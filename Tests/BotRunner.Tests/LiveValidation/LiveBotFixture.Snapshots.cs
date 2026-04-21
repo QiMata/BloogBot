@@ -177,6 +177,36 @@ public partial class LiveBotFixture
         return snapshot;
     }
 
+    private WoWActivitySnapshot? GetTrackedSnapshotForAccount(string accountName)
+    {
+        if (string.IsNullOrWhiteSpace(accountName))
+            return null;
+
+        if (string.Equals(accountName, BgAccountName, StringComparison.OrdinalIgnoreCase))
+            return BackgroundBot;
+
+        if (string.Equals(accountName, FgAccountName, StringComparison.OrdinalIgnoreCase))
+            return ForegroundBot;
+
+        if (string.Equals(accountName, CombatTestAccountName, StringComparison.OrdinalIgnoreCase))
+            return CombatTestBot;
+
+        return AllBots.FirstOrDefault(bot => string.Equals(bot.AccountName, accountName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string DescribeFlaggedNearbyUnits(WoWActivitySnapshot snapshot, int maxUnits = 5)
+    {
+        var flagged = snapshot.NearbyUnits
+            .Where(unit => unit.NpcFlags != 0)
+            .Take(maxUnits)
+            .Select(unit => $"{unit.GameObject?.Name ?? "(unnamed)"}:0x{unit.NpcFlags:X}")
+            .ToArray();
+
+        return flagged.Length == 0
+            ? "(none)"
+            : string.Join(", ", flagged);
+    }
+
     /// <summary>Forward an action to a specific bot.</summary>
 
 
@@ -202,7 +232,7 @@ public partial class LiveBotFixture
         while (sw.Elapsed < timeout)
         {
             await RefreshSnapshotsAsync();
-            var snap = await GetSnapshotAsync(accountName);
+            var snap = GetTrackedSnapshotForAccount(accountName) ?? await GetSnapshotAsync(accountName);
             if (snap != null && predicate(snap))
                 return true;
 
@@ -243,7 +273,8 @@ public partial class LiveBotFixture
         var lastProgressLog = 0L;
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
-            var snap = await GetSnapshotAsync(acct);
+            await RefreshSnapshotsAsync();
+            var snap = GetTrackedSnapshotForAccount(acct) ?? await GetSnapshotAsync(acct);
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
             if (pos != null)
             {
@@ -286,7 +317,8 @@ public partial class LiveBotFixture
         var lastProgressLog = 0L;
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
-            var snap = await GetSnapshotAsync(acct);
+            await RefreshSnapshotsAsync();
+            var snap = GetTrackedSnapshotForAccount(acct) ?? await GetSnapshotAsync(acct);
             if (snap != null)
             {
                 var unit = snap.NearbyUnits.FirstOrDefault(u => (u.NpcFlags & npcFlags) != 0);
@@ -296,7 +328,10 @@ public partial class LiveBotFixture
                 if (progressLabel != null && sw.ElapsedMilliseconds - lastProgressLog >= 5000)
                 {
                     lastProgressLog = sw.ElapsedMilliseconds;
-                    _testOutput?.WriteLine($"  [{progressLabel}] Waiting for unit with NpcFlags=0x{npcFlags:X}... {snap.NearbyUnits.Count} nearby units, {sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
+                    _testOutput?.WriteLine(
+                        $"  [{progressLabel}] Waiting for unit with NpcFlags=0x{npcFlags:X}... " +
+                        $"{snap.NearbyUnits.Count} nearby units, flagged={DescribeFlaggedNearbyUnits(snap)} " +
+                        $"{sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
                 }
             }
             await Task.Delay(1000);
@@ -321,9 +356,16 @@ public partial class LiveBotFixture
     /// Wait for a bot to settle at the expected position after a teleport.
     /// Polls snapshots until XY is within 50y of target and Z is stable (2 consecutive samples within 1y).
     /// </summary>
-    public async Task<bool> WaitForTeleportSettledAsync(string accountName, float expectedX, float expectedY, int timeoutMs = 3000, string? progressLabel = null)
+    public async Task<bool> WaitForTeleportSettledAsync(
+        string accountName,
+        float expectedX,
+        float expectedY,
+        int timeoutMs = 3000,
+        string? progressLabel = null,
+        float xyToleranceYards = 50f)
     {
-        // Require 3 consecutive snapshot readings within 50y XY of target with stable Z.
+        // Require 3 consecutive snapshot readings within the caller-supplied XY tolerance
+        // of the target with stable Z.
         // A single reading can be the locally-set position that gets overwritten by the
         // server's actual position (e.g. DB login position before teleport ACK arrives).
         int consecutiveNear = 0;
@@ -332,17 +374,21 @@ public partial class LiveBotFixture
         var lastProgressLog = 0L;
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
-            var snap = await GetSnapshotAsync(accountName);
+            await RefreshSnapshotsAsync();
+            var snap = GetTrackedSnapshotForAccount(accountName) ?? await GetSnapshotAsync(accountName);
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
             if (pos != null)
             {
                 var dx = pos.X - expectedX;
                 var dy = pos.Y - expectedY;
                 var dist2D = MathF.Sqrt(dx * dx + dy * dy);
-                bool nearTarget = dist2D < 50f;
+                bool nearTarget = dist2D < xyToleranceYards;
                 bool zStable = lastZ.HasValue && MathF.Abs(pos.Z - lastZ.Value) < 1f;
+                bool inWorld = string.Equals(snap.ScreenState, "InWorld", StringComparison.OrdinalIgnoreCase)
+                    && snap.ConnectionState == Communication.BotConnectionState.BotInWorld;
+                bool transitionClear = !snap.IsMapTransition;
 
-                if (nearTarget && zStable)
+                if (nearTarget && zStable && inWorld && transitionClear)
                     consecutiveNear++;
                 else
                     consecutiveNear = nearTarget ? 1 : 0;
@@ -357,8 +403,11 @@ public partial class LiveBotFixture
             {
                 lastProgressLog = sw.ElapsedMilliseconds;
                 var posStr = pos != null ? $"({pos.X:F0},{pos.Y:F0},{pos.Z:F0})" : "null";
-                _testOutput?.WriteLine($"  [{progressLabel}] Waiting for teleport to ({expectedX:F0},{expectedY:F0})... current={posStr} consecutive={consecutiveNear} {sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
-            }
+                var transitionState = snap == null
+                    ? "snapshot=null"
+                    : $"screen={snap.ScreenState}, conn={snap.ConnectionState}, transition={snap.IsMapTransition}";
+                  _testOutput?.WriteLine($"  [{progressLabel}] Waiting for teleport to ({expectedX:F0},{expectedY:F0}) tol={xyToleranceYards:F0}y... current={posStr} consecutive={consecutiveNear} {transitionState} {sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
+              }
 
             await Task.Delay(500);
         }
@@ -375,15 +424,24 @@ public partial class LiveBotFixture
     public async Task<bool> WaitForNearbyUnitsPopulatedAsync(string accountName, int timeoutMs = 5000, string? progressLabel = null)
     {
         var sw = Stopwatch.StartNew();
+        var lastProgressLog = 0L;
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
-            var snap = await GetSnapshotAsync(accountName);
+            await RefreshSnapshotsAsync();
+            var snap = GetTrackedSnapshotForAccount(accountName) ?? await GetSnapshotAsync(accountName);
             var count = snap?.NearbyUnits?.Count ?? 0;
             if (count > 0)
             {
                 _testOutput?.WriteLine($"  [{progressLabel ?? accountName}] Nearby units populated: {count} units after {sw.ElapsedMilliseconds}ms");
                 return true;
             }
+
+            if (sw.ElapsedMilliseconds - lastProgressLog >= 5000)
+            {
+                lastProgressLog = sw.ElapsedMilliseconds;
+                _testOutput?.WriteLine($"  [{progressLabel ?? accountName}] Nearby units still empty at {sw.ElapsedMilliseconds}ms");
+            }
+
             await Task.Delay(500);
         }
 

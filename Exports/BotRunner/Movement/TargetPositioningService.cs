@@ -58,7 +58,15 @@ namespace BotRunner.Movement
                     playerPosition,
                     targetPosition,
                     player.MapId,
-                    allowDirectFallback: false);
+                    allowDirectFallback: false,
+                    currentTransportGuid: player.TransportGuid);
+
+                if (_navPath.ShouldHoldPositionForTransport(playerPosition, waypoint))
+                {
+                    _objectManager.StopAllMovement();
+                    return false;
+                }
+
                 if (waypoint != null)
                 {
                     _objectManager.MoveToward(waypoint);

@@ -30,6 +30,7 @@
 
 #include "MoveMapSharedDefines.h"
 #include "G3D/Vector3.h"
+#include <cstdint>
 
 namespace Movement
 {
@@ -110,6 +111,10 @@ public:
 	PointsArray& getPath() { return m_pathPoints; }
 	PathType getPathType() const { return m_type; }
 	NavTerrain getNavTerrain(float x, float y, float z);
+	int getOverlayBlockedSegmentIndex() const { return m_overlayBlockedSegmentIndex; }
+	uint32_t getOverlayBlockingInstanceId() const { return m_overlayBlockingInstanceId; }
+	uint64_t getOverlayBlockingGuid() const { return m_overlayBlockingGuid; }
+	uint32_t getOverlayBlockingDisplayId() const { return m_overlayBlockingDisplayId; }
 private:
 
 	dtPolyRef      m_pathPolyRefs[MAX_PATH_LENGTH];   // array of detour polygon references
@@ -131,6 +136,10 @@ private:
 	const unsigned int      m_instanceId;       // instance id
 	const dtNavMesh*        m_navMesh;          // the nav mesh
 	const dtNavMeshQuery*   m_navMeshQuery;     // the nav mesh query used to find the path
+	int            m_overlayBlockedSegmentIndex = -1;
+	uint32_t       m_overlayBlockingInstanceId = 0;
+	uint64_t       m_overlayBlockingGuid = 0;
+	uint32_t       m_overlayBlockingDisplayId = 0;
 
 	dtQueryFilter m_filter;                     // use single filter for all movements, update it when needed
 
@@ -154,6 +163,7 @@ private:
 
 	void BuildPolyPath(const Vector3& startPos, const Vector3& endPos);
 	void BuildPointPath(const float* startPoint, const float* endPoint);
+	void CaptureFirstDynamicOverlayBlock();
     void BuildError();
 	void BuildShortcut();
 

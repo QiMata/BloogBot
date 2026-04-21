@@ -27,6 +27,8 @@ namespace WoWStateManager
     {
         internal const int LaunchThrottleActivationBotCount = 16;
         internal const int MaxPendingStartupBots = 4;
+        internal const string LaunchThrottleActivationBotCountEnvVar = "WWOW_LAUNCH_THROTTLE_ACTIVATION_BOT_COUNT";
+        internal const string MaxPendingStartupBotsEnvVar = "WWOW_LAUNCH_THROTTLE_MAX_PENDING_STARTUP_BOTS";
         internal static readonly TimeSpan LaunchThrottlePollInterval = TimeSpan.FromMilliseconds(250);
         private static readonly TimeSpan LaunchThrottleLogInterval = TimeSpan.FromSeconds(5);
 
@@ -278,12 +280,29 @@ namespace WoWStateManager
                 .ToArray();
         }
 
+        internal static int ResolveLaunchThrottleActivationBotCount()
+            => ResolvePositiveIntEnvOrDefault(LaunchThrottleActivationBotCountEnvVar, LaunchThrottleActivationBotCount);
+
+        internal static int ResolveMaxPendingStartupBots()
+            => ResolvePositiveIntEnvOrDefault(MaxPendingStartupBotsEnvVar, MaxPendingStartupBots);
+
+        private static int ResolvePositiveIntEnvOrDefault(string envVarName, int fallbackValue)
+        {
+            var rawValue = Environment.GetEnvironmentVariable(envVarName);
+            return int.TryParse(rawValue, out var parsedValue) && parsedValue > 0
+                ? parsedValue
+                : fallbackValue;
+        }
+
         private async Task WaitForLaunchThrottleAsync(
             IReadOnlyList<Settings.CharacterSettings> configuredSettings,
             string nextAccountName,
             CancellationToken stoppingToken)
         {
-            if (configuredSettings.Count < LaunchThrottleActivationBotCount)
+            var activationBotCount = ResolveLaunchThrottleActivationBotCount();
+            var maxPendingStartupBots = ResolveMaxPendingStartupBots();
+
+            if (configuredSettings.Count < activationBotCount)
                 return;
 
             var lastLogAt = DateTime.MinValue;
@@ -296,7 +315,7 @@ namespace WoWStateManager
                     _activityMemberSocketListener.CurrentActivityMemberList,
                     managedAccounts);
 
-                if (pendingStartupBots < MaxPendingStartupBots)
+                if (pendingStartupBots < maxPendingStartupBots)
                     return;
 
                 if (DateTime.UtcNow - lastLogAt >= LaunchThrottleLogInterval)
@@ -305,7 +324,7 @@ namespace WoWStateManager
                         "Launch throttle waiting before starting {Account}: {Pending}/{Limit} managed bots are still not world-ready.",
                         nextAccountName,
                         pendingStartupBots,
-                        MaxPendingStartupBots);
+                        maxPendingStartupBots);
                     lastLogAt = DateTime.UtcNow;
                 }
 

@@ -82,8 +82,8 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
         BattlemasterData.OrgrimmarWsg.Position.Y,
         BattlemasterData.OrgrimmarWsg.Position.Z);
 
-    // WSG uses group queue (leader queues for the raid).
-    // BattlegroundCoordinatorFixtureBase.PrepareBotsAsync handles raid formation + staging.
+    // WSG uses faction group queue.
+    // Prep only stages each faction at the battlemasters; StateManager/BotRunner reconcile grouping.
 
     protected override TeleportTarget AllianceQueueLocation => new(
         (int)BattlemasterData.StormwindWsg.MapId,
@@ -251,6 +251,9 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
 
     internal Task<ResponseResult> SetRuntimeCoordinatorEnabledAsync(bool enabled)
         => SetCoordinatorEnabledAsync(enabled);
+
+    internal Task ResetTrackedBattlegroundStateAsync(string label)
+        => ResetBattlegroundStateAsync(AccountNames, label);
 
     internal async Task AttemptMountSpellsAsync(IEnumerable<string> accountNames)
     {

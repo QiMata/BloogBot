@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using BotRunner;
 using GameData.Core.Enums;
 using Tests.Infrastructure;
+using WoWStateManager.Coordination;
 using WoWStateManager.Settings;
 using Xunit.Sdk;
 using WoWActivitySnapshot = Communication.WoWActivitySnapshot;
@@ -36,6 +37,8 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
     public IReadOnlyList<string> AccountNames => CharacterSettings.Select(settings => settings.AccountName).ToArray();
 
     public int ExpectedBotCount => CharacterSettings.Count;
+
+    protected override IReadOnlyCollection<string> KnownAccountNamesForCharacterResolution => AccountNames;
 
     protected virtual string FixtureLabel => GetType().Name.Replace("Fixture", string.Empty, StringComparison.Ordinal);
 
@@ -90,6 +93,11 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         Environment.SetEnvironmentVariable("WWOW_BG_ALLIANCE_QUEUE_X", null);
         Environment.SetEnvironmentVariable("WWOW_BG_ALLIANCE_QUEUE_Y", null);
         Environment.SetEnvironmentVariable("WWOW_BG_ALLIANCE_QUEUE_Z", null);
+        Environment.SetEnvironmentVariable(DungeoneeringCoordinator.DungeonTargetNameEnvVar, null);
+        Environment.SetEnvironmentVariable(DungeoneeringCoordinator.DungeonTargetMapEnvVar, null);
+        Environment.SetEnvironmentVariable(DungeoneeringCoordinator.DungeonTargetXEnvVar, null);
+        Environment.SetEnvironmentVariable(DungeoneeringCoordinator.DungeonTargetYEnvVar, null);
+        Environment.SetEnvironmentVariable(DungeoneeringCoordinator.DungeonTargetZEnvVar, null);
     }
 
     /// <summary>
@@ -106,12 +114,26 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         Task prepareTask;
         lock (_prepareLock)
         {
-            _prepareTask ??= PrepareBotsOnceAsync();
+            _prepareTask ??= PrepareBotsNowAsync();
             prepareTask = _prepareTask;
         }
 
         await prepareTask;
         Console.WriteLine("[PREP] EnsurePreparedAsync completed");
+    }
+
+    public async Task ReprepareAsync()
+    {
+        Console.WriteLine($"[PREP] ReprepareAsync called ({GetType().Name})");
+        Task prepareTask;
+        lock (_prepareLock)
+        {
+            _prepareTask = PrepareBotsNowAsync();
+            prepareTask = _prepareTask;
+        }
+
+        await prepareTask;
+        Console.WriteLine("[PREP] ReprepareAsync completed");
     }
 
     public new async Task InitializeAsync()
@@ -135,14 +157,14 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             await EnsurePreparedAsync();
     }
 
-    private async Task PrepareBotsOnceAsync()
+    private async Task PrepareBotsNowAsync()
     {
-        Console.WriteLine($"[PREP] PrepareBotsOnceAsync starting ({GetType().Name})");
+        Console.WriteLine($"[PREP] PrepareBotsNowAsync starting ({GetType().Name})");
         await PrepareBotsAsync();
         Console.WriteLine("[PREP] PrepareBotsAsync complete, refreshing snapshots");
         await RefreshSnapshotsAsync();
         await AfterPrepareAsync();
-        Console.WriteLine("[PREP] PrepareBotsOnceAsync complete");
+        Console.WriteLine("[PREP] PrepareBotsNowAsync complete");
     }
 
     internal static bool CanReuseExistingCharacters(
@@ -237,6 +259,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         var stopwatch = Stopwatch.StartNew();
         var lastCount = -1;
         var lastChange = stopwatch.Elapsed;
+        var lastMissingDiagnostics = string.Empty;
 
         while (stopwatch.Elapsed < maxTimeout)
         {
@@ -245,21 +268,22 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
             await RefreshSnapshotsAsync();
             var currentCount = AllBots.Count;
+            var missingDiagnostics = await DescribeMissingAccountsAsync();
             if (currentCount >= expectedCount)
                 return;
 
-            if (currentCount != lastCount)
+            if (currentCount != lastCount || !string.Equals(missingDiagnostics, lastMissingDiagnostics, StringComparison.Ordinal))
             {
                 lastCount = currentCount;
                 lastChange = stopwatch.Elapsed;
+                lastMissingDiagnostics = missingDiagnostics;
                 Console.WriteLine($"[{phaseName}] botCount={currentCount}/{expectedCount} at {stopwatch.Elapsed.TotalSeconds:F0}s");
             }
 
             if (stopwatch.Elapsed - lastChange > staleTimeout)
             {
-                var diagnostics = await DescribeMissingAccountsAsync();
                 throw new XunitException(
-                    $"[{phaseName}] STALE - bot count stopped at {currentCount}/{expectedCount} for {(stopwatch.Elapsed - lastChange).TotalSeconds:F0}s. {diagnostics}");
+                    $"[{phaseName}] STALE - bot count stopped at {currentCount}/{expectedCount} for {(stopwatch.Elapsed - lastChange).TotalSeconds:F0}s. {missingDiagnostics}");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(3));
@@ -1042,7 +1066,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         await Task.Delay(2000);
     }
 
-    protected async Task StageBattlegroundRaidAsync(
+    protected async Task StageBattlegroundTeamsAsync(
         IReadOnlyCollection<string> hordeAccounts,
         TeleportTarget hordeQueueLocation,
         IReadOnlyCollection<string> allianceAccounts,
@@ -1052,9 +1076,6 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         await EnsureAccountsStagedAtLocationAsync(hordeAccounts, hordeQueueLocation, "HordeStage");
         await EnsureAccountsStagedAtLocationAsync(allianceAccounts, allianceQueueLocation, "AllianceStage");
         await ResetBattlegroundStateAsync(AccountNames, "BgResetPostStage");
-        await FormFactionRaidAsync(hordeAccounts, "HordeRaid");
-        await FormFactionRaidAsync(allianceAccounts, "AllianceRaid");
-        await ResetBattlegroundStateAsync(AccountNames, "BgResetPostRaid");
 
         foreach (var account in AccountNames)
             await SendGmChatCommandAsync(account, ".gm off");
@@ -1069,7 +1090,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         TeleportTarget allianceQueueLocation)
     {
         await ReviveAndLevelBotsAsync(targetLevel);
-        await StageBattlegroundRaidAsync(hordeAccounts, hordeQueueLocation, allianceAccounts, allianceQueueLocation);
+        await StageBattlegroundTeamsAsync(hordeAccounts, hordeQueueLocation, allianceAccounts, allianceQueueLocation);
     }
 
     protected readonly record struct TeleportTarget(int MapId, float X, float Y, float Z);
@@ -1077,6 +1098,9 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
 public abstract class BattlegroundCoordinatorFixtureBase : CoordinatorFixtureBase
 {
+    protected virtual int LaunchThrottleActivationBotCountOverride => 8;
+    protected virtual int MaxPendingStartupBotsOverride => 8;
+
     protected override bool PrepareDuringInitialization => false;
     protected override bool DisableCoordinatorDuringPreparation => true;
     protected override bool PreserveExistingCharactersWhenAnyMatch => true;
@@ -1119,6 +1143,12 @@ public abstract class BattlegroundCoordinatorFixtureBase : CoordinatorFixtureBas
         Environment.SetEnvironmentVariable("WWOW_BG_ALLIANCE_QUEUE_X", AllianceQueueLocation.X.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Environment.SetEnvironmentVariable("WWOW_BG_ALLIANCE_QUEUE_Y", AllianceQueueLocation.Y.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Environment.SetEnvironmentVariable("WWOW_BG_ALLIANCE_QUEUE_Z", AllianceQueueLocation.Z.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Environment.SetEnvironmentVariable(
+            WoWStateManager.StateManagerWorker.LaunchThrottleActivationBotCountEnvVar,
+            LaunchThrottleActivationBotCountOverride.ToString());
+        Environment.SetEnvironmentVariable(
+            WoWStateManager.StateManagerWorker.MaxPendingStartupBotsEnvVar,
+            MaxPendingStartupBotsOverride.ToString());
     }
 
     protected override Task PrepareBotsAsync()

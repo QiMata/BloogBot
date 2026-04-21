@@ -125,8 +125,7 @@ public class FlightMasterVisitTask : BotTask, IBotTask
         _actionAttempts++;
         if (_actionAttempts > 3)
         {
-            Logger.LogWarning("[FLIGHTMASTER] Too many discover attempts, marking as visited and aborting");
-            _visitedFlightMasters.Add(_fmGuid);
+            Logger.LogWarning("[FLIGHTMASTER] Too many discover attempts, aborting without marking as visited");
             SetState(FMState.Done);
             return;
         }
@@ -137,6 +136,12 @@ public class FlightMasterVisitTask : BotTask, IBotTask
 
             var nodes = ObjectManager.DiscoverTaxiNodesAsync(_fmGuid, CancellationToken.None)
                 .GetAwaiter().GetResult();
+
+            if (nodes.Count == 0)
+            {
+                Logger.LogWarning("[FLIGHTMASTER] Discovery returned no taxi nodes from {Name}, retrying", _fmUnit?.Name ?? "unknown");
+                return;
+            }
 
             _visitedFlightMasters.Add(_fmGuid);
 

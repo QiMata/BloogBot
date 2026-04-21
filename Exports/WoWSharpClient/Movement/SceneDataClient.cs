@@ -135,11 +135,18 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
                     ? TestSendTileRequestOverride(request)
                     : SendMessage(request, SceneDataReadTimeoutMs, SceneDataWriteTimeoutMs, SceneDataConnectTimeoutMs);
 
-                if (!response.Success || response.TriangleCount == 0)
+                if (!response.Success)
                 {
                     _logger.LogWarning("[SceneData] Tile ({TileX},{TileY}) empty or failed: {Error}",
                         tx, ty, response.ErrorMessage ?? "empty");
-                    // Cache empty tile to avoid re-requesting
+                    anyFailure = true;
+                    MarkRetryAfterFailure(now);
+                    continue;
+                }
+
+                if (response.TriangleCount == 0)
+                {
+                    _logger.LogWarning("[SceneData] Tile ({TileX},{TileY}) returned no triangles", tx, ty);
                     _tileCache[key] = new CachedTile(mapId, tx, ty, [], 0, 0, 0, 0);
                     continue;
                 }
@@ -170,9 +177,6 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
             }
         }
 
-        if (anyFailure && !anyNewTile)
-            return false;
-
         // Evict tiles outside 5x5 radius
         EvictDistantTiles(mapId, centerTileX, centerTileY);
 
@@ -181,6 +185,9 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
         {
             InjectMergedTiles(mapId);
         }
+
+        if (anyFailure)
+            return false;
 
         _lastCenterTileKey = centerKey;
         _nextRetryUtc = DateTime.MinValue;
@@ -319,19 +326,7 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
         int triangleCount)
     {
         int floatCount = triangleCount * 9;
-        var rawBytes = new byte[floatCount * 4];
-
-        using var compressedStream = new System.IO.MemoryStream(compressed.ToByteArray());
-        using var gzip = new System.IO.Compression.GZipStream(
-            compressedStream, System.IO.Compression.CompressionMode.Decompress);
-
-        int totalRead = 0;
-        while (totalRead < rawBytes.Length)
-        {
-            int read = gzip.Read(rawBytes, totalRead, rawBytes.Length - totalRead);
-            if (read == 0) break;
-            totalRead += read;
-        }
+        var rawBytes = ReadExactCompressedBytes(compressed, floatCount * sizeof(float), "triangle vertex");
 
         var triangles = new NativePhysics.InjectedTriangle[triangleCount];
         for (int i = 0; i < triangleCount; i++)
@@ -363,19 +358,10 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
             return null;
 
         int wordCount = checked(triangleCount * 3);
-        var rawBytes = new byte[wordCount * sizeof(uint)];
-
-        using var compressedStream = new System.IO.MemoryStream(response.TriangleMetadataCompressed.ToByteArray());
-        using var gzip = new System.IO.Compression.GZipStream(
-            compressedStream, System.IO.Compression.CompressionMode.Decompress);
-
-        int totalRead = 0;
-        while (totalRead < rawBytes.Length)
-        {
-            int read = gzip.Read(rawBytes, totalRead, rawBytes.Length - totalRead);
-            if (read == 0) break;
-            totalRead += read;
-        }
+        var rawBytes = ReadExactCompressedBytes(
+            response.TriangleMetadataCompressed,
+            wordCount * sizeof(uint),
+            "triangle metadata");
 
         var metadata = new TriangleMetadata[triangleCount];
         for (int i = 0; i < triangleCount; i++)
@@ -393,6 +379,36 @@ public sealed class SceneDataClient : ProtobufSocketClient<SceneTileRequest, Sce
     private void MarkRetryAfterFailure(DateTime now)
     {
         _nextRetryUtc = now + SceneDataRetryDelay;
+    }
+
+    private static byte[] ReadExactCompressedBytes(
+        Google.Protobuf.ByteString compressed,
+        int expectedByteCount,
+        string payloadName)
+    {
+        var rawBytes = new byte[expectedByteCount];
+
+        using var compressedStream = new System.IO.MemoryStream(compressed.ToByteArray());
+        using var gzip = new System.IO.Compression.GZipStream(
+            compressedStream, System.IO.Compression.CompressionMode.Decompress);
+
+        int totalRead = 0;
+        while (totalRead < rawBytes.Length)
+        {
+            int read = gzip.Read(rawBytes, totalRead, rawBytes.Length - totalRead);
+            if (read == 0)
+                break;
+
+            totalRead += read;
+        }
+
+        if (totalRead != rawBytes.Length)
+        {
+            throw new System.IO.InvalidDataException(
+                $"Compressed {payloadName} payload truncated. Expected {rawBytes.Length} bytes, read {totalRead}.");
+        }
+
+        return rawBytes;
     }
 
     private static DateTime GetUtcNow()

@@ -1,5 +1,8 @@
 using BotCommLayer;
+using BotRunner;
+using BotRunner.Travel;
 using Communication;
+using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
@@ -155,13 +158,21 @@ namespace WoWStateManager.Listeners
                 return new WoWActivitySnapshot();
             }
 
+            if (CurrentActivityMemberList.TryGetValue(accountName, out var currentSnapshot)
+                && string.IsNullOrWhiteSpace(request.CharacterName)
+                && !string.IsNullOrWhiteSpace(currentSnapshot.CharacterName))
+            {
+                request.CharacterName = currentSnapshot.CharacterName;
+            }
+
             // Store the incoming state update from the bot
             CurrentActivityMemberList[accountName] = request;
             // Build the response — start with the stored snapshot
             var response = CurrentActivityMemberList[accountName];
 
-            // Clear any stale action from the request so only freshly injected actions are returned
+            // Clear any stale action/desired party state from the request so only freshly injected data is returned
             response.CurrentAction = null;
+            ClearDesiredPartyState(response);
 
             // Coordinate combat (group formation + combat support)
             InjectCoordinatedActions(accountName, response);
@@ -447,6 +458,7 @@ namespace WoWStateManager.Listeners
                     allAccounts,
                     _characterSettings,
                     _soapClient,
+                    DungeoneeringCoordinator.ResolveTargetFromEnvironment(_logger),
                     _logger);
             }
 
@@ -459,17 +471,18 @@ namespace WoWStateManager.Listeners
 
         private void InjectBattlegroundActions(string accountName, WoWActivitySnapshot response)
         {
+            // Parse BG type from env var (default WSG=2, map=489)
+            var bgTypeStr = Environment.GetEnvironmentVariable("WWOW_BG_TYPE") ?? "2";
+            var bgMapStr = Environment.GetEnvironmentVariable("WWOW_BG_MAP") ?? "489";
+            uint.TryParse(bgTypeStr, out var bgType);
+            uint.TryParse(bgMapStr, out var bgMap);
+            var desiredPartyLeaderAccounts = BuildDesiredBattlegroundPartyLeaderAccounts(bgType);
+
             if (_battlegroundCoordinator == null)
             {
                 var leaderAccount = _characterSettings.First().AccountName;
                 var allAccounts = _characterSettings.Select(cs => cs.AccountName);
                 var stagingTargets = BuildBattlegroundStagingTargets();
-
-                // Parse BG type from env var (default WSG=2, map=489)
-                var bgTypeStr = Environment.GetEnvironmentVariable("WWOW_BG_TYPE") ?? "2";
-                var bgMapStr = Environment.GetEnvironmentVariable("WWOW_BG_MAP") ?? "489";
-                uint.TryParse(bgTypeStr, out var bgType);
-                uint.TryParse(bgMapStr, out var bgMap);
 
                 _battlegroundCoordinator = new BattlegroundCoordinator(
                     leaderAccount,
@@ -477,7 +490,8 @@ namespace WoWStateManager.Listeners
                     bgType,
                     bgMap,
                     _logger,
-                    stagingTargets);
+                    stagingTargets,
+                    desiredPartyLeaderAccounts);
             }
 
             var action = _battlegroundCoordinator.GetAction(accountName, CurrentActivityMemberList);
@@ -485,7 +499,207 @@ namespace WoWStateManager.Listeners
             {
                 response.CurrentAction = action;
             }
+
+            ApplyDesiredBattlegroundPartyState(accountName, bgType, response, desiredPartyLeaderAccounts);
         }
+
+        private static void ClearDesiredPartyState(WoWActivitySnapshot response)
+        {
+            response.DesiredPartyLeaderName = string.Empty;
+            response.DesiredPartyMembers.Clear();
+            response.DesiredPartyIsRaid = false;
+        }
+
+        private IReadOnlyDictionary<string, string> BuildDesiredBattlegroundPartyLeaderAccounts(uint bgTypeId)
+        {
+            if (!RequiresFactionGroupQueue(bgTypeId))
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            var desiredPartyLeaderAccounts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var hordeLeaderAccount = _characterSettings
+                .FirstOrDefault(settings => IsHordeRace(settings.CharacterRace))
+                ?.AccountName;
+            var allianceLeaderAccount = _characterSettings
+                .FirstOrDefault(settings => IsAllianceRace(settings.CharacterRace))
+                ?.AccountName;
+
+            foreach (var settings in _characterSettings)
+            {
+                if (IsHordeRace(settings.CharacterRace) && !string.IsNullOrWhiteSpace(hordeLeaderAccount))
+                {
+                    desiredPartyLeaderAccounts[settings.AccountName] = hordeLeaderAccount;
+                }
+                else if (IsAllianceRace(settings.CharacterRace) && !string.IsNullOrWhiteSpace(allianceLeaderAccount))
+                {
+                    desiredPartyLeaderAccounts[settings.AccountName] = allianceLeaderAccount;
+                }
+            }
+
+            return desiredPartyLeaderAccounts;
+        }
+
+        private void ApplyDesiredBattlegroundPartyState(
+            string accountName,
+            uint bgTypeId,
+            WoWActivitySnapshot response,
+            IReadOnlyDictionary<string, string> desiredPartyLeaderAccounts)
+        {
+            if (!RequiresFactionGroupQueue(bgTypeId)
+                || desiredPartyLeaderAccounts.Count == 0
+                || !desiredPartyLeaderAccounts.TryGetValue(accountName, out var leaderAccount))
+            {
+                return;
+            }
+
+            if (!TryResolveSnapshotCharacterName(leaderAccount, out var desiredLeaderName))
+                return;
+
+            var factionAccounts = desiredPartyLeaderAccounts
+                .Where(entry => entry.Value.Equals(leaderAccount, StringComparison.OrdinalIgnoreCase))
+                .Select(entry => entry.Key)
+                .ToArray();
+            response.DesiredPartyLeaderName = desiredLeaderName;
+            response.DesiredPartyIsRaid = factionAccounts.Length > 5;
+
+            if (!accountName.Equals(leaderAccount, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (!CurrentActivityMemberList.TryGetValue(leaderAccount, out var leaderSnapshot))
+                return;
+
+            var leaderGuid = leaderSnapshot.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
+            if (leaderGuid == 0)
+                return;
+
+            var minimumLevel = BattlemasterData.GetMinimumLevel(bgTypeId);
+            foreach (var factionAccount in factionAccounts)
+            {
+                if (!TryResolveSnapshotCharacterName(factionAccount, out var desiredMemberName))
+                    continue;
+
+                if (factionAccount.Equals(leaderAccount, StringComparison.OrdinalIgnoreCase)
+                    || !CurrentActivityMemberList.TryGetValue(factionAccount, out var factionSnapshot)
+                    || !IsDesiredPartyWorldReady(factionSnapshot, minimumLevel))
+                {
+                    continue;
+                }
+
+                if (factionSnapshot.PartyLeaderGuid == leaderGuid)
+                    continue;
+
+                response.DesiredPartyMembers.Add(desiredMemberName);
+            }
+        }
+
+        private bool TryResolveSnapshotCharacterName(string accountName, out string characterName)
+        {
+            characterName = string.Empty;
+            if (CurrentActivityMemberList.TryGetValue(accountName, out var snapshot)
+                && !string.IsNullOrWhiteSpace(snapshot.CharacterName))
+            {
+                characterName = snapshot.CharacterName.Trim();
+                return true;
+            }
+
+            // Fall back to the exact generated identity reserved in CharacterSettings.
+            // Live fixtures already reserve per-account attempt offsets before launch,
+            // so this path uses the same source of truth as bot creation without
+            // mutating the cached snapshot when runtime observations are still blank.
+            return TryResolveConfiguredCharacterName(accountName, out characterName);
+        }
+
+        private bool TryResolveConfiguredCharacterName(string accountName, out string characterName)
+        {
+            characterName = string.Empty;
+            var settings = _characterSettings.FirstOrDefault(
+                candidate => candidate.AccountName.Equals(accountName, StringComparison.OrdinalIgnoreCase));
+            if (settings == null)
+                return false;
+
+            var characterClass = ResolveConfiguredClass(settings);
+            var race = ResolveConfiguredRace(settings);
+            var gender = ResolveConfiguredGender(settings, characterClass);
+            var attemptOffset = Math.Max(0, settings.CharacterNameAttemptOffset ?? 0);
+            var uniquenessSeed = BuildCharacterUniquenessSeed(settings.AccountName, attemptOffset);
+
+            characterName = WoWNameGenerator.GenerateName(race, gender, uniquenessSeed);
+            return !string.IsNullOrWhiteSpace(characterName);
+        }
+
+        private static Class ResolveConfiguredClass(CharacterSettings settings)
+        {
+            if (!string.IsNullOrWhiteSpace(settings.CharacterClass)
+                && Enum.TryParse<Class>(settings.CharacterClass, ignoreCase: true, out var configuredClass))
+            {
+                return configuredClass;
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.AccountName) && settings.AccountName.Length >= 4)
+            {
+                try
+                {
+                    return WoWNameGenerator.ParseClassCode(settings.AccountName.Substring(2, 2));
+                }
+                catch (ArgumentException)
+                {
+                }
+            }
+
+            return Class.Warrior;
+        }
+
+        private static Race ResolveConfiguredRace(CharacterSettings settings)
+        {
+            if (!string.IsNullOrWhiteSpace(settings.CharacterRace)
+                && Enum.TryParse<Race>(settings.CharacterRace, ignoreCase: true, out var configuredRace))
+            {
+                return configuredRace;
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.AccountName) && settings.AccountName.Length >= 2)
+            {
+                try
+                {
+                    return WoWNameGenerator.ParseRaceCode(settings.AccountName[..2]);
+                }
+                catch (ArgumentException)
+                {
+                }
+            }
+
+            return Race.Orc;
+        }
+
+        private static Gender ResolveConfiguredGender(CharacterSettings settings, Class characterClass)
+        {
+            if (!string.IsNullOrWhiteSpace(settings.CharacterGender)
+                && Enum.TryParse<Gender>(settings.CharacterGender, ignoreCase: true, out var configuredGender))
+            {
+                return configuredGender;
+            }
+
+            return WoWNameGenerator.DetermineGender(characterClass);
+        }
+
+        private static string? BuildCharacterUniquenessSeed(string? accountName, int attemptOffset)
+        {
+            if (string.IsNullOrWhiteSpace(accountName))
+                return accountName;
+
+            return attemptOffset <= 0
+                ? accountName
+                : $"{accountName}:{attemptOffset}";
+        }
+
+        private static bool IsDesiredPartyWorldReady(WoWActivitySnapshot snapshot, int minimumLevel)
+        {
+            return snapshot.IsObjectManagerValid
+                && (snapshot.Player?.Unit?.GameObject?.Level ?? 0) >= minimumLevel
+                && (snapshot.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL) != 0;
+        }
+
+        private static bool RequiresFactionGroupQueue(uint bgTypeId)
+            => bgTypeId != (uint)BattlemasterData.BattlegroundType.AlteracValley;
 
         private IReadOnlyDictionary<string, BattlegroundCoordinator.StagingTarget> BuildBattlegroundStagingTargets()
         {

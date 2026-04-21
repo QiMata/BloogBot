@@ -51,9 +51,29 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: `2026-04-19`
-- Pass result: `AB queue-entry stabilization is green with tracked dispatch coverage and a passing live rerun`
+- Last updated: `2026-04-20`
+- Pass result: `WSG desired-party/objective coverage is green deterministically and live`
 - Last delta:
+  - Fixed the live Horde roster stall by correcting `BotRunnerService.DesiredParty.GetCurrentGroupSize(...)` for the `PartyAgent` contract where `GroupSize`/`GetGroupMembers()` report the other four members of a full 5-player party but exclude the local leader. That lets the leader convert to raid before inviting the remaining WSG members.
+  - Updated `BotRunnerServiceDesiredPartyTests` to pin that `PartyAgent`-reported full-party case while still asserting the current `IObjectManager.ConvertToRaid()` dispatch path.
+  - Extended `BgTestHelper.WaitForBotsAsync(...)` to print the exact raw snapshot(s) missing from `AllBots` whenever live hydration stalls, so future `19/20` failures identify the real account immediately.
+  - Split the destructive WSG objective scenarios into separate fixture collections (`WsgFlagCaptureObjectiveTests` / `WsgFullGameObjectiveTests`) so each live objective run starts from a fresh 20-bot WSG fixture instead of inheriting state from the previous full match.
+  - `WarsongGulchFixture` now exposes `ResetTrackedBattlegroundStateAsync(...)`, which the objective prep path can use before the live readiness wait.
+  - Deterministic slice: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceDesiredPartyTests" --logger "console;verbosity=minimal"` -> `passed (10/10)`.
+  - Fresh live WSG proofs:
+    - `wsg_fullgame_after_group_size_fix_20260421_0210.trx` -> `passed (1/1)`
+    - `wsg_single_capture_isolated_after_diagnostics_20260421_0320.trx` -> `passed (1/1)`
+    - `wsg_objective_split_fixtures_20260421_0337.trx` -> `passed (2/2)`
+- Files changed:
+  - `Tests/BotRunner.Tests/BotRunnerServiceDesiredPartyTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/BattlegroundEntryTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/WarsongGulchFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/WarsongGulchObjectiveCollection.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/WsgObjectiveTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AbObjectiveTests" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=ab_objective_suite_next.trx"`
+- Previous handoff notes:
   - Added `BotRunnerServiceBattlegroundDispatchTests` to pin the `JoinBattleground` dispatch contract: the first dispatch pushes exactly one `BattlegroundQueueTask`, and a duplicate dispatch leaves the task stack at size `1`.
   - `ArathiBasinFixture` now keeps both leaders on background runners, extends the cold-start enter-world window to `12m/4m`, disables the launch throttle for the 20-bot roster, and uses the ground-level Stormwind AB battlemaster Z instead of the old Champion's Hall upper-floor offset.
   - `ab_queue_entry_alliance_groundlevel_recheck.trx` exposed the remaining harness issue: `ABBOT1` crashed during foreground battleground transfer. `ab_queue_entry_background_only_recheck.trx` then passed after the fixture stayed background-only end-to-end.

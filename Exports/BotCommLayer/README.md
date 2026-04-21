@@ -236,7 +236,7 @@ Navigation and physics:
 | Model | Description |
 |-------|-------------|
 | **PathfindingRequest/Response** | Main request/response wrapper |
-| **CalculatePathRequest/Response** | A* pathfinding, including request-scoped `nearby_objects` overlays for live blockers |
+| **CalculatePathRequest/Response** | A* pathfinding, including request-scoped `nearby_objects` overlays plus blocked-segment and affordance metadata (`blocked_reason`, `max_affordance`, `path_supported`, step/drop/cliff/vertical/jump-gap/safe-drop/unsafe-drop/blocked counts, Z and climb/gap/drop metrics) |
 | **LineOfSightRequest/Response** | Line-of-sight checks |
 | **PhysicsInput/Output** | Client physics simulation state |
 

@@ -84,6 +84,49 @@ public sealed class SceneDataRegionFallbackTests(PhysicsEngineFixture fixture)
         }
     }
 
+    [Fact]
+    public void PreloadMap_WhenSceneAutoloadDisabled_DoesNotLoadSceneCacheFromDisk()
+    {
+        Assert.True(_fixture.IsInitialized, "Native physics fixture failed to initialize.");
+
+        PhysicsEngineFixture.EnsureDataDir();
+        string dataDir = GetDataDir();
+        string originalScenesDir = Path.Combine(dataDir, "scenes") + Path.DirectorySeparatorChar;
+        string tempRoot = Path.Combine(Path.GetTempPath(), $"wwow_scene_autoload_gate_{Guid.NewGuid():N}");
+        string tempScenesDir = Path.Combine(tempRoot, "scenes");
+        Directory.CreateDirectory(tempScenesDir);
+
+        string partialScenePath = Path.Combine(tempScenesDir, "1.scene");
+        Assert.True(ExtractSceneCache(1, partialScenePath, -400f, -4500f, -100f, -4100f),
+            "Expected to create a bounded Kalimdor scene cache fixture.");
+        Assert.True(File.Exists(partialScenePath), $"Expected bounded scene cache at {partialScenePath}.");
+
+        try
+        {
+            SetSceneAutoloadEnabled(true);
+            SetScenesDir(tempScenesDir + Path.DirectorySeparatorChar);
+            UnloadSceneCache(1);
+            Assert.False(HasSceneCache(1), "Scene cache should start unloaded for the control probe.");
+
+            PreloadMap(1);
+            Assert.True(HasSceneCache(1), "Expected autoload-enabled preload to materialize the scene cache from disk.");
+
+            UnloadSceneCache(1);
+            SetSceneAutoloadEnabled(false);
+            PreloadMap(1);
+
+            Assert.False(HasSceneCache(1),
+                "Scene cache should stay unloaded when scene autoload is disabled for service-managed runtimes.");
+        }
+        finally
+        {
+            SetSceneAutoloadEnabled(true);
+            UnloadSceneCache(1);
+            SetScenesDir(originalScenesDir);
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
     private static (Vector3 boxMin, Vector3 boxMax) GetAlteracValleyStagingBounds()
         => (new Vector3(1600f, -5000f, -500f), new Vector3(2200f, -4400f, 2000f));
 

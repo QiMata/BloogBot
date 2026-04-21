@@ -341,6 +341,15 @@ extern "C" __declspec(dllexport) void ClearSceneCache(uint32_t mapId)
 // BG bots now load Physics.dll (PHYSICS_DLL_ONLY) which strips mmaps/VMAPs.
 extern "C" __declspec(dllexport) void SetSceneSliceMode(bool) {}
 
+extern "C" __declspec(dllexport) void SetSceneAutoloadEnabled(bool enabled)
+{
+    try
+    {
+        SceneQuery::SetSceneAutoloadEnabled(enabled);
+    }
+    catch (...) {}
+}
+
 // Set the data directory for all subsystems (MapLoader, VMapManager, SceneQuery).
 // Must be called before PreloadMap. Used by SceneDataService and in-process bot
 // physics to configure the data root when WWOW_DATA_DIR may not be set.
@@ -529,6 +538,62 @@ enum class SegmentValidationCode : uint32_t
     StepUpTooHigh = 3,
     StepDownTooFar = 4,
 };
+
+enum class SegmentAffordanceCode : uint32_t
+{
+    Walk = 0,
+    StepUp = 1,
+    SteepClimb = 2,
+    Drop = 3,
+    Cliff = 4,
+    Vertical = 5,
+    JumpGap = 6,
+    SafeDrop = 7,
+    UnsafeDrop = 8,
+    Blocked = 9,
+};
+
+static float Clamp01(float value)
+{
+    return std::max(0.0f, std::min(1.0f, value));
+}
+
+static float SegmentSlopeAngleDeg(float horizontalDistance, float verticalDistance)
+{
+    const float absVertical = std::fabs(verticalDistance);
+    if (horizontalDistance > 0.01f)
+        return std::atan2(absVertical, horizontalDistance) * (180.0f / 3.14159265358979323846f);
+
+    return absVertical > 0.5f ? 90.0f : 0.0f;
+}
+
+static float EstimateRunJumpDistance(float landingDeltaZ)
+{
+    const float discriminant =
+        (PhysicsConstants::JUMP_VELOCITY * PhysicsConstants::JUMP_VELOCITY) -
+        (PhysicsConstants::DOUBLE_GRAVITY * landingDeltaZ);
+
+    if (discriminant < 0.0f)
+        return 0.0f;
+
+    const float flightTime =
+        (PhysicsConstants::JUMP_VELOCITY + std::sqrt(discriminant)) * PhysicsConstants::INV_GRAVITY;
+    return std::max(0.0f, flightTime * PhysicsConstants::BASE_RUN_SPEED);
+}
+
+static float ProbeEndSupportZ(uint32_t mapId, XYZ end, float radius)
+{
+    const float queryBaseZ = end.Z + PhysicsConstants::STEP_HEIGHT + 0.5f;
+    const float queryDistance = PhysicsConstants::FALL_SAFE_DISTANCE + PhysicsConstants::STEP_HEIGHT + 2.0f;
+    return SceneQuery::GetCapsuleSupportZ(
+        mapId,
+        end.X,
+        end.Y,
+        end.Z,
+        queryBaseZ,
+        queryDistance,
+        radius);
+}
 
 static bool HasBlockingCapsuleOverlap(
     uint32_t mapId,
@@ -1033,45 +1098,249 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
     return static_cast<uint32_t>(SegmentValidationCode::Clear);
 }
 
-// Check whether the line segment (x0,y0,z0)→(x1,y1,z1) intersects any triangle
-// belonging to a registered dynamic object on the given map.
-// Returns false when no dynamic objects are registered (fast path).
-// Used by the pathfinding layer to detect when a freshly-generated path segment
-// passes through a closed door or other registered dynamic obstacle.
-extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjects(
+extern "C" __declspec(dllexport) uint32_t ClassifyPathSegmentAffordance(
     uint32_t mapId,
-    float x0, float y0, float z0,
-    float x1, float y1, float z1)
+    XYZ start,
+    XYZ end,
+    float radius,
+    float height,
+    float* climbHeight,
+    float* gapDistance,
+    float* dropHeight,
+    float* slopeAngleDeg,
+    float* resolvedEndZ,
+    uint32_t* validationCode)
 {
     if (!g_initialized)
         InitializeAllSystems();
 
     std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
 
+    if (climbHeight)
+        *climbHeight = 0.0f;
+    if (gapDistance)
+        *gapDistance = 0.0f;
+    if (dropHeight)
+        *dropHeight = 0.0f;
+    if (slopeAngleDeg)
+        *slopeAngleDeg = 0.0f;
+    if (resolvedEndZ)
+        *resolvedEndZ = start.Z;
+    if (validationCode)
+        *validationCode = static_cast<uint32_t>(SegmentValidationCode::BlockedGeometry);
+
+    const float dx = end.X - start.X;
+    const float dy = end.Y - start.Y;
+    const float horizontalDistance = std::sqrt((dx * dx) + (dy * dy));
+
+    SegmentValidationCode validation = SegmentValidationCode::Clear;
+    float effectiveEndZ = end.Z;
+    float verticalDelta = end.Z - start.Z;
+    float climb = std::max(0.0f, verticalDelta);
+    float drop = std::max(0.0f, -verticalDelta);
+    float gap = 0.0f;
+
+    const G3D::Vector3 losStart(start.X, start.Y, start.Z + (height * 0.5f));
+    const G3D::Vector3 losEnd(end.X, end.Y, end.Z + (height * 0.5f));
+    if (!SceneQuery::LineOfSight(mapId, losStart, losEnd))
+        validation = SegmentValidationCode::BlockedGeometry;
+
+    const float orientation = horizontalDistance > 0.01f
+        ? std::atan2(dy, dx)
+        : 0.0f;
+    const int sampleCount = horizontalDistance > 0.05f
+        ? std::max(1, std::min(8, static_cast<int>(std::ceil(horizontalDistance / 2.0f))))
+        : 1;
+    float previousSupportZ = start.Z;
+    bool havePreviousSupport = false;
+    float firstMissingFraction = -1.0f;
+
+    for (int i = 0; i <= sampleCount; ++i)
+    {
+        const float t = sampleCount > 0
+            ? static_cast<float>(i) / static_cast<float>(sampleCount)
+            : 1.0f;
+        const float sampleX = start.X + (dx * t);
+        const float sampleY = start.Y + (dy * t);
+        const float sampleZ = start.Z + ((end.Z - start.Z) * t);
+        const XYZ sample(sampleX, sampleY, sampleZ);
+        const float supportZ = ProbeEndSupportZ(mapId, sample, radius);
+
+        if (supportZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+        {
+            if (validation == SegmentValidationCode::Clear)
+                validation = SegmentValidationCode::MissingSupport;
+            if (firstMissingFraction < 0.0f)
+                firstMissingFraction = t;
+            continue;
+        }
+
+        if (i == sampleCount)
+            effectiveEndZ = supportZ;
+
+        climb = std::max(climb, std::max(0.0f, supportZ - start.Z));
+        drop = std::max(drop, std::max(0.0f, start.Z - supportZ));
+
+        if (havePreviousSupport)
+        {
+            const float deltaFromPrevious = supportZ - previousSupportZ;
+            if (validation == SegmentValidationCode::Clear && deltaFromPrevious > PhysicsConstants::STEP_HEIGHT + 0.3f)
+                validation = SegmentValidationCode::StepUpTooHigh;
+            else if (validation == SegmentValidationCode::Clear && deltaFromPrevious < -PhysicsConstants::STEP_DOWN_HEIGHT - 0.5f)
+                validation = SegmentValidationCode::StepDownTooFar;
+        }
+
+        if (i > 0 &&
+            validation == SegmentValidationCode::Clear &&
+            HasBlockingCapsuleOverlap(mapId, sampleX, sampleY, supportZ, radius, height, orientation))
+        {
+            validation = SegmentValidationCode::BlockedGeometry;
+        }
+
+        previousSupportZ = supportZ;
+        havePreviousSupport = true;
+    }
+
+    if (validation == SegmentValidationCode::MissingSupport)
+    {
+        gap = firstMissingFraction >= 0.0f
+            ? horizontalDistance * (1.0f - Clamp01(firstMissingFraction))
+            : horizontalDistance;
+        if (gap < 0.25f)
+            gap = horizontalDistance;
+    }
+
+    if (validationCode)
+        *validationCode = static_cast<uint32_t>(validation);
+
+    verticalDelta = effectiveEndZ - start.Z;
+    const float slopeDeg = SegmentSlopeAngleDeg(horizontalDistance, verticalDelta);
+
+    if (climbHeight)
+        *climbHeight = climb;
+    if (gapDistance)
+        *gapDistance = gap;
+    if (dropHeight)
+        *dropHeight = drop;
+    if (slopeAngleDeg)
+        *slopeAngleDeg = slopeDeg;
+    if (resolvedEndZ)
+        *resolvedEndZ = effectiveEndZ;
+
+    switch (validation)
+    {
+    case SegmentValidationCode::BlockedGeometry:
+        return static_cast<uint32_t>(SegmentAffordanceCode::Blocked);
+
+    case SegmentValidationCode::StepUpTooHigh:
+        return static_cast<uint32_t>(SegmentAffordanceCode::Blocked);
+
+    case SegmentValidationCode::StepDownTooFar:
+        return static_cast<uint32_t>(
+            drop > PhysicsConstants::FALL_SAFE_DISTANCE
+                ? SegmentAffordanceCode::UnsafeDrop
+                : SegmentAffordanceCode::SafeDrop);
+
+    case SegmentValidationCode::MissingSupport:
+    {
+        if (effectiveEndZ <= PhysicsConstants::INVALID_HEIGHT + 1.0f)
+            return static_cast<uint32_t>(SegmentAffordanceCode::Blocked);
+
+        if (drop > PhysicsConstants::FALL_SAFE_DISTANCE)
+            return static_cast<uint32_t>(SegmentAffordanceCode::UnsafeDrop);
+
+        const float maxJumpDistance = EstimateRunJumpDistance(verticalDelta);
+        if (gap <= maxJumpDistance + radius && climb <= (PhysicsConstants::JUMP_VELOCITY * PhysicsConstants::JUMP_VELOCITY / PhysicsConstants::DOUBLE_GRAVITY) + 0.25f)
+            return static_cast<uint32_t>(SegmentAffordanceCode::JumpGap);
+
+        return static_cast<uint32_t>(SegmentAffordanceCode::Blocked);
+    }
+
+    case SegmentValidationCode::Clear:
+    default:
+        break;
+    }
+
+    if (horizontalDistance < 0.5f && std::fabs(verticalDelta) > PhysicsConstants::STEP_HEIGHT)
+        return static_cast<uint32_t>(SegmentAffordanceCode::Vertical);
+
+    if (drop > PhysicsConstants::FALL_SAFE_DISTANCE)
+        return static_cast<uint32_t>(SegmentAffordanceCode::UnsafeDrop);
+
+    if (drop > 2.0f)
+        return static_cast<uint32_t>(SegmentAffordanceCode::SafeDrop);
+
+    if (slopeDeg > 45.0f && climb > 0.0f)
+        return static_cast<uint32_t>(SegmentAffordanceCode::SteepClimb);
+
+    if (climb > 1.0f || (slopeDeg > 15.0f && climb > 0.0f))
+        return static_cast<uint32_t>(SegmentAffordanceCode::StepUp);
+
+    return static_cast<uint32_t>(SegmentAffordanceCode::Walk);
+}
+
+// Check whether the line segment (x0,y0,z0)→(x1,y1,z1) intersects any triangle
+// belonging to a registered dynamic object on the given map.
+// Returns false when no dynamic objects are registered (fast path).
+// Used by the pathfinding layer to detect when a freshly-generated path segment
+// passes through a closed door or other registered dynamic obstacle.
+extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjectsDetailed(
+    uint32_t mapId,
+    float x0, float y0, float z0,
+    float x1, float y1, float z1,
+    uint32_t* blockingInstanceId,
+    uint64_t* blockingGuid,
+    uint32_t* blockingDisplayId);
+
+extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjects(
+    uint32_t mapId,
+    float x0, float y0, float z0,
+    float x1, float y1, float z1)
+{
+    return SegmentIntersectsDynamicObjectsDetailed(
+        mapId,
+        x0, y0, z0,
+        x1, y1, z1,
+        nullptr,
+        nullptr,
+        nullptr);
+}
+
+extern "C" __declspec(dllexport) bool SegmentIntersectsDynamicObjectsDetailed(
+    uint32_t mapId,
+    float x0, float y0, float z0,
+    float x1, float y1, float z1,
+    uint32_t* blockingInstanceId,
+    uint64_t* blockingGuid,
+    uint32_t* blockingDisplayId)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+    if (blockingInstanceId)
+        *blockingInstanceId = 0;
+
+    if (blockingGuid)
+        *blockingGuid = 0;
+
+    if (blockingDisplayId)
+        *blockingDisplayId = 0;
+
     auto* reg = DynamicObjectRegistry::Instance();
-    if (!reg || reg->Count() == 0) return false;
-
-    // Build AABB of segment with a small radius pad so thin geometry is caught.
-    const float pad = 0.5f;
-    const G3D::AABox segBox(
-        G3D::Vector3(std::min(x0, x1) - pad, std::min(y0, y1) - pad, std::min(z0, z1) - pad),
-        G3D::Vector3(std::max(x0, x1) + pad, std::max(y0, y1) + pad, std::max(z0, z1) + pad));
-
-    std::vector<CapsuleCollision::Triangle> tris;
-    reg->QueryTriangles(mapId, segBox, tris);
-    if (tris.empty()) return false;
+    if (!reg || reg->Count() == 0)
+        return false;
 
     const G3D::Vector3 p0(x0, y0, z0);
     const G3D::Vector3 p1(x1, y1, z1);
-    for (const auto& tri : tris)
-    {
-        const G3D::Vector3 ta(tri.a.x, tri.a.y, tri.a.z);
-        const G3D::Vector3 tb(tri.b.x, tri.b.y, tri.b.z);
-        const G3D::Vector3 tc(tri.c.x, tri.c.y, tri.c.z);
-        if (SegmentIntersectsTriangle(p0, p1, ta, tb, tc))
-            return true;
-    }
-    return false;
+    return reg->FindFirstIntersectingObject(
+        mapId,
+        p0,
+        p1,
+        blockingInstanceId,
+        blockingGuid,
+        blockingDisplayId);
 }
 
 // ===============================
@@ -1211,8 +1480,22 @@ struct CorridorResult
     int      cornerCount;
     float    corners[CORRIDOR_MAX_CORNERS * 3]; // [x,y,z, x,y,z, ...]
     float    posX, posY, posZ;                  // corridor-constrained position
+    int      blockedSegmentIndex;               // -1 when no dynamic overlay block was observed
+    uint32_t blockingInstanceId;
+    uint64_t blockingGuid;
+    uint32_t blockingDisplayId;
+    uint32_t flags;                             // bit 0: returned path was repaired around this block
 };
 #pragma pack(pop)
+
+static constexpr uint32_t CORRIDOR_RESULT_FLAG_OVERLAY_REPAIRED = 0x00000001u;
+
+static void ResetCorridorResult(CorridorResult& result, uint32_t handle = 0)
+{
+    result = {};
+    result.handle = handle;
+    result.blockedSegmentIndex = -1;
+}
 
 static dtNavMeshQuery* GetMutableQueryForMap(uint32_t mapId)
 {
@@ -1220,6 +1503,126 @@ static dtNavMeshQuery* GetMutableQueryForMap(uint32_t mapId)
     // Navigation::GetQueryForMap returns const, but the underlying object is mutable.
     return const_cast<dtNavMeshQuery*>(
         Navigation::GetInstance()->GetQueryForMap(mapId));
+}
+
+static bool HasActiveDynamicObjectOverlay()
+{
+    auto* registry = DynamicObjectRegistry::Instance();
+    return registry != nullptr && registry->Count() > 0;
+}
+
+static void SetCorridorBlockMetadata(
+    CorridorResult& result,
+    int segmentIndex,
+    uint32_t instanceId,
+    uint64_t guid,
+    uint32_t displayId,
+    bool repaired)
+{
+    if (segmentIndex < 0)
+        return;
+
+    result.blockedSegmentIndex = segmentIndex;
+    result.blockingInstanceId = instanceId;
+    result.blockingGuid = guid;
+    result.blockingDisplayId = displayId;
+    if (repaired)
+        result.flags |= CORRIDOR_RESULT_FLAG_OVERLAY_REPAIRED;
+}
+
+static bool TryFindDynamicOverlayBlockInResult(
+    uint32_t mapId,
+    const XYZ& start,
+    const CorridorResult& result,
+    int* outSegmentIndex,
+    uint32_t* outInstanceId,
+    uint64_t* outGuid,
+    uint32_t* outDisplayId)
+{
+    auto* registry = DynamicObjectRegistry::Instance();
+    if (!registry || registry->Count() == 0 || result.cornerCount <= 0)
+        return false;
+
+    XYZ segmentStart = start;
+    for (int i = 0; i < result.cornerCount; ++i)
+    {
+        const XYZ segmentEnd(
+            result.corners[i * 3 + 0],
+            result.corners[i * 3 + 1],
+            result.corners[i * 3 + 2]);
+
+        uint32_t instanceId = 0;
+        uint64_t guid = 0;
+        uint32_t displayId = 0;
+        if (registry->FindFirstIntersectingObject(
+            mapId,
+            G3D::Vector3(segmentStart.X, segmentStart.Y, segmentStart.Z),
+            G3D::Vector3(segmentEnd.X, segmentEnd.Y, segmentEnd.Z),
+            &instanceId,
+            &guid,
+            &displayId))
+        {
+            if (outSegmentIndex)
+                *outSegmentIndex = i;
+            if (outInstanceId)
+                *outInstanceId = instanceId;
+            if (outGuid)
+                *outGuid = guid;
+            if (outDisplayId)
+                *outDisplayId = displayId;
+            return true;
+        }
+
+        segmentStart = segmentEnd;
+    }
+
+    return false;
+}
+
+static uint32_t RegisterPassiveCorridorHandle(uint32_t mapId)
+{
+    auto* ci = new CorridorInstance();
+    ci->mapId = mapId;
+    ci->valid = false;
+
+    uint32_t handle = g_nextCorridorHandle++;
+    g_corridors[handle] = ci;
+    return handle;
+}
+
+static void FillResultFromPointPath(
+    CorridorResult& result,
+    const XYZ& start,
+    const XYZ* pathArr,
+    int pathLength)
+{
+    if (!pathArr || pathLength <= 0)
+        return;
+
+    constexpr float StartDedupEpsilon = 0.25f;
+    int firstCornerIndex = 0;
+    if (pathLength > 0)
+    {
+        const float dx = pathArr[0].X - start.X;
+        const float dy = pathArr[0].Y - start.Y;
+        const float dz = pathArr[0].Z - start.Z;
+        const float distanceSq = (dx * dx) + (dy * dy) + (dz * dz);
+        if (distanceSq <= (StartDedupEpsilon * StartDedupEpsilon))
+            firstCornerIndex = 1;
+    }
+
+    int cornerCount = 0;
+    for (int i = firstCornerIndex; i < pathLength && cornerCount < CORRIDOR_MAX_CORNERS; ++i, ++cornerCount)
+    {
+        result.corners[cornerCount * 3 + 0] = pathArr[i].X;
+        result.corners[cornerCount * 3 + 1] = pathArr[i].Y;
+        result.corners[cornerCount * 3 + 2] = pathArr[i].Z;
+    }
+
+    result.cornerCount = cornerCount;
+    result.posX = start.X;
+    result.posY = start.Y;
+    result.posZ = start.Z;
 }
 
 static int FillCorners(CorridorInstance* ci, CorridorResult& result)
@@ -1265,6 +1668,8 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
     uint32_t mapId, XYZ start, XYZ end)
 {
     CorridorResult result = {};
+    ResetCorridorResult(result);
+    std::unique_ptr<XYZ[]> overlayPath;
 
     try
     {
@@ -1279,6 +1684,29 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
         // on the same query object corrupts internal state and causes access violations.
         // With 10 bots on the same map, all sharing one query, this is fatal.
         std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+        if (HasActiveDynamicObjectOverlay())
+        {
+            int overlayPathLength = 0;
+            overlayPath.reset(navigation->CalculatePath(mapId, start, end, true, &overlayPathLength));
+            if (overlayPath != nullptr && overlayPathLength > 0)
+            {
+                FillResultFromPointPath(result, start, overlayPath.get(), overlayPathLength);
+                const auto overlayBlock = navigation->GetLastOverlayRepairedSegment();
+                SetCorridorBlockMetadata(
+                    result,
+                    overlayBlock.segmentIndex,
+                    overlayBlock.blockingInstanceId,
+                    overlayBlock.blockingGuid,
+                    overlayBlock.blockingDisplayId,
+                    true);
+                result.handle = RegisterPassiveCorridorHandle(mapId);
+                fprintf(stderr, "[CORRIDOR] overlay-aware native path reused smooth point-path: corners=%d handle=%u blockedIdx=%d display=%u guid=0x%llx\n",
+                    result.cornerCount, result.handle, result.blockedSegmentIndex, result.blockingDisplayId,
+                    (unsigned long long)result.blockingGuid);
+                return result;
+            }
+        }
 
         dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
         if (!query) { fprintf(stderr, "[CORRIDOR] no query for map %u\n", mapId); return result; }
@@ -1388,6 +1816,24 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
         g_corridors[handle] = ci;
 
         result.handle = handle;
+        if (HasActiveDynamicObjectOverlay())
+        {
+            int segmentIndex = -1;
+            uint32_t instanceId = 0;
+            uint64_t guid = 0;
+            uint32_t displayId = 0;
+            if (TryFindDynamicOverlayBlockInResult(
+                mapId,
+                start,
+                result,
+                &segmentIndex,
+                &instanceId,
+                &guid,
+                &displayId))
+            {
+                SetCorridorBlockMetadata(result, segmentIndex, instanceId, guid, displayId, false);
+            }
+        }
         fprintf(stderr, "[CORRIDOR] handle=%u corners=%d pos=(%.1f,%.1f,%.1f)\n",
                 handle, straightCount, result.posX, result.posY, result.posZ);
     }
@@ -1407,7 +1853,7 @@ extern "C" __declspec(dllexport) CorridorResult CorridorUpdate(
     uint32_t handle, XYZ agentPos)
 {
     CorridorResult result = {};
-    result.handle = handle;
+    ResetCorridorResult(result, handle);
 
     try
     {
@@ -1461,7 +1907,7 @@ extern "C" __declspec(dllexport) CorridorResult CorridorMoveTarget(
     uint32_t handle, XYZ newTarget)
 {
     CorridorResult result = {};
-    result.handle = handle;
+    ResetCorridorResult(result, handle);
 
     try
     {

@@ -12,7 +12,7 @@
 | Item | Value |
 |------|-------|
 | Server | VMaNGOS (vanilla 1.12.1 build 5875), always running locally |
-| VMaNGOS server binaries | `C:\Mangos\server\` (mangosd.exe, realmd.exe) |
+| VMaNGOS server binaries | Docker `realmd` / `mangosd` services by default; legacy host binaries may live under `C:\Mangos\server\` only when `MangosServer:AutoLaunch=true` is explicitly configured |
 | VMaNGOS source (reference) | `C:\Mangos\vmangos-core\` (cloned from github.com/vmangos/core) |
 | MaNGOS data directory | `C:\Mangos\data\` (maps, vmaps, mmaps, dbc) |
 | MariaDB | `maria-db` Docker container (shared, defined in FFXI repo) |
@@ -116,7 +116,7 @@ dotnet test Tests/BotRunner.Tests --filter "Category=Integration" --settings Tes
 - **StateManager DLL lock race** — StateManager and test can fight over DLLs. Must kill → build → verify → start SM → test. Script `run-swimming-recording-test.ps1` handles this.
 - **Orgrimmar terrain divergence** — `FlatRunForward_FrameByFrame` test fails due to terrain elevation causing PhysicsEngine position divergence beyond 0.5y tolerance. Genuine calibration gap in C++ ground detection.
 - **Spline data scarcity** — Only 1 of 31 recordings has player spline data (`Dralrahgra_Durotar_2026-02-08_12-28-15.json`). All others predate the spline JSON fix.
-- **FG-CRASH-001** — WoW.exe crash in ghost form at `0x00619CDF`. Blocks FG death/corpse-run live validation.
+- **FG corpse-run revalidation** - Historical `FG-CRASH-001` WoW.exe ghost-form crash at `0x00619CDF` was not reproduced on 2026-04-15. The follow-up opt-in FG death/corpse-run live validation now passes after corpse-run waypoint advancement stopped applying the standard probe-corridor shortcut veto to close unsmoothed waypoints (`fg_corpse_run_after_corpse_probe_policy.trx`, bestDist=34y, strict-alive restored).
 - **BG TradeFrame NullRef** — All 6 trade sequences lack null checks for TradeFrame. BG bot will crash on OfferTrade, OfferGold, OfferItem, AcceptTrade, EnchantTrade, LockpickTrade.
 - **BG MerchantFrame always null** — `WoWSharpObjectManager.MerchantFrame` is never assigned. BG vendor operations must use packet-based paths (vendorGuid parameter).
 - **HandleCharacterLoginFailed stub** — `WorldClient.cs:487` returns Task.CompletedTask. BG bot silently ignores login failures.

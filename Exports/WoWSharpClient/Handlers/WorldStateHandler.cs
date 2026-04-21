@@ -54,9 +54,32 @@ namespace WoWSharpClient.Handlers
                 // Process the world states as needed
                 ctx.EventEmitter.FireOnWorldStatesInit(worldStates);
             }
-            catch (EndOfStreamException e)
+            catch (EndOfStreamException)
             {
                 //Console.WriteLine($"Error reading world states: {e}");
+            }
+        }
+
+        public static void HandleUpdateWorldState(Opcode opcode, byte[] data, HandlerContext ctx)
+        {
+            if (data == null || data.Length < 8)
+            {
+                return;
+            }
+
+            using var reader = new BinaryReader(new MemoryStream(data));
+            try
+            {
+                var worldState = new WorldState
+                {
+                    StateId = reader.ReadUInt32(),
+                    StateValue = reader.ReadUInt32()
+                };
+
+                ctx.EventEmitter.FireOnWorldStateUpdate(worldState);
+            }
+            catch (EndOfStreamException)
+            {
             }
         }
     }

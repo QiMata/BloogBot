@@ -34,6 +34,7 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
         public async Task StoreAsync(RecordedTestStorageContext context, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(context);
+            cancellationToken.ThrowIfCancellationRequested();
 
             var sanitizedTestName = SanitizeFileName(context.TestName);
             var timestampFolder = context.CompletedAt.ToString("yyyyMMdd_HHmmss");
@@ -48,6 +49,7 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
             {
                 foreach (var file in Directory.GetFiles(context.TestRunDirectory))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var destPath = Path.Combine(testDirectory, Path.GetFileName(file));
                     File.Copy(file, destPath, overwrite: true);
                 }
@@ -94,6 +96,7 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
     {
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentException.ThrowIfNullOrWhiteSpace(testName);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var sanitizedTestName = SanitizeFileName(testName);
         var timestampFolder = timestamp.ToString("yyyyMMdd_HHmmss");
@@ -122,6 +125,7 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageLocation);
         ArgumentException.ThrowIfNullOrWhiteSpace(localDestinationPath);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var sourcePath = Path.Combine(_rootDirectory, storageLocation);
 
@@ -150,6 +154,7 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(testName);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var sanitizedTestName = SanitizeFileName(testName);
         var testDirectory = Path.Combine(_rootDirectory, sanitizedTestName);
@@ -177,6 +182,7 @@ public sealed class FileSystemRecordedTestStorage : IRecordedTestStorage
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(storageLocation);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var fullPath = Path.Combine(_rootDirectory, storageLocation);
 

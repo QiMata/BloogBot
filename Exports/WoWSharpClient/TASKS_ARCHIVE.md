@@ -2,6 +2,16 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-15) - BG server-packet movement parity coverage
+
+- [x] `WSC-PAR-06` BG server-packet trigger parity is now part of the deterministic movement bundle.
+  - `ObjectManagerWorldSessionTests.MoveKnockBack_ServerPacketFeedsMovementControllerNextFrame` covers `MovementHandler -> WoWSharpObjectManager -> MovementController` for `SMSG_MOVE_KNOCK_BACK`.
+  - Existing force-speed/root, movement-flag toggle, compressed-trigger, and knockback tests now carry `Category=MovementParity` / `ParityLayer=DeterministicBgProtocol`.
+  - Test fixture event wiring now uses `WoWSharpEventEmitter.Instance` where tests use singleton `HandlerContext`.
+- Validation:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.MoveKnockBack|FullyQualifiedName~ObjectManagerWorldSessionTests.ServerControlledMovementFlagChanges_ParseApplyAndAck|FullyQualifiedName~MovementControllerTests.PendingKnockback_OverridesDirectionalInputAndFeedsPhysicsVelocity" --logger "console;verbosity=minimal"` -> `passed (9/9)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
+
 ## Archived Snapshot (2026-03-25 23:59:00) - Exports/WoWSharpClient/TASKS.md
 
 - [x] `WSC-PAR-01` Capture a matched FG/BG trace that proves exact heartbeat-before-stop ordering.

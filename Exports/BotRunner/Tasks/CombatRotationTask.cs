@@ -124,6 +124,7 @@ public abstract class CombatRotationTask(IBotContext botContext) : BotTask(botCo
                 // leaves the player stationary and never reaches the follow-up swing retry.
                 if (_pendingMeleeEngageTargetGuid != target.Guid || !_meleeFacingPrimed)
                 {
+                    ObjectManager.StopAttack();
                     ObjectManager.StopAllMovement();
 
                     // BADFACING means the server disagrees with our local facing snapshot.

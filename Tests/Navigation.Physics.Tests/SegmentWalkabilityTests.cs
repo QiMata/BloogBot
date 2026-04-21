@@ -123,6 +123,38 @@ public class SegmentWalkabilityTests
     }
 
     [Fact]
+    public void ValidateWalkableSegment_SteepSweepContainsRejectedUphillSegment()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var candidates = new[]
+        {
+            PhysicsSweepCoordinates.VerticalSurfaces.UngoroCraterWalls,
+            PhysicsSweepCoordinates.VerticalSurfaces.DesolaceCliffs,
+            PhysicsSweepCoordinates.SteepSlopes.ThousandNeedlesMesas,
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (TryFindRejectedUphillSegment(candidate, out var start, out var end, out var result,
+                out var resolvedEndZ, out var supportDelta, out var travelFraction))
+            {
+                _output.WriteLine(
+                    $"Rejected uphill segment found in {candidate.Description}: start={start} end={end} result={result} resolvedEndZ={resolvedEndZ:F3} supportDelta={supportDelta:F3} travelFraction={travelFraction:F3}");
+
+                Assert.True(result == SegmentValidationResult.StepUpTooHigh || result == SegmentValidationResult.BlockedGeometry,
+                    $"Expected steep uphill rejection, got {result}");
+                Assert.InRange(travelFraction, 0.0f, 0.95f);
+                Assert.True(resolvedEndZ < end.Z - 3.0f,
+                    $"Expected the resolved support to stay materially below the blocked top point, got resolvedEndZ={resolvedEndZ:F3}, endZ={end.Z:F3}");
+                return;
+            }
+        }
+
+        Assert.Fail("Expected to find at least one rejected uphill segment in the steep-slope sweep corpus.");
+    }
+
+    [Fact]
     public void FindPath_OrgrimmarCorpseRun_PathExistsAndReachesDestination()
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
@@ -244,6 +276,69 @@ public class SegmentWalkabilityTests
                 ? new Vector3(to.X, to.Y, resolvedEndZ)
                 : to;
         }
+    }
+
+    private bool TryFindRejectedUphillSegment(
+        SweepLocation location,
+        out Vector3 start,
+        out Vector3 end,
+        out SegmentValidationResult result,
+        out float resolvedEndZ,
+        out float supportDelta,
+        out float travelFraction)
+    {
+        static bool IsValidGround(float z) => z > -100000f && z < 100000f;
+
+        for (var offsetX = -location.SweepRadius; offsetX <= location.SweepRadius; offsetX += 2.0f)
+        {
+            for (var offsetY = -location.SweepRadius; offsetY <= location.SweepRadius; offsetY += 2.0f)
+            {
+                var sampleX = location.CenterX + offsetX;
+                var sampleY = location.CenterY + offsetY;
+
+                var startZ = GetGroundZ(location.MapId, sampleX, sampleY, location.CenterZ + 10.0f, 40.0f);
+                if (!IsValidGround(startZ))
+                    startZ = GetGroundZ(location.MapId, sampleX, sampleY, location.CenterZ + 30.0f, 80.0f);
+                if (!IsValidGround(startZ))
+                    continue;
+
+                for (var step = 1.0f; step <= 4.0f; step += 1.0f)
+                {
+                    for (var dirIndex = 0; dirIndex < 32; dirIndex++)
+                    {
+                        var angle = dirIndex * (Math.PI / 16.0);
+                        var endX = sampleX + (float)(Math.Cos(angle) * step);
+                        var endY = sampleY + (float)(Math.Sin(angle) * step);
+                        var endZ = GetGroundZ(location.MapId, endX, endY, startZ + 80.0f, 120.0f);
+                        if (!IsValidGround(endZ) || endZ < startZ + 5.0f)
+                            continue;
+
+                        start = new Vector3(sampleX, sampleY, startZ);
+                        end = new Vector3(endX, endY, endZ);
+                        result = ValidateWalkableSegment(
+                            location.MapId,
+                            start,
+                            end,
+                            PhysicsTestConstants.DefaultCapsuleRadius,
+                            PhysicsTestConstants.DefaultCapsuleHeight,
+                            out resolvedEndZ,
+                            out supportDelta,
+                            out travelFraction);
+
+                        if (result == SegmentValidationResult.StepUpTooHigh || result == SegmentValidationResult.BlockedGeometry)
+                            return true;
+                    }
+                }
+            }
+        }
+
+        start = default;
+        end = default;
+        result = SegmentValidationResult.Clear;
+        resolvedEndZ = 0.0f;
+        supportDelta = 0.0f;
+        travelFraction = 0.0f;
+        return false;
     }
 
     private static float Distance2D(in Vector3 from, in Vector3 to)

@@ -212,9 +212,11 @@ namespace PathfindingService
             var sanitizedPath = pathResult.Path.Where(IsFinitePoint).ToArray();
 
             logger.LogInformation(
-                "[PATH_DIAG] id={RequestId} result={Result} pathLen={PathLen} rawPathLen={RawPathLen} blockedIdx={BlockedIdx} elapsedMs={ElapsedMs}",
+                "[PATH_DIAG] id={RequestId} result={Result} pathLen={PathLen} rawPathLen={RawPathLen} blockedIdx={BlockedIdx} blockedReason={BlockedReason} elapsedMs={ElapsedMs}",
                 requestId, pathResult.Result, sanitizedPath.Length, pathResult.RawPath.Length,
-                pathResult.BlockedSegmentIndex?.ToString() ?? "none", requestSw.ElapsedMilliseconds);
+                pathResult.BlockedSegmentIndex?.ToString() ?? "none",
+                pathResult.BlockedReason,
+                requestSw.ElapsedMilliseconds);
 
             if (dist2D >= 100f)
             {
@@ -238,6 +240,35 @@ namespace PathfindingService
             resp.Corners.AddRange(sanitizedPath.Select(p => new Game.Position { X = p.X, Y = p.Y, Z = p.Z }));
             resp.RawCornerCount = (uint)pathResult.RawPath.Length;
             resp.Result = pathResult.Result;
+            resp.HasBlockedSegment = pathResult.BlockedSegmentIndex.HasValue;
+            if (pathResult.BlockedSegmentIndex is int blockedSegmentIndex)
+            {
+                resp.BlockedSegmentIndex = blockedSegmentIndex;
+            }
+
+            resp.BlockedReason = pathResult.BlockedReason;
+
+            var affordanceSummary = PathAffordanceClassifier.Summarize(
+                req.MapId,
+                sanitizedPath,
+                agentRadius,
+                agentHeight);
+            resp.MaxAffordance = affordanceSummary.MaxAffordance;
+            resp.PathSupported = affordanceSummary.PathSupported;
+            resp.StepUpCount = (uint)affordanceSummary.StepUpCount;
+            resp.DropCount = (uint)affordanceSummary.DropCount;
+            resp.CliffCount = (uint)affordanceSummary.CliffCount;
+            resp.VerticalCount = (uint)affordanceSummary.VerticalCount;
+            resp.TotalZGain = affordanceSummary.TotalZGain;
+            resp.TotalZLoss = affordanceSummary.TotalZLoss;
+            resp.MaxSlopeAngleDeg = affordanceSummary.MaxSlopeAngleDeg;
+            resp.JumpGapCount = (uint)affordanceSummary.JumpGapCount;
+            resp.SafeDropCount = (uint)affordanceSummary.SafeDropCount;
+            resp.UnsafeDropCount = (uint)affordanceSummary.UnsafeDropCount;
+            resp.BlockedCount = (uint)affordanceSummary.BlockedCount;
+            resp.MaxClimbHeight = affordanceSummary.MaxClimbHeight;
+            resp.MaxGapDistance = affordanceSummary.MaxGapDistance;
+            resp.MaxDropHeight = affordanceSummary.MaxDropHeight;
 
             return new PathfindingResponse { Path = resp };
         }

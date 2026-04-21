@@ -1,5 +1,6 @@
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Moq;
 using System;
@@ -43,9 +44,51 @@ public class GatheringRouteTaskTests
     }
 
     [Fact]
-    public void Update_VisibleNodeInRange_StartsGatherSequence()
+    public void Update_VisibleNodeInRange_StopsUsesNodeThenDelaysGatherSpell()
     {
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var node = AtomicTaskTestHelpers.CreateGameObject(0xAAAAUL, 1731u, 3u, new Position(1, 0, 0), "Copper Vein");
+        om.Setup(o => o.GameObjects).Returns([node.Object]);
+        var calls = new List<string>();
+        om.Setup(o => o.ForceStopImmediate()).Callback(() => calls.Add("stop"));
+        om.Setup(o => o.Face(It.IsAny<Position>())).Callback(() => calls.Add("face"));
+        om.Setup(o => o.InteractWithGameObject(0xAAAAUL)).Callback(() => calls.Add("use"));
+        om.Setup(o => o.CastSpellOnGameObject(2575, 0xAAAAUL)).Callback(() => calls.Add("cast"));
+        om.Setup(o => o.SetTarget(0)).Callback(() => calls.Add("clear_target"));
+
+        var task = new GatheringRouteTask(ctx.Object, [new Position(0, 0, 0)], [1731u], 2575);
+        stack.Push(task);
+
+        task.Update(); // Build route
+        task.Update(); // Candidate reached
+        task.Update(); // Visible node found
+        task.Update(); // GAMEOBJ_USE starts, spell is intentionally delayed
+
+        om.Verify(o => o.StopAllMovement(), Times.Once);
+        om.Verify(o => o.ForceStopImmediate(), Times.Once);
+        om.Verify(o => o.InteractWithGameObject(0xAAAAUL), Times.Once);
+        om.Verify(o => o.CastSpellOnGameObject(2575, 0xAAAAUL), Times.Never);
+        om.Verify(o => o.SetTarget(0), Times.Never);
+        Assert.Equal(["stop", "face", "use"], calls);
+
+        RewindStateTimer(task, TimeSpan.FromMilliseconds(GatheringRouteTask.GatherCastDelayMs + 1));
+        task.Update(); // Gathering spell starts after stop/use packet ordering window
+
+        om.Verify(o => o.CastSpellOnGameObject(2575, 0xAAAAUL), Times.Once);
+        om.Verify(o => o.SetTarget(0), Times.Once);
+        Assert.Equal(["stop", "face", "use", "cast", "clear_target"], calls);
+        Assert.Single(stack);
+    }
+
+    [Fact]
+    public void Update_RetryableGatherCastFailure_ReusesSameVisibleNode()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var eventHandler = new Mock<IWoWEventHandler>();
+        ctx.Setup(c => c.EventHandler).Returns(eventHandler.Object);
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
         om.Setup(o => o.Player).Returns(player.Object);
 
@@ -58,13 +101,22 @@ public class GatheringRouteTaskTests
         task.Update(); // Build route
         task.Update(); // Candidate reached
         task.Update(); // Visible node found
-        task.Update(); // Gather starts
+        task.Update(); // GAMEOBJ_USE starts
 
-        om.Verify(o => o.StopAllMovement(), Times.Once);
-        om.Verify(o => o.ForceStopImmediate(), Times.Once);
-        om.Verify(o => o.InteractWithGameObject(0xAAAAUL), Times.Once);
+        RewindStateTimer(task, TimeSpan.FromMilliseconds(GatheringRouteTask.GatherCastDelayMs + 1));
+        task.Update(); // Gathering spell starts
+
+        eventHandler.Raise(
+            e => e.OnErrorMessage += null!,
+            new OnUiMessageArgs("Cast failed for spell 2575: TRY_AGAIN"));
+        task.Update(); // Server failure packet schedules a retry.
+
+        RewindStateTimer(task, TimeSpan.FromMilliseconds(GatheringRouteTask.GatherRetryDelayMs + 1));
+        task.Update(); // Retry delay elapsed; return to node approach state.
+        task.Update(); // Re-use the same visible node.
+
+        om.Verify(o => o.InteractWithGameObject(0xAAAAUL), Times.Exactly(2));
         om.Verify(o => o.CastSpellOnGameObject(2575, 0xAAAAUL), Times.Once);
-        om.Verify(o => o.SetTarget(0), Times.Once);
         Assert.Single(stack);
     }
 
@@ -90,7 +142,6 @@ public class GatheringRouteTaskTests
             pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
                 .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
                 {
-                    requestedDestination = new Position(end.X, end.Y, end.Z);
                     return
                     [
                         new Position(start.X, start.Y, start.Z),
@@ -100,6 +151,8 @@ public class GatheringRouteTaskTests
 
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
         om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.MoveToward(It.IsAny<Position>()))
+            .Callback<Position>(position => requestedDestination = new Position(position.X, position.Y, position.Z));
 
         var node = AtomicTaskTestHelpers.CreateGameObject(0xAAAAUL, 1731u, 3u, new Position(8f, 0f, 0f), "Copper Vein");
         om.Setup(o => o.GameObjects).Returns([node.Object]);
@@ -119,9 +172,50 @@ public class GatheringRouteTaskTests
     }
 
     [Fact]
+    public void Update_VisibleNodeShortRangeNoPath_FallsBackToDirectMove()
+    {
+        Position? requestedDestination = null;
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+        {
+            pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns([]);
+            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
+                .Returns(false);
+        });
+
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.MoveToward(It.IsAny<Position>()))
+            .Callback<Position>(position => requestedDestination = new Position(position.X, position.Y, position.Z));
+
+        var node = AtomicTaskTestHelpers.CreateGameObject(0xBBBBUL, 1731u, 3u, new Position(8f, 0f, 0f), "Copper Vein");
+        om.Setup(o => o.GameObjects).Returns([node.Object]);
+
+        var task = new GatheringRouteTask(ctx.Object, [new Position(0f, 0f, 0f)], [1731u], 2575);
+        stack.Push(task);
+
+        task.Update(); // Build route
+        task.Update(); // Candidate reached
+        task.Update(); // Visible node found
+        task.Update(); // Short-range fallback move
+
+        Assert.NotNull(requestedDestination);
+        Assert.Equal(3.5f, requestedDestination!.X, 3);
+        Assert.Equal(0f, requestedDestination.Y, 3);
+        Assert.Equal(0f, requestedDestination.Z, 3);
+        Assert.Single(stack);
+    }
+
+    [Fact]
     public void Update_CombatPause_KeepsTaskAndResumesWithoutTimingOut()
     {
-        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
+            pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
+                .Returns((uint mapId, Position start, Position end, bool smoothPath) =>
+                [
+                    new Position(start.X, start.Y, start.Z),
+                    new Position(end.X, end.Y, end.Z)
+                ]));
         var inCombat = false;
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
         player.Setup(p => p.IsInCombat).Returns(() => inCombat);
@@ -191,6 +285,45 @@ public class GatheringRouteTaskTests
         Assert.Same(combatTask.Object, stack.Peek());
         Assert.Same(task, stack.ToArray()[1]);
         Assert.Equal(1, combatFactoryCalls);
+    }
+
+    [Fact]
+    public void Update_CombatPause_RepushesCombatRotationTaskIfCombatPersistsAfterFirstHandoff()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0), inCombat: true);
+        om.Setup(o => o.Player).Returns(player.Object);
+        om.Setup(o => o.GameObjects).Returns([]);
+
+        var firstCombatTask = new Mock<IBotTask>();
+        var secondCombatTask = new Mock<IBotTask>();
+        var combatTaskQueue = new Queue<IBotTask>([firstCombatTask.Object, secondCombatTask.Object]);
+        var combatFactoryCalls = 0;
+        var classContainer = new Mock<BotRunner.Interfaces.IClassContainer>();
+        classContainer
+            .Setup(c => c.CreatePvERotationTask)
+            .Returns((BotRunner.Interfaces.IBotContext context) =>
+            {
+                combatFactoryCalls++;
+                Assert.Same(ctx.Object, context);
+                return combatTaskQueue.Dequeue();
+            });
+        Mock.Get(ctx.Object.Container).Setup(c => c.ClassContainer).Returns(classContainer.Object);
+
+        var task = new GatheringRouteTask(ctx.Object, [new Position(40, 0, 0)], [1731u], 2575);
+        stack.Push(task);
+
+        task.Update(); // Initial combat handoff.
+        Assert.Equal(2, stack.Count);
+        Assert.Same(firstCombatTask.Object, stack.Peek());
+
+        stack.Pop(); // Simulate the handed-off combat task ending while still in combat.
+        task.Update();
+
+        Assert.Equal(2, stack.Count);
+        Assert.Same(secondCombatTask.Object, stack.Peek());
+        Assert.Same(task, stack.ToArray()[1]);
+        Assert.Equal(2, combatFactoryCalls);
     }
 
     [Fact]

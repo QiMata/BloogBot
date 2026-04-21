@@ -11,6 +11,7 @@ using GameData.Core.Models;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Networking.ClientComponents.I;
@@ -31,6 +32,7 @@ namespace BotRunner
         private readonly IDiagnosticPacketTraceRecorder? _diagnosticPacketTraceRecorder;
         private readonly bool _autoReleaseCorpseTaskEnabled;
         private readonly bool _autoRetrieveCorpseTaskEnabled;
+        private readonly string _initialAccountName;
 
         private WoWActivitySnapshot _activitySnapshot;
 
@@ -38,6 +40,7 @@ namespace BotRunner
         private readonly Queue<string> _recentChatMessages = new();
         private readonly Queue<string> _recentErrors = new();
         private const int MaxBufferedMessages = 50;
+        private bool _battlegroundMessageEventsSubscribed;
 
         // DiagLog writes to file and Serilog. FG context lacks Serilog global config.
         // Instance path is scoped per bot account; static overload logs to Serilog only
@@ -86,6 +89,9 @@ namespace BotRunner
         private Position? _lastKnownAlivePosition;
         private int _lastLoggedContainedItems = -1;
         private int _lastLoggedItemObjects = -1;
+        private int _consecutiveTransitionSkips;
+        private int _consecutiveNullStateResponses;
+        private int _consecutiveStateUpdateFailures;
 
         // Extracted components
         private readonly DiagnosticsRecorder _diagnosticsRecorder;
@@ -126,7 +132,8 @@ namespace BotRunner
                                  IDiagnosticPacketTraceRecorder? diagnosticPacketTraceRecorder = null)
         {
             _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
-            _activitySnapshot = new() { AccountName = accountName ?? "?" };
+            _initialAccountName = accountName ?? "?";
+            _activitySnapshot = new() { AccountName = _initialAccountName };
             _agentFactoryAccessor = agentFactoryAccessor;
 
             _characterStateUpdateClient = characterStateUpdateClient ?? throw new ArgumentNullException(nameof(characterStateUpdateClient));
@@ -197,12 +204,8 @@ namespace BotRunner
             {
                 try
                 {
-                    if (_objectManager.HasEnteredWorld && _objectManager.IsInMapTransition)
-                    {
-                        var jitter = 500 + Random.Shared.Next(0, 1000);
-                        await Task.Delay(jitter, cancellationToken);
-                        continue;
-                    }
+                    EnsureActivitySnapshot();
+                    var inMapTransition = _objectManager.HasEnteredWorld && _objectManager.IsInMapTransition;
 
                     PopulateSnapshotFromObjectManager();
                     _diagnosticsRecorder.CaptureTransformFrame(_botTasks, Interlocked.Read(ref _tickCount), _activitySnapshot);
@@ -213,10 +216,26 @@ namespace BotRunner
                         Log.Information("[BG-DIAG] Snapshot contains MapId=489 at tick {Tick}", _tickCount);
 
                     Communication.WoWActivitySnapshot? incomingActivityMemberState = null;
+                    var stateSendStopwatch = Stopwatch.StartNew();
                     try
                     {
                         incomingActivityMemberState = await _characterStateUpdateClient
                             .SendMemberStateUpdateAsync(_activitySnapshot, cancellationToken);
+                        stateSendStopwatch.Stop();
+
+                        if (_consecutiveStateUpdateFailures > 0)
+                        {
+                            DiagLog($"[STATE-SEND] recovered after {_consecutiveStateUpdateFailures} failure(s)");
+                            _consecutiveStateUpdateFailures = 0;
+                        }
+
+                        if (stateSendStopwatch.ElapsedMilliseconds >= 1000)
+                        {
+                            DiagLog(
+                                $"[STATE-SEND] slow response {stateSendStopwatch.ElapsedMilliseconds}ms " +
+                                $"account={_activitySnapshot?.AccountName ?? _initialAccountName} " +
+                                $"screen={_activitySnapshot?.ScreenState ?? "?"}");
+                        }
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
@@ -229,6 +248,56 @@ namespace BotRunner
                         || ex is InvalidOperationException
                         || ex is TimeoutException)
                     {
+                        stateSendStopwatch.Stop();
+                        var failures = ++_consecutiveStateUpdateFailures;
+                        DiagLog(
+                            $"[STATE-SEND] failed #{failures} type={ex.GetType().Name} elapsed={stateSendStopwatch.ElapsedMilliseconds}ms " +
+                            $"account={_activitySnapshot?.AccountName ?? _initialAccountName} message={ex.Message}");
+                    }
+
+                    if (incomingActivityMemberState == null)
+                    {
+                        var nullResponses = ++_consecutiveNullStateResponses;
+                        if (nullResponses == 1 || nullResponses % 10 == 0)
+                        {
+                            DiagLog(
+                                $"[STATE-SEND] null response #{nullResponses}; preserving local snapshot " +
+                                $"account={_activitySnapshot?.AccountName ?? _initialAccountName}");
+                        }
+                    }
+                    else if (_consecutiveNullStateResponses > 0)
+                    {
+                        DiagLog($"[STATE-SEND] non-null response restored after {_consecutiveNullStateResponses} null response(s)");
+                        _consecutiveNullStateResponses = 0;
+                    }
+
+                    if (inMapTransition)
+                    {
+                        var skipped = ++_consecutiveTransitionSkips;
+                        if (skipped == 1 || skipped % 10 == 0)
+                        {
+                            var player = _objectManager.Player;
+                            var pos = player?.Position;
+                            DiagLog(
+                                $"[TRANSITION-SKIP] count={skipped} enteredWorld={_objectManager.HasEnteredWorld} " +
+                                $"inTransition={_objectManager.IsInMapTransition} " +
+                                $"player={player != null} pos=({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F1})");
+                        }
+
+                        if (incomingActivityMemberState != null)
+                        {
+                            _activitySnapshot = incomingActivityMemberState;
+                        }
+
+                        var jitter = 500 + Random.Shared.Next(0, 1000);
+                        await Task.Delay(jitter, cancellationToken);
+                        continue;
+                    }
+
+                    if (_consecutiveTransitionSkips > 0)
+                    {
+                        DiagLog($"[TRANSITION-SKIP] resumed after {_consecutiveTransitionSkips} skipped loops");
+                        _consecutiveTransitionSkips = 0;
                     }
 
                     var playerWorldReady = _objectManager.HasEnteredWorld
@@ -255,7 +324,16 @@ namespace BotRunner
                     if (_behaviorTree != null)
                     {
                         var prevStatus = _behaviorTreeStatus;
+                        var behaviorTickStopwatch = Stopwatch.StartNew();
                         _behaviorTreeStatus = _behaviorTree.Tick(new TimeData(0.1f));
+                        behaviorTickStopwatch.Stop();
+
+                        if (behaviorTickStopwatch.ElapsedMilliseconds >= 1000)
+                        {
+                            DiagLog(
+                                $"[TREE-TICK] slow tick {behaviorTickStopwatch.ElapsedMilliseconds}ms " +
+                                $"status={_behaviorTreeStatus} prevStatus={prevStatus} corr={_currentActionCorrelationId}");
+                        }
 
                         if (prevStatus == BehaviourTreeStatus.Running && _behaviorTreeStatus != BehaviourTreeStatus.Running
                             && !string.IsNullOrEmpty(_currentActionCorrelationId))
@@ -277,15 +355,37 @@ namespace BotRunner
                             _botTasks.Peek().Update();
                     }
 
-                    _activitySnapshot = incomingActivityMemberState;
+                    if (incomingActivityMemberState != null)
+                    {
+                        _activitySnapshot = incomingActivityMemberState;
+                    }
                 }
                 catch (Exception ex)
                 {
                     Log.Error($"[BOT RUNNER] {ex}");
+                    DiagLog($"[LOOP-ERROR] {ex.GetType().Name}: {ex.Message}");
                 }
 
                 await Task.Delay(100, cancellationToken);
             }
+        }
+
+        private void EnsureActivitySnapshot()
+        {
+            if (_activitySnapshot != null)
+            {
+                if (string.IsNullOrWhiteSpace(_activitySnapshot.AccountName))
+                    _activitySnapshot.AccountName = _initialAccountName;
+
+                return;
+            }
+
+            _activitySnapshot = new WoWActivitySnapshot
+            {
+                AccountName = _initialAccountName
+            };
+
+            DiagLog($"[STATE-SEND] restored missing activity snapshot for {_initialAccountName}");
         }
 
         private void UpdateBehaviorTree(WoWActivitySnapshot? incomingActivityMemberState)
@@ -364,6 +464,11 @@ namespace BotRunner
                 {
                     _tasksInitialized = true;
                     InitializeTaskSequence();
+                }
+
+                if (TryBuildDesiredPartyBehaviorTree(incomingActivityMemberState))
+                {
+                    return;
                 }
 
                 _behaviorTree = null;
@@ -516,8 +621,8 @@ namespace BotRunner
             if (player == null) return;
 
             var isGhost = IsGhostState(player);
-            var isCorpse = IsCorpseState(player);
-            var isDeadOrGhost = isGhost || isCorpse;
+            var canReleaseSpirit = CanReleaseSpirit(player);
+            var isDeadOrGhost = isGhost || canReleaseSpirit;
             if (!isDeadOrGhost)
                 return;
 
@@ -530,7 +635,7 @@ namespace BotRunner
 
             var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
 
-            if (isCorpse)
+            if (canReleaseSpirit)
             {
                 if (!_autoReleaseCorpseTaskEnabled)
                 {
@@ -592,6 +697,7 @@ namespace BotRunner
         private static bool IsStandStateDead(IWoWLocalPlayer player) => DeathStateDetection.IsStandStateDead(player);
         private static bool IsGhostState(IWoWLocalPlayer player) => DeathStateDetection.IsGhost(player);
         private static bool IsCorpseState(IWoWLocalPlayer player) => DeathStateDetection.IsCorpse(player);
+        private static bool CanReleaseSpirit(IWoWLocalPlayer player) => DeathStateDetection.CanReleaseSpirit(player);
         private static bool IsDeadOrGhostState(IWoWLocalPlayer player) => DeathStateDetection.IsDeadOrGhost(player);
 
         private void UpdateLastKnownAlivePosition(IWoWLocalPlayer player)

@@ -445,6 +445,7 @@ namespace WoWSharpClient.Handlers
             0x64 => "STUNNED",
             0x65 => "TARGETS_DEAD",
             0x76 => "TOO_CLOSE",
+            0x7A => "TRY_AGAIN",
             0x7B => "UNIT_NOT_BEHIND",
             0x7C => "UNIT_NOT_INFRONT",
             _ => $"UNKNOWN_0x{reason:X2}"
@@ -574,7 +575,7 @@ namespace WoWSharpClient.Handlers
                     if (isUs)
                     {
                         localPlayer.IsAutoAttacking = false;
-                        ctx.ObjectManager.ClearPendingMeleeAttackStart(targetGuid);
+                        ctx.ObjectManager.ClearTrackedMeleeAttackState(targetGuid);
                     }
                 }
             }
@@ -593,7 +594,7 @@ namespace WoWSharpClient.Handlers
             if (player is Models.WoWLocalPlayer localPlayer)
             {
                 localPlayer.IsAutoAttacking = false;
-                ctx.ObjectManager.ClearPendingMeleeAttackStart();
+                ctx.ObjectManager.ClearTrackedMeleeAttackState();
                 Log.Warning("[SpellHandler] SMSG_CANCEL_COMBAT received — cleared IsAutoAttacking (possible mob evade)");
             }
         }

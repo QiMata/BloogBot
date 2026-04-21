@@ -44,10 +44,15 @@ All converters are **one-way** (source to target only). `ConvertBack` either ret
 | `GreaterThanZeroToBooleanConverter` | `int` | `bool` (`value > 0`) | `IsEnabled` on controls gated by `SelectCharacterIndex` (MainWindow.xaml:86-136) |
 | `InverseBooleanConverter` | `bool` | `bool` (negated) | Inverts boolean properties for UI visibility/enabled state |
 | `EnumDescriptionConverter` | `Enum` | `string` (from `[Description]` attribute) | Display-friendly enum labels |
+| `NullToBoolConverter` | any nullable object | `bool` (`value != null`) | Enables selected-character detail panels |
+| `PathToFilenameConverter` | `string` path | filename or empty string | Shows compact config file names |
+| `ServiceStatusToBrushConverter` | `ServiceStatus` | status color brush | Status lights for realmd, mangosd, SOAP, pathfinding, and scene data |
 
 `SelectCharacterIndex` defaults to `-1` (no selection). The `GreaterThanZeroToBooleanConverter` returns `false` for `-1` and `0`, disabling dependent controls until a valid character is selected (index >= 1).
 
 Non-int values passed to `GreaterThanZeroToBooleanConverter` return `false` (safe fallback).
+
+`NullToBoolConverter`, `PathToFilenameConverter`, and `ServiceStatusToBrushConverter` are also one-way. Their `ConvertBack` methods throw `NotSupportedException` by design.
 
 ## Dependencies
 

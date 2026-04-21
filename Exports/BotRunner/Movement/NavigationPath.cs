@@ -406,6 +406,7 @@ public class NavigationPath(
     private readonly Gender _gender = gender;
     private Position[] _waypoints = [];
     private float[] _waypointAcceptanceRadii = [];
+    private Position? _pathStartPosition;
 
     /// <summary>
     /// Exposes the remaining active waypoint corridor for movement execution.
@@ -463,9 +464,17 @@ public class NavigationPath(
     private const float WALKABLE_CORRIDOR_SAMPLE_RADIUS_PADDING = 0.35f;
     private const float WALKABLE_CORRIDOR_MAX_SAMPLE_OFFSET = 0.9f;
     private const float WALKABLE_CORRIDOR_MAX_SNAP_Z_DELTA = 3.0f;
+    private const float COLLISION_LAYER_MISMATCH_Z_DELTA = 5.0f;
+    private const float COLLISION_LAYER_REPAIR_MAX_DISTANCE = 8.0f;
+    private const int COLLISION_LAYER_MAX_SUPPORT_SAMPLES = 16;
+    private const float LOCAL_PHYSICS_SEGMENT_SIMULATION_MAX_DISTANCE = 12.0f;
+    private const float LOCAL_PHYSICS_ROUTE_LAYER_REJECT_Z_DELTA = 5.0f;
+    private const float LOCAL_PHYSICS_ROUTE_LATERAL_REJECT_DISTANCE = 3.0f;
+    private const float LOCAL_PHYSICS_DETOUR_MAX_DISTANCE = 8.0f;
     private const float LOCAL_VERTICAL_ENDPOINT_MAX_2D = 12.0f;
     private const float LOCAL_VERTICAL_ENDPOINT_MIN_Z_DELTA = 4.0f;
     private static readonly float[] LocalVerticalEndpointSearchRadii = [4.0f, 8.0f, 12.0f];
+    private static readonly float[] CollisionLayerRepairDistances = [2.0f, 4.0f, 6.0f, 8.0f];
     private int _losSkipCacheIndex = -1;
     private int _losSkipCacheFarthest = -1;
     private long _losSkipCacheTick;
@@ -477,6 +486,7 @@ public class NavigationPath(
     private const float SHARP_TURN_ANGLE_DEG = 90f;       // angle that maps to MIN
     private const float WAYPOINT_REACH_DISTANCE = 3.5f;   // default fallback (no radii computed)
     private const float CORNER_COMMIT_DISTANCE = 1.25f;   // default fallback
+    private const float WAYPOINT_OVERSHOOT_ADVANCE_EPSILON = 0.35f;
     private const float RECALCULATE_DISTANCE = 10f;
 
     // Cliff/edge detection constants
@@ -507,6 +517,7 @@ public class NavigationPath(
     private const float STUCK_RECOVERY_REPEAT_PROMOTION_POSITION_EPSILON = 1.0f;
     private const float STUCK_RECOVERY_REPEAT_PROMOTION_DISTANCE_EPSILON = 0.35f;
     private const int STUCK_RECOVERY_REPEAT_PROMOTION_THRESHOLD = 2;
+    private const float STUCK_REPLAN_SAFER_ALTERNATE_COST_TOLERANCE = 30f;
     private const int WAYPOINT_REACHABILITY_SCAN_LIMIT = 12;
     private const float PATH_POINT_DEDUP_EPSILON = 0.05f;
     private const float MAX_FIRST_WAYPOINT_DISTANCE = 120f;
@@ -518,14 +529,19 @@ public class NavigationPath(
     private const float PROBE_COLLINEARITY_DOT_MIN = 0.985f;
     private const int MAX_TRACE_SAMPLES = 64;
     private const float SHORT_ROUTE_TRACE_DISTANCE = 40f;
+    private const float SHORT_DIRECT_FALLBACK_CORRIDOR_DISTANCE = 15f;
+    private const float SHORT_DIRECT_FALLBACK_MAX_Z_DELTA = 2f;
     private const string TRACE_RESOLUTION_WAYPOINT = "waypoint";
     private const string TRACE_RESOLUTION_WALL_DEFLECT = "wall_deflect";
     private const string TRACE_RESOLUTION_DIRECT_FALLBACK = "direct_fallback";
     private const string TRACE_RESOLUTION_NO_ROUTE = "no_route";
+    private const string TRACE_RESOLUTION_TRANSPORT_WAYPOINT = "transport_waypoint";
+    private const string TRACE_RESOLUTION_TRANSPORT_HOLD = "transport_hold";
 
     private readonly List<NavigationExecutionSample> _executionSamples = [];
     private bool _pendingDynamicBlockerReplan;
     private long _lastDynamicBlockerReplanTick;
+    private long _lastWaypointTick;
     private Position[] _traceServiceWaypoints = [];
     private Position[] _tracePlannedWaypoints = [];
     private PathAffordanceInfo _traceAffordances = PathAffordanceInfo.Empty;
@@ -572,8 +588,11 @@ public class NavigationPath(
     /// Gets the next waypoint to move toward, or the direct destination if no path is available.
     /// Automatically calculates/recalculates the path as needed.
     /// </summary>
-    public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f, bool physicsHitWall = false, float wallNormalX = 0f, float wallNormalY = 0f, float blockedFraction = 1f)
+    public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f, bool physicsHitWall = false, float wallNormalX = 0f, float wallNormalY = 0f, float blockedFraction = 1f, ulong currentTransportGuid = 0)
     {
+        var nowTick = _tickProvider();
+        var deltaTimeSec = ComputeDeltaTimeSeconds(nowTick);
+
         if (_pathfinding == null)
         {
             var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
@@ -583,6 +602,16 @@ public class NavigationPath(
                 fallback,
                 usedDirectFallback: fallback != null,
                 fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
+        }
+
+        if (TryResolveTransportWaypoint(currentPosition, destination, mapId, currentTransportGuid, deltaTimeSec, out var transportWaypoint, out var transportResolution))
+        {
+            return RecordWaypointResult(
+                currentPosition,
+                destination,
+                transportWaypoint,
+                usedDirectFallback: false,
+                transportResolution);
         }
 
         ObserveMovementStuckRecovery(currentPosition, destination, mapId);
@@ -844,7 +873,14 @@ public class NavigationPath(
             // the bot to circle around waypoints it's already standing on top of.
             var distanceToWaypoint = currentPosition.DistanceTo2D(_waypoints[_currentIndex]);
             if (distanceToWaypoint >= effectiveRadius)
-                break;
+            {
+                if (!CanAdvancePastOvershotWaypoint(currentPosition, mapId, effectiveRadius))
+                    break;
+
+                _currentIndex++;
+                Metrics.IncrementWaypointsReached();
+                continue;
+            }
 
             if (_enableDynamicProbeSkipping
                 && ShouldSkipProbeWaypoint(currentPosition, mapId, effectiveRadius, distanceToWaypoint))
@@ -877,7 +913,8 @@ public class NavigationPath(
             for (int i = _currentIndex + 1; i < scanEnd; i++)
             {
                 var d = currentPosition.DistanceTo2D(_waypoints[i]);
-                if (d < bestDist)
+                if (d < bestDist
+                    && ShortcutPreservesWalkableCorridor(currentPosition, _waypoints[i], mapId))
                 {
                     bestDist = d;
                     bestIndex = i;
@@ -904,11 +941,19 @@ public class NavigationPath(
             return true;
 
         // In non-strict mode, always advance once within the effective radius (caller already
-        // checked effectiveRadius). The old commitDistance check was stricter than effectiveRadius,
-        // causing the bot to get stuck at waypoints it had clearly reached (especially when
-        // navmesh Z differs from terrain Z).
+        // checked effectiveRadius), but only if the live shortcut to the next waypoint still
+        // stays inside the sampled walkable corridor. This prevents adaptive radii from
+        // curving the bot across off-mesh terrain after it drifts near a corner.
         if (!_strictPathValidation)
-            return true;
+        {
+            if (!_enableProbeHeuristics)
+                return true;
+
+            if (distanceToCurrentWaypoint2D <= PATH_POINT_DEDUP_EPSILON)
+                return true;
+
+            return ShortcutPreservesWalkableCorridor(currentPosition, _waypoints[_currentIndex + 1], mapId);
+        }
 
         // Strict mode: use the tighter acceptance radius as commit distance and require LOS.
         var commitDistance = _waypointAcceptanceRadii.Length > _currentIndex
@@ -920,6 +965,65 @@ public class NavigationPath(
 
         return TryGetLineOfSight(currentPosition, _waypoints[_currentIndex + 1], mapId, out var nextWaypointVisible)
             && nextWaypointVisible;
+    }
+
+    private bool CanAdvancePastOvershotWaypoint(Position currentPosition, uint mapId, float effectiveRadius)
+    {
+        if (_currentIndex + 1 >= _waypoints.Length)
+            return false;
+
+        if (!HasCrossedCurrentWaypoint(currentPosition, effectiveRadius))
+            return false;
+
+        var nextWaypoint = _waypoints[_currentIndex + 1];
+        if (_strictPathValidation
+            && (!TryGetLineOfSight(currentPosition, nextWaypoint, mapId, out var nextVisible) || !nextVisible))
+        {
+            return false;
+        }
+
+        return ShortcutPreservesWalkableCorridor(currentPosition, nextWaypoint, mapId);
+    }
+
+    private bool HasCrossedCurrentWaypoint(Position currentPosition, float effectiveRadius)
+    {
+        if (_currentIndex >= _waypoints.Length)
+            return false;
+
+        var previous = GetCurrentWaypointInboundAnchor();
+        if (previous == null)
+            return false;
+
+        var currentWaypoint = _waypoints[_currentIndex];
+        var segmentX = currentWaypoint.X - previous.X;
+        var segmentY = currentWaypoint.Y - previous.Y;
+        var segmentLengthSq = segmentX * segmentX + segmentY * segmentY;
+        if (segmentLengthSq <= PATH_POINT_DEDUP_EPSILON * PATH_POINT_DEDUP_EPSILON)
+            return false;
+
+        var segmentLength = MathF.Sqrt(segmentLengthSq);
+        var currentX = currentPosition.X - previous.X;
+        var currentY = currentPosition.Y - previous.Y;
+        var projection = (currentX * segmentX + currentY * segmentY) / segmentLengthSq;
+        var overshootDistance = (projection - 1f) * segmentLength;
+        if (overshootDistance <= WAYPOINT_OVERSHOOT_ADVANCE_EPSILON)
+            return false;
+
+        var projectedX = previous.X + segmentX * projection;
+        var projectedY = previous.Y + segmentY * projection;
+        var lateralX = currentPosition.X - projectedX;
+        var lateralY = currentPosition.Y - projectedY;
+        var lateralDistance = MathF.Sqrt(lateralX * lateralX + lateralY * lateralY);
+        var lateralTolerance = MathF.Max(effectiveRadius, _capsuleRadius * 3f);
+        return lateralDistance <= lateralTolerance;
+    }
+
+    private Position? GetCurrentWaypointInboundAnchor()
+    {
+        if (_currentIndex > 0)
+            return _waypoints[_currentIndex - 1];
+
+        return _pathStartPosition;
     }
 
     private bool ShouldSkipProbeWaypoint(
@@ -955,7 +1059,98 @@ public class NavigationPath(
             return false;
 
         return TryGetLineOfSight(currentPosition, nextWaypoint, mapId, out var nextWaypointVisible)
-            && nextWaypointVisible;
+            && nextWaypointVisible
+            && ShortcutPreservesWalkableCorridor(currentPosition, nextWaypoint, mapId);
+    }
+
+    public bool ShouldHoldPositionForTransport(Position currentPosition, Position? waypoint, float holdDistance2D = 0.5f)
+    {
+        if (!IsRidingTransport)
+            return false;
+
+        var phase = _activeTransportRide?.CurrentPhase ?? TransportPhase.Complete;
+        return phase switch
+        {
+            TransportPhase.Riding => true,
+            TransportPhase.Approaching or TransportPhase.WaitingForArrival
+                => waypoint == null || currentPosition.DistanceTo2D(waypoint) <= holdDistance2D,
+            _ => waypoint == null,
+        };
+    }
+
+    private float ComputeDeltaTimeSeconds(long nowTick)
+    {
+        if (_lastWaypointTick == 0)
+        {
+            _lastWaypointTick = nowTick;
+            return 1f / 60f;
+        }
+
+        var deltaMs = nowTick - _lastWaypointTick;
+        _lastWaypointTick = nowTick;
+
+        if (deltaMs <= 0 || deltaMs > 5000)
+            return 1f / 60f;
+
+        return deltaMs / 1000f;
+    }
+
+    private bool TryResolveTransportWaypoint(
+        Position currentPosition,
+        Position destination,
+        uint mapId,
+        ulong currentTransportGuid,
+        float deltaTimeSec,
+        out Position? waypoint,
+        out string resolution)
+    {
+        waypoint = null;
+        resolution = TRACE_RESOLUTION_NO_ROUTE;
+
+        if (!IsRidingTransport && !CheckTransportNeeded(currentPosition, destination, mapId))
+            return false;
+
+        IReadOnlyList<DynamicObjectProto>? nearbyObjects = null;
+        if (_nearbyObjectProvider != null)
+        {
+            try
+            {
+                nearbyObjects = _nearbyObjectProvider(currentPosition, destination);
+            }
+            catch
+            {
+                nearbyObjects = null;
+            }
+        }
+
+        waypoint = GetTransportTarget(currentPosition, currentTransportGuid, nearbyObjects, deltaTimeSec);
+        if (IsRidingTransport)
+        {
+            resolution = waypoint == null
+                ? TRACE_RESOLUTION_TRANSPORT_HOLD
+                : TRACE_RESOLUTION_TRANSPORT_WAYPOINT;
+            return true;
+        }
+
+        if (waypoint != null)
+        {
+            resolution = TRACE_RESOLUTION_TRANSPORT_WAYPOINT;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool ShortcutPreservesWalkableCorridor(Position from, Position to, uint mapId)
+    {
+        if (from.DistanceTo2D(to) <= PATH_POINT_DEDUP_EPSILON)
+            return true;
+
+        if (PreservesWalkableCorridor(from, to, mapId))
+            return true;
+
+        Metrics.IncrementWidthChecksFailed();
+        return false;
     }
 
     private bool TryResolveWaypoint(
@@ -1055,7 +1250,17 @@ public class NavigationPath(
         if (_pathfinding == null)
             return destination;
 
-        return HasLineOfSight(currentPosition, destination, mapId) ? destination : null;
+        if (HasLineOfSight(currentPosition, destination, mapId))
+            return destination;
+
+        var segmentDistance2D = currentPosition.DistanceTo2D(destination);
+        if (segmentDistance2D > SHORT_DIRECT_FALLBACK_CORRIDOR_DISTANCE)
+            return null;
+
+        if (MathF.Abs(destination.Z - currentPosition.Z) > SHORT_DIRECT_FALLBACK_MAX_Z_DELTA)
+            return null;
+
+        return PreservesWalkableCorridor(currentPosition, destination, mapId) ? destination : null;
     }
 
     private Position? RecordWaypointResult(
@@ -1433,8 +1638,56 @@ public class NavigationPath(
         if (_pathfinding == null)
             return true;
 
-        return IsSegmentWideEnoughForCharacter(from, to, mapId)
+        return HasLocalPhysicsExecutionConsistentWithRoute(mapId, from, to, out _)
+            && HasCollisionSupportConsistentWithSegment(mapId, from, to)
+            && IsSegmentWideEnoughForCharacter(from, to, mapId)
             && HasWalkableNavmeshSamples(from, to, mapId);
+    }
+
+    private bool HasLocalPhysicsExecutionConsistentWithRoute(
+        uint mapId,
+        Position from,
+        Position to,
+        out LocalSegmentSimulationResult simulation)
+    {
+        simulation = LocalSegmentSimulationResult.Unavailable(from);
+        if (_pathfinding == null)
+            return true;
+
+        var segmentDistance2D = from.DistanceTo2D(to);
+        if (segmentDistance2D <= PATH_POINT_DEDUP_EPSILON)
+            return true;
+
+        simulation = _pathfinding.SimulateLocalSegment(
+            mapId,
+            from,
+            to,
+            _race,
+            _gender,
+            LOCAL_PHYSICS_SEGMENT_SIMULATION_MAX_DISTANCE);
+
+        if (!simulation.Available)
+            return true;
+
+        if (simulation.MaxUpwardRouteZDelta > LOCAL_PHYSICS_ROUTE_LAYER_REJECT_Z_DELTA)
+            return false;
+
+        if (simulation.MaxLateralDistance > LOCAL_PHYSICS_ROUTE_LATERAL_REJECT_DISTANCE
+            && simulation.MaxAbsoluteRouteZDelta > LOCAL_PHYSICS_ROUTE_LAYER_REJECT_Z_DELTA)
+        {
+            return false;
+        }
+
+        if (!simulation.Compatible)
+        {
+            var longHorizonHitWithoutLayerMismatch =
+                string.Equals(simulation.Reason, "hit_wall", StringComparison.Ordinal)
+                && segmentDistance2D > LOCAL_PHYSICS_SEGMENT_SIMULATION_MAX_DISTANCE + PATH_POINT_DEDUP_EPSILON;
+
+            return longHorizonHitWithoutLayerMismatch;
+        }
+
+        return true;
     }
 
     private bool HasWalkableNavmeshSamples(Position from, Position to, uint mapId)
@@ -1900,9 +2153,10 @@ public class NavigationPath(
         var usedNearbyObjectOverlay = nearbyObjects is { Count: > 0 };
         var nearbyObjectCount = nearbyObjects?.Count ?? 0;
 
-        var rawPath = usedNearbyObjectOverlay
-            ? _pathfinding.GetPath(mapId, start, end, nearbyObjects, smoothPath, _race, _gender)
-            : _pathfinding.GetPath(mapId, start, end, nearbyObjects: null, smoothPath, _race, _gender);
+        var rawPathResult = usedNearbyObjectOverlay
+            ? _pathfinding.GetPathResult(mapId, start, end, nearbyObjects, smoothPath, _race, _gender)
+            : _pathfinding.GetPathResult(mapId, start, end, nearbyObjects: null, smoothPath, _race, _gender);
+        var rawPath = rawPathResult.Corners;
         var sanitizedPath = SanitizePath(rawPath);
         var prunedPath = _enableProbeHeuristics
             ? PruneProbeWaypoints(start, sanitizedPath)
@@ -1919,22 +2173,39 @@ public class NavigationPath(
         // catches segments through registered dynamic objects using triangle intersection.
         // Returns empty if any segment is blocked, causing IsPathUsable to reject and retry.
         var dynValidatedPath = _enableProbeHeuristics
-            ? ValidateSegmentsAgainstDynamicObjects(mapId, pulledPath)
+            ? usedNearbyObjectOverlay
+                // The service request already carried a nearby-object overlay. Trust
+                // that route result rather than re-running the local triangle gate
+                // against the same obstacle set and collapsing the path to none.
+                ? pulledPath
+                : ValidateSegmentsAgainstDynamicObjects(mapId, pulledPath)
             : pulledPath;
-        var rejectedByDynamicBlocker = _enableProbeHeuristics
+        var rejectedByDynamicBlocker = IsServiceDynamicOverlayBlock(rawPathResult)
+            || (_enableProbeHeuristics
             && pulledPath.Length > 0
-            && dynValidatedPath.Length == 0;
+            && dynValidatedPath.Length == 0);
 
         // Phase 3a: Post-path Z correction — replace navmesh Z with collision ground Z
         // where they differ. Fixes Orgrimmar WMO areas where navmesh Z diverges from
         // the actual walkable surface by a few yards.
         var zCorrectedPath = CorrectPathZFromCollision(mapId, dynValidatedPath);
 
+        // Phase 3b: replace or reject waypoints whose local collision support resolves
+        // to a different WMO layer than the navmesh path. BG movement will snap to that
+        // support layer, so accepting the stale waypoint creates tight backtracking loops.
+        var layerRepairedPath = _enableProbeHeuristics
+            ? RepairCollisionLayerMismatchedWaypoints(mapId, start, zCorrectedPath)
+            : zCorrectedPath;
+
+        var localPhysicsValidatedPath = _enableProbeHeuristics
+            ? ValidateSegmentsAgainstLocalPhysics(mapId, start, layerRepairedPath)
+            : layerRepairedPath;
+
         // Phase 4b: Cliff rerouting — probe each segment for cliff edges and insert
         // offset waypoints to steer the bot away from dangerous drops.
         var cliffReroutedPath = _enableProbeHeuristics
-            ? ReroutePathAroundCliffs(mapId, start, zCorrectedPath)
-            : zCorrectedPath;
+            ? ReroutePathAroundCliffs(mapId, start, localPhysicsValidatedPath)
+            : localPhysicsValidatedPath;
 
         var usable = IsPathUsable(mapId, start, end, cliffReroutedPath);
 
@@ -1954,6 +2225,11 @@ public class NavigationPath(
             Metrics.IncrementPathsFailed();
         return new(rawPath, result, usedNearbyObjectOverlay, nearbyObjectCount, smoothPath, rejectedByDynamicBlocker);
     }
+
+    private static bool IsServiceDynamicOverlayBlock(PathfindingRouteResult routeResult)
+        => routeResult.Corners.Length == 0
+            && (string.Equals(routeResult.Result, "blocked_by_dynamic_overlay", StringComparison.OrdinalIgnoreCase)
+                || routeResult.BlockedReason.StartsWith("dynamic_overlay", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Phase 3a: Correct waypoint Z values using collision ground queries.
@@ -1999,6 +2275,346 @@ public class NavigationPath(
         return corrected;
     }
 
+    private Position[] RepairCollisionLayerMismatchedWaypoints(uint mapId, Position start, Position[] path)
+    {
+        if (_pathfinding == null || path.Length == 0)
+            return path;
+
+        var repaired = new List<Position>(path.Length);
+        var repairCount = 0;
+
+        for (var i = 0; i < path.Length; i++)
+        {
+            var waypoint = path[i];
+            if (!HasCollisionLayerMismatch(mapId, waypoint, waypoint.Z, out var supportZ))
+            {
+                repaired.Add(waypoint);
+                continue;
+            }
+
+            var previous = repaired.Count > 0 ? repaired[^1] : start;
+            var next = i + 1 < path.Length ? path[i + 1] : (Position?)null;
+            if (!TryRepairCollisionLayerMismatchedWaypoint(mapId, previous, waypoint, next, out var replacement))
+            {
+                Serilog.Log.Warning(
+                    "[NavigationPath] Rejecting path: waypoint {Idx} collision support resolved to another layer waypoint=({WX:F1},{WY:F1},{WZ:F1}) supportZ={SupportZ:F1}",
+                    i, waypoint.X, waypoint.Y, waypoint.Z, supportZ);
+                return [];
+            }
+
+            repaired.Add(replacement);
+            repairCount++;
+            Serilog.Log.Warning(
+                "[NavigationPath] Repaired collision-layer waypoint {Idx}: ({WX:F1},{WY:F1},{WZ:F1}) supportZ={SupportZ:F1} -> ({RX:F1},{RY:F1},{RZ:F1})",
+                i,
+                waypoint.X, waypoint.Y, waypoint.Z,
+                supportZ,
+                replacement.X, replacement.Y, replacement.Z);
+        }
+
+        if (repairCount > 0)
+        {
+            Serilog.Log.Information(
+                "[NavigationPath] Phase 3b: repaired {Count} collision-layer waypoint(s) (mapId={MapId}, pathLen={PathLen})",
+                repairCount, mapId, path.Length);
+        }
+
+        return repaired.ToArray();
+    }
+
+    private Position[] ValidateSegmentsAgainstLocalPhysics(uint mapId, Position start, Position[] path)
+    {
+        if (_pathfinding == null || path.Length == 0)
+            return path;
+
+        var repaired = new List<Position>(path.Length);
+        var from = start;
+        for (var i = 0; i < path.Length; i++)
+        {
+            var to = path[i];
+            if (!HasLocalPhysicsExecutionConsistentWithRoute(mapId, from, to, out var simulation))
+            {
+                var next = i + 1 < path.Length ? path[i + 1] : (Position?)null;
+                if (TryRepairLocalPhysicsRejectedSegment(mapId, from, to, next, out var replacement))
+                {
+                    repaired.Add(replacement);
+                    Serilog.Log.Warning(
+                        "[NavigationPath] Repaired local-physics route-layer segment {Idx}: from=({FX:F1},{FY:F1},{FZ:F1}) rejectedTo=({TX:F1},{TY:F1},{TZ:F1}) -> ({RX:F1},{RY:F1},{RZ:F1}) upDelta={UpDelta:F1} final=({PX:F1},{PY:F1},{PZ:F1})",
+                        i,
+                        from.X,
+                        from.Y,
+                        from.Z,
+                        to.X,
+                        to.Y,
+                        to.Z,
+                        replacement.X,
+                        replacement.Y,
+                        replacement.Z,
+                        simulation.MaxUpwardRouteZDelta,
+                        simulation.FinalPosition.X,
+                        simulation.FinalPosition.Y,
+                        simulation.FinalPosition.Z);
+                    from = replacement;
+                    continue;
+                }
+
+                Serilog.Log.Warning(
+                    "[NavigationPath] Rejecting path: local physics leaves route layer at segment {Idx} from=({FX:F1},{FY:F1},{FZ:F1}) to=({TX:F1},{TY:F1},{TZ:F1}) reason={Reason} upDelta={UpDelta:F1} absDelta={AbsDelta:F1} lateral={Lateral:F1} final=({PX:F1},{PY:F1},{PZ:F1})",
+                    i,
+                    from.X,
+                    from.Y,
+                    from.Z,
+                    to.X,
+                    to.Y,
+                    to.Z,
+                    simulation.Reason,
+                    simulation.MaxUpwardRouteZDelta,
+                    simulation.MaxAbsoluteRouteZDelta,
+                    simulation.MaxLateralDistance,
+                    simulation.FinalPosition.X,
+                    simulation.FinalPosition.Y,
+                    simulation.FinalPosition.Z);
+                return [];
+            }
+
+            repaired.Add(to);
+            from = to;
+        }
+
+        return repaired.ToArray();
+    }
+
+    private bool TryRepairLocalPhysicsRejectedSegment(
+        uint mapId,
+        Position from,
+        Position rejectedTo,
+        Position? next,
+        out Position replacement)
+    {
+        foreach (var desired in EnumerateLocalPhysicsDetourCandidates(from, rejectedTo, next))
+        {
+            if (desired.DistanceTo2D(from) <= _capsuleRadius)
+                continue;
+
+            if (desired.DistanceTo2D(rejectedTo) > LOCAL_PHYSICS_DETOUR_MAX_DISTANCE + PATH_POINT_DEDUP_EPSILON)
+                continue;
+
+            var snapped = TrySnapToWalkablePoint(
+                mapId,
+                desired,
+                MathF.Max(LOCAL_PHYSICS_DETOUR_MAX_DISTANCE, _capsuleRadius + WALKABLE_CORRIDOR_SAMPLE_RADIUS_PADDING),
+                from.Z);
+            if (snapped == null)
+                continue;
+
+            if (rejectedTo.DistanceTo2D(snapped) > LOCAL_PHYSICS_DETOUR_MAX_DISTANCE + PATH_POINT_DEDUP_EPSILON)
+                continue;
+
+            if (!TryGetCollisionSupportZ(mapId, snapped, out var supportZ))
+                continue;
+
+            if (MathF.Abs(supportZ - from.Z) > COLLISION_LAYER_MISMATCH_Z_DELTA)
+                continue;
+
+            var candidate = new Position(snapped.X, snapped.Y, supportZ);
+            if (!HasLocalPhysicsExecutionConsistentWithRoute(mapId, from, candidate, out _))
+                continue;
+
+            if (!HasCollisionSupportConsistentWithSegment(mapId, from, candidate)
+                || !IsSegmentWideEnoughForCharacter(from, candidate, mapId)
+                || !HasWalkableNavmeshSamples(from, candidate, mapId))
+            {
+                continue;
+            }
+
+            if (next != null)
+            {
+                if (!HasLocalPhysicsExecutionConsistentWithRoute(mapId, candidate, next, out _))
+                    continue;
+
+                // The stitch-back leg can be a long sloped service segment. The
+                // lateral width probe compares side support against interpolated Z
+                // and can falsely reject valid ramps, so rely on local physics and
+                // support/navmesh continuity for this downstream leg.
+                if (!HasCollisionSupportConsistentWithSegment(mapId, candidate, next)
+                    || !HasWalkableNavmeshSamples(candidate, next, mapId))
+                {
+                    continue;
+                }
+            }
+
+            replacement = candidate;
+            return true;
+        }
+
+        replacement = rejectedTo;
+        return false;
+    }
+
+    private static IEnumerable<Position> EnumerateLocalPhysicsDetourCandidates(
+        Position from,
+        Position rejectedTo,
+        Position? next)
+    {
+        var (dirX, dirY) = ResolveRepairDirection(from, rejectedTo, next);
+        var perpX = -dirY;
+        var perpY = dirX;
+
+        foreach (var distance in CollisionLayerRepairDistances)
+        {
+            yield return new Position(rejectedTo.X + perpX * distance, rejectedTo.Y + perpY * distance, rejectedTo.Z);
+            yield return new Position(rejectedTo.X - perpX * distance, rejectedTo.Y - perpY * distance, rejectedTo.Z);
+            yield return new Position(rejectedTo.X + dirX * distance, rejectedTo.Y + dirY * distance, rejectedTo.Z);
+            yield return new Position(rejectedTo.X - dirX * distance, rejectedTo.Y - dirY * distance, rejectedTo.Z);
+
+            var diagScale = distance * 0.70710677f;
+            yield return new Position(rejectedTo.X + (dirX + perpX) * diagScale, rejectedTo.Y + (dirY + perpY) * diagScale, rejectedTo.Z);
+            yield return new Position(rejectedTo.X + (dirX - perpX) * diagScale, rejectedTo.Y + (dirY - perpY) * diagScale, rejectedTo.Z);
+            yield return new Position(rejectedTo.X + (-dirX + perpX) * diagScale, rejectedTo.Y + (-dirY + perpY) * diagScale, rejectedTo.Z);
+            yield return new Position(rejectedTo.X + (-dirX - perpX) * diagScale, rejectedTo.Y + (-dirY - perpY) * diagScale, rejectedTo.Z);
+        }
+    }
+
+    private bool TryRepairCollisionLayerMismatchedWaypoint(
+        uint mapId,
+        Position previous,
+        Position waypoint,
+        Position? next,
+        out Position replacement)
+    {
+        foreach (var desired in EnumerateCollisionLayerRepairCandidates(previous, waypoint, next))
+        {
+            var snapped = TrySnapToWalkablePoint(
+                mapId,
+                desired,
+                MathF.Max(COLLISION_LAYER_REPAIR_MAX_DISTANCE, _capsuleRadius + WALKABLE_CORRIDOR_SAMPLE_RADIUS_PADDING),
+                waypoint.Z);
+            if (snapped == null)
+                continue;
+
+            if (waypoint.DistanceTo2D(snapped) > COLLISION_LAYER_REPAIR_MAX_DISTANCE + PATH_POINT_DEDUP_EPSILON)
+                continue;
+
+            if (!TryGetCollisionSupportZ(mapId, snapped, out var supportZ))
+                continue;
+
+            if (MathF.Abs(supportZ - waypoint.Z) > COLLISION_LAYER_MISMATCH_Z_DELTA)
+                continue;
+
+            var candidate = new Position(snapped.X, snapped.Y, supportZ);
+            if (!PreservesWalkableCorridor(previous, candidate, mapId))
+                continue;
+
+            if (next != null && !PreservesWalkableCorridor(candidate, next, mapId))
+                continue;
+
+            replacement = candidate;
+            return true;
+        }
+
+        replacement = waypoint;
+        return false;
+    }
+
+    private static IEnumerable<Position> EnumerateCollisionLayerRepairCandidates(
+        Position previous,
+        Position waypoint,
+        Position? next)
+    {
+        var (dirX, dirY) = ResolveRepairDirection(previous, waypoint, next);
+        var perpX = -dirY;
+        var perpY = dirX;
+
+        foreach (var distance in CollisionLayerRepairDistances)
+        {
+            yield return new Position(waypoint.X + perpX * distance, waypoint.Y + perpY * distance, waypoint.Z);
+            yield return new Position(waypoint.X - perpX * distance, waypoint.Y - perpY * distance, waypoint.Z);
+            yield return new Position(waypoint.X + dirX * distance, waypoint.Y + dirY * distance, waypoint.Z);
+            yield return new Position(waypoint.X - dirX * distance, waypoint.Y - dirY * distance, waypoint.Z);
+
+            var diagScale = distance * 0.70710677f;
+            yield return new Position(waypoint.X + (dirX + perpX) * diagScale, waypoint.Y + (dirY + perpY) * diagScale, waypoint.Z);
+            yield return new Position(waypoint.X + (dirX - perpX) * diagScale, waypoint.Y + (dirY - perpY) * diagScale, waypoint.Z);
+            yield return new Position(waypoint.X + (-dirX + perpX) * diagScale, waypoint.Y + (-dirY + perpY) * diagScale, waypoint.Z);
+            yield return new Position(waypoint.X + (-dirX - perpX) * diagScale, waypoint.Y + (-dirY - perpY) * diagScale, waypoint.Z);
+        }
+    }
+
+    private static (float X, float Y) ResolveRepairDirection(Position previous, Position waypoint, Position? next)
+    {
+        var fromX = next?.X - previous.X ?? waypoint.X - previous.X;
+        var fromY = next?.Y - previous.Y ?? waypoint.Y - previous.Y;
+        var length = MathF.Sqrt(fromX * fromX + fromY * fromY);
+        if (length > PATH_POINT_DEDUP_EPSILON)
+            return (fromX / length, fromY / length);
+
+        if (next != null)
+        {
+            var toX = next.X - waypoint.X;
+            var toY = next.Y - waypoint.Y;
+            length = MathF.Sqrt(toX * toX + toY * toY);
+            if (length > PATH_POINT_DEDUP_EPSILON)
+                return (toX / length, toY / length);
+        }
+
+        return (1f, 0f);
+    }
+
+    private bool HasCollisionSupportConsistentWithSegment(uint mapId, Position from, Position to)
+    {
+        if (_pathfinding == null)
+            return true;
+
+        var segmentDistance2D = from.DistanceTo2D(to);
+        if (segmentDistance2D <= PATH_POINT_DEDUP_EPSILON)
+            return !HasCollisionLayerMismatch(mapId, to, to.Z, out _);
+
+        var sampleCount = Math.Clamp(
+            (int)MathF.Ceiling(segmentDistance2D / WALKABLE_CORRIDOR_SAMPLE_SPACING) + 1,
+            2,
+            COLLISION_LAYER_MAX_SUPPORT_SAMPLES);
+
+        for (var sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++)
+        {
+            var t = sampleCount == 1 ? 1f : sampleIndex / (sampleCount - 1f);
+            var sample = LerpPosition(from, to, t);
+            if (HasCollisionLayerMismatch(mapId, sample, sample.Z, out _))
+                return false;
+        }
+
+        return true;
+    }
+
+    private bool HasCollisionLayerMismatch(uint mapId, Position position, float referenceZ, out float supportZ)
+    {
+        supportZ = referenceZ;
+        if (!TryGetCollisionSupportZ(mapId, position, out supportZ))
+            return false;
+
+        return MathF.Abs(supportZ - referenceZ) > COLLISION_LAYER_MISMATCH_Z_DELTA;
+    }
+
+    private bool TryGetCollisionSupportZ(uint mapId, Position position, out float supportZ)
+    {
+        supportZ = position.Z;
+        if (_pathfinding == null)
+            return false;
+
+        try
+        {
+            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, position);
+            if (!found || !float.IsFinite(groundZ))
+                return false;
+
+            supportZ = groundZ;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public void CalculatePath(Position start, Position end, uint mapId, bool force = false, string reason = NavigationTraceReason.Manual)
     {
         var nowTick = _tickProvider();
@@ -2020,6 +2636,7 @@ public class NavigationPath(
         _lastCalculationTick = nowTick;
         _hasCalculatedPath = true;
         _destination = end;
+        _pathStartPosition = new Position(start.X, start.Y, start.Z);
         _lastWaypointSamplePosition = null;
         _lastWaypointSampleDistance = float.NaN;
         _stalledNearWaypointSamples = 0;
@@ -2035,6 +2652,7 @@ public class NavigationPath(
         {
             _waypoints = [];
             _waypointAcceptanceRadii = [];
+            _pathStartPosition = null;
             _currentIndex = 0;
             RecordCalculatedTrace(
                 mapId,
@@ -2054,6 +2672,10 @@ public class NavigationPath(
             // string-pulling routes through steep Z transitions that the headless
             // client can't safely descend.
             var preferSmooth = _enableProbeHeuristics;
+            var preferSaferAlternateOnReplan =
+                reason == NavigationTraceReason.MovementStuckRecovery
+                || reason == NavigationTraceReason.StalledNearWaypoint
+                || _stuckRecoveryStationaryCount >= STUCK_RECOVERY_STATIONARY_ESCALATION_THRESHOLD;
             var selectedPath = GetValidatedPath(mapId, start, end, smoothPath: preferSmooth);
             var alternateEvaluated = false;
             var alternateSelected = false;
@@ -2070,7 +2692,12 @@ public class NavigationPath(
                 alternateEvaluated = true;
                 var alternatePath = GetValidatedPath(mapId, start, end, smoothPath: !preferSmooth);
                 var alternateAffordances = PathAffordanceInfo.Classify(alternatePath.PlannedPath);
-                if (ShouldPreferAlternatePath(selectedPath, selectedAffordances, alternatePath, alternateAffordances))
+                if (ShouldPreferAlternatePath(
+                    selectedPath,
+                    selectedAffordances,
+                    alternatePath,
+                    alternateAffordances,
+                    preferSaferAlternateOnReplan))
                 {
                     selectedPath = alternatePath;
                     selectedAffordances = alternateAffordances;
@@ -2131,6 +2758,7 @@ public class NavigationPath(
                 mapId, start.X, start.Y, start.Z, end.X, end.Y, end.Z, ex.Message);
             _waypoints = [];
             _waypointAcceptanceRadii = [];
+            _pathStartPosition = null;
             _currentIndex = 0;
             _pendingDynamicBlockerReplan = false;
             RecordCalculatedTrace(
@@ -2147,7 +2775,8 @@ public class NavigationPath(
         ValidatedPathResult primaryPath,
         PathAffordanceInfo primaryAffordances,
         ValidatedPathResult alternatePath,
-        PathAffordanceInfo alternateAffordances)
+        PathAffordanceInfo alternateAffordances,
+        bool preferSaferAlternateOnReplan)
     {
         var primaryHasPath = primaryPath.PlannedPath.Length > 0;
         var alternateHasPath = alternatePath.PlannedPath.Length > 0;
@@ -2168,6 +2797,19 @@ public class NavigationPath(
 
         var primaryCost = ComputeRouteCost(primaryPath.PlannedPath, primaryAffordances);
         var alternateCost = ComputeRouteCost(alternatePath.PlannedPath, alternateAffordances);
+        var primarySeverity = ResolveRouteSeverity(primaryAffordances);
+        var alternateSeverity = ResolveRouteSeverity(alternateAffordances);
+
+        // A stuck-driven replan has already proven that the current corridor is not
+        // working in practice. In that case, accept a modest distance premium when
+        // the alternate route materially lowers traversal risk.
+        if (preferSaferAlternateOnReplan
+            && alternateSeverity < primarySeverity
+            && alternateCost <= primaryCost + STUCK_REPLAN_SAFER_ALTERNATE_COST_TOLERANCE)
+        {
+            return true;
+        }
+
         return alternateCost + 0.5f < primaryCost;
     }
 
@@ -2222,6 +2864,18 @@ public class NavigationPath(
 
         return SegmentAffordance.Walk;
     }
+
+    private static int ResolveRouteSeverity(PathAffordanceInfo affordances)
+        => ResolveMaxAffordance(affordances) switch
+        {
+            SegmentAffordance.Walk => 0,
+            SegmentAffordance.StepUp => 1,
+            SegmentAffordance.SteepClimb => 2,
+            SegmentAffordance.Drop => 3,
+            SegmentAffordance.Vertical => 4,
+            SegmentAffordance.Cliff => 5,
+            _ => 0,
+        };
 
     private static float ComputeRouteCost(Position[] waypoints, PathAffordanceInfo affordances)
     {
@@ -2821,6 +3475,7 @@ public class NavigationPath(
         _waypointAcceptanceRadii = [];
         _currentIndex = 0;
         _destination = null;
+        _pathStartPosition = null;
         _lastCalculationTick = 0;
         _hasCalculatedPath = false;
         _lastWaypointSamplePosition = null;
@@ -2859,6 +3514,9 @@ public class NavigationPath(
         _executionSamples.Clear();
         _pendingDynamicBlockerReplan = false;
         _lastDynamicBlockerReplanTick = 0;
+        _lastWaypointTick = 0;
+        _pendingTransport = null;
+        _activeTransportRide = null;
     }
 
     /// <summary>
@@ -2876,7 +3534,9 @@ public class NavigationPath(
         // Recompute radii if we already have a path with a start reference.
         if (_waypoints.Length > 0 && _enableProbeHeuristics)
         {
-            var start = _currentIndex > 0 ? _waypoints[_currentIndex - 1] : _waypoints[0];
+            var start = _currentIndex > 0
+                ? _waypoints[_currentIndex - 1]
+                : _pathStartPosition ?? _waypoints[0];
             ComputeWaypointAcceptanceRadii(start);
         }
     }

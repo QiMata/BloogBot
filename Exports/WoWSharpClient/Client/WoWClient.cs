@@ -197,6 +197,15 @@ namespace WoWSharpClient.Client
             await _worldClient.SendSetActiveMoverAsync(guid, cancellationToken);
         }
 
+        public virtual async Task SendAreaTriggerAsync(uint triggerId, CancellationToken cancellationToken = default)
+        {
+            if (_worldClient == null)
+                throw new InvalidOperationException("Not connected to world server");
+
+            var payload = BitConverter.GetBytes(triggerId);
+            await _worldClient.SendOpcodeAsync(Opcode.CMSG_AREATRIGGER, payload, cancellationToken);
+        }
+
         public virtual async Task SendMovementOpcodeAsync(Opcode opcode, byte[] movementInfo, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(movementInfo);

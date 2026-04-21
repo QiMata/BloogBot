@@ -58,6 +58,8 @@ namespace WoWSharpClient
         private const float FacingPacketThresholdRadians = 0.1f; // WoW.exe 0x80C408
 
         private bool _isBeingTeleported = true;
+        private DateTime _staleWorldEntryTransitionCandidateSinceUtc = DateTime.MinValue;
+        private static readonly TimeSpan StaleWorldEntryTransitionTimeout = TimeSpan.FromSeconds(2);
 
         /// <summary>
         /// True when BG bot is in a map transition (teleport in progress).
@@ -757,6 +759,7 @@ namespace WoWSharpClient
 
             _pendingTeleportAck = null;
             _isBeingTeleported = false;
+            _staleWorldEntryTransitionCandidateSinceUtc = DateTime.MinValue;
             return true;
         }
 
@@ -768,6 +771,58 @@ namespace WoWSharpClient
             return MathF.Abs(player.Position.X - pendingAck.TargetPosition.X) <= xyTolerance
                 && MathF.Abs(player.Position.Y - pendingAck.TargetPosition.Y) <= xyTolerance
                 && MathF.Abs(player.Position.Z - pendingAck.TargetPosition.Z) <= zTolerance;
+        }
+
+        private bool TryRecoverStaleWorldEntryTransition()
+        {
+            var player = Player as WoWLocalPlayer;
+            bool playerHydrated = player != null
+                && player.Guid != 0
+                && player.MaxHealth > 0
+                && player.Position != null;
+            bool needsGroundSnap = _movementController?.NeedsGroundSnap == true;
+            bool candidate =
+                HasEnteredWorld
+                && _isBeingTeleported
+                && _pendingTeleportAck == null
+                && !HasPendingWorldEntry
+                && !_hasExplicitClientControlLockout
+                && playerHydrated
+                && !(needsGroundSnap && _isInControl);
+
+            if (!candidate)
+            {
+                _staleWorldEntryTransitionCandidateSinceUtc = DateTime.MinValue;
+                return false;
+            }
+
+            if (_staleWorldEntryTransitionCandidateSinceUtc == DateTime.MinValue)
+            {
+                _staleWorldEntryTransitionCandidateSinceUtc = DateTime.UtcNow;
+                return false;
+            }
+
+            var stuckDuration = DateTime.UtcNow - _staleWorldEntryTransitionCandidateSinceUtc;
+            if (stuckDuration < StaleWorldEntryTransitionTimeout)
+            {
+                return false;
+            }
+
+            _isBeingTeleported = false;
+            _isInControl = true;
+            _staleWorldEntryTransitionCandidateSinceUtc = DateTime.MinValue;
+
+            Log.Warning(
+                "[WorldEntryTransition] Recovered stale transfer gate after {DurationMs}ms: guid=0x{Guid:X} map={MapId} " +
+                "pos=({X:F1},{Y:F1},{Z:F1}) needsGroundSnap={NeedsGroundSnap}",
+                (int)stuckDuration.TotalMilliseconds,
+                player!.Guid,
+                player.MapId,
+                player.Position.X,
+                player.Position.Y,
+                player.Position.Z,
+                needsGroundSnap);
+            return true;
         }
 
         internal void RecordResolvedEnvironmentState(uint mapId, Position position, SceneEnvironmentFlags flags)
@@ -860,6 +915,7 @@ namespace WoWSharpClient
         private void EventEmitter_OnLoginVerifyWorld(object? sender, WorldInfo e)
         {
             ClearPendingWorldEntry();
+            _staleWorldEntryTransitionCandidateSinceUtc = DateTime.MinValue;
             var player = (WoWLocalPlayer)Player;
             player.MapId = e.MapId;
 

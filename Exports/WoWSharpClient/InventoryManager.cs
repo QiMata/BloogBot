@@ -24,6 +24,32 @@ namespace WoWSharpClient
     /// </summary>
     internal sealed class InventoryManager
     {
+        // vMangos battleground bots cast SPELL_CAPTURE_BANNER (21651) directly on
+        // AB/AV banner game objects. Raw GAMEOBJ_USE only flips the goober/button
+        // state; the actual capture path is a player -> GO open-lock spell cast.
+        private const int BattlegroundBannerCaptureSpellId = 21651;
+        private static readonly HashSet<uint> BattlegroundBannerEntries =
+        [
+            178364u, // AV Horde Banner 1
+            178943u, // AV Horde Banner 2
+            178365u, // AV Alliance Banner 1
+            178925u, // AV Alliance Banner 2
+            178940u, // AV Contested Banner 1
+            179286u, // AV Contested Banner 2
+            179287u, // AV Contested Banner 3
+            179435u, // AV Contested Banner 4
+            180418u, // AV Snowfall Banner
+            180058u, // AB Alliance Banner
+            180059u, // AB Contested Banner 1
+            180060u, // AB Horde Banner
+            180061u, // AB Contested Banner 2
+            180087u, // AB Stable Banner
+            180088u, // AB Blacksmith Banner
+            180089u, // AB Farm Banner
+            180090u, // AB Lumber Mill Banner
+            180091u  // AB Gold Mine Banner
+        ];
+
         private readonly WoWSharpObjectManager _om;
 
         // Two-phase cursor emulation: PickupContainedItem stores source, PlaceItemInContainer sends CMSG_SWAP_ITEM
@@ -327,7 +353,17 @@ namespace WoWSharpClient
             var payload = BitConverter.GetBytes(guid);
             Log.Information("[GAMEOBJ_USE] Sending CMSG_GAMEOBJ_USE for GUID=0x{Guid:X} (8 bytes: {Hex})",
                 guid, BitConverter.ToString(payload));
-            _ = WoWClient.SendMSGPackedAsync(Opcode.CMSG_GAMEOBJ_USE, payload);
+            WoWClient.SendMSGPackedAsync(Opcode.CMSG_GAMEOBJ_USE, payload).GetAwaiter().GetResult();
+
+            if (TryGetBattlegroundBannerEntry(guid, out var bannerEntry))
+            {
+                Log.Information(
+                    "[GAMEOBJ_USE] Banner entry {Entry} requires capture spell {SpellId}; sending CMSG_CAST_SPELL on GUID=0x{Guid:X}",
+                    bannerEntry,
+                    BattlegroundBannerCaptureSpellId,
+                    guid);
+                _om.CastSpellOnGameObject(BattlegroundBannerCaptureSpellId, guid);
+            }
 
             // Temporary packet sniffer: log all opcodes received for 5 seconds after GAMEOBJ_USE
             _om.SniffingGameObjUse = true;
@@ -337,6 +373,20 @@ namespace WoWSharpClient
                 _om.SniffingGameObjUse = false;
                 Log.Information("[GAMEOBJ_USE] Packet sniffer ended — no more logging");
             }, TaskScheduler.Default);
+        }
+
+        private bool TryGetBattlegroundBannerEntry(ulong guid, out uint entry)
+        {
+            entry = 0;
+
+            if (_om.Objects.FirstOrDefault(o => o.Guid == guid) is not WoWGameObject gameObject)
+                return false;
+
+            if (!BattlegroundBannerEntries.Contains(gameObject.Entry))
+                return false;
+
+            entry = gameObject.Entry;
+            return true;
         }
 
         // ---- Loot ----

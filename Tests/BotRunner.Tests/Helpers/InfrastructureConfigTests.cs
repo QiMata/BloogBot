@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using Tests.Infrastructure;
 using Xunit;
 
 namespace BotRunner.Tests.Helpers;
@@ -12,6 +13,7 @@ namespace BotRunner.Tests.Helpers;
 public class InfrastructureConfigTests
 {
     private const string ShowWindowsEnvVar = "WWOW_SHOW_WINDOWS";
+    private const string MutexWaitMinutesEnvVar = "WWOW_BOTSERVICE_MUTEX_WAIT_MINUTES";
 
     [Fact]
     public void ShowWindows_Default_CreateNoWindowIsTrue()
@@ -102,5 +104,53 @@ public class InfrastructureConfigTests
         // A newly constructed helper with no started process should not throw on Stop()
         var helper = new StateManagerProcessHelper();
         helper.Stop(); // Should complete without error
+    }
+
+    [Fact]
+    public void BotServiceFixture_MutexWaitTimeout_DefaultsToFortyFiveMinutes()
+    {
+        var previous = Environment.GetEnvironmentVariable(MutexWaitMinutesEnvVar);
+        try
+        {
+            Environment.SetEnvironmentVariable(MutexWaitMinutesEnvVar, null);
+            Assert.Equal(TimeSpan.FromMinutes(45), BotServiceFixture.GetGlobalMutexWaitTimeout());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(MutexWaitMinutesEnvVar, previous);
+        }
+    }
+
+    [Fact]
+    public void BotServiceFixture_MutexWaitTimeout_UsesPositiveConfiguredValue()
+    {
+        var previous = Environment.GetEnvironmentVariable(MutexWaitMinutesEnvVar);
+        try
+        {
+            Environment.SetEnvironmentVariable(MutexWaitMinutesEnvVar, "90");
+            Assert.Equal(TimeSpan.FromMinutes(90), BotServiceFixture.GetGlobalMutexWaitTimeout());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(MutexWaitMinutesEnvVar, previous);
+        }
+    }
+
+    [Fact]
+    public void BotServiceFixture_MutexWaitTimeout_IgnoresInvalidConfiguredValue()
+    {
+        var previous = Environment.GetEnvironmentVariable(MutexWaitMinutesEnvVar);
+        try
+        {
+            Environment.SetEnvironmentVariable(MutexWaitMinutesEnvVar, "0");
+            Assert.Equal(TimeSpan.FromMinutes(45), BotServiceFixture.GetGlobalMutexWaitTimeout());
+
+            Environment.SetEnvironmentVariable(MutexWaitMinutesEnvVar, "invalid");
+            Assert.Equal(TimeSpan.FromMinutes(45), BotServiceFixture.GetGlobalMutexWaitTimeout());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(MutexWaitMinutesEnvVar, previous);
+        }
     }
 }

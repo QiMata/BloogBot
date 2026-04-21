@@ -2,6 +2,13 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-15) - Network tracker active-note refresh
+
+- [x] `Tests/WoWSharpClient.NetworkTests/TASKS.md` now reports no active owner-local item.
+- Completed:
+  - Confirmed network-test P0 work is complete and bridge-registration coverage remains aligned with the current movement parity slice.
+  - Preserved the `SMSG_ATTACKSTART` bridge/observer discovery note as a latent non-movement-parity bug rather than an active movement task.
+
 ## Completed 2026-02-28
 
 1. [x] `WSCN-TST-001` Add encrypted `PacketPipeline` receive-state tests (fragmented header/body, remainder carry, and header reset).

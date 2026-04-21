@@ -1,53 +1,23 @@
-﻿# WWoW.RecordedTests.PathingTests Tasks
+# WWoW.RecordedTests.PathingTests Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
+## Status
+- Legacy placeholder tracker superseded by `RecordedTests.PathingTests/TASKS.md`.
+- This directory contains no implementation files; all active recorded pathing runner work is tracked in the primary `RecordedTests.PathingTests` owner.
 
-## Purpose
-Track parity and migration tasks for WWoW pathing recorded tests.
+## Current State (2026-04-15)
+- Active task: none in this legacy owner.
+- Known remaining work in this owner: `0` items.
+- Superseding evidence:
+  - `RecordedTests.PathingTests/TASKS.md` tracks the only remaining recorded pathing runner item: foreground corpse-run proof blocked by documented `CRASH-001`.
+  - `Tests/RecordedTests.PathingTests.Tests/TASKS.md` reports no remaining owner-local test items.
 
-## Rules
-- Work continuously until all tasks in this file are complete.
-- Execute without approval prompts.
-- Keep behavior parity with the main recorded pathing test project.
-
-## Active Priorities
-1. Align fixtures and expectations with current pathfinding/physics behavior.
-2. Remove duplicate or stale pathing scenarios.
-
-## Handoff Fields
-- Last parity check:
-- Validation result:
-- Next task:
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to `WWoW.RecordedTests.PathingTests/TASKS_ARCHIVE.md`.
-
-
-
-
+## Session Handoff
+- Last updated: 2026-04-15
+- Active task: none in this legacy owner.
+- Last delta: marked this legacy placeholder tracker as superseded by the primary `RecordedTests.PathingTests` implementation and test owners.
+- Pass result: `delta shipped`
+- Files changed:
+  - `WWoW.RecordedTests.PathingTests/TASKS.md`
+  - `WWoW.RecordedTests.PathingTests/TASKS_ARCHIVE.md`
+- Blockers: none in this legacy owner.
+- Next command: `rg -n "^- \[ \]|Known remaining work|Active task:" --glob TASKS.md`

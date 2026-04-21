@@ -170,6 +170,7 @@ namespace WoWSharpClient
             _lastResolvedSceneEnvironmentFlags = SceneEnvironmentFlags.None;
             _lastResolvedSceneEnvironmentMapId = uint.MaxValue;
             _lastResolvedSceneEnvironmentPosition = null;
+            ResetKnownBattlegroundAreaTriggerState();
 
             // Wire handler context so legacy opcode handlers use this instance.
             // StoreHandlerContext applies immediately if WorldClient exists,
@@ -480,7 +481,11 @@ namespace WoWSharpClient
                 // 2. Handle ping heartbeat
                 HandlePingHeartbeat((long)now.TotalMilliseconds);
 
-                // 2a. Some transfers and server-driven moves can leave the local player
+                // 2a. If world data is already hydrated but the transition flag never drops,
+                // recover so BotRunner can resume snapshot polling and control reconciliation.
+                TryRecoverStaleWorldEntryTransition();
+
+                // 2b. Some transfers and server-driven moves can leave the local player
                 // out of control even after the world/object state has fully settled.
                 // Recover that state once there is no active spline or teleport in flight
                 // so passive physics (relocation detection, ground snap, environment flags)
@@ -541,7 +546,10 @@ namespace WoWSharpClient
                     && !_movementController.NeedsGroundSnap)
                 {
                     _isBeingTeleported = false;
+                    _staleWorldEntryTransitionCandidateSinceUtc = DateTime.MinValue;
                 }
+
+                PollKnownBattlegroundAreaTriggersForLocalPlayer();
 
                 // 4. Bot AI callback
                 OnBotTick?.Invoke(deltaSec);
@@ -779,6 +787,7 @@ namespace WoWSharpClient
             _isInControl = false;
             _hasExplicitClientControlLockout = false;
             _isBeingTeleported = false;
+            _staleWorldEntryTransitionCandidateSinceUtc = DateTime.MinValue;
             _pendingTeleportAck = null;
             _hasPendingKnockback = false;
             _pendingKnockbackVelX = _pendingKnockbackVelY = _pendingKnockbackVelZ = 0f;
@@ -798,6 +807,7 @@ namespace WoWSharpClient
                 _objects.Clear();
             }
             _activePet = null;
+            ResetKnownBattlegroundAreaTriggerState();
 
             if (!preservePlayerGuid)
             {

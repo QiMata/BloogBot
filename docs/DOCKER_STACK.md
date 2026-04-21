@@ -65,11 +65,17 @@ docker compose -f .\docker-compose.vmangos-linux.yml down
 Run StateManager on host while services stay in Docker:
 
 ```powershell
-$env:MangosServer__AutoLaunch='false'
 Start-Process -FilePath .\Bot\Release\net8.0\WoWStateManager.exe `
   -WorkingDirectory .\Bot\Release\net8.0 `
   -RedirectStandardOutput .\logs\service-host\wowstatemanager.stdout.log `
   -RedirectStandardError .\logs\service-host\wowstatemanager.stderr.log
+```
+
+`MangosServer:AutoLaunch` defaults to `false`. Local Windows MaNGOS process launch is legacy opt-in only:
+
+```powershell
+$env:MangosServer__AutoLaunch='true'
+$env:MangosServer__MangosDirectory='C:\Mangos\server'
 ```
 
 Validation signals:

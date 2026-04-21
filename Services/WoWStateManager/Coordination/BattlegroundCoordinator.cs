@@ -39,6 +39,7 @@ public class BattlegroundCoordinator
     private readonly uint _bgMapId;
     private readonly int _minimumLevel;
     private readonly IReadOnlyDictionary<string, StagingTarget> _stagingTargets;
+    private readonly IReadOnlyDictionary<string, string> _desiredPartyLeaderAccounts;
     private readonly ILogger _logger;
 
     private CoordState _state = CoordState.WaitingForBots;
@@ -58,7 +59,8 @@ public class BattlegroundCoordinator
         uint bgTypeId,
         uint bgMapId,
         ILogger logger,
-        IReadOnlyDictionary<string, StagingTarget>? stagingTargets = null)
+        IReadOnlyDictionary<string, StagingTarget>? stagingTargets = null,
+        IReadOnlyDictionary<string, string>? desiredPartyLeaderAccounts = null)
     {
         _leaderAccount = leaderAccount;
         _memberAccounts = allAccounts
@@ -70,15 +72,22 @@ public class BattlegroundCoordinator
         _logger = logger;
         _stagingTargets = stagingTargets
             ?? new Dictionary<string, StagingTarget>(StringComparer.OrdinalIgnoreCase);
+        _desiredPartyLeaderAccounts = desiredPartyLeaderAccounts != null
+            ? new Dictionary<string, string>(desiredPartyLeaderAccounts, StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         _logger.LogWarning(
-            "BG_COORD: Initialized - Leader='{Leader}', Members={Count}, BG={BgType}, Map={Map}, StagingTargets={Staging}",
+            "BG_COORD: Initialized - Leader='{Leader}', Members={Count}, BG={BgType}, Map={Map}, StagingTargets={Staging}, DesiredPartyAccounts={DesiredPartyAccounts}",
             leaderAccount,
             _memberAccounts.Count,
             bgTypeId,
             bgMapId,
-            _stagingTargets.Count);
+            _stagingTargets.Count,
+            _desiredPartyLeaderAccounts.Count);
     }
+
+    public bool RequiresFactionGroupQueue => _bgTypeId != (uint)BattlemasterData.BattlegroundType.AlteracValley
+        && _desiredPartyLeaderAccounts.Count > 0;
 
     public ActionMessage? GetAction(
         string requestingAccount,
@@ -175,6 +184,22 @@ public class BattlegroundCoordinator
             }
             else
             {
+                return null;
+            }
+        }
+
+        if (RequiresFactionGroupQueue)
+        {
+            var groupIssues = DescribeFactionGroupIssues(snapshots);
+            if (groupIssues.Count > 0)
+            {
+                if (_tickCount % 20 == 1)
+                {
+                    _logger.LogWarning(
+                        "BG_COORD: Waiting for faction group formation before queueing. Pending: {Pending}",
+                        string.Join(", ", groupIssues.Take(10)));
+                }
+
                 return null;
             }
         }
@@ -396,6 +421,67 @@ public class BattlegroundCoordinator
 
         var distance = Distance2D(position.X, position.Y, target.X, target.Y);
         return $"{accountName}(map={mapId}, dist={distance:F0})";
+    }
+
+    private IReadOnlyList<string> DescribeFactionGroupIssues(
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        var issues = new List<string>();
+        if (_desiredPartyLeaderAccounts.Count == 0)
+            return issues;
+
+        foreach (var leaderAccount in _desiredPartyLeaderAccounts.Values.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!snapshots.TryGetValue(leaderAccount, out var leaderSnapshot))
+            {
+                issues.Add($"{leaderAccount}(no snapshot)");
+                continue;
+            }
+
+            var leaderGuid = leaderSnapshot.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
+            if (leaderGuid == 0)
+            {
+                issues.Add($"{leaderAccount}(leader guid missing)");
+                continue;
+            }
+
+            foreach (var account in _desiredPartyLeaderAccounts
+                .Where(entry => entry.Value.Equals(leaderAccount, StringComparison.OrdinalIgnoreCase))
+                .Select(entry => entry.Key))
+            {
+                if (!snapshots.TryGetValue(account, out var snapshot))
+                {
+                    issues.Add($"{account}(no snapshot)");
+                    continue;
+                }
+
+                if (!IsWorldReady(snapshot, _minimumLevel))
+                {
+                    issues.Add($"{account}(world not ready)");
+                    continue;
+                }
+
+                var selfGuid = snapshot.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
+                if (selfGuid == 0)
+                {
+                    issues.Add($"{account}(self guid missing)");
+                    continue;
+                }
+
+                if (account.Equals(leaderAccount, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (selfGuid != leaderGuid)
+                        issues.Add($"{account}(leader guid mismatch)");
+
+                    continue;
+                }
+
+                if (snapshot.PartyLeaderGuid != leaderGuid)
+                    issues.Add($"{account}(leader=0x{snapshot.PartyLeaderGuid:X})");
+            }
+        }
+
+        return issues;
     }
 
     private bool IsQueuedAtStagingTarget(string accountName, WoWActivitySnapshot snapshot)

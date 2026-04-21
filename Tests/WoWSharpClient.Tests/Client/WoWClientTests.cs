@@ -35,6 +35,31 @@ public sealed class WoWClientTests
         Assert.Equal(payload.Length, observedSize);
     }
 
+    [Fact]
+    public async Task SendAreaTriggerAsync_SendsCmsgAreaTriggerPayload()
+    {
+        var client = new WoWClient();
+        var worldClient = new Mock<IWorldClient>();
+        Opcode? observedOpcode = null;
+        byte[]? observedPayload = null;
+
+        worldClient
+            .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Callback<Opcode, byte[], CancellationToken>((opcode, payload, _) =>
+            {
+                observedOpcode = opcode;
+                observedPayload = payload;
+            })
+            .Returns(Task.CompletedTask);
+
+        SetPrivateField(client, "_worldClient", worldClient.Object);
+
+        await client.SendAreaTriggerAsync(3647u);
+
+        Assert.Equal(Opcode.CMSG_AREATRIGGER, observedOpcode);
+        Assert.Equal(BitConverter.GetBytes(3647u), observedPayload);
+    }
+
     private static void SetPrivateField(object target, string fieldName, object value)
     {
         var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);

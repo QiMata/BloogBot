@@ -37,7 +37,9 @@ public class TransportWaitingLogic
     private const float BOARDING_TIMEOUT_SEC = 10f; // 10s to board once transport arrives
     private const float DISEMBARK_TIMEOUT_SEC = 10f; // 10s to step off
     private const float ELEVATOR_AT_STOP_Z_TOLERANCE = 3.0f;
+    private const float ELEVATOR_STOP_MARKER_DISTANCE = 12.0f;
     private const float BOAT_AT_STOP_DISTANCE = 20f;
+    private const uint ELEVATOR_STOP_MARKER_DISPLAY_ID = 462;
 
     private readonly TransportDefinition _transport;
     private readonly TransportStop _boardingStop;
@@ -104,17 +106,32 @@ public class TransportWaitingLogic
 
         foreach (var obj in nearbyObjects)
         {
-            if (obj.DisplayId != _transport.DisplayId) continue;
-
             if (_transport.Type == TransportType.Elevator)
             {
-                // Elevator: check if the car's Z is near the stop's Z
+                var matchesElevatorCar = obj.DisplayId == _transport.DisplayId;
+                var matchesStopMarker = obj.DisplayId == ELEVATOR_STOP_MARKER_DISPLAY_ID;
+                if (!matchesElevatorCar && !matchesStopMarker)
+                    continue;
+
+                // Elevator: check if the car or stop marker is near the stop's Z.
                 float zDiff = MathF.Abs(obj.Z - stop.WaitPosition.Z);
-                if (zDiff <= ELEVATOR_AT_STOP_Z_TOLERANCE)
+                if (zDiff > ELEVATOR_AT_STOP_Z_TOLERANCE)
+                    continue;
+
+                if (matchesElevatorCar)
+                    return true;
+
+                float dx = obj.X - stop.WaitPosition.X;
+                float dy = obj.Y - stop.WaitPosition.Y;
+                float dist = MathF.Sqrt(dx * dx + dy * dy);
+                if (dist <= ELEVATOR_STOP_MARKER_DISTANCE)
                     return true;
             }
             else
             {
+                if (obj.DisplayId != _transport.DisplayId)
+                    continue;
+
                 // Boat/zeppelin: check horizontal distance to the stop
                 float dx = obj.X - stop.WaitPosition.X;
                 float dy = obj.Y - stop.WaitPosition.Y;

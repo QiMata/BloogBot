@@ -1,7 +1,9 @@
 using ForegroundBotRunner.Frames;
+using ForegroundBotRunner.Statics;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
+using System.Threading;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -9,6 +11,48 @@ namespace ForegroundBotRunner.Tests;
 
 public sealed class ForegroundInteractionFrameTests
 {
+    [Fact]
+    public async Task WaitForInboxCountAsync_DoesNotTreatTransientZeroAsFinalWhenMailAppears()
+    {
+        var queryResponses = new Queue<string[]>(new[]
+        {
+            new[] { "" },
+            new[] { "0" },
+            new[] { "0" },
+            new[] { "2" },
+        });
+        var luaCalls = new List<string>();
+
+        var inboxCount = await ObjectManager.WaitForInboxCountAsync(
+            _ => queryResponses.Count > 0 ? queryResponses.Dequeue() : ["2"],
+            lua => luaCalls.Add(lua),
+            CancellationToken.None);
+
+        Assert.Equal(2, inboxCount);
+        Assert.Equal(4, luaCalls.Count(call => call == "CheckInbox()"));
+    }
+
+    [Fact]
+    public async Task WaitForInboxCountAsync_ReturnsZeroAfterStableZeroReads()
+    {
+        var queryResponses = new Queue<string[]>(new[]
+        {
+            new[] { "0" },
+            new[] { "0" },
+            new[] { "0" },
+            new[] { "5" },
+        });
+        var luaCalls = new List<string>();
+
+        var inboxCount = await ObjectManager.WaitForInboxCountAsync(
+            _ => queryResponses.Count > 0 ? queryResponses.Dequeue() : ["5"],
+            lua => luaCalls.Add(lua),
+            CancellationToken.None);
+
+        Assert.Equal(0, inboxCount);
+        Assert.Equal(3, luaCalls.Count(call => call == "CheckInbox()"));
+    }
+
     [Fact]
     public void GossipFrame_UsesLuaVisibilityAndOptionCount()
     {
@@ -181,7 +225,113 @@ public sealed class ForegroundInteractionFrameTests
 
         frame.SelectNode(2);
 
-        Assert.Contains(calls, call => call.Contains("TakeTaxiNode(2)"));
+        Assert.Contains(calls, call => call.Contains("TaxiButton'..idx"));
+        Assert.Contains(calls, call => call.Contains("local idx=2"));
+        Assert.Contains(calls, call => call.Contains("TakeTaxiNode(idx)"));
+    }
+
+    [Fact]
+    public void ResolveTaxiFrameNodeNumber_MapsGlobalTaxiNodeIdToFrameIndex()
+    {
+        var frame = new FgTaxiFrame(
+            _ => { },
+            lua =>
+            {
+                if (lua.Contains("NumTaxiNodes()"))
+                    return ["2"];
+                if (lua.Contains("TaxiNodeName(1)"))
+                    return ["Orgrimmar", "0", "CURRENT"];
+                if (lua.Contains("TaxiNodeName(2)"))
+                    return ["Crossroads", "50", "REACHABLE"];
+                if (lua.Contains("TaxiFrame:IsVisible()"))
+                    return ["1"];
+
+                return ["0"];
+            });
+
+        var frameNodeNumber = ObjectManager.ResolveTaxiFrameNodeNumber(frame.Nodes, 25);
+
+        Assert.Equal(2, frameNodeNumber);
+    }
+
+    [Fact]
+    public void ResolveTaxiFrameNodeNumber_MatchesZoneQualifiedTaxiLabel()
+    {
+        var frame = new FgTaxiFrame(
+            _ => { },
+            lua =>
+            {
+                if (lua.Contains("NumTaxiNodes()"))
+                    return ["3"];
+                if (lua.Contains("TaxiNodeName(1)"))
+                    return ["Thunder Bluff, Mulgore", "0", "REACHABLE"];
+                if (lua.Contains("TaxiNodeName(2)"))
+                    return ["Orgrimmar, Durotar", "0", "CURRENT"];
+                if (lua.Contains("TaxiNodeName(3)"))
+                    return ["Crossroads, The Barrens", "50", "REACHABLE"];
+                if (lua.Contains("TaxiFrame:IsVisible()"))
+                    return ["1"];
+
+                return ["0"];
+            });
+
+        var frameNodeNumber = ObjectManager.ResolveTaxiFrameNodeNumber(frame.Nodes, 25);
+
+        Assert.Equal(3, frameNodeNumber);
+    }
+
+    [Fact]
+    public void ResolveTaxiFrameNodeNumber_DoesNotTreatCanonicalNodeIdAsVisibleFrameIndex()
+    {
+        var frame = new FgTaxiFrame(
+            _ => { },
+            lua =>
+            {
+                if (lua.Contains("NumTaxiNodes()"))
+                    return ["30"];
+                if (lua.Contains("TaxiNodeName(1)"))
+                    return ["Orgrimmar", "0", "CURRENT"];
+                if (lua.Contains("TaxiNodeName(2)"))
+                    return ["Crossroads", "50", "REACHABLE"];
+                if (lua.Contains("TaxiNodeName(25)"))
+                    return ["Thunder Bluff", "90", "REACHABLE"];
+                if (lua.Contains("TaxiNodeName("))
+                    return [$"Node {ExtractTaxiNodeIndex(lua)}", "10", "REACHABLE"];
+                if (lua.Contains("TaxiFrame:IsVisible()"))
+                    return ["1"];
+
+                return ["0"];
+            });
+
+        var frameNodeNumber = ObjectManager.ResolveTaxiFrameNodeNumber(frame.Nodes, 25);
+
+        Assert.Equal(2, frameNodeNumber);
+    }
+
+    [Fact]
+    public void ResolveTaxiFrameNodeNumber_PrefersSelectableNodeWhenNormalizedNamesCollide()
+    {
+        var frame = new FgTaxiFrame(
+            _ => { },
+            lua =>
+            {
+                if (lua.Contains("NumTaxiNodes()"))
+                    return ["3"];
+                if (lua.Contains("TaxiNodeName(1)"))
+                    return ["Moonglade", "0", "NONE"];
+                if (lua.Contains("TaxiNodeName(2)"))
+                    return ["Orgrimmar, Durotar", "0", "CURRENT"];
+                if (lua.Contains("TaxiNodeName(3)"))
+                    return ["Moonglade", "50", "REACHABLE"];
+                if (lua.Contains("TaxiFrame:IsVisible()"))
+                    return ["1"];
+
+                return ["0"];
+            });
+
+        var frameNodeNumber = ObjectManager.ResolveTaxiFrameNodeNumber(frame.Nodes, 55);
+
+        Assert.Equal(3, frameNodeNumber);
     }
 
     [Fact]
@@ -334,6 +484,21 @@ public sealed class ForegroundInteractionFrameTests
         frame.Craft(2);
 
         Assert.Contains(calls, call => call.Contains("DoCraft(3)"));
+    }
+
+    private static int ExtractTaxiNodeIndex(string lua)
+    {
+        const string marker = "TaxiNodeName(";
+        var start = lua.IndexOf(marker);
+        if (start < 0)
+            return 0;
+
+        start += marker.Length;
+        var end = lua.IndexOf(')', start);
+        if (end <= start)
+            return 0;
+
+        return int.TryParse(lua[start..end], out var index) ? index : 0;
     }
 
     private sealed class TestItem : IWoWItem

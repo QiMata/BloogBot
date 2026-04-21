@@ -250,16 +250,38 @@ public partial class LiveBotFixture
             }
         }
 
-        // Step 2: Leave any existing group/raid (prevents "party is full" spam on next formation)
-        if (snap?.PartyLeaderGuid != 0)
+        // Step 2: Always flush stale server-side group state.
+        // Some reused live account pools can be effectively grouped even when the
+        // latest snapshot still reports PartyLeaderGuid == 0.
+        var selfGuid = snap?.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
+        var appearsLeader = selfGuid != 0 && snap?.PartyLeaderGuid == selfGuid;
+        _logger.LogInformation(
+            "[{Label}] Clearing potential stale group state (snapshot leader=0x{Leader:X}, self=0x{Self:X}, appearsLeader={AppearsLeader})",
+            label,
+            snap?.PartyLeaderGuid ?? 0UL,
+            selfGuid,
+            appearsLeader);
+
+        if (appearsLeader)
         {
-            _logger.LogInformation("[{Label}] Leaving existing group (leader={Leader:X})", label, snap.PartyLeaderGuid);
             await SendActionAsync(account, new Communication.ActionMessage
             {
-                ActionType = Communication.ActionType.LeaveGroup
+                ActionType = Communication.ActionType.DisbandGroup
             });
-            await Task.Delay(500);
+            await Task.Delay(250);
         }
+
+        await SendActionAsync(account, new Communication.ActionMessage
+        {
+            ActionType = Communication.ActionType.LeaveGroup
+        });
+        await Task.Delay(750);
+        await WaitForSnapshotConditionAsync(
+            account,
+            snapshot => snapshot.PartyLeaderGuid == 0,
+            TimeSpan.FromSeconds(4),
+            pollIntervalMs: 400,
+            progressLabel: $"{label} group-clear");
 
         if (!teleportToSafeZone)
         {
@@ -294,6 +316,111 @@ public partial class LiveBotFixture
         // reset reaction flags when toggling .gm off, but leaving GM ON is worse.
         // All GM setup (.learn, .additem, .go xyz) should happen BEFORE this point.
         await SendGmChatCommandAsync(account, ".gm off");
+    }
+
+    public async Task QuiesceAccountsAsync(
+        IEnumerable<string> accounts,
+        string label,
+        TimeSpan? timeout = null)
+    {
+        var trackedAccounts = accounts
+            .Where(account => !string.IsNullOrWhiteSpace(account))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (trackedAccounts.Length == 0)
+            return;
+
+        if (_stateManagerClient != null)
+        {
+            foreach (var account in trackedAccounts)
+            {
+                var drainResult = await _stateManagerClient.DrainPendingActionsAsync(account);
+                _logger.LogInformation(
+                    "[{Label}] Quiesce drained pending actions for {Account}: {Result}",
+                    label,
+                    account,
+                    drainResult);
+            }
+        }
+
+        var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(12);
+        var sw = Stopwatch.StartNew();
+        var lastDiag = string.Empty;
+
+        while (sw.Elapsed < effectiveTimeout)
+        {
+            await RefreshSnapshotsAsync();
+            var snapshots = await QueryAllSnapshotsAsync();
+
+            var blockingStates = trackedAccounts
+                .Select(account =>
+                {
+                    var snapshot = snapshots.FirstOrDefault(candidate =>
+                        string.Equals(candidate.AccountName, account, StringComparison.OrdinalIgnoreCase));
+                    return DescribeBlockingActionState(account, snapshot);
+                })
+                .Where(description => description != null)
+                .Cast<string>()
+                .ToArray();
+
+            if (blockingStates.Length == 0)
+            {
+                _testOutput?.WriteLine(
+                    $"[{label}] quiesced {trackedAccounts.Length} accounts after {sw.Elapsed.TotalSeconds:F1}s");
+                return;
+            }
+
+            var diag = string.Join(" || ", blockingStates);
+            if (!string.Equals(diag, lastDiag, StringComparison.Ordinal))
+            {
+                _testOutput?.WriteLine($"[{label}] waiting for quiesce: {diag}");
+                lastDiag = diag;
+            }
+
+            await Task.Delay(500);
+        }
+
+        await RefreshSnapshotsAsync();
+        var finalSnapshots = await QueryAllSnapshotsAsync();
+        var finalBlocking = trackedAccounts
+            .Select(account =>
+            {
+                var snapshot = finalSnapshots.FirstOrDefault(candidate =>
+                    string.Equals(candidate.AccountName, account, StringComparison.OrdinalIgnoreCase));
+                return DescribeBlockingActionState(account, snapshot);
+            })
+            .Where(description => description != null)
+            .Cast<string>()
+            .ToArray();
+
+        Assert.True(
+            finalBlocking.Length == 0,
+            $"[{label}] timed out waiting for scripted accounts to quiesce: {string.Join(" || ", finalBlocking)}");
+    }
+
+    private static string? DescribeBlockingActionState(string account, WoWActivitySnapshot? snapshot)
+    {
+        if (snapshot == null)
+            return $"{account}:snapshot=null";
+
+        var currentAction = snapshot.CurrentAction?.ActionType;
+        if (currentAction != null && currentAction != Communication.ActionType.Wait)
+        {
+            var previousAction = snapshot.PreviousAction != null
+                ? snapshot.PreviousAction.ActionType.ToString()
+                : "none";
+            return
+                $"{account}:current={currentAction}, previous={previousAction}, screen={snapshot.ScreenState}, conn={snapshot.ConnectionState}, transition={snapshot.IsMapTransition}";
+        }
+
+        if (snapshot.ConnectionState != Communication.BotConnectionState.BotInWorld || snapshot.IsMapTransition)
+        {
+            return
+                $"{account}:screen={snapshot.ScreenState}, conn={snapshot.ConnectionState}, transition={snapshot.IsMapTransition}";
+        }
+
+        return null;
     }
 
     // ---- GM Command Helpers (via SOAP — independent of bots) ----

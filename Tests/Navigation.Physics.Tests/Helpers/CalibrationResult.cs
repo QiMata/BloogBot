@@ -145,6 +145,9 @@ public class CalibrationResult
         public float RecordedSpeed;
         public float EngineGroundZ;
         public float EngineVx, EngineVy, EngineVz;
+        public uint EngineStandingOnInstanceId;
+        public float EngineStandingOnLocalX, EngineStandingOnLocalY, EngineStandingOnLocalZ;
+        public uint EngineGroundedWallState;
         public float InputVx, InputVy, InputVz;
         public bool IsSwimming;
         public bool IsAirborne;

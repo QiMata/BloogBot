@@ -26,7 +26,6 @@ namespace WoWSharpClient
 
         // Fishing spell IDs — vanilla fishing casts do not carry an explicit unit or destination payload.
         private static readonly HashSet<int> _fishingSpellIds = [7620, 7731, 7732, 18248, 33095];
-        private const float FishingBobberDistance = 14f;
 
         // Melee rejection tracking
         private const long RecentMeleeRejectWindowTicks = TimeSpan.TicksPerMillisecond * 1200;
@@ -37,6 +36,7 @@ namespace WoWSharpClient
         private ulong _recentMeleeFacingRejectTargetGuid;
         private long _pendingMeleeAttackConfirmUntilTicks;
         private ulong _pendingMeleeAttackTargetGuid;
+        private ulong _confirmedMeleeAttackTargetGuid;
 
         // Optional cooldown checker — set by BackgroundBotWorker after SpellCastingNetworkClientComponent is created
         private Func<uint, bool> _spellCooldownChecker;
@@ -67,7 +67,7 @@ namespace WoWSharpClient
             var targetGuid = CurrentTargetGuid != 0 ? CurrentTargetGuid : Player?.TargetGuid ?? 0;
             if (targetGuid == 0) return;
 
-            ClearPendingMeleeAttackStart(targetGuid);
+            ClearTrackedMeleeAttackState(targetGuid);
             _recentMeleeRangeRejectTargetGuid = targetGuid;
             Interlocked.Exchange(ref _recentMeleeRangeRejectUntilTicks, DateTime.UtcNow.Ticks + RecentMeleeRejectWindowTicks);
             Log.Warning("[COMBAT] Marked recent melee range rejection for 0x{Target:X}", targetGuid);
@@ -78,7 +78,7 @@ namespace WoWSharpClient
             var targetGuid = CurrentTargetGuid != 0 ? CurrentTargetGuid : Player?.TargetGuid ?? 0;
             if (targetGuid == 0) return;
 
-            ClearPendingMeleeAttackStart(targetGuid);
+            ClearTrackedMeleeAttackState(targetGuid);
             _recentMeleeFacingRejectTargetGuid = targetGuid;
             Interlocked.Exchange(ref _recentMeleeFacingRejectUntilTicks, DateTime.UtcNow.Ticks + RecentMeleeRejectWindowTicks);
             Log.Warning("[COMBAT] Marked recent melee facing rejection for 0x{Target:X}", targetGuid);
@@ -116,6 +116,9 @@ namespace WoWSharpClient
             Interlocked.Exchange(ref _pendingMeleeAttackConfirmUntilTicks, DateTime.UtcNow.Ticks + PendingMeleeAttackConfirmWindowTicks);
         }
 
+        internal bool HasConfirmedMeleeAttackStart(ulong targetGuid)
+            => targetGuid != 0 && _confirmedMeleeAttackTargetGuid == targetGuid;
+
         internal bool HasPendingMeleeAttackStart(ulong targetGuid)
         {
             if (targetGuid == 0 || _pendingMeleeAttackTargetGuid != targetGuid)
@@ -137,6 +140,20 @@ namespace WoWSharpClient
             Interlocked.Exchange(ref _pendingMeleeAttackConfirmUntilTicks, 0);
         }
 
+        internal void ClearConfirmedMeleeAttackStart(ulong targetGuid = 0)
+        {
+            if (targetGuid != 0 && _confirmedMeleeAttackTargetGuid != targetGuid)
+                return;
+
+            _confirmedMeleeAttackTargetGuid = 0;
+        }
+
+        internal void ClearTrackedMeleeAttackState(ulong targetGuid = 0)
+        {
+            ClearPendingMeleeAttackStart(targetGuid);
+            ClearConfirmedMeleeAttackStart(targetGuid);
+        }
+
         internal void ConfirmMeleeAttackStarted(ulong targetGuid = 0)
         {
             var confirmedTargetGuid = targetGuid != 0
@@ -146,6 +163,7 @@ namespace WoWSharpClient
 
             ClearPendingMeleeAttackStart(confirmedTargetGuid);
             ClearRecentMeleeRejections(confirmedTargetGuid);
+            _confirmedMeleeAttackTargetGuid = confirmedTargetGuid;
         }
 
         // ---- Spell readiness ----
@@ -186,21 +204,8 @@ namespace WoWSharpClient
         {
             if (WoWClient == null) return;
 
-            // Fishing spells need location-based targeting — calculate bobber position from facing
-            if (false && !castOnSelf && _fishingSpellIds.Contains(spellId) && Player?.Position != null)
-            {
-                var facing = Player.Facing;
-                var pos = Player.Position;
-                float targetX = pos.X + (float)(FishingBobberDistance * Math.Cos(facing));
-                float targetY = pos.Y + (float)(FishingBobberDistance * Math.Sin(facing));
-                float targetZ = pos.Z;
-                Log.Information("[CastSpell] Fishing spell {SpellId} — using location target ({X:F1}, {Y:F1}, {Z:F1}) from facing {Facing:F2}",
-                    spellId, targetX, targetY, targetZ, facing);
-                CastSpellAtLocation(spellId, targetX, targetY, targetZ);
-                return;
-            }
-
-            var forceNoTarget = _fishingSpellIds.Contains(spellId);
+            var isFishingSpell = _fishingSpellIds.Contains(spellId);
+            var forceNoTarget = isFishingSpell;
             using var ms = new MemoryStream();
             using var w = new BinaryWriter(ms);
             w.Write((uint)spellId);
@@ -270,7 +275,7 @@ namespace WoWSharpClient
             var payload = ms.ToArray();
             Log.Information("[CastSpellOnGameObject] spell={SpellId} target=0x{Guid:X} ({Len} bytes): {Hex}",
                 spellId, gameObjectGuid, payload.Length, BitConverter.ToString(payload));
-            _ = WoWClient.SendMSGPackedAsync(Opcode.CMSG_CAST_SPELL, payload);
+            WoWClient.SendMSGPackedAsync(Opcode.CMSG_CAST_SPELL, payload).GetAwaiter().GetResult();
         }
 
         public bool CanCastSpell(int spellId, ulong targetGuid)
@@ -304,7 +309,7 @@ namespace WoWSharpClient
             if (guid != CurrentTargetGuid)
             {
                 ClearRecentMeleeRejections();
-                ClearPendingMeleeAttackStart();
+                ClearTrackedMeleeAttackState();
             }
             CurrentTargetGuid = guid;
             if (Player is WoWLocalPlayer localPlayer)
@@ -329,7 +334,7 @@ namespace WoWSharpClient
             if (Player is WoWLocalPlayer lp)
                 lp.IsAutoAttacking = false;
             ClearRecentMeleeRejections();
-            ClearPendingMeleeAttackStart();
+            ClearTrackedMeleeAttackState();
             _ = WoWClient.SendMSGPackedAsync(Opcode.CMSG_ATTACKSTOP, []);
         }
 
@@ -350,6 +355,9 @@ namespace WoWSharpClient
 
                     if (localPlayer.IsAutoAttacking && !switchingTargets)
                     {
+                        if (HasConfirmedMeleeAttackStart(CurrentTargetGuid))
+                            return;
+
                         if (HasPendingMeleeAttackStart(CurrentTargetGuid))
                             return;
 

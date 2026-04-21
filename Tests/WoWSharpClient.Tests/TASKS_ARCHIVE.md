@@ -2,6 +2,24 @@
 
 Completed items moved from TASKS.md.
 
+## Completed 2026-04-15
+
+### WSC-TST-PAR-001: Add BG server-packet trigger coverage to full movement parity
+- Added `ObjectManagerWorldSessionTests.MoveKnockBack_ServerPacketFeedsMovementControllerNextFrame`, proving `SMSG_MOVE_KNOCK_BACK` flows through `MovementHandler`, mutates/ACKs in `WoWSharpObjectManager`, and feeds pending knockback velocity into `MovementController.Update()`.
+- Tagged force speed, force root, server movement flag toggles, compressed movement trigger variants, knockback ACK coverage, and controller pending-knockback coverage with `Category=MovementParity`.
+- Repaired the singleton handler test seam by wiring `ObjectManagerFixture` and `ResetObjectManager()` to `WoWSharpEventEmitter.Instance`.
+- Fixed the controller pending-knockback test to construct the controller with the object manager that owns pending state.
+- Validation:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.MoveKnockBack|FullyQualifiedName~ObjectManagerWorldSessionTests.ServerControlledMovementFlagChanges_ParseApplyAndAck|FullyQualifiedName~MovementControllerTests.PendingKnockback_OverridesDirectionalInputAndFeedsPhysicsVelocity" --logger "console;verbosity=minimal"` -> `passed (9/9)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (29/29)`
+
+### WSC-TST-PAR-002: Add stop/use ordering and gather retry signal coverage
+- Added `ObjectManagerWorldSessionTests.ForceStopImmediate_BlocksStopPacketBeforeGameObjectUse`, proving `MSG_MOVE_STOP` is sent before `CMSG_GAMEOBJ_USE` when the BG object-manager path forces an immediate stop before interaction.
+- Added `SpellHandlerTests.HandleCastFailed_TryAgainReason_FiresNamedErrorMessage`, pinning server reason `0x7A` to `TRY_AGAIN`.
+- Validation:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal"` -> `passed (30/30)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpellHandlerTests.HandleCastFailed" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+
 ## Completed 2026-02-28
 
 ### WSC-TST-001: Replace TODO-only object update replay test with deterministic assertions

@@ -2,6 +2,162 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-15) - Corpse-run and route-validator regression coverage
+
+- [x] Added deterministic BotRunner coverage for long-horizon local-physics route validation and corpse-run close-waypoint advancement.
+- Completion notes:
+  - `GetNextWaypoint_AcceptsLongLocalPhysicsHorizonHit_WhenRouteLayerRemainsConsistent` pins the long service segment case where short-horizon physics returns `hit_wall` but route-layer metrics stay consistent.
+  - `GetNextWaypoint_RejectsShortLocalPhysicsHitWall` keeps short blocked-leg rejection intact.
+  - `GetNextWaypoint_ProbeDisabled_AdvancesCloseWaypointEvenWhenShortcutProbeFails` pins corpse-run policy behavior so foreground ghost runback does not remain pinned to a micro-waypoint.
+  - The opt-in foreground corpse-run live test now passes and proves strict-alive restoration.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_AcceptsLongLocalPhysicsHorizonHit_WhenRouteLayerRemainsConsistent|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_RejectsShortLocalPhysicsHitWall|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_ProbeDisabled_AdvancesCloseWaypointEvenWhenShortcutProbeFails" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (80/80)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_RETRY_FG_CRASH001='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsForegroundPlayer" --blame-hang --blame-hang-timeout 5m --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=fg_corpse_run_after_corpse_probe_policy.trx"` -> `passed (1/1); alive after 30s, bestDist=34y`
+
+## Archived Snapshot (2026-04-15) - Navigation local-physics detour regression and live proof
+
+- [x] Added deterministic BotRunner coverage for local-physics route-layer repair.
+- Completion notes:
+  - `GetNextWaypoint_RepairsLocalPhysicsLayerTrap_WithNearbySameLayerDetour` proves a rejected wrong-layer service segment can be repaired through a nearby same-layer candidate.
+  - `GetNextWaypoint_RepairsLocalPhysicsLayerTrap_WhenDownstreamRampWidthProbeIsNoisy` pins the valid-ramp case where downstream lateral-width probing can be noisy after the short detour leg is already locally proven.
+  - `GetNextWaypoint_SelectsAlternate_WhenLocalPhysicsClimbsOffRouteLayer` continues to prove alternate selection when local physics rejects a primary route.
+  - The live Orgrimmar bank-to-auction-house corner route now passes and logs a local-physics repair before arrival.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_RepairsLocalPhysicsLayerTrap_WhenDownstreamRampWidthProbeIsNoisy|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_RepairsLocalPhysicsLayerTrap_WithNearbySameLayerDetour|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_SelectsAlternate_WhenLocalPhysicsClimbsOffRouteLayer" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (77/77)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CornerNavigationTests.Navigate_OrgBankToAH_ArrivesWithoutStall" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=corner_navigation_local_physics_detour_width_relax.trx"` -> `passed (1/1)`
+
+## Archived Snapshot (2026-04-15) - Navigation waypoint overshoot regression coverage
+
+- [x] Added deterministic BotRunner coverage for waypoint overshoot anti-oscillation.
+- Completion notes:
+  - `GetNextWaypoint_AdvancesPastOvershotWaypoint_WhenNextCorridorIsWalkable` proves the waypoint cursor advances after the bot crosses an active waypoint on a walkable corridor.
+  - `GetNextWaypoint_DoesNotLookAheadSkip_WhenOvershootShortcutLeavesWalkableCorridor` continues to pin the blocked-corridor guard.
+  - The overlay-aware dynamic route test fixture now blocks direct string-pull so it asserts the intended intermediate waypoint.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (72/72)`
+
+## Archived Snapshot (2026-04-15) - WSM Quest Snapshot Live Evidence Closeout
+
+- [x] Collected BotRunner live-validation evidence for `WSM-PAR-001`.
+- Completion notes:
+  - `QuestInteractionTests.Quest_AddCompleteAndRemove_AreReflectedInSnapshots` passed.
+  - Artifact: `tmp/test-runtime/results-live/quest_snapshot_wsm_par_rerun.trx`.
+  - Evidence includes quest add state in both FG/BG snapshots plus successful `.quest complete 786` and `.quest remove 786` flow.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.QuestInteractionTests.Quest_AddCompleteAndRemove_AreReflectedInSnapshots" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=quest_snapshot_wsm_par_rerun.trx"` -> `passed (1/1)`
+
+## Archived Snapshot (2026-04-15) - WSM Bootstrap Default Regression Coverage
+
+- [x] Added BotRunner-owned deterministic regression coverage for `WSM-BOOT-001`.
+- Completion notes:
+  - `MangosServerBootstrapperTests` pins WSM/Test config defaults: MaNGOS host auto-launch is disabled, no default host MaNGOS directory is carried, and an explicit auto-launch request without a configured directory returns without starting host processes.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MangosServerBootstrapperTests|FullyQualifiedName~WoWStateManagerLaunchThrottleTests|FullyQualifiedName~BattlegroundFixtureConfigurationTests" --logger "console;verbosity=minimal"` -> `passed (24/24)`
+
+## Archived Snapshot (2026-04-15) - Deferred D3 WSG Transfer Closeout
+
+- [x] Re-ran and closed deferred `D3` WSG transfer stalls now that AB/AV queue entry was proven.
+- Completion notes:
+  - `WSG_PreparedRaid_QueueAndEnterBattleground` passed with all 20 WSG accounts in world, all 20 queued, and all 20 on WSG map `489`.
+  - Artifact: `tmp/test-runtime/results-live/wsg_transfer_d3_rerun.trx`.
+  - Evidence includes `[WSG:Enter] All 20/20 bots entered world`, `BG_COORD: All 20 bots queued`, `BG_COORD: 20/20 bots on BG map`, `[WSG:BG] 20/15 bots on BG map`, and `[WSG:Final] onWsg=20, totalSnapshots=20`.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.WarsongGulchTests.WSG_PreparedRaid_QueueAndEnterBattleground" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=wsg_transfer_d3_rerun.trx"` -> `passed (1/1)`
+
+## Archived Snapshot (2026-04-15) - Deferred BG D1/D2 Closeout
+
+- [x] Added deterministic StateManager launch-order coverage for deferred `D1`.
+- [x] Closed deferred `D2` AB queue-pop proof with a passing live AB entry run.
+- Completion notes:
+  - `WoWStateManagerLaunchThrottleTests.AlteracValleySettings_IncludeAllianceAccountsInLaunchOrder` loads the real `Services/WoWStateManager/Settings/Configs/AlteracValley.config.json` and proves `AVBOTA1-40` are runnable and present in launch order.
+  - `ArathiBasinFixture` now uses a reliable 10v10 queue-entry smoke roster, keeps one Horde foreground visual client, makes the Alliance raid leader background, and extends AB cold-start enter-world tolerance to `8m` max / `2m` stale.
+  - The AB live proof reached `20/20` bots on map `529`.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundFixtureConfigurationTests|FullyQualifiedName~WoWStateManagerLaunchThrottleTests" --logger "console;verbosity=minimal"` -> `passed (20/20)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.ArathiBasinTests.AB_QueueAndEnterBattleground" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=ab_queue_entry_d2_after_ab_10v10_single_fg.trx"` -> `passed (1/1)`
+
+## Archived Snapshot (2026-04-15) - Final Core Live-Validation Chunk
+
+- [x] Closed the queued final live-validation chunk after the Navigation implementation queue was cleared.
+- [x] Collected fresh core live-validation evidence on the surface-affordance and local-detour Navigation baseline.
+- Completion notes:
+  - The final chunk covered `BasicLoopTests`, `MovementSpeedTests`, and `CombatBgTests`.
+  - The run completed with `4/4` passing tests and wrote the TRX result to `tmp/test-runtime/results-live/livevalidation_core_chunk_post_nav_affordance_detour_closeout.trx`.
+  - The remaining active BotRunner.Tests tracker now has no unresolved issue.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~MovementSpeedTests|FullyQualifiedName~CombatBgTests" -v n --blame-hang --blame-hang-timeout 5m --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=livevalidation_core_chunk_post_nav_affordance_detour_closeout.trx"` -> `passed (4/4)`
+
+## Archived Snapshot (2026-04-14) - Orgrimmar Corner Navigation Closeout
+
+- [x] Closed the remaining `CornerNavigationTests.Navigate_OrgBankToAH_ArrivesWithoutStall` live blocker.
+- [x] Completion notes:
+  - `CornerNavigationTests` now stages from the street-level bank approach instead of the elevated banker perch, so the live slice measures the intended Orgrimmar corner route.
+  - `NavigationPath` now gives stuck-driven replans a bounded safer-alternate preference and trusts overlay-aware service routes instead of collapsing them with a duplicate local dynamic-object segment rejection.
+  - `TravelTo` dispatch now stays on persistent `GoToTask` ownership, and deterministic dispatch coverage pins the same-map upsert, already-arrived, and cross-map failure cases.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_MovementStuckRecoveryPrefersSaferAlternateWithinTolerance|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_DoesNotLocallyRejectOverlayAwareServiceRouteForDynamicSegmentIntersection|FullyQualifiedName~BotRunnerServiceCombatDispatchTests|FullyQualifiedName~BotRunnerServiceGoToDispatchTests" --logger "console;verbosity=minimal"` -> `passed (12/12)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CornerNavigationTests.Navigate_OrgBankToAH_ArrivesWithoutStall" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=orgbank_to_ah_corner_navigation_post_overlay_local_dyn_gate_fix.trx"` -> `passed (1/1)`
+
+## Archived Snapshot (2026-04-14) - Orgrimmar AH/bank expectation cleanup
+
+- [x] Closed the remaining stale FG/BG divergence assumptions in the Orgrimmar auction-house/bank live suites.
+- [x] Completion notes:
+  - `AuctionHouseTests`, `AuctionHouseParityTests`, `BankInteractionTests`, and `BankParityTests` now use `BgOnlyValidationCollection` / `BgOnlyBotFixture` because their active assertions are still BG-only precondition checks while FG parity work remains intentionally deferred.
+  - Replaced the stale hardcoded NPC flag probes (`0x200000`, `0x80`) with `NPCFlags.UNIT_NPC_FLAG_AUCTIONEER` / `UNIT_NPC_FLAG_BANKER`, matching the authoritative runtime enum values already proven by `BgInteractionTests`.
+  - Result: the focused Orgrimmar AH/bank slice now passes the active BG assertions and cleanly skips the placeholder parity cases instead of failing before the intentional skip point.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AuctionHouseTests|FullyQualifiedName~AuctionHouseParityTests|FullyQualifiedName~BankInteractionTests|FullyQualifiedName~BankParityTests" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=bg_only_orgrimmar_ah_bank_after_flag_fix.trx"` -> `passed (4) / skipped (5)`
+
+## Archived Snapshot (2026-04-14) - Shared BG-only dungeon/raid fixture closeout
+
+- [x] Closed the shared `DungeonInstanceFixture` follow-through for explicitly BG-only dungeon/raid entry coverage.
+- [x] Completion notes:
+  - Default leader selection no longer reuses `TESTBOT1`; BG-led dungeon/raid fixtures now use dedicated `<prefix>1` accounts, while FG-led fixtures still opt back into `TESTBOT1`.
+  - Shared dungeon/raid entry fixtures now precreate missing accounts, wipe mismatched stale characters, and reserve deterministic generated names before launch so entry coverage no longer depends on manual preseeded state.
+  - `DungeonFixtureConfigurationTests` now pin both contracts directly: default BG leader account naming and the explicit FG opt-in path.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DungeonFixtureConfigurationTests|FullyQualifiedName~CoordinatorFixtureBaseTests" --logger "console;verbosity=minimal"` -> `passed (22/22)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false -p:BuildProjectReferences=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Raids.AQ20Tests.AQ20_RaidFormAndEnter" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=aq20_entry_post_dedicated_bg_leader_provisioning_fix.trx"` -> `passed (1/1)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false -p:BuildProjectReferences=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Raids.BlackwingLairTests.BWL_RaidFormAndEnter" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=raid_entry_namespace_post_dedicated_bg_leader_provisioning_fix.trx"` -> `passed (1/1)` (`BWL_RaidFormAndEnter`)
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false -p:BuildProjectReferences=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Raids.ZulGurubTests.ZG_RaidFormAndEnter" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=zg_entry_post_dedicated_bg_leader_provisioning_fix.trx"` -> `passed (1/1)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false -p:BuildProjectReferences=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Raids.MoltenCoreTests.MC_RaidFormAndEnter" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=mc_entry_post_dedicated_bg_leader_provisioning_fix.trx"` -> `passed (1/1)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false -p:BuildProjectReferences=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Raids.OnyxiasLairTests.ONY_RaidFormAndEnter" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=ony_entry_post_dedicated_bg_leader_provisioning_fix.trx"` -> `passed (1/1)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false -p:BuildProjectReferences=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Raids.AQ40Tests.AQ40_RaidFormAndEnter" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=aq40_entry_post_dedicated_bg_leader_provisioning_fix.trx"` -> `passed (1/1)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false -p:BuildProjectReferences=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Raids.NaxxramasTests.NAXX_RaidFormAndEnter" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=naxx_entry_post_dedicated_bg_leader_provisioning_fix.trx"` -> `passed (1/1)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false -p:BuildProjectReferences=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Dungeons.StratholmeLivingTests.STRAT_LIVE_GroupFormAndEnter" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=strath_live_entry_post_dedicated_bg_leader_provisioning_fix.trx"` -> `passed (1/1)`
+
+## Archived Snapshot (2026-04-13) - Ratchet fishing packet comparison closeout
+
+- [x] Closed the remaining Ratchet FG/BG fishing follow-up after the staged-visibility attribution work.
+- [x] Completion notes:
+  - `FishingTask` search-walk now keeps stepped probe targets on the waypoint reference layer and no longer counts nearby wrong-layer positions as arrived.
+  - `SpellcastingManager` now keeps fishing on the no-target `CMSG_CAST_SPELL` payload shape, matching the focused FG packet capture.
+  - The latest live compare artifact proves BG now reaches the same cast/channel/loot packet milestones as FG: `SMSG_SPELL_GO`, `MSG_CHANNEL_START`, `SMSG_GAMEOBJECT_CUSTOM_ANIM`, `CMSG_GAMEOBJ_USE`, and `SMSG_LOOT_RESPONSE`.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingTaskTests" --logger "console;verbosity=minimal"` -> `passed (37/37)`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpObjectManagerCombatTests" --logger "console;verbosity=minimal"` -> `passed (5/5)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_ComparePacketSequences_BgMatchesFgReference" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=ratchet_fg_bg_packet_sequence_compare_after_fishing_cast_packet_fix.trx"` -> `passed (1/1)`
+
+## Archived Snapshot (2026-04-12) - Live Movement Parity Harness Closeout
+
+- [x] Closed the live Docker-backed `Category=MovementParity` blocker without changing runtime movement semantics.
+- Completion notes:
+  - `LiveBotFixture.SendGmChatCommandTrackedAsync(...)` now refreshes snapshots while it waits for tracked GM chat execution/response evidence.
+  - `LiveBotFixture.WaitForTeleportSettledAsync(...)` now requires `ScreenState=InWorld`, `ConnectionState=BotInWorld`, and `IsMapTransition=false` in addition to XY/Z settle.
+  - `MovementParityTests.RunRedirectParityTest(...)` now clears stale packet/transform/physics artifacts before recording, matching the main parity runner.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RecordingArtifactHelperTests" --logger "console;verbosity=minimal"` -> `passed (2/2)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=movement_parity_category_20260412_post_transition_wait_fix.trx"` -> `passed (12/12)`
+
 ## Archived Snapshot (2026-04-09) - FG New Account Realm Handoff Stability
 
 - [x] Stabilized `ForegroundNewAccountFlowTests.NewAccount_NewCharacter_EntersWorld` with state-based realm-wizard handoff to empty character select and no runtime Lua sweep actions.
@@ -219,4 +375,15 @@ Move completed items to `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`.
   - Validation:
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `2 passed, 1 skipped`
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `33 passed, 0 failed, 2 skipped`
+
+## Archived Snapshot (2026-04-15) - BG gather/NPC Docker timing closeout
+
+- [x] Deterministic `GatheringRouteTask` parity coverage now pins stop/use/delayed-cast ordering and same-node retry on `TRY_AGAIN`.
+- [x] Live gathering route selection now prioritizes active `.pool spawns` coordinates and prepares route-specific skill floors before BG gathering proofs.
+- [x] Docker-backed BG herbalism and NPC vendor timing proofs passed.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteTaskTests" --logger "console;verbosity=minimal"` -> `passed (12/12)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~GatheringRouteSelectionTests" --logger "console;verbosity=minimal"` -> `passed (22/22)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; $env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringProfessionTests.Herbalism_BG_GatherHerb" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=herbalism_bg_retry_try_again.trx"` -> `passed (1/1)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NpcInteractionTests.Vendor_VisitTask_FindsAndInteracts" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=npc_vendor_visit_docker_timing.trx"` -> `passed (1/1)`
 

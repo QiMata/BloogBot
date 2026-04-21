@@ -14,16 +14,39 @@
 5. Every pass must record one-line `Pass result` and exactly one executable `Next command`.
 
 ## Active Priorities
-1. `WSM-PAR-001` Quest snapshot sync lag
-- [ ] Trace quest-state latency between WoWSharpClient packet handlers, StateManager snapshot publication, and test assertions.
-
-2. `WSM-BOOT-001` Bootstrap cleanup follow-up
-- [ ] Re-check any remaining assumptions that local `C:\Mangos\server` processes are always host-launched once the docker path becomes the default path.
+Known remaining work in this owner: `0` items.
 
 ## Session Handoff
-- Last updated: 2026-04-09 (session 300)
-- Active task: `WSM-BOOT-001`
+- Last updated: 2026-04-20
+- Active task: roll the now-proven desired-party queue contract into the next battleground objective slice.
 - Last delta:
+  - The previously shipped desired-party contract is now proven live for WSG. With the BotRunner-side party-size fix in place, Horde leaders convert to raid correctly, StateManager continues publishing faction desired-party membership, and the runtime queue flow reaches both the single-capture and full-game objective completions.
+  - No new `Services/WoWStateManager` runtime code changed in this follow-up pass; this slice closed the validation gap against the existing `CharacterStateSocketListener` / `BattlegroundCoordinator` behavior.
+  - The WSG objective scenarios now run on separate fresh fixture collections so each destructive live objective starts from a clean roster instead of inheriting the previous full match's transition residue.
+- Pass result: `StateManager desired battleground party-state publishing is now proven by green live WSG objective coverage`
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceDesiredPartyTests" --logger "console;verbosity=minimal"` -> `passed (10/10)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.WsgObjectiveTests.WSG_FullGame_CompletesToVictoryOrDefeat" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=wsg_fullgame_after_group_size_fix_20260421_0210.trx"` -> `passed (1/1)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.WsgObjectiveTests.WSG_FlagCapture_HordeCarrier_CompletesSingleCaptureCycle" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=wsg_single_capture_isolated_after_diagnostics_20260421_0320.trx"` -> `passed (1/1)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "(FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.WsgFlagCaptureObjectiveTests|FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.WsgFullGameObjectiveTests)" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=wsg_objective_split_fixtures_20260421_0337.trx"` -> `passed (2/2)`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AbObjectiveTests" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=ab_objective_suite_next.trx"`
+- Previous handoff notes:
+- Last delta:
+  - Closed `WSM-PAR-001` by current live evidence. `QuestInteractionTests.Quest_AddCompleteAndRemove_AreReflectedInSnapshots` passed and proved GM-driven quest add/complete/remove state propagates from WoWSharpClient quest-log updates through BotRunner snapshot serialization into StateManager query responses.
+  - Evidence artifact: `tmp/test-runtime/results-live/quest_snapshot_wsm_par_rerun.trx`, including `[FG] After add: QuestLog1=786 QuestLog2=0 QuestLog3=0`, `[BG] After add: QuestLog1=786 QuestLog2=4 QuestLog3=0`, successful `.quest complete 786`, successful `.quest remove 786`, and a passing result.
+  - No WoWStateManager runtime code changed for `WSM-PAR-001`; the latency item was stale relative to current snapshot behavior.
+  - Completed `WSM-BOOT-001`. `MangosServerOptions` now defaults to `AutoLaunch=false` with no default `C:\Mangos\server` directory, and `Services/WoWStateManager/appsettings.json` plus `Tests/BotRunner.Tests/appsettings.test.json` disable MaNGOS auto-launch by default.
+  - `MangosServerBootstrapper` now skips immediately if auto-launch is explicitly enabled without `MangosServer:MangosDirectory`, so an incomplete opt-in cannot fall through into host process launch assumptions.
+  - Added `MangosServerBootstrapperTests` to pin the external-server default and the no-directory opt-in guard.
+  - Updated Docker stack and technical notes docs: Docker `realmd`/`mangosd` are the default ownership path; Windows host MaNGOS process launch is legacy opt-in only.
+  - Deferred `D3` is closed for StateManager/BG coordinator behavior by current WSG evidence: `WSG_PreparedRaid_QueueAndEnterBattleground` reached `BG_COORD: All 20 bots queued`, `BG_COORD: 20/20 bots on BG map`, and `[WSG:Final] onWsg=20, totalSnapshots=20`.
+  - No WoWStateManager code changed in this D3 closeout; the pass verified the existing coordinator queue/invite/map-transfer path after the earlier AB/AV queue-entry work.
+  - Deferred `D1` is closed by evidence from the StateManager launch path: the real `AlteracValley.config.json` includes the `AVBOTA1-40` Alliance roster, and the new `WoWStateManagerLaunchThrottleTests.AlteracValleySettings_IncludeAllianceAccountsInLaunchOrder` regression proves all 40 runnable Alliance accounts remain in `StateManagerWorker.OrderLaunchSettings(...)`.
+  - Deferred `D2` is closed for StateManager/BG coordinator behavior by current AB evidence plus prior AV evidence: AB reached `BG_COORD: All 20 bots queued`, `BG_COORD: 20/20 bots on BG map`, and `[AB:BG] 20/20 bots on BG map`; AV remains covered by the earlier full-match pass with `BG-SETTLE bg=80,off=0`.
+  - No WoWStateManager code changed in this D1/D2 closeout; the change is fixture/test coverage proving the existing launch and queue coordinator behavior.
   - Session 300 tightened `BattlegroundCoordinator` queue/invite behavior for AV stragglers: queue and invite phases now restage off-position accounts with throttled `Goto` actions before issuing join/accept retries.
   - Added queue-settle orchestration in AV live validation so the coordinator remains active through delayed invite pops, then objective push starts from a settled in-map roster.
   - Live AV proof now reaches `BG-SETTLE bg=80,off=0` and passes `AV_FullMatch_EnterPrepQueueMountAndReachObjective`.
@@ -67,8 +90,10 @@
   - `WoWStateManager` is now treated as host-side by design because it must launch local `WoW.exe` clients; the Windows compose stack should no longer include a `wow-state-manager` container.
   - Kept the idle host-side `WoWStateManager` path in place with `MangosServer__AutoLaunch=false` and `WWOW_SETTINGS_OVERRIDE=StateManagerSettings.Idle.json`.
   - Updated the stack docs so the containerized pieces stay `vmangos-server` / `pathfinding-service`, while `WoWStateManager` remains outside Docker.
-- Pass result: `BattlegroundCoordinator restage + retry flow closes AV stragglers; live AV now settles to full 80/80 map entry before objectives`
+- Pass result: `WSM-PAR-001 and WSM-BOOT-001 closed; owner backlog is empty`
 - Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.QuestInteractionTests.Quest_AddCompleteAndRemove_AreReflectedInSnapshots" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=quest_snapshot_wsm_par_rerun.trx"` -> `passed (1/1)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MangosServerBootstrapperTests|FullyQualifiedName~WoWStateManagerLaunchThrottleTests|FullyQualifiedName~BattlegroundFixtureConfigurationTests" --logger "console;verbosity=minimal"` -> `passed (24/24)`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~CoordinatorStrictCountTests.BattlegroundCoordinator_WaitForInvite_RetriesJoinThenAcceptForOffMapAccountsAfterDelay|FullyQualifiedName~CoordinatorStrictCountTests.BattlegroundCoordinator_QueuePhase_RestagesUnstagedMembersBeforeJoin|FullyQualifiedName~CoordinatorStrictCountTests.BattlegroundCoordinator_DoesNotAdvanceToInBattleground_UntilEveryBotEntered" --logger "console;verbosity=minimal"` -> `passed`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_FullMatch_EnterPrepQueueMountAndReachObjective" --logger "console;verbosity=normal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=av_iteration_20260409_objective_tolerance60.trx"` -> `passed (1/1)`.
   - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"` -> confirms split external services are online
@@ -78,10 +103,21 @@
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LiveValidation" --logger "console;verbosity=minimal"` -> `interrupted by user`
   - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `succeeded`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StateManagerTestClientTimeoutTests|FullyQualifiedName~WoWStateManagerLaunchThrottleTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundFixtureConfigurationTests|FullyQualifiedName~WoWStateManagerLaunchThrottleTests" --logger "console;verbosity=minimal"` -> `passed (20/20)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.ArathiBasinTests.AB_QueueAndEnterBattleground" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=ab_queue_entry_d2_after_ab_10v10_single_fg.trx"` -> `passed (1/1)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.WarsongGulchTests.WSG_PreparedRaid_QueueAndEnterBattleground" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=wsg_transfer_d3_rerun.trx"` -> `passed (1/1)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
 - Files changed:
   - `Services/WoWStateManager/Coordination/BattlegroundCoordinator.cs`
   - `Tests/BotRunner.Tests/LiveValidation/CoordinatorStrictCountTests.cs`
   - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/BattlegroundEntryTests.cs`
+  - `Services/WoWStateManager/MangosServerOptions.cs`
+  - `Services/WoWStateManager/MangosServerBootstrapper.cs`
+  - `Services/WoWStateManager/appsettings.json`
+  - `Tests/BotRunner.Tests/MangosServerBootstrapperTests.cs`
+  - `Tests/BotRunner.Tests/appsettings.test.json`
+  - `docs/DOCKER_STACK.md`
+  - `docs/TECHNICAL_NOTES.md`
   - `Services/WoWStateManager/TASKS.md`
   - `docs/TASKS.md`
   - `docs/TASKS_ARCHIVE.md`
@@ -96,5 +132,5 @@
   - `Services/SceneDataService/Dockerfile`
   - `docker-compose.windows.yml`
   - `docs/DOCKER_STACK.md`
-- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AlteracValleyTests.AV_FullMatch_EnterPrepQueueMountAndReachObjective" --logger "console;verbosity=normal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live --logger "trx;LogFileName=av_iteration_rerun.trx"`
-- Blockers: no remaining AV queue-straggler blocker in this owner; remaining work is outside battleground coordinator flow.
+- Next command: `rg -n "^- \[ \]|\[ \] Problem|Active task:" docs/TASKS.md Services/WoWStateManager/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/Navigation.Physics.Tests/TASKS.md Exports/Navigation/TASKS.md Services/PathfindingService/TASKS.md Tests/PathfindingService.Tests/TASKS.md Exports/BotRunner/TASKS.md`
+- Blockers: none currently task-tracked in this owner.

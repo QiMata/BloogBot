@@ -61,6 +61,10 @@ namespace ForegroundBotRunner
         private static readonly ushort FishingCustomAnimOpcode = (ushort)Opcode.SMSG_GAMEOBJECT_CUSTOM_ANIM;
         private static readonly TimeSpan WorldEntryCinematicGrace = TimeSpan.FromSeconds(3);
         private static readonly TimeSpan WorldEntryCinematicRetry = TimeSpan.FromSeconds(2);
+        internal static bool IsWorkerInTransition(bool isInMapTransition, uint continentId) =>
+            isInMapTransition || continentId == 0xFFFFFFFF || continentId == 0xFF;
+        internal static bool ShouldPollWorkerLuaDiagnostics(bool isInMapTransition, WoWScreenState screenState) =>
+            !isInMapTransition && screenState != WoWScreenState.LoadingWorld;
         private DateTime _loadingWorldSinceUtc = DateTime.MinValue;
         private DateTime _lastWorldEntryCinematicDismissAttemptUtc = DateTime.MinValue;
         private bool _worldEntryHydrated;
@@ -263,13 +267,18 @@ namespace ForegroundBotRunner
                     try
                     {
                         loopCount++;
+                        var workerContId = _objectManager?.ContinentId ?? 0xFFFFFFFF;
+                        bool isInMapTransition = _objectManager?.IsInMapTransition == true;
+                        bool workerInTransition = IsWorkerInTransition(isInMapTransition, workerContId);
                         var screenState = _objectManager?.GetCurrentScreenState() ?? WoWScreenState.Unknown;
                         var hasEnteredWorld = _objectManager?.HasEnteredWorld ?? false;
 
                         // Log state every 10 iterations (every 5 seconds)
                         if (loopCount % 10 == 1)
                         {
-                            var playerName = _objectManager?.Player?.Name ?? "(null)";
+                            var playerName = ObjectManager.GetDiagnosticPlayerLabel(
+                                () => _objectManager?.Player?.Name,
+                                workerInTransition);
                             var connState = _connectionState.CurrentState;
                             var pktSend = PacketLogger.SendCount;
                             var pktRecv = PacketLogger.RecvCount;
@@ -292,10 +301,13 @@ namespace ForegroundBotRunner
 
                         // Ensure Lua error capture is active before world entry so realm/charselect
                         // failures are visible in logs without full 80-bot bring-up.
-                        ObjectManager.EnsureLuaErrorCaptureInstalled("worker.loop");
-                        if (loopCount % 6 == 0)
+                        if (ShouldPollWorkerLuaDiagnostics(workerInTransition, screenState))
                         {
-                            ObjectManager.CaptureLuaErrors("worker.loop");
+                            ObjectManager.EnsureLuaErrorCaptureInstalled("worker.loop");
+                            if (loopCount % 6 == 0)
+                            {
+                                ObjectManager.CaptureLuaErrors("worker.loop");
+                            }
                         }
 
                         if (hasEnteredWorld && screenState == WoWScreenState.InWorld && _objectManager?.Player != null)
@@ -422,12 +434,8 @@ namespace ForegroundBotRunner
                         }
 
                         // Poll MovementRecorder and run automated scenarios when in world.
-                        // Check ContinentId directly (not just IsContinentTransition) to catch
-                        // transitions before ObjectManager's separate poll loop detects them.
-                        var workerContId = _objectManager?.ContinentId ?? 0xFFFFFFFF;
-                        bool workerInTransition = _objectManager?.IsContinentTransition == true
-                            || workerContId == 0xFFFFFFFF || workerContId == 0xFF;
-
+                        // Check the broader map-transition guard plus raw ContinentId so FG stays
+                        // inert during transfer/teleport windows before every downstream poll notices.
                         // Infer inbound packets from ContinentId changes for the state machine.
                         // This is a safety net when the recv hook misses opcodes (e.g., SMSG_LOGIN_VERIFY_WORLD
                         // is not captured by the FG recv hook during instance transitions).

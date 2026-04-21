@@ -1,4 +1,5 @@
 using Communication;
+using BotRunner.Helpers;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
@@ -75,6 +76,16 @@ namespace BotRunner
                     }
                     case CharacterAction.InteractWith:
                     {
+                        if (actionEntry.Item2.Count == 0)
+                        {
+                            builder.Do("Reject InteractWith missing guid", time =>
+                            {
+                                Log.Warning("[BOT RUNNER] InteractWith action ignored because no GUID parameter was provided.");
+                                return BehaviourTreeStatus.Failure;
+                            });
+                            break;
+                        }
+
                         var interactGuid = UnboxGuid(actionEntry.Item2[0]);
                         // Try GameObjects first; fall back to NPC interaction via AgentFactory
                         var isGameObject = _objectManager.GameObjects.Any(x => x.Guid == interactGuid);
@@ -121,8 +132,9 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.SelectTaxiNode:
-                        // With flightMasterGuid + sourceNodeId + destinationNodeId: packet-based (BG compatible)
-                        // Without: legacy TaxiFrame path (FG only)
+                        // With flightMasterGuid + sourceNodeId + destinationNodeId: explicit packet path.
+                        // With flightMasterGuid + destinationNodeId: resolve source node via ObjectManager.
+                        // Without params: legacy TaxiFrame path (FG only).
                         if (actionEntry.Item2.Count >= 3)
                         {
                             var taxiFmGuid = UnboxGuid(actionEntry.Item2[0]);
@@ -139,6 +151,32 @@ namespace BotRunner
                                 }
                                 Log.Warning("[BOT RUNNER] AgentFactory unavailable for SelectTaxiNode packet path");
                                 return BehaviourTreeStatus.Failure;
+                            });
+                        }
+                        else if (actionEntry.Item2.Count == 2)
+                        {
+                            var taxiFmGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var taxiDestNode = (uint)(int)actionEntry.Item2[1];
+                            builder.Do($"Activate Taxi ?->{taxiDestNode} via FM {taxiFmGuid:X}", time =>
+                            {
+                                try
+                                {
+                                    var activated = _objectManager.ActivateFlightAsync(taxiFmGuid, taxiDestNode, CancellationToken.None)
+                                        .GetAwaiter()
+                                        .GetResult();
+                                    if (!activated)
+                                    {
+                                        Log.Warning("[BOT RUNNER] Failed to activate taxi to node {TaxiDestNode} via FM {TaxiFmGuid:X}", taxiDestNode, taxiFmGuid);
+                                        return BehaviourTreeStatus.Failure;
+                                    }
+
+                                    return BehaviourTreeStatus.Success;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log.Warning(ex, "[BOT RUNNER] Taxi activation failed for destination node {TaxiDestNode} via FM {TaxiFmGuid:X}", taxiDestNode, taxiFmGuid);
+                                    return BehaviourTreeStatus.Failure;
+                                }
                             });
                         }
                         else
@@ -266,9 +304,42 @@ namespace BotRunner
                                 return BehaviourTreeStatus.Failure;
                             });
                         }
-                        else
+                        else if (actionEntry.Item2.Count == 1)
                         {
                             builder.Splice(_interactionSequences.BuildLearnTalentSequence((int)actionEntry.Item2[0]));
+                        }
+                        else
+                        {
+                            builder.Do("Allocate Available Talent Points", time =>
+                            {
+                                if (_talentService == null)
+                                {
+                                    Log.Warning("[BOT RUNNER] TrainTalent auto-allocation requested, but no talent service is available.");
+                                    return BehaviourTreeStatus.Failure;
+                                }
+
+                                try
+                                {
+                                    var buildName = ResolveTrainTalentBuildName(_objectManager.Player);
+                                    var allocated = _talentService
+                                        .AllocateAvailablePointsAsync(buildName, CancellationToken.None)
+                                        .GetAwaiter()
+                                        .GetResult();
+
+                                    if (allocated <= 0)
+                                    {
+                                        Log.Warning("[BOT RUNNER] TrainTalent auto-allocation did not spend any points for build '{BuildName}'.", buildName);
+                                        return BehaviourTreeStatus.Failure;
+                                    }
+
+                                    return BehaviourTreeStatus.Success;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log.Warning(ex, "[BOT RUNNER] TrainTalent auto-allocation failed.");
+                                    return BehaviourTreeStatus.Failure;
+                                }
+                            });
                         }
                         break;
 
@@ -740,9 +811,9 @@ namespace BotRunner
                                 return BehaviourTreeStatus.Success;
                             }
 
-                            if (!IsCorpseState(player))
+                            if (!DeathStateDetection.CanReleaseSpirit(player))
                             {
-                                Log.Information("[BOT RUNNER] Skipping ReleaseCorpse: player is not in corpse state.");
+                                Log.Information("[BOT RUNNER] Skipping ReleaseCorpse: player is not in a releasable death state.");
                                 return BehaviourTreeStatus.Success;
                             }
 
@@ -846,6 +917,16 @@ namespace BotRunner
 
                     case CharacterAction.CheckMail:
                     {
+                        if (actionEntry.Item2.Count == 0)
+                        {
+                            builder.Do("Reject CheckMail missing guid", time =>
+                            {
+                                Log.Warning("[BOT RUNNER] CheckMail action ignored because no mailbox GUID parameter was provided.");
+                                return BehaviourTreeStatus.Failure;
+                            });
+                            break;
+                        }
+
                         var mailboxGuid = UnboxGuid(actionEntry.Item2[0]);
                         builder.Do($"Check Mail at mailbox {mailboxGuid:X}", time =>
                         {
@@ -1013,8 +1094,6 @@ namespace BotRunner
                         var targetX = Convert.ToSingle(actionEntry.Item2[1]);
                         var targetY = Convert.ToSingle(actionEntry.Item2[2]);
                         var targetZ = Convert.ToSingle(actionEntry.Item2[3]);
-                        Position[]? travelPath = null;
-                        int travelWaypointIdx = 0;
                         builder.Do($"TravelTo map={targetMapId} ({targetX:F0},{targetY:F0},{targetZ:F0})", time =>
                         {
                             if (_objectManager.Player.MapId != targetMapId)
@@ -1031,51 +1110,14 @@ namespace BotRunner
                                 return BehaviourTreeStatus.Success;
                             }
 
-                            // Compute path on first tick
-                            if (travelPath == null)
+                            var result = UpsertGoToTask(_botTasks, context, targetX, targetY, targetZ, tolerance: 15f);
+                            if (result != GoToTaskUpsertResult.Duplicate)
                             {
-                                try
-                                {
-                                    var pfClient = _container.PathfindingClient;
-                                    travelPath = pfClient.GetPath(targetMapId,
-                                        _objectManager.Player.Position, target,
-                                        nearbyObjects: null,
-                                        smoothPath: true,
-                                        race: _objectManager.Player.Race,
-                                        gender: _objectManager.Player.Gender);
-                                    travelWaypointIdx = 0;
-                                    Log.Information("[TRAVEL] Path computed: {Count} waypoints to ({X:F0},{Y:F0},{Z:F0})",
-                                        travelPath.Length, targetX, targetY, targetZ);
-                                }
-                                catch (Exception ex)
-                                {
-                                    Log.Warning(ex, "[TRAVEL] Pathfinding failed, using direct line");
-                                    travelPath = [];
-                                }
+                                Log.Information("[BOT RUNNER] TravelTo upsert: {Result} target=({X:F1},{Y:F1},{Z:F1}) tolerance=15.0",
+                                    result, targetX, targetY, targetZ);
                             }
 
-                            // Use pathfinding waypoints if available, else direct line
-                            if (travelPath.Length > 0 && travelWaypointIdx < travelPath.Length)
-                            {
-                                var wp = travelPath[travelWaypointIdx];
-                                var wpDist = _objectManager.Player.Position.DistanceTo2D(wp);
-                                if (wpDist <= 3f)
-                                {
-                                    travelWaypointIdx++;
-                                    if (travelWaypointIdx >= travelPath.Length)
-                                    {
-                                        _objectManager.MoveToward(target);
-                                        return BehaviourTreeStatus.Running;
-                                    }
-                                    wp = travelPath[travelWaypointIdx];
-                                }
-                                _objectManager.MoveToward(wp);
-                            }
-                            else
-                            {
-                                _objectManager.MoveToward(target);
-                            }
-                            return BehaviourTreeStatus.Running;
+                            return BehaviourTreeStatus.Success;
                         });
                         break;
                     }
@@ -1141,6 +1183,27 @@ namespace BotRunner
                 expectedMapId,
                 bgClient));
             return BattlegroundQueueTaskUpsertResult.Pushed;
+        }
+
+        private static string ResolveTrainTalentBuildName(IWoWLocalPlayer? player)
+        {
+            var envBuildName = Environment.GetEnvironmentVariable("WWOW_TALENT_BUILD");
+            if (!string.IsNullOrWhiteSpace(envBuildName))
+                return envBuildName;
+
+            return player?.Class switch
+            {
+                Class.Warrior => "Fury Warrior",
+                Class.Paladin => "Retribution Paladin",
+                Class.Hunter => "Beast Mastery Hunter",
+                Class.Rogue => "Combat Rogue",
+                Class.Priest => "Shadow Priest",
+                Class.Shaman => "Enhancement Shaman",
+                Class.Mage => "Frost Mage",
+                Class.Warlock => "Affliction Warlock",
+                Class.Druid => "Feral Druid",
+                _ => "Fury Warrior"
+            };
         }
 
         private static List<uint> ParseGatheringEntries(string csv)

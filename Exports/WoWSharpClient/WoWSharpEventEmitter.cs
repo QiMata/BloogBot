@@ -46,6 +46,7 @@ namespace WoWSharpClient
         public event EventHandler OnChooseRealm;
         public event EventHandler OnDisconnect;
         public event EventHandler<List<WorldState>> OnWorldStatesInit;
+        public event EventHandler<WorldState> OnWorldStateUpdate;
         public event EventHandler<OnUiMessageArgs> OnErrorMessage;
         public event EventHandler<OnUiMessageArgs> OnUiMessage;
         public event EventHandler<OnUiMessageArgs> OnSystemMessage;
@@ -227,6 +228,7 @@ namespace WoWSharpClient
         public void FireOnSpellLogMiss(uint spellId, ulong casterGUID, ulong targetGUID, uint missReason) => FireEvent(OnSpellLogMiss);
         public void FireOnAttackerStateUpdate(uint hitInfo, ulong attackerGuid, ulong targetGuid, uint totalDamage, uint spellId, uint blockedAmount) => FireEvent(OnAttackerStateUpdate);
         public void FireOnWorldStatesInit(List<WorldState> worldStates) => OnWorldStatesInit?.Invoke(this, worldStates);
+        public void FireOnWorldStateUpdate(WorldState worldState) => OnWorldStateUpdate?.Invoke(this, worldState);
         public void FireOnSetRestStart() => FireEvent(OnSetRestStart);
         public void FireOnCharacterJumpStart(ulong guid) => OnCharacterJumpStart?.Invoke(this, new CharacterActionArgs(guid));
         internal void FireOnCharacterFallLand(ulong guid) => OnCharacterFallLand?.Invoke(this, new CharacterActionArgs(guid));

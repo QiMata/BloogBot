@@ -159,12 +159,22 @@ public class BuffAndConsumableTests
         await _bot.EnsureCleanSlateAsync(account, label);
         await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthUseSpell}");
         await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthBuffAura}");
+        var auraCleared = await WaitForAuraAsync(account, HasLionsStrengthAura, present: false, timeout: TimeSpan.FromSeconds(5));
+        if (!auraCleared)
+        {
+            _output.WriteLine($"  [{label}] Lion's Strength still present after initial unaura; retrying cleanup once.");
+            await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthUseSpell}");
+            await _bot.SendGmChatCommandAsync(account, $".unaura {LionsStrengthBuffAura}");
+            auraCleared = await WaitForAuraAsync(account, HasLionsStrengthAura, present: false, timeout: TimeSpan.FromSeconds(3));
+        }
+
         await _bot.BotClearInventoryAsync(account, includeExtraBags: false);
         await Task.Delay(500);
 
         await _bot.RefreshSnapshotsAsync();
         var player = getPlayer();
         Assert.NotNull(player);
+        Assert.True(auraCleared, $"[{label}] Lion's Strength should be cleared before setup.");
         Assert.False(HasLionsStrengthAura(player), $"[{label}] Lion's Strength should be cleared before setup.");
         Assert.Equal(0, CountBagSlotsForItem(player, ElixirOfLionsStrength));
     }

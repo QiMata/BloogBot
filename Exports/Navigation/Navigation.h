@@ -31,6 +31,14 @@ struct NavPoly            // <-- goes below XYZ definition
     XYZ      verts[6];    // world‑space verts (WoW axis)
 };
 
+struct OverlayRepairedSegmentMetadata
+{
+    int      segmentIndex = -1;
+    uint32_t blockingInstanceId = 0;
+    uint64_t blockingGuid = 0;
+    uint32_t blockingDisplayId = 0;
+};
+
 class Navigation
 {
 public:
@@ -50,10 +58,12 @@ public:
     std::vector<NavPoly> CapsuleOverlap(uint32_t mapId, const XYZ& pos, float radius, float height);
     float GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t liquidTypeMask);
     const dtNavMeshQuery* GetQueryForMap(uint32_t mapId);
+    OverlayRepairedSegmentMetadata GetLastOverlayRepairedSegment() const { return m_lastOverlayRepairedSegment; }
 private:
     void InitializeMapsForContinent(MMAP::MMapManager* manager, unsigned int mapId);
     static Navigation* s_singletonInstance;
     XYZ* currentPath;
+    OverlayRepairedSegmentMetadata m_lastOverlayRepairedSegment;
 };
 
 #endif

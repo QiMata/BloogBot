@@ -252,7 +252,15 @@ public class RetrieveCorpseTask(IBotContext botContext, Position corpsePosition)
                 corpseNavTarget,
                 player.MapId,
                 allowDirectFallback: false,
-                minWaypointDistance: MinimumDriveWaypointDistance);
+                minWaypointDistance: MinimumDriveWaypointDistance,
+                currentTransportGuid: player.TransportGuid);
+
+            if (_navPath.ShouldHoldPositionForTransport(player.Position, waypoint))
+            {
+                _noPathSinceUtc = null;
+                ObjectManager.StopAllMovement();
+                return;
+            }
 
             if (waypoint == null)
             {

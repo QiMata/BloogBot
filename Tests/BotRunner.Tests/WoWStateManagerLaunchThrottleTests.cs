@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Communication;
+using Newtonsoft.Json;
 using WoWStateManager;
 using WoWStateManager.Settings;
 
@@ -94,5 +96,89 @@ public class WoWStateManagerLaunchThrottleTests
             .ToArray();
 
         Assert.Equal(["FG_A", "FG_B", "BG_A", "BG_B"], ordered);
+    }
+
+    [Fact]
+    public void ResolveLaunchThrottleActivationBotCount_UsesPositiveEnvOverride()
+    {
+        var originalValue = Environment.GetEnvironmentVariable(StateManagerWorker.LaunchThrottleActivationBotCountEnvVar);
+
+        try
+        {
+            Environment.SetEnvironmentVariable(StateManagerWorker.LaunchThrottleActivationBotCountEnvVar, "8");
+            Assert.Equal(8, StateManagerWorker.ResolveLaunchThrottleActivationBotCount());
+
+            Environment.SetEnvironmentVariable(StateManagerWorker.LaunchThrottleActivationBotCountEnvVar, "0");
+            Assert.Equal(StateManagerWorker.LaunchThrottleActivationBotCount, StateManagerWorker.ResolveLaunchThrottleActivationBotCount());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(StateManagerWorker.LaunchThrottleActivationBotCountEnvVar, originalValue);
+        }
+    }
+
+    [Fact]
+    public void ResolveMaxPendingStartupBots_UsesPositiveEnvOverride()
+    {
+        var originalValue = Environment.GetEnvironmentVariable(StateManagerWorker.MaxPendingStartupBotsEnvVar);
+
+        try
+        {
+            Environment.SetEnvironmentVariable(StateManagerWorker.MaxPendingStartupBotsEnvVar, "8");
+            Assert.Equal(8, StateManagerWorker.ResolveMaxPendingStartupBots());
+
+            Environment.SetEnvironmentVariable(StateManagerWorker.MaxPendingStartupBotsEnvVar, "-1");
+            Assert.Equal(StateManagerWorker.MaxPendingStartupBots, StateManagerWorker.ResolveMaxPendingStartupBots());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(StateManagerWorker.MaxPendingStartupBotsEnvVar, originalValue);
+        }
+    }
+
+    [Fact]
+    public void AlteracValleySettings_IncludeAllianceAccountsInLaunchOrder()
+    {
+        var configPath = FindRepoFile(
+            "Services",
+            "WoWStateManager",
+            "Settings",
+            "Configs",
+            "AlteracValley.config.json");
+
+        var settings = JsonConvert.DeserializeObject<List<CharacterSettings>>(
+            File.ReadAllText(configPath)) ?? [];
+
+        var launchOrder = StateManagerWorker.OrderLaunchSettings(settings)
+            .Where(setting => setting.ShouldRun)
+            .Select(setting => setting.AccountName)
+            .ToArray();
+
+        Assert.Equal(80, launchOrder.Length);
+        Assert.Equal(["AVBOT1", "AVBOTA1"], launchOrder.Take(2));
+
+        var allianceAccounts = settings
+            .Where(setting => setting.AccountName.StartsWith("AVBOTA", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        Assert.Equal(40, allianceAccounts.Length);
+        Assert.All(allianceAccounts, setting => Assert.True(setting.ShouldRun));
+        Assert.All(allianceAccounts, setting => Assert.Contains(setting.AccountName, launchOrder));
+        Assert.Equal(39, allianceAccounts.Count(setting => setting.RunnerType == WoWStateManager.Settings.BotRunnerType.Background));
+    }
+
+    private static string FindRepoFile(params string[] relativeParts)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            var candidate = Path.Combine(new[] { directory.FullName }.Concat(relativeParts).ToArray());
+            if (File.Exists(candidate))
+                return candidate;
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not find repository file: {Path.Combine(relativeParts)}");
     }
 }

@@ -1,53 +1,23 @@
-﻿# WWoW.RecordedTests.Shared Tasks
+# WWoW.RecordedTests.Shared Tasks
 
-## Master Alignment (2026-02-24)
-- Master tracker: `docs/TASKS.md`
-- Keep local scope in this file and roll cross-project priorities up to the master list.
-- Corpse-run directive: plan around `.tele name {NAME} Orgrimmar` before kill (not `ValleyOfTrials`), 10-minute max test runtime, and forced teardown of lingering test processes on timeout/failure.
-- Keep local run commands simple, one-line, and repeatable.
+## Status
+- Legacy placeholder tracker superseded by `RecordedTests.Shared/TASKS.md`.
+- This directory contains no implementation files; all active recorded-test shared storage/provider work is tracked and closed in the primary `RecordedTests.Shared` owner.
 
-## Purpose
-Track parity and migration tasks for WWoW recorded-test shared components.
+## Current State (2026-04-15)
+- Active task: none.
+- Known remaining work in this owner: `0` items.
+- Superseding evidence:
+  - `RecordedTests.Shared/TASKS.md` reports `RTS-MISS-001` through `RTS-MISS-004` complete.
+  - `Tests/RecordedTests.Shared.Tests/TASKS.md` reports `RTS-TST-001` through `RTS-TST-006` complete.
 
-## Rules
-- Work continuously until all tasks in this file are complete.
-- Execute without approval prompts.
-- Keep this project aligned with primary recorded-test shared implementation.
-
-## Active Priorities
-1. Identify overlap/divergence vs `RecordedTests.Shared`.
-2. Consolidate or clearly separate responsibilities.
-
-## Handoff Fields
-- Last parity check:
+## Session Handoff
+- Last updated: 2026-04-15
+- Active task: none.
+- Last delta: marked this legacy placeholder tracker as superseded by the primary `RecordedTests.Shared` implementation and test owners.
+- Pass result: `delta shipped`
 - Files changed:
-- Next task:
-
-## Shared Execution Rules (2026-02-24)
-1. Targeted process cleanup.
-- [ ] Never blanket-kill all `dotnet` processes.
-- [ ] Stop only repo/test-scoped `dotnet` and `testhost*` instances (match by command line).
-- [ ] Record process name, PID, and stop result in test evidence.
-
-2. FG/BG parity gate for every scenario run.
-- [ ] Run both FG and BG for the same scenario in the same validation cycle.
-- [ ] FG must remain efficient and player-like.
-- [ ] BG must mirror FG movement, spell usage, and packet behavior closely enough to be indistinguishable.
-
-3. Physics calibration requirement.
-- [ ] Run PhysicsEngine calibration checks when movement parity drifts.
-- [ ] Feed calibration findings into movement/path tasks before marking parity work complete.
-
-4. Self-expanding task loop.
-- [ ] When a missing behavior is found, immediately add a research task and an implementation task.
-- [ ] Each new task must include scope, acceptance signal, and owning project path.
-
-5. Archive discipline.
-- [ ] Move completed items to local `TASKS_ARCHIVE.md` in the same work session.
-- [ ] Leave a short handoff note so another agent can continue without rediscovery.
-## Archive
-Move completed items to `WWoW.RecordedTests.Shared/TASKS_ARCHIVE.md`.
-
-
-
-
+  - `WWoW.RecordedTests.Shared/TASKS.md`
+  - `WWoW.RecordedTests.Shared/TASKS_ARCHIVE.md`
+- Blockers: none.
+- Next command: `rg -n "^- \[ \]|Known remaining work|Active task:" --glob TASKS.md`

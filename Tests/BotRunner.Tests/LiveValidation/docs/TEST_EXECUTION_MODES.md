@@ -31,7 +31,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | BuffAndConsumableTests | Dual-Bot Conditional | BG + FG | Yes (when available) | FG-first, then BG |
 | CombatLoopTests | CombatTest-Only | COMBATTEST | **No** | Non-GM account, avoids faction corruption |
 | CraftingProfessionTests | BG-Only | BG | **No** | FG excluded (legacy Lua/UI dependency) |
-| DeathCorpseRunTests | BG-Only (FG skipped) | BG (+ FG skipped) | **No** | FG permanently skipped: CRASH-001 |
+| DeathCorpseRunTests | BG default + FG opt-in | BG (+ opt-in FG) | Opt-in only | Historical CRASH-001 not reproduced on 2026-04-15; latest opt-in FG corpse-run passes |
 | EconomyInteractionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Bank/AH parallel validation |
 | EquipmentEquipTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Parallel equip with IsFgActionable |
 | FishingProfessionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Ratchet fishing task path |
@@ -56,7 +56,7 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 
 1. **CombatLoopTests** — Uses COMBATTEST account. Consider adding FG combat reference.
 2. **CraftingProfessionTests** — Blocked on FG Lua/UI crafting parity.
-3. **DeathCorpseRunTests** — Blocked on FG WoW.exe crash (CRASH-001).
+3. **DeathCorpseRunTests** - FG is opt-in. Historical CRASH-001 was not reproduced on 2026-04-15; latest opt-in FG corpse-run validation passes and remains available for targeted regression proof.
 4. **LootCorpseTests** — Uses COMBATTEST account. Consider adding FG loot reference.
 5. **MapTransitionTests** — BG-only. FG map transition observation would catch desync.
 6. **NavigationTests** — BG-only. FG position comparison would catch movement divergence.

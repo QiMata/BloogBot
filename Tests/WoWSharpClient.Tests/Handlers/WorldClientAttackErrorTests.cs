@@ -32,10 +32,13 @@ namespace WoWSharpClient.Tests.Handlers
                 TargetGuid = 0x1234,
             };
             WoWSharpObjectManager.Instance.Player = localPlayer;
+            WoWSharpObjectManager.Instance.ClearConfirmedMeleeAttackStart();
             WoWSharpObjectManager.Instance.ClearPendingMeleeAttackStart();
+            WoWSharpObjectManager.Instance.ConfirmMeleeAttackStarted(localPlayer.TargetGuid);
             WoWSharpObjectManager.Instance.NotePendingMeleeAttackStart(localPlayer.TargetGuid);
 
             var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+            worldClient.SetHandlerContext(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
             await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
 
             connection.InjectIncomingData(CreateSmsgPacket(opcode, Array.Empty<byte>()));
@@ -43,6 +46,7 @@ namespace WoWSharpClient.Tests.Handlers
 
             Assert.False(localPlayer.IsAutoAttacking);
             Assert.False(WoWSharpObjectManager.Instance.HasPendingMeleeAttackStart(localPlayer.TargetGuid));
+            Assert.False(WoWSharpObjectManager.Instance.HasConfirmedMeleeAttackStart(localPlayer.TargetGuid));
         }
 
         private static byte[] CreateSmsgPacket(Opcode opcode, byte[] payload)

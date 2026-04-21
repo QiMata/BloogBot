@@ -311,6 +311,8 @@ class SceneQuery
         static SceneCache* GetSceneCache(uint32_t mapId);
         static void ClearSceneCaches();
         static void ClearSceneCache(uint32_t mapId);
+        static void SetSceneAutoloadEnabled(bool enabled) { m_sceneAutoloadEnabled = enabled; }
+        static bool IsSceneAutoloadEnabled() { return m_sceneAutoloadEnabled; }
         // Scene slice mode removed — Physics.dll (PHYSICS_DLL_ONLY) has no VMAP/mmap
         // data, so EnsureMapLoaded naturally returns early when SceneCache exists.
         // Kept as no-op for backward compat with any lingering callers.
@@ -327,6 +329,7 @@ class SceneQuery
         inline static VMAP::VMapManager2* m_vmapManager = nullptr;
         inline static MapLoader* m_mapLoader = nullptr;
         inline static bool m_initialized = false;
+        inline static bool m_sceneAutoloadEnabled = true;
         // m_sceneSliceMode removed — Physics.dll naturally has no VMAP/mmap data
         inline static std::string m_scenesDir;
 

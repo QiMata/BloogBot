@@ -206,9 +206,26 @@ public partial class LiveBotFixture
 
     private async Task SeedExpectedCharacterNamesFromDatabaseAsync()
     {
-        BgCharacterName ??= await ResolvePrimaryCharacterNameAsync(BgAccountName);
-        FgCharacterName ??= await ResolvePrimaryCharacterNameAsync(FgAccountName);
-        CombatTestCharacterName ??= await ResolvePrimaryCharacterNameAsync(CombatTestAccountName);
+        var accountsToResolve = new HashSet<string>(KnownAccountNamesForCharacterResolution, StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(BgAccountName))
+            accountsToResolve.Add(BgAccountName);
+        if (!string.IsNullOrWhiteSpace(FgAccountName))
+            accountsToResolve.Add(FgAccountName);
+        if (!string.IsNullOrWhiteSpace(CombatTestAccountName))
+            accountsToResolve.Add(CombatTestAccountName);
+
+        foreach (var accountName in accountsToResolve)
+        {
+            var characterName = await ResolvePrimaryCharacterNameAsync(accountName);
+            RememberKnownCharacterName(accountName, characterName);
+
+            if (string.Equals(accountName, BgAccountName, StringComparison.OrdinalIgnoreCase))
+                BgCharacterName ??= characterName;
+            if (string.Equals(accountName, FgAccountName, StringComparison.OrdinalIgnoreCase))
+                FgCharacterName ??= characterName;
+            if (string.Equals(accountName, CombatTestAccountName, StringComparison.OrdinalIgnoreCase))
+                CombatTestCharacterName ??= characterName;
+        }
     }
 
 

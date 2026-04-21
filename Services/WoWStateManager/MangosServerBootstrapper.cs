@@ -30,6 +30,12 @@ internal sealed class MangosServerBootstrapper(
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(_options.MangosDirectory))
+        {
+            _logger.LogWarning("MaNGOS auto-launch requested but MangosServer:MangosDirectory is not configured. Skipping auto-launch.");
+            return;
+        }
+
         if (!Directory.Exists(_options.MangosDirectory))
         {
             _logger.LogWarning("MaNGOS directory not found at {Dir}. Skipping auto-launch.", _options.MangosDirectory);

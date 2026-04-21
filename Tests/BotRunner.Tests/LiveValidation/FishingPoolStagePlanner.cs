@@ -14,6 +14,13 @@ internal sealed record FishingPoolSpawn(
     uint? PoolEntry,
     string? PoolDescription);
 
+internal sealed record FishingSearchWaypoint(
+    float X,
+    float Y,
+    float Z,
+    float StageDistance2D,
+    bool IsPrioritized);
+
 internal static class FishingPoolStagePlanner
 {
     private const float MaxStageProbeTravelDistance = 20f;
@@ -104,18 +111,14 @@ internal static class FishingPoolStagePlanner
         int waypointCount,
         float standoffDistance)
     {
-        var localSpawns = spawns
-            .Where(spawn => spawn.Distance2D <= localSpawnDistance)
-            .ToList();
-        var waypointSource = localSpawns.Count > 0
-            ? localSpawns
-            : spawns;
-
-        return waypointSource
-            .OrderBy(spawn => Distance2D(stageX, stageY, spawn.X, spawn.Y))
-            .GroupBy(spawn => $"{spawn.X:F1}:{spawn.Y:F1}")
-            .Select(group => CreateWaypoint(group.First(), stageX, stageY, anchorZ, standoffDistance))
-            .DistinctBy(waypoint => $"{waypoint.x:F1}:{waypoint.y:F1}")
+        return CreateWaypointCandidates(
+                SelectWaypointSource(spawns, localSpawnDistance),
+                stageX,
+                stageY,
+                anchorZ,
+                standoffDistance,
+                isPrioritized: false)
+            .Select(waypoint => (waypoint.X, waypoint.Y, waypoint.Z))
             .Take(waypointCount)
             .ToList();
     }
@@ -130,58 +133,107 @@ internal static class FishingPoolStagePlanner
         int waypointCount,
         float standoffDistance)
     {
-        var defaultWaypoints = CreateSearchWaypoints(
-            spawns,
+        var defaultWaypoints = CreateWaypointCandidates(
+            SelectWaypointSource(spawns, localSpawnDistance),
             stageX,
             stageY,
             anchorZ,
-            localSpawnDistance,
-            waypointCount,
-            standoffDistance);
+            standoffDistance,
+            isPrioritized: false);
 
         if (prioritizedPoolEntries.Count == 0)
-            return defaultWaypoints;
+        {
+            return defaultWaypoints
+                .Select(waypoint => (waypoint.X, waypoint.Y, waypoint.Z))
+                .Take(waypointCount)
+                .ToList();
+        }
 
         var prioritizedSpawns = spawns
             .Where(spawn => spawn.PoolEntry.HasValue && prioritizedPoolEntries.Contains(spawn.PoolEntry.Value))
             .ToList();
         if (prioritizedSpawns.Count == 0)
-            return defaultWaypoints;
+        {
+            return defaultWaypoints
+                .Select(waypoint => (waypoint.X, waypoint.Y, waypoint.Z))
+                .Take(waypointCount)
+                .ToList();
+        }
 
         var prioritizedLocalSpawns = prioritizedSpawns
             .Where(spawn => spawn.Distance2D <= localSpawnDistance)
             .ToList();
         if (prioritizedLocalSpawns.Count == 0 && defaultWaypoints.Count > 0)
         {
-            var fallbackPrioritizedWaypoints = CreateSearchWaypoints(
-                prioritizedSpawns,
+            var fallbackPrioritizedWaypoints = CreateWaypointCandidates(
+                SelectWaypointSource(prioritizedSpawns, localSpawnDistance),
                 stageX,
                 stageY,
                 anchorZ,
-                localSpawnDistance,
-                waypointCount,
-                standoffDistance);
+                standoffDistance,
+                isPrioritized: true);
 
             return defaultWaypoints
                 .Concat(fallbackPrioritizedWaypoints)
-                .DistinctBy(waypoint => $"{waypoint.x:F1}:{waypoint.y:F1}")
+                .DistinctBy(waypoint => $"{waypoint.X:F1}:{waypoint.Y:F1}")
+                .Select(waypoint => (waypoint.X, waypoint.Y, waypoint.Z))
                 .Take(waypointCount)
                 .ToList();
         }
 
-        var prioritizedWaypoints = CreateSearchWaypoints(
-            prioritizedLocalSpawns.Count > 0 ? prioritizedLocalSpawns : prioritizedSpawns,
+        var prioritizedWaypoints = CreateWaypointCandidates(
+            SelectWaypointSource(prioritizedLocalSpawns.Count > 0 ? prioritizedLocalSpawns : prioritizedSpawns, localSpawnDistance),
             stageX,
             stageY,
             anchorZ,
-            localSpawnDistance,
-            waypointCount,
-            standoffDistance);
+            standoffDistance,
+            isPrioritized: true);
 
-        return prioritizedWaypoints
-            .Concat(defaultWaypoints)
-            .DistinctBy(waypoint => $"{waypoint.x:F1}:{waypoint.y:F1}")
+        return defaultWaypoints
+            .Concat(prioritizedWaypoints)
+            .OrderBy(waypoint => waypoint.StageDistance2D)
+            .ThenByDescending(waypoint => waypoint.IsPrioritized)
+            .DistinctBy(waypoint => $"{waypoint.X:F1}:{waypoint.Y:F1}")
+            .Select(waypoint => (waypoint.X, waypoint.Y, waypoint.Z))
             .Take(waypointCount)
+            .ToList();
+    }
+
+    private static IReadOnlyList<FishingPoolSpawn> SelectWaypointSource(
+        IReadOnlyList<FishingPoolSpawn> spawns,
+        float localSpawnDistance)
+    {
+        var localSpawns = spawns
+            .Where(spawn => spawn.Distance2D <= localSpawnDistance)
+            .ToList();
+        return localSpawns.Count > 0
+            ? localSpawns
+            : spawns;
+    }
+
+    private static IReadOnlyList<FishingSearchWaypoint> CreateWaypointCandidates(
+        IReadOnlyList<FishingPoolSpawn> spawns,
+        float stageX,
+        float stageY,
+        float anchorZ,
+        float standoffDistance,
+        bool isPrioritized)
+    {
+        return spawns
+            .OrderBy(spawn => Distance2D(stageX, stageY, spawn.X, spawn.Y))
+            .GroupBy(spawn => $"{spawn.X:F1}:{spawn.Y:F1}")
+            .Select(group =>
+            {
+                var spawn = group.First();
+                var waypoint = CreateWaypoint(spawn, stageX, stageY, anchorZ, standoffDistance);
+                return new FishingSearchWaypoint(
+                    waypoint.x,
+                    waypoint.y,
+                    waypoint.z,
+                    Distance2D(stageX, stageY, spawn.X, spawn.Y),
+                    isPrioritized);
+            })
+            .DistinctBy(waypoint => $"{waypoint.X:F1}:{waypoint.Y:F1}")
             .ToList();
     }
 

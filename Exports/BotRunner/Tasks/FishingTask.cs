@@ -55,8 +55,10 @@ public class FishingTask : BotTask, IBotTask
     private const int SearchWalkTimeoutMs = 180_000;
     private const int SearchWaypointStallTimeoutMs = 20_000;
     private const float SearchWaypointArrivalRadius = 6f;
+    private const float SearchWaypointArrivalMaxZDelta = SearchWaypointDirectFallbackMaxZDelta;
     private const float SearchWaypointProgressResetDistance = 2f;
     private const float SearchWaypointTravelStride = 8f;
+    private const float SearchWaypointMicroStride = 1f;
     private const float SearchWaypointDirectFallbackRadius = 6f;
     private const float SearchWaypointDirectFallbackMaxZDelta = 1.5f;
     private const float SearchWaypointSnapRadius = 8f;
@@ -67,7 +69,10 @@ public class FishingTask : BotTask, IBotTask
     private const float SearchWaypointProbeLowerSurfacePenaltyScale = 8f;
     private const float SearchWaypointRouteMaxDropZ = 2.5f;
     private const float SearchWaypointRouteMaxRiseZ = 3.5f;
+    private const float SearchWaypointRouteMaxExtraDetourDistance = 12f;
+    private const float SearchWaypointRouteMaxDetourMultiplier = 2f;
     private const float SearchWaypointMinForwardProgress = 1.5f;
+    private const float SearchWaypointMicroStrideMinForwardProgress = 0.75f;
     private const float FishingApproachWalkableSnapRadius = 4f;
     private const float FishingApproachCandidateDedupRadius = 1.5f;
     private const float FishingApproachLowerSurfacePenaltyScale = 6f;
@@ -112,6 +117,12 @@ public class FishingTask : BotTask, IBotTask
     private DateTime _searchStartedAt;
     private DateTime _searchWaypointEnteredAt;
     private float _searchWaypointResetDistance = float.MaxValue;
+    private Position? _searchWaypointRawDiagnostic;
+    private Position? _searchWaypointResolvedDiagnostic;
+    private Position? _searchWaypointTravelTargetDiagnostic;
+    private Position? _searchWaypointPathHeadDiagnostic;
+    private int _searchWaypointPathNodesDiagnostic;
+    private string _searchWaypointTravelModeDiagnostic = "none";
 
     public void Update()
     {
@@ -355,14 +366,18 @@ public class FishingTask : BotTask, IBotTask
             return;
         }
 
-        var waypoint = ResolveSearchWaypoint(player.MapId, player.Position, _searchWaypointIndex, _searchWaypoints[_searchWaypointIndex]);
+        var rawWaypoint = _searchWaypoints[_searchWaypointIndex];
+        var waypoint = ResolveSearchWaypoint(player.MapId, player.Position, _searchWaypointIndex, rawWaypoint);
         var waypointDistance = player.Position.DistanceTo(waypoint);
 
-        if (waypointDistance <= SearchWaypointArrivalRadius)
+        if (CanTreatSearchWaypointAsArrived(player.Position, waypoint, waypointDistance))
         {
+            RecordSearchWaypointDiagnostic(rawWaypoint, waypoint, waypoint, null, "arrived");
+            var arrivedWaypoint = _searchWaypointIndex + 1;
+            var arrivalDetail = BuildSearchWaypointDiagnosticDetail(player.Position);
             AdvanceSearchWaypoint();
             BotContext.AddDiagnosticMessage(
-                $"[TASK] FishingTask search_walk waypoint={_searchWaypointIndex}/{_searchWaypoints.Count} distance={waypointDistance:F1}");
+                $"[TASK] FishingTask search_walk waypoint={arrivedWaypoint}/{_searchWaypoints.Count} distance={waypointDistance:F1} {arrivalDetail}");
             return;
         }
 
@@ -381,21 +396,30 @@ public class FishingTask : BotTask, IBotTask
         {
             ClearNavigation();
             var stalledWaypoint = _searchWaypointIndex + 1;
+            RecordSearchWaypointDiagnostic(
+                rawWaypoint,
+                waypoint,
+                _searchWaypointTravelTargetDiagnostic,
+                _searchWaypointPathHeadDiagnostic,
+                _searchWaypointTravelModeDiagnostic,
+                _searchWaypointPathNodesDiagnostic);
+            var stalledDetail = BuildSearchWaypointDiagnosticDetail(player.Position);
             AdvanceSearchWaypoint();
             BotContext.AddDiagnosticMessage(
-                $"[TASK] FishingTask search_walk_stalled waypoint={stalledWaypoint}/{_searchWaypoints.Count} distance={waypointDistance:F1} elapsed={waypointElapsed}ms");
+                $"[TASK] FishingTask search_walk_stalled waypoint={stalledWaypoint}/{_searchWaypoints.Count} distance={waypointDistance:F1} elapsed={waypointElapsed}ms {stalledDetail}");
             return;
         }
 
         var (travelTarget, travelPath) = ResolveSearchWaypointTravelTarget(player.MapId, player.Position, waypoint);
         if (CanDirectSearchWalkFallback(player.MapId, player.Position, travelTarget))
         {
+            RecordSearchWaypointDiagnostic(rawWaypoint, waypoint, travelTarget, null, "direct");
             ClearNavigation();
             ObjectManager.MoveToward(travelTarget);
             return;
         }
 
-        if (TryFollowSearchWaypointPath(travelPath))
+        if (TryFollowSearchWaypointPath(player.Position, rawWaypoint, waypoint, travelTarget, travelPath))
             return;
 
         // The search-walk probe path is the authoritative guard for these short local
@@ -404,7 +428,10 @@ public class FishingTask : BotTask, IBotTask
         // recovery route anyway.
         var rejectedProbeRoute = Container.PathfindingClient != null && travelPath == null;
         if (!rejectedProbeRoute && TryNavigateToward(travelTarget))
+        {
+            RecordSearchWaypointDiagnostic(rawWaypoint, waypoint, travelTarget, null, "navigate");
             return;
+        }
 
         // Search-walk waypoints are only staging probes to bring the client close enough
         // to stream the fishing pool. When pathfinding says a waypoint is not usable, do
@@ -412,14 +439,18 @@ public class FishingTask : BotTask, IBotTask
         // direct fallback for very short same-layer nudges; otherwise skip the waypoint.
         if (CanDirectSearchWalkFallback(player.MapId, player.Position, travelTarget))
         {
+            RecordSearchWaypointDiagnostic(rawWaypoint, waypoint, travelTarget, null, "direct_fallback");
             ObjectManager.MoveToward(travelTarget);
             return;
         }
 
         ClearNavigation();
+        RecordSearchWaypointDiagnostic(rawWaypoint, waypoint, travelTarget, null, rejectedProbeRoute ? "probe_rejected" : "unreachable");
+        var skippedWaypoint = _searchWaypointIndex + 1;
+        var unreachableDetail = BuildSearchWaypointDiagnosticDetail(player.Position);
         AdvanceSearchWaypoint();
         BotContext.AddDiagnosticMessage(
-            $"[TASK] FishingTask search_walk_unreachable waypoint={_searchWaypointIndex}/{_searchWaypoints.Count} distance={waypointDistance:F1}");
+            $"[TASK] FishingTask search_walk_unreachable waypoint={skippedWaypoint}/{_searchWaypoints.Count} distance={waypointDistance:F1} {unreachableDetail}");
     }
 
     private void MoveToFishingPool(IWoWLocalPlayer player)
@@ -1024,7 +1055,7 @@ public class FishingTask : BotTask, IBotTask
         {
             var steppedWaypoint = BuildSearchWaypointTravelStep(playerPosition, waypoint, stride);
             var candidate = FindBestSearchWaypointCandidate(mapId, playerPosition, steppedWaypoint)
-                ?? ResolveSearchWaypointCandidate(mapId, steppedWaypoint, playerPosition.Z)
+                ?? ResolveSearchWaypointCandidate(mapId, steppedWaypoint, waypoint.Z)
                 ?? steppedWaypoint;
 
             if (!IsMeaningfulSearchWaypointTravelCandidate(playerPosition, waypoint, candidate))
@@ -1051,6 +1082,7 @@ public class FishingTask : BotTask, IBotTask
             MathF.Min(waypointDistance2D, SearchWaypointTravelStride),
             MathF.Min(waypointDistance2D, SearchWaypointTravelStride * 0.5f),
             MathF.Min(waypointDistance2D, SearchWaypointTravelStride * 0.25f),
+            MathF.Min(waypointDistance2D, SearchWaypointMicroStride),
             waypointDistance2D
         })
         {
@@ -1072,7 +1104,15 @@ public class FishingTask : BotTask, IBotTask
         return new Position(
             playerPosition.X + ((waypoint.X - playerPosition.X) * stepScale),
             playerPosition.Y + ((waypoint.Y - playerPosition.Y) * stepScale),
-            playerPosition.Z);
+            waypoint.Z);
+    }
+
+    private static bool CanTreatSearchWaypointAsArrived(Position playerPosition, Position waypoint, float distanceToWaypoint)
+    {
+        if (distanceToWaypoint > SearchWaypointArrivalRadius)
+            return false;
+
+        return MathF.Abs(playerPosition.Z - waypoint.Z) <= SearchWaypointArrivalMaxZDelta;
     }
 
     private Position[]? TryGetReachableSearchWaypointPath(uint mapId, Position playerPosition, Position candidate)
@@ -1087,7 +1127,16 @@ public class FishingTask : BotTask, IBotTask
             if (path.Length == 0)
                 return null;
 
-            return IsUsableSearchWaypointPath(playerPosition, path) ? path : null;
+            if (!IsUsableSearchWaypointPath(playerPosition, candidate, path))
+                return null;
+
+            // Search-walk probes rely on pathfinding to provide a real local corridor
+            // around pier lips and shoreline props. A trivial start->end segment is
+            // only safe when that straight probe is actually clear on the current layer.
+            if (path.Length <= 2 && !CanSearchWaypointStraightProbePath(mapId, playerPosition, candidate))
+                return null;
+
+            return path;
         }
         catch (Exception ex)
         {
@@ -1096,16 +1145,28 @@ public class FishingTask : BotTask, IBotTask
         }
     }
 
-    private bool TryFollowSearchWaypointPath(Position[]? path)
+    private bool TryFollowSearchWaypointPath(Position playerPosition, Position rawWaypoint, Position resolvedWaypoint, Position travelTarget, Position[]? path)
     {
         var nextWaypoint = BotRunnerService.ResolveNextWaypoint(path);
         if (nextWaypoint == null)
             return false;
 
+        if (!IsMeaningfulSearchWaypointTravelCandidate(playerPosition, resolvedWaypoint, nextWaypoint))
+            return false;
+
+        RecordSearchWaypointDiagnostic(rawWaypoint, resolvedWaypoint, travelTarget, nextWaypoint, "path", path?.Length ?? 0);
         ClearNavigation();
         ObjectManager.MoveToward(nextWaypoint);
 
         return true;
+    }
+
+    private bool CanSearchWaypointStraightProbePath(uint mapId, Position playerPosition, Position candidate)
+    {
+        if (MathF.Abs(playerPosition.Z - candidate.Z) > SearchWaypointDirectFallbackMaxZDelta)
+            return false;
+
+        return TryHasLineOfSight(mapId, playerPosition, candidate);
     }
 
     private static bool IsMeaningfulSearchWaypointTravelCandidate(Position playerPosition, Position waypoint, Position candidate)
@@ -1127,10 +1188,13 @@ public class FishingTask : BotTask, IBotTask
         var candidateX = candidate.X - playerPosition.X;
         var candidateY = candidate.Y - playerPosition.Y;
         var forwardProgress = ((candidateX * desiredX) + (candidateY * desiredY)) / desiredLength;
-        return forwardProgress >= SearchWaypointMinForwardProgress;
+        var minRequiredForwardProgress = candidateDistance2D <= (SearchWaypointMicroStride + 0.25f)
+            ? SearchWaypointMicroStrideMinForwardProgress
+            : SearchWaypointMinForwardProgress;
+        return forwardProgress >= minRequiredForwardProgress;
     }
 
-    private static bool IsUsableSearchWaypointPath(Position playerPosition, Position[] path)
+    private static bool IsUsableSearchWaypointPath(Position playerPosition, Position candidate, Position[] path)
     {
         if (path.Length == 0)
             return false;
@@ -1140,8 +1204,26 @@ public class FishingTask : BotTask, IBotTask
 
         // Search-walk probes are only for streaming nearby pools from the current pier/dock layer.
         // Reject probe routes that dive off the current support surface or require a steep climb back.
-        return (playerPosition.Z - minPathZ) <= SearchWaypointRouteMaxDropZ
-            && (maxPathZ - playerPosition.Z) <= SearchWaypointRouteMaxRiseZ;
+        if ((playerPosition.Z - minPathZ) > SearchWaypointRouteMaxDropZ
+            || (maxPathZ - playerPosition.Z) > SearchWaypointRouteMaxRiseZ)
+        {
+            return false;
+        }
+
+        var directDistance2D = MathF.Max(playerPosition.DistanceTo2D(candidate), 0.01f);
+        var maxAllowedRadius2D = directDistance2D + SearchWaypointRouteMaxExtraDetourDistance;
+        var maxPointDistance2D = path.Max(position => playerPosition.DistanceTo2D(position));
+        if (maxPointDistance2D > maxAllowedRadius2D)
+            return false;
+
+        var totalPathDistance2D = 0f;
+        for (var i = 1; i < path.Length; i++)
+            totalPathDistance2D += path[i - 1].DistanceTo2D(path[i]);
+
+        var maxAllowedPathDistance2D = MathF.Max(
+            maxAllowedRadius2D,
+            directDistance2D * SearchWaypointRouteMaxDetourMultiplier);
+        return totalPathDistance2D <= maxAllowedPathDistance2D;
     }
 
     private Position? FindBestSearchWaypointCandidate(uint mapId, Position playerPosition, Position waypoint)
@@ -1286,6 +1368,7 @@ public class FishingTask : BotTask, IBotTask
     private void AdvanceSearchWaypoint()
     {
         _searchWaypointIndex++;
+        ResetSearchWaypointDiagnostic();
         BeginSearchWaypointWindow();
     }
 
@@ -1294,6 +1377,48 @@ public class FishingTask : BotTask, IBotTask
         _searchWaypointEnteredAt = now ?? DateTime.UtcNow;
         _searchWaypointResetDistance = float.MaxValue;
     }
+
+    private void ResetSearchWaypointDiagnostic()
+    {
+        _searchWaypointRawDiagnostic = null;
+        _searchWaypointResolvedDiagnostic = null;
+        _searchWaypointTravelTargetDiagnostic = null;
+        _searchWaypointPathHeadDiagnostic = null;
+        _searchWaypointPathNodesDiagnostic = 0;
+        _searchWaypointTravelModeDiagnostic = "none";
+    }
+
+    private void RecordSearchWaypointDiagnostic(
+        Position? rawWaypoint,
+        Position? resolvedWaypoint,
+        Position? travelTarget,
+        Position? pathHeadWaypoint,
+        string travelMode,
+        int pathNodes = 0)
+    {
+        _searchWaypointRawDiagnostic = rawWaypoint;
+        _searchWaypointResolvedDiagnostic = resolvedWaypoint;
+        _searchWaypointTravelTargetDiagnostic = travelTarget;
+        _searchWaypointPathHeadDiagnostic = pathHeadWaypoint;
+        _searchWaypointPathNodesDiagnostic = pathNodes;
+        _searchWaypointTravelModeDiagnostic = string.IsNullOrWhiteSpace(travelMode) ? "none" : travelMode;
+    }
+
+    private string BuildSearchWaypointDiagnosticDetail(Position playerPosition)
+    {
+        return
+            $"player={FormatDiagnosticPosition(playerPosition)} " +
+            $"raw={FormatDiagnosticPosition(_searchWaypointRawDiagnostic)} " +
+            $"resolved={FormatDiagnosticPosition(_searchWaypointResolvedDiagnostic)} " +
+            $"target={FormatDiagnosticPosition(_searchWaypointTravelTargetDiagnostic)} " +
+            $"pathHead={FormatDiagnosticPosition(_searchWaypointPathHeadDiagnostic)} " +
+            $"pathNodes={_searchWaypointPathNodesDiagnostic} mode={_searchWaypointTravelModeDiagnostic}";
+    }
+
+    private static string FormatDiagnosticPosition(Position? position)
+        => position == null
+            ? "none"
+            : $"({position.X:F1},{position.Y:F1},{position.Z:F1})";
 
     private bool CanCastFromPosition(uint mapId, Position fromPosition, Position poolPosition)
     {

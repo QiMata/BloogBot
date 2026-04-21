@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Communication;
 using GameData.Core.Enums;
@@ -22,6 +23,9 @@ public class TaxiTests
     private const int MapId = 1; // Kalimdor
     // Near Orgrimmar flight master (Doras)
     private const float OrgFmX = 1676.25f, OrgFmY = -4313.45f, OrgFmZ = 64.72f;
+    private const int OrgrimmarTaxiNodeId = 23;
+    private const int CrossroadsTaxiNodeId = 25;
+    private const int GadgetzanTaxiNodeId = 40; // Horde-side Gadgetzan route node
     // Crossroads approximate landing position
     private const float CrossroadsX = -441.0f, CrossroadsY = -2596.0f;
 
@@ -82,9 +86,19 @@ public class TaxiTests
         var account = _bot.BgAccountName!;
 
         await _bot.EnsureCleanSlateAsync(account, "BG");
+        await _bot.EnsureTaxiNodesEnabledAsync(account, "BG");
         await _bot.BotTeleportAsync(account, MapId, OrgFmX, OrgFmY, OrgFmZ);
         await _bot.WaitForTeleportSettledAsync(account, OrgFmX, OrgFmY);
         await _bot.WaitForNearbyUnitsPopulatedAsync(account, timeoutMs: 5000, progressLabel: "BG taxi-ride-setup");
+
+        var fmUnit = await _bot.WaitForNearbyUnitAsync(
+            account,
+            (uint)NPCFlags.UNIT_NPC_FLAG_FLIGHTMASTER,
+            timeoutMs: 15000,
+            progressLabel: "BG taxi-ride-fm");
+        Assert.NotNull(fmUnit);
+        var fmGuid = fmUnit!.GameObject?.Base?.Guid ?? 0UL;
+        Assert.NotEqual(0UL, fmGuid);
 
         // Visit flight master first to open taxi map
         var visitResult = await _bot.SendActionAsync(account, new ActionMessage
@@ -97,6 +111,7 @@ public class TaxiTests
         await _bot.RefreshSnapshotsAsync();
         var startSnap = await _bot.GetSnapshotAsync(account);
         var startPos = startSnap?.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.NotNull(startSnap);
         Assert.NotNull(startPos);
         _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1})");
 
@@ -104,12 +119,16 @@ public class TaxiTests
         var selectResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.SelectTaxiNode,
-            Parameters = { new RequestParameter { IntParam = 25 } } // Crossroads node ID
+            Parameters =
+            {
+                new RequestParameter { LongParam = unchecked((long)fmGuid) },
+                new RequestParameter { IntParam = OrgrimmarTaxiNodeId },
+                new RequestParameter { IntParam = CrossroadsTaxiNodeId }
+            }
         });
         _output.WriteLine($"[TEST] SELECT_TAXI_NODE result: {selectResult}");
 
-        // Wait for position to change (taxi ride takes ~2 minutes)
-        var moved = await _bot.WaitForPositionChangeAsync(account, startPos.X, startPos.Y, startPos.Z,
+        var moved = await WaitForTaxiDepartureAsync(account, startSnap!.CurrentMapId, startPos,
             timeoutMs: 180000, progressLabel: "BG taxi-ride-org-xroads");
         _output.WriteLine($"[TEST] Position changed during taxi ride: {moved}");
         Assert.True(moved, "Bot position should change during taxi flight");
@@ -147,9 +166,19 @@ public class TaxiTests
         var account = _bot.BgAccountName!;
 
         await _bot.EnsureCleanSlateAsync(account, "BG");
+        await _bot.EnsureTaxiNodesEnabledAsync(account, "BG");
         await _bot.BotTeleportAsync(account, MapId, OrgFmX, OrgFmY, OrgFmZ);
         await _bot.WaitForTeleportSettledAsync(account, OrgFmX, OrgFmY);
         await _bot.WaitForNearbyUnitsPopulatedAsync(account, timeoutMs: 5000, progressLabel: "BG multihop-setup");
+
+        var fmUnit = await _bot.WaitForNearbyUnitAsync(
+            account,
+            (uint)NPCFlags.UNIT_NPC_FLAG_FLIGHTMASTER,
+            timeoutMs: 15000,
+            progressLabel: "BG multihop-fm");
+        Assert.NotNull(fmUnit);
+        var fmGuid = fmUnit!.GameObject?.Base?.Guid ?? 0UL;
+        Assert.NotEqual(0UL, fmGuid);
 
         // Visit flight master
         var visitResult = await _bot.SendActionAsync(account, new ActionMessage
@@ -162,6 +191,7 @@ public class TaxiTests
         await _bot.RefreshSnapshotsAsync();
         var startSnap = await _bot.GetSnapshotAsync(account);
         var startPos = startSnap?.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.NotNull(startSnap);
         Assert.NotNull(startPos);
         _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1})");
 
@@ -169,13 +199,44 @@ public class TaxiTests
         var selectResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.SelectTaxiNode,
-            Parameters = { new RequestParameter { IntParam = 39 } } // Gadgetzan node ID
+            Parameters =
+            {
+                new RequestParameter { LongParam = unchecked((long)fmGuid) },
+                new RequestParameter { IntParam = OrgrimmarTaxiNodeId },
+                new RequestParameter { IntParam = GadgetzanTaxiNodeId }
+            }
         });
         _output.WriteLine($"[TEST] SELECT_TAXI_NODE (Gadgetzan) result: {selectResult}");
 
-        // Verify movement starts (multi-hop flight is long, just verify departure)
-        var moved = await _bot.WaitForPositionChangeAsync(account, startPos.X, startPos.Y, startPos.Z,
+        var moved = await WaitForTaxiDepartureAsync(account, startSnap!.CurrentMapId, startPos,
             timeoutMs: 60000, progressLabel: "BG taxi-multihop");
         Assert.True(moved, "Bot should depart on multi-hop taxi flight");
+    }
+
+    private Task<bool> WaitForTaxiDepartureAsync(
+        string account,
+        uint startMapId,
+        Game.Position startPos,
+        int timeoutMs,
+        string progressLabel)
+    {
+        return _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot =>
+            {
+                var movement = snapshot?.MovementData;
+                var position = movement?.Position;
+                if (snapshot == null || movement == null || position == null)
+                    return false;
+
+                var moved = LiveBotFixture.Distance2D(position.X, position.Y, startPos.X, startPos.Y) >= 3f
+                    || Math.Abs(position.Z - startPos.Z) >= 2f;
+                var onTransport = movement.TransportGuid != 0
+                    || (((MovementFlags)movement.MovementFlags) & MovementFlags.MOVEFLAG_ONTRANSPORT) != 0;
+                return moved || onTransport || snapshot.CurrentMapId != startMapId;
+            },
+            TimeSpan.FromMilliseconds(timeoutMs),
+            pollIntervalMs: 500,
+            progressLabel: progressLabel);
     }
 }

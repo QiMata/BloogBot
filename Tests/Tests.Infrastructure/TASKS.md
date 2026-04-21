@@ -57,11 +57,17 @@
 - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses`
 - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly -ListRepoScopedProcesses`
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneDataParityPathsTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-04-03 (session 297)
-- Active task: All TINF-MISS tasks complete.
+- Last updated: 2026-04-15
+- Active task: none. All `TINF-MISS-001` through `TINF-MISS-006` items are complete, and the Docker data-root fixture pinning follow-up is already implemented.
 - Last delta:
+  - Session 301 added `SceneDataParityPaths.cs`, a shared resolver that prefers `${WWOW_VMANGOS_DATA_DIR:-D:\MaNGOS\data}` before repo-local outputs so the test harness follows the same host data root Docker mounts into `scene-data-service`.
+  - `BotServiceFixture` now uses that resolver before launching `WoWStateManager`, preserving the earlier `appsettings.json` refresh and endpoint env overrides while ensuring BG workers inherit the Docker parity data root.
+  - Added `SceneDataParityPathsTests.cs` in `BotRunner.Tests` to pin the new resolver contract and kept the existing `SceneDataServiceAssemblyTests` alongside it.
+  - Validation:
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneDataParityPathsTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"` -> `passed (5/5)`
   - Session 297 aligned fixture ownership with the current StateManager contract: `BotServiceFixture` no longer treats `PathfindingService`/`SceneDataService` as StateManager-managed child processes.
   - Setup/teardown cleanup now only targets repo-scoped `WoWStateManager`, `WoW.exe`, and `BackgroundBotRunner` processes launched by tests.
   - Updated fixture comments/log wording so dependency checks for pathfinding/scene are explicitly external-service checks.
@@ -71,6 +77,12 @@
   - Practical implication: `dotnet test -o E:\tmp\...` live runs can now get past the old "Could not find WoWStateManager.exe" startup skip and surface the real runtime blockers in the isolated tree.
 - Pass result: `delta shipped`
 - Files changed:
+  - `Tests/Tests.Infrastructure/SceneDataParityPaths.cs`
+  - `Tests/Tests.Infrastructure/BotServiceFixture.cs`
+  - `Tests/BotRunner.Tests/SceneDataParityPathsTests.cs`
+  - `Tests/Tests.Infrastructure/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
   - `Tests/Tests.Infrastructure/BotServiceFixture.cs` (removed Pathfinding/SceneData cleanup ownership from fixture lifecycle)
   - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs` (managed-process crash wording aligned to StateManager + WoW ownership)
   - `Tests/Tests.Infrastructure/TASKS.md`
@@ -83,4 +95,4 @@
   - `Tests/BotRunner.Tests/Helpers/InfrastructureConfigTests.cs` (NEW — 7 tests)
   - `Tests/Tests.Infrastructure/TASKS.md` (all tasks marked complete)
 - Blockers: None.
-- Next task: `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+- Next command: `rg -n "^- \[ \]" --glob TASKS.md`

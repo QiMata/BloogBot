@@ -1,11 +1,14 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ServiceDiscovery;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 namespace Systems.ServiceDefaults;
@@ -22,21 +25,17 @@ public static class Extensions
         builder.AddDefaultHealthChecks();
 
         builder.Services.AddServiceDiscovery();
+        ConfigureServiceDiscoveryPolicy(builder.Services, builder.Configuration);
 
         builder.Services.ConfigureHttpClientDefaults(http =>
         {
-            // Turn on resilience by default
-            http.AddStandardResilienceHandler();
+            if (IsStandardResilienceEnabled(builder.Configuration))
+            {
+                http.AddStandardResilienceHandler();
+            }
 
-            // Turn on service discovery by default
             http.AddServiceDiscovery();
         });
-
-        // Uncomment the following to restrict the allowed schemes for service discovery.
-        // builder.Services.Configure<ServiceDiscoveryOptions>(options =>
-        // {
-        //     options.AllowedSchemes = ["https"];
-        // });
 
         return builder;
     }
@@ -50,6 +49,7 @@ public static class Extensions
         });
 
         builder.Services.AddOpenTelemetry()
+            .ConfigureResource(resource => ConfigureTelemetryResource(resource, builder))
             .WithMetrics(metrics =>
             {
                 metrics.AddAspNetCoreInstrumentation()
@@ -100,14 +100,10 @@ public static class Extensions
 
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
-        // Adding health checks endpoints to applications in non-development environments has security implications.
-        // See https://aka.ms/dotnet/aspire/healthchecks for details before enabling these endpoints in non-development environments.
-        if (app.Environment.IsDevelopment())
+        if (ShouldMapHealthEndpoints(app.Configuration, app.Environment))
         {
-            // All health checks must pass for app to be considered ready to accept traffic after starting
             app.MapHealthChecks("/health");
 
-            // Only health checks tagged with the "live" tag must pass for app to be considered alive
             app.MapHealthChecks("/alive", new HealthCheckOptions
             {
                 Predicate = r => r.Tags.Contains("live")
@@ -115,5 +111,121 @@ public static class Extensions
         }
 
         return app;
+    }
+
+    internal static IReadOnlyList<KeyValuePair<string, object>> BuildTelemetryResourceAttributes(
+        IConfiguration configuration)
+    {
+        var attributes = new List<KeyValuePair<string, object>>();
+
+        AddAttribute(attributes, "wwow.bot.role", configuration["ServiceDefaults:Telemetry:BotRole"]);
+        AddAttribute(attributes, "wwow.scenario.id", configuration["ServiceDefaults:Telemetry:ScenarioId"]);
+        AddAttribute(attributes, "wwow.test.id", configuration["ServiceDefaults:Telemetry:TestId"]);
+
+        return attributes;
+    }
+
+    internal static string ResolveTelemetryServiceName(IConfiguration configuration, IHostEnvironment environment)
+    {
+        var configuredName = configuration["ServiceDefaults:Telemetry:ServiceName"];
+        return string.IsNullOrWhiteSpace(configuredName)
+            ? environment.ApplicationName
+            : configuredName;
+    }
+
+    internal static bool ShouldMapHealthEndpoints(IConfiguration configuration, IHostEnvironment environment)
+    {
+        return environment.IsDevelopment() ||
+               ReadBool(configuration, "ServiceDefaults:Health:ExposeEndpoints", fallback: false);
+    }
+
+    internal static bool IsStandardResilienceEnabled(IConfiguration configuration)
+    {
+        return ReadBool(configuration, "ServiceDefaults:Resilience:EnableStandardHandler", fallback: true);
+    }
+
+    internal static string[] ResolveAllowedServiceDiscoverySchemes(IConfiguration configuration)
+    {
+        var configured = ReadStringList(configuration, "ServiceDefaults:ServiceDiscovery:AllowedSchemes");
+        if (configured.Length > 0)
+        {
+            return configured;
+        }
+
+        return ReadBool(configuration, "ServiceDefaults:ServiceDiscovery:AllowAllSchemes", fallback: true)
+            ? []
+            : ["https"];
+    }
+
+    internal static bool ShouldAllowAllServiceDiscoverySchemes(IConfiguration configuration)
+    {
+        var configured = ReadStringList(configuration, "ServiceDefaults:ServiceDiscovery:AllowedSchemes");
+        return configured.Length == 0 &&
+               ReadBool(configuration, "ServiceDefaults:ServiceDiscovery:AllowAllSchemes", fallback: true);
+    }
+
+    private static void ConfigureTelemetryResource<TBuilder>(ResourceBuilder resource, TBuilder builder)
+        where TBuilder : IHostApplicationBuilder
+    {
+        resource.AddService(ResolveTelemetryServiceName(builder.Configuration, builder.Environment));
+
+        var attributes = BuildTelemetryResourceAttributes(builder.Configuration);
+        if (attributes.Count > 0)
+        {
+            resource.AddAttributes(attributes);
+        }
+    }
+
+    private static void ConfigureServiceDiscoveryPolicy(IServiceCollection services, IConfiguration configuration)
+    {
+        var allowAllSchemes = ShouldAllowAllServiceDiscoverySchemes(configuration);
+        var allowedSchemes = ResolveAllowedServiceDiscoverySchemes(configuration);
+
+        services.Configure<ServiceDiscoveryOptions>(options =>
+        {
+            options.AllowAllSchemes = allowAllSchemes;
+
+            if (!allowAllSchemes)
+            {
+                options.AllowedSchemes = allowedSchemes;
+            }
+        });
+    }
+
+    private static string[] ReadStringList(IConfiguration configuration, string key)
+    {
+        var directValue = configuration[key];
+        if (!string.IsNullOrWhiteSpace(directValue))
+        {
+            return directValue
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        return configuration.GetSection(key)
+            .GetChildren()
+            .Select(child => child.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool ReadBool(IConfiguration configuration, string key, bool fallback)
+    {
+        return bool.TryParse(configuration[key], out var value) ? value : fallback;
+    }
+
+    private static void AddAttribute(
+        ICollection<KeyValuePair<string, object>> attributes,
+        string name,
+        string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            attributes.Add(new KeyValuePair<string, object>(name, value));
+        }
     }
 }

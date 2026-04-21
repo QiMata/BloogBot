@@ -248,6 +248,36 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_ProbeDisabled_AdvancesCloseWaypointEvenWhenShortcutProbeFails()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, _, _) =>
+            [
+                start,
+                new Position(0.5f, 0f, 0f),
+                new Position(4f, 0f, 0f)
+            ],
+            isPointOnNavmesh: (_, position, _) =>
+            {
+                if (position.X > 1f && position.X < 3f)
+                    return (false, position);
+
+                return (true, position);
+            });
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: false);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(4f, waypoint!.X);
+        Assert.Equal(0f, waypoint.Y);
+    }
+
+    [Fact]
     public void GetNextWaypoint_DoesNotSkipShortCornerWaypoint_WhenSegmentTurns()
     {
         // 90° turn: (0,0,0) → (8,0,0) → (8,6,0). Block LOS through the corner
@@ -836,6 +866,127 @@ public class NavigationPathTests
         Assert.True(waypoint.Y < 2f);
     }
 
+    [Fact]
+    public void GetNextWaypoint_DoesNotAdvanceEarly_WhenAdaptiveRadiusShortcutLeavesWalkableCorridor()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                new Position(8.5f, 0.9f, 0f),
+                new Position(12.5f, 0.9f, 0f)
+            ],
+            isInLineOfSight: (_, from, to) => !(from.X < 0.5f && to.X > 10f),
+            isPointOnNavmesh: (_, position, _) =>
+            {
+                if (position.X > 8.1f && position.X < 8.3f && position.Y > 0.84f && position.Y < 0.87f)
+                    return (false, position);
+
+                return (true, position);
+            },
+            findNearestWalkablePoint: (_, position, _) => (1u, position));
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: true);
+
+        var initialWaypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(initialWaypoint);
+        Assert.Equal(8.5f, initialWaypoint!.X, precision: 1);
+        Assert.Equal(0.9f, initialWaypoint.Y, precision: 1);
+
+        var shortcutAttempt = navPath.GetNextWaypoint(
+            new Position(2.5f, 0.8f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(shortcutAttempt);
+        Assert.Equal(8.5f, shortcutAttempt!.X, precision: 1);
+        Assert.Equal(0.9f, shortcutAttempt.Y, precision: 1);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_DoesNotLookAheadSkip_WhenOvershootShortcutLeavesWalkableCorridor()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                new Position(4f, 0f, 0f),
+                new Position(10f, 0f, 0f),
+                new Position(16f, 0f, 0f)
+            ],
+            isPointOnNavmesh: (_, position, _) =>
+            {
+                if (position.X > 9.0f && position.X < 9.2f)
+                    return (false, position);
+
+                return (true, position);
+            },
+            findNearestWalkablePoint: (_, position, _) => (1u, position));
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: false);
+
+        var initialWaypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(initialWaypoint);
+        Assert.Equal(4f, initialWaypoint!.X);
+        Assert.Equal(0f, initialWaypoint.Y);
+
+        var overshootWaypoint = navPath.GetNextWaypoint(
+            new Position(8.2f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(overshootWaypoint);
+        Assert.Equal(4f, overshootWaypoint!.X);
+        Assert.Equal(0f, overshootWaypoint.Y);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_AdvancesPastOvershotWaypoint_WhenNextCorridorIsWalkable()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                new Position(4f, 0f, 0f),
+                new Position(10f, 0f, 0f),
+                new Position(16f, 0f, 0f)
+            ],
+            isPointOnNavmesh: (_, position, _) => (true, position),
+            findNearestWalkablePoint: (_, position, _) => (1u, position));
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: false);
+
+        var initialWaypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(initialWaypoint);
+        Assert.Equal(4f, initialWaypoint!.X);
+        Assert.Equal(0f, initialWaypoint.Y);
+
+        var overshotWaypoint = navPath.GetNextWaypoint(
+            new Position(8.2f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(overshotWaypoint);
+        Assert.Equal(16f, overshotWaypoint!.X);
+        Assert.Equal(0f, overshotWaypoint.Y);
+        Assert.Equal(2, navPath.Metrics.WaypointsReached);
+    }
+
     // ===================== Cliff/edge detection =====================
 
     [Fact]
@@ -1035,7 +1186,7 @@ public class NavigationPathTests
     }
 
     [Fact]
-    public void GetNextWaypoint_ForwardsNearbyObjectsFromProvider()
+    public void GetNextWaypoint_ForwardsNearbyObjectsFromProviderToRouteRequest()
     {
         var expectedNearbyObjects = new[]
         {
@@ -1072,7 +1223,7 @@ public class NavigationPathTests
             allowDirectFallback: false);
 
         Assert.NotNull(waypoint);
-        Assert.Equal(1, pathfinding.OverlayGetPathCalls);
+        Assert.Equal(1, pathfinding.RouteResultCalls);
         Assert.Equal(0, pathfinding.LegacyGetPathCalls);
         Assert.NotNull(pathfinding.LastNearbyObjects);
         Assert.Single(pathfinding.LastNearbyObjects!);
@@ -1080,7 +1231,51 @@ public class NavigationPathTests
     }
 
     [Fact]
-    public void GetNextWaypoint_UsesLegacyPathCallWhenOverlayProviderReturnsNoObjects()
+    public void GetNextWaypoint_DoesNotLocallyRejectOverlayAwareServiceRouteForDynamicSegmentIntersection()
+    {
+        var nearbyObjects = new[]
+        {
+            new DynamicObjectProto
+            {
+                Guid = 7,
+                DisplayId = 17,
+                X = 5f,
+                Y = 0f,
+                Z = 0f,
+            }
+        };
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, end, _) =>
+            [
+                new Position(10f, 0f, 0f),
+                end
+            ],
+            isInLineOfSight: (_, from, to) => MathF.Abs(to.X - from.X) <= 12f,
+            segmentIntersectsDynamicObjects: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            nearbyObjectProvider: (_, _) => nearbyObjects);
+
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(10f, waypoint!.X);
+        Assert.True(trace.RouteDecision.HasPath);
+        Assert.Equal(1, pathfinding.RouteResultCalls);
+        Assert.Equal(0, pathfinding.LegacyGetPathCalls);
+        Assert.NotNull(pathfinding.LastNearbyObjects);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_PassesNullNearbyObjectsWhenOverlayProviderReturnsNoObjects()
     {
         var pathfinding = new DelegatePathfindingClient((_, start, end, _) => [start, end]);
         var navPath = new NavigationPath(
@@ -1095,9 +1290,7 @@ public class NavigationPathTests
             allowDirectFallback: false);
 
         Assert.NotNull(waypoint);
-        // Both overlay and legacy paths now route through the full GetPath overload
-        // (with race/gender params) so nearby objects is passed as null
-        Assert.Equal(1, pathfinding.OverlayGetPathCalls);
+        Assert.Equal(1, pathfinding.RouteResultCalls);
         Assert.Equal(0, pathfinding.LegacyGetPathCalls);
         Assert.Null(pathfinding.LastNearbyObjects);
     }
@@ -1617,6 +1810,378 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_MovementStuckRecoveryPrefersSaferAlternateWithinTolerance()
+    {
+        var start = new Position(0f, 0f, 10f);
+        var destination = new Position(50f, 0f, 5f);
+        var primaryDropPath = new[]
+        {
+            new Position(25f, 0f, 10f),
+            new Position(50f, 0f, 5f),
+        };
+        var saferAlternatePath = new[]
+        {
+            new Position(10f, 12f, 9f),
+            new Position(20f, 24f, 8f),
+            new Position(30f, 24f, 7f),
+            new Position(40f, 12f, 6f),
+            new Position(50f, 0f, 5f),
+        };
+
+        int stuckGeneration = 0;
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, smooth) => smooth ? primaryDropPath : saferAlternatePath,
+            isInLineOfSight: (_, from, to) => from.DistanceTo2D(to) <= 18f);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            enableProbeHeuristics: true,
+            stuckRecoveryGenerationProvider: () => stuckGeneration);
+
+        var initialWaypoint = navPath.GetNextWaypoint(
+            start,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var initialTrace = navPath.TraceSnapshot;
+
+        stuckGeneration = 1;
+        var recoveredWaypoint = navPath.GetNextWaypoint(
+            start,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var recoveryTrace = navPath.TraceSnapshot;
+
+        Assert.NotNull(initialWaypoint);
+        Assert.False(initialTrace.RouteDecision.AlternateSelected);
+        Assert.True(initialTrace.RouteDecision.AlternateEvaluated);
+        Assert.Equal(SegmentAffordance.Drop, initialTrace.RouteDecision.MaxAffordance);
+
+        Assert.NotNull(recoveredWaypoint);
+        Assert.Equal(NavigationTraceReason.MovementStuckRecovery, recoveryTrace.LastReplanReason);
+        Assert.True(recoveryTrace.RouteDecision.AlternateEvaluated);
+        Assert.True(recoveryTrace.RouteDecision.AlternateSelected);
+        Assert.Equal(SegmentAffordance.Walk, recoveryTrace.RouteDecision.MaxAffordance);
+        Assert.True(recoveryTrace.RouteDecision.EstimatedCost > initialTrace.RouteDecision.EstimatedCost);
+        Assert.Contains(pathfinding.SmoothCalls, value => value);
+        Assert.Contains(pathfinding.SmoothCalls, value => !value);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_ReplacesCollisionLayerMismatchedWaypoint_WithNearbySupportedCandidate()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                new Position(10f, 0f, 0f),
+                new Position(20f, 0f, 0f),
+            ],
+            getGroundZ: (_, position, _) =>
+            {
+                var isUpperLayerTrap = MathF.Abs(position.X - 10f) <= 0.6f
+                    && MathF.Abs(position.Y) <= 0.6f;
+                return isUpperLayerTrap ? (12f, true) : (0f, true);
+            });
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: true);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(10f, waypoint!.X, precision: 1);
+        Assert.Equal(2f, waypoint.Y, precision: 1);
+        Assert.Equal(0f, waypoint.Z, precision: 1);
+        Assert.Contains(trace.PlannedWaypoints, p =>
+            MathF.Abs(p.X - 10f) < 0.2f
+            && MathF.Abs(p.Y - 2f) < 0.2f
+            && MathF.Abs(p.Z) < 0.2f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_SelectsAlternate_WhenCollisionLayerMismatchCannotBeRepaired()
+    {
+        var primaryLayerMismatchPath = new[]
+        {
+            new Position(10f, 0f, 0f),
+            new Position(30f, 0f, 0f),
+        };
+        var alternateSameLayerPath = new[]
+        {
+            new Position(10f, 20f, 0f),
+            new Position(20f, 20f, 0f),
+            new Position(30f, 0f, 0f),
+        };
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, smooth) => smooth ? primaryLayerMismatchPath : alternateSameLayerPath,
+            getGroundZ: (_, position, _) =>
+            {
+                var isUpperLayerTrap = position.X >= 2f
+                    && position.X <= 18f
+                    && MathF.Abs(position.Y) <= 9f;
+                return isUpperLayerTrap ? (12f, true) : (0f, true);
+            });
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: true);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(30f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(10f, waypoint!.X, precision: 1);
+        Assert.Equal(20f, waypoint.Y, precision: 1);
+        Assert.True(trace.RouteDecision.AlternateEvaluated);
+        Assert.True(trace.RouteDecision.AlternateSelected);
+        Assert.Contains(pathfinding.SmoothCalls, value => value);
+        Assert.Contains(pathfinding.SmoothCalls, value => !value);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_SelectsAlternate_WhenLocalPhysicsClimbsOffRouteLayer()
+    {
+        var primaryTrapPath = new[]
+        {
+            new Position(4f, 0f, 0f),
+            new Position(12f, 0f, 0f),
+            new Position(30f, 0f, 0f),
+        };
+        var alternateSameLayerPath = new[]
+        {
+            new Position(4f, 6f, 0f),
+            new Position(16f, 6f, 0f),
+            new Position(30f, 0f, 0f),
+        };
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, smooth) => smooth ? primaryTrapPath : alternateSameLayerPath,
+            isInLineOfSight: (_, from, to) => from.DistanceTo2D(to) <= 15f,
+            findNearestWalkablePoint: (_, position, _) => (position.Y == 0f ? 1u : 0u, position),
+            simulateLocalSegment: (_, from, to, _, _, _) =>
+            {
+                if (MathF.Abs(from.Y) <= 0.5f && MathF.Abs(to.Y) <= 0.5f && to.X >= 4f && to.X <= 12f)
+                {
+                    return new LocalSegmentSimulationResult(
+                        Available: true,
+                        Compatible: true,
+                        MaxUpwardRouteZDelta: 12f,
+                        MaxAbsoluteRouteZDelta: 12f,
+                        MaxLateralDistance: 0.2f,
+                        FinalPosition: new Position(to.X, to.Y, to.Z + 12f),
+                        Reason: "test_layer_climb");
+                }
+
+                return LocalSegmentSimulationResult.CompatibleResult(to);
+            });
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: true);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(30f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(4f, waypoint!.X, precision: 1);
+        Assert.Equal(6f, waypoint.Y, precision: 1);
+        Assert.True(trace.RouteDecision.AlternateEvaluated);
+        Assert.True(trace.RouteDecision.AlternateSelected);
+        Assert.Contains(pathfinding.SmoothCalls, value => value);
+        Assert.Contains(pathfinding.SmoothCalls, value => !value);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_RepairsLocalPhysicsLayerTrap_WithNearbySameLayerDetour()
+    {
+        var trapPath = new[]
+        {
+            new Position(4f, 0f, 0f),
+            new Position(12f, 0f, 0f),
+            new Position(30f, 0f, 0f),
+        };
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => trapPath,
+            isInLineOfSight: (_, from, to) => from.DistanceTo2D(to) <= 15f,
+            simulateLocalSegment: (_, from, to, _, _, _) =>
+            {
+                if (MathF.Abs(from.Y) <= 0.5f && MathF.Abs(to.Y) <= 0.5f && to.X >= 4f && to.X <= 12f)
+                {
+                    return new LocalSegmentSimulationResult(
+                        Available: true,
+                        Compatible: true,
+                        MaxUpwardRouteZDelta: 12f,
+                        MaxAbsoluteRouteZDelta: 12f,
+                        MaxLateralDistance: 0.2f,
+                        FinalPosition: new Position(to.X, to.Y, to.Z + 12f),
+                        Reason: "test_layer_climb");
+                }
+
+                return LocalSegmentSimulationResult.CompatibleResult(to);
+            });
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: true);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(30f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.NotEqual(0f, waypoint!.Y, precision: 1);
+        Assert.True(trace.RouteDecision.HasPath);
+        Assert.False(trace.RouteDecision.AlternateSelected);
+        Assert.Contains(trace.PlannedWaypoints, p => MathF.Abs(p.Y) > 0.5f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_RepairsLocalPhysicsLayerTrap_WhenDownstreamRampWidthProbeIsNoisy()
+    {
+        var trapPath = new[]
+        {
+            new Position(4f, 0f, 0f),
+            new Position(12f, 0f, 0f),
+            new Position(30f, 0f, 8f),
+        };
+
+        static float DistanceFromRampCenter(Position position)
+        {
+            const float x0 = 4f;
+            const float y0 = 2f;
+            const float x1 = 30f;
+            const float y1 = 0f;
+            var dx = x1 - x0;
+            var dy = y1 - y0;
+            var len = MathF.Sqrt(dx * dx + dy * dy);
+            return MathF.Abs((dy * position.X) - (dx * position.Y) + (x1 * y0) - (y1 * x0)) / len;
+        }
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => trapPath,
+            isInLineOfSight: (_, from, to) => from.DistanceTo2D(to) <= 35f,
+            getGroundZ: (_, position, _) =>
+            {
+                var isDownstreamLateralProbe = position.X > 6f
+                    && DistanceFromRampCenter(position) > 0.4f;
+                return isDownstreamLateralProbe
+                    ? (position.Z + 3f, true)
+                    : (position.Z, true);
+            },
+            simulateLocalSegment: (_, from, to, _, _, _) =>
+            {
+                if (MathF.Abs(from.Y) <= 0.5f && MathF.Abs(to.Y) <= 0.5f && to.X >= 4f && to.X <= 12f)
+                {
+                    return new LocalSegmentSimulationResult(
+                        Available: true,
+                        Compatible: false,
+                        MaxUpwardRouteZDelta: 12f,
+                        MaxAbsoluteRouteZDelta: 12f,
+                        MaxLateralDistance: 0.2f,
+                        FinalPosition: new Position(to.X, to.Y, to.Z + 12f),
+                        Reason: "test_layer_climb");
+                }
+
+                return LocalSegmentSimulationResult.CompatibleResult(to);
+            });
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: true);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(30f, 0f, 8f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.NotEqual(0f, waypoint!.Y, precision: 1);
+        Assert.True(trace.RouteDecision.HasPath);
+        Assert.False(trace.RouteDecision.AlternateSelected);
+        Assert.Contains(trace.PlannedWaypoints, p => MathF.Abs(p.Y) > 0.5f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_AcceptsLongLocalPhysicsHorizonHit_WhenRouteLayerRemainsConsistent()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                new Position(20f, 0f, 0f),
+                new Position(40f, 0f, 0f)
+            ],
+            simulateLocalSegment: (_, from, to, _, _, _) =>
+            {
+                if (from.DistanceTo2D(to) > 12f)
+                {
+                    return new LocalSegmentSimulationResult(
+                        Available: true,
+                        Compatible: false,
+                        MaxUpwardRouteZDelta: 0.1f,
+                        MaxAbsoluteRouteZDelta: 0.3f,
+                        MaxLateralDistance: 0.2f,
+                        FinalPosition: new Position(12f, 0f, 0f),
+                        Reason: "hit_wall");
+                }
+
+                return LocalSegmentSimulationResult.CompatibleResult(to);
+            });
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: false);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(40f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.True(navPath.TraceSnapshot.RouteDecision.HasPath);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_RejectsShortLocalPhysicsHitWall()
+    {
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                new Position(5f, 0f, 0f),
+                new Position(12f, 0f, 0f)
+            ],
+            findNearestWalkablePoint: (_, position, _) => (0u, position),
+            simulateLocalSegment: (_, from, to, _, _, _) => new LocalSegmentSimulationResult(
+                Available: true,
+                Compatible: false,
+                MaxUpwardRouteZDelta: 0.1f,
+                MaxAbsoluteRouteZDelta: 0.3f,
+                MaxLateralDistance: 0.2f,
+                FinalPosition: new Position(3f, 0f, 0f),
+                Reason: "hit_wall"));
+
+        var navPath = new NavigationPath(pathfinding, () => 0, enableProbeHeuristics: true);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(12f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.Null(waypoint);
+        Assert.False(navPath.TraceSnapshot.RouteDecision.HasPath);
+    }
+
+    [Fact]
     public void GetNextWaypoint_TraceRecordsDynamicBlockerDrivenReplanReason()
     {
         long tick = 10_000;
@@ -1641,6 +2206,72 @@ public class NavigationPathTests
         Assert.Null(waypoint);
         Assert.True(pathfindingCalls >= 2);
         Assert.True(trace.PlanVersion >= 2);
+        Assert.Equal(NavigationTraceReason.DynamicBlockerObserved, trace.LastReplanReason);
+        Assert.Equal("no_route", trace.LastResolution);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_TraceRecordsServiceDynamicOverlayReplanReason()
+    {
+        long tick = 10_000;
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, end, _) => [start, end],
+            getPathResult: (_, _, _, nearbyObjects, _, _, _) =>
+            {
+                Assert.NotNull(nearbyObjects);
+                Assert.Single(nearbyObjects!);
+
+                return new PathfindingRouteResult(
+                    Corners: [],
+                    Result: "blocked_by_dynamic_overlay",
+                    RawCornerCount: 2,
+                    BlockedSegmentIndex: 0,
+                    BlockedReason: "dynamic_overlay",
+                    MaxAffordance: PathSegmentAffordance.Walk,
+                    PathSupported: false,
+                    StepUpCount: 0,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 0,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f);
+            });
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => tick,
+            enableProbeHeuristics: true,
+            nearbyObjectProvider: (_, _) =>
+            [
+                new DynamicObjectProto
+                {
+                    Guid = 1,
+                    DisplayId = 17,
+                    X = 4f,
+                    Y = 5f,
+                    Z = 6f,
+                }
+            ]);
+
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(20f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.Null(waypoint);
+        Assert.True(pathfinding.RouteResultCalls >= 2);
+        Assert.Equal(0, pathfinding.LegacyGetPathCalls);
         Assert.Equal(NavigationTraceReason.DynamicBlockerObserved, trace.LastReplanReason);
         Assert.Equal("no_route", trace.LastResolution);
     }
@@ -1677,6 +2308,154 @@ public class NavigationPathTests
         Assert.Equal(20f, trace.ExecutionSamples[0].ReturnedWaypoint!.X);
     }
 
+    [Fact]
+    public void GetNextWaypoint_DirectFallbackUsesWalkableCorridorForShortSegmentWhenLosFails()
+    {
+        var destination = new Position(12.3f, 2.4f, 0.5f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            isInLineOfSight: (_, _, _) => false,
+            simulateLocalSegment: (_, from, to, _, _, _) => new LocalSegmentSimulationResult(
+                Available: true,
+                Compatible: true,
+                FinalPosition: to,
+                MaxLateralDistance: 0.2f,
+                MaxAbsoluteRouteZDelta: 0.5f,
+                MaxUpwardRouteZDelta: 0.5f,
+                Reason: "ok"));
+
+        var navPath = new NavigationPath(pathfinding, () => 0);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: true);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(destination.X, waypoint!.X, 3);
+        Assert.Equal(destination.Y, waypoint.Y, 3);
+        Assert.Equal(destination.Z, waypoint.Z, 3);
+        Assert.Equal("direct_fallback", trace.LastResolution);
+        Assert.True(trace.UsedDirectFallback);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_DirectFallbackStillRejectsLongSegmentWhenLosFails()
+    {
+        var destination = new Position(25f, 0f, 0.5f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            isInLineOfSight: (_, _, _) => false,
+            simulateLocalSegment: (_, from, to, _, _, _) => new LocalSegmentSimulationResult(
+                Available: true,
+                Compatible: true,
+                FinalPosition: to,
+                MaxLateralDistance: 0.2f,
+                MaxAbsoluteRouteZDelta: 0.5f,
+                MaxUpwardRouteZDelta: 0.5f,
+                Reason: "ok"));
+
+        var navPath = new NavigationPath(pathfinding, () => 0);
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: true);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.Null(waypoint);
+        Assert.Equal("no_route", trace.LastResolution);
+        Assert.False(trace.UsedDirectFallback);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_ActivatesElevatorTransport_AndBypassesPathfinding()
+    {
+        var pathfindingCalls = 0;
+        var pathfinding = new DelegatePathfindingClient((_, start, end, _) =>
+        {
+            pathfindingCalls++;
+            return [start, end];
+        });
+
+        var current = new Position(1544.24f, 240.77f, 55.40f);
+        var destination = new Position(1544.24f, 240.77f, -43.0f);
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            nearbyObjectProvider: (_, _) => []);
+
+        var waypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 0,
+            allowDirectFallback: false,
+            currentTransportGuid: 0);
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(1544.24f, waypoint!.X, 2);
+        Assert.Equal(240.77f, waypoint.Y, 2);
+        Assert.Equal(55.40f, waypoint.Z, 2);
+        Assert.True(navPath.IsRidingTransport);
+        Assert.True(navPath.ShouldHoldPositionForTransport(current, waypoint));
+        Assert.Equal(0, pathfindingCalls);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_ElevatorRide_HoldsPositionWhileBoarded()
+    {
+        IReadOnlyList<DynamicObjectProto> nearbyObjects = [];
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, end, _) => [start, end],
+            getPathWithNearbyObjects: (_, start, end, _, _) => [start, end]);
+        var current = new Position(1544.24f, 240.77f, 55.40f);
+        var destination = new Position(1544.24f, 240.77f, -43.0f);
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            nearbyObjectProvider: (_, _) => nearbyObjects);
+
+        navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 0,
+            allowDirectFallback: false,
+            currentTransportGuid: 0);
+
+        nearbyObjects =
+        [
+            new DynamicObjectProto
+            {
+                Guid = 1,
+                DisplayId = 455,
+                X = 1544.24f,
+                Y = 240.77f,
+                Z = 55.40f,
+            }
+        ];
+
+        navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 0,
+            allowDirectFallback: false,
+            currentTransportGuid: 0);
+
+        var ridingWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 0,
+            allowDirectFallback: false,
+            currentTransportGuid: 12345);
+
+        Assert.Null(ridingWaypoint);
+        Assert.True(navPath.IsRidingTransport);
+        Assert.True(navPath.ShouldHoldPositionForTransport(current, ridingWaypoint));
+    }
+
     private sealed class DelegatePathfindingClient(
         Func<uint, Position, Position, bool, Position[]> getPath,
         Func<uint, Position, Position, bool>? isInLineOfSight = null,
@@ -1684,7 +2463,9 @@ public class NavigationPathTests
         Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? getPathWithNearbyObjects = null,
         Func<uint, Position, float, (bool onNavmesh, Position nearestPoint)>? isPointOnNavmesh = null,
         Func<uint, Position, float, (uint areaType, Position nearestPoint)>? findNearestWalkablePoint = null,
-        Func<uint, Position, Position, bool>? segmentIntersectsDynamicObjects = null) : PathfindingClient
+        Func<uint, Position, Position, bool>? segmentIntersectsDynamicObjects = null,
+        Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Race, Gender, PathfindingRouteResult>? getPathResult = null,
+        Func<uint, Position, Position, Race, Gender, float, LocalSegmentSimulationResult>? simulateLocalSegment = null) : PathfindingClient
     {
         private readonly Func<uint, Position, Position, bool, Position[]> _getPath = getPath;
         private readonly Func<uint, Position, Position, bool> _isInLineOfSight =
@@ -1697,9 +2478,12 @@ public class NavigationPathTests
             findNearestWalkablePoint ?? ((_, position, _) => (1u, position));
         private readonly Func<uint, Position, Position, bool> _segmentIntersectsDynamicObjects =
             segmentIntersectsDynamicObjects ?? ((_, _, _) => false);
+        private readonly Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Race, Gender, PathfindingRouteResult>? _getPathResult = getPathResult;
+        private readonly Func<uint, Position, Position, Race, Gender, float, LocalSegmentSimulationResult>? _simulateLocalSegment = simulateLocalSegment;
 
         public int LegacyGetPathCalls { get; private set; }
         public int OverlayGetPathCalls { get; private set; }
+        public int RouteResultCalls { get; private set; }
         public IReadOnlyList<DynamicObjectProto>? LastNearbyObjects { get; private set; }
         public List<bool> SmoothCalls { get; } = [];
 
@@ -1719,6 +2503,41 @@ public class NavigationPathTests
                 ?? _getPath(mapId, start, end, smoothPath);
         }
 
+        public override PathfindingRouteResult GetPathResult(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false, Race race = 0, Gender gender = 0)
+        {
+            RouteResultCalls++;
+            SmoothCalls.Add(smoothPath);
+            LastNearbyObjects = nearbyObjects?.ToArray();
+
+            if (_getPathResult is not null)
+                return _getPathResult(mapId, start, end, nearbyObjects, smoothPath, race, gender);
+
+            var corners = _getPathWithNearbyObjects?.Invoke(mapId, start, end, nearbyObjects, smoothPath)
+                ?? _getPath(mapId, start, end, smoothPath);
+            return new PathfindingRouteResult(
+                Corners: corners,
+                Result: corners.Length > 0 ? "native_path" : "no_path",
+                RawCornerCount: (uint)corners.Length,
+                BlockedSegmentIndex: null,
+                BlockedReason: "none",
+                MaxAffordance: PathSegmentAffordance.Walk,
+                PathSupported: corners.Length > 0,
+                StepUpCount: 0,
+                DropCount: 0,
+                CliffCount: 0,
+                VerticalCount: 0,
+                TotalZGain: 0f,
+                TotalZLoss: 0f,
+                MaxSlopeAngleDeg: 0f,
+                JumpGapCount: 0,
+                SafeDropCount: 0,
+                UnsafeDropCount: 0,
+                BlockedCount: 0,
+                MaxClimbHeight: 0f,
+                MaxGapDistance: 0f,
+                MaxDropHeight: 0f);
+        }
+
         public override bool IsInLineOfSight(uint mapId, Position from, Position to)
             => _isInLineOfSight(mapId, from, to);
 
@@ -1733,5 +2552,16 @@ public class NavigationPathTests
 
         public override bool SegmentIntersectsDynamicObjects(uint mapId, Position from, Position to)
             => _segmentIntersectsDynamicObjects(mapId, from, to);
+
+        public override LocalSegmentSimulationResult SimulateLocalSegment(
+            uint mapId,
+            Position from,
+            Position to,
+            Race race = 0,
+            Gender gender = 0,
+            float maxDistance = 12.0f,
+            float deltaTime = 0.05f)
+            => _simulateLocalSegment?.Invoke(mapId, from, to, race, gender, maxDistance)
+                ?? LocalSegmentSimulationResult.Unavailable(from);
     }
 }

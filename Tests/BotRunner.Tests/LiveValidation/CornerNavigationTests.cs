@@ -12,6 +12,10 @@ namespace BotRunner.Tests.LiveValidation;
 [Collection(LiveValidationCollection.Name)]
 public class CornerNavigationTests
 {
+    private const float OrgBankStreetX = 1614.1f;
+    private const float OrgBankStreetY = -4382.4f;
+    private const float OrgBankStreetZ = 14.8f;
+
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
@@ -34,9 +38,22 @@ public class CornerNavigationTests
         var bgAccount = _bot.BgAccountName!;
         await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
-        // Teleport to outdoor area near Org bank (not inside the building)
-        await _bot.BotTeleportAsync(bgAccount, 1, 1640f, -4340f, 29f);
-        await Task.Delay(3000);
+        // Stage on the street-level bank approach, not the elevated banker interaction perch.
+        // The banker location is correct for NPC interaction, but travel planning from there
+        // consistently starts with a forced drop to street level, which turns this test into
+        // a ledge-descent probe instead of a corner-navigation route.
+        await _bot.BotTeleportAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.MapId,
+            OrgBankStreetX,
+            OrgBankStreetY,
+            OrgBankStreetZ);
+        await _bot.WaitForTeleportSettledAsync(
+            bgAccount,
+            OrgBankStreetX,
+            OrgBankStreetY,
+            xyToleranceYards: 8f);
+        await Task.Delay(1000);
 
         // Send TRAVEL_TO action targeting Org AH
         // Params: [0]=mapId (int), [1]=x, [2]=y, [3]=z
@@ -46,9 +63,9 @@ public class CornerNavigationTests
             Parameters =
             {
                 new RequestParameter { IntParam = 1 },        // mapId (Kalimdor)
-                new RequestParameter { FloatParam = 1687f },  // dest X
-                new RequestParameter { FloatParam = -4465f }, // dest Y
-                new RequestParameter { FloatParam = 23f },    // dest Z
+                new RequestParameter { FloatParam = OrgrimmarServiceLocations.AuctionHouseX },
+                new RequestParameter { FloatParam = OrgrimmarServiceLocations.AuctionHouseY },
+                new RequestParameter { FloatParam = OrgrimmarServiceLocations.AuctionHouseZ },
             }
         });
         _output.WriteLine($"[CORNER-NAV] TravelTo result: {result}");
@@ -63,8 +80,8 @@ public class CornerNavigationTests
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
             if (pos == null) continue;
 
-            float dx = pos.X - 1687f;
-            float dy = pos.Y - (-4465f);
+            float dx = pos.X - OrgrimmarServiceLocations.AuctionHouseX;
+            float dy = pos.Y - OrgrimmarServiceLocations.AuctionHouseY;
             float dist = System.MathF.Sqrt(dx * dx + dy * dy);
             _output.WriteLine($"[CORNER-NAV] {i * 5}s: ({pos.X:F0},{pos.Y:F0}) dist={dist:F1}y");
 

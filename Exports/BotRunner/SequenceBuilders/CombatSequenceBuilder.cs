@@ -1,4 +1,5 @@
 using BotRunner.Movement;
+using BotRunner.Combat;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Serilog;
@@ -31,6 +32,7 @@ namespace BotRunner
             NavigationPath? navPath = null;
             bool targetSelected = false;
             bool attackStarted = false;
+            bool facingRetryPrimed = false;
             DateTime lastChaseLogUtc = DateTime.MinValue;
 
             return new BehaviourTreeBuilder()
@@ -77,6 +79,7 @@ namespace BotRunner
 
                         if (dist > chaseArrivalDist)
                         {
+                            facingRetryPrimed = false;
                             // Out of melee range - chase the target.
                             // Do not send CMSG_ATTACKSTOP here: if the server still considers
                             // auto-attack active, it will resume swings as soon as the player
@@ -102,7 +105,13 @@ namespace BotRunner
                                 bf = wsOm2.PhysicsBlockedFraction;
                             }
                             var waypoint = navPath.GetNextWaypoint(player.Position, target.Position,
-                                player.MapId, allowDirectFallback: true, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf);
+                                player.MapId, allowDirectFallback: true, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf, currentTransportGuid: player.TransportGuid);
+
+                            if (navPath.ShouldHoldPositionForTransport(player.Position, waypoint))
+                            {
+                                _objectManager.StopAllMovement();
+                                return BehaviourTreeStatus.Running;
+                            }
 
                             if (waypoint != null)
                             {
@@ -135,6 +144,19 @@ namespace BotRunner
                             return BehaviourTreeStatus.Running;
                         }
 
+                        if (_objectManager.HadRecentMeleeFacingRejection(targetGuid) && !facingRetryPrimed)
+                        {
+                            _objectManager.StopAttack();
+                            _objectManager.StopAllMovement();
+                            navPath?.Clear();
+                            _objectManager.SetFacing(player.GetFacingForPosition(target.Position));
+                            facingRetryPrimed = true;
+                            attackStarted = true;
+                            Log.Information("[BOT RUNNER] Recent BADFACING for 0x{Guid:X} - priming exact facing retry",
+                                targetGuid);
+                            return BehaviourTreeStatus.Running;
+                        }
+
                         // In melee range. Face the target first, then attack on the next tick.
                         // WoW.exe sends MSG_MOVE_SET_FACING before CMSG_ATTACKSWING — the server
                         // checks facing when processing the attack swing. If both packets are sent
@@ -150,6 +172,7 @@ namespace BotRunner
                             Log.Information("[BOT RUNNER] In melee range ({Dist:F1}y <= {Arrival:F1}y) - facing 0x{Guid:X}",
                                 dist, chaseArrivalDist, targetGuid);
                             attackStarted = true;
+                            facingRetryPrimed = false;
                         }
                         else
                         {
@@ -159,7 +182,10 @@ namespace BotRunner
                             // Send CMSG_ATTACKSWING if not already auto-attacking.
                             // SMSG_CANCEL_COMBAT / SMSG_ATTACKSTOP clear IsAutoAttacking.
                             if (!player.IsAutoAttacking)
+                            {
                                 _objectManager.StartMeleeAttack();
+                                facingRetryPrimed = false;
+                            }
                         }
                         return BehaviourTreeStatus.Running;
                     })
@@ -249,6 +275,12 @@ namespace BotRunner
         {
             Log.Information("[BOT RUNNER] BuildCastSpellSequence: spell={SpellId}, target=0x{Target:X}", spellId, targetGuid);
             var skipMountCast = false;
+            var allowZeroTargetFishingCast =
+                targetGuid == 0
+                && spellId is (int)FishingData.FishingRank1
+                    or (int)FishingData.FishingRank2
+                    or (int)FishingData.FishingRank3
+                    or (int)FishingData.FishingRank4;
             return new BehaviourTreeBuilder()
                 .Sequence("Cast Spell Sequence")
                     .Splice(CheckForTarget(targetGuid))
@@ -266,6 +298,9 @@ namespace BotRunner
                     .Condition("Can Cast Spell", time =>
                     {
                         if (skipMountCast)
+                            return true;
+
+                        if (allowZeroTargetFishingCast)
                             return true;
 
                         var canCast = _objectManager.CanCastSpell(spellId, targetGuid);

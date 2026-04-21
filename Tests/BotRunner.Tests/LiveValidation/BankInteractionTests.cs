@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Communication;
+using GameData.Core.Enums;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -14,16 +15,13 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~BankInteractionTests" --configuration Release
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(BgOnlyValidationCollection.Name)]
 public class BankInteractionTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int MapId = 1;
-    private const float OrgBankX = 1627.32f, OrgBankY = -4376.07f, OrgBankZ = 37f;
-
-    public BankInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
+    public BankInteractionTests(BgOnlyBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
@@ -39,14 +37,25 @@ public class BankInteractionTests
         await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Teleport to Orgrimmar bank
-        await _bot.BotTeleportAsync(bgAccount, MapId, OrgBankX, OrgBankY, OrgBankZ);
-        await Task.Delay(3000);
+        await _bot.BotTeleportAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.BankX,
+            OrgrimmarServiceLocations.BankY,
+            OrgrimmarServiceLocations.BankZ);
+        await _bot.WaitForTeleportSettledAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.BankX,
+            OrgrimmarServiceLocations.BankY);
 
         // Wait for nearby units
-        await _bot.WaitForNearbyUnitsPopulatedAsync(bgAccount, timeoutMs: 8000);
+        await _bot.WaitForNearbyUnitsPopulatedAsync(bgAccount, timeoutMs: 15000);
 
-        // Look for banker NPC (NPC_FLAG_BANKER = 0x80)
-        var banker = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x80, timeoutMs: 8000, progressLabel: "banker");
+        var banker = await _bot.WaitForNearbyUnitAsync(
+            bgAccount,
+            (uint)NPCFlags.UNIT_NPC_FLAG_BANKER,
+            timeoutMs: 15000,
+            progressLabel: "banker");
 
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(bgAccount);
@@ -77,8 +86,16 @@ public class BankInteractionTests
         await Task.Delay(1000);
 
         // Teleport to bank
-        await _bot.BotTeleportAsync(bgAccount, MapId, OrgBankX, OrgBankY, OrgBankZ);
-        await Task.Delay(3000);
+        await _bot.BotTeleportAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.BankX,
+            OrgrimmarServiceLocations.BankY,
+            OrgrimmarServiceLocations.BankZ);
+        await _bot.WaitForTeleportSettledAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.BankX,
+            OrgrimmarServiceLocations.BankY);
 
         // Verify item is in inventory before deposit
         await _bot.RefreshSnapshotsAsync();
@@ -89,8 +106,12 @@ public class BankInteractionTests
         Assert.True(beforeItemCount > 0, "Bot should have at least 1 item after .additem");
 
         // Look for banker NPC
-        await _bot.WaitForNearbyUnitsPopulatedAsync(bgAccount, timeoutMs: 8000);
-        var banker = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x80, timeoutMs: 8000, progressLabel: "banker");
+        await _bot.WaitForNearbyUnitsPopulatedAsync(bgAccount, timeoutMs: 15000);
+        var banker = await _bot.WaitForNearbyUnitAsync(
+            bgAccount,
+            (uint)NPCFlags.UNIT_NPC_FLAG_BANKER,
+            timeoutMs: 15000,
+            progressLabel: "banker");
 
         if (banker == null)
         {

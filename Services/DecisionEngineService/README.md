@@ -58,11 +58,10 @@ The service combines custom ML models for action prediction with ML.NET's advanc
 Services/DecisionEngineService/
 +-- DecisionEngineService.csproj      # .NET 8 Worker Service project file
 +-- README.md                          # This documentation
-+-- DecisionEngineWorker.cs            # Main BackgroundService worker
-+-- DecisionEngine.cs                  # Core ML model and prediction logic
++-- DecisionEngineWorker.cs            # Hosted runtime worker
++-- DecisionEngineRuntime*.cs          # Startup options, preflight, and lifetime ownership
++-- SqliteProvider.cs                  # SQLite native-provider initialization
 +-- CombatPredictionService.cs         # ML.NET-based combat predictions
-+-- Clients/
-|   +-- CombatModelClient.cs           # Client for ML model service calls
 +-- Listeners/
 |   +-- CombatModelServiceListener.cs  # Handles incoming prediction requests
 +-- Repository/
@@ -238,13 +237,20 @@ Configure via `appsettings.json`:
 ```json
 {
   "DecisionEngine": {
+    "Enabled": true,
     "DataDirectory": "./data/snapshots",
     "ProcessedDirectory": "./data/processed",
     "SqliteConnection": "Data Source=decision_engine.db",
+    "Listener": {
+      "IpAddress": "127.0.0.1",
+      "Port": 8080
+    },
     "MangosConnection": "Server=localhost;Database=mangos;Uid=root;Pwd=;"
   }
 }
 ```
+
+Runtime startup creates and verifies the data directory, processed directory, and SQLite parent directory before the socket listener is opened. It also creates the `TrainedModel` and `ModelWeights` tables when missing. If `DecisionEngine:Enabled` is `false`, the hosted worker remains idle and does not open the listener.
 
 ## Usage
 

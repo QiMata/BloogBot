@@ -34,6 +34,8 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<string> _flightMasterErrors;
         private readonly IDisposable _taxiMapOpenedSub;
         private readonly IDisposable _taxiMapClosedSub;
+        private readonly IDisposable _flightActivatedSub;
+        private readonly IDisposable _taxiNodeStatusSub;
 
         /// <summary>
         /// Initializes a new instance of the FlightMasterNetworkClientComponent class.
@@ -67,6 +69,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                         .Do(_ =>
                         {
                             _isTaxiMapOpen = false;
+                            _currentNodeId = 0;
                             _availableTaxiNodes.Clear();
                             _flightCosts.Clear();
                             _logger.LogDebug("Taxi context closed (disconnect)");
@@ -96,6 +99,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _taxiMapOpenedSub = _taxiMapOpened.Subscribe(_ => { });
             _taxiMapClosedSub = _taxiMapClosed.Subscribe(_ => { });
+            _flightActivatedSub = _flightActivated.Subscribe(_ => { });
+            _taxiNodeStatusSub = _taxiNodeStatus.Subscribe(_ => { });
         }
 
         #region Properties
@@ -379,6 +384,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 _logger.LogDebug("Closing taxi map (local state)");
                 _isTaxiMapOpen = false;
+                _currentNodeId = 0;
                 _availableTaxiNodes.Clear();
                 _flightCosts.Clear();
                 await Task.CompletedTask;
@@ -554,6 +560,8 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             _taxiMapOpenedSub?.Dispose();
             _taxiMapClosedSub?.Dispose();
+            _flightActivatedSub?.Dispose();
+            _taxiNodeStatusSub?.Dispose();
             _disposed = true;
             _logger.LogDebug("FlightMasterNetworkClientComponent disposed");
         }

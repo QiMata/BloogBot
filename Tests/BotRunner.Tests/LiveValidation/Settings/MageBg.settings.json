@@ -1,0 +1,11 @@
+[
+  {
+    "AccountName": "RFCBOT8",
+    "CharacterClass": "Mage",
+    "CharacterRace": "Troll",
+    "CharacterGender": "Male",
+    "GmLevel": 6,
+    "ShouldRun": true,
+    "RunnerType": "Background"
+  }
+]

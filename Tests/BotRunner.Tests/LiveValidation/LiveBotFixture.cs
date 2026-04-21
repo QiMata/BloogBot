@@ -13,6 +13,7 @@ using System.Xml.Linq;
 using Communication;
 using Microsoft.Extensions.Logging;
 using Tests.Infrastructure;
+using WoWStateManager.Coordination;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -59,6 +60,10 @@ public partial class LiveBotFixture : IAsyncLifetime
     private readonly Dictionary<string, int> _lastPrintedChatCountByAccount = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, int> _lastPrintedErrorCountByAccount = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Dictionary<string, string> _knownCharacterNamesByAccount = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly HashSet<string> _accountsWithConfirmedTaxiNodes = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _fgResponsive = true;
     private string? _presetSettingsPath;
@@ -129,6 +134,13 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// Derived fixtures can extend this for first-login cinematic flows.
     /// </summary>
     protected virtual TimeSpan InitialWorldEntryTimeout => TimeSpan.FromSeconds(120);
+
+    /// <summary>
+    /// Optional configured account set whose character names should be pre-seeded into the
+    /// snapshot normalizer. Coordinator-backed fixtures override this to include their full
+    /// roster so blank CharacterName snapshots can still satisfy the hydration gate.
+    /// </summary>
+    protected virtual IReadOnlyCollection<string> KnownAccountNamesForCharacterResolution => Array.Empty<string>();
 
     /// <summary>
     /// Whether PathfindingService is listening on port 5001.
@@ -463,6 +475,7 @@ public partial class LiveBotFixture : IAsyncLifetime
             await _stateManagerClient.ConnectAsync(connectCts.Token);
             _logger.LogInformation("[FIXTURE] Connected to StateManager on port 8088.");
             SeedExpectedAccountsFromStateManagerSettings();
+            await SeedExpectedCharacterNamesFromDatabaseAsync();
 
             // 4. Wait for bots to enter world
             _logger.LogInformation("[FIXTURE] Waiting for bots to enter world...");
@@ -953,10 +966,24 @@ public partial class LiveBotFixture : IAsyncLifetime
         return missing;
     }
 
+    private protected void RememberKnownCharacterName(string? accountName, string? characterName)
+    {
+        if (string.IsNullOrWhiteSpace(accountName) || string.IsNullOrWhiteSpace(characterName))
+            return;
+
+        _knownCharacterNamesByAccount[accountName] = characterName;
+    }
+
     private string? GetKnownCharacterNameForAccount(string? accountName)
     {
         if (string.IsNullOrWhiteSpace(accountName))
             return null;
+
+        if (_knownCharacterNamesByAccount.TryGetValue(accountName, out var knownCharacterName)
+            && !string.IsNullOrWhiteSpace(knownCharacterName))
+        {
+            return knownCharacterName;
+        }
 
         if (string.Equals(accountName, BgAccountName, StringComparison.OrdinalIgnoreCase))
             return BgCharacterName;
@@ -972,14 +999,23 @@ public partial class LiveBotFixture : IAsyncLifetime
             ?.CharacterName;
     }
 
-    private void NormalizeSnapshotCharacterName(WoWActivitySnapshot? snapshot)
+    private protected void NormalizeSnapshotCharacterName(WoWActivitySnapshot? snapshot)
     {
-        if (snapshot == null || !string.IsNullOrWhiteSpace(snapshot.CharacterName))
+        if (snapshot == null)
             return;
+
+        if (!string.IsNullOrWhiteSpace(snapshot.CharacterName))
+        {
+            RememberKnownCharacterName(snapshot.AccountName, snapshot.CharacterName);
+            return;
+        }
 
         var knownCharacterName = GetKnownCharacterNameForAccount(snapshot.AccountName);
         if (!string.IsNullOrWhiteSpace(knownCharacterName))
+        {
             snapshot.CharacterName = knownCharacterName;
+            RememberKnownCharacterName(snapshot.AccountName, knownCharacterName);
+        }
     }
 
     private static bool IsHydratedInWorldSnapshot(WoWActivitySnapshot? snapshot)
@@ -1243,6 +1279,11 @@ public partial class LiveBotFixture : IAsyncLifetime
         _stateManagerClient?.Dispose();
         await _serviceFixture.DisposeAsync();
         Environment.SetEnvironmentVariable(RecordingArtifactsEnvVar, _previousRecordingArtifactsFlag);
+        Environment.SetEnvironmentVariable(DungeoneeringCoordinator.DungeonTargetNameEnvVar, null);
+        Environment.SetEnvironmentVariable(DungeoneeringCoordinator.DungeonTargetMapEnvVar, null);
+        Environment.SetEnvironmentVariable(DungeoneeringCoordinator.DungeonTargetXEnvVar, null);
+        Environment.SetEnvironmentVariable(DungeoneeringCoordinator.DungeonTargetYEnvVar, null);
+        Environment.SetEnvironmentVariable(DungeoneeringCoordinator.DungeonTargetZEnvVar, null);
         _loggerFactory.Dispose();
     }
 

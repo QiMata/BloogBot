@@ -240,6 +240,7 @@ public class CombatRotationTaskTests : IDisposable
         Assert.True(_sut.CallUpdate(4f));
 
         const float expectedFacing = MathF.PI / 2f;
+        _om.Verify(o => o.StopAttack(), Times.Once);
         _om.Verify(o => o.StopAllMovement(), Times.Once);
         _om.Verify(o => o.SetFacing(It.Is<float>(f => MathF.Abs(f - expectedFacing) < 0.001f)), Times.Once);
         _om.Verify(o => o.StartMeleeAttack(), Times.Never);
@@ -263,6 +264,7 @@ public class CombatRotationTaskTests : IDisposable
         Assert.False(_sut.CallUpdate(4f));
 
         const float expectedFacing = MathF.PI / 2f;
+        _om.Verify(o => o.StopAttack(), Times.Once);
         _om.Verify(o => o.StopAllMovement(), Times.Once);
         _om.Verify(o => o.SetFacing(It.Is<float>(f => MathF.Abs(f - expectedFacing) < 0.001f)), Times.Once);
         _om.Verify(o => o.StartMeleeAttack(), Times.Once);

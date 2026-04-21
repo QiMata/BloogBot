@@ -1,3 +1,4 @@
+using BotCommLayer;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pathfinding;
@@ -37,6 +38,9 @@ public sealed class PathfindingSocketServerIntegrationTests
 
         Assert.Equal(PathfindingResponse.PayloadOneofCase.Path, response.PayloadCase);
         Assert.NotEqual("no_path", response.Path.Result);
+        Assert.Equal("none", response.Path.BlockedReason);
+        Assert.False(response.Path.HasBlockedSegment);
+        Assert.True(response.Path.MaxSlopeAngleDeg > 0f);
         Assert.True(
             response.Path.Corners.Count >= 3,
             $"Expected a real corpse-run waypoint chain, got {response.Path.Corners.Count} corners with result '{response.Path.Result}'.");
@@ -67,7 +71,7 @@ public sealed class PathfindingSocketServerIntegrationTests
         var responsePayload = await ReadExactAsync(stream, responseLength);
 
         var response = new PathfindingResponse();
-        response.MergeFrom(responsePayload);
+        response.MergeFrom(ProtobufCompression.Decode(responsePayload));
         return response;
     }
 

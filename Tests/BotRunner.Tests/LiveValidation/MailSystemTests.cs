@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Communication;
 using Xunit;
@@ -17,9 +19,6 @@ public class MailSystemTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int MapId = 1;
-    private const float OrgMailboxX = 1615.58f, OrgMailboxY = -4391.60f, OrgMailboxZ = 13.11f;
-
     public MailSystemTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -36,8 +35,16 @@ public class MailSystemTests
         await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Setup: teleport to Orgrimmar mailbox
-        await _bot.BotTeleportAsync(bgAccount, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
-        await Task.Delay(3000);
+        await _bot.BotTeleportAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.MailboxX,
+            OrgrimmarServiceLocations.MailboxY,
+            OrgrimmarServiceLocations.MailboxZ);
+        await _bot.WaitForTeleportSettledAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.MailboxX,
+            OrgrimmarServiceLocations.MailboxY);
 
         // Verify position after teleport
         await _bot.RefreshSnapshotsAsync();
@@ -55,10 +62,14 @@ public class MailSystemTests
         await _bot.ExecuteGMCommandAsync($".send money {charName} \"Gold Test\" \"Testing mail gold\" 10");
         await Task.Delay(2000);
 
+        var mailboxGuid = await WaitForMailboxGuidAsync(bgAccount, "MAIL");
+        Assert.NotEqual(0UL, mailboxGuid);
+
         // Check mail via CHECK_MAIL action
         var checkResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
         {
             ActionType = ActionType.CheckMail,
+            Parameters = { new RequestParameter { LongParam = (long)mailboxGuid } }
         });
         _output.WriteLine($"[MAIL] CheckMail result: {checkResult}");
 
@@ -88,8 +99,16 @@ public class MailSystemTests
         await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Setup: teleport to Orgrimmar mailbox
-        await _bot.BotTeleportAsync(bgAccount, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
-        await Task.Delay(3000);
+        await _bot.BotTeleportAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.MailboxX,
+            OrgrimmarServiceLocations.MailboxY,
+            OrgrimmarServiceLocations.MailboxZ);
+        await _bot.WaitForTeleportSettledAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.MailboxX,
+            OrgrimmarServiceLocations.MailboxY);
 
         // Verify position
         await _bot.RefreshSnapshotsAsync();
@@ -115,10 +134,14 @@ public class MailSystemTests
         await _bot.ExecuteGMCommandAsync($".send items {charName} \"Item Test\" \"Testing mail item\" 2589:1");
         await Task.Delay(2000);
 
+        var mailboxGuid = await WaitForMailboxGuidAsync(bgAccount, "MAIL");
+        Assert.NotEqual(0UL, mailboxGuid);
+
         // Check mail
         var checkResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
         {
             ActionType = ActionType.CheckMail,
+            Parameters = { new RequestParameter { LongParam = (long)mailboxGuid } }
         });
         _output.WriteLine($"[MAIL] CheckMail result: {checkResult}");
 
@@ -140,5 +163,30 @@ public class MailSystemTests
                 msg.Contains("item", System.StringComparison.OrdinalIgnoreCase))
                 _output.WriteLine($"[MAIL] Chat: {msg}");
         }
+    }
+
+    private async Task<ulong> WaitForMailboxGuidAsync(string account, string label)
+    {
+        var started = DateTime.UtcNow;
+        while (DateTime.UtcNow - started < TimeSpan.FromSeconds(5))
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var snap = await _bot.GetSnapshotAsync(account);
+            var mailbox = snap?.NearbyObjects?
+                .FirstOrDefault(go => go.GameObjectType == 19
+                    || (go.Name ?? string.Empty).Contains("mail", StringComparison.OrdinalIgnoreCase));
+
+            var guid = mailbox?.Base?.Guid ?? 0UL;
+            if (guid != 0)
+            {
+                _output.WriteLine($"[{label}] Mailbox found: type={mailbox!.GameObjectType} name='{mailbox.Name}' GUID={guid:X}");
+                return guid;
+            }
+
+            await Task.Delay(200);
+        }
+
+        _output.WriteLine($"[{label}] Mailbox GUID not found after 5s.");
+        return 0;
     }
 }

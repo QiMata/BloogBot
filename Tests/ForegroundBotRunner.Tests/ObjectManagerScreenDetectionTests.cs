@@ -28,4 +28,31 @@ public sealed class ObjectManagerScreenDetectionTests
 
         Assert.Equal(WoWScreenState.LoginScreen, screenState);
     }
+
+    [Fact]
+    public void GetDiagnosticPlayerLabel_DuringTransition_DoesNotTouchPlayerGetter()
+    {
+        bool invoked = false;
+
+        string label = ObjectManager.GetDiagnosticPlayerLabel(
+            () =>
+            {
+                invoked = true;
+                return "Mailanaraooj";
+            },
+            isInTransition: true);
+
+        Assert.Equal("(transition)", label);
+        Assert.False(invoked);
+    }
+
+    [Fact]
+    public void GetDiagnosticPlayerLabel_WhenGetterThrows_ReturnsUnavailable()
+    {
+        string label = ObjectManager.GetDiagnosticPlayerLabel(
+            () => throw new InvalidOperationException("stale player"),
+            isInTransition: false);
+
+        Assert.Equal("(unavailable)", label);
+    }
 }

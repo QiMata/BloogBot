@@ -175,13 +175,217 @@
         </Style.Triggers>
     </Style>
 
-    <!-- ── ComboBox ───────────────────────────────────────────── -->
+    <!-- ── ComboBox (WoW Classic dropdown) ─────────────────────
+         Toggle button styled like the red panel buttons; dropdown
+         popup uses dark slate with gold highlight on hover/select.
+         ──────────────────────────────────────────────────────────── -->
+
+    <!-- Toggle button inside the ComboBox (the entire clickable area) -->
+    <ControlTemplate x:Key="WoW.ComboBoxToggleButton" TargetType="ToggleButton">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="20"/>
+            </Grid.ColumnDefinitions>
+            <!-- Main background area -->
+            <Border x:Name="outerBorder" Grid.ColumnSpan="2"
+                    BorderBrush="#FF2A2A2A" BorderThickness="1" CornerRadius="1">
+                <Border x:Name="innerBorder" BorderBrush="#FF4A0808" BorderThickness="1"
+                        CornerRadius="0">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#FF9B1A1A" Offset="0.0"/>
+                            <GradientStop Color="#FF7A0E0E" Offset="0.15"/>
+                            <GradientStop Color="#FF580808" Offset="0.5"/>
+                            <GradientStop Color="#FF3A0404" Offset="0.85"/>
+                            <GradientStop Color="#FF1A0000" Offset="1.0"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+            </Border>
+            <!-- Arrow glyph -->
+            <Path x:Name="arrow" Grid.Column="1"
+                  Data="M 0 0 L 4 4 L 8 0 Z"
+                  Fill="{StaticResource WoW.GoldBrush}"
+                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="innerBorder" Property="Background">
+                    <Setter.Value>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#FFBB2828" Offset="0.0"/>
+                            <GradientStop Color="#FF9A1414" Offset="0.15"/>
+                            <GradientStop Color="#FF6E0A0A" Offset="0.5"/>
+                            <GradientStop Color="#FF4A0606" Offset="0.85"/>
+                            <GradientStop Color="#FF2A0202" Offset="1.0"/>
+                        </LinearGradientBrush>
+                    </Setter.Value>
+                </Setter>
+                <Setter TargetName="outerBorder" Property="BorderBrush" Value="#FF8B6914"/>
+                <Setter TargetName="innerBorder" Property="BorderBrush" Value="#FF6B1010"/>
+                <Setter TargetName="arrow" Property="Fill" Value="{StaticResource WoW.TextBrightBrush}"/>
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="innerBorder" Property="Background">
+                    <Setter.Value>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#FF3A0404" Offset="0.0"/>
+                            <GradientStop Color="#FF4A0808" Offset="0.3"/>
+                            <GradientStop Color="#FF580808" Offset="0.7"/>
+                            <GradientStop Color="#FF1A0000" Offset="1.0"/>
+                        </LinearGradientBrush>
+                    </Setter.Value>
+                </Setter>
+                <Setter TargetName="outerBorder" Property="BorderBrush" Value="#FF8B6914"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="innerBorder" Property="Background">
+                    <Setter.Value>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#FF3A2020" Offset="0.0"/>
+                            <GradientStop Color="#FF2A1515" Offset="0.5"/>
+                            <GradientStop Color="#FF1A0A0A" Offset="1.0"/>
+                        </LinearGradientBrush>
+                    </Setter.Value>
+                </Setter>
+                <Setter TargetName="outerBorder" Property="BorderBrush" Value="#FF1A1A1A"/>
+                <Setter TargetName="arrow" Property="Fill" Value="{StaticResource WoW.TextDimBrush}"/>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <!-- Editable textbox inside ComboBox (for IsEditable=True) -->
+    <ControlTemplate x:Key="WoW.ComboBoxTextBox" TargetType="TextBox">
+        <Border x:Name="PART_ContentHost" Focusable="False"
+                Background="Transparent"/>
+    </ControlTemplate>
+
     <Style TargetType="ComboBox">
         <Setter Property="Background" Value="{StaticResource WoW.InputBgBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource WoW.TextBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource WoW.GoldBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource WoW.BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="FontFamily" Value="Palatino Linotype, Book Antiqua, Georgia, serif"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Padding" Value="6,4"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton x:Name="ToggleButton"
+                                      Template="{StaticResource WoW.ComboBoxToggleButton}"
+                                      Focusable="False"
+                                      ClickMode="Press"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+                        <!-- Selected item display -->
+                        <ContentPresenter x:Name="ContentSite"
+                                          IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                          Margin="8,4,24,4"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Left"/>
+                        <!-- Editable textbox (hidden unless IsEditable) -->
+                        <TextBox x:Name="PART_EditableTextBox"
+                                 Style="{x:Null}"
+                                 Template="{StaticResource WoW.ComboBoxTextBox}"
+                                 HorizontalAlignment="Left"
+                                 VerticalAlignment="Center"
+                                 Margin="8,4,24,4"
+                                 Focusable="True"
+                                 Background="Transparent"
+                                 Foreground="{StaticResource WoW.GoldBrush}"
+                                 CaretBrush="{StaticResource WoW.GoldBrush}"
+                                 Visibility="Hidden"
+                                 IsReadOnly="{TemplateBinding IsReadOnly}"/>
+                        <!-- Dropdown popup -->
+                        <Popup x:Name="Popup"
+                               Placement="Bottom"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               PopupAnimation="Slide">
+                            <Grid x:Name="DropDown"
+                                  SnapsToDevicePixels="True"
+                                  MinWidth="{TemplateBinding ActualWidth}"
+                                  MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                <!-- Outer border: charcoal frame matching buttons -->
+                                <Border x:Name="DropDownBorder"
+                                        BorderBrush="#FF8B6914" BorderThickness="1"
+                                        CornerRadius="0,0,2,2">
+                                    <!-- Inner border: dark panel background -->
+                                    <Border BorderBrush="#FF4A0808" BorderThickness="1"
+                                            Background="{StaticResource WoW.PanelBrush}">
+                                        <ScrollViewer Margin="2" SnapsToDevicePixels="True">
+                                            <StackPanel IsItemsHost="True"
+                                                        KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Border>
+                            </Grid>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="HasItems" Value="False">
+                            <Setter TargetName="DropDownBorder" Property="MinHeight" Value="95"/>
+                        </Trigger>
+                        <Trigger Property="IsEditable" Value="True">
+                            <Setter Property="IsTabStop" Value="False"/>
+                            <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="ContentSite" Property="Visibility" Value="Hidden"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ComboBoxItem — dropdown list items with WoW hover/select -->
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Foreground" Value="{StaticResource WoW.TextBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="6,4"/>
+        <Setter Property="FontFamily" Value="Palatino Linotype, Book Antiqua, Georgia, serif"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="itemBorder"
+                            Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"
+                            BorderThickness="0,0,0,1"
+                            BorderBrush="#22FFD100">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="itemBorder" Property="Background">
+                                <Setter.Value>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="#44FFD100" Offset="0.0"/>
+                                        <GradientStop Color="#22FFD100" Offset="1.0"/>
+                                    </LinearGradientBrush>
+                                </Setter.Value>
+                            </Setter>
+                            <Setter Property="Foreground" Value="{StaticResource WoW.TextBrightBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="itemBorder" Property="Background" Value="{StaticResource WoW.SelectionBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource WoW.GoldBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ── TabControl ─────────────────────────────────────────── -->

@@ -37,19 +37,19 @@
 - `docs/TASKS.md` includes `MASTER-SUB-035..038` entries and queue pointers now target `MASTER-SUB-035` then `MASTER-SUB-036`.
 
 ## P0 Active Tasks (Ordered)
-1. [ ] `UI-UMB-001` Expand and execute `MASTER-SUB-036` (`UI/Systems/Systems.AppHost/TASKS.md`) with concrete IDs.
+1. [x] `UI-UMB-001` Expand and execute `MASTER-SUB-036` (`UI/Systems/Systems.AppHost/TASKS.md`) with concrete IDs.
 - Child target: create direct IDs in AppHost local file, then execute top-down.
 - Validation command: `dotnet build UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release`.
 
-2. [ ] `UI-UMB-002` Expand and execute `MASTER-SUB-037` (`UI/Systems/Systems.ServiceDefaults/TASKS.md`) with concrete IDs.
+2. [x] `UI-UMB-002` Expand and execute `MASTER-SUB-037` (`UI/Systems/Systems.ServiceDefaults/TASKS.md`) with concrete IDs.
 - Child target: create direct IDs in ServiceDefaults local file, then execute top-down.
 - Validation command: `dotnet build UI/Systems/Systems.ServiceDefaults/Systems.ServiceDefaults.csproj --configuration Release`.
 
-3. [ ] `UI-UMB-003` Execute `MASTER-SUB-038` (`UI/WoWStateManagerUI/TASKS.md`) IDs in order: `UI-MISS-001`, then `UI-MISS-002`.
+3. [x] `UI-UMB-003` Execute `MASTER-SUB-038` (`UI/WoWStateManagerUI/TASKS.md`) IDs in order: `UI-MISS-001`, then `UI-MISS-002`.
 - Child target: remove converter unimplemented path risk and keep UI binding behavior explicit.
 - Validation command: `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`.
 
-4. [ ] `UI-UMB-004` Keep parent/child status sync between `UI/TASKS.md` and `docs/TASKS.md` after each child-file delta.
+4. [x] `UI-UMB-004` Keep parent/child status sync between `UI/TASKS.md` and `docs/TASKS.md` after each child-file delta.
 - Child target: each completed child pass must update master queue status and handoff pointers.
 - Validation command: `rg -n "MASTER-SUB-03[6-8]|Current queue file|Next queue file" docs/TASKS.md`.
 
@@ -61,11 +61,42 @@
 
 ## Session Handoff
 - Last updated: 2026-02-25
-- Active task: `UI-UMB-004` (keep parent/child status sync in `UI/TASKS.md` and `docs/TASKS.md`).
-- Last delta: Added explicit one-by-one continuity rules (`run prior Next command first`, `set next queue-file read command after delta`) so compaction resumes on the next local `TASKS.md`.
+- Active task: none. `UI-UMB-001` through `UI-UMB-004` are complete.
+- Last delta: synced UI parent/master status after AppHost, ServiceDefaults, and WPF UI child closeouts.
 - Pass result: `delta shipped`
-- Validation/tests run: `dotnet build UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release` -> succeeded (`0 warnings`, `0 errors`); `dotnet build UI/Systems/Systems.ServiceDefaults/Systems.ServiceDefaults.csproj --configuration Release` -> succeeded (`0 warnings`, `0 errors`); `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release` -> succeeded (`0 warnings`, `0 errors`).
-- Files changed: `UI/TASKS.md`, `UI/Systems/Systems.AppHost/TASKS.md`, `UI/Systems/Systems.ServiceDefaults/TASKS.md`, `UI/WoWStateManagerUI/TASKS.md`.
+- Validation/tests run:
+  - `dotnet build UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release` -> `succeeded (0 warnings, 0 errors)`
+  - `dotnet run --project UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release --no-build --launch-profile local` -> expected preflight failure listing missing `config`/`data` bind-mount sources in this workspace
+  - `dotnet test Tests/Systems.ServiceDefaults.Tests/Systems.ServiceDefaults.Tests.csproj --configuration Release --settings Tests/test.runsettings --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `dotnet build UI/Systems/Systems.ServiceDefaults/Systems.ServiceDefaults.csproj --configuration Release` -> `succeeded (0 warnings, 0 errors)`
+  - `dotnet test Tests/WoWStateManagerUI.Tests/WoWStateManagerUI.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --logger "console;verbosity=minimal"` -> `passed (42/42)`
+  - `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release --no-restore` -> `succeeded (0 warnings, 0 errors)`
+  - `rg -n "MASTER-SUB-03[6-8]|Current queue file|Next queue file" docs/TASKS.md` -> matched the current handoff command; the previous master queue fields are no longer present in the current docs structure.
+- Files changed:
+  - `UI/Systems/Systems.AppHost/Program.cs`
+  - `UI/Systems/Systems.AppHost/WowServerConfig.cs`
+  - `UI/Systems/Systems.AppHost/appsettings.json`
+  - `UI/Systems/Systems.AppHost/Properties/launchSettings.json`
+  - `UI/Systems/Systems.AppHost/README.md`
+  - `UI/Systems/Systems.AppHost/TASKS.md`
+  - `UI/Systems/Systems.AppHost/TASKS_ARCHIVE.md`
+  - `UI/Systems/Systems.ServiceDefaults/Extensions.cs`
+  - `UI/Systems/Systems.ServiceDefaults/Properties/AssemblyInfo.cs`
+  - `UI/Systems/Systems.ServiceDefaults/README.md`
+  - `Tests/Systems.ServiceDefaults.Tests/Systems.ServiceDefaults.Tests.csproj`
+  - `Tests/Systems.ServiceDefaults.Tests/ServiceDefaultsExtensionsTests.cs`
+  - `UI/Systems/Systems.ServiceDefaults/TASKS.md`
+  - `UI/Systems/Systems.ServiceDefaults/TASKS_ARCHIVE.md`
+  - `Tests/WoWStateManagerUI.Tests/Converters/NullToBoolConverterTests.cs`
+  - `Tests/WoWStateManagerUI.Tests/Converters/PathToFilenameConverterTests.cs`
+  - `Tests/WoWStateManagerUI.Tests/Converters/ServiceStatusToBrushConverterTests.cs`
+  - `UI/WoWStateManagerUI/README.md`
+  - `UI/WoWStateManagerUI/TASKS.md`
+  - `UI/WoWStateManagerUI/TASKS_ARCHIVE.md`
+  - `UI/TASKS.md`
+  - `UI/TASKS_ARCHIVE.md`
+  - `docs/TASKS.md`
+  - `docs/TASKS_ARCHIVE.md`
 - Blockers: None.
-- Next task: `UI-UMB-004`.
-- Next command: `Get-Content -Path 'UI/Systems/Systems.AppHost/TASKS.md' -TotalCount 360`.
+- Next task: none in this owner.
+- Next command: `rg -n "^- \[ \]|Known remaining work|Active task:" --glob TASKS.md`.

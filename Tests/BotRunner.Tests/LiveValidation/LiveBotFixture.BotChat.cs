@@ -110,6 +110,9 @@ public partial class LiveBotFixture
         if (string.IsNullOrWhiteSpace(command))
             return requestedDelayMs;
 
+        if (command.Equals(".taxicheat on", StringComparison.OrdinalIgnoreCase))
+            return Math.Max(requestedDelayMs, 4500);
+
         if (command.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase))
             return Math.Max(requestedDelayMs, 3500);
 
@@ -123,6 +126,9 @@ public partial class LiveBotFixture
     {
         if (string.IsNullOrWhiteSpace(command))
             return 1000;
+
+        if (command.Equals(".taxicheat on", StringComparison.OrdinalIgnoreCase))
+            return 2500;
 
         if (command.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase))
             return 2500;
@@ -138,6 +144,9 @@ public partial class LiveBotFixture
         if (string.IsNullOrWhiteSpace(command))
             return 300;
 
+        if (command.Equals(".taxicheat on", StringComparison.OrdinalIgnoreCase))
+            return 1200;
+
         if (command.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase))
             return 800;
 
@@ -145,6 +154,78 @@ public partial class LiveBotFixture
             return 400;
 
         return 300;
+    }
+
+    internal static bool ContainsTaxiNodesGrantedMessage(string? text) =>
+        !string.IsNullOrWhiteSpace(text)
+        && text.Contains("has access to all taxi nodes now", StringComparison.OrdinalIgnoreCase);
+
+    public async Task EnsureTaxiNodesEnabledAsync(string accountName, string label, int maxAttempts = 3)
+    {
+        await BotSelectSelfAsync(accountName);
+        await Task.Delay(300);
+
+        var baseline = await GetSnapshotAsync(accountName);
+        var baselineChats = baseline?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
+        var baselineErrors = baseline?.RecentErrors.ToArray() ?? Array.Empty<string>();
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var trace = await SendGmChatCommandTrackedAsync(
+                accountName,
+                ".taxicheat on",
+                captureResponse: true,
+                delayMs: 4500);
+
+            Assert.Equal(ResponseResult.Success, trace.DispatchResult);
+
+            var responses = trace.ChatMessages.Concat(trace.ErrorMessages).ToArray();
+            foreach (var response in responses)
+                _testOutput?.WriteLine($"[{label}] taxicheat: {response}");
+
+            Assert.DoesNotContain(
+                responses,
+                response => response.Contains("no such command", StringComparison.OrdinalIgnoreCase)
+                    || response.Contains("not available", StringComparison.OrdinalIgnoreCase)
+                    || response.Contains("unknown command", StringComparison.OrdinalIgnoreCase));
+
+            if (responses.Any(ContainsTaxiNodesGrantedMessage))
+                return;
+
+            var confirmed = await WaitForSnapshotConditionAsync(
+                accountName,
+                snapshot =>
+                {
+                    if (snapshot == null)
+                        return false;
+
+                    var chatDelta = GetDeltaMessages(baselineChats, snapshot.RecentChatMessages);
+                    if (chatDelta.Any(ContainsTaxiNodesGrantedMessage))
+                        return true;
+
+                    var errorDelta = GetDeltaMessages(baselineErrors, snapshot.RecentErrors);
+                    return errorDelta.Any(ContainsTaxiNodesGrantedMessage);
+                },
+                TimeSpan.FromSeconds(6),
+                pollIntervalMs: 300,
+                progressLabel: $"{label} taxicheat-confirm");
+
+            if (confirmed)
+                return;
+
+            await RefreshSnapshotsAsync();
+            var current = await GetSnapshotAsync(accountName);
+            baselineChats = current?.RecentChatMessages.ToArray() ?? baselineChats;
+            baselineErrors = current?.RecentErrors.ToArray() ?? baselineErrors;
+            _testOutput?.WriteLine($"[{label}] taxicheat confirmation not seen on attempt {attempt}/{maxAttempts}; retrying.");
+        }
+
+        var finalSnapshot = await GetSnapshotAsync(accountName);
+        var recentChatTail = string.Join(" || ", finalSnapshot?.RecentChatMessages.TakeLast(6) ?? Array.Empty<string>());
+        var recentErrorTail = string.Join(" || ", finalSnapshot?.RecentErrors.TakeLast(6) ?? Array.Empty<string>());
+        throw new Xunit.Sdk.XunitException(
+            $"[{label}] taxi-node grant was not confirmed after {maxAttempts} '.taxicheat on' attempts. " +
+            $"Recent chat: {recentChatTail}. Recent errors: {recentErrorTail}.");
     }
 
 
@@ -337,6 +418,7 @@ public partial class LiveBotFixture
             while (DateTime.UtcNow < pollDeadlineUtc)
             {
                 await Task.Delay(200);
+                await RefreshSnapshotsAsync();
 
                 var responseSnapshot = await GetSnapshotAsync(accountName);
                 if (responseSnapshot == null)

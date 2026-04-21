@@ -25,24 +25,24 @@
 
 All tasks complete. No open items.
 
+## Completed Follow-up Items
+- [x] `UI-MISS-005` Add converter-contract coverage for the remaining WPF converters (`NullToBoolConverter`, `PathToFilenameConverter`, `ServiceStatusToBrushConverter`) and update README binding contract.
+
 ## Session Handoff
-- Last updated: 2026-02-28
+- Last updated: 2026-04-15
 - Active task: None (all UI-MISS tasks complete).
-- Last delta: Completed `UI-MISS-003` (added `Tests/WoWStateManagerUI.Tests` with 25 converter regression tests covering all 3 converters) and `UI-MISS-004` (simplified README from 289 lines to ~60 lines with command-first flow and converter binding contract).
+- Last delta: Completed `UI-MISS-005` by adding regression coverage for the remaining three converters and updating the README converter binding contract to cover every converter currently used by the UI.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Tests/WoWStateManagerUI.Tests/WoWStateManagerUI.Tests.csproj --configuration Release` -> `0 Warning(s)`, `0 Error(s)`.
-  - `dotnet test Tests/WoWStateManagerUI.Tests/WoWStateManagerUI.Tests.csproj --configuration Release` -> 25 passed, 0 failed.
-  - `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release` -> `0 Warning(s)`, `0 Error(s)`.
+  - `dotnet test Tests/WoWStateManagerUI.Tests/WoWStateManagerUI.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --logger "console;verbosity=minimal"` -> `passed (42/42)`
+  - `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release --no-restore` -> `succeeded (0 warnings, 0 errors)`
 - Files changed:
-  - `Tests/WoWStateManagerUI.Tests/WoWStateManagerUI.Tests.csproj` (new test project)
-  - `Tests/WoWStateManagerUI.Tests/Converters/GreaterThanZeroToBooleanConverterTests.cs` (new, 8 tests)
-  - `Tests/WoWStateManagerUI.Tests/Converters/InverseBooleanConverterTests.cs` (new, 4 tests)
-  - `Tests/WoWStateManagerUI.Tests/Converters/EnumDescriptionConverterTests.cs` (new, 5 tests)
-  - `UI/WoWStateManagerUI/README.md` (rewritten, command-first)
+  - `Tests/WoWStateManagerUI.Tests/Converters/NullToBoolConverterTests.cs`
+  - `Tests/WoWStateManagerUI.Tests/Converters/PathToFilenameConverterTests.cs`
+  - `Tests/WoWStateManagerUI.Tests/Converters/ServiceStatusToBrushConverterTests.cs`
+  - `UI/WoWStateManagerUI/README.md`
   - `UI/WoWStateManagerUI/TASKS.md` (updated)
   - `UI/WoWStateManagerUI/TASKS_ARCHIVE.md` (updated)
-  - `WestworldOfWarcraft.sln` (added test project)
 - Blockers: None.
 - Next task: None remaining in this TASKS.md.
 - Next command: `Get-Content -Path 'docs/TASKS.md' -TotalCount 420`.

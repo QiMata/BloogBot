@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\WWoWBot.AI\BloogBot.AI.csproj" />
+    <ProjectReference Include="..\..\BloogBot.AI\BloogBot.AI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

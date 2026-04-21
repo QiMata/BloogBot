@@ -64,6 +64,14 @@ public class TransportTests
         var nearbyGOs = snap.MovementData?.NearbyGameObjects?.ToList()
             ?? new System.Collections.Generic.List<Game.GameObjectSnapshot>();
         _output.WriteLine($"[TEST] Nearby game objects: {nearbyGOs.Count}");
+        foreach (var go in nearbyGOs.OrderBy(go => go.DistanceToPlayer))
+        {
+            var goPos = go.Position;
+            _output.WriteLine(
+                $"  GO: entry={go.Entry} display={go.DisplayId} type={go.GameObjectType} " +
+                $"name={go.Name} guid=0x{go.Guid:X} dist={go.DistanceToPlayer:F1} " +
+                $"pos=({goPos?.X:F1},{goPos?.Y:F1},{goPos?.Z:F1})");
+        }
 
         var transports = nearbyGOs
             .Where(go => go.GameObjectType == GoTypeTransport || go.GameObjectType == GoTypeMoTransport)
@@ -133,13 +141,14 @@ public class TransportTests
     {
         var account = _bot.BgAccountName!;
 
-        // Undercity elevator upper level (Eastern Kingdoms map 0)
+        // Undercity west elevator upper stop (Eastern Kingdoms map 0)
         const int ekMapId = 0;
-        const float ucElevTopX = 1583.0f, ucElevTopY = 239.0f, ucElevTopZ = -52.0f;
+        const float ucElevTopX = 1544.24f, ucElevTopY = 240.77f, ucElevTopZ = 55.40f;
 
         await _bot.EnsureCleanSlateAsync(account, "BG");
         await _bot.BotTeleportAsync(account, ekMapId, ucElevTopX, ucElevTopY, ucElevTopZ);
-        await Task.Delay(3000);
+        await _bot.WaitForTeleportSettledAsync(account, ucElevTopX, ucElevTopY);
+        await Task.Delay(5000);
 
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
@@ -148,6 +157,18 @@ public class TransportTests
         var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
         Assert.NotNull(pos);
         _output.WriteLine($"[TEST] Undercity elevator area position: ({pos!.X:F1}, {pos.Y:F1}, {pos.Z:F1})");
+
+        var nearbyGOs = snap.MovementData?.NearbyGameObjects?.ToList()
+            ?? new System.Collections.Generic.List<Game.GameObjectSnapshot>();
+        _output.WriteLine($"[TEST] Nearby game objects: {nearbyGOs.Count}");
+        foreach (var go in nearbyGOs.OrderBy(go => go.DistanceToPlayer))
+        {
+            var goPos = go.Position;
+            _output.WriteLine(
+                $"  GO: entry={go.Entry} display={go.DisplayId} type={go.GameObjectType} " +
+                $"name={go.Name} guid=0x{go.Guid:X} dist={go.DistanceToPlayer:F1} " +
+                $"pos=({goPos?.X:F1},{goPos?.Y:F1},{goPos?.Z:F1})");
+        }
     }
 
     /// <summary>

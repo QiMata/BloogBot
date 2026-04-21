@@ -168,6 +168,7 @@ namespace WoWSharpClient.Tests.Handlers
             };
 
             objectManager.Player = localPlayer;
+            objectManager.ClearConfirmedMeleeAttackStart();
             objectManager.ClearPendingMeleeAttackStart();
             objectManager.ClearRecentMeleeRejections();
             objectManager.NotePendingMeleeAttackStart(targetGuid);
@@ -184,6 +185,7 @@ namespace WoWSharpClient.Tests.Handlers
             Assert.Equal(targetGuid, localPlayer.TargetGuid);
             Assert.False(objectManager.HasPendingMeleeAttackStart(targetGuid));
             Assert.False(objectManager.HadRecentMeleeFacingRejection(targetGuid));
+            Assert.True(objectManager.HasConfirmedMeleeAttackStart(targetGuid));
         }
 
         // --- SMSG_ATTACKSTOP ---
@@ -228,7 +230,9 @@ namespace WoWSharpClient.Tests.Handlers
             };
 
             objectManager.Player = localPlayer;
+            objectManager.ClearConfirmedMeleeAttackStart();
             objectManager.ClearPendingMeleeAttackStart();
+            objectManager.ConfirmMeleeAttackStarted(targetGuid);
             objectManager.NotePendingMeleeAttackStart(targetGuid);
 
             using var ms = new MemoryStream();
@@ -240,6 +244,32 @@ namespace WoWSharpClient.Tests.Handlers
 
             Assert.False(localPlayer.IsAutoAttacking);
             Assert.False(objectManager.HasPendingMeleeAttackStart(targetGuid));
+            Assert.False(objectManager.HasConfirmedMeleeAttackStart(targetGuid));
+        }
+
+        [Fact]
+        public void HandleCancelCombat_LocalPlayerClearsTrackedAutoAttackState()
+        {
+            const ulong playerGuid = 0x10;
+            const ulong targetGuid = 0x1234;
+            var objectManager = WoWSharpObjectManager.Instance;
+            var localPlayer = new WoWLocalPlayer(new HighGuid(playerGuid))
+            {
+                IsAutoAttacking = true,
+                TargetGuid = targetGuid,
+            };
+
+            objectManager.Player = localPlayer;
+            objectManager.ClearConfirmedMeleeAttackStart();
+            objectManager.ClearPendingMeleeAttackStart();
+            objectManager.ConfirmMeleeAttackStarted(targetGuid);
+            objectManager.NotePendingMeleeAttackStart(targetGuid);
+
+            SpellHandler.HandleCancelCombat(Opcode.SMSG_CANCEL_COMBAT, Array.Empty<byte>(), ctx);
+
+            Assert.False(localPlayer.IsAutoAttacking);
+            Assert.False(objectManager.HasPendingMeleeAttackStart(targetGuid));
+            Assert.False(objectManager.HasConfirmedMeleeAttackStart(targetGuid));
         }
 
         [Fact]
@@ -255,6 +285,7 @@ namespace WoWSharpClient.Tests.Handlers
             };
 
             objectManager.Player = localPlayer;
+            objectManager.ClearConfirmedMeleeAttackStart();
             objectManager.ClearPendingMeleeAttackStart();
             objectManager.NotePendingMeleeAttackStart(targetGuid);
 
@@ -274,6 +305,7 @@ namespace WoWSharpClient.Tests.Handlers
 
             Assert.True(localPlayer.IsAutoAttacking);
             Assert.False(objectManager.HasPendingMeleeAttackStart(targetGuid));
+            Assert.True(objectManager.HasConfirmedMeleeAttackStart(targetGuid));
         }
 
         // --- SMSG_INITIAL_SPELLS ---
@@ -371,6 +403,30 @@ namespace WoWSharpClient.Tests.Handlers
             {
                 SpellHandler.HandleCastFailed(Opcode.SMSG_CAST_FAILED, ms.ToArray(), ctx);
                 Assert.Equal("Cast failed for spell 18248: MOVING", errorMessage);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnErrorMessage -= handler;
+            }
+        }
+
+        [Fact]
+        public void HandleCastFailed_TryAgainReason_FiresNamedErrorMessage()
+        {
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write((uint)2366);
+            writer.Write((byte)0);
+            writer.Write((byte)0x7A);
+
+            string? errorMessage = null;
+            EventHandler<OnUiMessageArgs> handler = (_, args) => errorMessage = args.Message;
+            WoWSharpEventEmitter.Instance.OnErrorMessage += handler;
+
+            try
+            {
+                SpellHandler.HandleCastFailed(Opcode.SMSG_CAST_FAILED, ms.ToArray(), ctx);
+                Assert.Equal("Cast failed for spell 2366: TRY_AGAIN", errorMessage);
             }
             finally
             {

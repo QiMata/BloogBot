@@ -206,6 +206,8 @@ public static class ReplayEngine
             // =================================================================
             bool currentOnTransport = currentFrame.TransportGuid != 0;
             bool nextOnTransport = nextFrame.TransportGuid != 0;
+            bool switchedTransport = currentOnTransport && nextOnTransport &&
+                currentFrame.TransportGuid != nextFrame.TransportGuid;
 
             // BOARD transition: world coords → transport-local coords
             if (!currentOnTransport && nextOnTransport)
@@ -233,6 +235,29 @@ public static class ReplayEngine
                 fallStartFrameIndex = -1;
                 prevOutput = CreateResetOutput();
                 prevGroundZ = nextFrame.Position.Z;
+                result.AddSkippedTransportTransition(i);
+                continue;
+            }
+
+            // SWITCH transition: transport-local coords on one moving base to
+            // transport-local coords on a different GUID. Carrying the previous
+            // support/local state across that swap creates a false steady-state
+            // transport frame in compact packet-backed elevator replays.
+            if (switchedTransport)
+            {
+                fallStartFrameIndex = -1;
+                prevOutput = CreateResetOutput();
+                var nextTransport = FindTransportGO(nextFrame, nextFrame.TransportGuid)
+                    ?? FindTransportGO(currentFrame, nextFrame.TransportGuid);
+                if (nextTransport != null)
+                {
+                    var (wx, wy, wz) = TransportLocalToWorld(nextFrame, nextTransport);
+                    prevGroundZ = wz;
+                }
+                else
+                {
+                    prevGroundZ = nextFrame.Position.Z;
+                }
                 result.AddSkippedTransportTransition(i);
                 continue;
             }
@@ -532,6 +557,11 @@ public static class ReplayEngine
                     RecordedSpeed = currentFrame.CurrentSpeed,
                     EngineGroundZ = output.GroundZ,
                     EngineVx = output.Vx, EngineVy = output.Vy, EngineVz = output.Vz,
+                    EngineStandingOnInstanceId = output.StandingOnInstanceId,
+                    EngineStandingOnLocalX = output.StandingOnLocalX,
+                    EngineStandingOnLocalY = output.StandingOnLocalY,
+                    EngineStandingOnLocalZ = output.StandingOnLocalZ,
+                    EngineGroundedWallState = output.GroundedWallState,
                     InputVx = input.Vx, InputVy = input.Vy, InputVz = input.Vz,
                     IsSwimming = isSwimming,
                     IsAirborne = isAirborne,

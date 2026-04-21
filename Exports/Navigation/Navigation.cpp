@@ -67,6 +67,8 @@ XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool smoo
 	if (length)
 		*length = 0;
 
+	m_lastOverlayRepairedSegment = {};
+
 	MMAP::MMapManager* manager = MMAP::MMapFactory::createOrGetMMapManager();
 
 	InitializeMapsForContinent(manager, mapId);
@@ -77,6 +79,10 @@ XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool smoo
 	// false => straight corner path
 	pathFinder.setUseStrightPath(!smoothPath);
 	pathFinder.calculate(start.X, start.Y, start.Z, end.X, end.Y, end.Z);
+	m_lastOverlayRepairedSegment.segmentIndex = pathFinder.getOverlayBlockedSegmentIndex();
+	m_lastOverlayRepairedSegment.blockingInstanceId = pathFinder.getOverlayBlockingInstanceId();
+	m_lastOverlayRepairedSegment.blockingGuid = pathFinder.getOverlayBlockingGuid();
+	m_lastOverlayRepairedSegment.blockingDisplayId = pathFinder.getOverlayBlockingDisplayId();
 
 	PointsArray pointPath = pathFinder.getPath();
 	if (pointPath.empty())

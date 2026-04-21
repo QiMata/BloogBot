@@ -117,4 +117,85 @@ public class GatheringRouteSelectionTests
         Assert.Equal(52.5f, candidates[0].distance2D);
         Assert.Equal(70.6f, candidates[1].distance2D);
     }
+
+    [Fact]
+    public void PrioritizeSpawnedPools_MovesSpawnedPoolsAheadOfNearInactiveCandidates()
+    {
+        var candidates = new (int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)[]
+        {
+            (1, -453f, -4824f, 38f, 52.5f, 1020u, "Peacebloom in Durotar"),
+            (1, -514f, -4869f, 36f, 70.6f, 1022u, "Silverleaf in Durotar"),
+            (1, -460f, -4712f, 37f, 96.5f, 1021u, "Earthroot in Durotar"),
+            (1, -600f, -4900f, 37f, 120.0f, null, null)
+        };
+
+        var prioritized = GatheringRouteSelection.PrioritizeSpawnedPools(candidates, [1021u]);
+
+        Assert.Equal(1021u, prioritized[0].poolEntry);
+        Assert.Equal(1020u, prioritized[1].poolEntry);
+        Assert.Equal(1022u, prioritized[2].poolEntry);
+        Assert.Null(prioritized[3].poolEntry);
+    }
+
+    [Fact]
+    public void PrioritizeSpawnedPools_PreservesDistanceOrderWhenNoPoolsSpawned()
+    {
+        var candidates = new (int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)[]
+        {
+            (1, -453f, -4824f, 38f, 52.5f, 1020u, "Peacebloom in Durotar"),
+            (1, -514f, -4869f, 36f, 70.6f, 1022u, "Silverleaf in Durotar")
+        };
+
+        var prioritized = GatheringRouteSelection.PrioritizeSpawnedPools(candidates, []);
+
+        Assert.True(prioritized.SequenceEqual(candidates));
+    }
+
+    [Fact]
+    public void SelectActivePoolSpawnCandidates_ParsesSpawnRowsAndFiltersToLocalMapRadius()
+    {
+        var candidates = GatheringRouteSelection.SelectActivePoolSpawnCandidates(
+        [
+            "12363 (Pool 1020) - |cffffffff|Hgameobject:12363|h[Peacebloom X:-237.703995 Y:-4733.990234 Z:30.960800 MapId:1]|h|r",
+            "43865 (Pool 1020) - |cffffffff|Hgameobject:43865|h[Peacebloom X:-125.189003 Y:-4933.250000 Z:19.890400 MapId:1]|h|r",
+            "10000 (Pool 1020) - |cffffffff|Hgameobject:10000|h[Peacebloom X:500.000000 Y:-4800.000000 Z:20.000000 MapId:1]|h|r",
+            "99999 (Pool 1020) - |cffffffff|Hgameobject:99999|h[Peacebloom X:-490.000000 Y:-4800.000000 Z:20.000000 MapId:0]|h|r"
+        ],
+            GatheringRouteSelection.DurotarHerbRouteStartX,
+            GatheringRouteSelection.DurotarHerbRouteStartY,
+            maxDistance: 600f);
+
+        Assert.Equal(2, candidates.Count);
+        Assert.True(candidates.SequenceEqual(candidates.OrderBy(candidate => candidate.distance2D)));
+        Assert.All(candidates, candidate =>
+        {
+            Assert.Equal(GatheringRouteSelection.DurotarMap, candidate.map);
+            Assert.Equal(1020u, candidate.poolEntry);
+            Assert.Equal("active pool spawn 1020", candidate.poolDescription);
+        });
+        Assert.Equal(-237.703995f, candidates[0].x, 3);
+        Assert.Equal(-125.189003f, candidates[1].x, 3);
+    }
+
+    [Fact]
+    public void SelectActivePoolSpawnCandidates_DeduplicatesAndHonorsCap()
+    {
+        var responses = new[]
+        {
+            "111 (Pool 1021) - |cffffffff|Hgameobject:111|h[Earthroot X:-460.0 Y:-4712.0 Z:37.0 MapId:1]|h|r",
+            "111 (Pool 1021) - |cffffffff|Hgameobject:111|h[Earthroot X:-460.02 Y:-4712.01 Z:37.0 MapId:1]|h|r",
+            "222 (Pool 1022) - |cffffffff|Hgameobject:222|h[Silverleaf X:-514.0 Y:-4869.0 Z:36.0 MapId:1]|h|r"
+        };
+
+        var candidates = GatheringRouteSelection.SelectActivePoolSpawnCandidates(
+            responses,
+            GatheringRouteSelection.DurotarHerbRouteStartX,
+            GatheringRouteSelection.DurotarHerbRouteStartY,
+            maxDistance: 600f,
+            maxCandidates: 1);
+
+        Assert.Single(candidates);
+        Assert.Equal(1022u, candidates[0].poolEntry);
+        Assert.Equal(-514.0f, candidates[0].x, 3);
+    }
 }

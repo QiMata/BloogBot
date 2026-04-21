@@ -259,6 +259,176 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - A fresh `dumpbin /disasm` spot-check over `CMovement::CollisionStep` (`0x633D1C..0x633DEB`) reconfirmed that vanilla runs a second swept AABB on the half-step branch; our code was still using a static `TestTerrainAABB` overlap there.
 - Behavioral change shipped:
 
+## 2026-04-12 Compact Undercity Transport-GUID Swap Addendum
+
+- Scope note:
+  - This pass stayed on the remaining compact packet-backed Undercity elevator parity gap on Docker scene data.
+  - The first blocker turned out to be harness accuracy, not native behavior: `NavigationInterop.cs` was still loading the stale `Bot\Release\net8.0\x64\Navigation.dll` before the freshly built root `Navigation.dll`.
+- Non-behavioral diagnostics added:
+  - `PacketBackedUndercityElevatorSupportTests.cs`
+    - widened the compact replay-state log to cover frames `6..20`
+    - added a frame-20 raw transport trace showing the remaining worst replay step happened on a nonzero-to-nonzero `TransportGuid` change while both transport objects were still nearby
+  - Those diagnostics proved:
+    - corrected runtime/native state keeps `groundedWallState=1` and a dynamic support token through compact frames `10..19`
+    - replay frame `20` was the remaining worst step because it carried moving-base state across a transport GUID swap, not because frame `19` still missed the upper deck
+- Behavioral change shipped:
+  - `Tests/Navigation.Physics.Tests/Helpers/ReplayEngine.cs`
+    - replay now treats any nonzero-to-nonzero `TransportGuid` change as a transport transition reset instead of a steady-state on-transport frame
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1`
+    - succeeded
+  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false`
+    - succeeded
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal"`
+    - passed (`3/3`)
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"`
+    - passed (`8/8`)
+- Do Not Repeat:
+  - Do not calibrate deterministic transport parity against the stale `Bot\Release\net8.0\x64\Navigation.dll` load path; fix the managed resolver or verify the loaded binary first.
+  - Do not carry replay moving-base state across nonzero-to-nonzero `TransportGuid` swaps as if the rider stayed on the same object.
+
+## 2026-04-10 Compact Undercity Transport Support Addendum
+
+- Scope note:
+  - This pass targeted the remaining packet-backed compact Undercity elevator parity gap on Docker scene data.
+  - The first question was whether the failing upper-arrival frame was dropping an already-latched moving-base token or whether the token was never being latched at all.
+- Non-behavioral diagnostics added:
+  - `ReplayEngine.cs` / `CalibrationResult.cs` now record `StandingOnInstanceId`, standing local point, and grounded-wall state into each `FrameDetail`.
+  - `PacketBackedUndercityElevatorSupportTests.cs` logs the compact on-transport window and asserts that the upper-arrival frame keeps a dynamic support token.
+- Validation:
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_ReplayPreservesDynamicSupportThroughUpperArrival" --logger "console;verbosity=normal"`
+    - failed; frames `10..19` all reported `support=0`, and frame `19` still landed at `simZ=39.786` vs `recZ=42.626`
+- Failed behavioral tweak (reverted immediately):
+  - Tried promoting only the active transport instance through the stateful `CheckWalkable(...)` path inside final support selection, even when the generic grounded-wall state bit was clear.
+  - Result: no change to the compact packet-backed replay; the support token remained `0` for the entire ride and the upper-arrival frame still failed.
+- Do Not Repeat:
+  - Do not retry “active transport contact => implicit stateful `CheckWalkable`” as a standalone fix for the compact Undercity replay.
+  - The compact recording never latches a dynamic support token in the first place, so the remaining bug is upstream of that promotion gate.
+
+## 2026-04-10 Compact Undercity Support-Contact Trace Addendum
+
+- Scope note:
+  - This follow-up stayed non-behavioral except for one narrow failed hypothesis, and focused on the exact frame that still fails in the compact packet-backed replay.
+- Non-behavioral diagnostics added:
+  - `PacketBackedUndercityElevatorSupportTests.cs` now records the compact replay’s upper-arrival support state and proves two contact-set facts on the failing `19 -> 20` transport pair:
+    - the final support query already contains a dynamic elevator contact near `z=42.339`
+    - that contact stays non-walkable with `groundedWallFlagBefore=false` but becomes walkable with `groundedWallFlagBefore=true`
+- Validation:
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests" --logger "console;verbosity=minimal"`
+    - `passed (2/2)`
+  - diagnostic output on the failing arrival frame:
+    - merged support: `inst=0x80000001 point=(1553.8356,242.4259,42.6260)`
+    - final support: `inst=0x80000001 point=(1551.8728,242.4102,42.3390)`
+    - `CheckWalkable` on final support:
+      - state `false` -> `walk=False`
+      - state `true` -> `walk=True`
+- Failed behavioral tweak (reverted immediately):
+  - Tried skipping the initial grounded `GetGroundZ` pre-snap whenever `transportGuid != 0`.
+  - Result: no change to the compact packet-backed replay; frame `19` still landed at `simZ=39.786` vs `recZ=42.626`, and the long Undercity V2 replay remained green.
+- Do Not Repeat:
+  - Do not retry “skip the initial transport pre-snap” as a standalone fix.
+  - The remaining compact transport bug is now narrowed to the actual selected-support transaction in `CollisionStepWoW`: the correct transport face is present and statefully walkable, but the runtime still commits static support / no support token on the failing frame.
+
+## 2026-04-10 Compact Undercity Active-Transport Instance Addendum
+
+- Scope note:
+  - This follow-up stayed focused on the same compact packet-backed Undercity elevator replay on Docker scene data.
+  - The main question was whether the missing upper-arrival support face belonged to the active transport instance at all, or whether the runtime was still chasing the wrong dynamic object.
+- Non-behavioral diagnostics added:
+  - `PacketBackedUndercityElevatorSupportTests.cs`
+    - added `PacketBackedUndercityElevatorUp_Frame19_LogsTransportRegistrationOrderAgainstSupportContacts`, which logs the frame-19 dynamic registration order alongside the merged/final support-contact instance IDs.
+- Validation:
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_LogsTransportRegistrationOrderAgainstSupportContacts" --logger "console;verbosity=detailed"`
+    - `passed (1/1)`
+    - fresh-process frame-19 output:
+      - `transportIndex=0`
+      - `freshProcessTransportInst~0x80000001`
+      - `mergedInst=0x80000001`
+      - `finalInst=0x80000001`
+- Failed behavioral tweak (no effect; reverted from practical outcome):
+  - Tried skipping the generic grounded post-`CollisionStepWoW` Z safety-net refinement whenever `transportGuid != 0`, under the hypothesis that transport-local `input.z` was overwriting a correct world-space transport result later in `StepV2`.
+  - Validation slice:
+    - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal"`
+    - compact packet-backed pair still failed unchanged at frame `19` (`simZ=39.786`, `recZ=42.626`, `support=0`, `gw=0`)
+    - long V2 replay still passed
+- Practical implication:
+  - The missing elevator support face is definitively on the active transport runtime instance itself.
+  - The blocker is therefore not “wrong dynamic object,” not the generic grounded post-refine safety net, and not scene-data mismatch. The next target is the actual support commit inside `CollisionStepWoW` on the compact transport frames.
+- Do Not Repeat:
+  - Do not spend another calibration pass on “active transport vs support face instance mismatch” for the compact Undercity replay.
+  - Do not retry “skip the generic grounded post-`CollisionStepWoW` safety-net refinement on transport frames” as a standalone fix; it produced no measurable change.
+
+## 2026-04-09 Transport Scene-Data Parity Addendum
+
+- Scope note:
+  - This pass kept the transport replay loop pinned to the Docker-backed `SceneDataService` data root (`D:\MaNGOS\data`) instead of the repo-local fallback data.
+  - The live FG/BG grounded movement parity routes were green again on that shared data root, but the compact packet-backed Undercity elevator replay regressed badly on board/disembark frames.
+- Behavioral change attempted:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - skipped the grounded `GetGroundZ(...)` pre-snap inside `CollisionStepWoW(...)` when `input.transportGuid != 0`, under the hypothesis that the transport-local -> world transform was being immediately dragged down onto nearby static shaft/deck geometry.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - succeeded
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=detailed" | Tee-Object logs/transport-parity-20260409-run1.txt`
+    - `UndercityElevatorReplay_TransportAverageStaysWithinParityTarget`: still passed on the long V2 replay (`transport avg=0.0509y`, `p99=0.3057y`, `max=0.3619y`)
+    - `PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck`: still failed at frame `19` (`simZ=39.786`, `recZ=42.626`, error `2.8402y`)
+    - `PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock`: still failed at frame `19` with the same `2.8402y` drift
+- Frame-pattern note:
+  - A one-off transport diagnostic runner over the same compact recording showed no output improvement from the pre-snap bypass.
+  - The native step still never emitted a moving-base support token on the compact packet-backed replay (`standingOnInstanceId=0` on every transport frame), even when the output Z matched the elevator deck.
+  - Practical implication: the current transport gap is not the initial world-space pre-snap. It is the later support-contact promotion/continuity path for the active transport under Docker-backed scene data.
+- Do Not Repeat:
+  - Do not retry the `input.transportGuid != 0` pre-snap bypass as-is; it produced no measurable change on the failing packet-backed elevator slice.
+
+## 2026-04-09 Transport Scene-Data Parity Addendum (Run 2)
+
+- Scope note:
+  - This follow-up stayed on the same compact packet-backed Undercity elevator replay and the same Docker-backed data root.
+  - The goal was to prove or disprove that the active transport contact could be promoted to the chosen support surface without depending on the older repo-local scene data.
+- Behavioral change attempted:
+  - `Exports/Navigation/DynamicObjectRegistry.*`
+    - added `TryGetRuntimeInstanceId(...)` so `PhysicsEngine` can resolve the currently active transport's runtime collision instance from the packet/recording GUID.
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - `CollisionStepWoW(...)` now computes an `activeTransportSupportZ` from the transport-local input plus the active transport's world Z, and tries to prioritize matching active-transport AABB contacts during support selection.
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
+    - succeeded
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal" | Tee-Object logs/transport-parity-20260409-run2.txt`
+    - `UndercityElevatorReplay_TransportAverageStaysWithinParityTarget`: still passed (`transport avg=0.0509y`, `p99=0.3057y`, `max=0.3619y`)
+    - both compact packet-backed Undercity tests still failed with unchanged metrics (`frame 19 simZ=39.786 vs recZ=42.626`, `transport avg=0.9846y`, `p99=3.2728y`, `max=3.2728y`)
+- Frame-pattern note:
+  - A direct contact dump against the compact replay's merged frame query confirmed the active transport contact is present under the Docker data:
+    - board frames show dynamic instance `2147483651` contacts at `z=-41.247` while the static lower floor remains the only raw walkable support at `z=-43.07`
+    - the failing upper-deck frame shows the same dynamic instance at `z=42.626` / `42.339` with downward normals and `walkable=0`, while the static upper deck at `z=39.945` is the only raw walkable support
+  - Practical implication: the missing parity piece is no longer “does the transport contact exist?” or “can we resolve the active transport instance?” Both are true. The remaining gap is the exact native state path that promotes the active transport's raw non-walkable support face into the chosen ground candidate on the compact packet-backed replay.
+- Do Not Repeat:
+  - Do not assume active-transport GUID resolution alone is enough. The current build can resolve the correct runtime instance and still chooses the static walkable deck/floor under Docker-backed scene data.
+
+## 2026-04-09 Transport Scene-Data Parity Addendum (Harness + Bundle Validation)
+
+- Scope note:
+  - This pass did not ship a new `PhysicsEngine` behavioral tweak.
+  - It hardened the test harness so parity tests now prefer the same host data root Docker mounts into `scene-data-service` (`${WWOW_VMANGOS_DATA_DIR:-D:\MaNGOS\data}`), then reran grouped movement parity bundles against that root.
+- Non-behavioral change shipped:
+  - `Tests/Tests.Infrastructure/SceneDataParityPaths.cs`
+    - added a shared resolver that prefers the Docker host data root first and only falls back to repo-local outputs when the Docker parity root is unavailable.
+  - `Tests/Tests.Infrastructure/BotServiceFixture.cs`
+    - now uses the shared resolver before launching `WoWStateManager`, so BG workers inherit the same host data root Docker serves.
+  - `Tests/Navigation.Physics.Tests/PhysicsTestFixtures.cs`
+    - now uses the same shared resolver, eliminating the old “stop if `WWOW_DATA_DIR` was already set” path that could leave deterministic parity tests on repo-local data even while Docker data existed.
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`, `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`, `Tests/Navigation.Physics.Tests/FrameByFramePhysicsTests.cs`, `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
+    - tagged the key live/replay jump, knockback, and transport tests with `Category=MovementParity` so parity slices can be rerun as a bundle on the Docker root.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneDataParityPathsTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
+    - `passed (5/5)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=movement_parity_category_20260409.trx"`
+    - `passed (12/12)`; live FG/BG grounded movement parity stayed green on the Docker root
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "Category=MovementParity" --logger "console;verbosity=minimal"`
+    - `failed (6/8)`; jump + knockback stayed green, and `UndercityElevatorReplay_TransportAverageStaysWithinParityTarget` stayed green, while the two compact packet-backed Undercity elevator tests remained red with the same frame-`19` upper-deck miss (`simZ=39.786`, `recZ=42.626`, `err=2.8402y`)
+- Practical implication:
+  - The transport blocker is now confirmed under the same scene data Docker serves in both deterministic and live validation paths.
+  - The remaining gap is not a stale local data-root mismatch; it is still the compact packet-backed transport support-selection/state path.
+
 ## 2026-03-28 Transport Orientation No-Op Follow-Up
 
 - Scope note:
@@ -2295,3 +2465,299 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
 - Practical implication:
   - Closing the final split `0x635600` seams did not change the current replay-calibration baseline.
   - The next actual parity/tuning pass should therefore target the still-open live replay/transport behavior in `PhysicsEngine.cpp`, not revisit `GroundedDriverParity.cpp`.
+
+## 2026-04-12 Compact Undercity Transport Support Addendum
+
+- Scope note:
+  - This pass targeted the remaining compact packet-backed Undercity elevator replay on Docker scene data.
+  - The immediate question was whether the lower transport window was still missing the active elevator support contact, or whether the blocker had already moved later into the grounded wall/support-commit transaction.
+- Diagnostic/test delta shipped:
+  - `Tests/Navigation.Physics.Tests/PacketBackedUndercityElevatorSupportTests.cs`
+    - corrected the lower-frame diagnostic so it registers the recording's dynamic objects before querying support contacts
+    - renamed/expanded it to `PacketBackedUndercityElevatorUp_LowerTransportFrame_FinalSupportQueryIncludesDynamicTransportContact`
+    - added lower-frame `CheckWalkable(...)` and grounded-wall trace logging alongside the existing upper-arrival diagnostics
+- Behavioral change attempt:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - briefly allowed the active transport's own support contacts to participate in the stateful `CollisionStepWoW` walkability gate even when `groundedWallState` was still false
+  - `Exports/Navigation/DynamicObjectRegistry.h/.cpp`
+    - briefly added a `TryGetRuntimeInstanceId(...)` helper to resolve the active transport runtime instance inside `CollisionStepWoW`
+  - Outcome:
+    - the compact replay metrics and support-token output were unchanged
+    - the native tweak was reverted immediately after validation
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1`
+    - succeeded before and after reverting the no-op native tweak
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_LowerTransportFrame_FinalSupportQueryIncludesDynamicTransportContact" --logger "console;verbosity=detailed"`
+    - passed
+    - lower frame `10` logged:
+      - `finalSupport inst=0x80000001`
+      - `walk0=false`
+      - `walk1=true`
+      - `support=0`
+      - `gw0 branch=1 selectedInst=0x80000001`
+      - `gw1 branch=1 selectedInst=0x80000001`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_LowerTransportFrame_FinalSupportQueryIncludesDynamicTransportContact|FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_ReplayLogsUpperArrivalSupportState|FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_GroundedWallTraceShowsSupportPromotionGap|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal"`
+    - passed (`4/6`)
+    - long V2 elevator replay still passed
+    - compact packet-backed pair still failed unchanged:
+      - frame `19`: `simZ=39.786`, `recZ=42.626`, `support=0`, `gw=0`
+      - worst steady-state frame `9`: `sim=(1549.136,242.233,-43.064)`, `rec=(1551.858,242.262,-41.248)`, `err=3.2728y`
+- Frame-pattern note:
+  - The lower transport frame already has the active elevator support face in the final support query, and that face becomes walkable on the same stateful helper path that the upper-arrival diagnostics already proved.
+  - Even so, the real replay keeps `supportInstanceId=0`, `groundedWallState=0`, and zero XY displacement through the compact transport window.
+  - That means the blocker is later than raw contact availability and later than the first support-eligibility gate inside `CollisionStepWoW`.
+- Do Not Repeat:
+  - Do not retry the "active transport support is stateful-walkable during ground selection" gate in `CollisionStepWoW` as a standalone fix; it produced no metric change on the compact replay.
+  - Do not reuse lower-frame contact logs collected before explicit dynamic-object registration; those earlier results came from an empty dynamic registry and were invalid.
+- Recommended next single hypothesis:
+  - Instrument the post-grounded-wall zero-displacement / support-commit transaction inside `CollisionStepWoW` next, specifically where the selected contact, projected move, `bestGroundZ`, and `supportInstanceId` diverge on compact transport frames despite the active transport face already being present and stateful-walkable.
+
+## 2026-04-12 Compact Undercity Same-Transport Wall Addendum
+
+- Scope note:
+  - This pass stayed on the compact packet-backed Undercity elevator replay.
+  - The question was whether the compact stall came from replay harness transport-object timing or from a same-transport wall contact being selected instead of the support face.
+- Diagnostic/test delta shipped:
+  - `Tests/Navigation.Physics.Tests/PacketBackedUndercityElevatorSupportTests.cs`
+    - added `PacketBackedUndercityElevatorUp_LowerTransportFrame_CurrentVsNextTransportRegistrationComparison`
+    - widened the lower grounded-wall trace logging with selected point, selected normal, threshold-gate outputs, and blocked fraction
+- Behavioral change attempt:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - briefly filtered same-transport horizontal side-wall contacts that sat below the rider when a same-instance support face already existed in the compact wall-query window
+  - `Exports/Navigation/DynamicObjectRegistry.h/.cpp`
+    - briefly re-added `TryGetRuntimeInstanceId(...)` to resolve the active transport runtime instance for that filter
+  - Outcome:
+    - compact replay metrics were unchanged
+    - the native tweak was reverted immediately after validation
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1`
+    - succeeded before and after reverting the no-op native tweak
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_LowerTransportFrame_CurrentVsNextTransportRegistrationComparison" --logger "console;verbosity=detailed"`
+    - passed
+    - lower frame `10` logged identical outputs for `currentDyn` and `nextDyn`:
+      - `out=(1551.8584, 242.2622, -41.2474)`
+      - `support=0x00000000`
+      - `gw=0`
+      - `wall=True`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_LowerTransportFrame_FinalSupportQueryIncludesDynamicTransportContact" --logger "console;verbosity=detailed"`
+    - lower frame `10` widened trace logged:
+      - `finalSupport inst=0x80000001`
+      - `walk0=false`
+      - `walk1=true`
+      - `gw0 selectedPoint=(1553.8317, 242.2779, -41.4388)`
+      - `gw0 selectedNormal=(1.0000, -0.0000, 0.0000)`
+      - `gw0 finalMove=(0.0000, 0.0000, 0.0000)`
+      - `gw1 selectedPoint=(1553.8317, 242.2779, -41.4388)`
+      - `gw1 selectedNormal=(1.0000, -0.0000, 0.0000)`
+      - `gw1 finalMove=(0.0000, 0.0000, 0.0000)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_LowerTransportFrame_FinalSupportQueryIncludesDynamicTransportContact|FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_LowerTransportFrame_CurrentVsNextTransportRegistrationComparison|FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_GroundedWallTraceShowsSupportPromotionGap|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal"`
+    - passed (`4/6`)
+    - long V2 replay still passed
+    - compact packet-backed pair still failed unchanged:
+      - frame `19`: `simZ=39.786`, `recZ=42.626`, `support=0`, `gw=0`
+      - worst steady-state frame `9`: `err=3.2728y`
+- Frame-pattern note:
+  - The compact grounded-wall selector is choosing a same-instance elevator side wall, not the elevator support face, on the lower transport frame.
+  - Replay harness transport-object timing is not causing that choice; current-frame and next-frame dynamic-object registration produce the same result.
+  - The no-op side-wall filter indicates the remaining parity gap is deeper than a simple same-instance contact suppression heuristic.
+- Do Not Repeat:
+  - Do not retry the current-vs-next transport-object registration hypothesis for compact grounded transport frames; it produced identical lower-frame output.
+  - Do not retry the "suppress same-transport lower side walls when a same-instance support face exists" filter in `CollisionStepWoW` as a standalone fix; it produced no metric change on the compact replay.
+- Recommended next single hypothesis:
+  - Target the still-unwired WoW.exe transport-local selector-record rewrite path (`0x63214C..0x632270`) or add a diagnostic seam that traces whether the runtime selected-contact pipeline is still operating on world-space same-transport wall records instead of the binary's transport-local rewrite before `0x631E70` selection/commit.
+
+## 2026-04-12 Compact Undercity Post-Pull State-Carry Addendum
+
+- Scope note:
+  - This pass revalidated the compact packet-backed Undercity elevator replay after pulling `origin/main`, then tried one more narrow runtime carry-bit tweak.
+  - The post-pull contact mix changed on the lower transport frame even though the replay failure metrics did not.
+- Diagnostic baseline corrections:
+  - Lower compact frame `10` now logs a static parent-WMO support contact in the final query window:
+    - `finalSupport inst=0x00003B34`
+    - `point=(1551.8584, 242.2622, -41.3606)`
+    - selected blocker is also static `0x00003B34` at `selectedPoint=(1553.8317, 242.2779, -42.7888)`
+  - Upper compact frame `19` still logs the dynamic elevator deck contact in the final query window:
+    - `finalSupport inst=0x80000001`
+    - `point=(1551.8728, 242.4102, 42.3390)`
+    - `walk state=false => false`
+    - `walk state=true => true`
+- Behavioral change attempt:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - briefly carried `groundedWallState` across the transport horizontal branch when the grounded-wall trace appeared statefully walkable
+  - Outcome:
+    - compact replay metrics were unchanged
+    - the native tweak was reverted immediately after validation
+- Validation:
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_LowerTransportFrame_FinalSupportQueryIncludesDynamicTransportContact" --logger "console;verbosity=detailed"`
+    - passed
+    - lower frame `10` logged `finalSupport inst=0x00003B34`, `walk0=false`, `walk1=true`, `support=0`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_FinalSupportQueryIncludesStatefulTransportDeckContact" --logger "console;verbosity=detailed"`
+    - passed
+    - upper frame `19` logged `finalSupport inst=0x80000001`, `walk state=false => false`, `walk state=true => true`
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1`
+    - succeeded before and after reverting the no-op native tweak
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_GroundedWallTraceShowsSupportPromotionGap|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal"`
+    - passed (`2/4`)
+    - long V2 replay still passed
+    - compact packet-backed pair still failed unchanged:
+      - frame `19`: `simZ=39.786`, `recZ=42.626`, `support=0`, `gw=0`
+      - worst steady-state frame `9`: `err=3.2728y`
+- Frame-pattern note:
+  - The no-op state-carry attempt failed for a concrete reason: `GroundedWallResolutionTrace.walkableWithState` is computed with the actual incoming `groundedWallState`, not a hypothetical `true` path.
+  - As a result, reading that trace field cannot bootstrap the carry bit from `false` on compact transport frames.
+  - The remaining parity gap is still in the runtime selected-contact/support-commit transaction, not in scene-data parity and not in replay harness object timing.
+- Do Not Repeat:
+  - Do not retry the transport horizontal-branch carry tweak by reusing `GroundedWallResolutionTrace.walkableWithState` as the bootstrap signal; it is wired to the actual incoming state and therefore cannot promote `groundedWallState` from `false`.
+- Recommended next single hypothesis:
+  - Evaluate the hypothetical stateful `CheckWalkable(..., true)` path directly inside the runtime selected-contact/support-commit transaction, or wire the binary’s transport-local selected-contact rewrite into that transaction before `bestGroundZ` / `supportInstanceId` are committed.
+
+## 2026-04-12 Compact Undercity Dynamic Support Bootstrap Addendum
+
+- Scope note:
+  - This pass stayed on the compact packet-backed Undercity elevator replay and tested one narrower interpretation of the frame-19 stateful deck-support signal.
+- Behavioral change attempt:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - briefly treated dynamic transport contacts as later support candidates when `CheckWalkable(..., true)` succeeded inside the support chooser
+  - Outcome:
+    - compact replay metrics were unchanged
+    - the native tweak was reverted immediately after validation
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1`
+    - succeeded before and after reverting the no-op native tweak
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_FinalSupportQueryIncludesStatefulTransportDeckContact|FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_GroundedWallTraceShowsSupportPromotionGap|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal"`
+    - passed (`3/5`)
+    - long V2 replay still passed
+    - compact packet-backed pair still failed unchanged:
+      - frame `19`: `simZ=39.786`, `recZ=42.626`, `support=0`, `gw=0`
+      - worst steady-state frame `9`: `err=3.2728y`
+- Frame-pattern note:
+  - The failed bootstrap condition is now explicit from the existing diagnostics:
+    - on frame `19`, `CheckWalkable(..., true)` for the dynamic deck support returns `walkable=true`, `walkableState=false`, `groundedWallFlagAfter=true`
+  - That means `walkableState` is not the right signal for this transport fix even though the helper still accepts the contact.
+- Do Not Repeat:
+  - Do not retry the dynamic transport-support bootstrap keyed off `CheckWalkableResult.walkableState`; this helper path can return `walkable=true` with `walkableState=false`, so gating on `walkableState` is a no-op here.
+- Recommended next single hypothesis:
+  - Re-test the same selected-contact/support-commit location, but key off `walkable` or `groundedWallFlagAfter` directly, or replace that handoff with the binary’s transport-local selected-contact rewrite before `bestGroundZ` / `supportInstanceId` commit.
+
+## 2026-04-12 Compact Undercity Dynamic Support Walkable Addendum
+
+- Scope note:
+  - This follow-up stayed on the same compact packet-backed Undercity elevator replay and tried one more narrow transport-support admission tweak in the later support chooser.
+- Behavioral change attempt:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - briefly treated downward-facing dynamic transport contacts as support candidates when a hypothetical `CheckWalkable(..., true)` returned `walkable=true` inside `isStatefulSupportWalkable(...)`
+  - Outcome:
+    - compact replay metrics were unchanged
+    - frame `19` still ended with `support=0`, `groundedWallState=0`, and `simZ=39.786`
+    - the native tweak was reverted immediately after validation
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1`
+    - succeeded before and after reverting the no-op native tweak
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_FinalSupportQueryIncludesStatefulTransportDeckContact|FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_GroundedWallTraceShowsSupportPromotionGap|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal"`
+    - passed (`3/5`)
+    - long V2 replay still passed
+    - compact packet-backed pair still failed unchanged:
+      - frame `19`: `simZ=39.786`, `recZ=42.626`, `support=0`, `gw=0`
+      - worst steady-state frame `9`: `err=3.2728y`
+- Frame-pattern note:
+  - Admitting the dynamic deck face into the later support chooser was still not enough to change the runtime outcome.
+  - That leaves the grounded-wall non-walkable gate and the selected-contact transaction as the remaining live runtime choke points for this replay.
+- Do Not Repeat:
+  - Do not retry the later `isStatefulSupportWalkable(...)` dynamic transport-support admission keyed off hypothetical `CheckWalkable(..., true).walkable` as a standalone fix; it produced no metric change on the compact replay.
+- Recommended next single hypothesis:
+  - Target `ResolveGroundedWallContacts(...)` directly so the non-walkable support-face scan can use the hypothetical stateful helper result for dynamic transport support faces, or wire the binary's transport-local selector-record rewrite into the grounded-wall selection path.
+
+## 2026-04-12 Compact Undercity Grounded-Wall Support Bootstrap Addendum
+
+- Scope note:
+  - This follow-up stayed on the same compact packet-backed Undercity elevator replay and moved the hypothetical stateful transport-support bootstrap one stage earlier into `ResolveGroundedWallContacts(...)`.
+- Behavioral change attempt:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - briefly let the non-walkable support-face scan treat a dynamic transport support face as accepted when hypothetical `CheckWalkable(..., true)` returned `walkable=true` and kept `groundedWallFlagAfter=true`
+  - Outcome:
+    - compact replay metrics were unchanged
+    - frame `19` still ended with `support=0`, `groundedWallState=0`, and `simZ=39.786`
+    - the native tweak was reverted immediately after validation
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1`
+    - succeeded after fixing and reverting the temporary test-export signature adjustment
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_FinalSupportQueryIncludesStatefulTransportDeckContact|FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_GroundedWallTraceShowsSupportPromotionGap|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal"`
+    - passed (`3/5`)
+    - long V2 replay still passed
+    - compact packet-backed pair still failed unchanged:
+      - frame `19`: `simZ=39.786`, `recZ=42.626`, `support=0`, `gw=0`
+      - worst steady-state frame `9`: `err=3.2728y`
+- Frame-pattern note:
+  - Moving the hypothetical stateful transport-support bootstrap into the non-walkable gate still did not affect the live runtime outcome.
+  - That leaves the selector path itself, not the later support gates, as the remaining live binary-aligned choke point.
+- Do Not Repeat:
+  - Do not retry the `ResolveGroundedWallContacts(...)` support-face bootstrap keyed off hypothetical `CheckWalkable(..., true)` as a standalone fix; it produced no metric change on the compact replay.
+- Recommended next single hypothesis:
+  - Apply the transport-local selected-contact rewrite directly in the grounded-wall selector path on active transport frames, then re-run the compact Undercity slice.
+
+## 2026-04-12 Compact Undercity Moving-Base Pre-Snap Addendum
+
+- Scope note:
+  - This pass stayed on the same compact packet-backed Undercity elevator replay and tested one narrower moving-base continuity hypothesis before the grounded sweep starts.
+- Behavioral change attempt:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - briefly replaced the grounded pre-sweep static `GetGroundZ(...)` snap with the active transport's persisted local support point whenever that moving-base point resolved on the current transport frame
+  - Outcome:
+    - compact replay metrics were unchanged
+    - frame `19` still ended with `support=0`, `groundedWallState=0`, and `simZ=39.786`
+    - the native tweak was reverted immediately after validation
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1`
+    - succeeded
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_FinalSupportQueryIncludesStatefulTransportDeckContact|FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_GroundedWallTraceShowsSupportPromotionGap|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal"`
+    - passed (`3/5`)
+    - long V2 replay still passed
+    - compact packet-backed pair still failed unchanged:
+      - frame `19`: `simZ=39.786`, `recZ=42.626`, `support=0`, `gw=0`
+      - worst steady-state frame `9`: `err=3.2728y`
+- Frame-pattern note:
+  - Pre-sweep moving-base continuity alone is not enough. The runtime is still reclassifying these compact transport frames onto static support later in the path.
+  - Baseline `PhysicsEngine.cpp` still only writes `standingOnInstanceId` / `standingOnLocal*` back out; aside from the reverted experiment, there is still no live runtime consumer of those bridged input fields.
+- Do Not Repeat:
+  - Do not retry the active-transport pre-sweep snap keyed off the persisted local support point as a standalone fix; it produced no metric change on the compact replay.
+- Recommended next single hypothesis:
+  - Wire the later selector/support-commit path to consume moving-base carry state, or apply the already-pinned `0x63214C..0x632270` transport-local selector-record rewrite in the grounded-wall selector path before support is committed.
+
+## 2026-04-12 Compact Undercity Forced Carry-Bit Addendum
+
+- Scope note:
+  - This pass stayed on the same compact packet-backed Undercity elevator replay and turned the grounded-wall carry bit itself into a deterministic end-to-end proof on the exact failing upper-deck step.
+- Test delta:
+  - `Tests/Navigation.Physics.Tests/PacketBackedUndercityElevatorSupportTests.cs`
+    - added `PacketBackedUndercityElevatorUp_Frame19_ForcedGroundedWallState_LogsFullRuntimeDelta`
+- Deterministic proof:
+  - On the exact frame-19 runtime step, forcing only `input.GroundedWallState = 1` changes the full native output from the static upper-door deck to the recorded upper elevator deck:
+    - baseline `pos=(1551.8728,242.4102,39.9447)`
+    - forced-state `pos=(1551.8728,242.4102,42.6260)`
+  - That means the missing carry bit is sufficient on the failing frame even though the live runtime still reaches it with `groundedWallState=0`.
+- Follow-up behavioral attempt:
+  - `Exports/Navigation/PhysicsEngine.cpp`
+    - briefly tried to seed `groundedWallState` from same-transport downward support faces in the merged query before grounded wall resolution
+  - Outcome:
+    - compact replay metrics were unchanged
+    - the native bootstrap was reverted immediately after validation
+- Validation:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal -m:1`
+    - succeeded before and after reverting the no-op native bootstrap
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_ForcedGroundedWallState_LogsFullRuntimeDelta" --logger "console;verbosity=normal"`
+    - passed (`1/1`)
+    - baseline `GroundMoveDiag`: `pos=(1551.8728,242.4102,39.9447) pre=(1551.8728,242.4102,42.6260)`
+    - forced-state `GroundMoveDiag`: `pos=(1551.8728,242.4102,42.6260) pre=(1551.8728,242.4102,42.6260)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_FinalSupportQueryIncludesStatefulTransportDeckContact|FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_GroundedWallTraceShowsSupportPromotionGap|FullyQualifiedName~PacketBackedUndercityElevatorSupportTests.PacketBackedUndercityElevatorUp_Frame19_ForcedGroundedWallState_LogsFullRuntimeDelta|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck|FullyQualifiedName~PhysicsReplayTests.PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock|FullyQualifiedName~ElevatorPhysicsParityTests.UndercityElevatorReplay_TransportAverageStaysWithinParityTarget" --logger "console;verbosity=normal"`
+    - passed (`4/6`)
+    - long V2 replay still passed
+    - compact packet-backed pair still failed unchanged:
+      - frame `19`: `simZ=39.786`, `recZ=42.626`, `support=0`, `gw=0`
+      - worst steady-state frame `9`: `err=3.2728y`
+- Frame-pattern note:
+  - The failing frame no longer needs another contact-availability theory. The runtime already has enough geometry; it just arrives at the step with the wrong carry state.
+  - The first live bootstrap attempt missing any metric change means the remaining gap is not “support face exists” but “how WoW.exe actually latches/persists that bit across the compact transport window.”
+- Do Not Repeat:
+  - Do not retry the same-transport downward-support bootstrap scan from this pass as a standalone fix; it did not latch the carry bit in the live replay.
+- Recommended next single hypothesis:
+  - Trace or force the producer chain that carries `groundedWallState` across the compact transport window before frame `19`, or wire the later selector/support-commit path so it commits the equivalent state that the forced diagnostic already proves is sufficient.

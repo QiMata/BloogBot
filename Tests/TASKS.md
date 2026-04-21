@@ -69,21 +69,20 @@ Master tracker: `MASTER-SUB-021`
 8. Combat distance unit slice: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~CombatDistanceTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff (Latest)
-- Last updated: 2026-03-12
-- Active task: `MASTER-SUB-022` is still the active child file, but its remaining fishing instability is now explicitly owned by the pathfinding/navigation stack.
-- Last delta: fishing docs and task trackers now mark the named Ratchet teleport path as meaningful and move the remaining intermittent failures back to `Services/PathfindingService` and `Exports/Navigation`.
+- Last updated: 2026-04-15
+- Active task: none. All TST-UMB items are complete, and child owners report either `0` remaining items or an explicit external blocker.
+- Last delta: refreshed umbrella handoff after DecisionEngine runtime tests landed in `Tests/PromptHandlingService.Tests`.
 - Pass result: `delta shipped`
 - Files changed:
-  - `Exports/BotRunner/Tasks/FishingTask.cs`
   - `Tests/TASKS.md`
-  - `Tests/BotRunner.Tests/TASKS.md`
-  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/`
+  - `Tests/PromptHandlingService.Tests/DecisionEngineRuntimeTests.cs`
+  - `Tests/PromptHandlingService.Tests/TASKS.md`
+  - `Tests/PromptHandlingService.Tests/TASKS_ARCHIVE.md`
   - `docs/TASKS.md`
-  - `Services/PathfindingService/TASKS.md`
-  - `Exports/Navigation/TASKS.md`
-  - `docs/BAD_TEST_BEHAVIORS.md`
-- Next command: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --logger "console;verbosity=minimal"`
+  - `docs/TASKS_ARCHIVE.md`
+- Validation:
+  - `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "Category!=Integration" --logger "console;verbosity=minimal"` -> `passed (31 passed, 161 skipped, 0 failed, 192 total)`
+- Next command: `rg -n "^- \[ \]" --glob TASKS.md`
 
 ## Session Handoff (2026-02-28 Archive)
 - Last updated: 2026-02-28

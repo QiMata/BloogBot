@@ -5,78 +5,112 @@ Each attempt is documented with: observation, hypothesis, fix attempted, and res
 
 ---
 
-## CRASH-001: FG Corpse Run — WoW.exe ACCESS_VIOLATION during ghost runback
+## CRASH-001: FG Corpse Run - historical WoW.exe ACCESS_VIOLATION during ghost runback
 
 **Test:** `DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsForegroundPlayer`
 **First observed:** 2026-03-15 (crash dump), reproduced 2026-03-16
-**Status:** BLOCKED — WoW client bug, not fixable from injected code
+**Status:** HISTORICAL - not reproduced in 2026-04-15 opt-in revalidation. The later opt-in corpse-run validation now passes; this file is crash-history context, not an active blocker.
 
-### Symptom
+### 2026-04-15 Follow-up Revalidation
 
-WoW.exe crashes 100% of the time during FG ghost form corpse retrieval runback:
-1. Teleport to Razor Hill (340, -4686, 19.5)
-2. Kill via `.die Testgrunt`
-3. Release corpse -> ghost state confirmed
-4. Graveyard settled at (233.5, -4793.7, 10.2), 152y from corpse
-5. RetrieveCorpse dispatched -> ghost starts walking toward corpse
-6. **WoW.exe crashes** after 20-30s of ghost movement (bot reaches ~117-128y from corpse)
+Command:
 
-BG test passes every time.
-
-### Crash Details (from 2026-03-15 Errors/ dump)
-
+```powershell
+$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_RETRY_FG_CRASH001='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsForegroundPlayer" --blame-hang --blame-hang-timeout 5m --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=fg_corpse_run_after_corpse_probe_policy.trx"
 ```
+
+Outcome:
+- Test passed.
+- WoW.exe did not crash.
+- The foreground ghost released, ran back, entered reclaim range, and restored strict-alive state.
+- Evidence lines in the TRX include graveyard start at 152y from corpse, recovery progress to best 34y, `Alive after 30s`, and `RetrieveCorpseTask pop reason=AliveAfterRetrieve`.
+
+Implication:
+- The old access violation remains historical.
+- The temporary 2026-04-15 runback/reclaim stall was path-following behavior, not crash behavior.
+- Crash triage should reopen only if a fresh WoW.exe access violation reproduces.
+
+### 2026-04-15 Revalidation
+
+Command:
+
+```powershell
+$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_RETRY_FG_CRASH001='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsForegroundPlayer" --blame-hang --blame-hang-timeout 5m --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=fg_corpse_run_crash001_revalidation.trx"
+```
+
+Outcome:
+- Test failed, but WoW.exe did not crash.
+- The ghost was released and `RetrieveCorpseTask` queued successfully.
+- Runback improved from the graveyard distance of about 152y to best 121y from the corpse.
+- The foreground client then stalled near `(237.1,-4749.0,13.0)` before reclaim range.
+- Captured task evidence showed `RetrieveCorpseTask` still active with `plan=81` and `resolution=waypoint`.
+
+Implication:
+- The old access violation notes below are useful historical context, but this file should no longer be treated as an active crash blocker.
+- The follow-up revalidation above supersedes this failed runback result with a passing opt-in foreground corpse-run proof.
+
+### Historical Symptom
+
+Earlier 2026-03 runs observed WoW.exe crashing during FG ghost form corpse retrieval runback:
+1. Teleport to Razor Hill `(340,-4686,19.5)`
+2. Kill via `.die Testgrunt`
+3. Release corpse, ghost state confirmed
+4. Graveyard settled at `(233.5,-4793.7,10.2)`, 152y from corpse
+5. `RetrieveCorpse` dispatched and ghost started walking toward corpse
+6. WoW.exe crashed after 20-30s of ghost movement, with the bot around 117-128y from corpse
+
+The BG test passed because the headless bot does not use WoW.exe.
+
+### Historical Crash Details
+
+From the 2026-03-15 `Errors/` dump:
+
+```text
 ERROR #132 (0x85100084) Fatal Exception
 Exception: 0xC0000005 (ACCESS_VIOLATION) at 0023:00619CDF
 The instruction at "0x00619CDF" referenced memory at "0x00000000".
 The memory could not be "written".
 EDX=00000000 (NULL write target)
 
-Stack trace (WoW's main game loop):
+Stack trace:
 00619CDF -> 0061787B -> 0060DC82 -> 00514E73 -> 00514791 -> 005151A5 -> 00513E46
 -> 006F9231 -> 006F65EF -> 006F425B -> 006F699B -> 006F423C -> 00704D27
 -> 004B7B11 -> 00483BC0 -> 00765F99 -> 004246B0 -> 00423D46 -> 00423A60
 -> 00423971 -> 00420D28 -> 00420BF1 -> 0040411E
 ```
 
-The crash is on WoW's **main thread** in its normal frame update path:
-- 0x00420BF1 = WinMain message loop
-- 0x004246B0 = game frame processing
-- 0x00765F99 = world/rendering update
-- 0x00483BC0 = object processing
-- 0x00619CDF = crash — writing NULL in movement/update code
+The historical crash was on WoW's main thread in its normal frame update path:
+- `0x00420BF1`: WinMain message loop
+- `0x004246B0`: game frame processing
+- `0x00765F99`: world/rendering update
+- `0x00483BC0`: object processing
+- `0x00619CDF`: NULL write in movement/update code
 
-### Attempts
+### Historical Attempts
 
 | # | Hypothesis | Change | Result |
 |---|-----------|--------|--------|
-| 1 | First run | Baseline | CRASH — bestDist=126y (26y progress) |
-| 2 | Reproducibility check | None | CRASH — bestDist=127y (25y progress), consistent |
-| 3 | Thread safety: movement calls race with WoW's game loop | Route SetFacing+SendMovementUpdate+SetControlBit through `RunOnMainThread()` atomically | CRASH — bestDist=120y (32y progress). Thread safety not the issue |
-| 4 | Native movement functions crash ghost form | Replace SetFacing/SetControlBit with pure Lua: `MoveForwardStart()` via `RunOnMainThread()` | CRASH — bestDist=152y (0y progress). Crashed even FASTER, no movement at all |
-| 5 | `SendMovementUpdate(MSG_MOVE_SET_FACING)` corrupts ghost movement state | Skip `SendMovementUpdate` — only write facing to memory + SetControlBit | CRASH — bestDist=152y (0y progress) |
-| 6 | Native `ReleaseCorpse()` (0x005E0AE0) corrupts internal state | Replace with Lua `RepopMe()` | CRASH — bestDist=119y (33y progress). Same pattern, ruling out ReleaseCorpse |
-| 7 | `EnumerateVisibleObjects` via WM_USER during ghost form corrupts WoW state | Skip EnumerateVisibleObjects entirely when player has ghost flag | CRASH — bestDist=117y (35y progress). Not enumeration-related |
+| 1 | First run | Baseline | Crash, bestDist=126y |
+| 2 | Reproducibility check | None | Crash, bestDist=127y |
+| 3 | Movement calls race with WoW's game loop | Route SetFacing, SendMovementUpdate, and SetControlBit through `RunOnMainThread()` atomically | Crash, bestDist=120y |
+| 4 | Native movement functions crash ghost form | Replace SetFacing/SetControlBit with Lua `MoveForwardStart()` via `RunOnMainThread()` | Crash, bestDist=152y |
+| 5 | `SendMovementUpdate(MSG_MOVE_SET_FACING)` corrupts ghost movement state | Skip `SendMovementUpdate`; write facing and SetControlBit only | Crash, bestDist=152y |
+| 6 | Native `ReleaseCorpse()` corrupts internal state | Replace with Lua `RepopMe()` | Crash, bestDist=119y |
+| 7 | `EnumerateVisibleObjects` via WM_USER corrupts ghost-form WoW state | Skip `EnumerateVisibleObjects` entirely when player has ghost flag | Crash, bestDist=117y |
 
-### Ruled Out
+### Historical Ruled-Out Areas
 
-- **Thread safety of movement calls** — RunOnMainThread didn't help (attempt 3)
-- **Native vs Lua movement** — Both crash (attempts 4-5)
-- **Movement packet sending** — Skipping packets still crashes (attempt 5)
-- **Native ReleaseCorpse corruption** — Lua RepopMe still crashes (attempt 6)
-- **EnumerateVisibleObjects** — Skipping enumeration still crashes (attempt 7)
-- **Our injected code causing the crash** — The crash is in WoW's own game frame processing stack, not in our callback or hook code
+- Thread safety of movement calls did not explain the 2026-03 crash.
+- Native vs Lua movement did not explain it.
+- Movement packet sending did not explain it.
+- Native `ReleaseCorpse()` did not explain it.
+- Visible-object enumeration did not explain it.
+- The crash stack was in WoW's own frame processing, not directly in our callback or hook code.
 
-### Root Cause Assessment
+### Current Resolution Path
 
-The crash is in **WoW.exe's own game loop** at address 0x00619CDF, in the object/movement processing path. It happens deterministically ~20-30s after entering ghost form near Razor Hill, regardless of what our injected code does. The crash appears to be a **WoW 1.12.1 client bug** related to ghost form object processing near this specific graveyard/terrain.
-
-The BG (headless) bot doesn't use WoW.exe at all — it emulates the protocol — so it's never affected.
-
-### Resolution Path
-
-1. **Short-term:** Skip the FG corpse run test. The BG test validates the RetrieveCorpseTask logic. The FG crash is a WoW client issue, not a bot code issue.
-2. **Medium-term:** Investigate if the SignalEventManager hook or PacketLogger hook assembly patches corrupt WoW's code near the crash address. Test with hooks disabled.
-3. **Long-term:** Reverse engineer WoW.exe at 0x00619CDF to understand what NULL pointer it's dereferencing. May require IDA Pro analysis of the binary.
+1. Treat this document as historical context only.
+2. Keep foreground corpse-run validation available with `WWOW_RETRY_FG_CRASH001=1` while deciding whether to promote it back into the default live matrix.
+3. Reopen crash triage only if a fresh access violation reproduces and matches or replaces the historical `0x00619CDF` signature.
 
 ---

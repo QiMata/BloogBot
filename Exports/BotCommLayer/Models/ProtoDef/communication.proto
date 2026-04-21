@@ -211,6 +211,9 @@ message WoWActivitySnapshot {
     CharacterGoals character_goals = 22;        // Build config / progression goals from CharacterSettings.BuildConfig
     ProgressionStatus progression_status = 23;  // Current progress toward goals (populated by StateManager)
     bool isIndoors = 24;                        // Runtime scene/environment classification from local physics
+    string desired_party_leader_name = 25;      // Desired party/raid leader character name for local reconciliation
+    repeated string desired_party_members = 26; // Desired party member character names this bot should ensure are grouped
+    bool desired_party_is_raid = 27;            // True when the desired party shape should be upgraded to a raid
 }
 
 // Progress toward character goals. StateManager populates from snapshot + goal comparison.

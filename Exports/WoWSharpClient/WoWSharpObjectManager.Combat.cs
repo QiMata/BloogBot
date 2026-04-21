@@ -25,8 +25,11 @@ namespace WoWSharpClient
         public bool HadRecentMeleeRangeRejection(ulong targetGuid) => _spellcasting.HadRecentMeleeRangeRejection(targetGuid);
         public bool HadRecentMeleeFacingRejection(ulong targetGuid) => _spellcasting.HadRecentMeleeFacingRejection(targetGuid);
         internal void NotePendingMeleeAttackStart(ulong targetGuid) => _spellcasting.NotePendingMeleeAttackStart(targetGuid);
+        internal bool HasConfirmedMeleeAttackStart(ulong targetGuid) => _spellcasting.HasConfirmedMeleeAttackStart(targetGuid);
         internal bool HasPendingMeleeAttackStart(ulong targetGuid) => _spellcasting.HasPendingMeleeAttackStart(targetGuid);
+        internal void ClearConfirmedMeleeAttackStart(ulong targetGuid = 0) => _spellcasting.ClearConfirmedMeleeAttackStart(targetGuid);
         internal void ClearPendingMeleeAttackStart(ulong targetGuid = 0) => _spellcasting.ClearPendingMeleeAttackStart(targetGuid);
+        internal void ClearTrackedMeleeAttackState(ulong targetGuid = 0) => _spellcasting.ClearTrackedMeleeAttackState(targetGuid);
         internal void ConfirmMeleeAttackStarted(ulong targetGuid = 0) => _spellcasting.ConfirmMeleeAttackStarted(targetGuid);
 
         // ---- Spell readiness ----

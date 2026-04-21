@@ -192,6 +192,8 @@ public class FrameByFramePhysicsTests
     /// Expected: Parabolic trajectory matching WoW gravity.
     /// </summary>
     [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityScenario", "Jump")]
     public void StandingJump_FollowsParabolicArc()
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
@@ -251,6 +253,8 @@ public class FrameByFramePhysicsTests
     /// Expected: Horizontal velocity maintained during airborne arc.
     /// </summary>
     [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityScenario", "Jump")]
     public void RunningJump_MaintainsHorizontalVelocity()
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");
@@ -297,6 +301,8 @@ public class FrameByFramePhysicsTests
     /// seeds vx/vy/vz and marks the player FALLINGFAR.
     /// </summary>
     [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityScenario", "Knockback")]
     public void KnockbackImpulse_AirborneTrajectoryMatchesWoWGravity()
     {
         Skip.If(!_fixture.IsInitialized, "Physics engine not available");

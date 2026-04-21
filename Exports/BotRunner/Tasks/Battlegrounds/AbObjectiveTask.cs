@@ -77,6 +77,7 @@ public class AbObjectiveTask : BotTask, IBotTask
 
                 if (banner != null)
                 {
+                    ObjectManager.ForceStopImmediate();
                     banner.Interact();
                     Logger.LogInformation("[AB] Assaulting {Node}!", _targetNodeName);
                 }

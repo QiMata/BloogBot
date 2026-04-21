@@ -77,9 +77,20 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 
     protected override string FixtureLabel => "AV";
 
+    protected virtual bool UseForegroundHordeLeader => true;
+
+    protected virtual bool UseForegroundAllianceLeader => true;
+
     protected override TimeSpan EnterWorldMaxTimeout => TimeSpan.FromMinutes(10);
 
     protected override TimeSpan EnterWorldStaleTimeout => TimeSpan.FromMinutes(2);
+
+    // The generic battleground launch throttle starves the back half of the AV
+    // roster while the first wave is still progressing through first-login world
+    // hydration. Disable it for the 80-bot cold-start fixture.
+    protected override int LaunchThrottleActivationBotCountOverride => TotalBotCount + 1;
+
+    protected override int MaxPendingStartupBotsOverride => TotalBotCount + 1;
 
     // AV requires all configured bots in-world before prep so both FG leaders and the full BG roster participate.
     protected override int MinimumBotCount => TotalBotCount;
@@ -124,7 +135,7 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                 characterClass: template.Class,
                 characterRace: template.Race,
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
+                runnerType: index == 0 && UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
         }
 
         for (var index = 0; index < AllianceBotCount; index++)
@@ -135,7 +146,7 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                 characterClass: template.Class,
                 characterRace: template.Race,
                 characterGender: index % 2 == 0 ? "Female" : "Male",
-                runnerType: index == 0 ? BotRunnerType.Foreground : BotRunnerType.Background));
+                runnerType: index == 0 && UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background));
         }
 
         return bots;

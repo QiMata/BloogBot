@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using BotRunner;
 using BotCommLayer;
 using Communication;
 using Game;
@@ -11,6 +12,9 @@ using WoWStateManager.Coordination;
 using WoWStateManager.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using CharacterClass = GameData.Core.Enums.Class;
+using CharacterGender = GameData.Core.Enums.Gender;
+using CharacterRace = GameData.Core.Enums.Race;
 
 namespace BotRunner.Tests;
 
@@ -187,6 +191,27 @@ public class ActionForwardingContractTests
         Assert.Equal(new string('B', 4096), deserialized.Snapshots[0].CharacterName);
     }
 
+    [Fact]
+    public void WoWActivitySnapshot_RoundTrip_PreservesDesiredPartyFields()
+    {
+        var snapshot = new WoWActivitySnapshot
+        {
+            AccountName = "WSGBOT1",
+            CharacterName = "HordeLeader",
+            DesiredPartyLeaderName = "HordeLeader",
+            DesiredPartyIsRaid = true,
+        };
+        snapshot.DesiredPartyMembers.Add("HordeMember1");
+        snapshot.DesiredPartyMembers.Add("HordeMember2");
+
+        var bytes = snapshot.ToByteArray();
+        var deserialized = WoWActivitySnapshot.Parser.ParseFrom(bytes);
+
+        Assert.Equal("HordeLeader", deserialized.DesiredPartyLeaderName);
+        Assert.Equal(["HordeMember1", "HordeMember2"], deserialized.DesiredPartyMembers);
+        Assert.True(deserialized.DesiredPartyIsRaid);
+    }
+
     // ===== Dead/ghost state detection =====
 
     private static bool InvokeIsDeadOrGhostState(WoWActivitySnapshot? snap, out string reason)
@@ -337,12 +362,18 @@ public class ActionForwardingContractTests
         => CreateListener(null, accountNames);
 
     private static CharacterStateSocketListener CreateListener(ILogger<CharacterStateSocketListener>? logger, params string[] accountNames)
+        => CreateListener(
+            accountNames.Select(accountName => new CharacterSettings { AccountName = accountName }).ToList(),
+            logger);
+
+    private static CharacterStateSocketListener CreateListener(
+        IReadOnlyList<CharacterSettings> settings,
+        ILogger<CharacterStateSocketListener>? logger = null)
     {
-        var settings = accountNames.Select(a => new CharacterSettings { AccountName = a }).ToList();
         var plannerLogger = NullLoggerFactory.Instance.CreateLogger<WoWStateManager.Progression.ProgressionPlanner>();
         var planner = new WoWStateManager.Progression.ProgressionPlanner(plannerLogger);
         return new CharacterStateSocketListener(
-            settings,
+            settings.ToList(),
             "127.0.0.1",
             0,
             null,
@@ -566,6 +597,164 @@ public class ActionForwardingContractTests
         }
     }
 
+    [Fact]
+    public void HandleRequest_BattlegroundMode_PopulatesDesiredPartyState_ForGroupQueueFactions()
+    {
+        var previousMode = Environment.GetEnvironmentVariable("WWOW_COORDINATOR_MODE");
+        var previousBgType = Environment.GetEnvironmentVariable("WWOW_BG_TYPE");
+        var previousBgMap = Environment.GetEnvironmentVariable("WWOW_BG_MAP");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", "battleground");
+            Environment.SetEnvironmentVariable("WWOW_BG_TYPE", "2");
+            Environment.SetEnvironmentVariable("WWOW_BG_MAP", "489");
+
+            var listener = CreateListener(
+                new List<CharacterSettings>
+                {
+                    new() { AccountName = "WSGBOT1", CharacterRace = "Orc" },
+                    new() { AccountName = "WSGBOT2", CharacterRace = "Orc" },
+                    new() { AccountName = "WSGBOTA1", CharacterRace = "Human" },
+                });
+
+            listener.CurrentActivityMemberList["WSGBOT2"] = BuildReadySnapshot("WSGBOT2", "HordeMember", selfGuid: 0x200UL);
+            listener.CurrentActivityMemberList["WSGBOTA1"] = BuildReadySnapshot("WSGBOTA1", "AllianceLeader", selfGuid: 0x300UL);
+
+            var leaderResponse = InvokeHandleRequest(
+                listener,
+                BuildReadySnapshot("WSGBOT1", "HordeLeader", selfGuid: 0x100UL));
+
+            Assert.Equal("HordeLeader", leaderResponse.DesiredPartyLeaderName);
+            Assert.Equal(["HordeMember"], leaderResponse.DesiredPartyMembers);
+            Assert.False(leaderResponse.DesiredPartyIsRaid);
+
+            var followerResponse = InvokeHandleRequest(
+                listener,
+                BuildReadySnapshot("WSGBOT2", "HordeMember", selfGuid: 0x200UL));
+
+            Assert.Equal("HordeLeader", followerResponse.DesiredPartyLeaderName);
+            Assert.Empty(followerResponse.DesiredPartyMembers);
+            Assert.False(followerResponse.DesiredPartyIsRaid);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", previousMode);
+            Environment.SetEnvironmentVariable("WWOW_BG_TYPE", previousBgType);
+            Environment.SetEnvironmentVariable("WWOW_BG_MAP", previousBgMap);
+        }
+    }
+
+    [Fact]
+    public void HandleRequest_BattlegroundMode_UsesConfiguredNames_UntilObservedNamesTakeOver()
+    {
+        var previousMode = Environment.GetEnvironmentVariable("WWOW_COORDINATOR_MODE");
+        var previousBgType = Environment.GetEnvironmentVariable("WWOW_BG_TYPE");
+        var previousBgMap = Environment.GetEnvironmentVariable("WWOW_BG_MAP");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", "battleground");
+            Environment.SetEnvironmentVariable("WWOW_BG_TYPE", "2");
+            Environment.SetEnvironmentVariable("WWOW_BG_MAP", "489");
+
+            var hordeLeader = new CharacterSettings
+            {
+                AccountName = "WSGBOT1",
+                CharacterClass = "Warrior",
+                CharacterRace = "Orc",
+                CharacterGender = "Female",
+            };
+            var hordeFollower = new CharacterSettings
+            {
+                AccountName = "WSGBOT10",
+                CharacterClass = "Shaman",
+                CharacterRace = "Troll",
+                CharacterGender = "Male",
+                CharacterNameAttemptOffset = 2,
+            };
+            var allianceLeader = new CharacterSettings
+            {
+                AccountName = "WSGBOTA1",
+                CharacterClass = "Paladin",
+                CharacterRace = "Human",
+                CharacterGender = "Female",
+            };
+
+            var listener = CreateListener([hordeLeader, hordeFollower, allianceLeader]);
+            var configuredLeaderName = BuildConfiguredCharacterName(hordeLeader);
+            var configuredFollowerName = BuildConfiguredCharacterName(hordeFollower);
+            const string observedFollowerName = "LiveFollower";
+
+            listener.CurrentActivityMemberList["WSGBOT10"] = BuildReadySnapshot("WSGBOT10", characterName: "", selfGuid: 0x200UL);
+            listener.CurrentActivityMemberList["WSGBOTA1"] = BuildReadySnapshot("WSGBOTA1", characterName: "", selfGuid: 0x300UL);
+
+            var leaderResponse = InvokeHandleRequest(
+                listener,
+                BuildReadySnapshot("WSGBOT1", characterName: string.Empty, selfGuid: 0x100UL));
+
+            Assert.Equal(configuredLeaderName, leaderResponse.DesiredPartyLeaderName);
+            Assert.Equal([configuredFollowerName], leaderResponse.DesiredPartyMembers);
+            Assert.False(leaderResponse.DesiredPartyIsRaid);
+            Assert.Equal(string.Empty, listener.CurrentActivityMemberList["WSGBOT10"].CharacterName);
+
+            var followerObservedResponse = InvokeHandleRequest(
+                listener,
+                BuildReadySnapshot(
+                    "WSGBOT10",
+                    characterName: observedFollowerName,
+                    selfGuid: 0x200UL));
+
+            Assert.Equal(observedFollowerName, followerObservedResponse.CharacterName);
+
+            var followerBlankResponse = InvokeHandleRequest(
+                listener,
+                BuildReadySnapshot(
+                    "WSGBOT10",
+                    characterName: string.Empty,
+                    selfGuid: 0x200UL));
+
+            Assert.Equal(observedFollowerName, followerBlankResponse.CharacterName);
+            Assert.Equal(observedFollowerName, listener.CurrentActivityMemberList["WSGBOT10"].CharacterName);
+
+            leaderResponse = InvokeHandleRequest(
+                listener,
+                BuildReadySnapshot("WSGBOT1", characterName: string.Empty, selfGuid: 0x100UL));
+
+            Assert.Equal(configuredLeaderName, leaderResponse.DesiredPartyLeaderName);
+            Assert.Equal([observedFollowerName], leaderResponse.DesiredPartyMembers);
+            Assert.False(leaderResponse.DesiredPartyIsRaid);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", previousMode);
+            Environment.SetEnvironmentVariable("WWOW_BG_TYPE", previousBgType);
+            Environment.SetEnvironmentVariable("WWOW_BG_MAP", previousBgMap);
+        }
+    }
+
+    private static string BuildConfiguredCharacterName(CharacterSettings settings)
+    {
+        var characterClass = !string.IsNullOrWhiteSpace(settings.CharacterClass)
+            && Enum.TryParse<CharacterClass>(settings.CharacterClass, ignoreCase: true, out var configuredClass)
+                ? configuredClass
+                : CharacterClass.Warrior;
+        var race = !string.IsNullOrWhiteSpace(settings.CharacterRace)
+            && Enum.TryParse<CharacterRace>(settings.CharacterRace, ignoreCase: true, out var configuredRace)
+                ? configuredRace
+                : CharacterRace.Orc;
+        var gender = !string.IsNullOrWhiteSpace(settings.CharacterGender)
+            && Enum.TryParse<CharacterGender>(settings.CharacterGender, ignoreCase: true, out var configuredGender)
+                ? configuredGender
+                : WoWNameGenerator.DetermineGender(characterClass);
+        var attemptOffset = Math.Max(0, settings.CharacterNameAttemptOffset ?? 0);
+        var uniquenessSeed = attemptOffset <= 0
+            ? settings.AccountName
+            : $"{settings.AccountName}:{attemptOffset}";
+
+        return WoWNameGenerator.GenerateName(race, gender, uniquenessSeed);
+    }
+
     // ===== ActionType coverage =====
 
     [Theory]
@@ -617,15 +806,20 @@ public class ActionForwardingContractTests
         }
     }
 
-    private static WoWActivitySnapshot BuildReadySnapshot(string accountName)
+    private static WoWActivitySnapshot BuildReadySnapshot(
+        string accountName,
+        string? characterName = null,
+        ulong? selfGuid = null,
+        ulong partyLeaderGuid = 0)
     {
         return new WoWActivitySnapshot
         {
             AccountName = accountName,
-            CharacterName = accountName,
+            CharacterName = characterName ?? accountName,
             ScreenState = "InWorld",
             IsObjectManagerValid = true,
             CurrentMapId = 0,
+            PartyLeaderGuid = partyLeaderGuid,
             Player = new WoWPlayer
             {
                 Unit = new WoWUnit
@@ -635,7 +829,11 @@ public class ActionForwardingContractTests
                     GameObject = new WoWGameObject
                     {
                         Level = 60,
-                        Base = new WoWObject { MapId = 0 }
+                        Base = new WoWObject
+                        {
+                            Guid = selfGuid ?? (ulong)accountName.GetHashCode(),
+                            MapId = 0,
+                        }
                     }
                 }
             }

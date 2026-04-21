@@ -2,6 +2,15 @@
 
 Completed items moved from TASKS.md.
 
+## 2026-04-15 - AI test project path closeout
+
+- [x] `AI-TST-PATH-001` Fixed the AI test project reference from removed path `..\..\WWoWBot.AI\BloogBot.AI.csproj` to existing path `..\..\BloogBot.AI\BloogBot.AI.csproj`.
+- [x] Refreshed `BloogBot.AI/TASKS.md` to use current repo paths and report no remaining owner-local items.
+- Validation:
+  - `dotnet restore Tests/BloogBot.AI.Tests/BloogBot.AI.Tests.csproj` -> `restored`
+  - `dotnet test Tests/BloogBot.AI.Tests/BloogBot.AI.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=minimal"` -> `passed (121/121)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+
 ## 2026-02-25
 
 - [x] `AI-CORE-001` Restored `BotActivity` enum at `WWoWBot.AI/States/BotActivity.cs` and cleared missing-symbol build failures.

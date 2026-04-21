@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.IO.Compression;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging.Abstractions;
 using SceneData;
 using WoWSharpClient.Movement;
@@ -65,6 +67,149 @@ public sealed class SceneDataClientTests
         finally
         {
             SceneDataClient.TestSendTileRequestOverride = null;
+            SceneDataClient.TestUtcNowOverride = null;
+        }
+    }
+
+    [Fact]
+    public void EnsureSceneDataAround_FailedTileResponse_RetriesOnlyMissingTileAfterBackoff()
+    {
+        var now = new DateTime(2026, 4, 3, 12, 0, 0, DateTimeKind.Utc);
+        var requestedTiles = new List<(uint TX, uint TY)>();
+        var failedTile = (TX: 29u, TY: 41u);
+        var failedOnce = false;
+
+        try
+        {
+            SceneDataClient.TestUtcNowOverride = () => now;
+            SceneDataClient.TestSendTileRequestOverride = req =>
+            {
+                requestedTiles.Add((req.TileX, req.TileY));
+
+                if (!failedOnce && req.TileX == failedTile.TX && req.TileY == failedTile.TY)
+                {
+                    failedOnce = true;
+                    return new SceneTileResponse
+                    {
+                        MapId = req.MapId,
+                        TileX = req.TileX,
+                        TileY = req.TileY,
+                        Success = false,
+                        TriangleCount = 0,
+                        ErrorMessage = "transient miss",
+                    };
+                }
+
+                var response = new SceneTileResponse
+                {
+                    MapId = req.MapId,
+                    TileX = req.TileX,
+                    TileY = req.TileY,
+                    Success = true,
+                    TriangleCount = 1,
+                };
+                response.TriangleData.AddRange(new float[] { 0, 0, 0, 1, 0, 0, 0, 1, 0 });
+                return response;
+            };
+            SceneDataClient.TestInjectOverride = (_, _, _, _, _, _) => true;
+
+            var client = new SceneDataClient(NullLogger.Instance);
+
+            Assert.False(client.EnsureSceneDataAround(1, 1629f, -4373f));
+            Assert.Equal(9, requestedTiles.Count);
+
+            Assert.False(client.EnsureSceneDataAround(1, 1629f, -4373f));
+            Assert.Equal(9, requestedTiles.Count);
+
+            requestedTiles.Clear();
+            now = now.AddSeconds(3);
+
+            Assert.True(client.EnsureSceneDataAround(1, 1629f, -4373f));
+            Assert.Single(requestedTiles);
+            Assert.Equal(failedTile, requestedTiles[0]);
+        }
+        finally
+        {
+            SceneDataClient.TestSendTileRequestOverride = null;
+            SceneDataClient.TestInjectOverride = null;
+            SceneDataClient.TestUtcNowOverride = null;
+        }
+    }
+
+    [Fact]
+    public void EnsureSceneDataAround_TruncatedCompressedTrianglePayload_RetriesAfterBackoff()
+    {
+        var now = new DateTime(2026, 4, 3, 12, 0, 0, DateTimeKind.Utc);
+        var requestCount = 0;
+
+        try
+        {
+            SceneDataClient.TestUtcNowOverride = () => now;
+            SceneDataClient.TestSendTileRequestOverride = req =>
+            {
+                requestCount++;
+                return requestCount == 1
+                    ? BuildCompressedTileResponse(req, triangleBytes: CompressBytes([1, 2, 3, 4]), metadataBytes: CompressBytes(new byte[12]))
+                    : BuildCompressedTileResponse(req, triangleBytes: CompressBytes(new byte[36]), metadataBytes: CompressBytes(new byte[12]));
+            };
+            SceneDataClient.TestInjectOverride = (_, _, _, _, _, _) => true;
+
+            var client = new SceneDataClient(NullLogger.Instance);
+
+            Assert.False(client.EnsureSceneDataAround(1, 1629f, -4373f));
+            Assert.Equal(1, requestCount);
+
+            Assert.False(client.EnsureSceneDataAround(1, 1629f, -4373f));
+            Assert.Equal(1, requestCount);
+
+            now = now.AddSeconds(3);
+
+            Assert.True(client.EnsureSceneDataAround(1, 1629f, -4373f));
+            Assert.Equal(10, requestCount);
+        }
+        finally
+        {
+            SceneDataClient.TestSendTileRequestOverride = null;
+            SceneDataClient.TestInjectOverride = null;
+            SceneDataClient.TestUtcNowOverride = null;
+        }
+    }
+
+    [Fact]
+    public void EnsureSceneDataAround_TruncatedCompressedMetadataPayload_RetriesAfterBackoff()
+    {
+        var now = new DateTime(2026, 4, 3, 12, 0, 0, DateTimeKind.Utc);
+        var requestCount = 0;
+
+        try
+        {
+            SceneDataClient.TestUtcNowOverride = () => now;
+            SceneDataClient.TestSendTileRequestOverride = req =>
+            {
+                requestCount++;
+                return requestCount == 1
+                    ? BuildCompressedTileResponse(req, triangleBytes: CompressBytes(new byte[36]), metadataBytes: CompressBytes([1, 2, 3, 4]))
+                    : BuildCompressedTileResponse(req, triangleBytes: CompressBytes(new byte[36]), metadataBytes: CompressBytes(new byte[12]));
+            };
+            SceneDataClient.TestInjectOverride = (_, _, _, _, _, _) => true;
+
+            var client = new SceneDataClient(NullLogger.Instance);
+
+            Assert.False(client.EnsureSceneDataAround(1, 1629f, -4373f));
+            Assert.Equal(1, requestCount);
+
+            Assert.False(client.EnsureSceneDataAround(1, 1629f, -4373f));
+            Assert.Equal(1, requestCount);
+
+            now = now.AddSeconds(3);
+
+            Assert.True(client.EnsureSceneDataAround(1, 1629f, -4373f));
+            Assert.Equal(10, requestCount);
+        }
+        finally
+        {
+            SceneDataClient.TestSendTileRequestOverride = null;
+            SceneDataClient.TestInjectOverride = null;
             SceneDataClient.TestUtcNowOverride = null;
         }
     }
@@ -270,5 +415,33 @@ public sealed class SceneDataClientTests
             SceneDataClient.TestSendTileRequestOverride = null;
             SceneDataClient.TestInjectOverride = null;
         }
+    }
+
+    private static SceneTileResponse BuildCompressedTileResponse(
+        SceneTileRequest request,
+        ByteString triangleBytes,
+        ByteString metadataBytes)
+    {
+        return new SceneTileResponse
+        {
+            MapId = request.MapId,
+            TileX = request.TileX,
+            TileY = request.TileY,
+            Success = true,
+            TriangleCount = 1,
+            TriangleDataCompressed = triangleBytes,
+            TriangleMetadataCompressed = metadataBytes,
+        };
+    }
+
+    private static ByteString CompressBytes(byte[] bytes)
+    {
+        using var stream = new MemoryStream();
+        using (var gzip = new GZipStream(stream, CompressionLevel.Fastest, leaveOpen: true))
+        {
+            gzip.Write(bytes, 0, bytes.Length);
+        }
+
+        return ByteString.CopyFrom(stream.GetBuffer(), 0, (int)stream.Length);
     }
 }

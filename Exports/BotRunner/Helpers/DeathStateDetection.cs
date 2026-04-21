@@ -62,6 +62,23 @@ public static class DeathStateDetection
         return IsStandStateDead(player);
     }
 
+    /// <summary>
+    /// True when it is safe to attempt a spirit release.
+    /// Some server builds expose a short corpse window as HP==0 before UNIT_STAND_STATE_DEAD
+    /// lands in the snapshot, but CMSG_REPOP_REQUEST is already valid in that window.
+    /// </summary>
+    public static bool CanReleaseSpirit(IWoWLocalPlayer player)
+    {
+        if (IsGhost(player))
+            return false;
+
+        if (IsStandStateDead(player))
+            return true;
+
+        try { return player.Health == 0; }
+        catch { return false; }
+    }
+
     /// <summary>True when the player is dead or a ghost (any death state).</summary>
     public static bool IsDeadOrGhost(IWoWLocalPlayer player)
         => IsGhost(player) || IsCorpse(player);

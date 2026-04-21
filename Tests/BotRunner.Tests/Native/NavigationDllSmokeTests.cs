@@ -66,6 +66,9 @@ public class NavigationDllSmokeTests
     [DllImport(Nav, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SetSceneSliceMode")]
     private static extern void SetSceneSliceModeNative([MarshalAs(UnmanagedType.I1)] bool enabled);
 
+    [DllImport(Nav, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SetSceneAutoloadEnabled")]
+    private static extern void SetSceneAutoloadEnabledNative([MarshalAs(UnmanagedType.I1)] bool enabled);
+
     [DllImport(Nav, CallingConvention = CallingConvention.Cdecl, EntryPoint = "ValidateWalkableSegment")]
     private static extern uint ValidateWalkableSegmentNative(uint mapId, float x0, float y0, float z0, float x1, float y1, float z1);
 
@@ -100,6 +103,10 @@ public class NavigationDllSmokeTests
     [SkippableFact]
     public void Export_SetSceneSliceMode_Exists()
         => AssertExportExists(() => SetSceneSliceModeNative(false), "SetSceneSliceMode");
+
+    [SkippableFact]
+    public void Export_SetSceneAutoloadEnabled_Exists()
+        => AssertExportExists(() => SetSceneAutoloadEnabledNative(false), "SetSceneAutoloadEnabled");
 
     [SkippableFact]
     public void Export_ValidateWalkableSegment_Exists()

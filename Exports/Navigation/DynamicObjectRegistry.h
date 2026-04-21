@@ -66,6 +66,16 @@ public:
     bool TryGetLocalPoint(uint32_t instanceId, const G3D::Vector3& worldPoint,
                           G3D::Vector3& outLocalPoint) const;
 
+    /// Check whether a world-space segment intersects any registered dynamic object.
+    /// Returns the nearest hit along the segment when multiple objects overlap.
+    bool FindFirstIntersectingObject(
+        uint32_t mapId,
+        const G3D::Vector3& start,
+        const G3D::Vector3& end,
+        uint32_t* outInstanceId = nullptr,
+        uint64_t* outGuid = nullptr,
+        uint32_t* outDisplayId = nullptr) const;
+
     /// Returns number of registered objects.
     int Count() const;
 

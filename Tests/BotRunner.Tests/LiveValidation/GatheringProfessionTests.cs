@@ -35,6 +35,7 @@ public class GatheringProfessionTests
     private const uint MiningGatherSpell = GatheringData.MINING_GATHER_SPELL;  // 2575 — profession spell with 3.2s channel
     private const uint MiningPick = 2901;
     private const uint CopperVeinEntry = 1731;
+    private const uint MiningRouteRequiredSkill = 1;
 
     // --- Herbalism constants ---
     private const uint HerbalismApprentice = 2366;
@@ -42,6 +43,8 @@ public class GatheringProfessionTests
     private const uint PeacebloomEntry = 1617;
     private const uint SilverleafEntry = 1618;
     private const uint EarthrootEntry = 1619;
+    private const uint HerbalismMinimumLevel = 20;
+    private const uint HerbalismRouteRequiredSkill = 15;
 
     // Orgrimmar (safe zone, no hostile mobs) for GM setup
     private const int OrgrimmarMap = 1;
@@ -146,6 +149,7 @@ public class GatheringProfessionTests
         _output.WriteLine($"{label} initial herbalism skill: {skillBefore}");
 
         await StageAtDurotarHerbRouteStartAsync(account, label);
+        herbCandidates = await RefreshAndPrioritizeGatheringPoolsAsync(account, label, herbCandidates);
         var bagBefore = CaptureBagItemCounts(label);
         var diagStart = DateTime.UtcNow;
         await _bot.SendActionAndWaitAsync(
@@ -295,10 +299,11 @@ public class GatheringProfessionTests
         _output.WriteLine($"[{label}] Ensuring mining spells learned (current skill={currentMining})");
         await _bot.BotLearnSpellAsync(account, MiningApprentice);
         await _bot.BotLearnSpellAsync(account, MiningGatherSpell);
-        if (currentMining < 1)
+        if (currentMining < MiningRouteRequiredSkill)
         {
-            var setSkillTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.MINING_SKILL_ID} 1 300", captureResponse: true);
-            AssertCommandSucceeded(setSkillTrace, label, $".setskill {GatheringData.MINING_SKILL_ID} 1 300");
+            var setSkillCommand = $".setskill {GatheringData.MINING_SKILL_ID} {MiningRouteRequiredSkill} 300";
+            var setSkillTrace = await _bot.SendGmChatCommandTrackedAsync(account, setSkillCommand, captureResponse: true);
+            AssertCommandSucceeded(setSkillTrace, label, setSkillCommand);
         }
 
         await _bot.RefreshSnapshotsAsync();
@@ -326,6 +331,7 @@ public class GatheringProfessionTests
     private async Task PrepareHerbalism(string account, string label)
     {
         await EnsureAliveAndAtSetupLocationAsync(account, label);
+        await EnsureLevelAtLeastAsync(account, label, HerbalismMinimumLevel);
 
         await _bot.RefreshSnapshotsAsync();
         var bagCount = GetBagItemCount(label);
@@ -343,10 +349,11 @@ public class GatheringProfessionTests
         _output.WriteLine($"[{label}] Ensuring herbalism spells learned (current skill={currentHerbalism})");
         await _bot.BotLearnSpellAsync(account, HerbalismApprentice);
         await _bot.BotLearnSpellAsync(account, HerbalismGatherSpell);
-        if (currentHerbalism < 1)
+        if (currentHerbalism < HerbalismRouteRequiredSkill)
         {
-            var setSkillTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".setskill {GatheringData.HERBALISM_SKILL_ID} 1 300", captureResponse: true);
-            AssertCommandSucceeded(setSkillTrace, label, $".setskill {GatheringData.HERBALISM_SKILL_ID} 1 300");
+            var setSkillCommand = $".setskill {GatheringData.HERBALISM_SKILL_ID} {HerbalismRouteRequiredSkill} 300";
+            var setSkillTrace = await _bot.SendGmChatCommandTrackedAsync(account, setSkillCommand, captureResponse: true);
+            AssertCommandSucceeded(setSkillTrace, label, setSkillCommand);
         }
 
         await _bot.RefreshSnapshotsAsync();
@@ -380,6 +387,109 @@ public class GatheringProfessionTests
 
         return action;
     }
+
+    private async Task<IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)>> RefreshAndPrioritizeGatheringPoolsAsync(
+        string commandAccount,
+        string label,
+        IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> routeCandidates,
+        int maxPoolUpdates = 8)
+    {
+        var refreshPlan = routeCandidates
+            .Where(candidate => candidate.poolEntry.HasValue)
+            .OrderBy(candidate => candidate.distance2D)
+            .Select(candidate => candidate.poolEntry!.Value)
+            .Distinct()
+            .Take(maxPoolUpdates)
+            .ToArray();
+
+        if (refreshPlan.Length == 0)
+            return routeCandidates;
+
+        _output.WriteLine($"[{label}] Gathering pool refresh plan: {string.Join(", ", refreshPlan)}");
+        var spawnedPools = new HashSet<uint>();
+        var activeSpawnCandidates = new List<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)>();
+        foreach (var poolEntry in refreshPlan)
+        {
+            var updateTrace = await _bot.SendGmChatCommandTrackedAsync(
+                commandAccount,
+                $".pool update {poolEntry}",
+                captureResponse: true,
+                delayMs: 750);
+            var updateResponses = updateTrace.ChatMessages.Concat(updateTrace.ErrorMessages).ToArray();
+            _output.WriteLine(
+                $"[{label}] gathering .pool update {poolEntry}: " +
+                $"{FormatCommandEvidence(updateTrace.DispatchResult, updateResponses)}");
+
+            var spawnTrace = await _bot.SendGmChatCommandTrackedAsync(
+                commandAccount,
+                $".pool spawns {poolEntry}",
+                captureResponse: true,
+                delayMs: 750);
+            var spawnResponses = spawnTrace.ChatMessages.Concat(spawnTrace.ErrorMessages).ToArray();
+            var evidence = updateResponses.Concat(spawnResponses).ToArray();
+            var state = FishingPoolActivationAnalyzer.ClassifyPoolSpawnStateResponses(poolEntry, evidence);
+            activeSpawnCandidates.AddRange(GatheringRouteSelection.SelectActivePoolSpawnCandidates(
+                spawnResponses,
+                GatheringRouteSelection.DurotarHerbRouteStartX,
+                GatheringRouteSelection.DurotarHerbRouteStartY,
+                GatheringRouteSelection.DurotarHerbSearchRadius));
+            _output.WriteLine(
+                $"[{label}] gathering .pool spawns {poolEntry}: " +
+                $"{FormatCommandEvidence(spawnTrace.DispatchResult, spawnResponses, "no active spawns reported")} => {state}");
+
+            if (state == FishingPoolActivationState.Spawned)
+                spawnedPools.Add(poolEntry);
+        }
+
+        var activeRouteCandidates = activeSpawnCandidates
+            .DistinctBy(candidate => $"{candidate.map}:{candidate.x:F1}:{candidate.y:F1}:{candidate.z:F1}:{candidate.poolEntry?.ToString() ?? "none"}")
+            .OrderBy(candidate => candidate.distance2D)
+            .Take(Math.Min(24, Math.Max(1, routeCandidates.Count)))
+            .ToList();
+        if (activeRouteCandidates.Count > 0)
+        {
+            _output.WriteLine(
+                $"[{label}] Using active gathering pool spawn coordinates before static DB rows: " +
+                string.Join(" | ", activeRouteCandidates.Take(8).Select(candidate =>
+                    $"pool={candidate.poolEntry?.ToString() ?? "none"} dist={candidate.distance2D:F1} pos=({candidate.x:F1},{candidate.y:F1},{candidate.z:F1})")));
+            return activeRouteCandidates;
+        }
+
+        if (spawnedPools.Count == 0)
+        {
+            _output.WriteLine($"[{label}] No refreshed gathering pools reported active spawns; preserving DB-distance route order.");
+            return routeCandidates;
+        }
+
+        var prioritized = GatheringRouteSelection.PrioritizeSpawnedPools(routeCandidates, spawnedPools);
+        _output.WriteLine(
+            $"[{label}] Prioritized gathering candidates from spawned pools [{string.Join(", ", spawnedPools.OrderBy(pool => pool))}]: " +
+            string.Join(" | ", prioritized.Take(6).Select(candidate =>
+                $"pool={candidate.poolEntry?.ToString() ?? "none"} dist={candidate.distance2D:F1} pos=({candidate.x:F1},{candidate.y:F1},{candidate.z:F1})")));
+        return prioritized;
+    }
+
+    private static string FormatCommandEvidence(
+        ResponseResult dispatchResult,
+        IReadOnlyCollection<string> responses,
+        string emptyDetail = "")
+    {
+        if (responses.Count == 0)
+            return string.IsNullOrWhiteSpace(emptyDetail)
+                ? dispatchResult.ToString()
+                : $"{dispatchResult} ({emptyDetail})";
+
+        const int maxResponses = 4;
+        var formatted = responses
+            .Take(maxResponses)
+            .Select(CollapseResponse)
+            .ToArray();
+        var suffix = responses.Count > maxResponses ? $" || ... ({responses.Count - maxResponses} more)" : "";
+        return string.Join(" || ", formatted) + suffix;
+    }
+
+    private static string CollapseResponse(string response)
+        => string.Join(" ", response.Split(['\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     private Dictionary<uint, int> CaptureBagItemCounts(string label)
     {
@@ -525,6 +635,28 @@ public class GatheringProfessionTests
         // Skip the Orgrimmar teleport to avoid the .go xyz race condition where
         // the local snapshot position reverts to the DB login position.
         _output.WriteLine($"[{label}] Setup from current position (GM commands work anywhere).");
+    }
+
+    private async Task EnsureLevelAtLeastAsync(string account, string label, uint minLevel)
+    {
+        await _bot.RefreshSnapshotsAsync();
+        var snap = GetSnapshot(label);
+        var currentLevel = snap?.Player?.Unit?.GameObject?.Level ?? 0;
+        if (currentLevel >= minLevel)
+        {
+            _output.WriteLine($"[{label}] Level already >= {minLevel}; skipping level setup.");
+            return;
+        }
+
+        var levelsToAdd = (int)(minLevel - currentLevel);
+        _output.WriteLine($"[{label}] Leveling to {minLevel} via .levelup {levelsToAdd} (current={currentLevel}).");
+        await _bot.SendGmChatCommandAsync(account, $".levelup {levelsToAdd}");
+        await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => (snapshot?.Player?.Unit?.GameObject?.Level ?? 0) >= minLevel,
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} level-setup");
     }
 
     /// <summary>

@@ -1,11 +1,216 @@
 using FluentAssertions;
+using GameData.Core.Models;
+using Microsoft.Extensions.Hosting;
+using NSubstitute;
 using RecordedTests.PathingTests.Configuration;
+using RecordedTests.PathingTests.Models;
+using RecordedTests.Shared.Abstractions.I;
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RecordedTests.PathingTests.Tests;
 
 public class ProgramTests
 {
+    [Fact]
+    public void FilterTests_TestFilter_UsesExactCaseInsensitiveNameMatch()
+    {
+        // Arrange
+        var tests = new[]
+        {
+            CreatePathingTest("Northshire", "Road"),
+            CreatePathingTest("Northshire_Extended", "Road"),
+            CreatePathingTest("Barrens", "Road")
+        };
+        var config = new TestConfiguration { TestFilter = "northshire" };
+
+        // Act
+        var filtered = Program.FilterTests(config, tests);
+
+        // Assert
+        filtered.Should().ContainSingle()
+            .Which.Name.Should().Be("Northshire");
+    }
+
+    [Fact]
+    public void FilterTests_CategoryFilter_UsesExactCaseInsensitiveCategoryMatch()
+    {
+        // Arrange
+        var tests = new[]
+        {
+            CreatePathingTest("ShortRoad", "Road"),
+            CreatePathingTest("LongRoad", "RoadLong"),
+            CreatePathingTest("BoatRoute", "Transport")
+        };
+        var config = new TestConfiguration { CategoryFilter = "road" };
+
+        // Act
+        var filtered = Program.FilterTests(config, tests);
+
+        // Assert
+        filtered.Should().ContainSingle()
+            .Which.Name.Should().Be("ShortRoad");
+    }
+
+    [Fact]
+    public void FilterTests_TestAndCategoryFilters_AreCombined()
+    {
+        // Arrange
+        var tests = new[]
+        {
+            CreatePathingTest("SharedName", "Road"),
+            CreatePathingTest("SharedName", "Transport"),
+            CreatePathingTest("OtherName", "Road")
+        };
+        var config = new TestConfiguration
+        {
+            TestFilter = "sharedname",
+            CategoryFilter = "transport"
+        };
+
+        // Act
+        var filtered = Program.FilterTests(config, tests);
+
+        // Assert
+        filtered.Should().ContainSingle()
+            .Which.Category.Should().Be("Transport");
+    }
+
+    [Fact]
+    public void FilterTests_NoMatch_ThrowsWithFilterAndAvailableTests()
+    {
+        // Arrange
+        var tests = new[]
+        {
+            CreatePathingTest("Northshire", "Road"),
+            CreatePathingTest("Barrens", "Desert")
+        };
+        var config = new TestConfiguration
+        {
+            TestFilter = "North",
+            CategoryFilter = "Road"
+        };
+
+        // Act
+        var act = () => Program.FilterTests(config, tests);
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*name='North'*category='Road'*Available tests: Northshire, Barrens*");
+    }
+
+    [Fact]
+    public async Task StartPathfindingServiceAsync_StartsHostCreatedByFactory()
+    {
+        // Arrange
+        var host = Substitute.For<IHost>();
+        host.StartAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var logger = Substitute.For<ITestLogger>();
+        Program.SetPathfindingServiceHostFactoryForTests(() => host);
+
+        try
+        {
+            // Act
+            await Program.StartPathfindingServiceAsync(logger);
+
+            // Assert
+            await host.Received(1).StartAsync(Arg.Any<CancellationToken>());
+            Program.HasPathfindingServiceHostForTests.Should().BeTrue();
+        }
+        finally
+        {
+            Program.ResetPathfindingServiceHostForTests();
+        }
+    }
+
+    [Fact]
+    public async Task StopPathfindingServiceAsync_StopsDisposesAndClearsStartedHost()
+    {
+        // Arrange
+        var host = Substitute.For<IHost>();
+        host.StartAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        host.StopAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        var logger = Substitute.For<ITestLogger>();
+        Program.SetPathfindingServiceHostFactoryForTests(() => host);
+
+        try
+        {
+            await Program.StartPathfindingServiceAsync(logger);
+
+            // Act
+            await Program.StopPathfindingServiceAsync(logger);
+
+            // Assert
+            await host.Received(1).StopAsync(Arg.Any<CancellationToken>());
+            host.Received(1).Dispose();
+            Program.HasPathfindingServiceHostForTests.Should().BeFalse();
+        }
+        finally
+        {
+            Program.ResetPathfindingServiceHostForTests();
+        }
+    }
+
+    [Fact]
+    public async Task StopPathfindingServiceAsync_DisposesAndClearsHost_WhenStopFails()
+    {
+        // Arrange
+        var host = Substitute.For<IHost>();
+        host.StartAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
+        host.StopAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("stop failed")));
+        var logger = Substitute.For<ITestLogger>();
+        Program.SetPathfindingServiceHostFactoryForTests(() => host);
+
+        try
+        {
+            await Program.StartPathfindingServiceAsync(logger);
+
+            // Act
+            await Program.StopPathfindingServiceAsync(logger);
+
+            // Assert
+            host.Received(1).Dispose();
+            Program.HasPathfindingServiceHostForTests.Should().BeFalse();
+            logger.Received(1).Warn(Arg.Is<string>(message => message.Contains("stop failed", StringComparison.OrdinalIgnoreCase)));
+        }
+        finally
+        {
+            Program.ResetPathfindingServiceHostForTests();
+        }
+    }
+
+    [Fact]
+    public async Task StartPathfindingServiceAsync_DisposesAndClearsHost_WhenStartFails()
+    {
+        // Arrange
+        var host = Substitute.For<IHost>();
+        host.StartAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("start failed")));
+        var logger = Substitute.For<ITestLogger>();
+        Program.SetPathfindingServiceHostFactoryForTests(() => host);
+
+        try
+        {
+            // Act
+            var act = () => Program.StartPathfindingServiceAsync(logger);
+
+            // Assert
+            await act.Should().ThrowAsync<InvalidOperationException>()
+                .WithMessage("start failed");
+            host.Received(1).Dispose();
+            Program.HasPathfindingServiceHostForTests.Should().BeFalse();
+            logger.Received(1).Error(
+                Arg.Is<string>(message => message.Contains("start failed", StringComparison.OrdinalIgnoreCase)),
+                Arg.Any<InvalidOperationException>());
+        }
+        finally
+        {
+            Program.ResetPathfindingServiceHostForTests();
+        }
+    }
+
     [Fact]
     public void ParseConfiguration_TrueNasApiFlag_PopulatesConfiguration()
     {
@@ -390,4 +595,16 @@ public class ProgramTests
         // Assert
         options.ServerAvailabilityTimeout.Should().Be(TimeSpan.FromMinutes(20));
     }
+
+    private static PathingTestDefinition CreatePathingTest(string name, string category)
+        => new(
+            name,
+            category,
+            "test",
+            1,
+            new Position(0, 0, 0),
+            new Position(1, 1, 1),
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            TimeSpan.FromSeconds(30));
 }

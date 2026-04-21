@@ -52,6 +52,8 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
     // ==========================================================================
 
     [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityScenario", "Jump")]
     public void StandingJump_FrameByFrame_PositionMatchesRecording()
     {
         var result = ReplayAndAssert(Recordings.OrgStandingJump);
@@ -59,6 +61,8 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
     }
 
     [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityScenario", "Jump")]
     public void RunningJumps_FrameByFrame_PositionMatchesRecording()
     {
         var result = ReplayAndAssert(Recordings.OrgRunningJumps);
@@ -220,6 +224,8 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
     }
 
     [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityScenario", "Transport")]
     public void PacketBackedUndercityElevatorUp_ReplayBoardsUndergroundAndExitsUpperDeck()
     {
         var result = ReplayAndAssert(Recordings.PacketBackedUndercityElevatorUp);
@@ -248,6 +254,8 @@ public class PhysicsReplayTests(PhysicsEngineFixture fixture, ITestOutputHelper 
     }
 
     [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityScenario", "Transport")]
     public void PacketBackedUndercityElevatorUp_ReplayPreservesUpperDoorBlock()
     {
         AssertReplayPreservesBlockedSteps(

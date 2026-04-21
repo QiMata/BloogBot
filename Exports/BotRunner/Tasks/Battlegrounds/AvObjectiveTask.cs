@@ -103,6 +103,7 @@ public class AvObjectiveTask : BotTask, IBotTask
 
                 if (banner != null)
                 {
+                    ObjectManager.ForceStopImmediate();
                     banner.Interact();
                     Logger.LogInformation("[AV] Assaulting {Objective}!", _targetName);
                 }

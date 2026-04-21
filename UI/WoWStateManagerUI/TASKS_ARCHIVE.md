@@ -2,6 +2,17 @@
 
 Completed items moved from TASKS.md.
 
+## UI-MISS-005 (Completed 2026-04-15)
+**Add converter-contract coverage for all remaining WPF converters.**
+- Added direct tests for:
+  - `NullToBoolConverter`: non-null true, null false, `ConvertBack` one-way contract.
+  - `PathToFilenameConverter`: Windows/relative/plain filenames, non-string fallback, `ConvertBack` one-way contract.
+  - `ServiceStatusToBrushConverter`: Up/Down/Unknown colors, non-status fallback, `ConvertBack` one-way contract.
+- Updated README converter binding contract so all converters currently used by XAML are documented.
+- Validation:
+  - `dotnet test Tests/WoWStateManagerUI.Tests/WoWStateManagerUI.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --logger "console;verbosity=minimal"` -> `passed (42/42)`
+  - `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release --no-restore` -> `succeeded (0 warnings, 0 errors)`
+
 ## UI-MISS-001 (Completed)
 **Remove `NotImplementedException` path from `ConvertBack` and make converter direction explicit.**
 - `ConvertBack` now returns `Binding.DoNothing` instead of throwing.

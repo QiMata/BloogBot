@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using WoWStateManager.Clients;
@@ -31,6 +32,14 @@ namespace WoWStateManager.Coordination;
 /// </summary>
 public class DungeoneeringCoordinator
 {
+    public readonly record struct DungeonTarget(string Label, uint MapId, float X, float Y, float Z);
+
+    public const string DungeonTargetNameEnvVar = "WWOW_DUNGEON_TARGET_NAME";
+    public const string DungeonTargetMapEnvVar = "WWOW_DUNGEON_TARGET_MAP";
+    public const string DungeonTargetXEnvVar = "WWOW_DUNGEON_TARGET_X";
+    public const string DungeonTargetYEnvVar = "WWOW_DUNGEON_TARGET_Y";
+    public const string DungeonTargetZEnvVar = "WWOW_DUNGEON_TARGET_Z";
+
     public enum CoordState
     {
         WaitingForBots,
@@ -59,6 +68,7 @@ public class DungeoneeringCoordinator
     private readonly List<string> _memberAccounts;
     private readonly List<CharacterSettings> _allSettings;
     private readonly ConcurrentDictionary<string, string> _accountToCharName = new();
+    private readonly DungeonTarget _dungeonTarget;
 
     private CoordState _state = CoordState.WaitingForBots;
     private DateTime _stateEnteredAt = DateTime.UtcNow;
@@ -91,16 +101,15 @@ public class DungeoneeringCoordinator
     private const float OrgY = -4373.4f;
     private const float OrgZ = 34.2f; // Z+3
 
-    // RFC interior start (first waypoint area)
-    private const int RfcMapId = 389;
-    private const float RfcStartX = 3f;
-    private const float RfcStartY = -11f;
-    private const float RfcStartZ = -15f; // Z+3 from waypoint at -18
-
     // Vanilla WoW party limit: 5 members (including leader). Must convert to raid for 6+.
     private const int PARTY_SIZE_LIMIT = 4; // 4 invites = 5 total with leader
+    private const int RAID_CONVERT_QUORUM = PARTY_SIZE_LIMIT - 1; // One stale batch-1 snapshot should not block raid conversion.
+    private const double RAID_CONVERT_GRACE_SEC = 2.5;
+    private const int GROUP_VERIFY_TOLERANCE = 1;
+    private const double GROUP_VERIFY_GRACE_SEC = 2.5;
     private bool _raidConvertSent;
     private readonly ConcurrentDictionary<string, byte> _leftOldGroup = new();
+    private readonly ConcurrentDictionary<string, ulong> _confirmedGroupLeaderByAccount = new(StringComparer.OrdinalIgnoreCase);
 
     // Throttle follow/heal actions per account — concurrent for multi-thread safety
     private readonly ConcurrentDictionary<string, DateTime> _lastActionSent = new();
@@ -123,6 +132,9 @@ public class DungeoneeringCoordinator
 
     public CoordState State => _state;
 
+    public static readonly DungeonTarget DefaultDungeonTarget =
+        new("RFC", 389, 0.797643f, -8.23429f, -15.5288f);
+
     /// <summary>
     /// Create a dungeoneering coordinator.
     /// </summary>
@@ -135,6 +147,7 @@ public class DungeoneeringCoordinator
         IEnumerable<string> allAccounts,
         List<CharacterSettings> allSettings,
         MangosSOAPClient? soapClient,
+        DungeonTarget? dungeonTarget,
         ILogger logger)
     {
         _leaderAccount = leaderAccount;
@@ -144,6 +157,7 @@ public class DungeoneeringCoordinator
         _allSettings = allSettings;
         _soapClient = soapClient;
         _logger = logger;
+        _dungeonTarget = dungeonTarget ?? DefaultDungeonTarget;
 
         if (_state == CoordState.FormGroup_Inviting)
         {
@@ -154,6 +168,45 @@ public class DungeoneeringCoordinator
 
         _logger.LogInformation("DUNGEON_COORD: Initialized — Leader='{Leader}', Members=[{Members}], SOAP={HasSoap}, State={State}",
             leaderAccount, string.Join(", ", _memberAccounts), soapClient != null, _state);
+    }
+
+    public DungeoneeringCoordinator(
+        string leaderAccount,
+        IEnumerable<string> allAccounts,
+        List<CharacterSettings> allSettings,
+        MangosSOAPClient? soapClient,
+        ILogger logger)
+        : this(leaderAccount, allAccounts, allSettings, soapClient, null, logger)
+    {
+    }
+
+    public static DungeonTarget ResolveTargetFromEnvironment(ILogger? logger = null)
+    {
+        var mapText = Environment.GetEnvironmentVariable(DungeonTargetMapEnvVar);
+        var xText = Environment.GetEnvironmentVariable(DungeonTargetXEnvVar);
+        var yText = Environment.GetEnvironmentVariable(DungeonTargetYEnvVar);
+        var zText = Environment.GetEnvironmentVariable(DungeonTargetZEnvVar);
+        var label = Environment.GetEnvironmentVariable(DungeonTargetNameEnvVar) ?? DefaultDungeonTarget.Label;
+
+        if (uint.TryParse(mapText, out var mapId)
+            && TryParseFloat(xText, out var x)
+            && TryParseFloat(yText, out var y)
+            && TryParseFloat(zText, out var z))
+        {
+            return new DungeonTarget(label, mapId, x, y, z);
+        }
+
+        if (!string.IsNullOrWhiteSpace(mapText)
+            || !string.IsNullOrWhiteSpace(xText)
+            || !string.IsNullOrWhiteSpace(yText)
+            || !string.IsNullOrWhiteSpace(zText))
+        {
+            logger?.LogWarning(
+                "DUNGEON_COORD: Ignoring incomplete dungeon target env override map='{Map}' x='{X}' y='{Y}' z='{Z}'. Falling back to default RFC target.",
+                mapText, xText, yText, zText);
+        }
+
+        return DefaultDungeonTarget;
     }
 
     public ActionMessage? GetAction(
@@ -201,7 +254,7 @@ public class DungeoneeringCoordinator
             CoordState.FormGroup_AcceptingRest => HandleAcceptingRest(requestingAccount, snapshots),
             CoordState.FormGroup_Verify => HandleVerify(requestingAccount, snapshots),
             CoordState.TeleportToRFC => HandleTeleportToRFC(requestingAccount, snapshots),
-            CoordState.WaitForRFCSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.DispatchDungeoneering, RfcMapId),
+            CoordState.WaitForRFCSettle => HandleWaitForSettle(requestingAccount, snapshots, CoordState.DispatchDungeoneering, GetDungeonMapId()),
             CoordState.DispatchDungeoneering => HandleDispatchDungeoneering(requestingAccount, snapshots),
             CoordState.DungeonInProgress => HandleDungeonInProgress(requestingAccount, snapshots),
             _ => null,
@@ -216,6 +269,71 @@ public class DungeoneeringCoordinator
         _state = newState;
         _stateEnteredAt = DateTime.UtcNow;
         _tickCount = 0;
+    }
+
+    private ulong GetExpectedLeaderGuid(ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        if (!snapshots.TryGetValue(_leaderAccount, out var leaderSnap))
+            return 0;
+
+        var selfGuid = leaderSnap.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
+        if (selfGuid != 0)
+            return selfGuid;
+
+        return leaderSnap.PartyLeaderGuid;
+    }
+
+    private bool TryResolveLeaderMatchedGroup(
+        string account,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots,
+        ulong expectedLeaderGuid,
+        out ulong observedLeaderGuid)
+    {
+        observedLeaderGuid = 0;
+
+        if (!snapshots.TryGetValue(account, out var snapshot))
+            return false;
+
+        observedLeaderGuid = snapshot.PartyLeaderGuid;
+        if (observedLeaderGuid == 0)
+            return false;
+
+        return expectedLeaderGuid == 0 || observedLeaderGuid == expectedLeaderGuid;
+    }
+
+    private bool HasLatchedGroupConfirmation(string account, ulong expectedLeaderGuid)
+    {
+        if (!_confirmedGroupLeaderByAccount.TryGetValue(account, out var confirmedLeaderGuid))
+            return false;
+
+        return expectedLeaderGuid == 0 || confirmedLeaderGuid == expectedLeaderGuid;
+    }
+
+    private int CountGroupedMembers(
+        IEnumerable<string> memberAccounts,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots,
+        ulong expectedLeaderGuid)
+    {
+        return memberAccounts.Count(account =>
+            TryResolveLeaderMatchedGroup(account, snapshots, expectedLeaderGuid, out _)
+            || HasLatchedGroupConfirmation(account, expectedLeaderGuid));
+    }
+
+    private int CountGroupedAccounts(
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots,
+        ulong expectedLeaderGuid)
+    {
+        var grouped = 0;
+
+        if (snapshots.TryGetValue(_leaderAccount, out var leaderSnap)
+            && leaderSnap.PartyLeaderGuid != 0
+            && (expectedLeaderGuid == 0 || leaderSnap.PartyLeaderGuid == expectedLeaderGuid))
+        {
+            grouped++;
+        }
+
+        grouped += CountGroupedMembers(_memberAccounts, snapshots, expectedLeaderGuid);
+        return grouped;
     }
 
     // ===== State Handlers =====
@@ -783,10 +901,9 @@ public class DungeoneeringCoordinator
         // Re-teleport bots that aren't on the correct map yet
         if (missingBots.Count > 0 && missingBots.Contains(requestingAccount))
         {
-            if (expectedMapId == RfcMapId)
+            if (expectedMapId == GetDungeonMapId())
             {
-                return TrySendThrottledTeleport(requestingAccount,
-                    $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+                return TrySendThrottledTeleport(requestingAccount, BuildDungeonTeleportCommand());
             }
             else if (expectedMapId == 1) // Orgrimmar
             {
@@ -827,6 +944,10 @@ public class DungeoneeringCoordinator
             return null;
 
         _logger.LogInformation("DUNGEON_COORD: All bots disbanded. Starting character preparation.");
+        _confirmedGroupLeaderByAccount.Clear();
+        _raidConvertSent = false;
+        _inviteIndex = 0;
+        CurrentInvitePhase = InvitePhase.SendInvite;
 
         // If SOAP is available, do full prep (level set + instance unbind)
         if (_soapClient != null)
@@ -865,8 +986,8 @@ public class DungeoneeringCoordinator
             // All batch 1 members processed — move to raid conversion or verify
             if (_memberAccounts.Count > PARTY_SIZE_LIMIT)
             {
-                var grouped = _memberAccounts.Take(inviteLimit).Count(m =>
-                    snapshots.TryGetValue(m, out var s) && s.PartyLeaderGuid != 0);
+                var expectedLeaderGuid = GetExpectedLeaderGuid(snapshots);
+                var grouped = CountGroupedMembers(_memberAccounts.Take(inviteLimit), snapshots, expectedLeaderGuid);
                 _logger.LogInformation("DUNGEON_COORD: Batch 1 complete: {Grouped}/{Limit} grouped. Converting to raid.",
                     grouped, inviteLimit);
                 TransitionTo(CoordState.FormGroup_ConvertToRaid);
@@ -919,10 +1040,12 @@ public class DungeoneeringCoordinator
                         (int)InvitePhase.SendInvite, (int)InvitePhase.WaitForGrouped) != (int)InvitePhase.WaitForGrouped)
                     return null; // Another thread already claimed this transition
 
-                var isGrouped = snapshots.TryGetValue(memberAccount, out var memberSnap) && memberSnap.PartyLeaderGuid != 0;
+                var expectedLeaderGuid = GetExpectedLeaderGuid(snapshots);
+                var isGrouped = TryResolveLeaderMatchedGroup(memberAccount, snapshots, expectedLeaderGuid, out var observedLeaderGuid);
                 var waitElapsed = (DateTime.UtcNow - _phaseStartedAt).TotalSeconds;
                 if (isGrouped)
                 {
+                    _confirmedGroupLeaderByAccount[memberAccount] = observedLeaderGuid;
                     _logger.LogInformation("DUNGEON_COORD: '{Account}' confirmed grouped.", memberAccount);
                     _inviteIndex++;
                     _tickCount = 0;
@@ -965,30 +1088,48 @@ public class DungeoneeringCoordinator
         if (!_raidConvertSent)
         {
             _raidConvertSent = true;
+            _phaseStartedAt = DateTime.UtcNow;
             _logger.LogInformation("DUNGEON_COORD: Leader converting party to raid.");
             return MakeAction(ActionType.ConvertToRaid);
         }
 
-        // Wait for the conversion to take effect — verify batch 1 members still grouped
+        // Wait for the conversion to take effect. Live snapshots can lag one member
+        // behind after the raid convert packet even when the raid itself is usable.
         _tickCount++;
-        var grouped = _memberAccounts.Take(PARTY_SIZE_LIMIT).Count(m =>
-            snapshots.TryGetValue(m, out var s) && s.PartyLeaderGuid != 0);
+        var expectedLeaderGuid = GetExpectedLeaderGuid(snapshots);
+        var leaderGrouped = snapshots.TryGetValue(_leaderAccount, out var leaderSnap) && leaderSnap.PartyLeaderGuid != 0;
+        var grouped = CountGroupedMembers(_memberAccounts.Take(PARTY_SIZE_LIMIT), snapshots, expectedLeaderGuid);
+        var waitElapsed = (DateTime.UtcNow - _phaseStartedAt).TotalSeconds;
 
-        // Wait longer for the conversion to propagate — MaNGOS needs time to update
-        // all clients' group state. Without this, batch 2 invites are sent before
-        // the server fully transitions the group to raid mode, causing silent failures.
-        if (grouped < PARTY_SIZE_LIMIT)
+        if (leaderGrouped && grouped >= PARTY_SIZE_LIMIT)
         {
-            if (_tickCount % 5 == 0)
-                _logger.LogInformation("DUNGEON_COORD: Waiting for raid conversion: {Grouped}/{Expected} batch 1 members still grouped",
-                    grouped, PARTY_SIZE_LIMIT);
+            _logger.LogInformation("DUNGEON_COORD: Raid conversion done ({Grouped}/{Expected} batch 1 grouped). Inviting remaining {Count} members.",
+                grouped, PARTY_SIZE_LIMIT, _memberAccounts.Count - PARTY_SIZE_LIMIT);
+            _inviteIndex = PARTY_SIZE_LIMIT; // Start from where we left off
+            TransitionTo(CoordState.FormGroup_InvitingRest);
             return null;
         }
 
-        _logger.LogInformation("DUNGEON_COORD: Raid conversion done ({Grouped}/{Expected} batch 1 grouped). Inviting remaining {Count} members.",
-            grouped, PARTY_SIZE_LIMIT, _memberAccounts.Count - PARTY_SIZE_LIMIT);
-        _inviteIndex = PARTY_SIZE_LIMIT; // Start from where we left off
-        TransitionTo(CoordState.FormGroup_InvitingRest);
+        if (leaderGrouped && grouped >= RAID_CONVERT_QUORUM && waitElapsed >= RAID_CONVERT_GRACE_SEC)
+        {
+            _logger.LogWarning(
+                "DUNGEON_COORD: Proceeding after raid conversion quorum ({Grouped}/{Expected} batch 1 grouped after {Elapsed:F1}s). Inviting remaining {Count} members.",
+                grouped, PARTY_SIZE_LIMIT, waitElapsed, _memberAccounts.Count - PARTY_SIZE_LIMIT);
+            _inviteIndex = PARTY_SIZE_LIMIT;
+            TransitionTo(CoordState.FormGroup_InvitingRest);
+            return null;
+        }
+
+        // Wait longer for the conversion to propagate before treating it as usable.
+        if (!leaderGrouped || grouped < RAID_CONVERT_QUORUM || waitElapsed < RAID_CONVERT_GRACE_SEC)
+        {
+            if (_tickCount % 5 == 0)
+                _logger.LogInformation(
+                    "DUNGEON_COORD: Waiting for raid conversion: leaderGrouped={LeaderGrouped}, grouped={Grouped}/{Expected}, elapsed={Elapsed:F1}s",
+                    leaderGrouped, grouped, PARTY_SIZE_LIMIT, waitElapsed);
+            return null;
+        }
+
         return null;
     }
 
@@ -1043,10 +1184,12 @@ public class DungeoneeringCoordinator
                         (int)InvitePhase.SendInvite, (int)InvitePhase.WaitForGrouped) != (int)InvitePhase.WaitForGrouped)
                     return null; // Another thread already claimed this transition
 
-                var isGrouped = snapshots.TryGetValue(memberAccount, out var memberSnap) && memberSnap.PartyLeaderGuid != 0;
+                var expectedLeaderGuid = GetExpectedLeaderGuid(snapshots);
+                var isGrouped = TryResolveLeaderMatchedGroup(memberAccount, snapshots, expectedLeaderGuid, out var observedLeaderGuid);
                 var waitElapsed = (DateTime.UtcNow - _phaseStartedAt).TotalSeconds;
                 if (isGrouped)
                 {
+                    _confirmedGroupLeaderByAccount[memberAccount] = observedLeaderGuid;
                     _logger.LogInformation("DUNGEON_COORD: '{Account}' confirmed grouped [batch 2].", memberAccount);
                     _inviteIndex++;
                     // Phase already set to SendInvite by CompareExchange above
@@ -1084,16 +1227,30 @@ public class DungeoneeringCoordinator
         if (_tickCount < 3)
             return null;
 
-        var grouped = snapshots.Values.Count(s => s.PartyLeaderGuid != 0);
+        var expectedGrouped = _memberAccounts.Count + 1;
+        var expectedLeaderGuid = GetExpectedLeaderGuid(snapshots);
+        var grouped = CountGroupedAccounts(snapshots, expectedLeaderGuid);
+        var verifyElapsed = (DateTime.UtcNow - _stateEnteredAt).TotalSeconds;
         _logger.LogInformation("DUNGEON_COORD: Group verify: {Grouped}/{Total} bots grouped.",
-            grouped, snapshots.Count);
+            grouped, expectedGrouped);
 
-        if (grouped < _memberAccounts.Count + 1)
+        if (grouped >= expectedGrouped)
+        {
+            // Skip subgroup organization - it can desync raid membership in Vanilla.
+            // All bots stay in default subgroup 0. Buff coverage is less optimal but raid stays intact.
+            TransitionTo(CoordState.TeleportToRFC);
             return null;
+        }
 
-        // Skip subgroup organization — it can desync raid membership in Vanilla.
-        // All bots stay in default subgroup 0. Buff coverage is less optimal but raid stays intact.
-        TransitionTo(CoordState.TeleportToRFC);
+        if (grouped >= expectedGrouped - GROUP_VERIFY_TOLERANCE && verifyElapsed >= GROUP_VERIFY_GRACE_SEC)
+        {
+            _logger.LogWarning(
+                "DUNGEON_COORD: Proceeding after group verify quorum ({Grouped}/{Expected} grouped after {Elapsed:F1}s).",
+                grouped, expectedGrouped, verifyElapsed);
+            TransitionTo(CoordState.TeleportToRFC);
+            return null;
+        }
+
         return null;
     }
 
@@ -1124,8 +1281,8 @@ public class DungeoneeringCoordinator
         var assignments = _subgroupAssignments.ToArray();
         if (_subgroupAssignIndex >= assignments.Length)
         {
-            _logger.LogInformation("DUNGEON_COORD: All {Count} subgroup assignments sent. Teleporting to RFC.",
-                assignments.Length);
+            _logger.LogInformation("DUNGEON_COORD: All {Count} subgroup assignments sent. Teleporting to {Target}.",
+                assignments.Length, _dungeonTarget.Label);
             TransitionTo(CoordState.TeleportToRFC);
             return null;
         }
@@ -1253,7 +1410,8 @@ public class DungeoneeringCoordinator
         // All teleported?
         if (_rfcTeleportIndex >= _rfcTeleportOrder.Count)
         {
-            _logger.LogInformation("DUNGEON_COORD: All bots teleported to RFC. Waiting to settle.");
+            _logger.LogInformation("DUNGEON_COORD: All bots teleported to {Target}. Waiting to settle.",
+                _dungeonTarget.Label);
             TransitionTo(CoordState.WaitForRFCSettle);
             return null;
         }
@@ -1273,14 +1431,14 @@ public class DungeoneeringCoordinator
         _rfcTeleportIndex++;
         _lastRfcTeleportAt = DateTime.UtcNow;
 
-        _logger.LogInformation("DUNGEON_COORD: Teleporting {Account} to RFC (map {Map}) [{Idx}/{Total}]",
-            requestingAccount, RfcMapId, _rfcTeleportIndex, _rfcTeleportOrder.Count);
+        _logger.LogInformation("DUNGEON_COORD: Teleporting {Account} to {Target} (map {Map}) [{Idx}/{Total}]",
+            requestingAccount, _dungeonTarget.Label, _dungeonTarget.MapId, _rfcTeleportIndex, _rfcTeleportOrder.Count);
 
         // All bots (FG and BG) use bot chat .go xyz for cross-map teleport.
         // .go xyz is a self-teleport GM command that triggers server-side transfer.
         // Previously FG used SOAP `.tele name` which required a game_tele entry ("rfc")
         // that may not exist, causing silent teleport failures.
-        return MakeSendChatAction($".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+        return MakeSendChatAction(BuildDungeonTeleportCommand());
     }
 
     private ActionMessage? HandleDispatchDungeoneering(string requestingAccount,
@@ -1308,11 +1466,10 @@ public class DungeoneeringCoordinator
         // WoW.exe loads the dungeon (10-20s loading screen). Do NOT re-teleport during
         // loading — spamming .go xyz mid-load crashes WoW.exe.
         if (snapshots.TryGetValue(requestingAccount, out var snap)
-            && snap.Player?.Unit?.GameObject?.Base?.MapId != RfcMapId
+            && snap.Player?.Unit?.GameObject?.Base?.MapId != _dungeonTarget.MapId
             && !_teleportedToRFC.ContainsKey(requestingAccount))
         {
-            var teleportAction = TrySendThrottledTeleport(requestingAccount,
-                $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+            var teleportAction = TrySendThrottledTeleport(requestingAccount, BuildDungeonTeleportCommand());
             return teleportAction; // null if throttled — bot will re-poll
         }
 
@@ -1332,7 +1489,7 @@ public class DungeoneeringCoordinator
 
         var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
         action.Parameters.Add(new RequestParameter { IntParam = isLeader ? 1 : 0 });
-        action.Parameters.Add(new RequestParameter { IntParam = RfcMapId }); // target dungeon map ID
+        action.Parameters.Add(new RequestParameter { IntParam = checked((int)_dungeonTarget.MapId) }); // target dungeon map ID
 
         // Transition when all bots (including leader) have been dispatched.
         // Re-evaluate after TryAdd since the pre-check was before this bot was added.
@@ -1365,7 +1522,7 @@ public class DungeoneeringCoordinator
             // re-send the teleport. Skip during the first 30s after a teleport
             // to avoid re-teleporting during an active map transfer (causes FG crash).
             var leaderMapId = leaderSnap?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-            if (leaderMapId != RfcMapId)
+            if (leaderMapId != _dungeonTarget.MapId)
             {
                 // Only retry if it's been >30s since last teleport (transfer takes 10-20s)
                 if (_lastTeleportSent.TryGetValue(_leaderAccount, out var lastTp)
@@ -1374,8 +1531,7 @@ public class DungeoneeringCoordinator
                     // Still within transfer window — wait
                     return null;
                 }
-                return TrySendThrottledTeleport(_leaderAccount,
-                    $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+                return TrySendThrottledTeleport(_leaderAccount, BuildDungeonTeleportCommand());
             }
 
             // Re-dispatch StartDungeoneering to leader every few seconds until acknowledged.
@@ -1390,6 +1546,7 @@ public class DungeoneeringCoordinator
                 _lastActionSent[requestingAccount] = DateTime.UtcNow;
                 var leaderAction = new ActionMessage { ActionType = ActionType.StartDungeoneering };
                 leaderAction.Parameters.Add(new RequestParameter { IntParam = 1 }); // isLeader = true
+                leaderAction.Parameters.Add(new RequestParameter { IntParam = checked((int)_dungeonTarget.MapId) });
                 return leaderAction;
             }
             return null;
@@ -1400,14 +1557,13 @@ public class DungeoneeringCoordinator
         if (snapshots.TryGetValue(requestingAccount, out var reqSnap))
         {
             var reqMapId = reqSnap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-            if (reqMapId != RfcMapId)
+            if (reqMapId != _dungeonTarget.MapId)
             {
                 if (_lastTeleportSent.TryGetValue(requestingAccount, out var lastTp)
                     && (DateTime.UtcNow - lastTp).TotalSeconds < 30)
                     return null; // Still within transfer window
 
-                return TrySendThrottledTeleport(requestingAccount,
-                    $".go xyz {RfcStartX:0.#} {RfcStartY:0.#} {RfcStartZ:0.#} {RfcMapId}");
+                return TrySendThrottledTeleport(requestingAccount, BuildDungeonTeleportCommand());
             }
         }
 
@@ -1479,7 +1635,13 @@ public class DungeoneeringCoordinator
         return MakeSendChatAction(teleportCommand);
     }
 
-    /// <summary>
+    private static bool TryParseFloat(string? text, out float value) =>
+        float.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out value);
+
+    private int GetDungeonMapId() => checked((int)_dungeonTarget.MapId);
+
+    private string BuildDungeonTeleportCommand() =>
+        $".go xyz {_dungeonTarget.X:0.###} {_dungeonTarget.Y:0.###} {_dungeonTarget.Z:0.###} {_dungeonTarget.MapId}";
 
     private void ResolveSpells(string account, WoWActivitySnapshot snap)
     {

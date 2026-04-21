@@ -179,6 +179,115 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
+    public void LocalPlayerUpdate_WithoutPriorAdd_TakesControlAndClearsTransition()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x91;
+        var objectManager = WoWSharpObjectManager.Instance;
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateSetActiveMoverRecorder(out var activeMoverRequests).Object);
+
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 1;
+        SetPrivateField(objectManager, "_isInControl", false);
+        SetPrivateField(objectManager, "_isBeingTeleported", true);
+
+        objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+            playerGuid,
+            WoWSharpObjectManager.ObjectUpdateOperation.Update,
+            WoWObjectType.Player,
+            new MovementInfoUpdate
+            {
+                Guid = playerGuid,
+                X = 14f,
+                Y = 24f,
+                Z = 34f,
+                Facing = 1.75f,
+                MovementFlags = MovementFlags.MOVEFLAG_NONE,
+            },
+            new Dictionary<uint, object?>
+            {
+                [(uint)EUnitFields.UNIT_FIELD_HEALTH] = 80u,
+                [(uint)EUnitFields.UNIT_FIELD_MAXHEALTH] = 100u,
+            }));
+
+        UpdateProcessingHelper.DrainPendingUpdates();
+
+        Assert.True(GetPrivateFieldValue<bool>(objectManager, "_isInControl"));
+        Assert.False(GetPrivateFieldValue<bool>(objectManager, "_isBeingTeleported"));
+        Assert.Single(activeMoverRequests);
+        Assert.Equal(playerGuid, activeMoverRequests[0]);
+    }
+
+    [Fact]
+    public void TryRecoverStaleWorldEntryTransition_ClearsTransition_WhenWorldDataIsHydratedButGateStaysLatched()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0xABCD;
+        var objectManager = WoWSharpObjectManager.Instance;
+
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 1;
+        player.Health = 350u;
+        player.MaxHealth = 500u;
+        player.Position = new Position(1990.4f, -4794.1f, 55.9f);
+
+        SetPrivateField(objectManager, "_isBeingTeleported", true);
+        SetPrivateField(objectManager, "_isInControl", false);
+        SetPrivateField(objectManager, "_hasExplicitClientControlLockout", false);
+        SetPrivateField(
+            objectManager,
+            "_staleWorldEntryTransitionCandidateSinceUtc",
+            DateTime.UtcNow - TimeSpan.FromSeconds(3));
+
+        var recovered = InvokePrivateMethod<bool>(objectManager, "TryRecoverStaleWorldEntryTransition");
+
+        Assert.True(recovered);
+        Assert.False(GetPrivateFieldValue<bool>(objectManager, "_isBeingTeleported"));
+        Assert.True(GetPrivateFieldValue<bool>(objectManager, "_isInControl"));
+    }
+
+    [Fact]
+    public void TryRecoverStaleWorldEntryTransition_DoesNotClearActiveGroundSnap_WhenControlAlreadyReturned()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0xDCBA;
+        var objectManager = WoWSharpObjectManager.Instance;
+
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 1;
+        player.Health = 350u;
+        player.MaxHealth = 500u;
+        player.Position = new Position(1990.4f, -4794.1f, 55.9f);
+
+        var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+        SetPrivateField(controller, "_needsGroundSnap", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", true);
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_hasExplicitClientControlLockout", false);
+        SetPrivateField(
+            objectManager,
+            "_staleWorldEntryTransitionCandidateSinceUtc",
+            DateTime.UtcNow - TimeSpan.FromSeconds(3));
+
+        var recovered = InvokePrivateMethod<bool>(objectManager, "TryRecoverStaleWorldEntryTransition");
+
+        Assert.False(recovered);
+        Assert.True(GetPrivateFieldValue<bool>(objectManager, "_isBeingTeleported"));
+    }
+
+    [Fact]
     public void SyncTransportPassengerWorldPositions_UpdatesPlayerFromTransportOffset()
     {
         var objectManager = WoWSharpObjectManager.Instance;
@@ -1933,6 +2042,88 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
+    public void InteractWithGameObject_BattlegroundBanner_SendsCaptureSpellAfterGameObjectUse()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12D0;
+        const ulong bannerGuid = 0xF11000000000BEEFul;
+
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(977.08f, 1046.54f, -44.83f);
+
+        var banner = new WoWGameObject(new HighGuid(bannerGuid))
+        {
+            Entry = 180088u,
+            Position = new Position(977.08f, 1046.54f, -44.83f)
+        };
+
+        var objects = GetPrivateField<List<WoWObject>>(objectManager, "_objects");
+        var objectsLock = GetPrivateField<object>(objectManager, "_objectsLock");
+        lock (objectsLock)
+        {
+            objects.Add(banner);
+        }
+
+        objectManager.InteractWithGameObject(bannerGuid);
+
+        Assert.Collection(sentPackets,
+            packet => Assert.Equal(Opcode.CMSG_GAMEOBJ_USE, packet.opcode),
+            packet =>
+            {
+                Assert.Equal(Opcode.CMSG_CAST_SPELL, packet.opcode);
+
+                using var ms = new MemoryStream(packet.payload);
+                using var reader = new BinaryReader(ms);
+                Assert.Equal(21651u, reader.ReadUInt32());
+                Assert.Equal(0x0800u, reader.ReadUInt16());
+                Assert.Equal(bannerGuid, ReaderUtils.ReadPackedGuid(reader));
+            });
+    }
+
+    [Fact]
+    public void InteractWithGameObject_NonBattlegroundBanner_OnlySendsGameObjectUse()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12D1;
+        const ulong objectGuid = 0xF11000000000FADEul;
+
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+        InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(977.08f, 1046.54f, -44.83f);
+
+        var mailbox = new WoWGameObject(new HighGuid(objectGuid))
+        {
+            Entry = 176296u,
+            Position = new Position(977.08f, 1046.54f, -44.83f)
+        };
+
+        var objects = GetPrivateField<List<WoWObject>>(objectManager, "_objects");
+        var objectsLock = GetPrivateField<object>(objectManager, "_objectsLock");
+        lock (objectsLock)
+        {
+            objects.Add(mailbox);
+        }
+
+        objectManager.InteractWithGameObject(objectGuid);
+
+        Assert.Collection(sentPackets,
+            packet => Assert.Equal(Opcode.CMSG_GAMEOBJ_USE, packet.opcode));
+    }
+
+    [Fact]
     public void NotifyTeleportIncoming_ClearsMovementFlagsToNone()
     {
         _fixture._woWClient.Reset();
@@ -2468,6 +2659,107 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(0u, GetPrivateFieldValue<uint>(controller, "_fallTimeMs"));
     }
 
+    [Fact]
+    public void PollKnownBattlegroundAreaTriggersForLocalPlayer_EnteringWsgCaptureZone_SendsAreaTriggerOncePerEntry()
+    {
+        ResetObjectManager();
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        var sentTriggerIds = new List<uint>();
+        _fixture._woWClient
+            .Setup(c => c.SendAreaTriggerAsync(It.IsAny<uint>(), It.IsAny<CancellationToken>()))
+            .Callback<uint, CancellationToken>((triggerId, _) => sentTriggerIds.Add(triggerId))
+            .Returns(Task.CompletedTask);
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", new Mock<IWorldClient>().Object);
+        objectManager.ResetWorldSessionState("PollKnownBattlegroundAreaTriggersForLocalPlayer");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 489;
+        player.Position = new Position(930.85f, 1431.57f, 345.54f);
+
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+        Assert.Empty(sentTriggerIds);
+
+        player.Position = new Position(918.50f, 1434.04f, 346.05f);
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+
+        Assert.Equal([3647u], sentTriggerIds);
+
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+        Assert.Equal([3647u], sentTriggerIds);
+
+        player.Position = new Position(930.85f, 1431.57f, 345.54f);
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+        Assert.Equal([3647u], sentTriggerIds);
+
+        player.Position = new Position(918.50f, 1434.04f, 346.05f);
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+        Assert.Equal([3647u, 3647u], sentTriggerIds);
+    }
+
+    [Fact]
+    public void PollKnownBattlegroundAreaTriggersForLocalPlayer_PendingWorldEntry_SuppressesAreaTriggerSend()
+    {
+        ResetObjectManager();
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        var sentTriggerIds = new List<uint>();
+        _fixture._woWClient
+            .Setup(c => c.SendAreaTriggerAsync(It.IsAny<uint>(), It.IsAny<CancellationToken>()))
+            .Callback<uint, CancellationToken>((triggerId, _) => sentTriggerIds.Add(triggerId))
+            .Returns(Task.CompletedTask);
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", new Mock<IWorldClient>().Object);
+
+        const ulong playerGuid = 0xCAFE;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 489;
+        player.Position = new Position(918.50f, 1434.04f, 346.05f);
+
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+
+        Assert.Empty(sentTriggerIds);
+    }
+
+    [Fact]
+    public void PollKnownBattlegroundAreaTriggersForLocalPlayer_EnteringAbBlacksmithTrigger_SendsAreaTriggerPairOncePerEntry()
+    {
+        ResetObjectManager();
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        var sentTriggerIds = new List<uint>();
+        _fixture._woWClient
+            .Setup(c => c.SendAreaTriggerAsync(It.IsAny<uint>(), It.IsAny<CancellationToken>()))
+            .Callback<uint, CancellationToken>((triggerId, _) => sentTriggerIds.Add(triggerId))
+            .Returns(Task.CompletedTask);
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", new Mock<IWorldClient>().Object);
+        objectManager.ResetWorldSessionState("PollKnownBattlegroundAreaTriggersForLocalPlayer");
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.MapId = 529;
+        player.Position = new Position(977.08f, 1046.54f, -44.83f);
+
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+        Assert.Empty(sentTriggerIds);
+
+        player.Position = new Position(997.12f, 1001.31f, -31.39f);
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+
+        Assert.Equal([3808u, 3809u], sentTriggerIds);
+
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+        Assert.Equal([3808u, 3809u], sentTriggerIds);
+
+        player.Position = new Position(977.08f, 1046.54f, -44.83f);
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+        Assert.Equal([3808u, 3809u], sentTriggerIds);
+
+        player.Position = new Position(997.12f, 1001.31f, -31.39f);
+        objectManager.PollKnownBattlegroundAreaTriggersForLocalPlayer();
+        Assert.Equal([3808u, 3809u, 3808u, 3809u], sentTriggerIds);
+    }
+
     private void ResetObjectManager()
     {
         WoWSharpObjectManager.Instance.Initialize(
@@ -2522,6 +2814,18 @@ public class ObjectManagerWorldSessionTests
             .Setup(x => x.SendMoveWorldPortAckAsync(It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         loginRequests = requests;
+        return mockWorldClient;
+    }
+
+    private static Mock<IWorldClient> CreateSetActiveMoverRecorder(out List<ulong> activeMoverRequests)
+    {
+        var requests = new List<ulong>();
+        var mockWorldClient = new Mock<IWorldClient>();
+        mockWorldClient
+            .Setup(x => x.SendSetActiveMoverAsync(It.IsAny<ulong>(), It.IsAny<CancellationToken>()))
+            .Callback<ulong, CancellationToken>((guid, _) => requests.Add(guid))
+            .Returns(Task.CompletedTask);
+        activeMoverRequests = requests;
         return mockWorldClient;
     }
 

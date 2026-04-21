@@ -26,7 +26,7 @@ public class BgInteractionTests
 
     private const int KalimdorMap = 1;
     private const int EasternKingdomsMap = 0;
-    private const float SetupArrivalDistance = 40f;
+    private const float SetupArrivalDistance = 8f;
 
     // Orgrimmar bank — Z+3 offset applied
     private const float OrgBankX = 1627.32f, OrgBankY = -4376.07f, OrgBankZ = 17.81f;

@@ -1,4 +1,5 @@
 using BotRunner.Clients;
+using BotRunner.Combat;
 using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
@@ -114,6 +115,22 @@ public class BotRunnerServiceInventoryResolutionTests
         Assert.Equal(BehaviourTreeStatus.Success, status);
         Assert.Contains(GetRecentChatMessages(service), message =>
             message.Contains("[MOUNT-BLOCK] spell=458", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BuildBehaviorTreeFromActions_ZeroTargetFishingSpell_BypassesCanCastProbeAndCasts()
+    {
+        var service = CreateService(out var objectManager);
+        var player = new Mock<IWoWLocalPlayer>(MockBehavior.Loose);
+        objectManager.SetupGet(o => o.Player).Returns(player.Object);
+        objectManager.Setup(o => o.CanCastSpell((int)FishingData.FishingRank1, 0UL)).Returns(false);
+
+        var node = BuildActionTree(service, CharacterAction.CastSpell, (int)FishingData.FishingRank1, 0UL);
+        var status = node.Tick(new TimeData(0.1f));
+
+        Assert.Equal(BehaviourTreeStatus.Success, status);
+        objectManager.Verify(o => o.StopAllMovement(), Times.Once);
+        objectManager.Verify(o => o.CastSpell((int)FishingData.FishingRank1, -1, false), Times.Once);
     }
 
     [Fact]

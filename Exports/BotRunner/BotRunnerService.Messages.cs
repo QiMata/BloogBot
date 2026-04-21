@@ -70,11 +70,73 @@ namespace BotRunner
                             _recentChatMessages.Dequeue();
                     }
                 };
+
+                eh.OnWorldStatesInit += (_, worldStates) =>
+                {
+                    var summary = string.Join(
+                        "; ",
+                        worldStates
+                            .OrderBy(state => state.StateId)
+                            .Select(state => $"0x{state.StateId:X}/{state.StateId}={state.StateValue}"));
+                    EnqueueDiagnosticMessage($"[WORLDSTATE_INIT] {summary}");
+                };
+
+                eh.OnWorldStateUpdate += (_, worldState) =>
+                {
+                    EnqueueDiagnosticMessage(
+                        $"[WORLDSTATE] 0x{worldState.StateId:X}/{worldState.StateId}={worldState.StateValue}");
+                };
+
+                TrySubscribeToBattlegroundMessageEvents();
             }
             catch (Exception ex)
             {
                 Log.Warning($"[BOT RUNNER] Failed to subscribe to message events: {ex.Message}");
             }
+        }
+
+        private void TrySubscribeToBattlegroundMessageEvents()
+        {
+            if (_battlegroundMessageEventsSubscribed)
+                return;
+
+            var factory = _agentFactoryAccessor?.Invoke();
+            var battlegroundAgent = factory?.BattlegroundAgent;
+            if (battlegroundAgent == null)
+                return;
+
+            battlegroundAgent.StatusChanged.Subscribe(status =>
+            {
+                EnqueueDiagnosticMessage(
+                    $"[BATTLEGROUND_STATUS] queueSlot={status.QueueSlot} bgType={status.BgTypeId} " +
+                    $"status={status.Status} mapId={(status.MapId?.ToString() ?? "-")} " +
+                    $"acceptMs={(status.TimeToAcceptMs?.ToString() ?? "-")}");
+            });
+
+            battlegroundAgent.ScoreboardReceived.Subscribe(scoreboard =>
+            {
+                var sample = string.Join(
+                    "; ",
+                    scoreboard.Scores
+                        .Take(3)
+                        .Select(score =>
+                            $"0x{score.PlayerGuid:X}:{score.KillingBlows}/{score.HonorableKills}/{score.Deaths}/{score.BonusHonor}"));
+                EnqueueDiagnosticMessage(
+                    $"[PVP_LOG] finished={(scoreboard.IsFinished ? 1 : 0)} players={scoreboard.Scores.Count} " +
+                    $"sample={(string.IsNullOrWhiteSpace(sample) ? "-" : sample)}");
+            });
+
+            battlegroundAgent.BattlegroundPlayerJoined.Subscribe(playerGuid =>
+            {
+                EnqueueDiagnosticMessage($"[BATTLEGROUND_PLAYER_JOINED] 0x{playerGuid:X}");
+            });
+
+            battlegroundAgent.BattlegroundPlayerLeft.Subscribe(playerGuid =>
+            {
+                EnqueueDiagnosticMessage($"[BATTLEGROUND_PLAYER_LEFT] 0x{playerGuid:X}");
+            });
+
+            _battlegroundMessageEventsSubscribed = true;
         }
 
         private void FlushMessageBuffers()

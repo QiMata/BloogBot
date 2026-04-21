@@ -23,12 +23,11 @@ public class EconomyInteractionTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int MapId = 1; // Kalimdor
-    private const float SetupArrivalDistance = 40f;
-    // Z+3 offset applied to spawn table Z values to avoid UNDERMAP detection
-    private const float OrgBankX = 1627.32f, OrgBankY = -4376.07f, OrgBankZ = 14.81f;
-    private const float OrgAhX = 1687.26f, OrgAhY = -4464.71f, OrgAhZ = 23.15f;
-    private const float OrgMailboxX = 1615.58f, OrgMailboxY = -4391.60f, OrgMailboxZ = 13.11f;
+    private const int MapId = OrgrimmarServiceLocations.MapId; // Kalimdor
+    private const float SetupArrivalDistance = 8f;
+    private const float OrgBankX = OrgrimmarServiceLocations.BankX, OrgBankY = OrgrimmarServiceLocations.BankY, OrgBankZ = OrgrimmarServiceLocations.BankZ;
+    private const float OrgAhX = OrgrimmarServiceLocations.AuctionHouseX, OrgAhY = OrgrimmarServiceLocations.AuctionHouseY, OrgAhZ = OrgrimmarServiceLocations.AuctionHouseZ;
+    private const float OrgMailboxX = OrgrimmarServiceLocations.MailboxX, OrgMailboxY = OrgrimmarServiceLocations.MailboxY, OrgMailboxZ = OrgrimmarServiceLocations.MailboxZ;
 
 
     public EconomyInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
@@ -182,6 +181,13 @@ public class EconomyInteractionTests
 
         if (hasFg)
         {
+            await _bot.WaitForSnapshotConditionAsync(
+                _bot.FgAccountName!,
+                snap => (snap?.Player?.Coinage ?? 0) > fgCoinageBefore,
+                TimeSpan.FromSeconds(12),
+                pollIntervalMs: 300,
+                progressLabel: "FG mail-coinage-increase");
+
             var fgSnapAfter = await _bot.GetSnapshotAsync(_bot.FgAccountName!);
             var fgCoinageAfter = fgSnapAfter?.Player?.Coinage ?? 0;
             _output.WriteLine($"  [FG] Coinage after: {fgCoinageAfter} (delta={fgCoinageAfter - fgCoinageBefore})");
@@ -191,14 +197,25 @@ public class EconomyInteractionTests
 
     private async Task SetupMailAsync(string account, string label)
     {
+        var nameReady = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            s => !string.IsNullOrWhiteSpace(s.CharacterName),
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 250,
+            progressLabel: $"{label} mail-character");
+        Assert.True(nameReady, $"[{label}] Character name should be available before SOAP mail staging.");
+
         // Send gold to the bot via SOAP before teleporting to mailbox
+        await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
-        var charName = snap?.CharacterName ?? "";
-        if (!string.IsNullOrEmpty(charName))
-        {
-            _output.WriteLine($"  [{label}] Sending 10000 copper to {charName} via SOAP .send money");
-            await _bot.ExecuteGMCommandAsync($".send money {charName} \"Test Gold\" \"Mail collection test\" 10000");
-        }
+        var charName = snap?.CharacterName
+            ?? (string.Equals(account, _bot.BgAccountName, StringComparison.OrdinalIgnoreCase) ? _bot.BgCharacterName : _bot.FgCharacterName)
+            ?? string.Empty;
+        Assert.False(string.IsNullOrWhiteSpace(charName), $"[{label}] Character name must resolve before sending mail.");
+
+        _output.WriteLine($"  [{label}] Sending 10000 copper to {charName} via SOAP .send money");
+        await _bot.ExecuteGMCommandAsync($".send money {charName} \"Test Gold\" \"Mail collection test\" 10000");
+        await Task.Delay(2000);
 
         await EnsureReadyAtLocationAsync(account, label, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
     }

@@ -39,8 +39,8 @@ All P0 tasks completed. See `TASKS_ARCHIVE.md`.
 - `dotnet test Tests/WowSharpClient.NetworkTests/WowSharpClient.NetworkTests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~AuthClientTests|FullyQualifiedName~WorldClientTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-03-23
-- Active task: Keep bridge-registration coverage aligned with movement parity work from `Exports/WoWSharpClient`.
+- Last updated: 2026-04-15
+- Active task: none. All network-test P0 tasks are complete; bridge-registration coverage is current for the movement parity work.
 - Last delta: Added bridge-registration coverage for the observer-side Vanilla movement broadcasts so `WorldClient` now routes the full player/controller/observer movement matrix through the legacy movement handler map.
 - Pass result: `delta shipped`
 - Validation/tests run:
@@ -50,6 +50,6 @@ All P0 tasks completed. See `TASKS_ARCHIVE.md`.
 - Files changed:
   - `Tests/WowSharpClient.NetworkTests/WorldClientTests.cs`
 - Blockers: None.
-- Next task: Extend bridge coverage again if the remaining dispatch-table audit finds more movement/control opcodes.
-- Next command: `Get-Content Exports/WoWSharpClient/Movement/SplineController.cs | Select-Object -First 260`
-- Discovery: `WorldClient.RegisterWorldHandlers()` still registers `HandleAttackStart` before `BridgeToLegacy(SMSG_ATTACKSTART, SpellHandler.HandleAttackStart)`, so the reactive `AttackStateChanged` subject is likely shadowed by the legacy bridge registration. This remains a separate latent bug, not part of the current movement parity slice.
+- Next task: none in this owner.
+- Next command: `rg -n "^- \[ \]" --glob TASKS.md`
+- Discovery: `WorldClient.RegisterWorldHandlers()` still registers `HandleAttackStart` before `BridgeToLegacy(SMSG_ATTACKSTART, SpellHandler.HandleAttackStart)`, so the reactive `AttackStateChanged` subject may be shadowed by the legacy bridge registration. This remains a separate latent bug, not part of the current movement parity slice.

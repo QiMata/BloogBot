@@ -10,8 +10,8 @@ namespace DecisionEngineService
     public class CombatPredictionService : IDisposable
     {
         private readonly MLContext _mlContext;
-        private PredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot> _predictionEngine;
-        private ITransformer _trainedModel;
+        private PredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot>? _predictionEngine;
+        private ITransformer? _trainedModel;
         private FileSystemWatcher? _fileWatcher;
         private bool _disposed;
         private readonly string _connectionString;
@@ -30,6 +30,8 @@ namespace DecisionEngineService
             _dataDirectory = dataDirectory;
             _processedDirectory = processedDirectory;
             _logger = logger;
+
+            SqliteProvider.EnsureInitialized();
 
             LogServiceConfiguration();
 
@@ -59,9 +61,9 @@ namespace DecisionEngineService
         }
 
         // Method to load the model from the SQLite database
-        private ITransformer LoadModelFromDatabase()
+        private ITransformer? LoadModelFromDatabase()
         {
-            ITransformer model = null;
+            ITransformer? model = null;
 
             using (var connection = new SqliteConnection(_connectionString))
             {
@@ -97,7 +99,12 @@ namespace DecisionEngineService
         public void UpdateModel()
         {
             _trainedModel = LoadModelFromDatabase();
-            _predictionEngine = _mlContext.Model.CreatePredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot>(_trainedModel);
+            _predictionEngine = _trainedModel == null
+                ? null
+                : _mlContext.Model.CreatePredictionEngine<WoWActivitySnapshot, WoWActivitySnapshot>(_trainedModel);
+
+            if (_predictionEngine == null)
+                _logger.LogWarning("No trained model found in database - prediction engine remains unavailable");
         }
 
         // Method to monitor the data directory for new `.bin` files

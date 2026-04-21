@@ -46,6 +46,9 @@ internal static class NativePhysics
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     public static extern void ClearSceneCache(uint mapId);
 
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern void SetSceneAutoloadEnabled([MarshalAs(UnmanagedType.I1)] bool enabled);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct InjectedTriangle
     {

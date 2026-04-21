@@ -271,6 +271,18 @@ public class TransportWaitingLogicTests
         Assert.False(logic.IsTransportAtStop(objects, UpperStop));
     }
 
+    [Fact]
+    public void IsTransportAtStop_ElevatorDoorMarkerNearStop_ReturnsTrue()
+    {
+        var logic = new TransportWaitingLogic(TestElevator, UpperStop, LowerStop);
+        var objects = new List<DynamicObjectProto>
+        {
+            new() { DisplayId = 462, X = 109f, Y = 100f, Z = 50f }
+        };
+
+        Assert.True(logic.IsTransportAtStop(objects, UpperStop));
+    }
+
     // =====================================================================
     // TransportData LOOKUP TESTS
     // =====================================================================

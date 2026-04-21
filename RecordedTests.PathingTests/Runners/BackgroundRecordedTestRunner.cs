@@ -42,15 +42,28 @@ public class BackgroundRecordedTestRunner(
     private WoWClientOrchestrator? _orchestrator;
     private WoWSharpObjectManager? _objectManager;
     private WoWClient? _wowClient;
+    private bool _disconnectCompleted;
     private readonly List<Position> _positionHistory = new();
     private const int StuckCheckHistorySize = 10;
     private const float StuckDistanceThreshold = 1.0f;
     private const float SuccessRadiusYards = 50.0f;
 
+    internal Func<TimeSpan, CancellationToken, Task> DelayAsync { get; set; } = Task.Delay;
+    internal Func<Position, uint, CancellationToken, Task>? NavigateToDestinationOverride { get; set; }
+    internal Func<Position>? CurrentPositionOverride { get; set; }
+    internal Func<uint>? CurrentMapIdOverride { get; set; }
+    internal Action? StopMovementOverride { get; set; }
+    internal Action? StopGameLoopOverride { get; set; }
+    internal Func<CancellationToken, Task>? DisconnectWorldOverride { get; set; }
+    internal Func<CancellationToken, Task>? DisconnectAuthOverride { get; set; }
+    internal Action? DisposeOrchestratorOverride { get; set; }
+    internal Action? DisposeWowClientOverride { get; set; }
+
     /// <inheritdoc />
     public async Task ConnectAsync(ServerInfo server, CancellationToken cancellationToken)
     {
         _logger.Info($"[BG] Connecting to server {server.Host}:{server.Port} with account '{_account}'");
+        _disconnectCompleted = false;
 
         _orchestrator = WoWClientFactory.CreateOrchestrator();
 
@@ -144,9 +157,12 @@ public class BackgroundRecordedTestRunner(
         try
         {
             // Wait for player to be ready (teleport from GM commands to take effect)
-            await Task.Delay(2000, linkedCts.Token);
+            await DelayAsync(TimeSpan.FromSeconds(2), linkedCts.Token);
 
-            await NavigateToDestinationAsync(endPos, expectedEndMapId, linkedCts.Token);
+            if (NavigateToDestinationOverride != null)
+                await NavigateToDestinationOverride(endPos, expectedEndMapId, linkedCts.Token);
+            else
+                await NavigateToDestinationAsync(endPos, expectedEndMapId, linkedCts.Token);
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
         {
@@ -261,7 +277,7 @@ public class BackgroundRecordedTestRunner(
                 lastRepathTime = DateTime.UtcNow;
             }
 
-            await Task.Delay(100, cancellationToken);
+            await DelayAsync(TimeSpan.FromMilliseconds(100), cancellationToken);
         }
     }
 
@@ -310,6 +326,9 @@ public class BackgroundRecordedTestRunner(
     /// </summary>
     private Position GetCurrentPosition()
     {
+        if (CurrentPositionOverride != null)
+            return CurrentPositionOverride();
+
         if (_objectManager?.Player == null)
         {
             _logger.Warn("[BG] Object manager player not available, returning start position");
@@ -323,7 +342,7 @@ public class BackgroundRecordedTestRunner(
     /// </summary>
     private uint GetCurrentMapId()
     {
-        return _objectManager?.Player?.MapId ?? _testDefinition.MapId;
+        return CurrentMapIdOverride?.Invoke() ?? _objectManager?.Player?.MapId ?? _testDefinition.MapId;
     }
 
     /// <summary>
@@ -351,8 +370,11 @@ public class BackgroundRecordedTestRunner(
     /// </summary>
     private void StopMovement()
     {
-        // Stop all movement by stopping forward movement
-        _objectManager?.StopMovement(ControlBits.Front);
+        if (StopMovementOverride != null)
+            StopMovementOverride();
+        else
+            _objectManager?.StopMovement(ControlBits.Front);
+
         _logger.Info("[BG] Stopping movement");
     }
 
@@ -421,11 +443,11 @@ public class BackgroundRecordedTestRunner(
                     _logger.Warn($"[BG] Transport timeout (retry count: {retryCount})");
                     throw new TimeoutException("Transport did not arrive within expected time");
                 }
-                await Task.Delay(500, cancellationToken);
+                await DelayAsync(TimeSpan.FromMilliseconds(500), cancellationToken);
             }
 
             // Wait a moment for mapId to update
-            await Task.Delay(1000, cancellationToken);
+            await DelayAsync(TimeSpan.FromSeconds(1), cancellationToken);
 
             // Verify we're at expected dock area (radius 50 yards and expected mapId)
             var currentPos = GetCurrentPosition();
@@ -469,20 +491,72 @@ public class BackgroundRecordedTestRunner(
     /// <inheritdoc />
     public async Task DisconnectAsync(CancellationToken cancellationToken)
     {
-        // Stop the game loop before disconnecting to prevent update ticks on a dead connection
-        _objectManager?.StopGameLoop();
+        if (_disconnectCompleted)
+            return;
 
-        if (_orchestrator != null)
+        _disconnectCompleted = true;
+
+        // Stop the game loop before disconnecting to prevent update ticks on a dead connection
+        if (StopGameLoopOverride != null)
+            StopGameLoopOverride();
+        else
+            _objectManager?.StopGameLoop();
+
+        if (DisconnectWorldOverride != null || DisconnectAuthOverride != null || DisposeOrchestratorOverride != null)
         {
             _logger.Info("[BG] Disconnecting from server");
-            await _orchestrator.DisconnectWorldAsync(cancellationToken);
-            await _orchestrator.DisconnectAuthAsync(cancellationToken);
-            _orchestrator.Dispose();
+            await RunDisconnectStepAsync("world", () => DisconnectWorldOverride?.Invoke(cancellationToken) ?? Task.CompletedTask);
+            await RunDisconnectStepAsync("auth", () => DisconnectAuthOverride?.Invoke(cancellationToken) ?? Task.CompletedTask);
+            RunDisposeStep("orchestrator", DisposeOrchestratorOverride);
             _orchestrator = null;
         }
+        else if (_orchestrator != null)
+        {
+            var orchestrator = _orchestrator;
+            _orchestrator = null;
+            _logger.Info("[BG] Disconnecting from server");
+            await RunDisconnectStepAsync("world", () => orchestrator.DisconnectWorldAsync(cancellationToken));
+            await RunDisconnectStepAsync("auth", () => orchestrator.DisconnectAuthAsync(cancellationToken));
+            RunDisposeStep("orchestrator", orchestrator.Dispose);
+        }
 
-        _wowClient?.Dispose();
+        var wowClient = _wowClient;
         _wowClient = null;
+        if (DisposeWowClientOverride != null)
+            RunDisposeStep("wow client", DisposeWowClientOverride);
+        else
+            RunDisposeStep("wow client", wowClient == null ? null : () => wowClient.Dispose());
+    }
+
+    private async Task RunDisconnectStepAsync(string step, Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[BG] Error during {step} disconnect: {ex.Message}");
+        }
+    }
+
+    private void RunDisposeStep(string step, Action? action)
+    {
+        if (action == null)
+            return;
+
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[BG] Error disposing {step}: {ex.Message}");
+        }
     }
 
     /// <inheritdoc />

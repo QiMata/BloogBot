@@ -96,6 +96,29 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-20)
+
+- Completed: closed the WSG desired-party/objective slice end to end. `BotRunnerService.DesiredParty.GetCurrentGroupSize(...)` now counts the local player when `PartyAgent` reports only the other four members of a full 5-player party, so Horde leaders actually convert to raid before inviting the remaining queue roster. The WSG objective scenarios also now run on separate fresh fixture collections, which removes the shared-fixture contamination where a completed full-game run left the next destructive scenario at `hydrated=19/20`.
+- Deterministic coverage:
+  - `Tests/BotRunner.Tests/BotRunnerServiceDesiredPartyTests.cs` now pins the `PartyAgent.GroupSize == 4` / `GetGroupMembers().Count == 4` case and verifies it still drives the existing `IObjectManager.ConvertToRaid()` behavior path.
+  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/BattlegroundEntryTests.cs` now logs the exact raw snapshot(s) missing from `AllBots` when live hydration stalls, instead of only emitting the aggregate `19/20` count.
+- Live-validation coverage:
+  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/WsgObjectiveTests.cs` now uses a shared abstract base plus two separate collection fixtures so the single-capture and full-game objective scenarios each start from a fresh 20-bot WSG roster.
+  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/WarsongGulchFixture.cs` exposes an explicit battleground-reset helper used by the objective prep path.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceDesiredPartyTests" --logger "console;verbosity=minimal"` -> `passed (10/10)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.WsgObjectiveTests.WSG_FullGame_CompletesToVictoryOrDefeat" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=wsg_fullgame_after_group_size_fix_20260421_0210.trx"` -> `passed (1/1)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.WsgObjectiveTests.WSG_FlagCapture_HordeCarrier_CompletesSingleCaptureCycle" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=wsg_single_capture_isolated_after_diagnostics_20260421_0320.trx"` -> `passed (1/1)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "(FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.WsgFlagCaptureObjectiveTests|FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.WsgFullGameObjectiveTests)" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=wsg_objective_split_fixtures_20260421_0337.trx"` -> `passed (2/2)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found.`
+- Evidence:
+  - `tmp/test-runtime/results-live/wsg_fullgame_after_group_size_fix_20260421_0210.trx`
+  - `tmp/test-runtime/results-live/wsg_single_capture_isolated_after_diagnostics_20260421_0320.trx`
+  - `tmp/test-runtime/results-live/wsg_objective_split_fixtures_20260421_0337.trx`
+- Files changed: `Exports/BotRunner/BotRunnerService.DesiredParty.cs`, `Tests/BotRunner.Tests/BotRunnerServiceDesiredPartyTests.cs`, `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/BattlegroundEntryTests.cs`, `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/WarsongGulchFixture.cs`, `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/WarsongGulchObjectiveCollection.cs`, `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/WsgObjectiveTests.cs`, and task trackers.
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunner.Tests.LiveValidation.Battlegrounds.AbObjectiveTests" --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=ab_objective_suite_next.trx"`
+
 ## Handoff (2026-04-19)
 
 - Completed: closed the battleground queue-entry stabilization slice that followed `P2`. Early battleground/friend/ignore handlers are now registered before fresh world-client login traffic arrives, duplicate `JoinBattleground` dispatch no longer stacks queue tasks, and the Arathi Basin queue/entry fixture is stable on the background-only runner path.

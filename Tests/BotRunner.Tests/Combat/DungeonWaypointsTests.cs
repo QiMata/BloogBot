@@ -49,7 +49,9 @@ public class DungeonWaypointsTests
         foreach (var dungeon in DungeonEntryData.AllDungeons)
         {
             Assert.NotNull(dungeon.EntrancePosition);
+            Assert.NotNull(dungeon.InstanceEntryPosition);
             Assert.NotEqual(0f, dungeon.EntrancePosition.X);
+            Assert.NotEqual(0f, dungeon.InstanceEntryPosition.X);
             Assert.True(dungeon.InstanceMapId > 1, $"{dungeon.Name}: instance map should be >1");
             Assert.False(string.IsNullOrEmpty(dungeon.Abbreviation), $"{dungeon.Name}: missing abbreviation");
         }
@@ -68,6 +70,8 @@ public class DungeonWaypointsTests
         foreach (var raid in RaidEntryData.AllRaids)
         {
             Assert.NotNull(raid.EntrancePosition);
+            Assert.NotNull(raid.InstanceEntryPosition);
+            Assert.NotEqual(0f, raid.InstanceEntryPosition.X);
             Assert.True(raid.MaxPlayers >= 20, $"{raid.Name}: max players should be >=20");
         }
     }

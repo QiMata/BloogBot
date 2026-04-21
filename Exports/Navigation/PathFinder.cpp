@@ -49,6 +49,20 @@ extern "C" float GetGroundZ(
     float z,
     float maxSearchDist);
 
+class DynamicObjectRegistry
+{
+public:
+    static DynamicObjectRegistry* Instance();
+    int Count() const;
+    bool FindFirstIntersectingObject(
+        uint32_t mapId,
+        const G3D::Vector3& start,
+        const G3D::Vector3& end,
+        uint32_t* outInstanceId = nullptr,
+        uint64_t* outGuid = nullptr,
+        uint32_t* outDisplayId = nullptr) const;
+};
+
 namespace
 {
     constexpr float PathValidationAgentRadius = 0.6f;
@@ -64,6 +78,12 @@ namespace
     constexpr float MinCandidateEndpointDistance = 1.0f;
     constexpr float DetourAlongSamples[] = { 0.35f, 0.5f, 0.65f };
     constexpr float DetourLateralOffsets[] = { 2.0f, 4.0f, 6.0f, 8.0f, 10.0f, 12.0f };
+
+    bool HasActiveDynamicObjectOverlay()
+    {
+        auto* registry = DynamicObjectRegistry::Instance();
+        return registry != nullptr && registry->Count() > 0;
+    }
 
     XYZ ToXyz(const Vector3& point)
     {
@@ -411,6 +431,11 @@ PathFinder::~PathFinder()
 
 bool PathFinder::calculate(float originX, float originY, float originZ, float destX, float destY, float destZ, bool forceDest, bool isSwimming)
 {
+    m_overlayBlockedSegmentIndex = -1;
+    m_overlayBlockingInstanceId = 0;
+    m_overlayBlockingGuid = 0;
+    m_overlayBlockingDisplayId = 0;
+
 	Vector3 start(originX, originY, originZ);
 	setStartPosition(start);
 
@@ -838,13 +863,18 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 		}
 	}
 
-	// RefinePathForWalkability and SimplifyPathForWalkability DISABLED:
-	// ValidateWalkableSegment physics capsule sweeps cost ~630ms per segment,
-	// making 27-point paths take 16+ seconds. The Detour smooth path is already
-	// walkable (generated via moveAlongSurface). The C# CalculateValidatedPath
-	// layer handles segment validation via FindBlockedSegment at the service level.
-	auto afterRefine = afterSmooth;
-	auto afterSimplify = afterSmooth;
+    auto afterRefine = afterSmooth;
+    auto afterSimplify = afterSmooth;
+    if (HasActiveDynamicObjectOverlay())
+    {
+        CaptureFirstDynamicOverlayBlock();
+
+        RefinePathForWalkability(m_mapId, m_pathPoints);
+        afterRefine = std::chrono::steady_clock::now();
+
+        SimplifyPathForWalkability(m_mapId, m_pathPoints);
+        afterSimplify = std::chrono::steady_clock::now();
+    }
 
 	{
 		auto smoothMs = std::chrono::duration_cast<std::chrono::milliseconds>(afterSmooth - buildStart).count();
@@ -883,6 +913,61 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 	}
 
 	//printf("++ PathFinder::BuildPointPath path type %d size %d poly-size %d\n", m_type, pointCount, m_polyLength);
+}
+
+void PathFinder::CaptureFirstDynamicOverlayBlock()
+{
+    m_overlayBlockedSegmentIndex = -1;
+    m_overlayBlockingInstanceId = 0;
+    m_overlayBlockingGuid = 0;
+    m_overlayBlockingDisplayId = 0;
+
+    if (m_pathPoints.size() < 2)
+        return;
+
+    auto* registry = DynamicObjectRegistry::Instance();
+    if (!registry || registry->Count() == 0)
+        return;
+
+    for (size_t i = 0; i + 1 < m_pathPoints.size(); ++i)
+    {
+        uint32_t instanceId = 0;
+        uint64_t guid = 0;
+        uint32_t displayId = 0;
+        if (!registry->FindFirstIntersectingObject(
+            m_mapId,
+            m_pathPoints[i],
+            m_pathPoints[i + 1],
+            &instanceId,
+            &guid,
+            &displayId))
+        {
+            continue;
+        }
+
+        m_overlayBlockedSegmentIndex = static_cast<int>(i);
+        m_overlayBlockingInstanceId = instanceId;
+        m_overlayBlockingGuid = guid;
+        m_overlayBlockingDisplayId = displayId;
+        return;
+    }
+
+    uint32_t instanceId = 0;
+    uint64_t guid = 0;
+    uint32_t displayId = 0;
+    if (registry->FindFirstIntersectingObject(
+        m_mapId,
+        m_startPosition,
+        m_endPosition,
+        &instanceId,
+        &guid,
+        &displayId))
+    {
+        m_overlayBlockedSegmentIndex = 0;
+        m_overlayBlockingInstanceId = instanceId;
+        m_overlayBlockingGuid = guid;
+        m_overlayBlockingDisplayId = displayId;
+    }
 }
 
 void PathFinder::BuildError()

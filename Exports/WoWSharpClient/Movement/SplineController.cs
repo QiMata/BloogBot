@@ -25,6 +25,9 @@ namespace WoWSharpClient.Movement
     /// <summary>Per-tick state machine that walks along one spline.</summary>
     internal sealed class ActiveSpline(Spline s)
     {
+        private const float MaxSeedElapsedMs = 30000f;
+        private const float MaxSeedDurationMultiplier = 4f;
+
         public Spline Spline { get; } = s;
         private float _elapsed;   // ms since spline start
         private int _seg;         // current segment index
@@ -38,6 +41,12 @@ namespace WoWSharpClient.Movement
                 return;
 
             uint absoluteElapsedMs = currentTimeMs.Value - s.StartMs;
+            if (ShouldIgnoreSeedElapsed(absoluteElapsedMs))
+            {
+                _lastPosition = Spline.Points[0];
+                return;
+            }
+
             _elapsed = NormalizeElapsed(absoluteElapsedMs);
             RecalculateSegment();
             _lastPosition = EvaluateCurrentPosition();
@@ -78,6 +87,17 @@ namespace WoWSharpClient.Movement
 
         public bool Finished => !Spline.Flags.HasFlag(SplineFlags.Cyclic)
             && _seg + 1 >= Spline.Points.Count;
+
+        private bool ShouldIgnoreSeedElapsed(uint absoluteElapsedMs)
+        {
+            if (Spline.DurationMs == 0 || absoluteElapsedMs <= Spline.DurationMs)
+                return false;
+
+            float maxAllowedSeedElapsedMs = MathF.Max(
+                MaxSeedElapsedMs,
+                Spline.DurationMs * MaxSeedDurationMultiplier);
+            return absoluteElapsedMs > maxAllowedSeedElapsedMs;
+        }
 
         private float NormalizeElapsed(float absoluteElapsedMs)
         {

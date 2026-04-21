@@ -1,3 +1,4 @@
+using BotRunner.Combat;
 using ForegroundBotRunner.Mem;
 using ForegroundBotRunner.Objects;
 using GameData.Core.Enums;
@@ -769,30 +770,30 @@ namespace ForegroundBotRunner.Statics
             Log.Information("[FG-MAIL] Opening mailbox (right-click on 0x{Guid:X})...", mailboxGuid);
             ThreadSynchronizer.RunOnMainThread(() => wowObj.Interact());
 
-            // Step 2: Wait for mail UI to open (poll GetInboxNumItems)
-            bool windowOpened = false;
-            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
-            {
-                await Task.Delay(150, ct);
-                var countResult = MainThreadLuaCallWithResult("{0} = GetInboxNumItems()");
-                if (countResult.Length > 0 && int.TryParse(countResult[0], out int n) && n >= 0)
-                {
-                    // GetInboxNumItems returns 0 when open with no mail, nil when closed
-                    windowOpened = true;
-                    break;
-                }
-            }
-
-            if (!windowOpened)
+            // Step 2: Wait for the actual mail UI instead of treating an immediate
+            // zero-count inbox as success. Newly delivered mail can briefly report
+            // GetInboxNumItems()==0 before the inbox list has populated.
+            if (!await WaitForLuaFrameAsync("if MailFrame and MailFrame:IsVisible() then {0} = 1 else {0} = 0 end", ct))
             {
                 Log.Warning("[FG-MAIL] Mail window did not open after 4.5s.");
+                return;
+            }
+
+            // Step 3: Force an inbox refresh and give the server time to populate the list.
+            var inboxCount = await WaitForInboxCountAsync(MainThreadLuaCallWithResult, MainThreadLuaCall, ct);
+            Log.Information("[FG-MAIL] Inbox count after refresh: {Count}", inboxCount);
+
+            if (inboxCount <= 0)
+            {
+                MainThreadLuaCall("CloseMail()");
+                Log.Information("[FG-MAIL] Mailbox opened but no inbox entries were available to collect.");
                 return;
             }
 
             // Step 3: Take all money and items from each mail
             // Iterate in reverse so index removal doesn't shift remaining indices
             var result = MainThreadLuaCallWithResult(
-                "local n = GetInboxNumItems(); " +
+                "local n = GetInboxNumItems() or 0; " +
                 "local collected = 0; " +
                 "for i = n, 1, -1 do " +
                 "  local _, _, _, _, money, _, _, hasItem = GetInboxHeaderInfo(i); " +
@@ -806,9 +807,9 @@ namespace ForegroundBotRunner.Statics
                 int.TryParse(result[0], out collectedCount);
 
             if (collectedCount > 0)
-                await Task.Delay(500, ct);
+                await Task.Delay(750, ct);
 
-            // Step 4: Close mail window
+            // Step 4: Close mail window after collection settles.
             MainThreadLuaCall("CloseMail()");
 
             Log.Information("[FG-MAIL] Collected {Count} mail items/money from mailbox.", collectedCount);
@@ -976,41 +977,178 @@ namespace ForegroundBotRunner.Statics
 
         public async Task<IReadOnlyList<uint>> DiscoverTaxiNodesAsync(ulong flightMasterGuid, CancellationToken ct = default)
         {
-            await InteractWithNpcAsync(flightMasterGuid, ct);
-            if (!await WaitForTaxiMapAsync(ct))
+            if (!await EnsureTaxiMapOpenAsync(flightMasterGuid, ct))
             {
+                DiagLog($"[FG-TAXI] DiscoverTaxiNodesAsync: taxi map did not open for 0x{flightMasterGuid:X}.");
                 Log.Warning("[FG-TAXI] Taxi map did not open for flight master 0x{Guid:X}.", flightMasterGuid);
                 return Array.Empty<uint>();
             }
 
-            return _fgTaxiFrame.Nodes
+            var nodes = _fgTaxiFrame.Nodes
                 .Skip(1)
                 .Where(node => _fgTaxiFrame.HasNodeUnlocked(node.NodeNumber))
                 .Select(node => (uint)node.NodeNumber)
                 .ToList();
+            DiagLog($"[FG-TAXI] DiscoverTaxiNodesAsync: visible nodes={FormatTaxiNodes(_fgTaxiFrame.Nodes)}");
+            _fgTaxiFrame.Close();
+            return nodes;
         }
 
         public async Task<bool> ActivateFlightAsync(ulong flightMasterGuid, uint destinationNodeId, CancellationToken ct = default)
         {
-            if (!_fgTaxiFrame.IsOpen)
+            if (!await EnsureTaxiMapOpenAsync(flightMasterGuid, ct))
             {
-                await InteractWithNpcAsync(flightMasterGuid, ct);
-                if (!await WaitForTaxiMapAsync(ct))
-                {
-                    Log.Warning("[FG-TAXI] Taxi map did not open for activate-flight vendor 0x{Guid:X}.", flightMasterGuid);
-                    return false;
-                }
-            }
-
-            if (!_fgTaxiFrame.HasNodeUnlocked((int)destinationNodeId))
-            {
-                Log.Warning("[FG-TAXI] Destination node {NodeId} is not unlocked in the current taxi map.", destinationNodeId);
+                DiagLog($"[FG-TAXI] ActivateFlightAsync: taxi map did not open for 0x{flightMasterGuid:X} -> {destinationNodeId}.");
+                Log.Warning("[FG-TAXI] Taxi map did not open for activate-flight vendor 0x{Guid:X}.", flightMasterGuid);
                 return false;
             }
 
-            _fgTaxiFrame.SelectNode((int)destinationNodeId);
-            await Task.Delay(150, ct);
-            return true;
+            var taxiNodes = _fgTaxiFrame.Nodes;
+            DiagLog($"[FG-TAXI] ActivateFlightAsync: destination={destinationNodeId} visible nodes={FormatTaxiNodes(taxiNodes)}");
+            var frameNodeNumber = ResolveTaxiFrameNodeNumber(taxiNodes, destinationNodeId);
+            if (frameNodeNumber <= 0)
+            {
+                DiagLog($"[FG-TAXI] ActivateFlightAsync: destination={destinationNodeId} could not be resolved.");
+                Log.Warning("[FG-TAXI] Destination node {NodeId} could not be resolved from the current taxi map.", destinationNodeId);
+                return false;
+            }
+
+            if (!_fgTaxiFrame.HasNodeUnlocked(frameNodeNumber))
+            {
+                DiagLog($"[FG-TAXI] ActivateFlightAsync: destination={destinationNodeId} resolved to frame={frameNodeNumber} but is locked.");
+                Log.Warning("[FG-TAXI] Destination node {NodeId} resolved to frame node {FrameNode} but is not unlocked.", destinationNodeId, frameNodeNumber);
+                return false;
+            }
+
+            var destinationNodeName = taxiNodes
+                .Skip(1)
+                .FirstOrDefault(node => node.NodeNumber == frameNodeNumber)
+                ?.Name ?? string.Empty;
+            DiagLog($"[FG-TAXI] ActivateFlightAsync: selecting destination={destinationNodeId} frame={frameNodeNumber} name='{destinationNodeName}'.");
+            Log.Information(
+                "[FG-TAXI] Selecting destination node {NodeId} via frame node {FrameNode} ({NodeName}).",
+                destinationNodeId,
+                frameNodeNumber,
+                destinationNodeName);
+            _fgTaxiFrame.SelectNode(frameNodeNumber);
+            await Task.Delay(250, ct);
+            CaptureLuaErrors("fg.taxi.select");
+
+            for (int i = 0; i < 10 && !ct.IsCancellationRequested; i++)
+            {
+                if (!_fgTaxiFrame.IsOpen)
+                {
+                    DiagLog($"[FG-TAXI] ActivateFlightAsync: taxi map closed after selection on poll {i}.");
+                    return true;
+                }
+
+                await Task.Delay(150, ct);
+            }
+
+            CaptureLuaErrors("fg.taxi.select.still-open");
+            DiagLog($"[FG-TAXI] ActivateFlightAsync: taxi map still open after selection for destination={destinationNodeId} frame={frameNodeNumber}.");
+            Log.Warning(
+                "[FG-TAXI] Taxi selection for destination node {NodeId} via frame node {FrameNode} left the taxi map open.",
+                destinationNodeId,
+                frameNodeNumber);
+            return false;
+        }
+
+        internal static int ResolveTaxiFrameNodeNumber(IReadOnlyList<TaxiNode> taxiNodes, uint destinationNodeId)
+        {
+            if (taxiNodes == null || taxiNodes.Count == 0)
+                return 0;
+
+            if (!FlightPathData.Nodes.TryGetValue(destinationNodeId, out var canonicalNode))
+                return 0;
+
+            // FG taxi-frame numbering is local to the visible UI list, not the global taxi node id.
+            // Resolve the canonical destination through the displayed node metadata instead of
+            // treating the destination bit index as a frame-local button number.
+            return taxiNodes
+                .Skip(1)
+                .Where(node => TaxiNodeNameMatches(node.Name, canonicalNode.Name))
+                .OrderByDescending(node => IsTaxiNodeSelectable(node.Status))
+                .ThenByDescending(node => IsExactTaxiNodeNameMatch(node.Name, canonicalNode.Name))
+                .ThenBy(node => node.NodeNumber)
+                .FirstOrDefault()
+                ?.NodeNumber ?? 0;
+        }
+
+        private static bool TaxiNodeNameMatches(string displayedName, string canonicalName)
+        {
+            var normalizedDisplayedName = NormalizeTaxiNodeName(displayedName);
+            var normalizedCanonicalName = NormalizeTaxiNodeName(canonicalName);
+            if (normalizedDisplayedName.Length == 0 || normalizedCanonicalName.Length == 0)
+                return false;
+
+            if (string.Equals(normalizedDisplayedName, normalizedCanonicalName, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return normalizedDisplayedName.StartsWith(
+                normalizedCanonicalName + ",",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsExactTaxiNodeNameMatch(string displayedName, string canonicalName)
+            => string.Equals(
+                NormalizeTaxiNodeName(displayedName),
+                NormalizeTaxiNodeName(canonicalName),
+                StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsTaxiNodeSelectable(string? status)
+            => string.Equals(status, "CURRENT", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(status, "REACHABLE", StringComparison.OrdinalIgnoreCase);
+
+        private static string NormalizeTaxiNodeName(string? name)
+            => string.IsNullOrWhiteSpace(name)
+                ? string.Empty
+                : string.Join(" ", name.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        private async Task<bool> EnsureTaxiMapOpenAsync(ulong flightMasterGuid, CancellationToken ct)
+        {
+            if (_fgTaxiFrame.IsOpen)
+            {
+                DiagLog($"[FG-TAXI] EnsureTaxiMapOpenAsync: taxi map already open for 0x{flightMasterGuid:X}.");
+                return true;
+            }
+
+            DiagLog($"[FG-TAXI] EnsureTaxiMapOpenAsync: interacting with 0x{flightMasterGuid:X}.");
+            await InteractWithNpcAsync(flightMasterGuid, ct);
+
+            var gossipHandled = false;
+            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                if (_fgTaxiFrame.IsOpen)
+                {
+                    DiagLog($"[FG-TAXI] EnsureTaxiMapOpenAsync: taxi map opened on poll {i}.");
+                    return true;
+                }
+
+                if (!gossipHandled && _fgGossipFrame.IsOpen)
+                {
+                    gossipHandled = true;
+                    DiagLog($"[FG-TAXI] EnsureTaxiMapOpenAsync: gossip frame detected on poll {i}; selecting taxi option.");
+                    Log.Information("[FG-TAXI] Gossip frame detected - selecting taxi option.");
+                    _fgGossipFrame.SelectFirstGossipOfType(DialogType.taxi);
+                }
+            }
+
+            DiagLog($"[FG-TAXI] EnsureTaxiMapOpenAsync: taxi map never opened for 0x{flightMasterGuid:X}.");
+            return _fgTaxiFrame.IsOpen;
+        }
+
+        private static string FormatTaxiNodes(IReadOnlyList<TaxiNode> taxiNodes)
+        {
+            if (taxiNodes == null || taxiNodes.Count <= 1)
+                return "(none)";
+
+            return string.Join(
+                "; ",
+                taxiNodes
+                    .Skip(1)
+                    .Select(node => $"#{node.NodeNumber}:{node.Name}:{node.Status}"));
         }
 
         public async Task InteractWithNpcAsync(ulong npcGuid, CancellationToken ct = default)
@@ -1144,6 +1282,44 @@ namespace ForegroundBotRunner.Statics
             }
 
             return false;
+        }
+
+        internal static Task<int> WaitForInboxCountAsync(
+            Func<string, string[]> luaQuery,
+            Action<string> luaCall,
+            CancellationToken ct)
+        {
+            ArgumentNullException.ThrowIfNull(luaQuery);
+            ArgumentNullException.ThrowIfNull(luaCall);
+            return WaitForInboxCountCoreAsync(luaQuery, luaCall, ct);
+        }
+
+        private static async Task<int> WaitForInboxCountCoreAsync(
+            Func<string, string[]> luaQuery,
+            Action<string> luaCall,
+            CancellationToken ct)
+        {
+            int stableZeroReads = 0;
+
+            for (int i = 0; i < 15 && !ct.IsCancellationRequested; i++)
+            {
+                luaCall("CheckInbox()");
+                await Task.Delay(200, ct);
+
+                var result = luaQuery(
+                    "local n = GetInboxNumItems(); if n == nil then {0} = '' else {0} = n end");
+                if (result.Length == 0 || !int.TryParse(result[0], out var inboxCount))
+                    continue;
+
+                if (inboxCount > 0)
+                    return inboxCount;
+
+                stableZeroReads++;
+                if (stableZeroReads >= 3)
+                    return 0;
+            }
+
+            return 0;
         }
     }
 }

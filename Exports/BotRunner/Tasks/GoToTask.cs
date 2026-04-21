@@ -24,9 +24,15 @@ public class GoToTask : BotTask, IBotTask
     private DateTime _lastNoPathLogUtc = DateTime.MinValue;
     private const double NoPathTimeoutSec = 30.0;
     private const double DirectFallbackAfterNoPathSec = 5.0;
+    private const float InitialDirectFallbackDistance2D = 60f;
     private const float PositionMatchEpsilon = 0.5f;
     private const float ToleranceMatchEpsilon = 0.1f;
     private int _lastLoggedRoutePlanVersion;
+    private readonly DateTime _createdUtc = DateTime.UtcNow;
+    private bool _loggedFirstResolutionAttempt;
+    private bool _loggedFirstSuccessfulWaypoint;
+    private bool _loggedFirstNullWaypoint;
+    private const float TransportArrivalZTolerance = 3f;
 
     public GoToTask(IBotContext botContext, float x, float y, float z, float tolerance = 3f)
         : base(botContext)
@@ -76,7 +82,7 @@ public class GoToTask : BotTask, IBotTask
         }
 
         // Arrived?
-        if (player.Position.DistanceTo2D(_target) < _tolerance)
+        if (HasArrived(player))
         {
             ObjectManager.StopAllMovement();
             _navPath?.Clear();
@@ -116,17 +122,63 @@ public class GoToTask : BotTask, IBotTask
             var noPathElapsedSec = _noPathSinceUtc.HasValue
                 ? (now - _noPathSinceUtc.Value).TotalSeconds
                 : 0.0;
-            var allowDirectFallback = noPathElapsedSec >= DirectFallbackAfterNoPathSec;
+            var allowDirectFallback = player.Position.DistanceTo2D(_target) <= InitialDirectFallbackDistance2D
+                || noPathElapsedSec >= DirectFallbackAfterNoPathSec;
+            var resolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             var waypoint = _navPath.GetNextWaypoint(
                 player.Position, _target, player.MapId,
                 allowDirectFallback: allowDirectFallback,
                 physicsHitWall: hitWall,
                 wallNormalX: wnx, wallNormalY: wny,
-                blockedFraction: bf);
+                blockedFraction: bf,
+                currentTransportGuid: player.TransportGuid);
+            resolutionStopwatch.Stop();
+
+            if (!_loggedFirstResolutionAttempt)
+            {
+                _loggedFirstResolutionAttempt = true;
+                var firstAttemptMsg =
+                    $"[GOTO-TASK][INIT] first resolution attempt after {(now - _createdUtc).TotalMilliseconds:F0}ms " +
+                    $"(call={resolutionStopwatch.ElapsedMilliseconds}ms) pos=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1}) " +
+                    $"target=({_target.X:F1},{_target.Y:F1},{_target.Z:F1}) allowDirectFallback={allowDirectFallback}";
+                BotRunnerService.DiagLog(firstAttemptMsg);
+                Log.Warning(
+                    "[GOTO-TASK][INIT] first resolution attempt after {ElapsedMs}ms (call={CallMs}ms) " +
+                    "pos=({X:F1},{Y:F1},{Z:F1}) target=({TX:F1},{TY:F1},{TZ:F1}) allowDirectFallback={AllowDirectFallback}",
+                    (now - _createdUtc).TotalMilliseconds,
+                    resolutionStopwatch.ElapsedMilliseconds,
+                    player.Position.X, player.Position.Y, player.Position.Z,
+                    _target.X, _target.Y, _target.Z,
+                    allowDirectFallback);
+            }
+
+            if (_navPath.ShouldHoldPositionForTransport(player.Position, waypoint))
+            {
+                _noPathSinceUtc = null;
+                ObjectManager.StopAllMovement();
+                return;
+            }
 
             if (waypoint == null)
             {
+                if (!_loggedFirstNullWaypoint)
+                {
+                    _loggedFirstNullWaypoint = true;
+                    var firstNullMsg =
+                        $"[GOTO-TASK][INIT] first resolution returned null after {(now - _createdUtc).TotalMilliseconds:F0}ms " +
+                        $"(call={resolutionStopwatch.ElapsedMilliseconds}ms) pos=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1}) " +
+                        $"target=({_target.X:F1},{_target.Y:F1},{_target.Z:F1})";
+                    BotRunnerService.DiagLog(firstNullMsg);
+                    Log.Warning(
+                        "[GOTO-TASK][INIT] first resolution returned null after {ElapsedMs}ms (call={CallMs}ms) " +
+                        "pos=({X:F1},{Y:F1},{Z:F1}) target=({TX:F1},{TY:F1},{TZ:F1})",
+                        (now - _createdUtc).TotalMilliseconds,
+                        resolutionStopwatch.ElapsedMilliseconds,
+                        player.Position.X, player.Position.Y, player.Position.Z,
+                        _target.X, _target.Y, _target.Z);
+                }
+
                 ObjectManager.StopAllMovement();
                 _noPathSinceUtc ??= now;
                 EmitRouteDecisionIfUpdated();
@@ -149,6 +201,23 @@ public class GoToTask : BotTask, IBotTask
 
             _noPathSinceUtc = null;
             EmitRouteDecisionIfUpdated();
+
+            if (!_loggedFirstSuccessfulWaypoint)
+            {
+                _loggedFirstSuccessfulWaypoint = true;
+                var firstWaypointMsg =
+                    $"[GOTO-TASK][INIT] first waypoint after {(now - _createdUtc).TotalMilliseconds:F0}ms " +
+                    $"(call={resolutionStopwatch.ElapsedMilliseconds}ms) waypoint=({waypoint.X:F1},{waypoint.Y:F1},{waypoint.Z:F1}) " +
+                    $"dist={player.Position.DistanceTo2D(waypoint):F2}";
+                BotRunnerService.DiagLog(firstWaypointMsg);
+                Log.Warning(
+                    "[GOTO-TASK][INIT] first waypoint after {ElapsedMs}ms (call={CallMs}ms) " +
+                    "waypoint=({WX:F1},{WY:F1},{WZ:F1}) dist={Dist:F2}",
+                    (now - _createdUtc).TotalMilliseconds,
+                    resolutionStopwatch.ElapsedMilliseconds,
+                    waypoint.X, waypoint.Y, waypoint.Z,
+                    player.Position.DistanceTo2D(waypoint));
+            }
 
             var dx = waypoint.X - player.Position.X;
             var dy = waypoint.Y - player.Position.Y;
@@ -187,6 +256,20 @@ public class GoToTask : BotTask, IBotTask
 
         BotContext.AddDiagnosticMessage(
             $"[GOTO_ROUTE] plan={trace.PlanVersion} route={summary} drops={trace.Affordances.DropCount} cliffs={trace.Affordances.CliffCount} vertical={trace.Affordances.VerticalCount}");
+    }
+
+    private bool HasArrived(GameData.Core.Interfaces.IWoWLocalPlayer player)
+    {
+        if (player.Position.DistanceTo2D(_target) >= _tolerance)
+            return false;
+
+        var requiresTransport = (_navPath?.IsRidingTransport ?? false)
+            || TransportData.DetectElevatorCrossing(player.MapId, player.Position, _target) != null;
+        if (!requiresTransport)
+            return true;
+
+        return player.TransportGuid == 0
+            && Math.Abs(player.Position.Z - _target.Z) <= MathF.Max(_tolerance, TransportArrivalZTolerance);
     }
 
 }

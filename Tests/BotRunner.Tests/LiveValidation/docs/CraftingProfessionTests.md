@@ -31,10 +31,13 @@ The live assertions record:
 - spell-list confirmation for apprentice + recipe
 - pre-craft cloth slot count
 - pre-craft bandage slot count
+- pre-craft total bag item count
 - post-craft cloth slot count
 - post-craft bandage slot count
 - final bag item count
 - craft latency in milliseconds
+
+The bag-count check is intentionally relative rather than fixed to `1`. The live fixture can repopulate unrelated bag slots between cleanup and the cast, so the invariant that matters is that crafting replaces the staged cloth with a bandage without changing the total occupied slot count.
 
 `SpellList` confirmation is treated as diagnostic evidence, not the primary pass/fail gate, because BG can craft successfully even when the learned-spell snapshot has not caught up yet.
 

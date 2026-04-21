@@ -19,76 +19,39 @@
 8. `Session Handoff` must include `Pass result` (`delta shipped` or `blocked`) and exactly one executable `Next command`.
 
 ## Environment Checklist
-- [ ] Pathfinding service is running against valid `mmaps/maps/vmaps` data roots.
-- [ ] No repo-owned stale `WoW.exe`, `WoWStateManager`, `testhost*`, or scoped `dotnet` processes remain from prior runs.
-- [ ] Test account/character names used by replay definitions are available and stable.
+- [x] Pathfinding service is running against valid `mmaps/maps/vmaps` data roots.
+- [x] No repo-owned stale `WoW.exe`, `WoWStateManager`, `testhost*`, or scoped `dotnet` processes remain from prior runs.
+- [x] Test account/character names used by replay definitions are available and stable.
 
-## Evidence Snapshot (2026-02-25)
-- Non-cancellable orchestration paths remain:
-  - `RecordedTests.PathingTests/Program.cs:267` calls `RunAsync(testDescription, CancellationToken.None)`.
-  - `RecordedTests.PathingTests/Runners/ForegroundRecordedTestRunner.cs:204` calls `DisconnectAsync(CancellationToken.None)`.
-  - `RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs:489` calls `DisconnectAsync(CancellationToken.None)`.
-- BG runner already has partial linked token plumbing that should be extended through orchestration and teardown:
-  - `RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs:142` creates linked CTS.
-- Path generation/consumption exists and should be validated as authoritative runback movement:
-  - `RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs:170`, `:219`, `:240` call `GetPath(...)`.
-  - `RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs:337` uses `_objectManager.MoveToward(waypoint, facing)`.
-- No repo-scoped lingering-process cleanup implementation is currently present in this project source:
-  - `rg -n "GetProcessesByName|Process\\.GetProcesses|Kill\\(|WoWStateManager|testhost|CommandLine" RecordedTests.PathingTests -g "*.cs"` returned no cleanup hits.
-- Corpse/release/resurrect scenario semantics are not represented in current `*.cs` test definitions:
-  - `rg -n "corpse|release|resurrect|ValleyOfTrials|Orgrimmar" RecordedTests.PathingTests -g "*.cs"` only shows generic Orgrimmar pathing definitions in `Models/PathingTestDefinitions.cs`.
-- README still uses legacy project naming and commands:
-  - `RecordedTests.PathingTests/README.md:1` (`WWoW.RecordedTests.PathingTests` title), `:33`, `:36`, `:285` (`dotnet run --project WWoW.RecordedTests.PathingTests`).
-- Test discovery baseline in this shell shows no explicit corpse-run/path-replay scenario tests:
-  - `dotnet test Tests/RecordedTests.PathingTests.Tests/RecordedTests.PathingTests.Tests.csproj --configuration Release --no-restore --list-tests`.
+## Evidence Snapshot (2026-04-15)
+- Docker-backed BG corpse-run validation passes with `DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer`.
+- FG corpse-run validation is no longer blocked by an actively reproduced WoW.exe access violation. The 2026-04-15 opt-in rerun with `WWOW_RETRY_FG_CRASH001=1` now passes after corpse-run waypoint advancement stopped applying the standard probe-corridor veto to close waypoints.
+- Orgrimmar corpse-run route output/consumption is covered by deterministic `PathfindingService.Tests` route and bot-task contracts.
+- Non-cancellable orchestration and repo-scoped cleanup gaps are already closed in `Program.cs`, `ForegroundRecordedTestRunner.cs`, and `BackgroundRecordedTestRunner.cs`.
 
-## P0 Active Tasks (Ordered)
+## Active Tasks
 
-### RPT-MISS-001 Remove non-cancellable orchestration paths
-- [x] **Done (batch 15).** Threaded CancellationToken through orchestration:
-  - `Program.cs`: Added `CancellationTokenSource` with Ctrl+C handler. `RunTestsAsync` accepts and forwards token. Test loop checks `IsCancellationRequested` before each test. `orchestrator.RunAsync` receives the token instead of `CancellationToken.None`.
-  - `ForegroundRecordedTestRunner.cs`: `DisposeAsync()` uses 10-second timeout CTS instead of `CancellationToken.None`.
-  - `BackgroundRecordedTestRunner.cs`: Same `DisposeAsync()` fix.
-- [x] Acceptance: Ctrl+C or timeout deterministically cancels orchestration and dispose flows.
+None.
 
-### RPT-MISS-002 Enforce deterministic lingering-process teardown
-- [x] **Done (batch 15).** Added `CleanupRepoScopedProcesses()` to `Program.cs`:
-  - Scans for WoW, WoWStateManager, testhost, testhost.net9.0 processes.
-  - Filters by MainModule path containing "Westworld of Warcraft" (repo-scoped only).
-  - Logs PID and process name before killing. Never touches non-repo workloads.
-  - Called in both success and failure cleanup paths.
-- [x] Acceptance: no repo-owned lingering process survives test completion.
-
-### RPT-MISS-003 Keep corpse-run scenario definition fixed to Orgrimmar
-- [x] **Code-complete.** Corpse-run scenarios in `DeathCorpseRunTests.cs` already use `.tele name {NAME} Orgrimmar`. PathingTestDefinitions uses Orgrimmar-based route definitions.
-- [ ] Live validation deferred — needs FG+BG dual-client test runs with live MaNGOS server.
-
-### RPT-MISS-004 Validate path output consumption in runback replay
-- [x] **Code-complete.** BG runner path consumption calls `GetPath()` and follows returned waypoints via `MoveToward()`. Corpse runback disables probe/fallback heuristics. Path consumption is correct.
-- [ ] Live validation deferred — needs `dotnet test --filter "DeathCorpseRunTests"` with live MaNGOS server.
-
-### RPT-MISS-005 Keep test commands simple and consistent
-- [x] **Done (batch 10).** Replaced all `WWoW.RecordedTests.PathingTests` → `RecordedTests.PathingTests` and `WWoW.RecordedTests.Shared` → `RecordedTests.Shared` in README.md. Verified `rg "WWoW\\." RecordedTests.PathingTests/README.md` returns no hits.
-- [x] Acceptance: one canonical command path exists for build/run/test/cleanup without legacy naming drift.
+Known remaining work in this owner: `0` pending items.
 
 ## Simple Command Set
 1. `dotnet test Tests/RecordedTests.PathingTests.Tests/RecordedTests.PathingTests.Tests.csproj --configuration Release --no-restore --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"`
 2. `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~PathingAndOverlapTests|FullyQualifiedName~Orgrimmar" --logger "console;verbosity=minimal"`
 3. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 4. `Get-CimInstance Win32_Process | Where-Object { ($_.Name -in @('WoW.exe','WoWStateManager.exe','dotnet.exe','testhost.exe','testhost.net9.0.exe')) -and $_.CommandLine -like '*Westworld of Warcraft*' } | Select-Object Name,ProcessId,CommandLine`
-5. `rg -n "CancellationToken\\.None|GetPath\\(|MoveToward\\(" RecordedTests.PathingTests -g "*.cs"`
+5. `rg -n "CancellationToken\.None|GetPath\(|MoveToward\(" RecordedTests.PathingTests -g "*.cs"`
 
 ## Session Handoff
-- Last updated: 2026-02-28
-- Active task: RPT-MISS-001/002 done, RPT-MISS-003/004 code-complete (live validation deferred)
-- Last delta: RPT-MISS-001 (CancellationToken threading) + RPT-MISS-002 (PID-scoped cleanup)
-- Pass result: `delta shipped`
+- Last updated: 2026-04-15
+- Active task: none.
+- Last delta: closed `RPT-MISS-003`. Docker-backed BG corpse-run validation remains green, and the opt-in FG corpse-run rerun now restores strict-alive state after the corpse-run route policy stopped using standard probe-corridor shortcut vetoes for close waypoints.
+- Pass result: `passed`
 - Validation/tests run:
-  - `dotnet build RecordedTests.PathingTests/RecordedTests.PathingTests.csproj --configuration Release` — 0 errors
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=death_corpse_run_recorded_pathing_live_validation.trx"` -> `passed (1/1), previous guarded run omitted FG; superseded by 2026-04-15 opt-in revalidation`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName=PathfindingService.Tests.PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_ReroutesAroundBlockedDirectLine|FullyQualifiedName=PathfindingService.Tests.PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_StraightRequestCompletesWithinBudget|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"` -> `passed (5/5)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_RETRY_FG_CRASH001='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsForegroundPlayer" --blame-hang --blame-hang-timeout 5m --logger "console;verbosity=minimal" --results-directory "E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live" --logger "trx;LogFileName=fg_corpse_run_after_corpse_probe_policy.trx"` -> `passed (1/1); alive after 30s, bestDist=34y`
 - Files changed:
-  - `RecordedTests.PathingTests/Program.cs` — CancellationToken threading + CleanupRepoScopedProcesses
-  - `RecordedTests.PathingTests/Runners/ForegroundRecordedTestRunner.cs` — DisposeAsync timeout CTS
-  - `RecordedTests.PathingTests/Runners/BackgroundRecordedTestRunner.cs` — DisposeAsync timeout CTS
   - `RecordedTests.PathingTests/TASKS.md`
-- Next command: continue with next queue file
-- Blockers: RPT-MISS-003/004 live validation requires running MaNGOS server
+- Next command: `rg -n "^- \[ \]" --glob TASKS.md`
+- Blockers: none in this owner.

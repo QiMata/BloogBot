@@ -5,6 +5,48 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <limits>
+
+namespace
+{
+bool SegmentTriangleIntersectionT(
+    const G3D::Vector3& p0,
+    const G3D::Vector3& p1,
+    const G3D::Vector3& ta,
+    const G3D::Vector3& tb,
+    const G3D::Vector3& tc,
+    float* outT)
+{
+    const float eps = 1e-8f;
+    const G3D::Vector3 dir = p1 - p0;
+    const G3D::Vector3 e1 = tb - ta;
+    const G3D::Vector3 e2 = tc - ta;
+    const G3D::Vector3 h = dir.cross(e2);
+    const float a = e1.dot(h);
+    if (fabsf(a) < eps)
+        return false;
+
+    const float f = 1.0f / a;
+    const G3D::Vector3 s = p0 - ta;
+    const float u = f * s.dot(h);
+    if (u < 0.0f || u > 1.0f)
+        return false;
+
+    const G3D::Vector3 q = s.cross(e1);
+    const float v = f * dir.dot(q);
+    if (v < 0.0f || u + v > 1.0f)
+        return false;
+
+    const float t = f * e2.dot(q);
+    if (t < 0.0f || t > 1.0f)
+        return false;
+
+    if (outT)
+        *outT = t;
+
+    return true;
+}
+}
 
 DynamicObjectRegistry* DynamicObjectRegistry::s_instance = nullptr;
 
@@ -429,6 +471,91 @@ bool DynamicObjectRegistry::TryGetLocalPoint(
     outLocalPoint.x = (dx * cosO + dy * sinO) / scale;
     outLocalPoint.y = (-dx * sinO + dy * cosO) / scale;
     outLocalPoint.z = dz / scale;
+    return true;
+}
+
+bool DynamicObjectRegistry::FindFirstIntersectingObject(
+    uint32_t mapId,
+    const G3D::Vector3& start,
+    const G3D::Vector3& end,
+    uint32_t* outInstanceId,
+    uint64_t* outGuid,
+    uint32_t* outDisplayId) const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    const float pad = 0.5f;
+    const G3D::AABox segBox(
+        G3D::Vector3(
+            std::min(start.x, end.x) - pad,
+            std::min(start.y, end.y) - pad,
+            std::min(start.z, end.z) - pad),
+        G3D::Vector3(
+            std::max(start.x, end.x) + pad,
+            std::max(start.y, end.y) + pad,
+            std::max(start.z, end.z) + pad));
+
+    bool found = false;
+    float bestT = std::numeric_limits<float>::infinity();
+    uint32_t bestInstanceId = 0;
+    uint64_t bestGuid = 0;
+    uint32_t bestDisplayId = 0;
+
+    for (const auto& [guid, obj] : m_objects)
+    {
+        if (obj.mapId != mapId)
+            continue;
+
+        if (obj.worldTriangles.empty())
+            continue;
+
+        if (obj.isDoorModel && obj.goState == 0)
+            continue;
+
+        if (obj.worldBounds.high().x < segBox.low().x ||
+            obj.worldBounds.low().x > segBox.high().x ||
+            obj.worldBounds.high().y < segBox.low().y ||
+            obj.worldBounds.low().y > segBox.high().y ||
+            obj.worldBounds.high().z < segBox.low().z ||
+            obj.worldBounds.low().z > segBox.high().z)
+        {
+            continue;
+        }
+
+        for (const auto& tri : obj.worldTriangles)
+        {
+            const G3D::Vector3 ta(tri.a.x, tri.a.y, tri.a.z);
+            const G3D::Vector3 tb(tri.b.x, tri.b.y, tri.b.z);
+            const G3D::Vector3 tc(tri.c.x, tri.c.y, tri.c.z);
+            float hitT = 0.0f;
+            if (!SegmentTriangleIntersectionT(start, end, ta, tb, tc, &hitT))
+                continue;
+
+            if (!found ||
+                hitT < bestT - 1e-6f ||
+                (fabsf(hitT - bestT) <= 1e-6f && obj.runtimeInstanceId < bestInstanceId))
+            {
+                found = true;
+                bestT = hitT;
+                bestInstanceId = obj.runtimeInstanceId;
+                bestGuid = guid;
+                bestDisplayId = obj.displayId;
+            }
+        }
+    }
+
+    if (!found)
+        return false;
+
+    if (outInstanceId)
+        *outInstanceId = bestInstanceId;
+
+    if (outGuid)
+        *outGuid = bestGuid;
+
+    if (outDisplayId)
+        *outDisplayId = bestDisplayId;
+
     return true;
 }
 

@@ -14,6 +14,27 @@ namespace WoWSharpClient.Tests.Movement;
 /// </summary>
 public sealed class SceneDataClientIntegrationTests
 {
+    private static bool IsServiceAvailable()
+    {
+        try
+        {
+            using var client = new ProtobufSocketClient<SceneTileRequest, SceneTileResponse>(
+                "127.0.0.1", 5003, NullLogger.Instance);
+            var response = client.SendMessage(new SceneTileRequest
+            {
+                MapId = 1,
+                TileX = 29,
+                TileY = 41,
+            });
+
+            return response.Success;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     // =========================================================================
     // Tile Coordinate Mapping — verify tile coords for known positions
     // =========================================================================
@@ -55,13 +76,18 @@ public sealed class SceneDataClientIntegrationTests
             var client = new SceneDataClient(NullLogger.Instance);
 
             // First attempt — requests sent, all fail with empty data
-            client.EnsureSceneDataAround(1, 100f, 100f);
+            Assert.False(client.EnsureSceneDataAround(1, 100f, 100f));
             var firstCount = requestCount;
             Assert.True(firstCount > 0);
 
-            // Same position — no new requests (tiles cached as empty)
-            client.EnsureSceneDataAround(1, 100f, 100f);
+            // Immediate retry stays within backoff window
+            Assert.False(client.EnsureSceneDataAround(1, 100f, 100f));
             Assert.Equal(firstCount, requestCount);
+
+            now = now.AddSeconds(3);
+
+            Assert.False(client.EnsureSceneDataAround(1, 100f, 100f));
+            Assert.True(requestCount > firstCount);
         }
         finally
         {
@@ -207,5 +233,72 @@ public sealed class SceneDataClientIntegrationTests
 
         Skip.IfNot(response.Success && response.TriangleCount > 0,
             $"Tile 1_28_41 missing or empty (success={response.Success}, triangles={response.TriangleCount}, error={response.ErrorMessage})");
+    }
+
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public void LiveService_Map409_31_33_TileCanBeSynthesizedFromSceneSource()
+    {
+        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 5003");
+
+        using var client = new ProtobufSocketClient<SceneTileRequest, SceneTileResponse>(
+            "127.0.0.1", 5003, NullLogger.Instance);
+
+        var response = client.SendMessage(new SceneTileRequest
+        {
+            MapId = 409,
+            TileX = 31,
+            TileY = 33,
+        });
+
+        Assert.True(response.Success,
+            $"Tile 409_31_33 synthesis failed (triangles={response.TriangleCount}, error={response.ErrorMessage})");
+        Assert.True(response.TriangleCount > 0,
+            $"Tile 409_31_33 should contain geometry after source-scene synthesis (triangles={response.TriangleCount}).");
+    }
+
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public void LiveService_Map409_30_33_TileReturnsSceneData()
+    {
+        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 5003");
+
+        using var client = new ProtobufSocketClient<SceneTileRequest, SceneTileResponse>(
+            "127.0.0.1", 5003, NullLogger.Instance);
+
+        var response = client.SendMessage(new SceneTileRequest
+        {
+            MapId = 409,
+            TileX = 30,
+            TileY = 33,
+        });
+
+        Assert.True(response.Success,
+            $"Tile 409_30_33 should return scene data after centralized source-scene synthesis (error={response.ErrorMessage})");
+        Assert.True(response.TriangleCount > 0,
+            $"Tile 409_30_33 should contain geometry after source-scene synthesis (triangles={response.TriangleCount}).");
+    }
+
+    [SkippableTheory]
+    [Trait("Category", "RequiresInfrastructure")]
+    [InlineData(409u, 1091.89f, -466.985f, "Molten Core entry")]
+    [InlineData(469u, -7672.32f, -1107.05f, "Blackwing Lair entry")]
+    [InlineData(329u, 3392.92f, -3395.03f, "Stratholme living entry")]
+    [InlineData(329u, 3392.84f, -3364.44f, "Stratholme undead entry")]
+    public void LiveService_DungeonAndRaidEntryNeighborhoods_ReturnSceneData(
+        uint mapId,
+        float x,
+        float y,
+        string label)
+    {
+        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 5003");
+
+        var (tileX, tileY) = SceneDataClient.WorldToTile(x, y);
+        var client = new SceneDataClient("127.0.0.1", 5003, NullLogger.Instance);
+
+        var result = client.EnsureSceneDataAround(mapId, x, y);
+
+        Assert.True(result,
+            $"SceneDataService did not return a full 3x3 neighborhood for {label} (map={mapId}, tile={tileX},{tileY}, pos=({x:F2},{y:F2})).");
     }
 }

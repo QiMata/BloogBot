@@ -99,7 +99,14 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
             physicsHitWall: ObjectManager.PhysicsHitWall,
             wallNormalX: wallNormal.X,
             wallNormalY: wallNormal.Y,
-            blockedFraction: ObjectManager.PhysicsBlockedFraction);
+            blockedFraction: ObjectManager.PhysicsBlockedFraction,
+            currentTransportGuid: player.TransportGuid);
+
+        if (_navPath.ShouldHoldPositionForTransport(player.Position, waypoint))
+        {
+            ObjectManager.StopAllMovement();
+            return true;
+        }
 
         if (waypoint != null)
         {

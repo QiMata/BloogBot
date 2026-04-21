@@ -27,6 +27,19 @@ message Error {
     string message = 1;
 }
 
+enum PathSegmentAffordance {
+    PATH_SEGMENT_AFFORDANCE_WALK = 0;
+    PATH_SEGMENT_AFFORDANCE_STEP_UP = 1;
+    PATH_SEGMENT_AFFORDANCE_STEEP_CLIMB = 2;
+    PATH_SEGMENT_AFFORDANCE_DROP = 3;
+    PATH_SEGMENT_AFFORDANCE_CLIFF = 4;
+    PATH_SEGMENT_AFFORDANCE_VERTICAL = 5;
+    PATH_SEGMENT_AFFORDANCE_JUMP_GAP = 6;
+    PATH_SEGMENT_AFFORDANCE_SAFE_DROP = 7;
+    PATH_SEGMENT_AFFORDANCE_UNSAFE_DROP = 8;
+    PATH_SEGMENT_AFFORDANCE_BLOCKED = 9;
+}
+
 // Path calculation
 message CalculatePathRequest {
     uint32 map_id = 1;
@@ -42,6 +55,25 @@ message CalculatePathResponse {
     repeated game.Position corners = 1;
     string result = 2;        // Path outcome: "native_path", "no_path", "validation_error", "error"
     uint32 raw_corner_count = 3;  // Corner count before sanitization (non-finite filtering)
+    bool has_blocked_segment = 4;
+    int32 blocked_segment_index = 5;
+    string blocked_reason = 6;  // "none", "dynamic_overlay", "capsule_validation", ...
+    PathSegmentAffordance max_affordance = 7;
+    bool path_supported = 8;
+    uint32 step_up_count = 9;
+    uint32 drop_count = 10;
+    uint32 cliff_count = 11;
+    uint32 vertical_count = 12;
+    float total_z_gain = 13;
+    float total_z_loss = 14;
+    float max_slope_angle_deg = 15;
+    uint32 jump_gap_count = 16;
+    uint32 safe_drop_count = 17;
+    uint32 unsafe_drop_count = 18;
+    uint32 blocked_count = 19;
+    float max_climb_height = 20;
+    float max_gap_distance = 21;
+    float max_drop_height = 22;
 }
 
 // Dynamic object for physics collision (elevators, doors, trophy pillars)

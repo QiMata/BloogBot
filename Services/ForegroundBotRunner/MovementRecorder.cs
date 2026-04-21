@@ -161,6 +161,15 @@ namespace ForegroundBotRunner
             return true;
         }
 
+        internal static bool ShouldReinstallChatHookAfterTransition(bool wasInTransition, bool isInMapTransition) =>
+            wasInTransition && !isInMapTransition;
+
+        internal static bool ShouldPauseForCurrentState(bool hasPlayer, bool isInMapTransition) =>
+            !hasPlayer || isInMapTransition;
+
+        internal static bool ShouldCaptureFrame(bool isInWorld, bool isInMapTransition) =>
+            isInWorld && !isInMapTransition;
+
         public bool IsRecording => _isRecording;
 
         public MovementRecorder(Func<ObjectManager?> getObjectManager, ILoggerFactory loggerFactory)
@@ -219,21 +228,23 @@ namespace ForegroundBotRunner
         public void Poll()
         {
             var objectManager = _getObjectManager();
-            if (objectManager?.Player == null)
+            if (objectManager == null)
                 return;
 
+            bool isInMapTransition = objectManager.IsInMapTransition;
+
             // After a map transition, Lua state may have been reset — reinstall chat hook.
-            if (_wasInTransition)
+            if (ShouldReinstallChatHookAfterTransition(_wasInTransition, isInMapTransition))
             {
                 _chatHookInstalled = false;
                 _wasInTransition = false;
                 _logger.LogInformation("Map transition ended — reinstalling chat hook");
             }
 
-            // Track transition state so we can detect when it clears
-            if (objectManager.IsContinentTransition)
+            if (ShouldPauseForCurrentState(objectManager.Player != null, isInMapTransition))
             {
-                _wasInTransition = true;
+                if (isInMapTransition)
+                    _wasInTransition = true;
                 return;
             }
 
@@ -496,14 +507,12 @@ namespace ForegroundBotRunner
         private MovementData? CaptureFrame(ulong frameTimestamp)
         {
             var objectManager = _getObjectManager();
-            if (objectManager == null || !objectManager.IsInWorld)
+            if (objectManager == null)
                 return null;
 
-            // Secondary guard: check for continent transition directly.
-            // The IsInWorld check above reads ContinentId, but the map can change
-            // between that check and the memory reads below. IsContinentTransition
-            // is a volatile bool set by the polling loop and is cheaper/safer to read.
-            if (objectManager.IsContinentTransition)
+            // Secondary guard: skip capture during any map-transfer guard, not just the
+            // continent sentinel. Teleport pauses can still leave object pointers unstable.
+            if (!ShouldCaptureFrame(objectManager.IsInWorld, objectManager.IsInMapTransition))
                 return null;
 
             var player = objectManager.Player;

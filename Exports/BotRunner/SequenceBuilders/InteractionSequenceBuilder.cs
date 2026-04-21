@@ -171,7 +171,7 @@ namespace BotRunner.SequenceBuilders
                     Log.Warning("[BOT RUNNER] TalentFrame is null -- requires FG bot or packet-based path");
                     return false;
                 })
-                .Condition("Can Train Talent", time => _objectManager.TalentFrame.TalentPointsAvailable > 1)
+                .Condition("Can Train Talent", time => _objectManager.TalentFrame.TalentPointsAvailable > 0)
                 .Do("Train Talent", time =>
                 {
                     _objectManager.TalentFrame.LearnTalent(talentSpellId);
@@ -808,9 +808,32 @@ namespace BotRunner.SequenceBuilders
 
         internal IBehaviourTreeNode DisbandGroupSequence => new BehaviourTreeBuilder()
             .Sequence("Disband Group Sequence")
-                .Condition("Is Group Leader", time => _objectManager.Player != null && _objectManager.Player.Guid == _objectManager.PartyLeaderGuid)
+                .Condition("Is Group Leader", time =>
+                {
+                    var factory = _agentFactoryAccessor?.Invoke();
+                    if (factory != null)
+                    {
+                        var player = _objectManager.Player;
+                        if (factory.PartyAgent.IsGroupLeader)
+                            return true;
+
+                        return player != null
+                            && player.Guid != 0
+                            && factory.PartyAgent.LeaderGuid == player.Guid;
+                    }
+
+                    return _objectManager.Player != null && _objectManager.Player.Guid == _objectManager.PartyLeaderGuid;
+                })
                 .Do("Disband Group", time =>
                 {
+                    var factory = _agentFactoryAccessor?.Invoke();
+                    if (factory != null)
+                    {
+                        Log.Information("[BOT RUNNER] Disbanding group via network agent");
+                        _ = factory.PartyAgent.DisbandGroupAsync();
+                        return BehaviourTreeStatus.Success;
+                    }
+
                     _objectManager.DisbandGroup();
                     return BehaviourTreeStatus.Success;
                 })

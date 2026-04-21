@@ -1,4 +1,7 @@
+using BotRunner.Travel;
 using System;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Communication;
 using Xunit;
@@ -29,6 +32,7 @@ public class MageTeleportTests
     // Spell IDs
     private const uint TeleportOrgrimmar = 3567;
     private const uint TeleportStormwind = 3561;
+    private const uint RuneOfTeleportation = (uint)MageTeleportData.RuneOfTeleportation;
 
     public MageTeleportTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -46,54 +50,53 @@ public class MageTeleportTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task MageTeleport_Horde_OrgrimmarArrival()
     {
-        var account = _bot.BgAccountName!;
-
-        await _bot.EnsureCleanSlateAsync(account, "BG");
-
-        // Learn Teleport: Orgrimmar
-        _output.WriteLine("[SETUP] Teaching Teleport: Orgrimmar (3567)");
-        await _bot.SendGmChatCommandAsync(account, $".learn {TeleportOrgrimmar}");
-        await Task.Delay(1000);
-
-        // Teleport to Razor Hill (away from Org)
-        await _bot.BotTeleportAsync(account, KalimdorMapId, RazorHillX, RazorHillY, RazorHillZ);
-        await _bot.WaitForTeleportSettledAsync(account, RazorHillX, RazorHillY);
-
-        await _bot.RefreshSnapshotsAsync();
-        var startSnap = await _bot.GetSnapshotAsync(account);
-        Assert.NotNull(startSnap);
-        var startPos = startSnap!.Player?.Unit?.GameObject?.Base?.Position;
-        Assert.NotNull(startPos);
-        _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1}, {startPos.Z:F1})");
-
-        // Cast Teleport: Orgrimmar
-        var castResult = await _bot.SendActionAsync(account, new ActionMessage
+        await UseMageBackgroundSettingsAsync();
+        try
         {
-            ActionType = ActionType.CastSpell,
-            Parameters = { new RequestParameter { IntParam = (int)TeleportOrgrimmar } }
-        });
-        _output.WriteLine($"[TEST] CAST_SPELL result: {castResult}");
-        Assert.Equal(ResponseResult.Success, castResult);
+            var account = _bot.BgAccountName!;
 
-        // Wait for position change (teleport should be near-instant after cast time)
-        var arrived = await _bot.WaitForSnapshotConditionAsync(
-            account,
-            snap =>
-            {
-                var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-                if (pos == null) return false;
-                var dist = LiveBotFixture.Distance2D(pos.X, pos.Y, OrgTeleportX, OrgTeleportY);
-                return dist <= OrgArrivalRadius;
-            },
-            TimeSpan.FromSeconds(15),
-            pollIntervalMs: 1000,
-            progressLabel: "BG mage-teleport-org");
+            await _bot.EnsureCleanSlateAsync(account, "BG");
+            await SetGmModeAsync(account, enabled: true);
 
-        await _bot.RefreshSnapshotsAsync();
-        var endSnap = await _bot.GetSnapshotAsync(account);
-        var endPos = endSnap?.Player?.Unit?.GameObject?.Base?.Position;
-        _output.WriteLine($"[TEST] End position: ({endPos?.X:F1}, {endPos?.Y:F1}, {endPos?.Z:F1})");
-        Assert.True(arrived, "Mage should arrive in Orgrimmar within 15s of casting Teleport: Orgrimmar");
+            // Teleport to Razor Hill (away from Org)
+            await _bot.BotTeleportAsync(account, KalimdorMapId, RazorHillX, RazorHillY, RazorHillZ);
+            await _bot.WaitForTeleportSettledAsync(account, RazorHillX, RazorHillY);
+
+            await _bot.RefreshSnapshotsAsync();
+            var startSnap = await _bot.GetSnapshotAsync(account);
+            Assert.NotNull(startSnap);
+            var startPos = startSnap!.Player?.Unit?.GameObject?.Base?.Position;
+            Assert.NotNull(startPos);
+            _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1}, {startPos.Z:F1})");
+
+            // GM .cast is the reliable live path for GM-provisioned self-teleports.
+            var castTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".cast {TeleportOrgrimmar}", captureResponse: true, delayMs: 1000);
+            AssertCommandSucceeded(castTrace, "BG", $".cast {TeleportOrgrimmar}");
+
+            // Wait for position change (teleport should be near-instant after cast time)
+            var arrived = await _bot.WaitForSnapshotConditionAsync(
+                account,
+                snap =>
+                {
+                    var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+                    if (pos == null) return false;
+                    var dist = LiveBotFixture.Distance2D(pos.X, pos.Y, OrgTeleportX, OrgTeleportY);
+                    return dist <= OrgArrivalRadius;
+                },
+                TimeSpan.FromSeconds(15),
+                pollIntervalMs: 1000,
+                progressLabel: "BG mage-teleport-org");
+
+            await _bot.RefreshSnapshotsAsync();
+            var endSnap = await _bot.GetSnapshotAsync(account);
+            var endPos = endSnap?.Player?.Unit?.GameObject?.Base?.Position;
+            _output.WriteLine($"[TEST] End position: ({endPos?.X:F1}, {endPos?.Y:F1}, {endPos?.Z:F1})");
+            Assert.True(arrived, "Mage should arrive in Orgrimmar within 15s of casting Teleport: Orgrimmar");
+        }
+        finally
+        {
+            await RestoreDefaultSettingsAsync();
+        }
     }
 
     /// <summary>
@@ -108,11 +111,24 @@ public class MageTeleportTests
         var account = _bot.BgAccountName!;
 
         await _bot.EnsureCleanSlateAsync(account, "BG");
+        await _bot.RefreshSnapshotsAsync();
+        var raceSnapshot = await _bot.GetSnapshotAsync(account);
+        global::Tests.Infrastructure.Skip.IfNot(
+            IsAllianceRace(raceSnapshot),
+            "Default live fixture uses Horde bots; Stormwind teleport requires an Alliance character.");
+        await SetGmModeAsync(account, enabled: true);
 
         // Learn Teleport: Stormwind
         _output.WriteLine("[SETUP] Teaching Teleport: Stormwind (3561)");
-        await _bot.SendGmChatCommandAsync(account, $".learn {TeleportStormwind}");
-        await Task.Delay(1000);
+        await _bot.BotLearnSpellAsync(account, TeleportStormwind);
+        var stormwindTeleportKnown = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            s => s.Player?.SpellList?.Contains(TeleportStormwind) == true,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: "BG teleport-sw-learn");
+        Assert.True(stormwindTeleportKnown, "Teleport: Stormwind should be present in SpellList before cast.");
+        await EnsureTeleportReagentAsync(account, "BG");
 
         await _bot.RefreshSnapshotsAsync();
         var startSnap = await _bot.GetSnapshotAsync(account);
@@ -120,6 +136,7 @@ public class MageTeleportTests
         var startPos = startSnap!.Player?.Unit?.GameObject?.Base?.Position;
         Assert.NotNull(startPos);
         _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1}, {startPos.Z:F1})");
+        await SetGmModeAsync(account, enabled: false);
 
         var castResult = await _bot.SendActionAsync(account, new ActionMessage
         {
@@ -146,12 +163,12 @@ public class MageTeleportTests
         var account = _bot.BgAccountName!;
 
         await _bot.EnsureCleanSlateAsync(account, "BG");
+        await SetGmModeAsync(account, enabled: true);
 
         // Learn Portal: Orgrimmar (11417)
         const uint portalOrgrimmar = 11417;
         _output.WriteLine("[SETUP] Teaching Portal: Orgrimmar (11417)");
-        await _bot.SendGmChatCommandAsync(account, $".learn {portalOrgrimmar}");
-        await Task.Delay(1000);
+        await _bot.BotLearnSpellAsync(account, portalOrgrimmar);
 
         // Verify spell learned via snapshot
         await _bot.RefreshSnapshotsAsync();
@@ -173,16 +190,16 @@ public class MageTeleportTests
         var account = _bot.BgAccountName!;
 
         await _bot.EnsureCleanSlateAsync(account, "BG");
+        await SetGmModeAsync(account, enabled: true);
 
         uint[] teleportSpells = { 3567, 3563, 3566, 3561, 3562, 3565 };
         string[] spellNames = { "Orgrimmar", "Undercity", "Thunder Bluff", "Stormwind", "Ironforge", "Darnassus" };
 
         for (int i = 0; i < teleportSpells.Length; i++)
         {
-            await _bot.SendGmChatCommandAsync(account, $".learn {teleportSpells[i]}");
+            await _bot.BotLearnSpellAsync(account, teleportSpells[i]);
             _output.WriteLine($"[SETUP] Taught Teleport: {spellNames[i]} ({teleportSpells[i]})");
         }
-        await Task.Delay(1500);
 
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
@@ -195,5 +212,66 @@ public class MageTeleportTests
             var has = spellList!.Contains(spellId);
             _output.WriteLine($"[TEST] Spell {spellId}: {(has ? "LEARNED" : "MISSING")}");
         }
+    }
+
+    private static bool IsAllianceRace(WoWActivitySnapshot? snapshot)
+    {
+        var raceId = (snapshot?.Player?.PlayerBytes0 ?? 0) & 0xFF;
+        return raceId is 1 or 3 or 4 or 7;
+    }
+
+    private async Task UseMageBackgroundSettingsAsync()
+    {
+        var mageSettingsPath = ResolveRepoPath("Tests", "BotRunner.Tests", "LiveValidation", "Settings", "MageBg.settings.json");
+        await _bot.EnsureSettingsAsync(mageSettingsPath);
+        _bot.SetOutput(_output);
+    }
+
+    private async Task RestoreDefaultSettingsAsync()
+    {
+        var defaultSettingsPath = ResolveRepoPath("Services", "WoWStateManager", "Settings", "StateManagerSettings.json");
+        await _bot.EnsureSettingsAsync(defaultSettingsPath);
+        _bot.SetOutput(_output);
+    }
+
+    private async Task EnsureTeleportReagentAsync(string account, string label)
+    {
+        await _bot.BotAddItemAsync(account, RuneOfTeleportation, 5);
+        var hasReagent = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            s => s.Player?.BagContents?.Values.Any(value => value == RuneOfTeleportation) == true,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{label} teleport-reagent");
+        Assert.True(hasReagent, $"[{label}] Rune of Teleportation should be present before casting a self-teleport.");
+    }
+
+    private async Task SetGmModeAsync(string account, bool enabled)
+    {
+        var command = enabled ? ".gm on" : ".gm off";
+        var trace = await _bot.SendGmChatCommandTrackedAsync(account, command, captureResponse: true, delayMs: 1000, allowWhenDead: true);
+        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
+    }
+
+    private static void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)
+    {
+        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
+        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
+        Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
     }
 }

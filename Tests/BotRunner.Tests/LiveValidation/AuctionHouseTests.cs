@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
+using GameData.Core.Enums;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -15,16 +16,13 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~AuctionHouseTests" --configuration Release
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(BgOnlyValidationCollection.Name)]
 public class AuctionHouseTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int MapId = 1;
-    private const float AhX = 1687.26f, AhY = -4464.71f, AhZ = 23.15f;
-
-    public AuctionHouseTests(LiveBotFixture bot, ITestOutputHelper output)
+    public AuctionHouseTests(BgOnlyBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
@@ -40,11 +38,19 @@ public class AuctionHouseTests
         await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Teleport to Org AH area
-        await _bot.BotTeleportAsync(bgAccount, MapId, AhX, AhY, AhZ);
-        await Task.Delay(3000);
+        await _bot.BotTeleportAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.AuctionHouseX,
+            OrgrimmarServiceLocations.AuctionHouseY,
+            OrgrimmarServiceLocations.AuctionHouseZ);
+        await _bot.WaitForTeleportSettledAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.AuctionHouseX,
+            OrgrimmarServiceLocations.AuctionHouseY);
 
         // Wait for nearby units to populate (auctioneer NPCs)
-        var hasNearbyUnits = await _bot.WaitForNearbyUnitsPopulatedAsync(bgAccount, timeoutMs: 8000);
+        var hasNearbyUnits = await _bot.WaitForNearbyUnitsPopulatedAsync(bgAccount, timeoutMs: 15000);
         _output.WriteLine($"[AH] Nearby units populated: {hasNearbyUnits}");
 
         // Verify snapshot shows bot at AH location
@@ -54,8 +60,11 @@ public class AuctionHouseTests
         var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
         _output.WriteLine($"[AH] Bot position: ({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
 
-        // Look for auctioneer NPC (NPC_FLAG_AUCTIONEER = 0x200000)
-        var auctioneer = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x200000, timeoutMs: 8000, progressLabel: "auctioneer");
+        var auctioneer = await _bot.WaitForNearbyUnitAsync(
+            bgAccount,
+            (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER,
+            timeoutMs: 15000,
+            progressLabel: "auctioneer");
 
         // Assert auctioneer was found — if not, detection or teleport position is wrong
         Assert.NotNull(auctioneer);
@@ -76,13 +85,32 @@ public class AuctionHouseTests
         await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Setup at AH
-        await _bot.BotTeleportAsync(bgAccount, MapId, AhX, AhY, AhZ);
-        await Task.Delay(3000);
+        await _bot.BotTeleportAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.AuctionHouseX,
+            OrgrimmarServiceLocations.AuctionHouseY,
+            OrgrimmarServiceLocations.AuctionHouseZ);
+        await _bot.WaitForTeleportSettledAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.AuctionHouseX,
+            OrgrimmarServiceLocations.AuctionHouseY);
 
-        // Interact with nearest auctioneer
+        var auctioneer = await _bot.WaitForNearbyUnitAsync(
+            bgAccount,
+            (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER,
+            timeoutMs: 15000,
+            progressLabel: "auctioneer-interact");
+        Assert.NotNull(auctioneer);
+
+        var auctioneerGuid = auctioneer!.GameObject?.Base?.Guid ?? 0;
+        Assert.NotEqual(0UL, auctioneerGuid);
+
+        // Interact with the detected auctioneer instead of relying on an implicit nearest-target contract.
         var interactResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
         {
             ActionType = ActionType.InteractWith,
+            Parameters = { new RequestParameter { LongParam = (long)auctioneerGuid } }
         });
         _output.WriteLine($"[AH] Interact result: {interactResult}");
 
@@ -96,7 +124,11 @@ public class AuctionHouseTests
         _output.WriteLine("[AH] AH interaction completed, verifying NPC nearby");
 
         // Verify an auctioneer is nearby (interaction implies proximity)
-        var auctioneer = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x200000, timeoutMs: 5000, progressLabel: "auctioneer-verify");
-        Assert.NotNull(auctioneer);
+        var verifyAuctioneer = await _bot.WaitForNearbyUnitAsync(
+            bgAccount,
+            (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER,
+            timeoutMs: 15000,
+            progressLabel: "auctioneer-verify");
+        Assert.NotNull(verifyAuctioneer);
     }
 }

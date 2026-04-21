@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Navigation.Physics.Tests.Helpers;
+using Tests.Infrastructure;
 
 namespace Navigation.Physics.Tests;
 
@@ -90,68 +91,19 @@ public class PhysicsEngineFixture : IDisposable
     }
 
     /// <summary>
-    /// Sets WWOW_DATA_DIR if not already set, searching common locations
-    /// for the directory containing mmaps/, vmaps/, maps/ subdirectories.
+    /// Sets WWOW_DATA_DIR, preferring the same Docker-backed data root that
+    /// SceneDataService mounts, and only falling back to repo-local test data
+    /// when the Docker parity root is unavailable.
     /// </summary>
     public static void EnsureDataDir()
     {
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WWOW_DATA_DIR")))
-            return;
+        var resolved = SceneDataParityPaths.ResolvePreferredDataRoot(
+            Environment.GetEnvironmentVariable("WWOW_DATA_DIR"),
+            AppContext.BaseDirectory,
+            requireMmaps: false);
 
-        var baseDir = AppContext.BaseDirectory.TrimEnd(
-            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-        // Walk up from test output to find repo root, then check candidate directories.
-        var dir = baseDir;
-        while (!string.IsNullOrEmpty(dir))
-        {
-            // Highest priority: centralized Data/ directory at repo root
-            var dataDir = Path.Combine(dir, "Data");
-            if (Directory.Exists(Path.Combine(dataDir, "mmaps")))
-            {
-                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", dataDir);
-                return;
-            }
-
-            var botDebug = Path.Combine(dir, "Bot", "Debug", "net8.0");
-            var botRelease = Path.Combine(dir, "Bot", "Release", "net8.0");
-            if (Directory.Exists(Path.Combine(botDebug, "mmaps")))
-            {
-                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", botDebug);
-                return;
-            }
-            if (Directory.Exists(Path.Combine(botRelease, "mmaps")))
-            {
-                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", botRelease);
-                return;
-            }
-            var parent = Path.GetDirectoryName(dir);
-            if (parent == dir) break;
-            dir = parent;
-        }
-
-        // Original fallback: check AppContext.BaseDirectory directly.
-        if (Directory.Exists(Path.Combine(baseDir, "mmaps")))
-        {
-            Environment.SetEnvironmentVariable("WWOW_DATA_DIR", baseDir);
-            return;
-        }
-
-        var systemDrive = Environment.GetEnvironmentVariable("SystemDrive") ?? "C:";
-        var externalDataRoots = new[]
-        {
-            Path.Combine(systemDrive + Path.DirectorySeparatorChar, "MaNGOS", "data"),
-            Path.Combine(systemDrive + Path.DirectorySeparatorChar, "mangos", "data"),
-        };
-
-        foreach (var candidate in externalDataRoots)
-        {
-            if (!Directory.Exists(Path.Combine(candidate, "mmaps")))
-                continue;
-
-            Environment.SetEnvironmentVariable("WWOW_DATA_DIR", candidate);
-            return;
-        }
+        if (!string.IsNullOrWhiteSpace(resolved))
+            Environment.SetEnvironmentVariable("WWOW_DATA_DIR", resolved);
     }
 
     public void Dispose()

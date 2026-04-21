@@ -37,4 +37,25 @@ public class LiveBotFixtureBotChatTests
         Assert.Equal(1000, delayMs);
         Assert.Equal(1000, tailMs);
     }
+
+    [Fact]
+    public void GetTrackedChatCommandDelayMs_ExtendsTaxiCheatCaptureWindow()
+    {
+        var delayMs = LiveBotFixture.GetTrackedChatCommandDelayMs(".taxicheat on", 1000);
+        var tailMs = LiveBotFixture.GetTrackedChatCommandPostActionTailMs(".taxicheat on");
+        var settleMs = LiveBotFixture.GetTrackedChatCommandResponseSettleMs(".taxicheat on");
+
+        Assert.Equal(4500, delayMs);
+        Assert.Equal(2500, tailMs);
+        Assert.Equal(1200, settleMs);
+    }
+
+    [Theory]
+    [InlineData("[SYSTEM] |cffffffff|Hplayer:Thokzugshvrg|h[Thokzugshvrg]|h|r has access to all taxi nodes now (until logout).", true)]
+    [InlineData("[CHAT:CHAT_MSG_SYSTEM] : GM mode is OFF", false)]
+    [InlineData("[SYSTEM] Cheat: Taxi: Attempt to use unknown node.", false)]
+    public void ContainsTaxiNodesGrantedMessage_MatchesOnlyGrantConfirmation(string message, bool expected)
+    {
+        Assert.Equal(expected, LiveBotFixture.ContainsTaxiNodesGrantedMessage(message));
+    }
 }

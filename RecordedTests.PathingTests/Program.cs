@@ -26,6 +26,7 @@ namespace RecordedTests.PathingTests;
 internal class Program
 {
     private static IHost? _pathfindingServiceHost;
+    private static Func<IHost> _pathfindingServiceHostFactory = CreateDefaultPathfindingServiceHost;
 
     static async Task<int> Main(string[] args)
     {
@@ -122,17 +123,18 @@ internal class Program
     /// <summary>
     /// Starts the PathfindingService in-process.
     /// </summary>
-    private static async Task StartPathfindingServiceAsync(ITestLogger logger)
+    internal static async Task StartPathfindingServiceAsync(ITestLogger logger)
     {
+        IHost? host = null;
         try
         {
             logger.Info("Starting PathfindingService in-process...");
 
-            // Build the host using PathfindingService's CreateHostBuilder
-            _pathfindingServiceHost = PathfindingService.Program.CreateHostBuilder(Array.Empty<string>()).Build();
+            host = _pathfindingServiceHostFactory();
+            _pathfindingServiceHost = host;
 
             // Start the host asynchronously
-            await _pathfindingServiceHost.StartAsync();
+            await host.StartAsync();
 
             logger.Info("PathfindingService started successfully");
 
@@ -142,6 +144,8 @@ internal class Program
         catch (Exception ex)
         {
             logger.Error($"Failed to start PathfindingService in-process: {ex.Message}", ex);
+            _pathfindingServiceHost = null;
+            host?.Dispose();
             throw;
         }
     }
@@ -149,24 +153,52 @@ internal class Program
     /// <summary>
     /// Stops the PathfindingService if it was started in-process.
     /// </summary>
-    private static async Task StopPathfindingServiceAsync(ITestLogger logger)
+    internal static async Task StopPathfindingServiceAsync(ITestLogger logger)
     {
-        if (_pathfindingServiceHost == null)
+        var host = _pathfindingServiceHost;
+        if (host == null)
             return;
 
+        _pathfindingServiceHost = null;
         try
         {
             logger.Info("Stopping PathfindingService...");
-            await _pathfindingServiceHost.StopAsync(TimeSpan.FromSeconds(10));
-            _pathfindingServiceHost.Dispose();
-            _pathfindingServiceHost = null;
+            await host.StopAsync(TimeSpan.FromSeconds(10));
             logger.Info("PathfindingService stopped successfully");
         }
         catch (Exception ex)
         {
             logger.Warn($"Error stopping PathfindingService: {ex.Message}");
         }
+        finally
+        {
+            try
+            {
+                host.Dispose();
+            }
+            catch (Exception ex)
+            {
+                logger.Warn($"Error disposing PathfindingService: {ex.Message}");
+            }
+        }
     }
+
+    internal static bool HasPathfindingServiceHostForTests => _pathfindingServiceHost != null;
+
+    internal static void SetPathfindingServiceHostFactoryForTests(Func<IHost> factory)
+    {
+        _pathfindingServiceHostFactory = factory ?? throw new ArgumentNullException(nameof(factory));
+    }
+
+    internal static void ResetPathfindingServiceHostForTests()
+    {
+        _pathfindingServiceHost?.Dispose();
+        _pathfindingServiceHost = null;
+        _pathfindingServiceHostFactory = CreateDefaultPathfindingServiceHost;
+    }
+
+    private static IHost CreateDefaultPathfindingServiceHost()
+        => PathfindingService.Program.CreateHostBuilder(Array.Empty<string>()).Build();
 
     /// <summary>
     /// Finds and kills repo-scoped lingering processes (WoW.exe, WoWStateManager, testhost)
@@ -215,7 +247,7 @@ internal class Program
             logger.Info($"[Cleanup] Killed {killed} repo-scoped lingering process(es).");
     }
 
-    private static IReadOnlyList<PathingTestDefinition> FilterTests(
+    internal static IReadOnlyList<PathingTestDefinition> FilterTests(
         TestConfiguration config,
         IReadOnlyList<PathingTestDefinition> allTests)
     {

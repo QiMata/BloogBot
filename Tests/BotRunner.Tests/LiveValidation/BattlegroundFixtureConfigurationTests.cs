@@ -85,6 +85,25 @@ public sealed class BattlegroundFixtureConfigurationTests
     }
 
     [Fact]
+    public void AlteracValleyObjectiveFixture_UsesBackgroundLeadersAndObjectiveReadyMinimumRoster()
+    {
+        var fixture = new AlteracValleyObjectiveFixture();
+        var settings = GetCharacterSettings(fixture);
+
+        Assert.Equal(AlteracValleyFixture.TotalBotCount, settings.Count);
+        Assert.False(GetPrepareDuringInitialization(fixture));
+        Assert.Equal(
+            AlteracValleyObjectiveFixture.ObjectiveReadyMinimumBotCount,
+            GetProtectedIntProperty(fixture, "MinimumBotCount"));
+
+        var foregroundAccounts = settings
+            .Where(setting => setting.RunnerType == SettingsBotRunnerType.Foreground)
+            .Select(setting => setting.AccountName)
+            .ToArray();
+        Assert.Empty(foregroundAccounts);
+    }
+
+    [Fact]
     public void BattlegroundFixtures_PreserveExistingCharacters_WhenAnyConfiguredCharacterMatches()
     {
         Assert.True(GetPreserveExistingCharactersWhenAnyMatch(new WarsongGulchFixture()));
@@ -253,6 +272,28 @@ public sealed class BattlegroundFixtureConfigurationTests
     }
 
     [Fact]
+    public void AlteracValleyFixture_DisablesLaunchThrottle_ForEightyBotRoster()
+    {
+        var originalLaunchThrottleActivation = Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.LaunchThrottleActivationBotCountEnvVar);
+        var originalMaxPendingStartupBots = Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.MaxPendingStartupBotsEnvVar);
+
+        try
+        {
+            var fixture = new TestableAlteracValleyFixture();
+
+            fixture.ApplyCoordinatorEnvironment();
+
+            Assert.Equal("81", Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.LaunchThrottleActivationBotCountEnvVar));
+            Assert.Equal("81", Environment.GetEnvironmentVariable(WoWStateManager.StateManagerWorker.MaxPendingStartupBotsEnvVar));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(WoWStateManager.StateManagerWorker.LaunchThrottleActivationBotCountEnvVar, originalLaunchThrottleActivation);
+            Environment.SetEnvironmentVariable(WoWStateManager.StateManagerWorker.MaxPendingStartupBotsEnvVar, originalMaxPendingStartupBots);
+        }
+    }
+
+    [Fact]
     public void BattlegroundFixtures_ExtendEnterWorldTimeouts_ForFirstLoginCinematics()
     {
         var fixture = new WarsongGulchFixture();
@@ -393,6 +434,11 @@ public sealed class BattlegroundFixtureConfigurationTests
     }
 
     private sealed class TestableWarsongGulchFixture : WarsongGulchFixture
+    {
+        public void ApplyCoordinatorEnvironment() => ConfigureCoordinatorEnvironment();
+    }
+
+    private sealed class TestableAlteracValleyFixture : AlteracValleyFixture
     {
         public void ApplyCoordinatorEnvironment() => ConfigureCoordinatorEnvironment();
     }

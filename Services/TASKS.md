@@ -75,3 +75,18 @@
 - Files changed: `Services/TASKS.md`
 - Next command: continue with next queue file
 - Blockers: none
+
+## Session Handoff (2026-04-15 - DecisionEngineService Runtime Closeout)
+- Active task: all SRV-UMB tasks verified complete.
+- Last delta: DecisionEngineService child tracker closed after runtime composition/schema startup follow-up.
+- Pass result: `delta shipped`
+- Files changed:
+  - `Services/DecisionEngineService/TASKS.md`
+  - `Services/DecisionEngineService/TASKS_ARCHIVE.md`
+  - `Services/TASKS.md`
+- Validation:
+  - `dotnet build Services/DecisionEngineService/DecisionEngineService.csproj --configuration Release --no-restore` -> `succeeded (0 warnings, 0 errors)`
+  - `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DecisionEngineRuntimeTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Next command: `rg -n "^- \[ \]" --glob TASKS.md`
+- Blockers: none

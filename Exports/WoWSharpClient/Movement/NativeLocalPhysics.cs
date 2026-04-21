@@ -22,6 +22,7 @@ internal static class NativeLocalPhysics
     internal static Action<uint>? TestPreloadMapOverride { get; set; }
     internal static Action<string>? TestSetDataDirectoryOverride { get; set; }
     internal static Func<string?>? TestResolveDataDirectoryOverride { get; set; }
+    internal static Func<uint, float, float, float, float, (float groundZ, bool found)>? TestGetGroundZOverride { get; set; }
     public static IReadOnlyList<uint> PreloadedMapIds => _preloadedMapIds;
 
     public static PhysicsOutput Step(PhysicsInput proto)
@@ -166,6 +167,9 @@ internal static class NativeLocalPhysics
     /// </summary>
     public static (float groundZ, bool found) GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist = 10f)
     {
+        if (TestGetGroundZOverride != null)
+            return TestGetGroundZOverride(mapId, x, y, z, maxSearchDist);
+
         EnsureInitialized();
         float gz = NativePhysics.GetGroundZ(mapId, x, y, z, maxSearchDist);
         return (gz, gz > -50000f);

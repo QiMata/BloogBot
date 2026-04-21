@@ -14,10 +14,13 @@ namespace BotRunner.Tests.LiveValidation;
 internal static class CombatTestHelpers
 {
     public const int MapId = 1;
-    public const float MobAreaX = -284f;
-    public const float MobAreaY = -4383f;
-    public const float MobAreaZ = 60f; // Z+3 offset from spawn table (~57) to avoid UNDERMAP detection
-    public const float MobAreaRadius = 80f;
+    // Durotar boar pocket west of Razor Hill. The nearby Vile Familiar spawns can
+    // reproduce flaky BADFACING deadlocks; the boar cluster is the reliable melee
+    // contract we want for the live auto-attack regression.
+    public const float MobAreaX = -320f;
+    public const float MobAreaY = -4360f;
+    public const float MobAreaZ = 58f; // Z+3 offset from terrain ~55 to avoid UNDERMAP detection
+    public const float MobAreaRadius = 60f;
 
     // Observer: on the road south of the mob area (flat, walkable terrain).
     // Previous offset (MobAreaX+15) placed the FG bot on a steep slope that
@@ -26,7 +29,7 @@ internal static class CombatTestHelpers
     public const float ObserverY = -4400f;
     public const float ObserverZ = 55f;
 
-    public static readonly HashSet<uint> AttackableCreatureEntries = [3098, 3101, 3124];
+    public static readonly HashSet<uint> AttackableCreatureEntries = [3098];
     public const uint OneHandMaceSpell = 198;
     public const int MaxCombatAttempts = 3;
 
@@ -34,8 +37,6 @@ internal static class CombatTestHelpers
         => entry switch
         {
             3098 => 0, // Mottled Boar
-            3101 => 1, // Vile Familiar
-            3124 => 2, // Scorpid Worker
             _ => 99
         };
 

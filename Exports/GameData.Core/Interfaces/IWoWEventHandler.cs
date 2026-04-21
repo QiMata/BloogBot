@@ -25,6 +25,7 @@ namespace GameData.Core.Interfaces
         event EventHandler OnChooseRealm;
         event EventHandler OnDisconnect;
         event EventHandler<List<WorldState>> OnWorldStatesInit;
+        event EventHandler<WorldState> OnWorldStateUpdate;
         event EventHandler<OnUiMessageArgs> OnErrorMessage;
         event EventHandler<OnUiMessageArgs> OnUiMessage;
         event EventHandler<OnUiMessageArgs> OnSystemMessage;

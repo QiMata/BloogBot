@@ -28,6 +28,14 @@
 #include "PhysicsShapeHelpers.h"
 #include "PhysicsTolerances.h"
 
+static bool TryResolveSceneCacheAreaInfo(const SceneCache& cache,
+    float x,
+    float y,
+    float z,
+    uint32_t& flags,
+    int32_t& rootId,
+    int32_t& groupId);
+
 SceneQuery::SweepResults SceneQuery::ComputeCapsuleSweep(
     uint32_t mapId,
     float x,
@@ -446,6 +454,9 @@ void SceneQuery::EnsureMapLoaded(uint32_t mapId)
     if (GetSceneCache(mapId))
         return;
 
+    if (!IsSceneAutoloadEnabled())
+        return;
+
     // 2. Check for .scene file on disk (fast path)
     if (!m_scenesDir.empty())
     {
@@ -695,11 +706,25 @@ bool SceneQuery::GetAreaInfo(uint32_t mapId,
     groupId = -1;
 
     if (!m_vmapManager)
+    {
+        if (auto* cache = GetSceneCache(mapId))
+            return TryResolveSceneCacheAreaInfo(*cache, x, y, z, flags, rootId, groupId);
+
         return false;
+    }
 
     int32_t adtId = -1;
     float queryZ = z;
-    return m_vmapManager->getAreaInfo(mapId, x, y, queryZ, flags, adtId, rootId, groupId);
+    if (m_vmapManager->getAreaInfo(mapId, x, y, queryZ, flags, adtId, rootId, groupId))
+    {
+        if (flags != 0u || rootId >= 0 || groupId >= 0)
+            return true;
+    }
+
+    if (auto* cache = GetSceneCache(mapId))
+        return TryResolveSceneCacheAreaInfo(*cache, x, y, z, flags, rootId, groupId);
+
+    return false;
 }
 
 float SceneQuery::GetCapsuleSupportZ(
@@ -1566,6 +1591,88 @@ static bool BarycentricZ(const G3D::Vector3& v0, const G3D::Vector3& v1, const G
     if (u < eps || v < eps || w < eps) return false;
 
     outZ = w * v0.z + u * v1.z + v * v2.z;
+    return true;
+}
+
+static bool TryResolveSceneCacheAreaInfo(const SceneCache& cache,
+    float x,
+    float y,
+    float z,
+    uint32_t& flags,
+    int32_t& rootId,
+    int32_t& groupId)
+{
+    constexpr float queryHalfWidth = 0.25f;
+    constexpr float maxVerticalDistance = 4.0f;
+    constexpr float sameHeightEpsilon = 1e-3f;
+
+    std::vector<CapsuleCollision::Triangle> tris;
+    std::vector<SceneTriMetadata> metadata;
+    cache.QueryTrianglesInAABB(
+        x - queryHalfWidth,
+        y - queryHalfWidth,
+        x + queryHalfWidth,
+        y + queryHalfWidth,
+        tris,
+        nullptr,
+        nullptr,
+        &metadata);
+
+    bool foundCandidate = false;
+    bool foundBelow = false;
+    float bestBelowZ = -FLT_MAX;
+    float bestAboveError = FLT_MAX;
+    size_t bestIndex = 0;
+
+    for (size_t i = 0; i < tris.size() && i < metadata.size(); ++i)
+    {
+        const auto& tri = tris[i];
+        float triZ = 0.0f;
+        if (!BarycentricZ(
+                G3D::Vector3(tri.a.x, tri.a.y, tri.a.z),
+                G3D::Vector3(tri.b.x, tri.b.y, tri.b.z),
+                G3D::Vector3(tri.c.x, tri.c.y, tri.c.z),
+                x,
+                y,
+                triZ))
+        {
+            continue;
+        }
+
+        if (triZ < z - maxVerticalDistance || triZ > z + maxVerticalDistance)
+            continue;
+
+        if (triZ <= z + sameHeightEpsilon)
+        {
+            if (!foundBelow || triZ > bestBelowZ + sameHeightEpsilon)
+            {
+                foundCandidate = true;
+                foundBelow = true;
+                bestBelowZ = triZ;
+                bestIndex = i;
+            }
+
+            continue;
+        }
+
+        if (foundBelow)
+            continue;
+
+        const float aboveError = triZ - z;
+        if (!foundCandidate || aboveError < bestAboveError - sameHeightEpsilon)
+        {
+            foundCandidate = true;
+            bestAboveError = aboveError;
+            bestIndex = i;
+        }
+    }
+
+    if (!foundCandidate)
+        return false;
+
+    flags = metadata[bestIndex].groupFlags;
+    rootId = metadata[bestIndex].rootId;
+    groupId = metadata[bestIndex].groupId;
     return true;
 }
 

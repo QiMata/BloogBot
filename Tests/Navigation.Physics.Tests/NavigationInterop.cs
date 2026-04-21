@@ -30,16 +30,17 @@ public static partial class NavigationInterop
 
         var baseDir = AppContext.BaseDirectory;
         var arch = RuntimeInformation.ProcessArchitecture;
+        IntPtr handle;
 
-        // Try platform-specific subdirectory first (x86/ or x64/)
-        var subdir = arch == Architecture.X86 ? "x86" : "x64";
-        var platformPath = Path.Combine(baseDir, subdir, NavigationDll);
-        if (File.Exists(platformPath) && NativeLibrary.TryLoad(platformPath, out var handle))
-            return handle;
-
-        // Fall back to default location
+        // Prefer the root output because the native build writes the current DLL there.
         string preferredPath = Path.Combine(baseDir, NavigationDll);
         if (File.Exists(preferredPath) && NativeLibrary.TryLoad(preferredPath, out handle))
+            return handle;
+
+        // Fall back to platform-specific subdirectories for older test output layouts.
+        var subdir = arch == Architecture.X86 ? "x86" : "x64";
+        var platformPath = Path.Combine(baseDir, subdir, NavigationDll);
+        if (File.Exists(platformPath) && NativeLibrary.TryLoad(platformPath, out handle))
             return handle;
 
         return IntPtr.Zero;
@@ -786,6 +787,35 @@ public static partial class NavigationInterop
     [DllImport(NavigationDll, EntryPoint = "PathArrFree", CallingConvention = CallingConvention.Cdecl)]
     private static extern void PathArrFree(IntPtr pathArr);
 
+    public const int CorridorMaxCorners = 96;
+    public const uint CorridorResultFlagOverlayRepaired = 0x00000001u;
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct CorridorResult
+    {
+        public uint Handle;
+        public int CornerCount;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = CorridorMaxCorners * 3)]
+        public float[] Corners;
+        public float PosX;
+        public float PosY;
+        public float PosZ;
+        public int BlockedSegmentIndex;
+        public uint BlockingInstanceId;
+        public ulong BlockingGuid;
+        public uint BlockingDisplayId;
+        public uint Flags;
+    }
+
+    [DllImport(NavigationDll, EntryPoint = "FindPathCorridor", CallingConvention = CallingConvention.Cdecl)]
+    public static extern CorridorResult FindPathCorridor(
+        uint mapId,
+        in Vector3 start,
+        in Vector3 end);
+
+    [DllImport(NavigationDll, EntryPoint = "CorridorDestroy", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void CorridorDestroy(uint handle);
+
     public enum SegmentValidationResult : uint
     {
         Clear = 0,
@@ -793,6 +823,20 @@ public static partial class NavigationInterop
         MissingSupport = 2,
         StepUpTooHigh = 3,
         StepDownTooFar = 4,
+    }
+
+    public enum SegmentAffordanceResult : uint
+    {
+        Walk = 0,
+        StepUp = 1,
+        SteepClimb = 2,
+        Drop = 3,
+        Cliff = 4,
+        Vertical = 5,
+        JumpGap = 6,
+        SafeDrop = 7,
+        UnsafeDrop = 8,
+        Blocked = 9,
     }
 
     /// <summary>
@@ -810,6 +854,20 @@ public static partial class NavigationInterop
         out float resolvedEndZ,
         out float supportDelta,
         out float travelFraction);
+
+    [DllImport(NavigationDll, EntryPoint = "ClassifyPathSegmentAffordance", CallingConvention = CallingConvention.Cdecl)]
+    public static extern SegmentAffordanceResult ClassifyPathSegmentAffordance(
+        uint mapId,
+        in Vector3 start,
+        in Vector3 end,
+        float radius,
+        float height,
+        out float climbHeight,
+        out float gapDistance,
+        out float dropHeight,
+        out float slopeAngleDeg,
+        out float resolvedEndZ,
+        out SegmentValidationResult validationCode);
 
     public static Vector3[] FindPath(uint mapId, in Vector3 start, in Vector3 end, bool smoothPath)
     {
@@ -2064,6 +2122,24 @@ public static partial class NavigationInterop
     [DllImport(NavigationDll, EntryPoint = "GetCachedModelCount", CallingConvention = CallingConvention.Cdecl)]
     public static extern int GetCachedModelCount();
 
+    /// <summary>
+    /// Checks whether a segment intersects a registered dynamic object and returns
+    /// the nearest blocking object identity when it does.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "SegmentIntersectsDynamicObjectsDetailed", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool SegmentIntersectsDynamicObjectsDetailed(
+        uint mapId,
+        float x0,
+        float y0,
+        float z0,
+        float x1,
+        float y1,
+        float z1,
+        out uint blockingInstanceId,
+        out ulong blockingGuid,
+        out uint blockingDisplayId);
+
     // ==========================================================================
     // SCENE CACHE (pre-processed collision geometry)
     // ==========================================================================
@@ -2111,6 +2187,9 @@ public static partial class NavigationInterop
     /// </summary>
     [DllImport(NavigationDll, EntryPoint = "SetScenesDir", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     public static extern void SetScenesDir(string dir);
+
+    [DllImport(NavigationDll, EntryPoint = "SetSceneAutoloadEnabled", CallingConvention = CallingConvention.Cdecl)]
+    public static extern void SetSceneAutoloadEnabled([MarshalAs(UnmanagedType.I1)] bool enabled);
 
     // ==========================================================================
     // WMO DOODAD EXTRACTION

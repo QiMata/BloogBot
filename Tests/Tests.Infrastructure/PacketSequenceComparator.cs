@@ -36,10 +36,20 @@ public class PacketSequenceComparator
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
             var parts = line.Split(',');
-            if (parts.Length < 3) continue;
-            if (!int.TryParse(parts[1].Trim(), out var size)) continue; // skip header
-            double.TryParse(parts[2].Trim(), out var ts);
-            entries.Add(new PacketEntry(parts[0].Trim(), size, ts));
+            if (parts.Length >= 8
+                && long.TryParse(parts[1].Trim(), out var currentTraceTimestamp)
+                && int.TryParse(parts[6].Trim(), out var currentTraceSize))
+            {
+                entries.Add(new PacketEntry(parts[5].Trim(), currentTraceSize, currentTraceTimestamp));
+                continue;
+            }
+
+            if (parts.Length >= 3
+                && int.TryParse(parts[1].Trim(), out var legacySize))
+            {
+                double.TryParse(parts[2].Trim(), out var legacyTimestamp);
+                entries.Add(new PacketEntry(parts[0].Trim(), legacySize, legacyTimestamp));
+            }
         }
         return entries;
     }

@@ -4,6 +4,7 @@ using RecordedTests.Shared.Abstractions.I;
 using RecordedTests.Shared.Storage;
 using NSubstitute;
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -224,10 +225,10 @@ public class S3RecordedTestStorageTests
     public async Task UploadArtifactAsync_ReturnsS3Uri()
     {
         var storage = CreateStorage();
-        var artifact = new TestArtifact("recording.mkv", "/tmp/recording.mkv");
+        using var artifact = new TempArtifactFile("recording.mkv");
         var timestamp = new DateTimeOffset(2025, 1, 19, 12, 0, 0, TimeSpan.Zero);
 
-        var result = await storage.UploadArtifactAsync(artifact, "TestName", timestamp, CancellationToken.None);
+        var result = await storage.UploadArtifactAsync(artifact.Artifact, "TestName", timestamp, CancellationToken.None);
 
         result.Should().StartWith("s3://test-bucket/recorded-tests/");
         result.Should().Contain("TestName");
@@ -236,13 +237,27 @@ public class S3RecordedTestStorageTests
     }
 
     [Fact]
+    public async Task UploadArtifactAsync_StoresArtifactContent()
+    {
+        var backend = new InMemoryS3StorageBackend();
+        var storage = CreateStorage(backend);
+        using var artifact = new TempArtifactFile("recording.mkv", "s3 upload content");
+        var timestamp = new DateTimeOffset(2025, 1, 19, 12, 0, 0, TimeSpan.Zero);
+
+        await storage.UploadArtifactAsync(artifact.Artifact, "TestName", timestamp, CancellationToken.None);
+
+        backend.ReadText("test-bucket", "recorded-tests/TestName/20250119_120000/recording.mkv")
+            .Should().Be("s3 upload content");
+    }
+
+    [Fact]
     public async Task UploadArtifactAsync_WithLogger_LogsMessages()
     {
         var logger = Substitute.For<ITestLogger>();
-        var storage = new S3RecordedTestStorage(CreateConfig(), logger);
-        var artifact = new TestArtifact("test.mkv", "/tmp/test.mkv");
+        var storage = CreateStorage(new InMemoryS3StorageBackend(), logger);
+        using var artifact = new TempArtifactFile("test.mkv");
 
-        await storage.UploadArtifactAsync(artifact, "TestName", DateTimeOffset.UtcNow, CancellationToken.None);
+        await storage.UploadArtifactAsync(artifact.Artifact, "TestName", DateTimeOffset.UtcNow, CancellationToken.None);
 
         logger.Received().Info(Arg.Is<string>(s => s.Contains("Uploading")));
         logger.Received().Info(Arg.Is<string>(s => s.Contains("successfully")));
@@ -274,6 +289,84 @@ public class S3RecordedTestStorageTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Theory]
+    [InlineData("https://my-bucket.s3.amazonaws.com/recording.mkv")]
+    [InlineData("not-s3")]
+    public async Task DownloadArtifactAsync_InvalidS3Uri_ThrowsFormatException(string storageLocation)
+    {
+        var storage = CreateStorage();
+        var destination = Path.Combine(Path.GetTempPath(), "wwow-s3-tests", "recording.mkv");
+
+        var act = async () => await storage.DownloadArtifactAsync(storageLocation, destination, CancellationToken.None);
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*s3://*");
+    }
+
+    [Fact]
+    public async Task DownloadArtifactAsync_ValidUri_DownloadsFile()
+    {
+        var backend = new InMemoryS3StorageBackend();
+        backend.Seed("test-bucket", "recorded-tests/TestName/recording.mkv", "downloaded content");
+        var storage = CreateStorage(backend);
+        var root = Path.Combine(Path.GetTempPath(), "wwow-s3-tests", Guid.NewGuid().ToString("N"));
+        var destination = Path.Combine(root, "nested", "recording.mkv");
+
+        try
+        {
+            await storage.DownloadArtifactAsync("s3://test-bucket/recorded-tests/TestName/recording.mkv", destination, CancellationToken.None);
+
+            Directory.Exists(Path.GetDirectoryName(destination)!).Should().BeTrue();
+            File.Exists(destination).Should().BeTrue();
+            File.ReadAllText(destination).Should().Be("downloaded content");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task DownloadArtifactAsync_MissingObject_ThrowsFileNotFoundException()
+    {
+        var storage = CreateStorage();
+        var destination = Path.Combine(Path.GetTempPath(), "wwow-s3-tests", Guid.NewGuid().ToString("N"), "recording.mkv");
+
+        var act = async () => await storage.DownloadArtifactAsync("s3://test-bucket/recorded-tests/TestName/missing.mkv", destination, CancellationToken.None);
+
+        await act.Should().ThrowAsync<FileNotFoundException>();
+    }
+
+    [Fact]
+    public async Task DownloadArtifactAsync_BucketMismatch_ThrowsArgumentException()
+    {
+        var storage = CreateStorage();
+        var destination = Path.Combine(Path.GetTempPath(), "wwow-s3-tests", Guid.NewGuid().ToString("N"), "recording.mkv");
+
+        var act = async () => await storage.DownloadArtifactAsync("s3://other-bucket/recorded-tests/TestName/recording.mkv", destination, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*other-bucket*test-bucket*");
+    }
+
+    [Fact]
+    public async Task DownloadArtifactAsync_WithLogger_LogsParsedS3LocationAndStubSuccess()
+    {
+        var logger = Substitute.For<ITestLogger>();
+        var backend = new InMemoryS3StorageBackend();
+        backend.Seed("test-bucket", "recorded-tests/TestName/recording.mkv", "downloaded content");
+        var storage = CreateStorage(backend, logger);
+        var destination = Path.Combine(Path.GetTempPath(), "wwow-s3-tests", Guid.NewGuid().ToString("N"), "recording.mkv");
+
+        await storage.DownloadArtifactAsync("s3://test-bucket/recorded-tests/TestName/recording.mkv", destination, CancellationToken.None);
+
+        logger.Received().Info(Arg.Is<string>(s => s.Contains("bucket 'test-bucket'") && s.Contains("recorded-tests/TestName/recording.mkv")));
+        logger.Received().Info(Arg.Is<string>(s => s.Contains("downloaded successfully")));
+    }
+
     // ================================================================
     // ListArtifactsAsync
     // ================================================================
@@ -297,6 +390,32 @@ public class S3RecordedTestStorageTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task ListArtifactsAsync_WithLogger_LogsListingAndCount()
+    {
+        var logger = Substitute.For<ITestLogger>();
+        var storage = CreateStorage(new InMemoryS3StorageBackend(), logger);
+
+        var result = await storage.ListArtifactsAsync("TestName", CancellationToken.None);
+
+        result.Should().BeEmpty();
+        logger.Received().Info(Arg.Is<string>(s => s.Contains("Listing artifacts for test 'TestName'")));
+        logger.Received().Info(Arg.Is<string>(s => s.Contains("Found 0 artifact")));
+    }
+
+    [Fact]
+    public async Task ListArtifactsAsync_ReturnsUploadedArtifactUris()
+    {
+        var backend = new InMemoryS3StorageBackend();
+        backend.Seed("test-bucket", "recorded-tests/TestName/20250119_120000/recording.mkv", "one");
+        backend.Seed("test-bucket", "recorded-tests/OtherTest/20250119_120000/recording.mkv", "two");
+        var storage = CreateStorage(backend);
+
+        var result = await storage.ListArtifactsAsync("TestName", CancellationToken.None);
+
+        result.Should().Equal("s3://test-bucket/recorded-tests/TestName/20250119_120000/recording.mkv");
+    }
+
     // ================================================================
     // DeleteArtifactAsync
     // ================================================================
@@ -312,12 +431,49 @@ public class S3RecordedTestStorageTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Theory]
+    [InlineData("https://my-bucket.s3.amazonaws.com/recording.mkv")]
+    [InlineData("not-s3")]
+    public async Task DeleteArtifactAsync_InvalidS3Uri_ThrowsFormatException(string storageLocation)
+    {
+        var storage = CreateStorage();
+
+        var act = async () => await storage.DeleteArtifactAsync(storageLocation, CancellationToken.None);
+
+        await act.Should().ThrowAsync<FormatException>()
+            .WithMessage("*s3://*");
+    }
+
     [Fact]
     public async Task DeleteArtifactAsync_ValidUri_Completes()
     {
         var storage = CreateStorage();
-        var act = async () => await storage.DeleteArtifactAsync("s3://bucket/key", CancellationToken.None);
+        var act = async () => await storage.DeleteArtifactAsync("s3://test-bucket/key", CancellationToken.None);
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task DeleteArtifactAsync_ExistingObject_RemovesObject()
+    {
+        var backend = new InMemoryS3StorageBackend();
+        backend.Seed("test-bucket", "recorded-tests/TestName/recording.mkv", "content");
+        var storage = CreateStorage(backend);
+
+        await storage.DeleteArtifactAsync("s3://test-bucket/recorded-tests/TestName/recording.mkv", CancellationToken.None);
+
+        backend.Contains("test-bucket", "recorded-tests/TestName/recording.mkv").Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task DeleteArtifactAsync_WithLogger_LogsParsedS3LocationAndStubSuccess()
+    {
+        var logger = Substitute.For<ITestLogger>();
+        var storage = CreateStorage(new InMemoryS3StorageBackend(), logger);
+
+        await storage.DeleteArtifactAsync("s3://test-bucket/recorded-tests/TestName/recording.mkv", CancellationToken.None);
+
+        logger.Received().Info(Arg.Is<string>(s => s.Contains("bucket 'test-bucket'") && s.Contains("recorded-tests/TestName/recording.mkv")));
+        logger.Received().Info(Arg.Is<string>(s => s.Contains("deleted successfully")));
     }
 
     // ================================================================
@@ -344,10 +500,10 @@ public class S3RecordedTestStorageTests
     }
 
     [Fact]
-    public async Task StoreAsync_WithLogger_LogsWarning()
+    public async Task StoreAsync_WithLogger_LogsStorageMessages()
     {
         var logger = Substitute.For<ITestLogger>();
-        var storage = new S3RecordedTestStorage(CreateConfig(), logger);
+        var storage = CreateStorage(new InMemoryS3StorageBackend(), logger);
         var context = new RecordedTestStorageContext(
             TestName: "Test", AutomationRunId: null,
             Success: true, Message: "ok",
@@ -357,7 +513,31 @@ public class S3RecordedTestStorageTests
 
         await storage.StoreAsync(context, CancellationToken.None);
 
-        logger.Received().Warn(Arg.Is<string>(s => s.Contains("StoreAsync")));
+        logger.Received().Info(Arg.Is<string>(s => s.Contains("Storing test artifacts")));
+        logger.Received().Info(Arg.Is<string>(s => s.Contains("stored successfully")));
+    }
+
+    [Fact]
+    public async Task StoreAsync_UploadsMetadata()
+    {
+        var backend = new InMemoryS3StorageBackend();
+        var storage = CreateStorage(backend);
+        var completedAt = new DateTimeOffset(2025, 1, 19, 12, 0, 0, TimeSpan.Zero);
+        var context = new RecordedTestStorageContext(
+            TestName: "Test",
+            AutomationRunId: "run-1",
+            Success: true,
+            Message: "ok",
+            TestRunDirectory: null,
+            RecordingArtifact: null,
+            StartedAt: completedAt.AddMinutes(-1),
+            CompletedAt: completedAt
+        );
+
+        await storage.StoreAsync(context, CancellationToken.None);
+
+        backend.ReadText("test-bucket", "recorded-tests/Test/20250119_120000/run-metadata.json")
+            .Should().Contain("\"automationRunId\": \"run-1\"");
     }
 
     // ================================================================
@@ -422,5 +602,33 @@ public class S3RecordedTestStorageTests
         SecretAccessKey = "test-secret"
     };
 
-    private static S3RecordedTestStorage CreateStorage() => new(CreateConfig());
+    private static S3RecordedTestStorage CreateStorage(
+        InMemoryS3StorageBackend? backend = null,
+        ITestLogger? logger = null,
+        S3StorageConfiguration? config = null)
+    {
+        return new S3RecordedTestStorage(config ?? CreateConfig(), backend ?? new InMemoryS3StorageBackend(), logger);
+    }
+
+    private sealed class TempArtifactFile : IDisposable
+    {
+        private readonly string _path;
+
+        public TempArtifactFile(string artifactName, string content = "test content")
+        {
+            _path = Path.Combine(Path.GetTempPath(), $"wwow-s3-{Guid.NewGuid():N}-{artifactName}");
+            File.WriteAllText(_path, content);
+            Artifact = new TestArtifact(artifactName, _path);
+        }
+
+        public TestArtifact Artifact { get; }
+
+        public void Dispose()
+        {
+            if (File.Exists(_path))
+            {
+                File.Delete(_path);
+            }
+        }
+    }
 }

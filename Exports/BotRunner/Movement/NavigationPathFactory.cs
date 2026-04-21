@@ -64,7 +64,7 @@ public static class NavigationPathFactory
             capsuleRadius: capabilities.CapsuleRadius,
             capsuleHeight: capabilities.CapsuleHeight,
             nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end),
-            stuckRecoveryGenerationProvider: stuckRecoveryGenerationProvider,
+            stuckRecoveryGenerationProvider: stuckRecoveryGenerationProvider ?? (() => objectManager.MovementStuckRecoveryGeneration),
             race: capabilities.Race,
             gender: capabilities.Gender);
     }

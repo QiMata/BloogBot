@@ -105,5 +105,41 @@ namespace WoWSharpClient.Tests.Handlers
                 WoWSharpEventEmitter.Instance.OnWorldStatesInit -= handler;
             }
         }
+
+        [Fact]
+        public void HandleUpdateWorldState_ValidPacket_FiresEvent()
+        {
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write((uint)2267);
+            writer.Write((uint)3);
+
+            byte[] data = ms.ToArray();
+
+            WorldState? receivedState = null;
+            EventHandler<WorldState> handler = (_, state) => receivedState = state;
+            WoWSharpEventEmitter.Instance.OnWorldStateUpdate += handler;
+
+            try
+            {
+                WorldStateHandler.HandleUpdateWorldState(Opcode.SMSG_UPDATE_WORLD_STATE, data, ctx);
+
+                Assert.NotNull(receivedState);
+                Assert.Equal(2267u, receivedState!.StateId);
+                Assert.Equal(3u, receivedState.StateValue);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnWorldStateUpdate -= handler;
+            }
+        }
+
+        [Fact]
+        public void HandleUpdateWorldState_TooSmall_DoesNotThrow()
+        {
+            byte[] data = new byte[4];
+
+            WorldStateHandler.HandleUpdateWorldState(Opcode.SMSG_UPDATE_WORLD_STATE, data, ctx);
+        }
     }
 }

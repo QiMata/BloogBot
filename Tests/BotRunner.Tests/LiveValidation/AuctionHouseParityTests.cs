@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using Communication;
+using GameData.Core.Enums;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -10,16 +11,13 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~AuctionHouseParityTests" --configuration Release
 /// </summary>
-[Collection(LiveValidationCollection.Name)]
+[Collection(BgOnlyValidationCollection.Name)]
 public class AuctionHouseParityTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int MapId = 1;
-    private const float AhX = 1687.26f, AhY = -4464.71f, AhZ = 23.15f;
-
-    public AuctionHouseParityTests(LiveBotFixture bot, ITestOutputHelper output)
+    public AuctionHouseParityTests(BgOnlyBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
@@ -36,8 +34,16 @@ public class AuctionHouseParityTests
         await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
 
         // Teleport to AH and verify position
-        await _bot.BotTeleportAsync(bgAccount, MapId, AhX, AhY, AhZ);
-        await Task.Delay(3000);
+        await _bot.BotTeleportAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.AuctionHouseX,
+            OrgrimmarServiceLocations.AuctionHouseY,
+            OrgrimmarServiceLocations.AuctionHouseZ);
+        await _bot.WaitForTeleportSettledAsync(
+            bgAccount,
+            OrgrimmarServiceLocations.AuctionHouseX,
+            OrgrimmarServiceLocations.AuctionHouseY);
 
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(bgAccount);
@@ -49,7 +55,11 @@ public class AuctionHouseParityTests
         _output.WriteLine($"[AH-PARITY] BG bot at ({pos!.X:F0},{pos.Y:F0},{pos.Z:F0})");
 
         // Verify auctioneer NPC is detectable
-        var auctioneer = await _bot.WaitForNearbyUnitAsync(bgAccount, 0x200000, timeoutMs: 8000, progressLabel: "auctioneer");
+        var auctioneer = await _bot.WaitForNearbyUnitAsync(
+            bgAccount,
+            (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER,
+            timeoutMs: 15000,
+            progressLabel: "auctioneer");
         Assert.NotNull(auctioneer);
         _output.WriteLine("[AH-PARITY] Auctioneer found by BG bot");
 

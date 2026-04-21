@@ -34,6 +34,10 @@ public class OrgrimmarGroundZAnalysisTests
     // the ground snap failed.
     private const float TELEPORT_HEIGHT_DEAD_ZONE = 0.5f;
 
+    // If both clients agree on an alternate floor in a multi-level WMO area, treat that as a
+    // stale probe expectation instead of a BG-only ground-snap failure.
+    private const float ALT_LEVEL_CLIENT_MATCH_TOLERANCE = 4.0f;
+
     /// <summary>
     /// Worst ground-Z-error positions from physics replay calibration.
     /// Engine ground Z was consistently 0.4-0.5y below the real WoW client's reported Z.
@@ -88,13 +92,32 @@ public class OrgrimmarGroundZAnalysisTests
             await Task.WhenAll(teleportTasks);
 
             // Wait for clients to settle (gravity + ground snap)
-            await _bot.WaitForTeleportSettledAsync(bgAccount!, px, py);
+            await _bot.WaitForTeleportSettledAsync(
+                bgAccount!,
+                px,
+                py,
+                timeoutMs: 5000,
+                progressLabel: $"BG {label}",
+                xyToleranceYards: 8f);
+            if (hasFg)
+            {
+                await _bot.WaitForTeleportSettledAsync(
+                    fgAccount!,
+                    px,
+                    py,
+                    timeoutMs: 5000,
+                    progressLabel: $"FG {label}",
+                    xyToleranceYards: 8f);
+            }
 
-            // Read both positions from snapshots
+            // Read both positions from fresh account-scoped snapshots. The fixture-wide
+            // cached snapshots can lag one probe behind during rapid dual-client teleports,
+            // which makes this test compare the current FG reading against the previous BG one.
             float bgZ = float.NaN;
             float fgZ = float.NaN;
 
             await _bot.RefreshSnapshotsAsync();
+            var cachedBgSnap = _bot.BackgroundBot;
             var bgSnap = await _bot.GetSnapshotAsync(bgAccount!);
             var bgPos = bgSnap?.Player?.Unit?.GameObject?.Base?.Position;
             if (bgPos != null)
@@ -102,14 +125,41 @@ public class OrgrimmarGroundZAnalysisTests
 
             if (hasFg)
             {
+                var cachedFgSnap = _bot.ForegroundBot;
                 var fgSnap = await _bot.GetSnapshotAsync(fgAccount!);
                 var fgPos = fgSnap?.Player?.Unit?.GameObject?.Base?.Position;
                 if (fgPos != null)
                     fgZ = fgPos.Z;
+
+                var cachedFgPos = cachedFgSnap?.Player?.Unit?.GameObject?.Base?.Position;
+                if (cachedFgPos != null
+                    && fgPos != null
+                    && MathF.Abs(cachedFgPos.Z - fgPos.Z) > 5.0f)
+                {
+                    _output.WriteLine(
+                        $"  [{label}] WARN: cached FG snapshot lagged fresh query " +
+                        $"(cachedZ={cachedFgPos.Z:F3}, freshZ={fgPos.Z:F3})");
+                }
+            }
+
+            var cachedBgPos = cachedBgSnap?.Player?.Unit?.GameObject?.Base?.Position;
+            if (cachedBgPos != null
+                && bgPos != null
+                && MathF.Abs(cachedBgPos.Z - bgPos.Z) > 5.0f)
+            {
+                _output.WriteLine(
+                    $"  [{label}] WARN: cached BG snapshot lagged fresh query " +
+                    $"(cachedZ={cachedBgPos.Z:F3}, freshZ={bgPos.Z:F3})");
             }
 
             float bgSimDelta = float.IsNaN(bgZ) ? float.NaN : bgZ - simZ;
             float fgBgDelta = (!float.IsNaN(bgZ) && !float.IsNaN(fgZ)) ? fgZ - bgZ : float.NaN;
+            bool alternateLevelAgreement =
+                hasFg
+                && !float.IsNaN(fgZ)
+                && MathF.Abs(fgBgDelta) <= ALT_LEVEL_CLIENT_MATCH_TOLERANCE
+                && MathF.Abs(bgSimDelta) > 5.0f
+                && MathF.Abs(fgZ - simZ) > 5.0f;
 
             // Check assertions
             bool passed = true;
@@ -130,6 +180,13 @@ public class OrgrimmarGroundZAnalysisTests
                 reason = "Z_CLAMP";
                 _output.WriteLine($"  [{label}] WARN: BG at teleZ ({bgZ:F3} ~= {teleZ:F3}) — navmesh ground snap unavailable, Z clamp active");
             }
+            else if (alternateLevelAgreement)
+            {
+                reason = "ALT_LEVEL";
+                _output.WriteLine(
+                    $"  [{label}] WARN: both clients settled to an alternate level " +
+                    $"(BG_Z={bgZ:F3}, FG_Z={fgZ:F3}, SimZ={simZ:F3}) - treating as a stale probe expectation.");
+            }
             else if (MathF.Abs(bgSimDelta) > BG_TO_SIM_TOLERANCE)
             {
                 // BG Z drifted too far from expected simulation Z — could be multi-level area
@@ -147,7 +204,8 @@ public class OrgrimmarGroundZAnalysisTests
                 }
             }
 
-            _output.WriteLine($"{label,-22} {teleZ,8:F3} {simZ,8:F3} {bgZ,10:F3} {bgSimDelta,8:F3} {fgZ,10:F3} {fgBgDelta,8:F3} {(passed ? "PASS" : reason),8}");
+            var resultText = passed && reason == "OK" ? "PASS" : reason;
+            _output.WriteLine($"{label,-22} {teleZ,8:F3} {simZ,8:F3} {bgZ,10:F3} {bgSimDelta,8:F3} {fgZ,10:F3} {fgBgDelta,8:F3} {resultText,8}");
         }
 
         _output.WriteLine("");

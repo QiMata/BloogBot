@@ -101,8 +101,22 @@ public class DualClientParityTests
 
         await _bot.BotTeleportAsync(bgAccount, MapId, OrgX, OrgY, OrgZ);
         await _bot.BotTeleportAsync(fgAccount, MapId, OrgX, OrgY, OrgZ);
-        await _bot.WaitForTeleportSettledAsync(bgAccount, OrgX, OrgY);
-        await _bot.WaitForTeleportSettledAsync(fgAccount, OrgX, OrgY);
+        var bgSettled = await _bot.WaitForTeleportSettledAsync(
+            bgAccount,
+            OrgX,
+            OrgY,
+            timeoutMs: 8000,
+            progressLabel: "BG dual-parity-position",
+            xyToleranceYards: 10f);
+        var fgSettled = await _bot.WaitForTeleportSettledAsync(
+            fgAccount,
+            OrgX,
+            OrgY,
+            timeoutMs: 8000,
+            progressLabel: "FG dual-parity-position",
+            xyToleranceYards: 10f);
+        Assert.True(bgSettled, "BG bot should settle near the shared parity location.");
+        Assert.True(fgSettled, "FG bot should settle near the shared parity location.");
 
         await _bot.RefreshSnapshotsAsync();
         var bgSnap = _bot.BackgroundBot;

@@ -12,13 +12,7 @@ namespace BotRunner.Tasks;
 /// Walks a natural-node route, scans for visible gatherable objects near each candidate
 /// coordinate, and performs the first successful gather before completing.
 /// </summary>
-public class GatheringRouteTask(
-    IBotContext botContext,
-    IReadOnlyList<Position> routeCandidates,
-    IReadOnlyCollection<uint> nodeEntries,
-    int gatherSpellId,
-    int targetSuccessCount = 1,
-    int maxRouteLoops = 1) : BotTask(botContext), IBotTask
+public class GatheringRouteTask : BotTask, IBotTask
 {
     private enum GatheringState
     {
@@ -26,7 +20,9 @@ public class GatheringRouteTask(
         MoveToCandidate,
         SearchVisibleNode,
         MoveToVisibleNode,
+        AwaitGatherCast,
         AwaitGatherChannel,
+        AwaitGatherRetry,
         LootNode,
         PostGatherCooldown,
     }
@@ -35,19 +31,21 @@ public class GatheringRouteTask(
     internal const float VisibleNodeDistance = 80f;
     internal const float GatherRange = 5f;
     internal const float GatherApproachBuffer = 0.5f;
+    internal const float ShortRangeNodeFallbackDistance = 12f;
     internal const int CandidateTimeoutMs = 45000;
-    internal const int NodeSearchTimeoutMs = 8000;
+    internal const int NodeSearchTimeoutMs = 3000;
+    internal const int GatherCastDelayMs = 500;
     internal const int GatherChannelMs = 5000;
+    internal const int GatherRetryDelayMs = 1000;
+    internal const int MaxGatherAttempts = 4;
     internal const int PostGatherCooldownMs = 3000;
 
-    private readonly List<Position> _originalCandidates = routeCandidates
-        .Where(candidate => candidate != null)
-        .Select(candidate => new Position(candidate.X, candidate.Y, candidate.Z))
-        .ToList();
-    private readonly HashSet<uint> _nodeEntries = nodeEntries.Where(entry => entry != 0).ToHashSet();
-    private readonly int _gatherSpellId = gatherSpellId;
-    private readonly int _targetSuccessCount = Math.Max(1, targetSuccessCount);
-    private readonly int _maxRouteLoops = Math.Max(1, maxRouteLoops);
+    private readonly List<Position> _originalCandidates;
+    private readonly HashSet<uint> _nodeEntries;
+    private readonly int _gatherSpellId;
+    private readonly int _targetSuccessCount;
+    private readonly int _maxRouteLoops;
+    private readonly object _gatherFailureLock = new();
 
     private readonly List<Position> _orderedRoute = [];
     private GatheringState _state = GatheringState.BuildRoute;
@@ -57,16 +55,39 @@ public class GatheringRouteTask(
     private Position? _currentCandidate;
     private ulong _activeNodeGuid;
     private Position? _activeNodePosition;
+    private uint _activeNodeEntry;
     private bool _gatherLikelySucceeded;
     private int _successfulGathers;
+    private int _activeNodeAttempts;
+    private string? _pendingGatherFailure;
+    private bool _eventsSubscribed;
     private bool _combatPaused;
+
+    public GatheringRouteTask(
+        IBotContext botContext,
+        IReadOnlyList<Position> routeCandidates,
+        IReadOnlyCollection<uint> nodeEntries,
+        int gatherSpellId,
+        int targetSuccessCount = 1,
+        int maxRouteLoops = 1) : base(botContext)
+    {
+        _originalCandidates = routeCandidates
+            .Where(candidate => candidate != null)
+            .Select(candidate => new Position(candidate.X, candidate.Y, candidate.Z))
+            .ToList();
+        _nodeEntries = nodeEntries.Where(entry => entry != 0).ToHashSet();
+        _gatherSpellId = gatherSpellId;
+        _targetSuccessCount = Math.Max(1, targetSuccessCount);
+        _maxRouteLoops = Math.Max(1, maxRouteLoops);
+        SubscribeToGatherEvents();
+    }
 
     public void Update()
     {
         var player = ObjectManager.Player;
         if (player?.Position == null)
         {
-            PopTask("no_player");
+            CompleteTask("no_player");
             return;
         }
 
@@ -93,8 +114,14 @@ public class GatheringRouteTask(
             case GatheringState.MoveToVisibleNode:
                 MoveToVisibleNode(player);
                 return;
+            case GatheringState.AwaitGatherCast:
+                AwaitGatherCast();
+                return;
             case GatheringState.AwaitGatherChannel:
                 AwaitGatherChannel();
+                return;
+            case GatheringState.AwaitGatherRetry:
+                AwaitGatherRetry();
                 return;
             case GatheringState.LootNode:
                 LootNode();
@@ -132,7 +159,7 @@ public class GatheringRouteTask(
     {
         if (_originalCandidates.Count == 0 || _nodeEntries.Count == 0)
         {
-            PopTask("no_candidates");
+            CompleteTask("no_candidates");
             return;
         }
 
@@ -185,6 +212,7 @@ public class GatheringRouteTask(
         {
             _activeNodeGuid = node.Guid;
             _activeNodePosition = new Position(node.Position.X, node.Position.Y, node.Position.Z);
+            _activeNodeEntry = node.Entry;
             BotContext.AddDiagnosticMessage(
                 $"[TASK] GatheringRouteTask node_visible guid=0x{_activeNodeGuid:X} entry={node.Entry} candidate={_routeIndex}/{_orderedRoute.Count}");
             SetState(GatheringState.MoveToVisibleNode);
@@ -216,6 +244,14 @@ public class GatheringRouteTask(
             var approachPosition = ComputeApproachPosition(player.Position, _activeNodePosition);
             if (!TryNavigateToward(approachPosition, allowDirectFallback: true))
             {
+                if (distance <= ShortRangeNodeFallbackDistance)
+                {
+                    BotContext.AddDiagnosticMessage(
+                        $"[TASK] GatheringRouteTask node_short_direct_fallback guid=0x{_activeNodeGuid:X} distance={distance:F1}");
+                    ObjectManager.MoveToward(approachPosition);
+                    return;
+                }
+
                 BotContext.AddDiagnosticMessage(
                     $"[TASK] GatheringRouteTask node_no_path guid=0x{_activeNodeGuid:X} distance={distance:F1}");
                 AdvanceToNextCandidate("node_no_path");
@@ -226,25 +262,69 @@ public class GatheringRouteTask(
         ClearNavigation();
         ObjectManager.ForceStopImmediate();
         ObjectManager.Face(_activeNodePosition);
+        ClearPendingGatherFailure();
+        _activeNodeAttempts++;
         ObjectManager.InteractWithGameObject(_activeNodeGuid);
+        Logger.LogInformation("[GATHER-ROUTE] Used gathering node 0x{Guid:X} entry={Entry}; attempt={Attempt}/{MaxAttempts}; delaying spell={SpellId} for {DelayMs}ms",
+            _activeNodeGuid, node.Entry, _activeNodeAttempts, MaxGatherAttempts, _gatherSpellId, GatherCastDelayMs);
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] GatheringRouteTask gather_use_started guid=0x{_activeNodeGuid:X} entry={node.Entry} spell={_gatherSpellId} attempt={_activeNodeAttempts}/{MaxGatherAttempts} delayMs={GatherCastDelayMs}");
+        SetState(GatheringState.AwaitGatherCast);
+    }
+
+    private void AwaitGatherCast()
+    {
+        if (ElapsedMs < GatherCastDelayMs)
+            return;
+
         if (_gatherSpellId > 0)
             ObjectManager.CastSpellOnGameObject(_gatherSpellId, _activeNodeGuid);
         ObjectManager.SetTarget(0);
         Logger.LogInformation("[GATHER-ROUTE] Gathering node 0x{Guid:X} entry={Entry} spell={SpellId}",
-            _activeNodeGuid, node.Entry, _gatherSpellId);
+            _activeNodeGuid, _activeNodeEntry, _gatherSpellId);
         BotContext.AddDiagnosticMessage(
-            $"[TASK] GatheringRouteTask gather_started guid=0x{_activeNodeGuid:X} entry={node.Entry} spell={_gatherSpellId}");
+            $"[TASK] GatheringRouteTask gather_started guid=0x{_activeNodeGuid:X} entry={_activeNodeEntry} spell={_gatherSpellId}");
         SetState(GatheringState.AwaitGatherChannel);
     }
 
     private void AwaitGatherChannel()
     {
+        if (TryConsumeGatherFailure(out var failure))
+        {
+            ScheduleGatherRetry($"cast_failed:{failure}");
+            return;
+        }
+
         if (ElapsedMs < GatherChannelMs)
             return;
 
         BotContext.AddDiagnosticMessage(
             $"[TASK] GatheringRouteTask gather_channel_complete guid=0x{_activeNodeGuid:X}");
         SetState(GatheringState.LootNode);
+    }
+
+    private void AwaitGatherRetry()
+    {
+        if (ElapsedMs < GatherRetryDelayMs)
+            return;
+
+        if (FindActiveNode() == null)
+        {
+            _gatherLikelySucceeded = true;
+            SetState(GatheringState.PostGatherCooldown);
+            return;
+        }
+
+        if (_activeNodeAttempts >= MaxGatherAttempts)
+        {
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] GatheringRouteTask gather_retry_exhausted guid=0x{_activeNodeGuid:X} attempts={_activeNodeAttempts}/{MaxGatherAttempts}");
+            AdvanceToNextCandidate("gather_retry_exhausted");
+            return;
+        }
+
+        ClearNavigation();
+        SetState(GatheringState.MoveToVisibleNode);
     }
 
     private void LootNode()
@@ -261,6 +341,11 @@ public class GatheringRouteTask(
         {
             // The node despawned even though the loot frame is already closed.
             _gatherLikelySucceeded = true;
+        }
+        else if (_activeNodeAttempts < MaxGatherAttempts)
+        {
+            ScheduleGatherRetry("gather_no_result");
+            return;
         }
 
         SetState(GatheringState.PostGatherCooldown);
@@ -279,7 +364,7 @@ public class GatheringRouteTask(
                 $"[TASK] GatheringRouteTask gather_success guid=0x{_activeNodeGuid:X} successes={_successfulGathers}");
             if (_successfulGathers >= _targetSuccessCount)
             {
-                PopTask("gather_success");
+                CompleteTask("gather_success");
                 return;
             }
         }
@@ -329,8 +414,11 @@ public class GatheringRouteTask(
         ClearNavigation();
         _activeNodeGuid = 0;
         _activeNodePosition = null;
+        _activeNodeEntry = 0;
         _gatherLikelySucceeded = false;
+        _activeNodeAttempts = 0;
         _combatPaused = false;
+        ClearPendingGatherFailure();
 
         if (_routeIndex >= _orderedRoute.Count)
         {
@@ -349,7 +437,7 @@ public class GatheringRouteTask(
             }
             else
             {
-                PopTask(_successfulGathers > 0 ? "route_complete_success" : "route_complete_no_nodes");
+                CompleteTask(_successfulGathers > 0 ? "route_complete_success" : "route_complete_no_nodes");
                 return;
             }
         }
@@ -395,14 +483,18 @@ public class GatheringRouteTask(
     {
         ObjectManager.StopAllMovement();
         ClearNavigation();
+        var alreadyPausedForCombat = _combatPaused;
 
-        if (!_combatPaused)
+        if (!alreadyPausedForCombat)
         {
             BotContext.AddDiagnosticMessage(
                 $"[TASK] GatheringRouteTask pause reason=combat state={_state} candidate={_routeIndex}/{_orderedRoute.Count}");
-            PushCombatTaskIfNeeded();
             _combatPaused = true;
         }
+
+        PushCombatTaskIfNeeded(alreadyPausedForCombat
+            ? "combat_task_repush"
+            : "combat_task_pushed");
 
         ResetStateTimer();
     }
@@ -424,7 +516,7 @@ public class GatheringRouteTask(
         ResetStateTimer();
     }
 
-    private void PushCombatTaskIfNeeded()
+    private void PushCombatTaskIfNeeded(string diagnosticEvent)
     {
         if (BotTasks.Count > 0 && BotTasks.Peek() != this)
             return;
@@ -439,8 +531,80 @@ public class GatheringRouteTask(
             return;
 
         BotTasks.Push(combatTask);
-        BotContext.AddDiagnosticMessage("[TASK] GatheringRouteTask combat_task_pushed");
+        BotContext.AddDiagnosticMessage($"[TASK] GatheringRouteTask {diagnosticEvent}");
     }
 
     private void ResetStateTimer() => _stateEnteredAt = DateTime.UtcNow;
+
+    private void ScheduleGatherRetry(string reason)
+    {
+        if (_activeNodeGuid == 0)
+        {
+            AdvanceToNextCandidate(reason);
+            return;
+        }
+
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] GatheringRouteTask gather_retry guid=0x{_activeNodeGuid:X} entry={_activeNodeEntry} attempts={_activeNodeAttempts}/{MaxGatherAttempts} reason={reason}");
+        Logger.LogWarning("[GATHER-ROUTE] Retrying gather node 0x{Guid:X} entry={Entry} attempts={Attempts}/{MaxAttempts} reason={Reason}",
+            _activeNodeGuid, _activeNodeEntry, _activeNodeAttempts, MaxGatherAttempts, reason);
+        _gatherLikelySucceeded = false;
+        SetState(GatheringState.AwaitGatherRetry);
+    }
+
+    private void SubscribeToGatherEvents()
+    {
+        if (_eventsSubscribed || _gatherSpellId <= 0)
+            return;
+
+        EventHandler.OnErrorMessage += OnGatherErrorMessage;
+        _eventsSubscribed = true;
+    }
+
+    private void UnsubscribeFromGatherEvents()
+    {
+        if (!_eventsSubscribed)
+            return;
+
+        EventHandler.OnErrorMessage -= OnGatherErrorMessage;
+        _eventsSubscribed = false;
+    }
+
+    private void OnGatherErrorMessage(object? sender, OnUiMessageArgs args)
+    {
+        var message = args.Message;
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        if (!message.Contains($"Cast failed for spell {_gatherSpellId}", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (!message.Contains("TRY_AGAIN", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        lock (_gatherFailureLock)
+            _pendingGatherFailure = message;
+    }
+
+    private bool TryConsumeGatherFailure(out string failure)
+    {
+        lock (_gatherFailureLock)
+        {
+            failure = _pendingGatherFailure ?? string.Empty;
+            _pendingGatherFailure = null;
+            return failure.Length > 0;
+        }
+    }
+
+    private void ClearPendingGatherFailure()
+    {
+        lock (_gatherFailureLock)
+            _pendingGatherFailure = null;
+    }
+
+    private void CompleteTask(string reason)
+    {
+        UnsubscribeFromGatherEvents();
+        PopTask(reason);
+    }
 }

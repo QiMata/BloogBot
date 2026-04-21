@@ -197,6 +197,38 @@ public class FishingPoolStagePlannerTests
     }
 
     [Fact]
+    public void CreatePrioritizedSearchWaypoints_KeepsCloserStageLocalProbeAheadOfFartherPrioritizedLocalSpawn()
+    {
+        FishingPoolSpawn[] spawns =
+        [
+            new(180582, 1, -957.2f, -3778.9f, 0f, 14.0f, 2620u, "child"),
+            new(180582, 1, -988.9f, -3775.5f, 0f, 39.9f, 2619u, "child"),
+            new(180655, 1, -969.8f, -3805.1f, 0f, 43.1f, 2627u, "child"),
+            new(180655, 1, -1001.7f, -3733.5f, 0f, 61.6f, 2618u, "child"),
+            new(180582, 1, -1012.0f, -3808.3f, 0f, 74.6f, 2617u, "child"),
+            new(180582, 1, -872.8f, -3814.7f, 0f, 90.8f, 2621u, "child")
+        ];
+
+        var waypoints = FishingPoolStagePlanner.CreatePrioritizedSearchWaypoints(
+            spawns,
+            prioritizedPoolEntries: [2617u, 2618u, 2621u, 2627u],
+            stageX: -949.932f,
+            stageY: -3766.883f,
+            anchorZ: 3.949f,
+            localSpawnDistance: 50f,
+            waypointCount: 4,
+            standoffDistance: 8f);
+
+        Assert.True(waypoints.Count >= 3);
+        Assert.InRange(waypoints[0].x, -954f, -952f);
+        Assert.InRange(waypoints[0].y, -3773f, -3771f);
+        Assert.InRange(waypoints[1].x, -970f, -968f);
+        Assert.InRange(waypoints[1].y, -3772f, -3770f);
+        Assert.InRange(waypoints[2].x, -960f, -958f);
+        Assert.InRange(waypoints[2].y, -3786f, -3783f);
+    }
+
+    [Fact]
     public void CreateSearchWaypoints_CapsFarProbeTravelToKeepStageSearchLocal()
     {
         FishingPoolSpawn[] spawns =

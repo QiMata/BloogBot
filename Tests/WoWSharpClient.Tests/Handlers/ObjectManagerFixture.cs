@@ -21,12 +21,20 @@ public class ObjectManagerFixture : IDisposable
         _woWClient = new();
         _pathfindingClient = new();
 
-        WoWSharpObjectManager.Instance.Initialize(_woWClient.Object, _pathfindingClient.Object, _logger);
+        WoWSharpObjectManager.Instance.Initialize(
+            _woWClient.Object,
+            _pathfindingClient.Object,
+            _logger,
+            WoWSharpEventEmitter.Instance);
     }
 
     public void Dispose()
     {
-        WoWSharpObjectManager.Instance.Initialize(_woWClient.Object, _pathfindingClient.Object, _logger);
+        WoWSharpObjectManager.Instance.Initialize(
+            _woWClient.Object,
+            _pathfindingClient.Object,
+            _logger,
+            WoWSharpEventEmitter.Instance);
     }
 }
 

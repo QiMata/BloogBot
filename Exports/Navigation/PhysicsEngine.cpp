@@ -5111,6 +5111,14 @@ void PhysicsEngine::CollisionStepWoW(const PhysicsInput& input, const MovementIn
     st.vy = dirN.y * moveSpeed;
     st.groundNormal = bestNormal;
     st.environmentFlags = ComputeSceneEnvironmentFlags(bestSupportContact);
+    const bool needsEnvironmentFallback =
+        st.environmentFlags == SCENE_ENVIRONMENT_FLAG_NONE &&
+        (!bestSupportContact ||
+            (bestSupportContact->sourceType != 1u && bestSupportContact->groupFlags == 0u));
+    if (needsEnvironmentFallback)
+    {
+        st.environmentFlags = QueryEnvironmentFlagsAtGroundSupport(input.mapId, st.x, st.y, st.z, radius, height);
+    }
 
     // Binary 0x635600 tail: reset groundedWallState when landing on a clearly
     // walkable surface. The flag should only persist across frames when the
@@ -5435,6 +5443,9 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 	// We still use queries to *inform* grounding, but we avoid immediately overriding
 	// airborne flags purely from a pre-probe.
 	st.isGrounded = !(inputSwimmingFlag || inputFlyingFlag || inputAirborneFlag);
+    if (!st.groundedWallState && input.transportGuid != 0 && st.isGrounded) {
+        st.groundedWallState = true;
+    }
 	const bool hasPrevGround = (input.prevGroundZ > PhysicsConstants::INVALID_HEIGHT) && (input.prevGroundNz > 0.0f);
 	// Only recover grounded from prevGroundZ when NO airborne flags are set.
 	// When JUMPING/FALLINGFAR is active, the character IS airborne regardless of

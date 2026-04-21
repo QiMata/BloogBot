@@ -2,7 +2,7 @@ namespace WoWStateManager;
 
 public class MangosServerOptions
 {
-    public string MangosDirectory { get; set; } = @"C:\Mangos\server";
+    public string MangosDirectory { get; set; } = string.Empty;
     public string MySqlRelativePath { get; set; } = @"..\mysql\bin\mysqld.exe";
     public string MySqlArgs { get; set; } = "--defaults-file=C:/Mangos/mysql/my.ini --console";
     public string RealmdExe { get; set; } = "realmd.exe";
@@ -14,5 +14,5 @@ public class MangosServerOptions
     public int MySqlTimeoutSeconds { get; set; } = 30;
     public int RealmdTimeoutSeconds { get; set; } = 15;
     public int MangosdTimeoutSeconds { get; set; } = 60;
-    public bool AutoLaunch { get; set; } = true;
+    public bool AutoLaunch { get; set; } = false;
 }

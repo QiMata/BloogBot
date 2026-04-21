@@ -17,8 +17,8 @@
 
 ## Environment Checklist
 - [x] `Exports/WinImports/WinProcessImports.csproj` builds for `net8.0` with `x86` target.
-- [ ] WoW/client process detection can run without admin-only assumptions.
-- [ ] Repo-scoped teardown path can identify lingering WoW/StateManager test processes without blanket `dotnet` kills.
+- [x] WoW/client process detection can run without admin-only assumptions.
+- [x] Repo-scoped teardown path can identify lingering WoW/StateManager test processes without blanket `dotnet` kills.
 
 ## Evidence Snapshot (2026-02-25)
 - `SafeInjection.cs` is still an empty shell:

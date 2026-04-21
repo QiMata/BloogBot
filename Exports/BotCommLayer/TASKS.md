@@ -112,15 +112,38 @@
 4. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-- Last updated: 2026-02-25
+- Last updated: 2026-04-20
 - Master tracker: `MASTER-SUB-003`
-- Active task: `BCL-MISS-001`
-- Last delta: executed prior handoff build command successfully for `BotRunner`, then added resume-first/next-file continuity guards to keep queue traversal one-by-one.
+- Active task: `none`
+- Last delta:
+  - Session 301 extended `communication.proto` / generated `Communication.cs` so `WoWActivitySnapshot` now carries `desired_party_leader_name`, `desired_party_members`, and `desired_party_is_raid`.
+  - This contract is now used by StateManager/BotRunner battleground coordination so group-queue battlegrounds can form parties/raids from a single high-level desired-state payload instead of fixture-owned invite choreography.
+  - Validation:
+    - `cmd /c protocsharp.bat . ..` (from `Exports/BotCommLayer/Models/ProtoDef`) -> regenerated `Exports/BotCommLayer/Models/Communication.cs`
+    - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~BotRunnerServiceDesiredPartyTests|FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~CoordinatorStrictCountTests" --logger "console;verbosity=minimal"` -> `passed (55/55)`
+- Pass result: `desired battleground party-state fields are now part of the canonical snapshot contract and covered by deterministic tests`
+- Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
+  - `Exports/BotCommLayer/Models/Communication.cs`
+  - `Exports/BotCommLayer/TASKS.md`
+- Next command: `dotnet build Exports/BotCommLayer/BotCommLayer.csproj --configuration Release --no-restore`
+- Previous handoff notes:
+  - Extended `pathfinding.proto` again so `CalculatePathResponse` carries jump-gap, safe-drop, unsafe-drop, and blocked counts plus max climb height, max gap distance, and max drop height.
+  - Regenerated `Exports/BotCommLayer/Models/Pathfinding.cs` with `protocsharp.bat`.
+  - Updated README contract notes so callers know the expanded route-affordance metadata is part of the supported wire contract.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore` -> pass.
-- Files changed: `Exports/BotCommLayer/TASKS.md`
-- Blockers: none for documentation continuity pass (BG corpse-run stall remains tracked under `BCL-MISS-001` evidence).
-- Next task: move queue to `MASTER-SUB-004` (`Exports/BotRunner/TASKS.md`).
-- Next command: `Get-Content -Path 'Exports/BotRunner/TASKS.md' -TotalCount 360`
+  - `E:\repos\Westworld of Warcraft\Exports\BotCommLayer\Models\ProtoDef\protocsharp.bat . .\..` (run from `Exports/BotCommLayer/Models/ProtoDef`) -> `succeeded`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingClientRequestTests" --logger "console;verbosity=minimal"` -> `passed (2/2)`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathAffordanceClassifierTests|FullyQualifiedName~PathfindingSocketServerIntegrationTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+- Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/pathfinding.proto`
+  - `Exports/BotCommLayer/Models/Pathfinding.cs`
+  - `Exports/BotCommLayer/README.md`
+  - `Exports/BotCommLayer/TASKS.md`
+- Blockers: none
+- Next task: none in this owner; scan master/local trackers for any remaining unchecked work.
+- Next command: `rg -n "^- \\[ \\]|\\[ \\] Problem|Active task:" docs/TASKS.md Exports/Navigation/TASKS.md Services/PathfindingService/TASKS.md Tests/PathfindingService.Tests/TASKS.md Tests/Navigation.Physics.Tests/TASKS.md Exports/BotRunner/TASKS.md Tests/BotRunner.Tests/TASKS.md`
 - Loop Break: if no delta after two passes, record blocker with exact missing field/test and move to next queued file.

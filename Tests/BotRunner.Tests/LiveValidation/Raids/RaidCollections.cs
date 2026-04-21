@@ -16,7 +16,7 @@ public class ZulGurubFixture : DungeonInstanceFixture
         Dungeon = new DungeonEntryData.DungeonDefinition(
             RaidEntryData.ZulGurub.Name, RaidEntryData.ZulGurub.Abbreviation,
             RaidEntryData.ZulGurub.InstanceMapId, RaidEntryData.ZulGurub.EntranceMapId,
-            RaidEntryData.ZulGurub.EntrancePosition, RaidEntryData.ZulGurub.MeetingStonePosition,
+            RaidEntryData.ZulGurub.EntrancePosition, RaidEntryData.ZulGurub.InstanceEntryPosition, RaidEntryData.ZulGurub.MeetingStonePosition,
             RaidEntryData.ZulGurub.MeetingStoneMapId,
             RaidEntryData.ZulGurub.MinLevel, 60, RaidEntryData.ZulGurub.MaxPlayers,
             RaidEntryData.ZulGurub.Faction);
@@ -35,7 +35,7 @@ public class AQ20Fixture : DungeonInstanceFixture
         Dungeon = new DungeonEntryData.DungeonDefinition(
             RaidEntryData.RuinsOfAhnQiraj.Name, RaidEntryData.RuinsOfAhnQiraj.Abbreviation,
             RaidEntryData.RuinsOfAhnQiraj.InstanceMapId, RaidEntryData.RuinsOfAhnQiraj.EntranceMapId,
-            RaidEntryData.RuinsOfAhnQiraj.EntrancePosition, null, null,
+            RaidEntryData.RuinsOfAhnQiraj.EntrancePosition, RaidEntryData.RuinsOfAhnQiraj.InstanceEntryPosition, null, null,
             RaidEntryData.RuinsOfAhnQiraj.MinLevel, 60, RaidEntryData.RuinsOfAhnQiraj.MaxPlayers,
             RaidEntryData.RuinsOfAhnQiraj.Faction);
         AccountPrefix = "AQ20BOT";
@@ -53,7 +53,7 @@ public class MoltenCoreFixture : DungeonInstanceFixture
         Dungeon = new DungeonEntryData.DungeonDefinition(
             RaidEntryData.MoltenCore.Name, RaidEntryData.MoltenCore.Abbreviation,
             RaidEntryData.MoltenCore.InstanceMapId, RaidEntryData.MoltenCore.EntranceMapId,
-            RaidEntryData.MoltenCore.EntrancePosition, RaidEntryData.MoltenCore.MeetingStonePosition,
+            RaidEntryData.MoltenCore.EntrancePosition, RaidEntryData.MoltenCore.InstanceEntryPosition, RaidEntryData.MoltenCore.MeetingStonePosition,
             RaidEntryData.MoltenCore.MeetingStoneMapId,
             RaidEntryData.MoltenCore.MinLevel, 60, RaidEntryData.MoltenCore.MaxPlayers,
             RaidEntryData.MoltenCore.Faction);
@@ -72,7 +72,7 @@ public class OnyxiasLairFixture : DungeonInstanceFixture
         Dungeon = new DungeonEntryData.DungeonDefinition(
             RaidEntryData.OnyxiasLair.Name, RaidEntryData.OnyxiasLair.Abbreviation,
             RaidEntryData.OnyxiasLair.InstanceMapId, RaidEntryData.OnyxiasLair.EntranceMapId,
-            RaidEntryData.OnyxiasLair.EntrancePosition, null, null,
+            RaidEntryData.OnyxiasLair.EntrancePosition, RaidEntryData.OnyxiasLair.InstanceEntryPosition, null, null,
             RaidEntryData.OnyxiasLair.MinLevel, 60, RaidEntryData.OnyxiasLair.MaxPlayers,
             RaidEntryData.OnyxiasLair.Faction);
         AccountPrefix = "ONYBOT";
@@ -90,7 +90,7 @@ public class BlackwingLairFixture : DungeonInstanceFixture
         Dungeon = new DungeonEntryData.DungeonDefinition(
             RaidEntryData.BlackwingLair.Name, RaidEntryData.BlackwingLair.Abbreviation,
             RaidEntryData.BlackwingLair.InstanceMapId, RaidEntryData.BlackwingLair.EntranceMapId,
-            RaidEntryData.BlackwingLair.EntrancePosition, RaidEntryData.BlackwingLair.MeetingStonePosition,
+            RaidEntryData.BlackwingLair.EntrancePosition, RaidEntryData.BlackwingLair.InstanceEntryPosition, RaidEntryData.BlackwingLair.MeetingStonePosition,
             RaidEntryData.BlackwingLair.MeetingStoneMapId,
             RaidEntryData.BlackwingLair.MinLevel, 60, RaidEntryData.BlackwingLair.MaxPlayers,
             RaidEntryData.BlackwingLair.Faction);
@@ -109,7 +109,7 @@ public class AQ40Fixture : DungeonInstanceFixture
         Dungeon = new DungeonEntryData.DungeonDefinition(
             RaidEntryData.TempleOfAhnQiraj.Name, RaidEntryData.TempleOfAhnQiraj.Abbreviation,
             RaidEntryData.TempleOfAhnQiraj.InstanceMapId, RaidEntryData.TempleOfAhnQiraj.EntranceMapId,
-            RaidEntryData.TempleOfAhnQiraj.EntrancePosition, null, null,
+            RaidEntryData.TempleOfAhnQiraj.EntrancePosition, RaidEntryData.TempleOfAhnQiraj.InstanceEntryPosition, null, null,
             RaidEntryData.TempleOfAhnQiraj.MinLevel, 60, RaidEntryData.TempleOfAhnQiraj.MaxPlayers,
             RaidEntryData.TempleOfAhnQiraj.Faction);
         AccountPrefix = "AQ40BOT";
@@ -127,7 +127,7 @@ public class NaxxramasFixture : DungeonInstanceFixture
         Dungeon = new DungeonEntryData.DungeonDefinition(
             RaidEntryData.Naxxramas.Name, RaidEntryData.Naxxramas.Abbreviation,
             RaidEntryData.Naxxramas.InstanceMapId, RaidEntryData.Naxxramas.EntranceMapId,
-            RaidEntryData.Naxxramas.EntrancePosition, null, null,
+            RaidEntryData.Naxxramas.EntrancePosition, RaidEntryData.Naxxramas.InstanceEntryPosition, null, null,
             RaidEntryData.Naxxramas.MinLevel, 60, RaidEntryData.Naxxramas.MaxPlayers,
             RaidEntryData.Naxxramas.Faction);
         AccountPrefix = "NAXXBOT";

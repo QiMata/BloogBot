@@ -72,7 +72,14 @@ namespace BotRunner
                         bf = wsOm.PhysicsBlockedFraction;
                     }
                     try {
-                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf);
+                        var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf, currentTransportGuid: _objectManager.Player.TransportGuid);
+                        if (navPath.ShouldHoldPositionForTransport(_objectManager.Player.Position, waypoint))
+                        {
+                            _objectManager.StopAllMovement();
+                            noPathSinceUtc = null;
+                            return BehaviourTreeStatus.Running;
+                        }
+
                         if (waypoint == null)
                         {
                             _objectManager.StopAllMovement();
@@ -166,7 +173,14 @@ namespace BotRunner
                             _objectManager.Player.Position,
                             target.Position,
                             _objectManager.Player.MapId,
-                            allowDirectFallback: true);
+                            allowDirectFallback: true,
+                            currentTransportGuid: _objectManager.Player.TransportGuid);
+                        if (navPath.ShouldHoldPositionForTransport(_objectManager.Player.Position, waypoint))
+                        {
+                            _objectManager.StopAllMovement();
+                            return BehaviourTreeStatus.Running;
+                        }
+
                         if (waypoint != null)
                         {
                             var dx = waypoint.X - _objectManager.Player.Position.X;
@@ -193,9 +207,7 @@ namespace BotRunner
         /// <returns>IBehaviourTreeNode that manages interacting with the specified target.</returns>
         private IBehaviourTreeNode BuildInteractWithSequence(ulong guid) => new BehaviourTreeBuilder()
             .Sequence("Interact With Sequence")
-                .Splice(CheckForTarget(guid))
-                // Ensure the target is valid for interaction
-                .Condition("Has Valid Target", time => _objectManager.Player.TargetGuid == guid)
+                .Condition("GameObject Exists", time => _objectManager.GameObjects.Any(x => x.Guid == guid))
 
                 // Perform the interaction
                 .Do("Interact with Target", time =>

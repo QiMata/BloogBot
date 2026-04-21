@@ -34,62 +34,83 @@ namespace Pathfinding {
             "ASgNEh0KBXN0YXJ0GAIgASgLMg4uZ2FtZS5Qb3NpdGlvbhIbCgNlbmQYAyAB",
             "KAsyDi5nYW1lLlBvc2l0aW9uEhAKCHN0cmFpZ2h0GAQgASgIEjcKDm5lYXJi",
             "eV9vYmplY3RzGAUgAygLMh8ucGF0aGZpbmRpbmcuRHluYW1pY09iamVjdFBy",
-            "b3RvEgwKBHJhY2UYBiABKA0SDgoGZ2VuZGVyGAcgASgNImIKFUNhbGN1bGF0",
-            "ZVBhdGhSZXNwb25zZRIfCgdjb3JuZXJzGAEgAygLMg4uZ2FtZS5Qb3NpdGlv",
-            "bhIOCgZyZXN1bHQYAiABKAkSGAoQcmF3X2Nvcm5lcl9jb3VudBgDIAEoDSKN",
-            "AQoSRHluYW1pY09iamVjdFByb3RvEgwKBGd1aWQYASABKAQSEgoKZGlzcGxh",
-            "eV9pZBgCIAEoDRIJCgF4GAMgASgCEgkKAXkYBCABKAISCQoBehgFIAEoAhIT",
-            "CgtvcmllbnRhdGlvbhgGIAEoAhINCgVzY2FsZRgHIAEoAhIQCghnb19zdGF0",
-            "ZRgIIAEoDSLsBwoMUGh5c2ljc0lucHV0EhYKDm1vdmVtZW50X2ZsYWdzGAEg",
-            "ASgNEg0KBXBvc194GAIgASgCEg0KBXBvc195GAMgASgCEg0KBXBvc196GAQg",
-            "ASgCEg4KBmZhY2luZxgFIAEoAhIWCg50cmFuc3BvcnRfZ3VpZBgGIAEoBBIa",
-            "ChJ0cmFuc3BvcnRfb2Zmc2V0X3gYByABKAISGgoSdHJhbnNwb3J0X29mZnNl",
-            "dF95GAggASgCEhoKEnRyYW5zcG9ydF9vZmZzZXRfehgJIAEoAhIdChV0cmFu",
-            "c3BvcnRfb3JpZW50YXRpb24YCiABKAISEgoKc3dpbV9waXRjaBgLIAEoAhIR",
-            "CglmYWxsX3RpbWUYDCABKAISFAoMZmFsbF9zdGFydF96GCcgASgCEhgKEHNw",
-            "bGluZV9lbGV2YXRpb24YDSABKAISDQoFdmVsX3gYDiABKAISDQoFdmVsX3kY",
-            "DyABKAISDQoFdmVsX3oYECABKAISEgoKd2Fsa19zcGVlZBgRIAEoAhIRCgly",
-            "dW5fc3BlZWQYEiABKAISFgoOcnVuX2JhY2tfc3BlZWQYEyABKAISEgoKc3dp",
-            "bV9zcGVlZBgUIAEoAhIXCg9zd2ltX2JhY2tfc3BlZWQYFSABKAISDAoEcmFj",
-            "ZRgWIAEoDRIOCgZnZW5kZXIYFyABKA0SDgoGbWFwX2lkGBggASgNEhIKCmRl",
-            "bHRhX3RpbWUYGSABKAISFQoNZnJhbWVfY291bnRlchgaIAEoDRIVCg1wcmV2",
-            "X2dyb3VuZF96GBsgASgCEhYKDnByZXZfZ3JvdW5kX254GBwgASgCEhYKDnBy",
-            "ZXZfZ3JvdW5kX255GB0gASgCEhYKDnByZXZfZ3JvdW5kX256GB4gASgCEhcK",
-            "D3BlbmRpbmdfZGVwZW5feBgfIAEoAhIXCg9wZW5kaW5nX2RlcGVuX3kYICAB",
-            "KAISFwoPcGVuZGluZ19kZXBlbl96GCEgASgCEh8KF3N0YW5kaW5nX29uX2lu",
-            "c3RhbmNlX2lkGCIgASgNEhsKE3N0YW5kaW5nX29uX2xvY2FsX3gYIyABKAIS",
-            "GwoTc3RhbmRpbmdfb25fbG9jYWxfeRgkIAEoAhIbChNzdGFuZGluZ19vbl9s",
-            "b2NhbF96GCUgASgCEhUKDXBoeXNpY3NfZmxhZ3MYJiABKA0SNwoObmVhcmJ5",
-            "X29iamVjdHMYKCADKAsyHy5wYXRoZmluZGluZy5EeW5hbWljT2JqZWN0UHJv",
-            "dG8SFgoOc3RlcF91cF9iYXNlX3oYKSABKAISEwoLc3RlcF91cF9hZ2UYKiAB",
-            "KA0SFAoMd2FzX2dyb3VuZGVkGCsgASgIIsQGCg1QaHlzaWNzT3V0cHV0EhEK",
-            "CW5ld19wb3NfeBgBIAEoAhIRCgluZXdfcG9zX3kYAiABKAISEQoJbmV3X3Bv",
-            "c196GAMgASgCEhEKCW5ld192ZWxfeBgEIAEoAhIRCgluZXdfdmVsX3kYBSAB",
-            "KAISEQoJbmV3X3ZlbF96GAYgASgCEhYKDm1vdmVtZW50X2ZsYWdzGAcgASgN",
-            "EhMKC29yaWVudGF0aW9uGAggASgCEg0KBXBpdGNoGAkgASgCEhMKC2lzX2dy",
-            "b3VuZGVkGAogASgIEhMKC2lzX3N3aW1taW5nGAsgASgIEhEKCWlzX2ZseWlu",
-            "ZxgMIAEoCBIRCglmYWxsX3RpbWUYDSABKAISHAoUY3VycmVudF9zcGxpbmVf",
-            "aW5kZXgYDiABKAUSFwoPc3BsaW5lX3Byb2dyZXNzGA8gASgCEhAKCGdyb3Vu",
-            "ZF96GBAgASgCEhEKCWdyb3VuZF9ueBgRIAEoAhIRCglncm91bmRfbnkYEiAB",
-            "KAISEQoJZ3JvdW5kX256GBMgASgCEhAKCGxpcXVpZF96GBQgASgCEhMKC2xp",
-            "cXVpZF90eXBlGBUgASgNEhcKD3BlbmRpbmdfZGVwZW5feBgWIAEoAhIXCg9w",
-            "ZW5kaW5nX2RlcGVuX3kYFyABKAISFwoPcGVuZGluZ19kZXBlbl96GBggASgC",
-            "Eh8KF3N0YW5kaW5nX29uX2luc3RhbmNlX2lkGBkgASgNEhsKE3N0YW5kaW5n",
-            "X29uX2xvY2FsX3gYGiABKAISGwoTc3RhbmRpbmdfb25fbG9jYWxfeRgbIAEo",
-            "AhIbChNzdGFuZGluZ19vbl9sb2NhbF96GBwgASgCEhUKDWZhbGxfZGlzdGFu",
-            "Y2UYHSABKAISFAoMZmFsbF9zdGFydF96GB4gASgCEhAKCGhpdF93YWxsGB8g",
-            "ASgIEhUKDXdhbGxfbm9ybWFsX3gYICABKAISFQoNd2FsbF9ub3JtYWxfeRgh",
-            "IAEoAhIVCg13YWxsX25vcm1hbF96GCIgASgCEhgKEGJsb2NrZWRfZnJhY3Rp",
-            "b24YIyABKAISFgoOc3RlcF91cF9iYXNlX3oYJCABKAISEwoLc3RlcF91cF9h",
-            "Z2UYJSABKA1CDqoCC1BhdGhmaW5kaW5nYgZwcm90bzM="));
+            "b3RvEgwKBHJhY2UYBiABKA0SDgoGZ2VuZGVyGAcgASgNItsEChVDYWxjdWxh",
+            "dGVQYXRoUmVzcG9uc2USHwoHY29ybmVycxgBIAMoCzIOLmdhbWUuUG9zaXRp",
+            "b24SDgoGcmVzdWx0GAIgASgJEhgKEHJhd19jb3JuZXJfY291bnQYAyABKA0S",
+            "GwoTaGFzX2Jsb2NrZWRfc2VnbWVudBgEIAEoCBIdChVibG9ja2VkX3NlZ21l",
+            "bnRfaW5kZXgYBSABKAUSFgoOYmxvY2tlZF9yZWFzb24YBiABKAkSOgoObWF4",
+            "X2FmZm9yZGFuY2UYByABKA4yIi5wYXRoZmluZGluZy5QYXRoU2VnbWVudEFm",
+            "Zm9yZGFuY2USFgoOcGF0aF9zdXBwb3J0ZWQYCCABKAgSFQoNc3RlcF91cF9j",
+            "b3VudBgJIAEoDRISCgpkcm9wX2NvdW50GAogASgNEhMKC2NsaWZmX2NvdW50",
+            "GAsgASgNEhYKDnZlcnRpY2FsX2NvdW50GAwgASgNEhQKDHRvdGFsX3pfZ2Fp",
+            "bhgNIAEoAhIUCgx0b3RhbF96X2xvc3MYDiABKAISGwoTbWF4X3Nsb3BlX2Fu",
+            "Z2xlX2RlZxgPIAEoAhIWCg5qdW1wX2dhcF9jb3VudBgQIAEoDRIXCg9zYWZl",
+            "X2Ryb3BfY291bnQYESABKA0SGQoRdW5zYWZlX2Ryb3BfY291bnQYEiABKA0S",
+            "FQoNYmxvY2tlZF9jb3VudBgTIAEoDRIYChBtYXhfY2xpbWJfaGVpZ2h0GBQg",
+            "ASgCEhgKEG1heF9nYXBfZGlzdGFuY2UYFSABKAISFwoPbWF4X2Ryb3BfaGVp",
+            "Z2h0GBYgASgCIo0BChJEeW5hbWljT2JqZWN0UHJvdG8SDAoEZ3VpZBgBIAEo",
+            "BBISCgpkaXNwbGF5X2lkGAIgASgNEgkKAXgYAyABKAISCQoBeRgEIAEoAhIJ",
+            "CgF6GAUgASgCEhMKC29yaWVudGF0aW9uGAYgASgCEg0KBXNjYWxlGAcgASgC",
+            "EhAKCGdvX3N0YXRlGAggASgNIuwHCgxQaHlzaWNzSW5wdXQSFgoObW92ZW1l",
+            "bnRfZmxhZ3MYASABKA0SDQoFcG9zX3gYAiABKAISDQoFcG9zX3kYAyABKAIS",
+            "DQoFcG9zX3oYBCABKAISDgoGZmFjaW5nGAUgASgCEhYKDnRyYW5zcG9ydF9n",
+            "dWlkGAYgASgEEhoKEnRyYW5zcG9ydF9vZmZzZXRfeBgHIAEoAhIaChJ0cmFu",
+            "c3BvcnRfb2Zmc2V0X3kYCCABKAISGgoSdHJhbnNwb3J0X29mZnNldF96GAkg",
+            "ASgCEh0KFXRyYW5zcG9ydF9vcmllbnRhdGlvbhgKIAEoAhISCgpzd2ltX3Bp",
+            "dGNoGAsgASgCEhEKCWZhbGxfdGltZRgMIAEoAhIUCgxmYWxsX3N0YXJ0X3oY",
+            "JyABKAISGAoQc3BsaW5lX2VsZXZhdGlvbhgNIAEoAhINCgV2ZWxfeBgOIAEo",
+            "AhINCgV2ZWxfeRgPIAEoAhINCgV2ZWxfehgQIAEoAhISCgp3YWxrX3NwZWVk",
+            "GBEgASgCEhEKCXJ1bl9zcGVlZBgSIAEoAhIWCg5ydW5fYmFja19zcGVlZBgT",
+            "IAEoAhISCgpzd2ltX3NwZWVkGBQgASgCEhcKD3N3aW1fYmFja19zcGVlZBgV",
+            "IAEoAhIMCgRyYWNlGBYgASgNEg4KBmdlbmRlchgXIAEoDRIOCgZtYXBfaWQY",
+            "GCABKA0SEgoKZGVsdGFfdGltZRgZIAEoAhIVCg1mcmFtZV9jb3VudGVyGBog",
+            "ASgNEhUKDXByZXZfZ3JvdW5kX3oYGyABKAISFgoOcHJldl9ncm91bmRfbngY",
+            "HCABKAISFgoOcHJldl9ncm91bmRfbnkYHSABKAISFgoOcHJldl9ncm91bmRf",
+            "bnoYHiABKAISFwoPcGVuZGluZ19kZXBlbl94GB8gASgCEhcKD3BlbmRpbmdf",
+            "ZGVwZW5feRggIAEoAhIXCg9wZW5kaW5nX2RlcGVuX3oYISABKAISHwoXc3Rh",
+            "bmRpbmdfb25faW5zdGFuY2VfaWQYIiABKA0SGwoTc3RhbmRpbmdfb25fbG9j",
+            "YWxfeBgjIAEoAhIbChNzdGFuZGluZ19vbl9sb2NhbF95GCQgASgCEhsKE3N0",
+            "YW5kaW5nX29uX2xvY2FsX3oYJSABKAISFQoNcGh5c2ljc19mbGFncxgmIAEo",
+            "DRI3Cg5uZWFyYnlfb2JqZWN0cxgoIAMoCzIfLnBhdGhmaW5kaW5nLkR5bmFt",
+            "aWNPYmplY3RQcm90bxIWCg5zdGVwX3VwX2Jhc2VfehgpIAEoAhITCgtzdGVw",
+            "X3VwX2FnZRgqIAEoDRIUCgx3YXNfZ3JvdW5kZWQYKyABKAgi3wYKDVBoeXNp",
+            "Y3NPdXRwdXQSEQoJbmV3X3Bvc194GAEgASgCEhEKCW5ld19wb3NfeRgCIAEo",
+            "AhIRCgluZXdfcG9zX3oYAyABKAISEQoJbmV3X3ZlbF94GAQgASgCEhEKCW5l",
+            "d192ZWxfeRgFIAEoAhIRCgluZXdfdmVsX3oYBiABKAISFgoObW92ZW1lbnRf",
+            "ZmxhZ3MYByABKA0SEwoLb3JpZW50YXRpb24YCCABKAISDQoFcGl0Y2gYCSAB",
+            "KAISEwoLaXNfZ3JvdW5kZWQYCiABKAgSEwoLaXNfc3dpbW1pbmcYCyABKAgS",
+            "EQoJaXNfZmx5aW5nGAwgASgIEhEKCWZhbGxfdGltZRgNIAEoAhIcChRjdXJy",
+            "ZW50X3NwbGluZV9pbmRleBgOIAEoBRIXCg9zcGxpbmVfcHJvZ3Jlc3MYDyAB",
+            "KAISEAoIZ3JvdW5kX3oYECABKAISEQoJZ3JvdW5kX254GBEgASgCEhEKCWdy",
+            "b3VuZF9ueRgSIAEoAhIRCglncm91bmRfbnoYEyABKAISEAoIbGlxdWlkX3oY",
+            "FCABKAISEwoLbGlxdWlkX3R5cGUYFSABKA0SFwoPcGVuZGluZ19kZXBlbl94",
+            "GBYgASgCEhcKD3BlbmRpbmdfZGVwZW5feRgXIAEoAhIXCg9wZW5kaW5nX2Rl",
+            "cGVuX3oYGCABKAISHwoXc3RhbmRpbmdfb25faW5zdGFuY2VfaWQYGSABKA0S",
+            "GwoTc3RhbmRpbmdfb25fbG9jYWxfeBgaIAEoAhIbChNzdGFuZGluZ19vbl9s",
+            "b2NhbF95GBsgASgCEhsKE3N0YW5kaW5nX29uX2xvY2FsX3oYHCABKAISFQoN",
+            "ZmFsbF9kaXN0YW5jZRgdIAEoAhIUCgxmYWxsX3N0YXJ0X3oYHiABKAISEAoI",
+            "aGl0X3dhbGwYHyABKAgSFQoNd2FsbF9ub3JtYWxfeBggIAEoAhIVCg13YWxs",
+            "X25vcm1hbF95GCEgASgCEhUKDXdhbGxfbm9ybWFsX3oYIiABKAISGAoQYmxv",
+            "Y2tlZF9mcmFjdGlvbhgjIAEoAhIWCg5zdGVwX3VwX2Jhc2VfehgkIAEoAhIT",
+            "CgtzdGVwX3VwX2FnZRglIAEoDRIZChFlbnZpcm9ubWVudF9mbGFncxgmIAEo",
+            "DSqNAwoVUGF0aFNlZ21lbnRBZmZvcmRhbmNlEiAKHFBBVEhfU0VHTUVOVF9B",
+            "RkZPUkRBTkNFX1dBTEsQABIjCh9QQVRIX1NFR01FTlRfQUZGT1JEQU5DRV9T",
+            "VEVQX1VQEAESJwojUEFUSF9TRUdNRU5UX0FGRk9SREFOQ0VfU1RFRVBfQ0xJ",
+            "TUIQAhIgChxQQVRIX1NFR01FTlRfQUZGT1JEQU5DRV9EUk9QEAMSIQodUEFU",
+            "SF9TRUdNRU5UX0FGRk9SREFOQ0VfQ0xJRkYQBBIkCiBQQVRIX1NFR01FTlRf",
+            "QUZGT1JEQU5DRV9WRVJUSUNBTBAFEiQKIFBBVEhfU0VHTUVOVF9BRkZPUkRB",
+            "TkNFX0pVTVBfR0FQEAYSJQohUEFUSF9TRUdNRU5UX0FGRk9SREFOQ0VfU0FG",
+            "RV9EUk9QEAcSJwojUEFUSF9TRUdNRU5UX0FGRk9SREFOQ0VfVU5TQUZFX0RS",
+            "T1AQCBIjCh9QQVRIX1NFR01FTlRfQUZGT1JEQU5DRV9CTE9DS0VEEAlCDqoC",
+            "C1BhdGhmaW5kaW5nYgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
-          new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
+          new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Pathfinding.PathSegmentAffordance), }, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PathfindingRequest), global::Pathfinding.PathfindingRequest.Parser, new[]{ "Path" }, new[]{ "Payload" }, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PathfindingResponse), global::Pathfinding.PathfindingResponse.Parser, new[]{ "Path", "Error" }, new[]{ "Payload" }, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.Error), global::Pathfinding.Error.Parser, new[]{ "Message" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.CalculatePathRequest), global::Pathfinding.CalculatePathRequest.Parser, new[]{ "MapId", "Start", "End", "Straight", "NearbyObjects", "Race", "Gender" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.CalculatePathResponse), global::Pathfinding.CalculatePathResponse.Parser, new[]{ "Corners", "Result", "RawCornerCount" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.CalculatePathResponse), global::Pathfinding.CalculatePathResponse.Parser, new[]{ "Corners", "Result", "RawCornerCount", "HasBlockedSegment", "BlockedSegmentIndex", "BlockedReason", "MaxAffordance", "PathSupported", "StepUpCount", "DropCount", "CliffCount", "VerticalCount", "TotalZGain", "TotalZLoss", "MaxSlopeAngleDeg", "JumpGapCount", "SafeDropCount", "UnsafeDropCount", "BlockedCount", "MaxClimbHeight", "MaxGapDistance", "MaxDropHeight" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.DynamicObjectProto), global::Pathfinding.DynamicObjectProto.Parser, new[]{ "Guid", "DisplayId", "X", "Y", "Z", "Orientation", "Scale", "GoState" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsInput), global::Pathfinding.PhysicsInput.Parser, new[]{ "MovementFlags", "PosX", "PosY", "PosZ", "Facing", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "SwimPitch", "FallTime", "FallStartZ", "SplineElevation", "VelX", "VelY", "VelZ", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "Race", "Gender", "MapId", "DeltaTime", "FrameCounter", "PrevGroundZ", "PrevGroundNx", "PrevGroundNy", "PrevGroundNz", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "PhysicsFlags", "NearbyObjects", "StepUpBaseZ", "StepUpAge", "WasGrounded" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsOutput), global::Pathfinding.PhysicsOutput.Parser, new[]{ "NewPosX", "NewPosY", "NewPosZ", "NewVelX", "NewVelY", "NewVelZ", "MovementFlags", "Orientation", "Pitch", "IsGrounded", "IsSwimming", "IsFlying", "FallTime", "CurrentSplineIndex", "SplineProgress", "GroundZ", "GroundNx", "GroundNy", "GroundNz", "LiquidZ", "LiquidType", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "FallDistance", "FallStartZ", "HitWall", "WallNormalX", "WallNormalY", "WallNormalZ", "BlockedFraction", "StepUpBaseZ", "StepUpAge", "EnvironmentFlags" }, null, null, null, null)
@@ -98,6 +119,22 @@ namespace Pathfinding {
     #endregion
 
   }
+  #region Enums
+  public enum PathSegmentAffordance {
+    [pbr::OriginalName("PATH_SEGMENT_AFFORDANCE_WALK")] Walk = 0,
+    [pbr::OriginalName("PATH_SEGMENT_AFFORDANCE_STEP_UP")] StepUp = 1,
+    [pbr::OriginalName("PATH_SEGMENT_AFFORDANCE_STEEP_CLIMB")] SteepClimb = 2,
+    [pbr::OriginalName("PATH_SEGMENT_AFFORDANCE_DROP")] Drop = 3,
+    [pbr::OriginalName("PATH_SEGMENT_AFFORDANCE_CLIFF")] Cliff = 4,
+    [pbr::OriginalName("PATH_SEGMENT_AFFORDANCE_VERTICAL")] Vertical = 5,
+    [pbr::OriginalName("PATH_SEGMENT_AFFORDANCE_JUMP_GAP")] JumpGap = 6,
+    [pbr::OriginalName("PATH_SEGMENT_AFFORDANCE_SAFE_DROP")] SafeDrop = 7,
+    [pbr::OriginalName("PATH_SEGMENT_AFFORDANCE_UNSAFE_DROP")] UnsafeDrop = 8,
+    [pbr::OriginalName("PATH_SEGMENT_AFFORDANCE_BLOCKED")] Blocked = 9,
+  }
+
+  #endregion
+
   #region Messages
   /// <summary>
   /// Main request message — path operations only.
@@ -1320,6 +1357,25 @@ namespace Pathfinding {
       corners_ = other.corners_.Clone();
       result_ = other.result_;
       rawCornerCount_ = other.rawCornerCount_;
+      hasBlockedSegment_ = other.hasBlockedSegment_;
+      blockedSegmentIndex_ = other.blockedSegmentIndex_;
+      blockedReason_ = other.blockedReason_;
+      maxAffordance_ = other.maxAffordance_;
+      pathSupported_ = other.pathSupported_;
+      stepUpCount_ = other.stepUpCount_;
+      dropCount_ = other.dropCount_;
+      cliffCount_ = other.cliffCount_;
+      verticalCount_ = other.verticalCount_;
+      totalZGain_ = other.totalZGain_;
+      totalZLoss_ = other.totalZLoss_;
+      maxSlopeAngleDeg_ = other.maxSlopeAngleDeg_;
+      jumpGapCount_ = other.jumpGapCount_;
+      safeDropCount_ = other.safeDropCount_;
+      unsafeDropCount_ = other.unsafeDropCount_;
+      blockedCount_ = other.blockedCount_;
+      maxClimbHeight_ = other.maxClimbHeight_;
+      maxGapDistance_ = other.maxGapDistance_;
+      maxDropHeight_ = other.maxDropHeight_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -1370,6 +1426,237 @@ namespace Pathfinding {
       }
     }
 
+    /// <summary>Field number for the "has_blocked_segment" field.</summary>
+    public const int HasBlockedSegmentFieldNumber = 4;
+    private bool hasBlockedSegment_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool HasBlockedSegment {
+      get { return hasBlockedSegment_; }
+      set {
+        hasBlockedSegment_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "blocked_segment_index" field.</summary>
+    public const int BlockedSegmentIndexFieldNumber = 5;
+    private int blockedSegmentIndex_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int BlockedSegmentIndex {
+      get { return blockedSegmentIndex_; }
+      set {
+        blockedSegmentIndex_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "blocked_reason" field.</summary>
+    public const int BlockedReasonFieldNumber = 6;
+    private string blockedReason_ = "";
+    /// <summary>
+    /// "none", "dynamic_overlay", "capsule_validation", ...
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string BlockedReason {
+      get { return blockedReason_; }
+      set {
+        blockedReason_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "max_affordance" field.</summary>
+    public const int MaxAffordanceFieldNumber = 7;
+    private global::Pathfinding.PathSegmentAffordance maxAffordance_ = global::Pathfinding.PathSegmentAffordance.Walk;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Pathfinding.PathSegmentAffordance MaxAffordance {
+      get { return maxAffordance_; }
+      set {
+        maxAffordance_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "path_supported" field.</summary>
+    public const int PathSupportedFieldNumber = 8;
+    private bool pathSupported_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool PathSupported {
+      get { return pathSupported_; }
+      set {
+        pathSupported_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "step_up_count" field.</summary>
+    public const int StepUpCountFieldNumber = 9;
+    private uint stepUpCount_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint StepUpCount {
+      get { return stepUpCount_; }
+      set {
+        stepUpCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "drop_count" field.</summary>
+    public const int DropCountFieldNumber = 10;
+    private uint dropCount_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint DropCount {
+      get { return dropCount_; }
+      set {
+        dropCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "cliff_count" field.</summary>
+    public const int CliffCountFieldNumber = 11;
+    private uint cliffCount_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint CliffCount {
+      get { return cliffCount_; }
+      set {
+        cliffCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "vertical_count" field.</summary>
+    public const int VerticalCountFieldNumber = 12;
+    private uint verticalCount_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint VerticalCount {
+      get { return verticalCount_; }
+      set {
+        verticalCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "total_z_gain" field.</summary>
+    public const int TotalZGainFieldNumber = 13;
+    private float totalZGain_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float TotalZGain {
+      get { return totalZGain_; }
+      set {
+        totalZGain_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "total_z_loss" field.</summary>
+    public const int TotalZLossFieldNumber = 14;
+    private float totalZLoss_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float TotalZLoss {
+      get { return totalZLoss_; }
+      set {
+        totalZLoss_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "max_slope_angle_deg" field.</summary>
+    public const int MaxSlopeAngleDegFieldNumber = 15;
+    private float maxSlopeAngleDeg_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float MaxSlopeAngleDeg {
+      get { return maxSlopeAngleDeg_; }
+      set {
+        maxSlopeAngleDeg_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "jump_gap_count" field.</summary>
+    public const int JumpGapCountFieldNumber = 16;
+    private uint jumpGapCount_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint JumpGapCount {
+      get { return jumpGapCount_; }
+      set {
+        jumpGapCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "safe_drop_count" field.</summary>
+    public const int SafeDropCountFieldNumber = 17;
+    private uint safeDropCount_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint SafeDropCount {
+      get { return safeDropCount_; }
+      set {
+        safeDropCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "unsafe_drop_count" field.</summary>
+    public const int UnsafeDropCountFieldNumber = 18;
+    private uint unsafeDropCount_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint UnsafeDropCount {
+      get { return unsafeDropCount_; }
+      set {
+        unsafeDropCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "blocked_count" field.</summary>
+    public const int BlockedCountFieldNumber = 19;
+    private uint blockedCount_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint BlockedCount {
+      get { return blockedCount_; }
+      set {
+        blockedCount_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "max_climb_height" field.</summary>
+    public const int MaxClimbHeightFieldNumber = 20;
+    private float maxClimbHeight_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float MaxClimbHeight {
+      get { return maxClimbHeight_; }
+      set {
+        maxClimbHeight_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "max_gap_distance" field.</summary>
+    public const int MaxGapDistanceFieldNumber = 21;
+    private float maxGapDistance_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float MaxGapDistance {
+      get { return maxGapDistance_; }
+      set {
+        maxGapDistance_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "max_drop_height" field.</summary>
+    public const int MaxDropHeightFieldNumber = 22;
+    private float maxDropHeight_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public float MaxDropHeight {
+      get { return maxDropHeight_; }
+      set {
+        maxDropHeight_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -1388,6 +1675,25 @@ namespace Pathfinding {
       if(!corners_.Equals(other.corners_)) return false;
       if (Result != other.Result) return false;
       if (RawCornerCount != other.RawCornerCount) return false;
+      if (HasBlockedSegment != other.HasBlockedSegment) return false;
+      if (BlockedSegmentIndex != other.BlockedSegmentIndex) return false;
+      if (BlockedReason != other.BlockedReason) return false;
+      if (MaxAffordance != other.MaxAffordance) return false;
+      if (PathSupported != other.PathSupported) return false;
+      if (StepUpCount != other.StepUpCount) return false;
+      if (DropCount != other.DropCount) return false;
+      if (CliffCount != other.CliffCount) return false;
+      if (VerticalCount != other.VerticalCount) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(TotalZGain, other.TotalZGain)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(TotalZLoss, other.TotalZLoss)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaxSlopeAngleDeg, other.MaxSlopeAngleDeg)) return false;
+      if (JumpGapCount != other.JumpGapCount) return false;
+      if (SafeDropCount != other.SafeDropCount) return false;
+      if (UnsafeDropCount != other.UnsafeDropCount) return false;
+      if (BlockedCount != other.BlockedCount) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaxClimbHeight, other.MaxClimbHeight)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaxGapDistance, other.MaxGapDistance)) return false;
+      if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(MaxDropHeight, other.MaxDropHeight)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -1398,6 +1704,25 @@ namespace Pathfinding {
       hash ^= corners_.GetHashCode();
       if (Result.Length != 0) hash ^= Result.GetHashCode();
       if (RawCornerCount != 0) hash ^= RawCornerCount.GetHashCode();
+      if (HasBlockedSegment != false) hash ^= HasBlockedSegment.GetHashCode();
+      if (BlockedSegmentIndex != 0) hash ^= BlockedSegmentIndex.GetHashCode();
+      if (BlockedReason.Length != 0) hash ^= BlockedReason.GetHashCode();
+      if (MaxAffordance != global::Pathfinding.PathSegmentAffordance.Walk) hash ^= MaxAffordance.GetHashCode();
+      if (PathSupported != false) hash ^= PathSupported.GetHashCode();
+      if (StepUpCount != 0) hash ^= StepUpCount.GetHashCode();
+      if (DropCount != 0) hash ^= DropCount.GetHashCode();
+      if (CliffCount != 0) hash ^= CliffCount.GetHashCode();
+      if (VerticalCount != 0) hash ^= VerticalCount.GetHashCode();
+      if (TotalZGain != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(TotalZGain);
+      if (TotalZLoss != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(TotalZLoss);
+      if (MaxSlopeAngleDeg != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaxSlopeAngleDeg);
+      if (JumpGapCount != 0) hash ^= JumpGapCount.GetHashCode();
+      if (SafeDropCount != 0) hash ^= SafeDropCount.GetHashCode();
+      if (UnsafeDropCount != 0) hash ^= UnsafeDropCount.GetHashCode();
+      if (BlockedCount != 0) hash ^= BlockedCount.GetHashCode();
+      if (MaxClimbHeight != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaxClimbHeight);
+      if (MaxGapDistance != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaxGapDistance);
+      if (MaxDropHeight != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(MaxDropHeight);
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -1425,6 +1750,82 @@ namespace Pathfinding {
         output.WriteRawTag(24);
         output.WriteUInt32(RawCornerCount);
       }
+      if (HasBlockedSegment != false) {
+        output.WriteRawTag(32);
+        output.WriteBool(HasBlockedSegment);
+      }
+      if (BlockedSegmentIndex != 0) {
+        output.WriteRawTag(40);
+        output.WriteInt32(BlockedSegmentIndex);
+      }
+      if (BlockedReason.Length != 0) {
+        output.WriteRawTag(50);
+        output.WriteString(BlockedReason);
+      }
+      if (MaxAffordance != global::Pathfinding.PathSegmentAffordance.Walk) {
+        output.WriteRawTag(56);
+        output.WriteEnum((int) MaxAffordance);
+      }
+      if (PathSupported != false) {
+        output.WriteRawTag(64);
+        output.WriteBool(PathSupported);
+      }
+      if (StepUpCount != 0) {
+        output.WriteRawTag(72);
+        output.WriteUInt32(StepUpCount);
+      }
+      if (DropCount != 0) {
+        output.WriteRawTag(80);
+        output.WriteUInt32(DropCount);
+      }
+      if (CliffCount != 0) {
+        output.WriteRawTag(88);
+        output.WriteUInt32(CliffCount);
+      }
+      if (VerticalCount != 0) {
+        output.WriteRawTag(96);
+        output.WriteUInt32(VerticalCount);
+      }
+      if (TotalZGain != 0F) {
+        output.WriteRawTag(109);
+        output.WriteFloat(TotalZGain);
+      }
+      if (TotalZLoss != 0F) {
+        output.WriteRawTag(117);
+        output.WriteFloat(TotalZLoss);
+      }
+      if (MaxSlopeAngleDeg != 0F) {
+        output.WriteRawTag(125);
+        output.WriteFloat(MaxSlopeAngleDeg);
+      }
+      if (JumpGapCount != 0) {
+        output.WriteRawTag(128, 1);
+        output.WriteUInt32(JumpGapCount);
+      }
+      if (SafeDropCount != 0) {
+        output.WriteRawTag(136, 1);
+        output.WriteUInt32(SafeDropCount);
+      }
+      if (UnsafeDropCount != 0) {
+        output.WriteRawTag(144, 1);
+        output.WriteUInt32(UnsafeDropCount);
+      }
+      if (BlockedCount != 0) {
+        output.WriteRawTag(152, 1);
+        output.WriteUInt32(BlockedCount);
+      }
+      if (MaxClimbHeight != 0F) {
+        output.WriteRawTag(165, 1);
+        output.WriteFloat(MaxClimbHeight);
+      }
+      if (MaxGapDistance != 0F) {
+        output.WriteRawTag(173, 1);
+        output.WriteFloat(MaxGapDistance);
+      }
+      if (MaxDropHeight != 0F) {
+        output.WriteRawTag(181, 1);
+        output.WriteFloat(MaxDropHeight);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -1444,6 +1845,82 @@ namespace Pathfinding {
         output.WriteRawTag(24);
         output.WriteUInt32(RawCornerCount);
       }
+      if (HasBlockedSegment != false) {
+        output.WriteRawTag(32);
+        output.WriteBool(HasBlockedSegment);
+      }
+      if (BlockedSegmentIndex != 0) {
+        output.WriteRawTag(40);
+        output.WriteInt32(BlockedSegmentIndex);
+      }
+      if (BlockedReason.Length != 0) {
+        output.WriteRawTag(50);
+        output.WriteString(BlockedReason);
+      }
+      if (MaxAffordance != global::Pathfinding.PathSegmentAffordance.Walk) {
+        output.WriteRawTag(56);
+        output.WriteEnum((int) MaxAffordance);
+      }
+      if (PathSupported != false) {
+        output.WriteRawTag(64);
+        output.WriteBool(PathSupported);
+      }
+      if (StepUpCount != 0) {
+        output.WriteRawTag(72);
+        output.WriteUInt32(StepUpCount);
+      }
+      if (DropCount != 0) {
+        output.WriteRawTag(80);
+        output.WriteUInt32(DropCount);
+      }
+      if (CliffCount != 0) {
+        output.WriteRawTag(88);
+        output.WriteUInt32(CliffCount);
+      }
+      if (VerticalCount != 0) {
+        output.WriteRawTag(96);
+        output.WriteUInt32(VerticalCount);
+      }
+      if (TotalZGain != 0F) {
+        output.WriteRawTag(109);
+        output.WriteFloat(TotalZGain);
+      }
+      if (TotalZLoss != 0F) {
+        output.WriteRawTag(117);
+        output.WriteFloat(TotalZLoss);
+      }
+      if (MaxSlopeAngleDeg != 0F) {
+        output.WriteRawTag(125);
+        output.WriteFloat(MaxSlopeAngleDeg);
+      }
+      if (JumpGapCount != 0) {
+        output.WriteRawTag(128, 1);
+        output.WriteUInt32(JumpGapCount);
+      }
+      if (SafeDropCount != 0) {
+        output.WriteRawTag(136, 1);
+        output.WriteUInt32(SafeDropCount);
+      }
+      if (UnsafeDropCount != 0) {
+        output.WriteRawTag(144, 1);
+        output.WriteUInt32(UnsafeDropCount);
+      }
+      if (BlockedCount != 0) {
+        output.WriteRawTag(152, 1);
+        output.WriteUInt32(BlockedCount);
+      }
+      if (MaxClimbHeight != 0F) {
+        output.WriteRawTag(165, 1);
+        output.WriteFloat(MaxClimbHeight);
+      }
+      if (MaxGapDistance != 0F) {
+        output.WriteRawTag(173, 1);
+        output.WriteFloat(MaxGapDistance);
+      }
+      if (MaxDropHeight != 0F) {
+        output.WriteRawTag(181, 1);
+        output.WriteFloat(MaxDropHeight);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -1460,6 +1937,63 @@ namespace Pathfinding {
       }
       if (RawCornerCount != 0) {
         size += 1 + pb::CodedOutputStream.ComputeUInt32Size(RawCornerCount);
+      }
+      if (HasBlockedSegment != false) {
+        size += 1 + 1;
+      }
+      if (BlockedSegmentIndex != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeInt32Size(BlockedSegmentIndex);
+      }
+      if (BlockedReason.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(BlockedReason);
+      }
+      if (MaxAffordance != global::Pathfinding.PathSegmentAffordance.Walk) {
+        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) MaxAffordance);
+      }
+      if (PathSupported != false) {
+        size += 1 + 1;
+      }
+      if (StepUpCount != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(StepUpCount);
+      }
+      if (DropCount != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(DropCount);
+      }
+      if (CliffCount != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(CliffCount);
+      }
+      if (VerticalCount != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(VerticalCount);
+      }
+      if (TotalZGain != 0F) {
+        size += 1 + 4;
+      }
+      if (TotalZLoss != 0F) {
+        size += 1 + 4;
+      }
+      if (MaxSlopeAngleDeg != 0F) {
+        size += 1 + 4;
+      }
+      if (JumpGapCount != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(JumpGapCount);
+      }
+      if (SafeDropCount != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(SafeDropCount);
+      }
+      if (UnsafeDropCount != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(UnsafeDropCount);
+      }
+      if (BlockedCount != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(BlockedCount);
+      }
+      if (MaxClimbHeight != 0F) {
+        size += 2 + 4;
+      }
+      if (MaxGapDistance != 0F) {
+        size += 2 + 4;
+      }
+      if (MaxDropHeight != 0F) {
+        size += 2 + 4;
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -1479,6 +2013,63 @@ namespace Pathfinding {
       }
       if (other.RawCornerCount != 0) {
         RawCornerCount = other.RawCornerCount;
+      }
+      if (other.HasBlockedSegment != false) {
+        HasBlockedSegment = other.HasBlockedSegment;
+      }
+      if (other.BlockedSegmentIndex != 0) {
+        BlockedSegmentIndex = other.BlockedSegmentIndex;
+      }
+      if (other.BlockedReason.Length != 0) {
+        BlockedReason = other.BlockedReason;
+      }
+      if (other.MaxAffordance != global::Pathfinding.PathSegmentAffordance.Walk) {
+        MaxAffordance = other.MaxAffordance;
+      }
+      if (other.PathSupported != false) {
+        PathSupported = other.PathSupported;
+      }
+      if (other.StepUpCount != 0) {
+        StepUpCount = other.StepUpCount;
+      }
+      if (other.DropCount != 0) {
+        DropCount = other.DropCount;
+      }
+      if (other.CliffCount != 0) {
+        CliffCount = other.CliffCount;
+      }
+      if (other.VerticalCount != 0) {
+        VerticalCount = other.VerticalCount;
+      }
+      if (other.TotalZGain != 0F) {
+        TotalZGain = other.TotalZGain;
+      }
+      if (other.TotalZLoss != 0F) {
+        TotalZLoss = other.TotalZLoss;
+      }
+      if (other.MaxSlopeAngleDeg != 0F) {
+        MaxSlopeAngleDeg = other.MaxSlopeAngleDeg;
+      }
+      if (other.JumpGapCount != 0) {
+        JumpGapCount = other.JumpGapCount;
+      }
+      if (other.SafeDropCount != 0) {
+        SafeDropCount = other.SafeDropCount;
+      }
+      if (other.UnsafeDropCount != 0) {
+        UnsafeDropCount = other.UnsafeDropCount;
+      }
+      if (other.BlockedCount != 0) {
+        BlockedCount = other.BlockedCount;
+      }
+      if (other.MaxClimbHeight != 0F) {
+        MaxClimbHeight = other.MaxClimbHeight;
+      }
+      if (other.MaxGapDistance != 0F) {
+        MaxGapDistance = other.MaxGapDistance;
+      }
+      if (other.MaxDropHeight != 0F) {
+        MaxDropHeight = other.MaxDropHeight;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -1511,6 +2102,82 @@ namespace Pathfinding {
             RawCornerCount = input.ReadUInt32();
             break;
           }
+          case 32: {
+            HasBlockedSegment = input.ReadBool();
+            break;
+          }
+          case 40: {
+            BlockedSegmentIndex = input.ReadInt32();
+            break;
+          }
+          case 50: {
+            BlockedReason = input.ReadString();
+            break;
+          }
+          case 56: {
+            MaxAffordance = (global::Pathfinding.PathSegmentAffordance) input.ReadEnum();
+            break;
+          }
+          case 64: {
+            PathSupported = input.ReadBool();
+            break;
+          }
+          case 72: {
+            StepUpCount = input.ReadUInt32();
+            break;
+          }
+          case 80: {
+            DropCount = input.ReadUInt32();
+            break;
+          }
+          case 88: {
+            CliffCount = input.ReadUInt32();
+            break;
+          }
+          case 96: {
+            VerticalCount = input.ReadUInt32();
+            break;
+          }
+          case 109: {
+            TotalZGain = input.ReadFloat();
+            break;
+          }
+          case 117: {
+            TotalZLoss = input.ReadFloat();
+            break;
+          }
+          case 125: {
+            MaxSlopeAngleDeg = input.ReadFloat();
+            break;
+          }
+          case 128: {
+            JumpGapCount = input.ReadUInt32();
+            break;
+          }
+          case 136: {
+            SafeDropCount = input.ReadUInt32();
+            break;
+          }
+          case 144: {
+            UnsafeDropCount = input.ReadUInt32();
+            break;
+          }
+          case 152: {
+            BlockedCount = input.ReadUInt32();
+            break;
+          }
+          case 165: {
+            MaxClimbHeight = input.ReadFloat();
+            break;
+          }
+          case 173: {
+            MaxGapDistance = input.ReadFloat();
+            break;
+          }
+          case 181: {
+            MaxDropHeight = input.ReadFloat();
+            break;
+          }
         }
       }
     #endif
@@ -1540,6 +2207,82 @@ namespace Pathfinding {
           }
           case 24: {
             RawCornerCount = input.ReadUInt32();
+            break;
+          }
+          case 32: {
+            HasBlockedSegment = input.ReadBool();
+            break;
+          }
+          case 40: {
+            BlockedSegmentIndex = input.ReadInt32();
+            break;
+          }
+          case 50: {
+            BlockedReason = input.ReadString();
+            break;
+          }
+          case 56: {
+            MaxAffordance = (global::Pathfinding.PathSegmentAffordance) input.ReadEnum();
+            break;
+          }
+          case 64: {
+            PathSupported = input.ReadBool();
+            break;
+          }
+          case 72: {
+            StepUpCount = input.ReadUInt32();
+            break;
+          }
+          case 80: {
+            DropCount = input.ReadUInt32();
+            break;
+          }
+          case 88: {
+            CliffCount = input.ReadUInt32();
+            break;
+          }
+          case 96: {
+            VerticalCount = input.ReadUInt32();
+            break;
+          }
+          case 109: {
+            TotalZGain = input.ReadFloat();
+            break;
+          }
+          case 117: {
+            TotalZLoss = input.ReadFloat();
+            break;
+          }
+          case 125: {
+            MaxSlopeAngleDeg = input.ReadFloat();
+            break;
+          }
+          case 128: {
+            JumpGapCount = input.ReadUInt32();
+            break;
+          }
+          case 136: {
+            SafeDropCount = input.ReadUInt32();
+            break;
+          }
+          case 144: {
+            UnsafeDropCount = input.ReadUInt32();
+            break;
+          }
+          case 152: {
+            BlockedCount = input.ReadUInt32();
+            break;
+          }
+          case 165: {
+            MaxClimbHeight = input.ReadFloat();
+            break;
+          }
+          case 173: {
+            MaxGapDistance = input.ReadFloat();
+            break;
+          }
+          case 181: {
+            MaxDropHeight = input.ReadFloat();
             break;
           }
         }

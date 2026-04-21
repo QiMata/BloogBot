@@ -60,7 +60,14 @@ public sealed class FgTaxiFrame(
         => Nodes.Skip(1).FirstOrDefault(node => string.Equals(node.Status, "CURRENT", StringComparison.OrdinalIgnoreCase))?.Name ?? string.Empty;
 
     public void SelectNodeByNumber(int parNodeNumber)
-        => luaCall($"if TaxiFrame and TaxiFrame:IsVisible() then TakeTaxiNode({Math.Max(1, parNodeNumber)}) end");
+    {
+        var nodeNumber = Math.Max(1, parNodeNumber);
+        luaCall(
+            $"if TaxiFrame and TaxiFrame:IsVisible() then local idx={nodeNumber}; local btn=nil; " +
+            "if getglobal then btn = getglobal('TaxiButton'..idx) end; " +
+            "if btn and btn.IsVisible and btn:IsVisible() and btn.Click then btn:Click(); " +
+            "elseif TakeTaxiNode then TakeTaxiNode(idx); end; end");
+    }
 
     public void SelectNodeByName(string parNodeName)
     {

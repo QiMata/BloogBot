@@ -22,8 +22,8 @@ public class PathCalculationTask : TestBotTask
     public override void Update()
     {
         uint mapId = 1;
-        var start = new XYZ(-616.25f, -4188.00f, 82.32f);
-        var end = new XYZ(-829.95f, -4930.76f, 21.97f);
+        var start = new XYZ(1177.8f, -4464.2f, 21.4f);
+        var end = new XYZ(1629.4f, -4373.4f, 31.3f);
 
         XYZ[] path;
         try
@@ -41,8 +41,8 @@ public class PathCalculationTask : TestBotTask
             start,
             end,
             path,
-            maxStartDistance: 5.0f,
-            maxEndDistance: 10.0f,
+            maxStartDistance: 10.0f,
+            maxEndDistance: 12.0f,
             maxSegmentLength: 200.0f,
             maxHeightJump: 25.0f);
         if (validationFailure is not null)

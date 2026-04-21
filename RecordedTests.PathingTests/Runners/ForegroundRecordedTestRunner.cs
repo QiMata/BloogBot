@@ -36,11 +36,17 @@ public class ForegroundRecordedTestRunner(
     private readonly ITestLogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TestConfiguration? _config = config;
     private WoWClientOrchestrator? _orchestrator;
+    private bool _disconnectCompleted;
+
+    internal Func<CancellationToken, Task>? DisconnectWorldOverride { get; set; }
+    internal Func<CancellationToken, Task>? DisconnectAuthOverride { get; set; }
+    internal Action? DisposeOrchestratorOverride { get; set; }
 
     /// <inheritdoc />
     public async Task ConnectAsync(ServerInfo server, CancellationToken cancellationToken)
     {
         _logger.Info($"[FG] Connecting to server {server.Host}:{server.Port} with GM account '{_account}'");
+        _disconnectCompleted = false;
 
         _orchestrator = WoWClientFactory.CreateOrchestrator();
 
@@ -181,13 +187,58 @@ public class ForegroundRecordedTestRunner(
     /// <inheritdoc />
     public async Task DisconnectAsync(CancellationToken cancellationToken)
     {
-        if (_orchestrator != null)
+        if (_disconnectCompleted)
+            return;
+
+        _disconnectCompleted = true;
+
+        if (DisconnectWorldOverride != null || DisconnectAuthOverride != null || DisposeOrchestratorOverride != null)
         {
             _logger.Info("[FG] Disconnecting from server");
-            await _orchestrator.DisconnectWorldAsync(cancellationToken);
-            await _orchestrator.DisconnectAuthAsync(cancellationToken);
-            _orchestrator.Dispose();
+            await RunDisconnectStepAsync("world", () => DisconnectWorldOverride?.Invoke(cancellationToken) ?? Task.CompletedTask);
+            await RunDisconnectStepAsync("auth", () => DisconnectAuthOverride?.Invoke(cancellationToken) ?? Task.CompletedTask);
+            RunDisposeStep("orchestrator", DisposeOrchestratorOverride);
             _orchestrator = null;
+        }
+        else if (_orchestrator != null)
+        {
+            var orchestrator = _orchestrator;
+            _orchestrator = null;
+            _logger.Info("[FG] Disconnecting from server");
+            await RunDisconnectStepAsync("world", () => orchestrator.DisconnectWorldAsync(cancellationToken));
+            await RunDisconnectStepAsync("auth", () => orchestrator.DisconnectAuthAsync(cancellationToken));
+            RunDisposeStep("orchestrator", orchestrator.Dispose);
+        }
+    }
+
+    private async Task RunDisconnectStepAsync(string step, Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[FG] Error during {step} disconnect: {ex.Message}");
+        }
+    }
+
+    private void RunDisposeStep(string step, Action? action)
+    {
+        if (action == null)
+            return;
+
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"[FG] Error disposing {step}: {ex.Message}");
         }
     }
 

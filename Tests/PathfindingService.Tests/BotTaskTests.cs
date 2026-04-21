@@ -27,4 +27,12 @@ public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<
         task.Update();
         task.AssertSuccess();
     }
+
+    [Fact]
+    public void OrgrimmarCorpseRunPath_ShouldReturnValidWaypointPath()
+    {
+        var task = new OrgrimmarCorpseRunPathTask(_fixture.Navigation);
+        task.Update();
+        task.AssertSuccess();
+    }
 }

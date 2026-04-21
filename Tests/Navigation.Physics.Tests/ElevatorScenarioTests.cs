@@ -412,6 +412,8 @@ public class ElevatorPhysicsParityTests(PhysicsEngineFixture fixture, ITestOutpu
     }
 
     [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityScenario", "Transport")]
     public void UndercityElevatorReplay_TransportAverageStaysWithinParityTarget()
     {
         var result = _fixture.ReplayCache.GetOrReplay(Recordings.UndercityElevatorV2, _output, _fixture.IsInitialized);

@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.Json;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -39,6 +40,8 @@ public class BotServiceFixture : IAsyncLifetime
     #region Fields and Properties — Core State
 
     private const string RepoMarker = "Westworld of Warcraft";
+    internal const string MutexWaitMinutesEnvVar = "WWOW_BOTSERVICE_MUTEX_WAIT_MINUTES";
+    internal const int DefaultMutexWaitMinutes = 45;
     private readonly MangosServerFixture _mangosFixture = new();
     private ITestOutputHelper? _output;
     private Process? _stateManagerProcess;
@@ -77,10 +80,11 @@ public class BotServiceFixture : IAsyncLifetime
         new(@"WoW\.exe started.*Process ID: (\d+)", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// <summary>
-    /// Machine-wide mutex to prevent multiple test processes from concurrently
-    /// launching StateManagers. Only one BotServiceFixture can be initializing at a time.
+    /// Machine-wide semaphore to prevent multiple test processes from concurrently
+    /// launching StateManagers. Unlike Mutex, Semaphore release is not thread-affine,
+    /// which keeps async fixture teardown from deadlocking the next collection.
     /// </summary>
-    private static Mutex? _globalMutex;
+    private Semaphore? _globalSemaphore;
 
     /// <summary>
     /// Whether a managed client (WoW.exe or StateManager) has crashed during this session.
@@ -152,6 +156,75 @@ public class BotServiceFixture : IAsyncLifetime
         }
     }
 
+    private static string? ResolveRepoRoot()
+    {
+        var envRoot = Environment.GetEnvironmentVariable("WWOW_REPO_ROOT");
+        if (!string.IsNullOrWhiteSpace(envRoot) &&
+            File.Exists(Path.Combine(envRoot, "WestworldOfWarcraft.sln")))
+        {
+            return Path.GetFullPath(envRoot);
+        }
+
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "WestworldOfWarcraft.sln")))
+                return dir.FullName;
+
+            dir = dir.Parent;
+        }
+
+        return null;
+    }
+
+    private static string? ResolveDockerParityDataDir()
+        => SceneDataParityPaths.ResolveDockerHostDataRoot();
+
+    public static TimeSpan GetGlobalMutexWaitTimeout()
+    {
+        var rawValue = Environment.GetEnvironmentVariable(MutexWaitMinutesEnvVar);
+        if (int.TryParse(rawValue, out var minutes) && minutes > 0)
+            return TimeSpan.FromMinutes(minutes);
+
+        return TimeSpan.FromMinutes(DefaultMutexWaitMinutes);
+    }
+
+    private void EnsureStateManagerAppSettings(string stateManagerDirectory)
+    {
+        var repoRoot = ResolveRepoRoot();
+        if (string.IsNullOrWhiteSpace(repoRoot))
+            return;
+
+        var sourcePath = Path.Combine(repoRoot, "Services", "WoWStateManager", "appsettings.json");
+        if (!File.Exists(sourcePath))
+            return;
+
+        var targetPath = Path.Combine(stateManagerDirectory, "appsettings.json");
+        var needsRefresh = true;
+
+        if (File.Exists(targetPath))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(targetPath));
+                needsRefresh =
+                    !document.RootElement.TryGetProperty("MangosSOAP", out _) ||
+                    !document.RootElement.TryGetProperty("StateManagerListener", out _) ||
+                    !document.RootElement.TryGetProperty("CharacterStateListener", out _);
+            }
+            catch (Exception ex)
+            {
+                Log($"  [StateManager] Existing appsettings.json could not be parsed; refreshing from source. {ex.Message}");
+            }
+        }
+
+        if (!needsRefresh)
+            return;
+
+        File.Copy(sourcePath, targetPath, overwrite: true);
+        Log("  [StateManager] Refreshed appsettings.json from Services/WoWStateManager to avoid shared-output config overwrite.");
+    }
+
     #endregion
 
     #region Test Output and Logging Configuration
@@ -179,30 +252,26 @@ public class BotServiceFixture : IAsyncLifetime
     {
         Log("BotServiceFixture initializing...");
 
-        // Acquire machine-wide mutex — prevents concurrent test processes from racing.
+        // Acquire machine-wide launch lock — prevents concurrent test processes from racing.
         // Skip if we already hold it (e.g., during RestartWithSettingsAsync).
         if (!_mutexHeld)
         {
-            const string mutexName = "Global\\WWoW_BotServiceFixture_Mutex";
-            try
+            const string semaphoreName = "Global\\WWoW_BotServiceFixture_Semaphore";
+            _globalSemaphore = new Semaphore(1, 1, semaphoreName);
+            Log("  [Mutex] Acquiring machine-wide lock (prevents concurrent StateManager launches)...");
+            var waitTimeout = GetGlobalMutexWaitTimeout();
+            Log($"  [Mutex] Waiting up to {waitTimeout.TotalMinutes:F0} minute(s) for prior BotServiceFixture owners to finish...");
+            if (!_globalSemaphore.WaitOne(waitTimeout))
             {
-                _globalMutex = new Mutex(false, mutexName);
-                Log("  [Mutex] Acquiring machine-wide lock (prevents concurrent StateManager launches)...");
-                if (!_globalMutex.WaitOne(TimeSpan.FromMinutes(2)))
-                {
-                    UnavailableReason = "Another test process is already running BotServiceFixture. Wait for it to finish.";
-                    Log($"SKIP: {UnavailableReason}");
-                    return;
-                }
-                Log("  [Mutex] Lock acquired.");
-                _mutexHeld = true;
+                UnavailableReason = "Another test process is already running BotServiceFixture. Wait for it to finish.";
+                Log($"SKIP: {UnavailableReason}");
+                _globalSemaphore.Dispose();
+                _globalSemaphore = null;
+                return;
             }
-            catch (AbandonedMutexException)
-            {
-                // Previous holder crashed — we now own the mutex, which is fine.
-                Log("  [Mutex] Acquired (previous holder crashed).");
-                _mutexHeld = true;
-            }
+
+            Log("  [Mutex] Lock acquired.");
+            _mutexHeld = true;
         }
         else
         {
@@ -551,20 +620,20 @@ public class BotServiceFixture : IAsyncLifetime
 
         await TeardownProcessesAsync();
 
-        // Always release the machine-wide mutex so the next test run can proceed
+        // Always release the machine-wide launch lock so the next test run can proceed.
         try
         {
             if (_mutexHeld)
             {
-                _globalMutex?.ReleaseMutex();
+                _globalSemaphore?.Release();
                 _mutexHeld = false;
             }
-            _globalMutex?.Dispose();
-            _globalMutex = null;
+            _globalSemaphore?.Dispose();
+            _globalSemaphore = null;
         }
-        catch (ApplicationException)
+        catch (SemaphoreFullException)
         {
-            // Mutex was not owned — this is fine (e.g., InitializeAsync failed before acquiring)
+            // Lock was already released — this is fine during partial init/teardown paths.
         }
     }
 
@@ -875,6 +944,8 @@ public class BotServiceFixture : IAsyncLifetime
                 RedirectStandardError = true
             };
 
+            EnsureStateManagerAppSettings(smDir);
+
             var x86DotnetRoot = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
                 "dotnet");
@@ -894,6 +965,13 @@ public class BotServiceFixture : IAsyncLifetime
             // Always show console windows for child processes (BG/FG bot runners)
             // so test runners can observe bot output in real time.
             psi.Environment["WWOW_SHOW_WINDOWS"] = "1";
+
+            var parityDataDir = ResolveDockerParityDataDir();
+            if (!string.IsNullOrWhiteSpace(parityDataDir))
+            {
+                psi.Environment["WWOW_DATA_DIR"] = parityDataDir;
+                Log($"  [StateManager] WWOW_DATA_DIR={parityDataDir}");
+            }
 
             if (!string.IsNullOrEmpty(envRecording))
                 psi.Environment["BLOOGBOT_AUTOMATED_RECORDING"] = envRecording;
@@ -937,6 +1015,31 @@ public class BotServiceFixture : IAsyncLifetime
                 psi.Environment["WWOW_TEST_DISABLE_COORDINATOR"] = coordDisable;
                 Log($"  [StateManager] WWOW_TEST_DISABLE_COORDINATOR={coordDisable}");
             }
+
+            // Shared output folders let other services overwrite WoWStateManager's appsettings.json.
+            // Force the minimum endpoint config required for deterministic live test startup.
+            psi.Environment["MangosSOAP__IpAddress"] =
+                $"http://127.0.0.1:{_mangosFixture.Config.SoapPort}";
+            psi.Environment["PathfindingService__IpAddress"] = _mangosFixture.Config.PathfindingServiceIp;
+            psi.Environment["PathfindingService__Port"] = _mangosFixture.Config.PathfindingServicePort.ToString();
+            psi.Environment["SceneDataService__IpAddress"] =
+                Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP") ?? "127.0.0.1";
+            psi.Environment["SceneDataService__Port"] =
+                Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT") ?? "5003";
+            psi.Environment["CharacterStateListener__IpAddress"] = "127.0.0.1";
+            psi.Environment["CharacterStateListener__Port"] = "5002";
+            psi.Environment["StateManagerListener__IpAddress"] = "127.0.0.1";
+            psi.Environment["StateManagerListener__Port"] = "8088";
+            psi.Environment["RealmEndpoint__IpAddress"] = _mangosFixture.Config.AuthServerIp;
+
+            var wowExePath = Environment.GetEnvironmentVariable("WWOW_WOW_EXE_PATH")
+                ?? Environment.GetEnvironmentVariable("WWOW_TEST_WOW_PATH");
+            if (!string.IsNullOrWhiteSpace(wowExePath))
+                psi.Environment["WWOW_WOW_EXE_PATH"] = wowExePath;
+
+            var loaderPath = Path.Combine(BotOutputDirectory, "Loader.dll");
+            if (File.Exists(loaderPath))
+                psi.Environment["WWOW_LOADER_DLL_PATH"] = loaderPath;
 
             _stateManagerProcess = Process.Start(psi);
             if (_stateManagerProcess == null)

@@ -312,6 +312,7 @@ namespace WoWSharpClient.Client
             // Stand state / world state
             BridgeToLegacy(Opcode.SMSG_STANDSTATE_UPDATE, Handlers.StandStateHandler.HandleStandStateUpdate);
             BridgeToLegacy(Opcode.SMSG_INIT_WORLD_STATES, Handlers.WorldStateHandler.HandleInitWorldStates);
+            BridgeToLegacy(Opcode.SMSG_UPDATE_WORLD_STATE, Handlers.WorldStateHandler.HandleUpdateWorldState);
 
             // Movement packets
             BridgeToLegacy(Opcode.SMSG_MONSTER_MOVE, Handlers.MovementHandler.HandleUpdateMovement);
@@ -714,7 +715,7 @@ namespace WoWSharpClient.Client
 
         private void ClearRejectedLocalAutoAttack(string reason)
         {
-            _handlerContext?.ObjectManager.ClearPendingMeleeAttackStart();
+            _handlerContext?.ObjectManager.ClearTrackedMeleeAttackState();
             if (_handlerContext?.ObjectManager.Player is Models.WoWLocalPlayer localPlayer &&
                 localPlayer.IsAutoAttacking)
             {

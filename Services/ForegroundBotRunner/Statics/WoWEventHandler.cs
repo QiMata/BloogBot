@@ -344,6 +344,7 @@ namespace ForegroundBotRunner.Statics
         public event EventHandler<WorldInfo> OnLoginVerifyWorld;
         public event EventHandler<byte> OnStandStateUpdate;
         public event EventHandler<List<WorldState>> OnWorldStatesInit;
+        public event EventHandler<WorldState> OnWorldStateUpdate;
         public event EventHandler OnInitialSpellsLoaded;
         public event EventHandler<CharCreateResponse> OnCharacterCreateResponse;
         public event EventHandler<CharDeleteResponse> OnCharacterDeleteResponse;

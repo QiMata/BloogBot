@@ -91,6 +91,7 @@ namespace BotRunner
                 _activitySnapshot.CurrentMapId = (uint)mapPlayer.MapId;
 
             // Always flush message buffers (even during login — captures GM command errors)
+            TrySubscribeToBattlegroundMessageEvents();
             FlushMessageBuffers();
 
             // Only populate game data when in world and not in a map transition.
@@ -290,13 +291,17 @@ namespace BotRunner
             try
             {
                 _activitySnapshot.NearbyUnits.Clear();
+                _activitySnapshot.MovementData?.NearbyUnits.Clear();
                 var playerPos = player.Position;
                 if (playerPos != null)
                 {
                     foreach (var unit in _objectManager.Units
                         .Where(u => u.Guid != player.Guid && u.Position != null && u.Position.DistanceTo(playerPos) < 40f))
                     {
-                        _activitySnapshot.NearbyUnits.Add(BuildUnitProtobuf(unit));
+                        var protoUnit = BuildUnitProtobuf(unit);
+                        _activitySnapshot.NearbyUnits.Add(protoUnit);
+                        _activitySnapshot.MovementData?.NearbyUnits.Add(
+                            BuildUnitSnapshot(unit, protoUnit, playerPos.DistanceTo(unit.Position)));
                     }
                 }
             }
@@ -309,13 +314,37 @@ namespace BotRunner
             try
             {
                 _activitySnapshot.NearbyObjects.Clear();
+                _activitySnapshot.MovementData?.NearbyGameObjects.Clear();
                 var playerPos = player.Position;
                 if (playerPos != null)
                 {
                     foreach (var go in _objectManager.GameObjects
                         .Where(g => g.Position != null && g.Position.DistanceTo(playerPos) < 40f))
                     {
-                        _activitySnapshot.NearbyObjects.Add(BuildGameObjectProtobuf(go));
+                        var protoGameObject = BuildGameObjectProtobuf(go);
+                        _activitySnapshot.NearbyObjects.Add(protoGameObject);
+                        _activitySnapshot.MovementData?.NearbyGameObjects.Add(new Game.GameObjectSnapshot
+                        {
+                            Guid = protoGameObject.Base.Guid,
+                            Entry = protoGameObject.Entry,
+                            DisplayId = protoGameObject.DisplayId,
+                            GameObjectType = protoGameObject.GameObjectType,
+                            Flags = protoGameObject.Flags,
+                            GoState = protoGameObject.GoState,
+                            Position = protoGameObject.Base.Position == null
+                                ? null
+                                : new Game.Position
+                                {
+                                    X = protoGameObject.Base.Position.X,
+                                    Y = protoGameObject.Base.Position.Y,
+                                    Z = protoGameObject.Base.Position.Z,
+                                },
+                            Facing = protoGameObject.Base.Facing,
+                            Name = protoGameObject.Name ?? string.Empty,
+                            Scale = protoGameObject.Base.ScaleX,
+                            AnimProgress = protoGameObject.AnimProgress,
+                            DistanceToPlayer = playerPos.DistanceTo(go.Position),
+                        });
                     }
                 }
             }
@@ -492,13 +521,19 @@ namespace BotRunner
                     Guid = go.Guid,
                     ObjectType = (uint)go.ObjectType,
                     Facing = go.Facing,
+                    ScaleX = go.ScaleX,
                 },
                 DisplayId = go.DisplayId,
                 GoState = (uint)go.GoState,
                 GameObjectType = go.TypeId,
                 Flags = go.Flags,
+                DynamicFlags = (uint)go.DynamicFlags,
                 Level = go.Level,
+                FactionTemplate = go.FactionTemplate,
                 Entry = go.Entry,
+                ArtKit = go.ArtKit,
+                AnimProgress = go.AnimProgress,
+                Name = go.Name ?? string.Empty,
             };
 
             if (pos != null)
@@ -507,6 +542,59 @@ namespace BotRunner
             }
 
             return protoGo;
+        }
+
+        private static Game.UnitSnapshot BuildUnitSnapshot(IWoWUnit unit, Game.WoWUnit protoUnit, float distanceToPlayer)
+        {
+            var snapshot = new Game.UnitSnapshot
+            {
+                Guid = protoUnit.GameObject.Base.Guid,
+                Entry = protoUnit.GameObject.Entry,
+                Name = protoUnit.GameObject.Name ?? string.Empty,
+                Facing = protoUnit.GameObject.Base.Facing,
+                MovementFlags = (uint)protoUnit.MovementFlags,
+                Health = protoUnit.Health,
+                MaxHealth = protoUnit.MaxHealth,
+                Level = protoUnit.GameObject.Level,
+                UnitFlags = protoUnit.UnitFlags,
+                DistanceToPlayer = distanceToPlayer,
+                BoundingRadius = protoUnit.BoundingRadius,
+                CombatReach = protoUnit.CombatReach,
+                NpcFlags = (uint)protoUnit.NpcFlags,
+                TargetGuid = protoUnit.TargetGuid,
+                IsPlayer = protoUnit.GameObject.Base.ObjectType == (uint)WoWObjectType.Player,
+            };
+
+            if (protoUnit.GameObject.Base.Position != null)
+            {
+                snapshot.Position = new Game.Position
+                {
+                    X = protoUnit.GameObject.Base.Position.X,
+                    Y = protoUnit.GameObject.Base.Position.Y,
+                    Z = protoUnit.GameObject.Base.Position.Z,
+                };
+            }
+
+            TryPopulate(() => snapshot.HasSpline = unit.SplineFlags != SplineFlags.None || (uint)(unit.SplineNodes?.Count ?? 0) > 0, "NearbyUnit.HasSpline");
+            TryPopulate(() => snapshot.SplineFlags = (uint)unit.SplineFlags, "NearbyUnit.SplineFlags");
+            TryPopulate(() => snapshot.SplineTimePassed = unit.SplineTimePassed, "NearbyUnit.SplineTimePassed");
+            TryPopulate(() => snapshot.SplineDuration = unit.SplineDuration, "NearbyUnit.SplineDuration");
+            TryPopulate(() => snapshot.SplineNodeCount = (uint)(unit.SplineNodes?.Count ?? 0), "NearbyUnit.SplineNodeCount");
+            TryPopulate(() =>
+            {
+                var finalDestination = unit.SplineFinalDestination;
+                if (finalDestination != null)
+                {
+                    snapshot.SplineFinalDestination = new Game.Position
+                    {
+                        X = finalDestination.X,
+                        Y = finalDestination.Y,
+                        Z = finalDestination.Z,
+                    };
+                }
+            }, "NearbyUnit.SplineFinalDestination");
+
+            return snapshot;
         }
 
         /// <summary>

@@ -100,12 +100,21 @@ dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj
 # Transfer-history contract tests
 dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~TransferHistory|FullyQualifiedName~PromptFunctionBase" --logger "console;verbosity=minimal"
 
-# Prompt function tests (requires local Ollama)
+# Prompt function deterministic tests (uses ScriptedPromptRunner; no model/network)
 dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~IntentionParserFunctionTests|FullyQualifiedName~GMCommandGeneratorFunctionTests|FullyQualifiedName~CharacterSkillPrioritizationFunctionTests" --logger "console;verbosity=minimal"
+
+# Prompt function Ollama integration tests
+dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "Category=Integration" --logger "console;verbosity=minimal"
 
 # Repository smoke tests (requires MaNGOS database)
 dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~MangosRepositoryTest" --logger "console;verbosity=minimal"
 ```
+
+Ollama integration tests are opt-in through `Category=Integration`. They require a local Ollama endpoint at `http://localhost:11434` and the models used by the test classes:
+
+- `deepseek-r1` for `IntentionParserOllamaIntegrationTests`
+- `llama3` for `GMCommandGeneratorOllamaIntegrationTests`
+- `deepseekr1:14b` for `CharacterSkillPrioritizationOllamaIntegrationTests`
 
 ### Visual Studio
 
@@ -130,7 +139,15 @@ dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj
 
 ## Mocking
 
-For AI service tests, mock the OpenAI/Azure AI client:
+For prompt function tests, prefer the local `ScriptedPromptRunner` test double so default tests do not call a live model:
+
+```csharp
+var runner = new ScriptedPromptRunner(_ => "ACTION: GOTO 1234 5678 90");
+```
+
+For provider integration tests, keep the test tagged with `Category=Integration` and document the endpoint/model prerequisites.
+
+For lower-level AI provider tests, mock the OpenAI/Azure AI client:
 
 ```csharp
 var mockClient = new Mock<IAIClient>();

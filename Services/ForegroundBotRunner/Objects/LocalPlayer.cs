@@ -63,45 +63,74 @@ namespace ForegroundBotRunner.Objects
             }
         }
 
+        internal static bool EvaluateGhostFormState(
+            uint health,
+            uint playerFlags,
+            uint[]? bytes1,
+            int memoryGhostFlag,
+            string? luaGhostValue,
+            Position corpsePos)
+        {
+            const uint playerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
+            const uint standStateMask = 0xFF;
+            const uint standStateDead = 7; // UNIT_STAND_STATE_DEAD
+
+            var hasGhostFlag = (playerFlags & playerFlagGhost) != 0;
+            var standDead = bytes1 is { Length: > 0 } && (bytes1[0] & standStateMask) == standStateDead;
+
+            // Descriptor-backed state is authoritative for snapshot parity.
+            if (hasGhostFlag)
+                return true;
+
+            // Corpse state should not be treated as ghost.
+            if (health == 0 || standDead)
+                return false;
+
+            // Memory ghost flag can flicker in transition states; only trust it when health is non-zero.
+            if (memoryGhostFlag != 0 && health > 0)
+                return true;
+
+            if (!string.IsNullOrWhiteSpace(luaGhostValue))
+                return luaGhostValue == "1";
+
+            // Final fallback: ghosts typically have near-1 HP and a known corpse location.
+            // Exclude health==0 so corpse state is not misclassified as ghost.
+            return health > 0 && health <= 1 && (corpsePos.X != 0 || corpsePos.Y != 0 || corpsePos.Z != 0);
+        }
+
         public bool InGhostForm
         {
             get
             {
-                const uint playerFlagGhost = 0x10; // PLAYER_FLAGS_GHOST
-                const uint standStateMask = 0xFF;
-                const uint standStateDead = 7; // UNIT_STAND_STATE_DEAD
-
-                var health = Health;
-                var hasGhostFlag = (((uint)PlayerFlags) & playerFlagGhost) != 0;
-                var standDead = Bytes1.Length > 0 && (Bytes1[0] & standStateMask) == standStateDead;
-
-                // Descriptor-backed state is authoritative for snapshot parity.
-                if (hasGhostFlag)
-                    return true;
-
-                // Corpse state should not be treated as ghost.
-                if (health == 0 || standDead)
-                    return false;
-
-                // Memory ghost flag can flicker in transition states; only trust it when health is non-zero.
-                if (MemoryManager.ReadInt(Offsets.Player.IsGhost) != 0 && health > 0)
-                    return true;
-
                 try
                 {
-                    var result = Functions.LuaCallWithResult("{0} = UnitIsGhost('player')");
-                    if (result.Length > 0)
-                        return result[0] == "1";
+                    var health = Health;
+                    string? luaGhostValue = null;
+
+                    try
+                    {
+                        var result = Functions.LuaCallWithResult("{0} = UnitIsGhost('player')");
+                        if (result.Length > 0)
+                            luaGhostValue = result[0];
+                    }
+                    catch
+                    {
+                        // Fall through to structural heuristic.
+                    }
+
+                    return EvaluateGhostFormState(
+                        health,
+                        (uint)PlayerFlags,
+                        Bytes1,
+                        MemoryManager.ReadInt(Offsets.Player.IsGhost),
+                        luaGhostValue,
+                        CorpsePosition);
                 }
                 catch
                 {
-                    // Fall through to structural heuristic.
+                    // During world transfers the local-player object can be temporarily unstable.
+                    return false;
                 }
-
-                // Final fallback: ghosts typically have near-1 HP and a known corpse location.
-                // Exclude health==0 so corpse state is not misclassified as ghost.
-                var corpsePos = CorpsePosition;
-                return health > 0 && health <= 1 && (corpsePos.X != 0 || corpsePos.Y != 0 || corpsePos.Z != 0);
             }
         }
 

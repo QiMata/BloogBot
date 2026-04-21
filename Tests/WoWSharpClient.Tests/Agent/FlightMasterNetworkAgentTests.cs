@@ -36,6 +36,29 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
+        public void Constructor_RegistersTaxiReplyAndStatusHandlers()
+        {
+            var showTaxiNodes = new Subject<ReadOnlyMemory<byte>>();
+            var activateTaxiReply = new Subject<ReadOnlyMemory<byte>>();
+            var taxiNodeStatus = new Subject<ReadOnlyMemory<byte>>();
+            var disconnects = new Subject<Exception?>();
+            var mockWc = new Mock<IWorldClient>();
+            mockWc.SetupGet(x => x.WhenDisconnected).Returns(disconnects.AsObservable());
+            mockWc.Setup(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_SHOWTAXINODES))
+                .Returns(showTaxiNodes.AsObservable());
+            mockWc.Setup(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_ACTIVATETAXIREPLY))
+                .Returns(activateTaxiReply.AsObservable());
+            mockWc.Setup(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_TAXINODE_STATUS))
+                .Returns(taxiNodeStatus.AsObservable());
+
+            using var agent = new FlightMasterNetworkClientComponent(mockWc.Object, _mockLogger.Object);
+
+            mockWc.Verify(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_SHOWTAXINODES), Times.Once);
+            mockWc.Verify(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_ACTIVATETAXIREPLY), Times.Once);
+            mockWc.Verify(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_TAXINODE_STATUS), Times.Once);
+        }
+
+        [Fact]
         public void Constructor_WithNullWorldClient_ThrowsArgumentNullException()
         {
             Assert.Throws<ArgumentNullException>(() => new FlightMasterNetworkClientComponent(null!, _mockLogger.Object));
@@ -380,6 +403,29 @@ namespace WoWSharpClient.Tests.Agent
             await _flightMasterAgent.CloseTaxiMapAsync();
             Assert.False(_flightMasterAgent.IsTaxiMapOpen);
             Assert.Empty(_flightMasterAgent.AvailableTaxiNodes);
+        }
+
+        [Fact]
+        public async Task CloseTaxiMapAsync_WhenCurrentNodeKnown_ClearsCurrentNodeId()
+        {
+            var subject = new Subject<ReadOnlyMemory<byte>>();
+            var mockWc = new Mock<IWorldClient>();
+            mockWc.Setup(x => x.RegisterOpcodeHandler(GameData.Core.Enums.Opcode.SMSG_SHOWTAXINODES))
+                .Returns(subject.AsObservable());
+            var agent = new FlightMasterNetworkClientComponent(mockWc.Object, _mockLogger.Object);
+
+            var payload = new byte[20];
+            BitConverter.GetBytes(1u).CopyTo(payload, 0);
+            BitConverter.GetBytes(0x1234UL).CopyTo(payload, 4);
+            BitConverter.GetBytes(23u).CopyTo(payload, 12);
+            BitConverter.GetBytes((1u << 23) | (1u << 25)).CopyTo(payload, 16);
+
+            subject.OnNext(payload);
+            Assert.Equal(23u, agent.CurrentNodeId);
+
+            await agent.CloseTaxiMapAsync();
+
+            Assert.Null(agent.CurrentNodeId);
         }
 
         [Fact]

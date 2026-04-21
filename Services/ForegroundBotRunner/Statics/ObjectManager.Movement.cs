@@ -71,6 +71,15 @@ namespace ForegroundBotRunner.Statics
 
             try
             {
+                var shouldUseGhostForwardInput = ShouldUseGhostForwardKeyInput(Player, bits);
+                if (shouldUseGhostForwardInput)
+                {
+                    ThreadSynchronizer.SimulateForwardKeyPress();
+                    bits &= ~ControlBits.Front;
+                    if (bits == ControlBits.Nothing)
+                        return;
+                }
+
                 int tickCount = Environment.TickCount;
                 var expandedBits = ExpandControlBits(bits);
                 ThreadSynchronizer.RunOnMainThread(() =>
@@ -125,6 +134,15 @@ namespace ForegroundBotRunner.Statics
 
             try
             {
+                var shouldUseGhostForwardInput = ShouldUseGhostForwardKeyInput(Player, bits);
+                if (shouldUseGhostForwardInput)
+                {
+                    ThreadSynchronizer.SimulateForwardKeyRelease();
+                    bits &= ~ControlBits.Front;
+                    if (bits == ControlBits.Nothing)
+                        return;
+                }
+
                 int tickCount = Environment.TickCount;
                 var expandedBits = ExpandControlBits(bits);
                 ThreadSynchronizer.RunOnMainThread(() =>
@@ -139,6 +157,21 @@ namespace ForegroundBotRunner.Statics
             {
                 DiagLog($"[StopMovement] exception bits={bits}: {ex}");
                 throw;
+            }
+        }
+
+        internal static bool ShouldUseGhostForwardKeyInput(IWoWLocalPlayer? player, ControlBits bits)
+        {
+            if ((bits & ControlBits.Front) == 0 || player == null)
+                return false;
+
+            try
+            {
+                return ((uint)player.PlayerFlags & (uint)PlayerFlags.PLAYER_FLAGS_GHOST) != 0;
+            }
+            catch
+            {
+                return false;
             }
         }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using BotRunner.Travel;
 using WoWStateManager.Settings;
 using Xunit;
@@ -10,7 +11,7 @@ namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 /// <summary>
 /// Fixture for Arathi Basin tests. Launches 20 background bots: 10 Horde and
 /// 10 Alliance.
-/// Fixture prep handles revive/level/teleport/GM-off; the coordinator handles queue and entry only.
+/// Fixture prep handles revive/level/teleport/GM-off; StateManager/BotRunner handle faction grouping, queue, and entry.
 /// </summary>
 public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
 {
@@ -20,6 +21,12 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
     public const uint AbMapId = 529;
     public const string HordeLeaderAccount = "ABBOT1";
     public const string AllianceLeaderAccount = "ABBOTA1";
+    internal static readonly IReadOnlyList<string> HordeAccountsOrdered = Enumerable.Range(0, HordeBotCount)
+        .Select(index => $"ABBOT{index + 1}")
+        .ToArray();
+    internal static readonly IReadOnlyList<string> AllianceAccountsOrdered = Enumerable.Range(0, AllianceBotCount)
+        .Select(index => $"ABBOTA{index + 1}")
+        .ToArray();
 
     private static readonly string[] HordeClasses =
     [
@@ -74,14 +81,10 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
     protected override int TargetLevel => BattlemasterData.GetMinimumLevel(BattlemasterData.BattlegroundType.ArathiBasin);
 
     protected override IReadOnlyCollection<string> HordeAccounts
-        => Enumerable.Range(0, HordeBotCount)
-            .Select(index => $"ABBOT{index + 1}")
-            .ToArray();
+        => HordeAccountsOrdered;
 
     protected override IReadOnlyCollection<string> AllianceAccounts
-        => Enumerable.Range(0, AllianceBotCount)
-            .Select(index => $"ABBOTA{index + 1}")
-            .ToArray();
+        => AllianceAccountsOrdered;
 
     protected override TeleportTarget HordeQueueLocation => new(
         (int)BattlemasterData.OrgrimmarAb.MapId,
@@ -123,6 +126,9 @@ public class ArathiBasinFixture : BattlegroundCoordinatorFixtureBase
 
         return bots;
     }
+
+    internal Task<Communication.ResponseResult> SetRuntimeCoordinatorEnabledAsync(bool enabled)
+        => SetCoordinatorEnabledAsync(enabled);
 }
 
 [CollectionDefinition(Name)]

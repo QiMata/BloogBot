@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Serilog; // TODO: migrate to ILogger when DI is available
@@ -75,24 +74,29 @@ public static class NavigationDllResolver
         var baseDir = AppContext.BaseDirectory;
         var arch = RuntimeInformation.ProcessArchitecture;
 
-        // Try platform-specific subdirectory first (x86/ or x64/)
-        var subdir = arch == Architecture.X86 ? "x86" : "x64";
-        var platformPath = Path.Combine(baseDir, subdir, dllFileName);
-
-        if (File.Exists(platformPath) && NativeLibrary.TryLoad(platformPath, out var handle))
+        foreach (var candidatePath in GetCandidatePaths(baseDir, arch, dllFileName))
         {
-            Log.Information("[NavigationDllResolver] Loaded {Arch} from {Path}", arch, platformPath);
-            return handle;
-        }
-
-        // Fall back to default location
-        var defaultPath = Path.Combine(baseDir, dllFileName);
-        if (File.Exists(defaultPath) && NativeLibrary.TryLoad(defaultPath, out handle))
-        {
-            Log.Information("[NavigationDllResolver] Loaded from default {Path}", defaultPath);
-            return handle;
+            if (File.Exists(candidatePath) && NativeLibrary.TryLoad(candidatePath, out var handle))
+            {
+                Log.Information("[NavigationDllResolver] Loaded {Arch} {Library} from {Path}", arch, dllFileName, candidatePath);
+                return handle;
+            }
         }
 
         return IntPtr.Zero;
+    }
+
+    internal static IReadOnlyList<string> GetCandidatePaths(string baseDir, Architecture arch, string dllFileName)
+    {
+        var rootPath = Path.Combine(baseDir, dllFileName);
+        var x64Path = Path.Combine(baseDir, "x64", dllFileName);
+        var x86Path = Path.Combine(baseDir, "x86", dllFileName);
+
+        return arch switch
+        {
+            Architecture.X86 => [x86Path, rootPath],
+            Architecture.X64 => [rootPath, x64Path],
+            _ => [rootPath, x64Path, x86Path]
+        };
     }
 }

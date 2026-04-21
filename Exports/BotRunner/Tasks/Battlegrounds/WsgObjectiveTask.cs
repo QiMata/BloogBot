@@ -80,6 +80,7 @@ public class WsgObjectiveTask : BotTask, IBotTask
 
             case WsgState.PickupFlag:
                 if (_targetFlag == null) { _state = WsgState.FindObjective; return; }
+                ObjectManager.ForceStopImmediate();
                 _targetFlag.Interact(); // CMSG_GAMEOBJ_USE
                 _state = WsgState.CarryFlagToBase;
                 Logger.LogInformation("[WSG] Picking up flag!");
@@ -102,7 +103,10 @@ public class WsgObjectiveTask : BotTask, IBotTask
                 var ownFlag = ObjectManager.GameObjects
                     .FirstOrDefault(go => go.Entry == ownFlagEntry);
                 if (ownFlag != null)
+                {
+                    ObjectManager.ForceStopImmediate();
                     ownFlag.Interact();
+                }
                 Logger.LogInformation("[WSG] Flag captured!");
                 _state = WsgState.FindObjective; // Loop for next flag
                 break;

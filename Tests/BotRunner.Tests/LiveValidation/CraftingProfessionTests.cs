@@ -51,7 +51,7 @@ public class CraftingProfessionTests
         Assert.Equal(0, metrics.BandageSlotsBefore);
         Assert.Equal(0, metrics.ClothSlotsAfter);
         Assert.Equal(1, metrics.BandageSlotsAfter);
-        Assert.Equal(1, metrics.BagItemCountAfter);
+        Assert.Equal(metrics.BagItemCountBefore, metrics.BagItemCountAfter);
         Assert.InRange(metrics.CraftLatencyMs, 1, CraftTimeoutMs);
     }
 
@@ -59,8 +59,19 @@ public class CraftingProfessionTests
     {
         await _bot.EnsureCleanSlateAsync(account, label);
 
-        _output.WriteLine($"[{label}] Clearing bags for deterministic craft verification.");
-        await _bot.BotClearInventoryAsync(account);
+        await _bot.RefreshSnapshotsAsync();
+        var baseline = await _bot.GetSnapshotAsync(account);
+        var charName = baseline?.CharacterName ?? string.Empty;
+        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(charName), $"{label}: character name not available for .reset items.");
+
+        _output.WriteLine($"[{label}] Resetting items for deterministic craft verification.");
+        await _bot.ResetItemsAsync(charName);
+        await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => (snapshot.Player?.BagContents?.Count ?? 1) == 0,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 250,
+            progressLabel: $"{label} reset items");
 
         _output.WriteLine($"[{label}] Teaching First Aid apprentice + Linen Bandage recipe.");
         await _bot.BotLearnSpellAsync(account, FirstAidApprentice);
@@ -89,6 +100,7 @@ public class CraftingProfessionTests
         var before = await _bot.GetSnapshotAsync(account);
         var clothSlotsBefore = CountItemSlots(before, LinenClothItem);
         var bandageSlotsBefore = CountItemSlots(before, LinenBandageItem);
+        var bagItemCountBefore = before?.Player?.BagContents?.Count ?? 0;
 
         _output.WriteLine($"[{label}] Casting Linen Bandage recipe via ActionType.CastSpell.");
         var craftTimer = Stopwatch.StartNew();
@@ -117,7 +129,7 @@ public class CraftingProfessionTests
         _output.WriteLine(
             $"[{label}] craft metrics: spellListSynced={spellsKnown}, clothPrepared={clothPrepared}, crafted={crafted}, " +
             $"cloth {clothSlotsBefore}->{clothSlotsAfter}, bandage {bandageSlotsBefore}->{bandageSlotsAfter}, " +
-            $"bagItems={bagItemCountAfter}, latencyMs={craftTimer.ElapsedMilliseconds}");
+            $"bagItems {bagItemCountBefore}->{bagItemCountAfter}, latencyMs={craftTimer.ElapsedMilliseconds}");
 
         if (!crafted)
             _bot.DumpSnapshotDiagnostics(after, label);
@@ -128,6 +140,7 @@ public class CraftingProfessionTests
             crafted,
             clothSlotsBefore,
             bandageSlotsBefore,
+            bagItemCountBefore,
             clothSlotsAfter,
             bandageSlotsAfter,
             bagItemCountAfter,
@@ -143,6 +156,7 @@ public class CraftingProfessionTests
         bool Crafted,
         int ClothSlotsBefore,
         int BandageSlotsBefore,
+        int BagItemCountBefore,
         int ClothSlotsAfter,
         int BandageSlotsAfter,
         int BagItemCountAfter,

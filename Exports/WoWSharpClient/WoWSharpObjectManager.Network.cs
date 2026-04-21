@@ -452,6 +452,10 @@ namespace WoWSharpClient
                                             obj.ObjectType,
                                             "update");
                                     }
+                                    if (isLocalPlayer)
+                                    {
+                                        RestoreLocalPlayerControlFromHydratedUpdate();
+                                    }
                                     FinalizeUpdatedObject(obj, index, update.Guid);
 
                                     break;
@@ -737,6 +741,34 @@ namespace WoWSharpClient
             if (_activePet != null && guid == _activePet.Guid && obj is WoWUnit petUnit)
             {
                 _activePet.CopyFrom(petUnit);
+            }
+        }
+
+        private void RestoreLocalPlayerControlFromHydratedUpdate()
+        {
+            if (Player is not WoWLocalPlayer localPlayer
+                || PlayerGuid.FullGuid == 0
+                || localPlayer.Guid != PlayerGuid.FullGuid
+                || HasPendingWorldEntry
+                || _hasExplicitClientControlLockout)
+            {
+                return;
+            }
+
+            if (_isInControl && !_isBeingTeleported)
+            {
+                return;
+            }
+
+            Log.Information("[LocalPlayer-Update] Taking control from hydrated update");
+            _ = _woWClient.SendSetActiveMoverAsync(PlayerGuid.FullGuid);
+            _isInControl = true;
+            _hasExplicitClientControlLockout = false;
+            _isBeingTeleported = false;
+
+            if (_movementController == null)
+            {
+                InitializeMovementController();
             }
         }
 

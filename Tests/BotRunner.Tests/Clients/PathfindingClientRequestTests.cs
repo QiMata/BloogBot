@@ -7,7 +7,7 @@ namespace BotRunner.Tests.Clients;
 public class PathfindingClientRequestTests
 {
     [Fact]
-    public void GetPath_WithNearbyObjects_SendsOverlayInRequest()
+    public void GetPathResult_WithNearbyObjects_SendsOverlayAndReturnsMetadata()
     {
         var expectedPath = new[]
         {
@@ -18,8 +18,23 @@ public class PathfindingClientRequestTests
         {
             Path = new CalculatePathResponse
             {
-                Result = "native_path",
+                Result = "blocked_by_dynamic_overlay",
                 RawCornerCount = (uint)expectedPath.Length,
+                HasBlockedSegment = true,
+                BlockedSegmentIndex = 1,
+                BlockedReason = "dynamic_overlay",
+                MaxAffordance = PathSegmentAffordance.Cliff,
+                PathSupported = false,
+                CliffCount = 1,
+                TotalZLoss = 7.5f,
+                MaxSlopeAngleDeg = 52.5f,
+                JumpGapCount = 2,
+                SafeDropCount = 3,
+                UnsafeDropCount = 1,
+                BlockedCount = 4,
+                MaxClimbHeight = 1.25f,
+                MaxGapDistance = 2.5f,
+                MaxDropHeight = 7.5f,
             }
         });
         client.Response.Path.Corners.Add(expectedPath);
@@ -50,16 +65,32 @@ public class PathfindingClientRequestTests
             }
         };
 
-        var path = client.GetPath(
+        var result = client.GetPathResult(
             1,
             new Position(1f, 2f, 3f),
             new Position(4f, 5f, 6f),
             nearbyObjects,
             smoothPath: true);
 
-        Assert.Equal(expectedPath.Length, path.Length);
-        Assert.Equal(expectedPath[0].X, path[0].X);
-        Assert.Equal(expectedPath[1].Z, path[1].Z);
+        Assert.Equal(expectedPath.Length, result.Corners.Length);
+        Assert.Equal(expectedPath[0].X, result.Corners[0].X);
+        Assert.Equal(expectedPath[1].Z, result.Corners[1].Z);
+        Assert.Equal("blocked_by_dynamic_overlay", result.Result);
+        Assert.Equal((uint)expectedPath.Length, result.RawCornerCount);
+        Assert.Equal(1, result.BlockedSegmentIndex);
+        Assert.Equal("dynamic_overlay", result.BlockedReason);
+        Assert.Equal(PathSegmentAffordance.Cliff, result.MaxAffordance);
+        Assert.False(result.PathSupported);
+        Assert.Equal((uint)1, result.CliffCount);
+        Assert.Equal(7.5f, result.TotalZLoss);
+        Assert.Equal(52.5f, result.MaxSlopeAngleDeg);
+        Assert.Equal((uint)2, result.JumpGapCount);
+        Assert.Equal((uint)3, result.SafeDropCount);
+        Assert.Equal((uint)1, result.UnsafeDropCount);
+        Assert.Equal((uint)4, result.BlockedCount);
+        Assert.Equal(1.25f, result.MaxClimbHeight);
+        Assert.Equal(2.5f, result.MaxGapDistance);
+        Assert.Equal(7.5f, result.MaxDropHeight);
 
         var sent = Assert.IsType<CalculatePathRequest>(client.LastRequest?.Path);
         Assert.Equal(1u, sent.MapId);
@@ -79,6 +110,8 @@ public class PathfindingClientRequestTests
             {
                 Result = "native_path",
                 RawCornerCount = 0,
+                BlockedReason = "none",
+                PathSupported = true,
             }
         });
 

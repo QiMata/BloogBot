@@ -769,6 +769,22 @@ namespace ForegroundBotRunner.Statics
         public bool IsInMapTransition => _isContinentTransition || PauseDuringTeleport
             || MemoryManager.ReadUint(Offsets.Map.ContinentId) is 0xFF or 0xFFFFFFFF;
 
+        internal static string GetDiagnosticPlayerLabel(Func<string?>? getPlayerName, bool isInTransition)
+        {
+            if (isInTransition)
+                return "(transition)";
+
+            try
+            {
+                var playerName = getPlayerName?.Invoke();
+                return string.IsNullOrWhiteSpace(playerName) ? "(null)" : playerName;
+            }
+            catch
+            {
+                return "(unavailable)";
+            }
+        }
+
 
 
         internal async Task StartSimplePollingLoop()
@@ -818,18 +834,20 @@ namespace ForegroundBotRunner.Statics
                         LoginStateMonitor.CaptureSnapshot($"Periodic_{loopCount}");
                     }
 
-                    // Log state every 20 iterations (every 10 seconds)
-                    if (loopCount % 20 == 1)
-                    {
-                        DiagLog($"SimplePolling[{loopCount}]: IsLoggedIn={isLoggedIn}, IsLoadingWorld={isLoadingWorld}, IsConnected={isConnected}, LoginState={loginState}, HasEnteredWorld={HasEnteredWorld}, Player={(Player != null ? Player.Name : "(null)")}, LogoutCount={_consecutiveLoggedOutCount}");
-                    }
-
                     // Detect charselect state reset: if LoginState is charselect AND HasEnteredWorld is true AND NOT logged in,
                     // the player logged out (on servers where events don't fire)
                     // IMPORTANT: Use debounce to avoid resetting on brief GUID=0 glitches
                     // IMPORTANT: Skip during continent transitions (ContinentId == 0xFFFFFFFF while HasEnteredWorld)
                     // — zeppelin/boat crossings temporarily clear the GUID and ContinentId
                     bool isContinentTransition = HasEnteredWorld && (continentId == 0xFFFFFFFF || continentId == 0xFF);
+                    bool diagnosticTransition = isContinentTransition || PauseDuringTeleport;
+
+                    // Log state every 20 iterations (every 10 seconds)
+                    if (loopCount % 20 == 1)
+                    {
+                        var playerLabel = GetDiagnosticPlayerLabel(() => Player?.Name, diagnosticTransition);
+                        DiagLog($"SimplePolling[{loopCount}]: IsLoggedIn={isLoggedIn}, IsLoadingWorld={isLoadingWorld}, IsConnected={isConnected}, LoginState={loginState}, HasEnteredWorld={HasEnteredWorld}, Player={playerLabel}, LogoutCount={_consecutiveLoggedOutCount}");
+                    }
 
                     // Detect instance/map transitions: map ID changed to a new valid map.
                     // Uses prevContId (saved before update) so the check isn't defeated by the
@@ -927,7 +945,8 @@ namespace ForegroundBotRunner.Statics
 
                             if (loopCount % 20 == 1)
                             {
-                                DiagLog($"SimplePolling[{loopCount}]: Enumerated {ObjectsBuffer.Count} objects (Player={Player?.Name})");
+                                var playerLabel = GetDiagnosticPlayerLabel(() => Player?.Name, false);
+                                DiagLog($"SimplePolling[{loopCount}]: Enumerated {ObjectsBuffer.Count} objects (Player={playerLabel})");
                             }
                         }
                         catch (Exception ex)

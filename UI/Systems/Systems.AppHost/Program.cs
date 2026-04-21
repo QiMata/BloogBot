@@ -1,40 +1,49 @@
-// Configuration constants
 using Aspire.Hosting;
+using System;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-// Add MySQL container for WoW database
-var database = builder.AddContainer("wow-vanilla-database", WowServerConfig.DbContainerImage)
-    .WithEnvironment("MYSQL_APP_USER", WowServerConfig.DbUser)
-    .WithEnvironment("MYSQL_APP_PASSWORD", WowServerConfig.DbPassword)
-    .WithVolume(WowServerConfig.Volumes.MySqlData, WowServerConfig.Volumes.MySqlPath)
-    .WithEndpoint("mysql", x =>
+var wowConfig = WowServerConfig.Load(builder.Configuration);
+var resolvedPaths = wowConfig.ResolvePaths();
+wowConfig.ValidateBindMountSources(resolvedPaths);
+
+Console.WriteLine("Systems.AppHost resolved bind-mount paths:");
+Console.WriteLine($"  Base:   {resolvedPaths.BaseDirectory}");
+Console.WriteLine($"  Config: {resolvedPaths.ConfigDir}");
+Console.WriteLine($"  Data:   {resolvedPaths.DataDir}");
+Console.WriteLine($"  DB image:  {wowConfig.DatabaseImage}");
+Console.WriteLine($"  WoW image: {wowConfig.ServerImage}");
+Console.WriteLine("Readiness: wow-vanilla-server waits for wow-vanilla-database before starting.");
+
+var database = builder.AddContainer("wow-vanilla-database", wowConfig.DatabaseImage)
+    .WithEnvironment("MYSQL_APP_USER", wowConfig.DbUser)
+    .WithEnvironment("MYSQL_APP_PASSWORD", wowConfig.DbPassword)
+    .WithVolume(wowConfig.Volumes.MySqlData, wowConfig.Volumes.MySqlPath)
+    .WithEndpoint("mysql", endpoint =>
     {
-        x.TargetPort = WowServerConfig.Ports.MySql;
+        endpoint.TargetPort = wowConfig.Ports.MySql;
     });
 
-// Add WoW Vanilla server container
-var wowServer = builder.AddContainer("wow-vanilla-server", WowServerConfig.ServerContainerImage)
-    .WithEnvironment("MYSQL_APP_USER", WowServerConfig.DbUser)
-    .WithEnvironment("MYSQL_APP_PASSWORD", WowServerConfig.DbPassword)
+var wowServer = builder.AddContainer("wow-vanilla-server", wowConfig.ServerImage)
+    .WithEnvironment("MYSQL_APP_USER", wowConfig.DbUser)
+    .WithEnvironment("MYSQL_APP_PASSWORD", wowConfig.DbPassword)
     .WithEnvironment("DATABASE_HOSTNAME", database.GetEndpoint("mysql"))
-    .WithVolume(WowServerConfig.Volumes.LogData, WowServerConfig.Volumes.LogPath)
-    .WithBindMount($"{WowServerConfig.Paths.ConfigDir}/mangosd.conf.tpl", $"{WowServerConfig.Paths.ServerConfigPath}/mangosd.conf.tpl")
-    .WithBindMount($"{WowServerConfig.Paths.ConfigDir}/realmd.conf.tpl", $"{WowServerConfig.Paths.ServerConfigPath}/realmd.conf.tpl")
-    .WithBindMount($"{WowServerConfig.Paths.DataDir}/dbc", $"{WowServerConfig.Paths.ServerDataPath}/dbc")
-    .WithBindMount($"{WowServerConfig.Paths.DataDir}/maps", $"{WowServerConfig.Paths.ServerDataPath}/maps")
-    .WithBindMount($"{WowServerConfig.Paths.DataDir}/mmaps", $"{WowServerConfig.Paths.ServerDataPath}/mmaps")
-    .WithBindMount($"{WowServerConfig.Paths.DataDir}/vmaps", $"{WowServerConfig.Paths.ServerDataPath}/vmaps")
-    .WithEndpoint("mangos-world", x =>
+    .WithVolume(wowConfig.Volumes.LogData, wowConfig.Volumes.LogPath)
+    .WithBindMount(resolvedPaths.MangosConfigTemplate, $"{wowConfig.Paths.ServerConfigPath}/mangosd.conf.tpl")
+    .WithBindMount(resolvedPaths.RealmdConfigTemplate, $"{wowConfig.Paths.ServerConfigPath}/realmd.conf.tpl")
+    .WithBindMount(resolvedPaths.DbcDirectory, $"{wowConfig.Paths.ServerDataPath}/dbc")
+    .WithBindMount(resolvedPaths.MapsDirectory, $"{wowConfig.Paths.ServerDataPath}/maps")
+    .WithBindMount(resolvedPaths.MmapsDirectory, $"{wowConfig.Paths.ServerDataPath}/mmaps")
+    .WithBindMount(resolvedPaths.VmapsDirectory, $"{wowConfig.Paths.ServerDataPath}/vmaps")
+    .WithEndpoint("mangos-world", endpoint =>
     {
-        x.TargetPort = WowServerConfig.Ports.MangosWorld;
+        endpoint.TargetPort = wowConfig.Ports.MangosWorld;
     })
-    .WithEndpoint("mangos-realm", x =>
+    .WithEndpoint("mangos-realm", endpoint =>
     {
-        x.TargetPort = WowServerConfig.Ports.MangosRealm;
+        endpoint.TargetPort = wowConfig.Ports.MangosRealm;
     })
     .WithReference(database.GetEndpoint("mysql"));
-
 
 wowServer.WaitFor(database);
 

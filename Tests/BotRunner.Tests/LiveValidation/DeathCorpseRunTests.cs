@@ -35,6 +35,7 @@ public class DeathCorpseRunTests
     private const float MinRunbackImprovement = 25.0f;
     private const int MaxGraveyardTeleportSeconds = 15;
     private const int MaxRecoverySeconds = 120;
+    private const string RetryForegroundCrash001EnvVar = "WWOW_RETRY_FG_CRASH001";
 
     // Razor Hill — flat outdoor terrain, graveyard is nearby (~100y), navmesh can route.
     // Orgrimmar failed because pathfinding returned no_route for graveyard→corpse (460y, city navmesh).
@@ -68,15 +69,15 @@ public class DeathCorpseRunTests
     [SkippableFact]
     public async Task Death_ReleaseAndRetrieve_ResurrectsForegroundPlayer()
     {
-        // CRASH-001: WoW.exe ACCESS_VIOLATION at 0x00619CDF during ghost form.
-        // The crash is in WoW's own game loop (not our injected code) and happens
-        // 100% of the time during FG ghost movement near Razor Hill graveyard.
-        // 7 fix attempts ruled out all injection-side causes — this is a WoW client bug.
-        // See docs/CRASH_INVESTIGATION.md for full investigation log.
-        // BG test validates the same RetrieveCorpseTask logic without WoW.exe.
-        global::Tests.Infrastructure.Skip.If(true,
-            "CRASH-001: WoW.exe crashes in ghost form (ACCESS_VIOLATION at 0x00619CDF). " +
-            "WoW client bug — not fixable from injected code. BG test covers this path.");
+        // CRASH-001: WoW.exe historically hit ACCESS_VIOLATION at 0x00619CDF during
+        // foreground ghost runback. Keep it guarded by default so regular live runs
+        // cannot crash the local client; set WWOW_RETRY_FG_CRASH001=1 to validate a
+        // mitigation intentionally.
+        global::Tests.Infrastructure.Skip.If(
+            !string.Equals(Environment.GetEnvironmentVariable(RetryForegroundCrash001EnvVar), "1", StringComparison.OrdinalIgnoreCase),
+            "CRASH-001: FG corpse-run validation is opt-in because WoW.exe has historically crashed in ghost form. " +
+            $"Set {RetryForegroundCrash001EnvVar}=1 to retry the current mitigation. " +
+            "See Tests/BotRunner.Tests/LiveValidation/docs/CRASH_INVESTIGATION.md.");
 
         var fgAccount = _bot.FgAccountName;
         var fgChar = _bot.FgCharacterName;
