@@ -136,5 +136,86 @@ namespace WoWStateManager.Settings
         /// </summary>
         [JsonProperty("BuildConfig", NullValueHandling = NullValueHandling.Ignore)]
         public CharacterBuildConfig? BuildConfig { get; set; }
+
+        /// <summary>
+        /// P3: Full per-character "become raid-ready" specification. When present,
+        /// StateManager hands this off to BotRunner exactly once via
+        /// <c>ActionType.APPLY_LOADOUT</c>. BotRunner then executes the plan at
+        /// its own pace and reports completion through
+        /// <c>WoWActivitySnapshot.LoadoutStatus</c>. Null means "no loadout hand-off
+        /// is configured for this bot"; fixtures may still drive prep manually
+        /// during the P3 rollout.
+        /// </summary>
+        [JsonProperty("Loadout", NullValueHandling = NullValueHandling.Ignore)]
+        public LoadoutSpecSettings? Loadout { get; set; }
+    }
+
+    /// <summary>
+    /// P3: JSON-serializable mirror of the <c>Communication.LoadoutSpec</c> proto.
+    /// Kept as a plain POCO here so battleground config files stay human-editable;
+    /// the fixture translates this into the proto form before enqueuing the
+    /// <c>APPLY_LOADOUT</c> action.
+    /// </summary>
+    public sealed class LoadoutSpecSettings
+    {
+        [JsonProperty("TargetLevel", NullValueHandling = NullValueHandling.Ignore)]
+        public uint TargetLevel { get; set; }
+
+        [JsonProperty("HonorRank", NullValueHandling = NullValueHandling.Ignore)]
+        public uint HonorRank { get; set; }
+
+        [JsonProperty("RidingSkill", NullValueHandling = NullValueHandling.Ignore)]
+        public uint RidingSkill { get; set; }
+
+        [JsonProperty("MountSpellId", NullValueHandling = NullValueHandling.Ignore)]
+        public uint MountSpellId { get; set; }
+
+        [JsonProperty("ArmorSetId", NullValueHandling = NullValueHandling.Ignore)]
+        public uint ArmorSetId { get; set; }
+
+        [JsonProperty("SpellIdsToLearn", NullValueHandling = NullValueHandling.Ignore)]
+        public uint[]? SpellIdsToLearn { get; set; }
+
+        [JsonProperty("Skills", NullValueHandling = NullValueHandling.Ignore)]
+        public LoadoutSkillValueSettings[]? Skills { get; set; }
+
+        [JsonProperty("EquipItems", NullValueHandling = NullValueHandling.Ignore)]
+        public LoadoutEquipItemSettings[]? EquipItems { get; set; }
+
+        [JsonProperty("SupplementalItemIds", NullValueHandling = NullValueHandling.Ignore)]
+        public uint[]? SupplementalItemIds { get; set; }
+
+        [JsonProperty("ElixirItemIds", NullValueHandling = NullValueHandling.Ignore)]
+        public uint[]? ElixirItemIds { get; set; }
+
+        [JsonProperty("FactionReps", NullValueHandling = NullValueHandling.Ignore)]
+        public LoadoutFactionRepSettings[]? FactionReps { get; set; }
+
+        [JsonProperty("CompletedQuestIds", NullValueHandling = NullValueHandling.Ignore)]
+        public uint[]? CompletedQuestIds { get; set; }
+
+        [JsonProperty("TalentTemplate", NullValueHandling = NullValueHandling.Ignore)]
+        public string? TalentTemplate { get; set; }
+    }
+
+    public sealed class LoadoutEquipItemSettings
+    {
+        [JsonProperty("ItemId")] public uint ItemId { get; set; }
+        [JsonProperty("InventorySlot", NullValueHandling = NullValueHandling.Ignore)]
+        public uint InventorySlot { get; set; }
+    }
+
+    public sealed class LoadoutSkillValueSettings
+    {
+        [JsonProperty("SkillId")] public uint SkillId { get; set; }
+        [JsonProperty("Value")] public uint Value { get; set; }
+        [JsonProperty("Max", NullValueHandling = NullValueHandling.Ignore)]
+        public uint Max { get; set; }
+    }
+
+    public sealed class LoadoutFactionRepSettings
+    {
+        [JsonProperty("FactionId")] public uint FactionId { get; set; }
+        [JsonProperty("Standing")] public int Standing { get; set; }
     }
 }
