@@ -202,6 +202,30 @@ public sealed class BattlegroundFixtureConfigurationTests
         Assert.Equal(SettingsBotRunnerType.Foreground, allianceLeader.RunnerType);
     }
 
+    public static IEnumerable<object[]> BattlegroundFixtureInstances => new[]
+    {
+        new object[] { new WarsongGulchFixture() },
+        new object[] { new WarsongGulchObjectiveFixture() },
+        new object[] { new ArathiBasinFixture() },
+        new object[] { new AlteracValleyFixture() },
+    };
+
+    [Theory]
+    [MemberData(nameof(BattlegroundFixtureInstances))]
+    public void BattlegroundFixture_InheritsPvPHonorRankPrep(CoordinatorFixtureBase fixture)
+    {
+        // Every battleground fixture equips level-60 PvP gear that requires
+        // Grand Marshal / High Warlord rank. The base class runs the rank bump
+        // during PrepareOfflineAccountStateAsync — make sure each concrete
+        // fixture picks up that behaviour and uses the expected rank value.
+        var property = typeof(BattlegroundCoordinatorFixtureBase)
+            .GetProperty("PvPRankForLoadout", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            ?? throw new InvalidOperationException("PvPRankForLoadout property not found.");
+
+        var rank = Assert.IsType<int>(property.GetValue(fixture));
+        Assert.Equal(AlteracValleyLoadoutPlan.PvPRankForLoadout, rank);
+    }
+
     [Fact]
     public void AlteracValleyFixture_BuildsLeaderAndRaidLoadouts()
     {

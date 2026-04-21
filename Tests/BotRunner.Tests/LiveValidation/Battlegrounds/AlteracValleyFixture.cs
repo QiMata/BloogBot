@@ -124,12 +124,9 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
         return roster;
     }
 
-    protected override async Task PrepareOfflineAccountStateAsync()
-    {
-        await EnsureHonorRankForAccountsAsync(
-            AccountNames,
-            AlteracValleyLoadoutPlan.PvPRankForLoadout);
-    }
+    // BattlegroundCoordinatorFixtureBase.PrepareOfflineAccountStateAsync now handles
+    // PvP honor-rank hydration for every battleground fixture. No AV-specific
+    // override needed.
 
     internal IReadOnlyDictionary<string, AlteracValleyLoadoutPlan.AlteracValleyLoadout> BuildLoadoutMap()
     {

@@ -1199,6 +1199,21 @@ public abstract class BattlegroundCoordinatorFixtureBase : CoordinatorFixtureBas
     protected override Task PrepareBotsAsync()
         => PrepareBotsForBattlegroundAsync(TargetLevel, HordeAccounts, HordeQueueLocation, AllianceAccounts, AllianceQueueLocation);
 
+    /// <summary>
+    /// All battlegrounds use level-60 PvP loadouts that require high honor rank to
+    /// equip (e.g. Grand Marshal / High Warlord sets, rank 14). The honor fields
+    /// are persisted in the characters table, so we bump them while bots are
+    /// offline — they hydrate on next login and loadout equip no longer fails
+    /// silently on "requires rank X" server rejection.
+    /// </summary>
+    protected virtual int PvPRankForLoadout => Battlegrounds.AlteracValleyLoadoutPlan.PvPRankForLoadout;
+
+    protected override async Task PrepareOfflineAccountStateAsync()
+    {
+        await base.PrepareOfflineAccountStateAsync();
+        await EnsureHonorRankForAccountsAsync(AccountNames, PvPRankForLoadout);
+    }
+
     protected override async Task AfterPrepareAsync()
     {
         await base.AfterPrepareAsync();
