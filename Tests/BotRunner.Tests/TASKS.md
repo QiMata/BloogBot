@@ -51,6 +51,22 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-21
+- Pass result: `P4.1/P4.2 BotRunner snapshot coverage is green`
+- Last delta:
+  - Added snapshot-buffer assertions for the new `[SKILL]`, `[UI]`, `[ERROR]`, and `[SYSTEM]` message sources in `BotRunnerServiceSnapshotTests`.
+  - Added the gated heartbeat regression test that proves diagnostic message churn stays heartbeat-only until the 2-second interval elapses.
+  - Confirmed `GetDeltaMessages(...)` remains heartbeat-safe because it diffs by message content against the last full-snapshot baseline instead of assuming per-tick delivery.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceSnapshotTests" --logger "console;verbosity=minimal"` -> `passed (13/13)`
+- Files changed:
+  - `Tests/BotRunner.Tests/BotRunnerServiceSnapshotTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command:
+  - `rg -n "LoadoutTask|LearnSpellStep|AddItemStep|SetSkillStep|ExpectedAck" Exports/BotRunner Tests/BotRunner.Tests docs/TASKS.md`
+- Previous handoff preserved below.
+
 - Last updated: `2026-04-20`
 - Pass result: `WSG desired-party/objective coverage is green deterministically and live`
 - Last delta:

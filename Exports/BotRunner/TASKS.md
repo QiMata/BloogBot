@@ -32,6 +32,21 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-21
+- Pass result: `P4.1/P4.2 BotRunner plumbing shipped`
+- Last delta:
+  - `BotRunnerService.Messages` now buffers learned/unlearned spell, skill-update, item-added, error, and system-message events through the shared FG/BG event surface.
+  - `SnapshotChangeSignature` no longer counts recent chat/error buffer lengths, and `BotRunnerServiceSnapshotTests.Start_WhenOnlyDiagnosticMessagesChange_KeepsHeartbeatOnlyUntilHeartbeatInterval` pins the no-churn heartbeat behavior.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceSnapshotTests" --logger "console;verbosity=minimal"` -> `passed (13/13)`
+- Files changed:
+  - `Exports/BotRunner/BotRunnerService.Messages.cs`
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `rg -n "LoadoutTask|LearnSpellStep|AddItemStep|SetSkillStep|ExpectedAck" Exports/BotRunner Tests/BotRunner.Tests docs/TASKS.md`
+- Previous handoff preserved below.
+
 - Last updated: 2026-04-20
 - Active task: carry the now-green WSG desired-party/live-objective path forward into the next battleground objective slice.
 - Last delta:

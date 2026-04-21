@@ -20,6 +20,30 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-07` BG stop/use/cast packet trigger parity is part of the deterministic movement bundle: `ForceStopImmediate()` synchronously records `MSG_MOVE_STOP` before game-object use/cast packets, and server `0x7A` cast failure is named `TRY_AGAIN` (2026-04-15).
 
 ## Session Handoff
+### 2026-04-21
+- Pass result: `P4.1 BG SMSG-to-event parity is green`
+- Last delta:
+  - `WoWSharpEventEmitter`, `SpellHandler`, `WorldClient`, `WoWSharpObjectManager`, and `LootingNetworkClientComponent` now surface learned/unlearned spell, skill-update, item-added, attack/inventory/spell failure, and notification events through `IWoWEventHandler`.
+  - That closes the silent BG state-change gap that the next `P4.3` loadout-step work will consume.
+- Validation:
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpellHandlerTests|FullyQualifiedName~WoWSharpEventEmitterTests" --logger "console;verbosity=minimal"` -> `passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests|FullyQualifiedName~WoWSharpEventEmitterTests" --logger "console;verbosity=minimal"` -> `passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpEventEmitterTests|FullyQualifiedName~LootingNetworkClientComponentTests" --logger "console;verbosity=minimal"` -> `passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WorldClientAttackErrorTests|FullyQualifiedName~SpellHandlerTests" --logger "console;verbosity=minimal"` -> `passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WorldClientNotificationTests" --logger "console;verbosity=minimal"` -> `passed`
+- Files changed:
+  - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
+  - `Exports/WoWSharpClient/Handlers/SpellHandler.cs`
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+  - `Exports/WoWSharpClient/Networking/ClientComponents/LootingNetworkClientComponent.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+- Next command:
+  - `rg -n "LoadoutTask|LearnSpellStep|AddItemStep|SetSkillStep|ExpectedAck" Exports/BotRunner Tests/BotRunner.Tests docs/TASKS.md`
+- Previous handoff preserved below.
+
 - Last updated: `2026-04-19`
 - Pass result: `Early battleground-status handler registration is pinned for fresh WorldClient startup`
 - Last delta:

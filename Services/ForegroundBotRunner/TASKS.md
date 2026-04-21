@@ -37,6 +37,23 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
+### 2026-04-21
+- Pass result: `FG now emits the shared P4.1 spell/skill/item event surface`
+- Last delta:
+  - `WoWEventHandler` now raises learned/unlearned spell events, `ObjectManager.Spells.cs` / `ObjectManager.Interaction.cs` surface skill changes, and `ObjectManager.Inventory.cs` diffs bag snapshots to emit item-added events.
+  - This keeps the foreground runner aligned with the new BG event surface while leaving `P4.3` loadout advancement untouched for the next session.
+- Validation/tests run:
+  - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+- Files changed:
+  - `Services/ForegroundBotRunner/Statics/WoWEventHandler.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Spells.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+- Next command:
+  - `rg -n "LoadoutTask|LearnSpellStep|AddItemStep|SetSkillStep|ExpectedAck" Exports/BotRunner Tests/BotRunner.Tests docs/TASKS.md`
+- Previous handoff preserved below.
+
 - Last updated: `2026-04-17 (session 310)`
 - Pass result: `FG ACK corpus recorder now excludes raw-position/flight opcodes that WoW.exe never ACKs`
 - Last delta:

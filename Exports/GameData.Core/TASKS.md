@@ -57,6 +57,20 @@
 3. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-21
+- Current focus: `Shared P4.1 event contract is shipped; P4.3 consumption starts next session in BotRunner.`
+- Last delta:
+  - `IWoWEventHandler` gained `OnLearnedSpell`, `OnUnlearnedSpell`, `OnSkillUpdated`, and `OnItemAddedToBag` so FG and BG publish the same loadout-relevant contract surface.
+- Pass result: `delta shipped`
+- Validation/tests run:
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded`
+- Files changed:
+  - `Exports/GameData.Core/Interfaces/IWoWEventHandler.cs`
+  - `Exports/GameData.Core/TASKS.md`
+- Next queue file: `Exports/BotRunner/TASKS.md`
+- Next command: `rg -n "LoadoutTask|LearnSpellStep|AddItemStep|SetSkillStep|ExpectedAck" Exports/BotRunner Tests/BotRunner.Tests docs/TASKS.md`
+- Previous handoff preserved below.
+
 - Last updated: 2026-02-25
 - Current focus: `GDC-MISS-001`
 - Last delta: executed prior handoff command (`Get-Content Exports/Loader/TASKS.md`) and added resume-first/next-file continuity guards for one-by-one queue traversal.

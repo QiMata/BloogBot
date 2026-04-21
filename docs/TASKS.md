@@ -88,44 +88,44 @@ commands that have no authoritative SMSG (`.modify money`, `.setskill`,
 
 ### Sub-phases
 
-- [ ] **P4.1** Close BG SMSG → event parity gap
-  - [ ] P4.1.1 Add `OnLearnedSpell(spellId)` and `OnUnlearnedSpell(spellId)`
+- [x] **P4.1** Close BG SMSG → event parity gap
+  - [x] P4.1.1 Add `OnLearnedSpell(spellId)` and `OnUnlearnedSpell(spellId)`
     events to `Exports/GameData.Core/Interfaces/IWoWEventHandler.cs`. Fire
     from `SpellHandler.HandleLearnedSpell` / `HandleRemovedSpell`. Surface
     as `[SKILL] Learned spell <id>` / `[SKILL] Unlearned spell <id>` in
     `BotRunnerService.Messages.cs`.
-  - [ ] P4.1.2 Add `OnSkillUpdated(skillId, oldValue, newValue, maxValue)`
+  - [x] P4.1.2 Add `OnSkillUpdated(skillId, oldValue, newValue, maxValue)`
     event. Fire from whichever `SMSG_UPDATE_OBJECT` path mutates
     `IWoWLocalPlayer.SkillInfo` (locate the descriptor-walker site in
     `ObjectUpdate`-family handlers). Surface as
     `[SKILL] Skill <id> <old>→<new>/<max>`.
-  - [ ] P4.1.3 Add `OnItemAddedToBag(bag, slot, itemId, count)` event.
+  - [x] P4.1.3 Add `OnItemAddedToBag(bag, slot, itemId, count)` event.
     Fire from the inventory-change-success path
     (`LootingNetworkClientComponent.OnItemPushResultReceived` is the
     existing observable — mirror it into an `IWoWEventHandler` event so
     FG/BG parity is maintained). Surface as `[UI] Item <id> x<count>
     → bag <bag>/<slot>`.
-  - [ ] P4.1.4 Route `SMSG_ATTACKSWING_*`, `SMSG_INVENTORY_CHANGE_FAILURE`,
+  - [x] P4.1.4 Route `SMSG_ATTACKSWING_*`, `SMSG_INVENTORY_CHANGE_FAILURE`,
     and `SMSG_SPELL_FAILURE` through `FireOnErrorMessage` alongside their
     existing Rx/diagnostic channels. Today they're silent at the event
     layer (`WorldClient.cs:234-251`, `SpellHandler.cs:459`).
-  - [ ] P4.1.5 Register a handler for `SMSG_NOTIFICATION` (0x1CB) and
+  - [x] P4.1.5 Register a handler for `SMSG_NOTIFICATION` (0x1CB) and
     raise `OnSystemMessage(text)`.
-  - [ ] P4.1.6 Unit tests: each new event fires once per matching
+  - [x] P4.1.6 Unit tests: each new event fires once per matching
     inbound packet; `[SKILL]` / `[UI]` / `[ERROR]` prefixes land in
     `snapshot.RecentChatMessages` / `snapshot.RecentErrors` via the
     existing flush path.
 
-- [ ] **P4.2** Fix snapshot signature churn
-  - [ ] P4.2.1 Remove `RecentChatCount` + `RecentErrorCount` from
+- [x] **P4.2** Fix snapshot signature churn
+  - [x] P4.2.1 Remove `RecentChatCount` + `RecentErrorCount` from
     `SnapshotChangeSignature` in `Exports/BotRunner/BotRunnerService.cs`.
     Messages ride along on full snapshots that fire for real state
     changes + the 2s heartbeat.
-  - [ ] P4.2.2 Regression test: a stream of `[SYSTEM]`/`[SKILL]` messages
+  - [x] P4.2.2 Regression test: a stream of `[SYSTEM]`/`[SKILL]` messages
     arriving with no other state change must not trigger a full snapshot
     send; only the next heartbeat (or next real change) should carry
     them.
-  - [ ] P4.2.3 Confirm that test helpers still work: `GetDeltaMessages`
+  - [x] P4.2.3 Confirm that test helpers still work: `GetDeltaMessages`
     already handles the case where deltas arrive only on heartbeat ticks.
 
 - [ ] **P4.3** LoadoutTask event-driven step advancement
@@ -267,6 +267,53 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 | G10 | Movement counter semantics unverified                                | P2.2      |
 
 ---
+
+## Handoff (2026-04-21)
+
+- Completed: shipped `P4.1` and `P4.2` only. `P4.3`, `P4.4`, and `P4.5` were intentionally not started.
+- Commits:
+  - `06b39001` `feat(comm): P4.1 add OnLearnedSpell/OnUnlearnedSpell events (FG+BG)`
+  - `a9f9ba6b` `feat(comm): P4.1 add OnSkillUpdated event (FG+BG)`
+  - `1560495b` `feat(comm): P4.1 add OnItemAddedToBag event (FG+BG)`
+  - `35a05376` `feat(comm): P4.1 route attack/inventory/spell failures through OnErrorMessage`
+  - `58fbae48` `feat(comm): P4.1 register SMSG_NOTIFICATION -> OnSystemMessage`
+  - `b7293f1a` `fix(botrunner): P4.2 drop RecentChat/ErrorCount from snapshot signature`
+- Validation:
+  - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+  - `dotnet build Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpellHandlerTests|FullyQualifiedName~WoWSharpEventEmitterTests" --logger "console;verbosity=minimal"` -> `passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests|FullyQualifiedName~WoWSharpEventEmitterTests" --logger "console;verbosity=minimal"` -> `passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpEventEmitterTests|FullyQualifiedName~LootingNetworkClientComponentTests" --logger "console;verbosity=minimal"` -> `passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WorldClientAttackErrorTests|FullyQualifiedName~SpellHandlerTests" --logger "console;verbosity=minimal"` -> `passed`
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WorldClientNotificationTests" --logger "console;verbosity=minimal"` -> `passed`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceSnapshotTests" --logger "console;verbosity=minimal"` -> `passed (13/13)`
+- Notes:
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs.GetDeltaMessages(...)` already computes deltas by subtracting the previous full-snapshot list from the current list, so heartbeat-delivered message batches still surface correctly. No helper code change was required for `P4.2.3`.
+  - No `P4.1` / `P4.2` sub-task remains open.
+- Files changed:
+  - `Exports/GameData.Core/Interfaces/IWoWEventHandler.cs`
+  - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
+  - `Exports/WoWSharpClient/Handlers/SpellHandler.cs`
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
+  - `Exports/WoWSharpClient/Networking/ClientComponents/LootingNetworkClientComponent.cs`
+  - `Services/ForegroundBotRunner/Statics/WoWEventHandler.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Spells.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Exports/BotRunner/BotRunnerService.Messages.cs`
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Tests/WoWSharpClient.Tests/Handlers/SpellHandlerTests.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WoWSharpClient.Tests/Agent/LootingNetworkAgentTests.cs`
+  - `Tests/WoWSharpClient.Tests/Handlers/WorldClientAttackErrorTests.cs`
+  - `Tests/WoWSharpClient.Tests/Handlers/WorldClientNotificationTests.cs`
+  - `Tests/WoWSharpClient.Tests/WoWSharpEventEmitterTests.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceSnapshotTests.cs`
+  - task trackers
+- Next command: `rg -n "LoadoutTask|LearnSpellStep|AddItemStep|SetSkillStep|ExpectedAck" Exports/BotRunner Tests/BotRunner.Tests docs/TASKS.md`
 
 ## Handoff (2026-04-20)
 
