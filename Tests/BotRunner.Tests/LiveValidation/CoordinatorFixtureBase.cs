@@ -1046,10 +1046,21 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
     protected async Task ReviveAndLevelBotsAsync(int targetLevel)
     {
+        // Foreground bots occasionally crash during BG map transfers; StateManager
+        // auto-relaunches them, but the new WoW.exe needs a grace window to finish
+        // login and reappear in CurrentActivityMemberList. Poll briefly instead of
+        // failing on the first stale snapshot count.
+        var graceWindow = TimeSpan.FromSeconds(60);
+        var graceStopwatch = Stopwatch.StartNew();
         await RefreshSnapshotsAsync();
-        Console.WriteLine($"[PREP] ReviveAndLevel: AllBots.Count={AllBots.Count}, Expected={ExpectedBotCount}, Min={MinimumBotCount}, targetLevel={targetLevel}");
+        while (AllBots.Count < MinimumBotCount && graceStopwatch.Elapsed < graceWindow)
+        {
+            await Task.Delay(2000);
+            await RefreshSnapshotsAsync();
+        }
+        Console.WriteLine($"[PREP] ReviveAndLevel: AllBots.Count={AllBots.Count}, Expected={ExpectedBotCount}, Min={MinimumBotCount}, targetLevel={targetLevel}, graceElapsed={graceStopwatch.Elapsed.TotalSeconds:F1}s");
         if (AllBots.Count < MinimumBotCount)
-            throw new XunitException($"[{FixtureLabel}:Prep] Expected at least {MinimumBotCount} bots before prep, got {AllBots.Count}");
+            throw new XunitException($"[{FixtureLabel}:Prep] Expected at least {MinimumBotCount} bots before prep, got {AllBots.Count} after {graceStopwatch.Elapsed.TotalSeconds:F0}s grace");
 
         foreach (var snapshot in AllBots)
         {
