@@ -41,6 +41,7 @@ public class LoadoutTask : BotTask, IBotTask
     private string _failureReason = string.Empty;
     private List<LoadoutStep>? _plan;
     private int _stepIndex;
+    private bool _acksAttached;
 
     public LoadoutTask(IBotContext context, LoadoutSpec spec)
         : base(context ?? throw new ArgumentNullException(nameof(context)))
@@ -63,21 +64,28 @@ public class LoadoutTask : BotTask, IBotTask
         {
             _plan = BuildPlan(_spec);
             _status = LoadoutStatus.LoadoutInProgress;
+            AttachExpectedAcks();
 
             if (_plan.Count == 0)
             {
-                _status = LoadoutStatus.LoadoutReady;
+                TransitionToReady();
                 return;
             }
         }
 
         // Skip leading steps that are already satisfied (idempotent short-circuit).
+        // P4.3: IsSatisfied short-circuits on a matching IWoWEventHandler event
+        // (OnLearnedSpell / OnSkillUpdated / OnItemAddedToBag) so the plan can
+        // advance on the very next Update without waiting for the pacing tick.
         while (_stepIndex < _plan.Count && TryIsSatisfied(_plan[_stepIndex]))
+        {
+            _plan[_stepIndex].DetachExpectedAck();
             _stepIndex++;
+        }
 
         if (_stepIndex >= _plan.Count)
         {
-            _status = LoadoutStatus.LoadoutReady;
+            TransitionToReady();
             return;
         }
 
@@ -121,8 +129,48 @@ public class LoadoutTask : BotTask, IBotTask
     {
         _status = LoadoutStatus.LoadoutFailed;
         _failureReason = reason;
+        DetachAllAcks();
         Log.Warning("[LOADOUT] Failed: {Reason}", reason);
         try { BotContext.AddDiagnosticMessage($"[LOADOUT-FAIL] {reason}"); } catch { }
+    }
+
+    private void TransitionToReady()
+    {
+        _status = LoadoutStatus.LoadoutReady;
+        DetachAllAcks();
+    }
+
+    private void AttachExpectedAcks()
+    {
+        if (_acksAttached || _plan == null) return;
+
+        IWoWEventHandler? events = null;
+        try { events = BotContext.EventHandler; }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[LOADOUT] EventHandler unavailable; steps will poll only");
+        }
+
+        foreach (var step in _plan)
+        {
+            try { step.AttachExpectedAck(events); }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "[LOADOUT] Step '{Step}' AttachExpectedAck threw", step.Description);
+            }
+        }
+
+        _acksAttached = true;
+    }
+
+    private void DetachAllAcks()
+    {
+        if (_plan == null) return;
+        foreach (var step in _plan)
+        {
+            try { step.DetachExpectedAck(); }
+            catch { /* best-effort cleanup */ }
+        }
     }
 
     internal static List<LoadoutStep> BuildPlan(LoadoutSpec spec)
@@ -235,6 +283,10 @@ public class LoadoutTask : BotTask, IBotTask
 
     internal abstract class LoadoutStep
     {
+        private bool _ackInstalled;
+        private bool _ackFired;
+        private Action? _unsubscribe;
+
         public int ExecuteAttempts { get; private set; }
         public int DispatchCount { get; private set; }
         public abstract string Description { get; }
@@ -265,6 +317,47 @@ public class LoadoutTask : BotTask, IBotTask
         }
 
         internal void MarkAttemptedWithoutDispatch() => ExecuteAttempts++;
+
+        /// <summary>
+        /// P4.3: event-driven short-circuit for <see cref="IsSatisfied"/>.
+        /// True once a matching <see cref="IWoWEventHandler"/> ack fires.
+        /// Exposed as <c>internal</c> so subclasses and assembly-visible tests
+        /// can both observe the flag.
+        /// </summary>
+        internal bool AckFired => _ackFired;
+
+        protected void MarkAckFired() => _ackFired = true;
+
+        /// <summary>
+        /// Subscribe to the step's expected-ack event on the given
+        /// <paramref name="events"/> handler. Idempotent — repeated calls on
+        /// the same step reuse the original subscription. Passing <c>null</c>
+        /// is a no-op (polling remains the sole signal).
+        /// </summary>
+        internal void AttachExpectedAck(IWoWEventHandler? events)
+        {
+            if (_ackInstalled) return;
+            _ackInstalled = true;
+            if (events == null) return;
+            _unsubscribe = OnAttachExpectedAck(events);
+        }
+
+        internal void DetachExpectedAck()
+        {
+            var dispose = _unsubscribe;
+            _unsubscribe = null;
+            _ackInstalled = false;
+            if (dispose == null) return;
+            try { dispose(); }
+            catch { /* best-effort unsubscribe */ }
+        }
+
+        /// <summary>
+        /// Hook for subclasses that want event-driven short-circuiting. Return
+        /// a delegate that removes the subscription, or <c>null</c> if the
+        /// step has no relevant event.
+        /// </summary>
+        protected virtual Action? OnAttachExpectedAck(IWoWEventHandler events) => null;
     }
 
     internal sealed class LearnSpellStep : LoadoutStep
@@ -273,7 +366,8 @@ public class LoadoutTask : BotTask, IBotTask
         public LearnSpellStep(uint spellId) { _spellId = spellId; }
         public uint SpellId => _spellId;
         public override string Description => $"learn spell {_spellId}";
-        public override bool IsSatisfied(IBotContext context) => KnowsSpell(context.ObjectManager, _spellId);
+        public override bool IsSatisfied(IBotContext context)
+            => AckFired || KnowsSpell(context.ObjectManager, _spellId);
 
         public override bool TryExecute(IBotContext context)
         {
@@ -282,6 +376,17 @@ public class LoadoutTask : BotTask, IBotTask
             if (KnowsSpell(om, _spellId)) return true;
             om.SendChatMessage($".learn {_spellId}");
             return true;
+        }
+
+        protected override Action? OnAttachExpectedAck(IWoWEventHandler events)
+        {
+            EventHandler<SpellChangedArgs> handler = (_, args) =>
+            {
+                if (args.SpellId == _spellId)
+                    MarkAckFired();
+            };
+            events.OnLearnedSpell += handler;
+            return () => events.OnLearnedSpell -= handler;
         }
     }
 
@@ -305,6 +410,7 @@ public class LoadoutTask : BotTask, IBotTask
 
         public override bool IsSatisfied(IBotContext context)
         {
+            if (AckFired) return true;
             var player = context.ObjectManager?.Player;
             if (player == null) return false;
             return GetSkillValue(player, _skillId) >= _value;
@@ -318,6 +424,17 @@ public class LoadoutTask : BotTask, IBotTask
             om.SendChatMessage($".setskill {_skillId} {_value} {_max}");
             return true;
         }
+
+        protected override Action? OnAttachExpectedAck(IWoWEventHandler events)
+        {
+            EventHandler<SkillUpdatedArgs> handler = (_, args) =>
+            {
+                if (args.SkillId == _skillId && args.NewValue >= _value)
+                    MarkAckFired();
+            };
+            events.OnSkillUpdated += handler;
+            return () => events.OnSkillUpdated -= handler;
+        }
     }
 
     internal sealed class AddItemStep : LoadoutStep
@@ -328,7 +445,7 @@ public class LoadoutTask : BotTask, IBotTask
         public override string Description => $"add item {_itemId}";
 
         public override bool IsSatisfied(IBotContext context)
-            => BagContainsItem(context.ObjectManager, _itemId);
+            => AckFired || BagContainsItem(context.ObjectManager, _itemId);
 
         public override bool TryExecute(IBotContext context)
         {
@@ -337,6 +454,17 @@ public class LoadoutTask : BotTask, IBotTask
             if (BagContainsItem(om, _itemId)) return true;
             om.SendChatMessage($".additem {_itemId}");
             return true;
+        }
+
+        protected override Action? OnAttachExpectedAck(IWoWEventHandler events)
+        {
+            EventHandler<ItemAddedToBagArgs> handler = (_, args) =>
+            {
+                if (args.ItemId == _itemId)
+                    MarkAckFired();
+            };
+            events.OnItemAddedToBag += handler;
+            return () => events.OnItemAddedToBag -= handler;
         }
     }
 

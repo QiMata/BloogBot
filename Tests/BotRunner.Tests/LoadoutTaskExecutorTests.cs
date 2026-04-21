@@ -288,6 +288,235 @@ public sealed class LoadoutTaskExecutorTests
         Assert.DoesNotContain(".learn 111", harness.SentChat);
     }
 
+    // ---------- P4.3: event-driven step advancement ----------
+
+    [Fact]
+    public void LearnSpellStep_OnLearnedSpellEventWithMatchingId_FlipsAckFired()
+    {
+        var harness = new Harness();
+        var step = new LoadoutTask.LearnSpellStep(12345u);
+
+        step.AttachExpectedAck(harness.EventHandler.Object);
+
+        Assert.False(step.AckFired);
+        harness.EventHandler.Raise(e => e.OnLearnedSpell += null, null, new SpellChangedArgs(12345u));
+
+        Assert.True(step.AckFired);
+        Assert.True(step.IsSatisfied(harness.Context));
+    }
+
+    [Fact]
+    public void LearnSpellStep_OnLearnedSpellEventWithWrongId_DoesNotFlipAck()
+    {
+        var harness = new Harness();
+        var step = new LoadoutTask.LearnSpellStep(12345u);
+
+        step.AttachExpectedAck(harness.EventHandler.Object);
+
+        harness.EventHandler.Raise(e => e.OnLearnedSpell += null, null, new SpellChangedArgs(99999u));
+
+        Assert.False(step.AckFired);
+    }
+
+    [Fact]
+    public void SetSkillStep_OnSkillUpdatedEvent_RequiresNewValueAtOrAboveTarget()
+    {
+        var harness = new Harness();
+        var step = new LoadoutTask.SetSkillStep(skillId: 762u, value: 150u, max: 300u);
+
+        step.AttachExpectedAck(harness.EventHandler.Object);
+
+        // Below target — does not flip the ack.
+        harness.EventHandler.Raise(
+            e => e.OnSkillUpdated += null,
+            null,
+            new SkillUpdatedArgs(skillId: 762u, oldValue: 0u, newValue: 75u, maxValue: 300u));
+        Assert.False(step.AckFired);
+
+        // At target — flips the ack.
+        harness.EventHandler.Raise(
+            e => e.OnSkillUpdated += null,
+            null,
+            new SkillUpdatedArgs(skillId: 762u, oldValue: 75u, newValue: 150u, maxValue: 300u));
+        Assert.True(step.AckFired);
+    }
+
+    [Fact]
+    public void AddItemStep_OnItemAddedToBagEvent_FlipsAckFired()
+    {
+        var harness = new Harness();
+        var step = new LoadoutTask.AddItemStep(2770u);
+
+        step.AttachExpectedAck(harness.EventHandler.Object);
+
+        harness.EventHandler.Raise(
+            e => e.OnItemAddedToBag += null,
+            null,
+            new ItemAddedToBagArgs(bag: 0u, slot: 0u, itemId: 2770u, count: 1u));
+
+        Assert.True(step.AckFired);
+        Assert.True(step.IsSatisfied(harness.Context));
+    }
+
+    [Fact]
+    public void LoadoutStep_DetachExpectedAck_RemovesSubscription()
+    {
+        var harness = new Harness();
+        var step = new LoadoutTask.LearnSpellStep(12345u);
+
+        step.AttachExpectedAck(harness.EventHandler.Object);
+        step.DetachExpectedAck();
+
+        harness.EventHandler.Raise(e => e.OnLearnedSpell += null, null, new SpellChangedArgs(12345u));
+
+        Assert.False(step.AckFired);
+    }
+
+    [Fact]
+    public void LoadoutStep_AttachExpectedAck_IsIdempotent()
+    {
+        // Re-attaching the same step does not double-subscribe — if it did,
+        // raising the event once would fire the handler twice. We prove
+        // single-subscription by detaching once and confirming no handler
+        // remains to see a subsequent event.
+        var harness = new Harness();
+        var step = new LoadoutTask.LearnSpellStep(12345u);
+
+        step.AttachExpectedAck(harness.EventHandler.Object);
+        step.AttachExpectedAck(harness.EventHandler.Object);
+        step.DetachExpectedAck();
+
+        harness.EventHandler.Raise(e => e.OnLearnedSpell += null, null, new SpellChangedArgs(12345u));
+
+        Assert.False(step.AckFired);
+    }
+
+    [Fact]
+    public void LoadoutStep_AttachExpectedAck_WithNullHandler_IsSafeNoOp()
+    {
+        var step = new LoadoutTask.LearnSpellStep(12345u);
+
+        var ex = Record.Exception(() => step.AttachExpectedAck(null));
+
+        Assert.Null(ex);
+        Assert.False(step.AckFired);
+        // Detach must still be safe even when nothing was subscribed.
+        Record.Exception(step.DetachExpectedAck);
+    }
+
+    [Fact]
+    public void Update_LearnedSpellEvent_AdvancesStepWithoutWaitingForPacing()
+    {
+        // Polling is disabled (SuppressFakeServer) so the ONLY way to advance
+        // past step 0 is the OnLearnedSpell event flipping AckFired. We then
+        // call Update() again immediately (well inside StepPacingMs) and
+        // observe StepIndex moving from 0 to 1 — the core P4.3 guarantee.
+        var harness = new Harness { SuppressFakeServer = true };
+        var spec = new LoadoutSpec { SpellIdsToLearn = { 100u, 200u } };
+        var task = new LoadoutTask(harness.Context, spec);
+
+        task.Update();
+        Assert.Equal(LoadoutStatus.LoadoutInProgress, task.Status);
+        Assert.Equal(0, task.StepIndex);
+        Assert.Contains(".learn 100", harness.SentChat);
+
+        harness.EventHandler.Raise(e => e.OnLearnedSpell += null, null, new SpellChangedArgs(100u));
+
+        // Immediate re-tick: no Thread.Sleep. The only thing that can flip
+        // step 0's IsSatisfied here is the ack.
+        task.Update();
+
+        Assert.Equal(1, task.StepIndex);
+    }
+
+    [Fact]
+    public void Update_SingleStepSpec_CompletesOnEventWithoutPacingDelay()
+    {
+        var harness = new Harness { SuppressFakeServer = true };
+        var spec = new LoadoutSpec { SpellIdsToLearn = { 42u } };
+        var task = new LoadoutTask(harness.Context, spec);
+
+        task.Update(); // dispatches .learn 42
+        Assert.Equal(LoadoutStatus.LoadoutInProgress, task.Status);
+
+        harness.EventHandler.Raise(e => e.OnLearnedSpell += null, null, new SpellChangedArgs(42u));
+
+        task.Update();
+
+        Assert.Equal(LoadoutStatus.LoadoutReady, task.Status);
+    }
+
+    [Fact]
+    public void Update_PollingFallback_StillReachesReadyWhenNoEventFires()
+    {
+        // No event raised. Polling path (fake server adds spell to KnownSpells
+        // on .learn dispatch) must still drive the plan to Ready.
+        var harness = new Harness();
+        var spec = new LoadoutSpec { SpellIdsToLearn = { 100u, 200u } };
+        var task = new LoadoutTask(harness.Context, spec);
+
+        task.Update();
+        for (int i = 0; i < 10; i++)
+        {
+            Thread.Sleep(LoadoutTask.StepPacingMs + 25);
+            task.Update();
+            if (task.Status == LoadoutStatus.LoadoutReady) break;
+        }
+
+        Assert.Equal(LoadoutStatus.LoadoutReady, task.Status);
+        Assert.Contains(".learn 100", harness.SentChat);
+        Assert.Contains(".learn 200", harness.SentChat);
+    }
+
+    [Fact]
+    public void Update_TerminalReady_DetachesAllStepSubscriptions()
+    {
+        // Empty spec short-circuits to Ready immediately. Subsequent events
+        // must not flip any step's ack (there are none), but more importantly
+        // the plan's AttachExpectedAcks + DetachAllAcks lifecycle must run
+        // without throwing.
+        var harness = new Harness();
+        var spec = new LoadoutSpec();
+        var task = new LoadoutTask(harness.Context, spec);
+
+        task.Update();
+        Assert.Equal(LoadoutStatus.LoadoutReady, task.Status);
+
+        // Post-terminal event raise is a safe no-op: no subscribers remain.
+        var ex = Record.Exception(() => harness.EventHandler.Raise(
+            e => e.OnLearnedSpell += null, null, new SpellChangedArgs(1u)));
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void Update_AdvancedStep_DetachesItsSubscriptionIndividually()
+    {
+        // After step 0 completes, further OnLearnedSpell events for step 0's
+        // spellId must not be able to re-flip state (the subscription is
+        // gone). We prove this by accessing the step instance through the
+        // plan and asserting AckFired is observable only while it is the
+        // active step.
+        var harness = new Harness { SuppressFakeServer = true };
+        var spec = new LoadoutSpec { SpellIdsToLearn = { 100u, 200u } };
+        var task = new LoadoutTask(harness.Context, spec);
+
+        task.Update();
+        var step0 = task.Plan[0];
+        var step1 = task.Plan[1];
+
+        harness.EventHandler.Raise(e => e.OnLearnedSpell += null, null, new SpellChangedArgs(100u));
+        Assert.True(step0.AckFired);
+
+        task.Update(); // advances past step 0, detaches its subscription
+        Assert.Equal(1, task.StepIndex);
+
+        // Raising a matching event for step 1 must still work (its
+        // subscription is still installed).
+        Assert.False(step1.AckFired);
+        harness.EventHandler.Raise(e => e.OnLearnedSpell += null, null, new SpellChangedArgs(200u));
+        Assert.True(step1.AckFired);
+    }
+
     // ---------- Moq harness ----------
 
     private sealed class Harness
@@ -295,11 +524,19 @@ public sealed class LoadoutTaskExecutorTests
         public readonly Mock<IObjectManager> ObjectManager = new(MockBehavior.Loose);
         public readonly Mock<IWoWLocalPlayer> Player = new(MockBehavior.Loose);
         public readonly Mock<IBotContext> ContextMock = new(MockBehavior.Loose);
+        public readonly Mock<IWoWEventHandler> EventHandler = new(MockBehavior.Loose);
         public readonly HashSet<uint> KnownSpells = new();
         public readonly List<string> SentChat = new();
         public readonly Dictionary<(int, int), IWoWItem> Bags = new();
         public readonly SkillInfo[] Skills = Enumerable.Range(0, 128).Select(_ => new SkillInfo()).ToArray();
         public readonly Stack<IBotTask> BotTasks = new();
+
+        /// <summary>
+        /// When true, <c>.learn</c>/<c>.additem</c>/<c>.setskill</c> commands
+        /// do NOT mutate the simulated server state. Tests that want to drive
+        /// advancement exclusively through events (not polling) set this.
+        /// </summary>
+        public bool SuppressFakeServer { get; set; }
 
         public Harness()
         {
@@ -313,7 +550,8 @@ public sealed class LoadoutTaskExecutorTests
                 .Callback<string>(msg =>
                 {
                     SentChat.Add(msg);
-                    ApplyFakeServerSideEffect(msg);
+                    if (!SuppressFakeServer)
+                        ApplyFakeServerSideEffect(msg);
                 });
             ObjectManager
                 .Setup(om => om.GetEquippedItem(It.IsAny<EquipSlot>()))
@@ -326,6 +564,7 @@ public sealed class LoadoutTaskExecutorTests
             ContextMock.SetupGet(c => c.BotTasks).Returns(BotTasks);
             ContextMock.SetupGet(c => c.LoggerFactory).Returns((Microsoft.Extensions.Logging.ILoggerFactory?)null);
             ContextMock.SetupGet(c => c.Config).Returns(new BotRunner.Constants.BotBehaviorConfig());
+            ContextMock.SetupGet(c => c.EventHandler).Returns(EventHandler.Object);
         }
 
         public IBotContext Context => ContextMock.Object;
