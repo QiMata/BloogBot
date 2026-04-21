@@ -4,7 +4,9 @@ namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 
 public class WarsongGulchObjectiveFixture : WarsongGulchFixture
 {
-    protected override bool UseForegroundHordeLeader => false;
+    protected override bool UseForegroundHordeLeader => true;
+
+    protected override bool UseForegroundAllianceLeader => true;
 }
 
 public sealed class WarsongGulchFlagCaptureObjectiveFixture : WarsongGulchObjectiveFixture

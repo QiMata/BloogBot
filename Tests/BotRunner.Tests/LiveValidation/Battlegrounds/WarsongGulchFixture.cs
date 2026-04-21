@@ -60,9 +60,9 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
 
     protected override TimeSpan EnterWorldStaleTimeout => TimeSpan.FromMinutes(3);
 
-    protected override int LaunchThrottleActivationBotCountOverride => TotalBotCount + 1;
+    protected override int LaunchThrottleActivationBotCountOverride => 2;
 
-    protected override int MaxPendingStartupBotsOverride => TotalBotCount + 1;
+    protected override int MaxPendingStartupBotsOverride => 6;
 
     protected override uint BattlegroundTypeId => 2;
 
