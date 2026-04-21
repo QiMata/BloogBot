@@ -87,6 +87,12 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
                 setting.RunnerType = UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background;
             else if (setting.AccountName.Equals(AllianceLeaderAccount, StringComparison.OrdinalIgnoreCase))
                 setting.RunnerType = UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background;
+
+            // P3.6: stamp the per-bot loadout onto settings so the BattlegroundCoordinator
+            // hands it off via ApplyLoadout once each bot reaches the staging area. The
+            // legacy fixture-driven prep helpers below remain in place as a safety net
+            // until live validation confirms the hand-off path covers every BG fixture.
+            setting.Loadout ??= AlteracValleyLoadoutPlan.BuildLoadoutSpecSettings(setting);
         }
 
         return roster;

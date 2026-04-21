@@ -119,6 +119,13 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
                 setting.RunnerType = UseForegroundHordeLeader ? BotRunnerType.Foreground : BotRunnerType.Background;
             else if (setting.AccountName.Equals(AllianceLeaderAccount, StringComparison.OrdinalIgnoreCase))
                 setting.RunnerType = UseForegroundAllianceLeader ? BotRunnerType.Foreground : BotRunnerType.Background;
+
+            // P3.6: stamp the per-bot loadout onto settings so the BattlegroundCoordinator
+            // hands it off via ApplyLoadout once each bot reaches the staging area. AV's
+            // objective-specific class/proficiency teaching still runs through the legacy
+            // PrepareObjectiveReadyLoadoutAsync fixture path for now — the LoadoutSpec
+            // schema can't yet express `.learn all_myclass` / `.learn all_myspells`.
+            setting.Loadout ??= AlteracValleyLoadoutPlan.BuildLoadoutSpecSettings(setting);
         }
 
         return roster;

@@ -60,6 +60,42 @@ internal static class AlteracValleyLoadoutPlan
             ["Rogue"] = new(548, [23284, 23285, 23298, 23299, 23312, 23313], [23456]),
         };
 
+    /// <summary>
+    /// P3.6: projects the resolver's <see cref="AlteracValleyLoadout"/> record
+    /// into the JSON-serialisable <see cref="LoadoutSpecSettings"/> POCO so
+    /// battleground fixtures can stamp the full per-bot loadout onto
+    /// <c>CharacterSettings.Loadout</c> before StateManager reads the config.
+    /// From there, the <see cref="WoWStateManager.Coordination.BattlegroundCoordinator"/>
+    /// hands it off to BotRunner once per bot via <c>ActionType.ApplyLoadout</c>.
+    /// Kept here (rather than on the fixture) because the class/faction →
+    /// item/spell mapping already lives in this file.
+    /// </summary>
+    internal static LoadoutSpecSettings BuildLoadoutSpecSettings(CharacterSettings settings)
+    {
+        if (settings == null)
+            throw new ArgumentNullException(nameof(settings));
+
+        var loadout = ResolveLoadout(settings);
+        var isHorde = IsHordeRace(settings.CharacterRace);
+        var mountSpellId = isHorde ? 23509u : 23510u;
+        var supplementals = AlteracValleyFixture.BuildSupplementalItemIds(loadout);
+
+        return new LoadoutSpecSettings
+        {
+            TargetLevel = TargetLevel,
+            HonorRank = PvPRankForLoadout,
+            RidingSkill = (uint)EpicRidingSkill,
+            MountSpellId = mountSpellId,
+            ArmorSetId = loadout.ArmorSetId,
+            SpellIdsToLearn = new[] { ApprenticeRidingSpellId, mountSpellId },
+            EquipItems = loadout.EquipItemIds
+                .Select(id => new LoadoutEquipItemSettings { ItemId = id })
+                .ToArray(),
+            SupplementalItemIds = supplementals.ToArray(),
+            ElixirItemIds = loadout.ElixirItemIds.ToArray(),
+        };
+    }
+
     internal static AlteracValleyLoadout ResolveLoadout(CharacterSettings settings)
     {
         if (settings == null)

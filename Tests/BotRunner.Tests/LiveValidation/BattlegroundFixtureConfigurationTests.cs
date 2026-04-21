@@ -56,6 +56,45 @@ public sealed class BattlegroundFixtureConfigurationTests
     }
 
     [Fact]
+    public void WarsongGulchFixture_StampsPerBotLoadoutOnEveryCharacter()
+    {
+        var fixture = new WarsongGulchFixture();
+        var settings = GetCharacterSettings(fixture);
+
+        Assert.Equal(WarsongGulchFixture.TotalBotCount, settings.Count);
+        foreach (var setting in settings)
+        {
+            Assert.True(setting.Loadout != null,
+                $"WSG fixture must stamp Loadout for '{setting.AccountName}' so the coordinator can hand it off via ApplyLoadout.");
+            Assert.Equal((uint)AlteracValleyLoadoutPlan.TargetLevel, setting.Loadout!.TargetLevel);
+            Assert.Equal((uint)AlteracValleyLoadoutPlan.EpicRidingSkill, setting.Loadout.RidingSkill);
+            Assert.NotEqual(0u, setting.Loadout.MountSpellId);
+            Assert.NotEqual(0u, setting.Loadout.ArmorSetId);
+            Assert.NotNull(setting.Loadout.EquipItems);
+            Assert.NotEmpty(setting.Loadout.EquipItems);
+            Assert.NotNull(setting.Loadout.SupplementalItemIds);
+            Assert.Contains(AlteracValleyLoadoutPlan.ApprenticeRidingSpellId, setting.Loadout.SpellIdsToLearn!);
+        }
+    }
+
+    [Fact]
+    public void AlteracValleyFixture_StampsPerBotLoadoutOnEveryCharacter()
+    {
+        var fixture = new AlteracValleyFixture();
+        var settings = GetCharacterSettings(fixture);
+
+        Assert.Equal(AlteracValleyFixture.TotalBotCount, settings.Count);
+        foreach (var setting in settings)
+        {
+            Assert.True(setting.Loadout != null,
+                $"AV fixture must stamp Loadout for '{setting.AccountName}'.");
+            Assert.Equal((uint)AlteracValleyLoadoutPlan.TargetLevel, setting.Loadout!.TargetLevel);
+            Assert.NotEmpty(setting.Loadout.EquipItems!);
+            Assert.NotEmpty(setting.Loadout.SupplementalItemIds!);
+        }
+    }
+
+    [Fact]
     public void WarsongGulchFixture_UsesSingleForegroundHordeLeaderAndBackgroundAllianceLeader()
     {
         var fixture = new WarsongGulchFixture();
