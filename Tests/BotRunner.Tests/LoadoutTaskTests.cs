@@ -2,10 +2,16 @@ using BotRunner.Interfaces;
 using BotRunner.Tasks;
 using Communication;
 using Moq;
+using System.Collections.Generic;
 using Xunit;
 
 namespace BotRunner.Tests;
 
+/// <summary>
+/// P3.3: status state-machine + empty-spec short-circuit contract.
+/// Plan-builder and per-step executor coverage lives in
+/// <see cref="LoadoutTaskExecutorTests"/>.
+/// </summary>
 public sealed class LoadoutTaskTests
 {
     [Fact]
@@ -18,9 +24,9 @@ public sealed class LoadoutTaskTests
     [Fact]
     public void Update_EmptySpec_TransitionsToReady()
     {
-        // The scaffold short-circuits empty specs so coordinator-level state
-        // machines can be exercised without waiting on the (not-yet-landed)
-        // chat/SOAP executors.
+        // Empty spec produces an empty plan, so the task short-circuits to
+        // Ready on the very first Update. Coordinator can drive its state
+        // machine end-to-end even when a bot has nothing to prep.
         var task = new LoadoutTask(MockContext(), new LoadoutSpec());
 
         task.Update();
@@ -30,8 +36,12 @@ public sealed class LoadoutTaskTests
     }
 
     [Fact]
-    public void Update_NonEmptySpec_StaysInProgress_UntilExecutorsLand()
+    public void Update_NonEmptySpec_WithNoOnlinePlayer_StaysInProgress()
     {
+        // With no ObjectManager/Player attached (loose mock), every step's
+        // TryExecute returns false (not-ready), so the task accumulates
+        // retry attempts without burning dispatch. Still InProgress after
+        // one tick.
         var task = new LoadoutTask(MockContext(), new LoadoutSpec
         {
             TargetLevel = 60,
@@ -66,5 +76,10 @@ public sealed class LoadoutTaskTests
         Assert.Throws<System.ArgumentNullException>(() => new LoadoutTask(null!, new LoadoutSpec()));
     }
 
-    private static IBotContext MockContext() => new Mock<IBotContext>(MockBehavior.Loose).Object;
+    private static IBotContext MockContext()
+    {
+        var ctx = new Mock<IBotContext>(MockBehavior.Loose);
+        ctx.SetupGet(c => c.BotTasks).Returns(new Stack<IBotTask>());
+        return ctx.Object;
+    }
 }
