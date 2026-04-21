@@ -2,6 +2,26 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-21) - P3 Unified Loadout Hand-off closeout
+
+- [x] `P3.1` Plumbing — proto types (`LoadoutSpec`, `LoadoutStatus`, `ActionType.ApplyLoadout`, `WoWActivitySnapshot.loadoutStatus` + `loadoutFailureReason`, status field included in `SnapshotChangeSignature`). Shipped in commit `9c0e6339`.
+- [x] `P3.2` Config — `CharacterSettings.Loadout` POCO (`LoadoutSpecSettings` + sub-POCOs) and `Services/WoWStateManager/Settings/LoadoutSpecConverter.cs` (`ToProto` / `BuildApplyLoadoutAction`). Shipped in commit `61b9fffb`.
+- [x] `P3.3` BotRunner — `Exports/BotRunner/Tasks/LoadoutTask.cs` with plan-builder + seven step executors (`LearnSpellStep`, `SetSkillStep`, `AddItemStep`, `AddItemSetStep`, `EquipItemStep`, `UseItemStep`, `LevelUpStep`), 100ms pacing throttle, idempotent `IsSatisfied` + `TryExecute` contract. Scaffold in commit `d38fff31`, executors in `813da3ef`. `BotRunnerService.HandleApplyLoadoutAction` / `SyncLoadoutStatusIntoSnapshot` wiring in `a1a312c3`.
+- [x] `P3.4` StateManager dispatch — `BattlegroundCoordinator.CoordState.ApplyingLoadouts` between `WaitingForBots` and `QueueForBattleground`, per-bot single-shot `ApplyLoadout` dispatch, `ExcludedAccounts` exclusion list for `LoadoutFailed` bots, chain-loop through purely-internal orchestration states. Shipped in commit `f1799080`.
+- [x] `P3.5` Coordinator raid-formation gate — `CoordState.WaitingForRaidFormation` reuses `DescribeFactionGroupIssues`; trivially short-circuits when `!RequiresFactionGroupQueue`. Shipped alongside P3.4 in `f1799080`.
+- [x] `P3.6` Fixture cleanup — fixtures now stamp `CharacterSettings.Loadout` at `BuildCharacterSettings` via `AlteracValleyLoadoutPlan.BuildLoadoutSpecSettings`. WSG fixture-driven prep path (`EnsureLoadoutPreparedAsync` chain) removed in commit `a6d6aa55`; AV parity closed in P3.7. Phase-1 stamp + tests in `64f38a20`.
+- [x] `P3.7` Explicit spell curation — `ClassLoadoutSpells.ResolveHighestRankClassSpellIds` replaces the forbidden `.learn all_myclass` / `.learn all_myspells` shortcuts; AV `PrepareObjectiveReadyLoadoutAsync` and its call sites removed. Shipped in commit `d8f9e873`.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LoadoutTask|FullyQualifiedName~BotRunnerServiceLoadoutDispatch|FullyQualifiedName~LoadoutSpecConverter|FullyQualifiedName~BattlegroundCoordinator|FullyQualifiedName~CoordinatorStrictCount|FullyQualifiedName~ActionForwardingContract|FullyQualifiedName~ClassLoadoutSpells|FullyQualifiedName~BattlegroundFixtureConfigurationTests.WarsongGulchFixture_StampsPerBotLoadout|FullyQualifiedName~BattlegroundFixtureConfigurationTests.AlteracValleyFixture_StampsPerBotLoadout" --logger "console;verbosity=minimal"` -> `passed (59/59)`
+- Design invariants now in production:
+  - One `ApplyLoadout` per bot per fixture run; coordinator keeps `_loadoutSent` / `_loadoutReady` / `_loadoutFailed` sets.
+  - `WoWActivitySnapshot.LoadoutStatus` is the only new snapshot field (part of the change signature so transitions force full sends).
+  - BotRunner owns execution timing (100ms pacing + 20-retry budget per step).
+  - Config-authoritative: fixtures stamp `CharacterSettings.Loadout` at init time; no programmatic generation at runtime.
+  - Curated per-(class, race) spell roster; `.learn all_*` is forbidden and fails loud on unknown class.
+- Commits (in order): `3fa5aaf9` (plan), `9c0e6339`, `61b9fffb`, `d38fff31`, `a1a312c3`, `813da3ef`, `f1799080`, `64f38a20`, `a6d6aa55`, `d8f9e873`.
+- Memory: `feedback_explicit_spell_learning.md` locks the "no `.learn all_*`" rule for future sessions; CRITICAL pointer added to `MEMORY.md`.
+
 ## Archived Snapshot (2026-04-17) - WoW.exe packet handling & ACK parity closeout
 
 - [x] `P2` packet dispatch, ACK generation, timing, mutation order, packet-flow, and state-machine parity.

@@ -32,123 +32,175 @@
 
 ---
 
-## P3 - Unified Loadout Hand-off (StateManager → BotRunner)
+## P4 - Command ACK Infrastructure (message capture parity + structured ACKs)
+
+P3 is archived (see `docs/TASKS_ARCHIVE.md`); this phase builds on the loadout
+hand-off and tightens how the bot observes the server's response to GM
+commands / player actions.
 
 ### Context
-Test fixtures currently orchestrate every step of per-bot prep (revive, level,
-learn spells/skills, add/equip items, elixirs, honor-rank, rep, talents) by
-firing dozens of individual `EquipItem`/`SendChat` actions per account from the
-fixture process. This is chatty, slow, and mixes test-harness concerns with
-what should be BotRunner's own responsibility — to move itself to a target
-configured state.
+Today `LoadoutTask` advances on `IsSatisfied()` polling of `ObjectManager`
+state (spell in `KnownSpellIds`, item in bags, skill value in `SkillInfo`).
+That works but has three real gaps:
+
+1. **BG parity holes.** `SMSG_LEARNED_SPELL` / `SMSG_REMOVED_SPELL` /
+   `SMSG_SPELL_FAILURE` / `SMSG_INVENTORY_CHANGE_FAILURE` / `SMSG_NOTIFICATION`
+   update `ObjectManager` silently — no event fires
+   (`Exports/WoWSharpClient/Handlers/SpellHandler.cs`,
+   `Exports/WoWSharpClient/Client/WorldClient.cs`). FG sees these via Lua
+   hooks; BG sees nothing, so BG tests reading `[SKILL]` / `[ERROR]` prefixes
+   from the snapshot come up empty.
+2. **Snapshot signature churn.** `BotRunnerService.SnapshotChangeSignature`
+   (`Exports/BotRunner/BotRunnerService.cs:111-125`) includes
+   `RecentChatCount` + `RecentErrorCount`. Every new message flips the count
+   → forces a full snapshot send. Under heavy chat (loadout dispatch, BG
+   fights) we send full snapshots every tick and defeat the 2s heartbeat
+   throttle.
+3. **No structured per-command ACK.** Tests that want to say *"did this
+   specific `.learn 12345` succeed?"* have to baseline + diff + pattern-match
+   on text (`LiveBotFixture.BotChat.cs.GetDeltaMessages` +
+   `LiveBotFixture.Assertions.cs.ContainsCommandRejection`). Works today
+   but brittle — there is no correlation id on `ActionMessage`, and MaNGOS
+   1.12 emits no chat text for most GM command successes, so the "wait for
+   system message" pattern can't gate on `.learn` / `.setskill` / `.additem`
+   at all.
 
 ### Goal
-Replace the per-step fixture drip with a **single `ApplyLoadout` action** per
-bot. StateManager ships the full target spec once; BotRunner owns the
-execution. When every bot reports `LoadoutStatus.Ready`, the coordinator
-drives raid formation → all-members-joined → kick-off (e.g. `JoinBattleground`
-for WSG). Chatter between StateManager and BotRunner is limited to state
-transitions that matter for coordination decisions.
+Close the BG event-parity gap, stop message volume from churning the
+snapshot signature, and give `LoadoutTask` an event-driven alternative
+(push notification) to its current polling-based `IsSatisfied` path —
+without throwing away the polling fallback, which is the only option for
+commands that have no authoritative SMSG (`.modify money`, `.setskill`,
+`.modify health/mana`).
 
 ### Rules
-1. Loadout spec lives **in the config file** alongside `CharacterSettings`.
-   Source of truth; no programmatic generation in fixtures.
-2. Spec covers: `TargetLevel`, talents, spells to learn, skills with values,
-   armor set id, equip items (per slot), supplemental items (bag fills,
-   elixirs), mount spells, honor rank, faction rep rows, completed quest
-   ids, riding skill.
-3. One `ApplyLoadout` action per bot — BotRunner pushes a `LoadoutTask`,
-   executes steps at its own pace, and emits a single `LoadoutStatus`
-   transition when done.
-4. Snapshot adds one small field: `LoadoutStatus` (`NotStarted`,
-   `InProgress`, `Ready`, `Failed`) + optional failure reason. No chatty
-   per-step reporting.
-5. `BattlegroundCoordinator` waits for all configured bots' snapshots to
-   report `Ready` before emitting raid invites. Then it waits for all bots
-   to be in the leader's party/raid before emitting the kick-off action.
+1. **Every `.learn` must target a specific numeric spell id, every
+   `.setskill` a specific skill id.** Catch-all MaNGOS commands
+   (`.learn all_myclass`, `.learn all_myspells`) are forbidden — see
+   `memory/feedback_explicit_spell_learning.md`.
+2. **Polling stays.** State observation is the authoritative success
+   signal; events are a latency optimization, not a replacement.
+3. **No new free-form message buckets.** If BG needs to surface a new
+   SMSG-observed event, it goes through an existing `IWoWEventHandler`
+   event (new prefix if needed) so FG parity is preserved.
+4. **Snapshot budget matters.** Do not add unbounded repeated fields.
+   Ring-buffer with an explicit cap; document it next to the field.
 
 ### Sub-phases
 
-- [ ] **P3.1** Plumbing — proto types
-  - [ ] P3.1.1 Add `LoadoutSpec` message to `communication.proto` with
-    target level, talents, spells (repeated uint32), skills (repeated
-    SkillValue{id,value,max}), armor set id, equip items (repeated
-    ItemSlot{itemId,inventorySlot}), supplemental items (repeated uint32),
-    elixir item ids, mount spell id, honor rank, faction reputations
-    (repeated FactionRep{factionId,standing}), completed quest ids
-    (repeated uint32), riding skill target.
-  - [ ] P3.1.2 Add `LoadoutStatus` enum to `communication.proto`
-    (`NotStarted`, `InProgress`, `Ready`, `Failed`).
-  - [ ] P3.1.3 Add `WoWActivitySnapshot.loadoutStatus` and
-    `WoWActivitySnapshot.loadoutFailureReason`.
-  - [ ] P3.1.4 Add `ActionType.ApplyLoadout` with `LoadoutSpec` as the
-    `ActionMessage` payload.
-  - [ ] P3.1.5 Include `loadoutStatus` in `SnapshotChangeSignature` so the
-    event-driven IPC sends a full snapshot when the status transitions.
+- [ ] **P4.1** Close BG SMSG → event parity gap
+  - [ ] P4.1.1 Add `OnLearnedSpell(spellId)` and `OnUnlearnedSpell(spellId)`
+    events to `Exports/GameData.Core/Interfaces/IWoWEventHandler.cs`. Fire
+    from `SpellHandler.HandleLearnedSpell` / `HandleRemovedSpell`. Surface
+    as `[SKILL] Learned spell <id>` / `[SKILL] Unlearned spell <id>` in
+    `BotRunnerService.Messages.cs`.
+  - [ ] P4.1.2 Add `OnSkillUpdated(skillId, oldValue, newValue, maxValue)`
+    event. Fire from whichever `SMSG_UPDATE_OBJECT` path mutates
+    `IWoWLocalPlayer.SkillInfo` (locate the descriptor-walker site in
+    `ObjectUpdate`-family handlers). Surface as
+    `[SKILL] Skill <id> <old>→<new>/<max>`.
+  - [ ] P4.1.3 Add `OnItemAddedToBag(bag, slot, itemId, count)` event.
+    Fire from the inventory-change-success path
+    (`LootingNetworkClientComponent.OnItemPushResultReceived` is the
+    existing observable — mirror it into an `IWoWEventHandler` event so
+    FG/BG parity is maintained). Surface as `[UI] Item <id> x<count>
+    → bag <bag>/<slot>`.
+  - [ ] P4.1.4 Route `SMSG_ATTACKSWING_*`, `SMSG_INVENTORY_CHANGE_FAILURE`,
+    and `SMSG_SPELL_FAILURE` through `FireOnErrorMessage` alongside their
+    existing Rx/diagnostic channels. Today they're silent at the event
+    layer (`WorldClient.cs:234-251`, `SpellHandler.cs:459`).
+  - [ ] P4.1.5 Register a handler for `SMSG_NOTIFICATION` (0x1CB) and
+    raise `OnSystemMessage(text)`.
+  - [ ] P4.1.6 Unit tests: each new event fires once per matching
+    inbound packet; `[SKILL]` / `[UI]` / `[ERROR]` prefixes land in
+    `snapshot.RecentChatMessages` / `snapshot.RecentErrors` via the
+    existing flush path.
 
-- [ ] **P3.2** Config — `CharacterSettings.Loadout`
-  - [ ] P3.2.1 Add `LoadoutSpec Loadout { get; set; }` to `CharacterSettings`.
-  - [ ] P3.2.2 Seed WSG config with per-bot loadouts (port today's
-    `AlteracValleyLoadoutPlan.ResolveLoadout` output into the JSON).
-  - [ ] P3.2.3 Seed AB and AV configs the same way.
-  - [ ] P3.2.4 Validation test: every BG config entry has a non-empty
-    loadout spec and the spec is self-consistent (items reference valid
-    slots, spells are valid ids).
+- [ ] **P4.2** Fix snapshot signature churn
+  - [ ] P4.2.1 Remove `RecentChatCount` + `RecentErrorCount` from
+    `SnapshotChangeSignature` in `Exports/BotRunner/BotRunnerService.cs`.
+    Messages ride along on full snapshots that fire for real state
+    changes + the 2s heartbeat.
+  - [ ] P4.2.2 Regression test: a stream of `[SYSTEM]`/`[SKILL]` messages
+    arriving with no other state change must not trigger a full snapshot
+    send; only the next heartbeat (or next real change) should carry
+    them.
+  - [ ] P4.2.3 Confirm that test helpers still work: `GetDeltaMessages`
+    already handles the case where deltas arrive only on heartbeat ticks.
 
-- [ ] **P3.3** BotRunner — `LoadoutTask`
-  - [ ] P3.3.1 Create `Exports/BotRunner/Tasks/LoadoutTask.cs`. On
-    construction, read the spec and plan ordered steps.
-  - [ ] P3.3.2 Executes: wait for `IsObjectManagerValid` → set level via
-    `.levelup` chat → learn riding spell / `.setskill` ride rank → learn
-    mount spell → set honor rank via SOAP → apply faction rep → learn
-    spells (`.learn` each) → `.setskill` each skill → `.additemset` armor
-    set → `.additem` each supplemental → `EquipItem` each item (respect
-    slot) → `UseItem` elixirs → mark completed quests.
-  - [ ] P3.3.3 Emits snapshot status transitions:
-    `NotStarted` → `InProgress` (first tick) → `Ready` (all steps
-    succeeded) or `Failed` (irrecoverable error with reason).
-  - [ ] P3.3.4 Idempotent: safe to re-apply. Skip "already know that
-    spell", already-equipped items, etc. Tolerate `CHAT_MSG_SYSTEM` noise.
-  - [ ] P3.3.5 Unit tests: deterministic task plan from a fixed spec;
-    status transitions on mocked ObjectManager + chat responses.
+- [ ] **P4.3** LoadoutTask event-driven step advancement
+  - [ ] P4.3.1 Extend `LoadoutStep` with an optional
+    `ExpectedAck(IWoWEventHandler)` handle that each step can install
+    before `TryExecute`. `LearnSpellStep` subscribes to `OnLearnedSpell`
+    filtered on its `_spellId`; `AddItemStep` subscribes to
+    `OnItemAddedToBag` filtered on its `_itemId`; `SetSkillStep`
+    subscribes to `OnSkillUpdated` filtered on `_skillId`. The first
+    matching event short-circuits `IsSatisfied` → true on the next tick.
+  - [ ] P4.3.2 Keep the polling path as the fallback. Event handle + poll
+    race benignly; whichever flips `IsSatisfied` first wins.
+  - [ ] P4.3.3 Unsubscribe on step completion / task dispose to avoid
+    leaks. Add a guard so the same `LoadoutTask` instance can be
+    re-entered without doubling subscriptions.
+  - [ ] P4.3.4 Unit tests: a mocked event firing on step N flips the
+    task to its next step on the very next `Update()` call without
+    needing the 100ms polling tick; fallback-only path still works when
+    the event never fires.
 
-- [ ] **P3.4** StateManager — dispatch `ApplyLoadout`
-  - [ ] P3.4.1 `BattlegroundCoordinator` state machine gets a new
-    `ApplyingLoadouts` state between `WaitingForBots` and
-    `StagingAtBattlemaster`. Coordinator enqueues one `ApplyLoadout`
-    per bot with the spec from CharacterSettings.
-  - [ ] P3.4.2 Transition to next state only when every configured bot's
-    snapshot shows `loadoutStatus=Ready`. Bots with `Failed` go on an
-    exclusion list; coordinator logs but proceeds without them.
-  - [ ] P3.4.3 Unit tests: state stays in `ApplyingLoadouts` until all
-    bots are Ready; transitions forward on consensus; records failures.
+- [ ] **P4.4** Correlation IDs + structured `CommandAckEvent`
+  - [ ] P4.4.1 Add `string correlation_id = <n>;` to `ActionMessage` in
+    `Exports/BotCommLayer/Models/ProtoDef/communication.proto`.
+    StateManager assigns one per dispatch; BotRunner echoes it back.
+  - [ ] P4.4.2 Add a new message
+    `CommandAckEvent { string correlation_id; ActionType action_type;
+    enum AckStatus {Pending, Success, Failed, TimedOut} status;
+    string failure_reason; uint32 related_id; }` and
+    `repeated CommandAckEvent recent_command_acks` on
+    `WoWActivitySnapshot` (ring-buffer cap 10; document next to the
+    field).
+  - [ ] P4.4.3 `BotRunnerService` populates the ring on every action it
+    dispatches (including `LoadoutTask` step actions). Include the
+    correlation id in the action's `CurrentAction` as it goes into
+    `_activitySnapshot.CurrentAction`.
+  - [ ] P4.4.4 `SnapshotChangeSignature` gains
+    `RecentCommandAckCount` so coordinator-level transitions can react
+    to ACK arrivals without heartbeat lag. (Unlike the chat rings, ack
+    counts change rarely — per dispatched command, not per chat line —
+    so this does not reintroduce the churn from P4.2.)
+  - [ ] P4.4.5 Unit tests: end-to-end round trip — StateManager sends
+    an action with correlation id, bot pushes a step, emits
+    `CommandAckEvent(Success)` or `CommandAckEvent(Failed, reason)`
+    in the snapshot.
 
-- [ ] **P3.5** Coordinator — raid formation gate
-  - [ ] P3.5.1 After loadouts ready, coordinator emits raid-invite desired
-    party state (existing `DesiredParty*` path).
-  - [ ] P3.5.2 New state `WaitingForRaidFormation` gated on every member's
-    snapshot showing `PartyLeaderGuid == leaderGuid`.
-  - [ ] P3.5.3 Transition to `QueueForBattleground` only after the gate
-    passes. Existing queue/accept/entry flow unchanged.
-
-- [ ] **P3.6** Fixture cleanup
-  - [ ] P3.6.1 Delete `WarsongGulchFixture.EnsureLoadoutPreparedAsync`,
-    `PrepareLoadoutsOnceAsync`, `RunLoadoutPrepAsync`, `PrepareLoadoutAsync`.
-  - [ ] P3.6.2 Delete `AlteracValleyFixture` loadout orchestration.
-  - [ ] P3.6.3 Test body stays: fixture writes config, launches, asserts
-    on coordinator state progression.
+- [ ] **P4.5** Coordinator + test migration to structured ACKs
+  - [ ] P4.5.1 `BattlegroundCoordinator` gains a `LastAckStatus` helper
+    that reads `snapshot.RecentCommandAcks` for a given correlation id.
+    Existing `LoadoutStatus` enum stays — it's the per-phase roll-up;
+    `CommandAckEvent` is the per-command receipt.
+  - [ ] P4.5.2 `LiveBotFixture.BotChat.SendGmChatCommandTrackedAsync`
+    returns `GmChatCommandTrace` with an added `AckStatus` field pulled
+    from the snapshot's `RecentCommandAcks` by correlation id. Tests
+    can then assert `trace.AckStatus == AckStatus.Success` instead of
+    string-matching `trace.ChatMessages`.
+  - [ ] P4.5.3 Migrate the `EnsureTaxiNodesEnabledAsync` /
+    `ContainsCommandRejection` call sites in `LiveValidation/` off raw
+    string matching, one fixture at a time. Keep `ContainsCommandRejection`
+    as a deprecated fallback for commands we haven't mapped yet.
+  - [ ] P4.5.4 Unit tests: driver test that feeds a scripted
+    `RecentCommandAcks` sequence through `BattlegroundCoordinator` and
+    asserts the state transitions fire at the right correlation id.
 
 ### Design invariants
-- **One `ApplyLoadout` action per bot per fixture run.** No per-step
-  chatter from StateManager.
-- **Snapshots stay small.** `LoadoutStatus` is the only new field; it is
-  included in the event-driven signature so transitions are captured
-  but heartbeats are not inflated.
-- **BotRunner owns execution timing.** It runs the plan at whatever
-  pace is safe for its own behavior tree + connection state.
-- **Config is authoritative.** Fixtures read from
-  `Services/WoWStateManager/Settings/Configs/*.config.json`; no
-  programmatic loadout generation.
+- **No new catch-all `.learn all_*`.** Explicit IDs only, per curated
+  per-(class, race) roster in
+  `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/ClassLoadoutSpells.cs`.
+- **Polling stays as the authoritative success signal.** Events are
+  a latency optimization; they never decide "did this succeed?" alone.
+- **Snapshot budget:** ring buffers only, explicit caps, documented.
+- **Correlation IDs flow through `ActionMessage` end-to-end.** No
+  StateManager → bot → StateManager round trip loses the id.
+- **FG/BG parity.** Every event added to `IWoWEventHandler` must have
+  a firing path from both the FG Lua-hook bridge and the BG SMSG
+  handler. If one side can't fire it, document why.
 
 ---
 
