@@ -245,9 +245,14 @@ namespace WoWSharpClient.Client
                 if (payload.Length >= 1)
                 {
                     byte errorCode = payload.Span[0];
-                    Console.WriteLine($"[INVENTORY_CHANGE_FAILURE] errorCode=0x{errorCode:X2} ({GetInventoryErrorName(errorCode)}) len={payload.Length} raw={BitConverter.ToString(payload.ToArray())}");
+                    var errorName = GetInventoryErrorName(errorCode);
+                    Console.WriteLine($"[INVENTORY_CHANGE_FAILURE] errorCode=0x{errorCode:X2} ({errorName}) len={payload.Length} raw={BitConverter.ToString(payload.ToArray())}");
                     Serilog.Log.Warning("[WorldClient] INVENTORY_CHANGE_FAILURE: errorCode={Error} (0x{ErrorHex:X2}) len={Len}",
                         errorCode, errorCode, payload.Length);
+                    if (errorCode != 0)
+                    {
+                        _handlerContext?.EventEmitter.FireOnErrorMessage($"Inventory change failed: {errorName}");
+                    }
                 }
                 return Task.CompletedTask;
             });
@@ -678,6 +683,7 @@ namespace WoWSharpClient.Client
                 if (!_disposed)
                     _attackErrors.OnNext("Attack failed: Not in range.");
             }
+            _handlerContext?.EventEmitter.FireOnErrorMessage("Attack failed: Not in range.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingBadFacing(ReadOnlyMemory<byte> payload)
@@ -690,6 +696,7 @@ namespace WoWSharpClient.Client
                 if (!_disposed)
                     _attackErrors.OnNext("Attack failed: Bad facing.");
             }
+            _handlerContext?.EventEmitter.FireOnErrorMessage("Attack failed: Bad facing.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingNotStanding(ReadOnlyMemory<byte> payload)
@@ -701,6 +708,7 @@ namespace WoWSharpClient.Client
                 if (!_disposed)
                     _attackErrors.OnNext("Attack failed: Not standing.");
             }
+            _handlerContext?.EventEmitter.FireOnErrorMessage("Attack failed: Not standing.");
             return Task.CompletedTask;
         }
         private Task HandleAttackSwingDeadTarget(ReadOnlyMemory<byte> payload)
@@ -712,6 +720,7 @@ namespace WoWSharpClient.Client
                 if (!_disposed)
                     _attackErrors.OnNext("Attack failed: Target is dead.");
             }
+            _handlerContext?.EventEmitter.FireOnErrorMessage("Attack failed: Target is dead.");
             return Task.CompletedTask;
         }
 
@@ -733,6 +742,7 @@ namespace WoWSharpClient.Client
                 if (!_disposed)
                     _attackErrors.OnNext("Attack failed: Can't attack.");
             }
+            _handlerContext?.EventEmitter.FireOnErrorMessage("Attack failed: Can't attack.");
             return Task.CompletedTask;
         }
 

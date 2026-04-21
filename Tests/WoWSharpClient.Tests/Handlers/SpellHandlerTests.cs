@@ -452,6 +452,31 @@ namespace WoWSharpClient.Tests.Handlers
         }
 
         [Fact]
+        public void HandleSpellFailure_FiresErrorMessage()
+        {
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+            writer.Write((byte)0x01);
+            writer.Write((byte)0x34);
+            writer.Write((uint)18248);
+            writer.Write((byte)0x2E);
+
+            string? errorMessage = null;
+            EventHandler<OnUiMessageArgs> handler = (_, args) => errorMessage = args.Message;
+            WoWSharpEventEmitter.Instance.OnErrorMessage += handler;
+
+            try
+            {
+                SpellHandler.HandleSpellFailure(Opcode.SMSG_SPELL_FAILURE, ms.ToArray(), ctx);
+                Assert.Equal("Spell failed for spell 18248: MOVING", errorMessage);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnErrorMessage -= handler;
+            }
+        }
+
+        [Fact]
         public void HandleCastFailed_TryAgainReason_FiresNamedErrorMessage()
         {
             using var ms = new MemoryStream();

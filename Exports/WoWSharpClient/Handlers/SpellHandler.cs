@@ -474,6 +474,8 @@ namespace WoWSharpClient.Handlers
 
                 Log.Warning("[SpellHandler] SPELL_FAILURE: caster=0x{Caster:X} spell={SpellId} reason={Reason}",
                     casterGuid, spellId, reason);
+                ctx.EventEmitter.FireOnErrorMessage(
+                    $"Spell failed for spell {spellId}: {GetCastFailureReasonName(reason)}");
             }
             catch (EndOfStreamException) { }
         }

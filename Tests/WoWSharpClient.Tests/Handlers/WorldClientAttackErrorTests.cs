@@ -1,4 +1,5 @@
 using GameData.Core.Enums;
+using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using System;
 using System.Threading.Tasks;
@@ -47,6 +48,75 @@ namespace WoWSharpClient.Tests.Handlers
             Assert.False(localPlayer.IsAutoAttacking);
             Assert.False(WoWSharpObjectManager.Instance.HasPendingMeleeAttackStart(localPlayer.TargetGuid));
             Assert.False(WoWSharpObjectManager.Instance.HasConfirmedMeleeAttackStart(localPlayer.TargetGuid));
+        }
+
+        [Theory]
+        [InlineData(Opcode.SMSG_ATTACKSWING_NOTINRANGE, "Attack failed: Not in range.")]
+        [InlineData(Opcode.SMSG_ATTACKSWING_BADFACING, "Attack failed: Bad facing.")]
+        [InlineData(Opcode.SMSG_ATTACKSWING_NOTSTANDING, "Attack failed: Not standing.")]
+        [InlineData(Opcode.SMSG_ATTACKSWING_DEADTARGET, "Attack failed: Target is dead.")]
+        [InlineData(Opcode.SMSG_ATTACKSWING_CANT_ATTACK, "Attack failed: Can't attack.")]
+        public async Task AttackSwingError_FiresErrorMessage(Opcode opcode, string expectedMessage)
+        {
+            using var connection = new InMemoryConnection();
+            using var framer = new WoWMessageFramer();
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+            string? errorMessage = null;
+            EventHandler<OnUiMessageArgs> handler = (_, args) => errorMessage = args.Message;
+            WoWSharpEventEmitter.Instance.OnErrorMessage += handler;
+
+            try
+            {
+                var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+                worldClient.SetHandlerContext(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
+                await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
+
+                connection.InjectIncomingData(CreateSmsgPacket(opcode, Array.Empty<byte>()));
+                await Task.Delay(200);
+
+                Assert.Equal(expectedMessage, errorMessage);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnErrorMessage -= handler;
+            }
+        }
+
+        [Fact]
+        public async Task InventoryChangeFailure_FiresErrorMessage()
+        {
+            using var connection = new InMemoryConnection();
+            using var framer = new WoWMessageFramer();
+            var encryptor = new NoEncryption();
+            var codec = new WoWPacketCodec();
+            var router = new MessageRouter<Opcode>();
+
+            using var worldClient = new WorldClient(connection, framer, encryptor, codec, router);
+
+            string? errorMessage = null;
+            EventHandler<OnUiMessageArgs> handler = (_, args) => errorMessage = args.Message;
+            WoWSharpEventEmitter.Instance.OnErrorMessage += handler;
+
+            try
+            {
+                var sessionKey = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+                worldClient.SetHandlerContext(WoWSharpObjectManager.Instance, WoWSharpEventEmitter.Instance);
+                await worldClient.ConnectAsync("testuser", "127.0.0.1", sessionKey);
+
+                connection.InjectIncomingData(CreateSmsgPacket(Opcode.SMSG_INVENTORY_CHANGE_FAILURE, new byte[] { 0x04 }));
+                await Task.Delay(200);
+
+                Assert.Equal("Inventory change failed: BAG_FULL", errorMessage);
+            }
+            finally
+            {
+                WoWSharpEventEmitter.Instance.OnErrorMessage -= handler;
+            }
         }
 
         private static byte[] CreateSmsgPacket(Opcode opcode, byte[] payload)
