@@ -32,6 +32,126 @@
 
 ---
 
+## P3 - Unified Loadout Hand-off (StateManager → BotRunner)
+
+### Context
+Test fixtures currently orchestrate every step of per-bot prep (revive, level,
+learn spells/skills, add/equip items, elixirs, honor-rank, rep, talents) by
+firing dozens of individual `EquipItem`/`SendChat` actions per account from the
+fixture process. This is chatty, slow, and mixes test-harness concerns with
+what should be BotRunner's own responsibility — to move itself to a target
+configured state.
+
+### Goal
+Replace the per-step fixture drip with a **single `ApplyLoadout` action** per
+bot. StateManager ships the full target spec once; BotRunner owns the
+execution. When every bot reports `LoadoutStatus.Ready`, the coordinator
+drives raid formation → all-members-joined → kick-off (e.g. `JoinBattleground`
+for WSG). Chatter between StateManager and BotRunner is limited to state
+transitions that matter for coordination decisions.
+
+### Rules
+1. Loadout spec lives **in the config file** alongside `CharacterSettings`.
+   Source of truth; no programmatic generation in fixtures.
+2. Spec covers: `TargetLevel`, talents, spells to learn, skills with values,
+   armor set id, equip items (per slot), supplemental items (bag fills,
+   elixirs), mount spells, honor rank, faction rep rows, completed quest
+   ids, riding skill.
+3. One `ApplyLoadout` action per bot — BotRunner pushes a `LoadoutTask`,
+   executes steps at its own pace, and emits a single `LoadoutStatus`
+   transition when done.
+4. Snapshot adds one small field: `LoadoutStatus` (`NotStarted`,
+   `InProgress`, `Ready`, `Failed`) + optional failure reason. No chatty
+   per-step reporting.
+5. `BattlegroundCoordinator` waits for all configured bots' snapshots to
+   report `Ready` before emitting raid invites. Then it waits for all bots
+   to be in the leader's party/raid before emitting the kick-off action.
+
+### Sub-phases
+
+- [ ] **P3.1** Plumbing — proto types
+  - [ ] P3.1.1 Add `LoadoutSpec` message to `communication.proto` with
+    target level, talents, spells (repeated uint32), skills (repeated
+    SkillValue{id,value,max}), armor set id, equip items (repeated
+    ItemSlot{itemId,inventorySlot}), supplemental items (repeated uint32),
+    elixir item ids, mount spell id, honor rank, faction reputations
+    (repeated FactionRep{factionId,standing}), completed quest ids
+    (repeated uint32), riding skill target.
+  - [ ] P3.1.2 Add `LoadoutStatus` enum to `communication.proto`
+    (`NotStarted`, `InProgress`, `Ready`, `Failed`).
+  - [ ] P3.1.3 Add `WoWActivitySnapshot.loadoutStatus` and
+    `WoWActivitySnapshot.loadoutFailureReason`.
+  - [ ] P3.1.4 Add `ActionType.ApplyLoadout` with `LoadoutSpec` as the
+    `ActionMessage` payload.
+  - [ ] P3.1.5 Include `loadoutStatus` in `SnapshotChangeSignature` so the
+    event-driven IPC sends a full snapshot when the status transitions.
+
+- [ ] **P3.2** Config — `CharacterSettings.Loadout`
+  - [ ] P3.2.1 Add `LoadoutSpec Loadout { get; set; }` to `CharacterSettings`.
+  - [ ] P3.2.2 Seed WSG config with per-bot loadouts (port today's
+    `AlteracValleyLoadoutPlan.ResolveLoadout` output into the JSON).
+  - [ ] P3.2.3 Seed AB and AV configs the same way.
+  - [ ] P3.2.4 Validation test: every BG config entry has a non-empty
+    loadout spec and the spec is self-consistent (items reference valid
+    slots, spells are valid ids).
+
+- [ ] **P3.3** BotRunner — `LoadoutTask`
+  - [ ] P3.3.1 Create `Exports/BotRunner/Tasks/LoadoutTask.cs`. On
+    construction, read the spec and plan ordered steps.
+  - [ ] P3.3.2 Executes: wait for `IsObjectManagerValid` → set level via
+    `.levelup` chat → learn riding spell / `.setskill` ride rank → learn
+    mount spell → set honor rank via SOAP → apply faction rep → learn
+    spells (`.learn` each) → `.setskill` each skill → `.additemset` armor
+    set → `.additem` each supplemental → `EquipItem` each item (respect
+    slot) → `UseItem` elixirs → mark completed quests.
+  - [ ] P3.3.3 Emits snapshot status transitions:
+    `NotStarted` → `InProgress` (first tick) → `Ready` (all steps
+    succeeded) or `Failed` (irrecoverable error with reason).
+  - [ ] P3.3.4 Idempotent: safe to re-apply. Skip "already know that
+    spell", already-equipped items, etc. Tolerate `CHAT_MSG_SYSTEM` noise.
+  - [ ] P3.3.5 Unit tests: deterministic task plan from a fixed spec;
+    status transitions on mocked ObjectManager + chat responses.
+
+- [ ] **P3.4** StateManager — dispatch `ApplyLoadout`
+  - [ ] P3.4.1 `BattlegroundCoordinator` state machine gets a new
+    `ApplyingLoadouts` state between `WaitingForBots` and
+    `StagingAtBattlemaster`. Coordinator enqueues one `ApplyLoadout`
+    per bot with the spec from CharacterSettings.
+  - [ ] P3.4.2 Transition to next state only when every configured bot's
+    snapshot shows `loadoutStatus=Ready`. Bots with `Failed` go on an
+    exclusion list; coordinator logs but proceeds without them.
+  - [ ] P3.4.3 Unit tests: state stays in `ApplyingLoadouts` until all
+    bots are Ready; transitions forward on consensus; records failures.
+
+- [ ] **P3.5** Coordinator — raid formation gate
+  - [ ] P3.5.1 After loadouts ready, coordinator emits raid-invite desired
+    party state (existing `DesiredParty*` path).
+  - [ ] P3.5.2 New state `WaitingForRaidFormation` gated on every member's
+    snapshot showing `PartyLeaderGuid == leaderGuid`.
+  - [ ] P3.5.3 Transition to `QueueForBattleground` only after the gate
+    passes. Existing queue/accept/entry flow unchanged.
+
+- [ ] **P3.6** Fixture cleanup
+  - [ ] P3.6.1 Delete `WarsongGulchFixture.EnsureLoadoutPreparedAsync`,
+    `PrepareLoadoutsOnceAsync`, `RunLoadoutPrepAsync`, `PrepareLoadoutAsync`.
+  - [ ] P3.6.2 Delete `AlteracValleyFixture` loadout orchestration.
+  - [ ] P3.6.3 Test body stays: fixture writes config, launches, asserts
+    on coordinator state progression.
+
+### Design invariants
+- **One `ApplyLoadout` action per bot per fixture run.** No per-step
+  chatter from StateManager.
+- **Snapshots stay small.** `LoadoutStatus` is the only new field; it is
+  included in the event-driven signature so transitions are captured
+  but heartbeats are not inflated.
+- **BotRunner owns execution timing.** It runs the plan at whatever
+  pace is safe for its own behavior tree + connection state.
+- **Config is authoritative.** Fixtures read from
+  `Services/WoWStateManager/Settings/Configs/*.config.json`; no
+  programmatic loadout generation.
+
+---
+
 ## P2 - WoW.exe Packet Handling & ACK Parity (COMPLETE)
 
 ### Context
