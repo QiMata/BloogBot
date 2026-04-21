@@ -16,9 +16,6 @@ namespace BotRunner.Tests.LiveValidation.Battlegrounds;
 /// </summary>
 public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
 {
-    private readonly object _loadoutPrepareLock = new();
-    private Task? _loadoutPrepareTask;
-
     public const int HordeBotCount = 10;
     public const int AllianceBotCount = 10;
     public const int TotalBotCount = HordeBotCount + AllianceBotCount;
@@ -98,144 +95,10 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
         return roster;
     }
 
-    // ---- Loadout prep (reuses AV loadout plan for level 60 PvP gear) ----
-
-    internal async Task EnsureLoadoutPreparedAsync()
-    {
-        Task prepareTask;
-        lock (_loadoutPrepareLock)
-        {
-            _loadoutPrepareTask ??= PrepareLoadoutsOnceAsync();
-            prepareTask = _loadoutPrepareTask;
-        }
-        await prepareTask;
-    }
-
-    private async Task PrepareLoadoutsOnceAsync()
-    {
-        await EnsurePreparedAsync();
-        await RunLoadoutPrepAsync();
-    }
-
-    /// <summary>
-    /// Runs the per-account loadout work (gear, riding, mount, elixirs) without first
-    /// calling <see cref="CoordinatorFixtureBase.EnsurePreparedAsync"/>, so it is safe
-    /// to invoke from <c>AfterPrepareAsync</c> (which already runs inside the base
-    /// prep task and would otherwise deadlock on the prep-task lock).
-    /// </summary>
-    protected async Task RunLoadoutPrepAsync()
-    {
-        await SetCoordinatorEnabledAsync(false);
-
-        try
-        {
-            var loadouts = CharacterSettings.ToDictionary(
-                s => s.AccountName,
-                AlteracValleyLoadoutPlan.ResolveLoadout,
-                StringComparer.OrdinalIgnoreCase);
-
-            // Batch 4 at a time to avoid overwhelming the server
-            foreach (var batch in CharacterSettings.Chunk(4))
-            {
-                var batchTasks = batch.Select(async settings =>
-                {
-                    if (!loadouts.TryGetValue(settings.AccountName, out var loadout))
-                        throw new InvalidOperationException($"WSG loadout missing for '{settings.AccountName}'.");
-                    await PrepareLoadoutAsync(settings.AccountName, loadout);
-                }).ToArray();
-
-                await Task.WhenAll(batchTasks);
-                await Task.Delay(300);
-            }
-        }
-        finally
-        {
-            await SetCoordinatorEnabledAsync(true);
-        }
-    }
-
-    private async Task PrepareLoadoutAsync(
-        string accountName,
-        AlteracValleyLoadoutPlan.AlteracValleyLoadout loadout)
-    {
-        var supplementalItemIds = AlteracValleyFixture.BuildSupplementalItemIds(loadout);
-
-        await SendSilentGmChatCommandAsync(accountName, ".reset items");
-        await WaitForSnapshotConditionAsync(
-            accountName,
-            snapshot => (snapshot.Player?.BagContents?.Count ?? 1) == 0,
-            TimeSpan.FromSeconds(5),
-            pollIntervalMs: 250);
-
-        // Learn riding + mount spell
-        await SendSilentGmChatCommandAsync(accountName, $".learn {AlteracValleyLoadoutPlan.ApprenticeRidingSpellId}");
-        await Task.Delay(75);
-        await SendSilentGmChatCommandAsync(
-            accountName,
-            $".setskill {AlteracValleyLoadoutPlan.RidingSkillId} {AlteracValleyLoadoutPlan.EpicRidingSkill} {AlteracValleyLoadoutPlan.EpicRidingSkill}");
-        await Task.Delay(75);
-        var mountSpellId = HordeAccountsOrdered.Contains(accountName, StringComparer.OrdinalIgnoreCase) ? 23509 : 23510;
-        await SendSilentGmChatCommandAsync(accountName, $".learn {mountSpellId}");
-        await Task.Delay(75);
-
-        // Add armor set + supplemental items
-        await SendSilentGmChatCommandAsync(accountName, $".additemset {loadout.ArmorSetId}");
-        await Task.Delay(500);
-
-        foreach (var itemId in supplementalItemIds)
-        {
-            await SendSilentGmChatCommandAsync(accountName, $".additem {itemId}");
-            await Task.Delay(75);
-        }
-
-        // Fire-and-forget equip
-        foreach (var itemId in loadout.EquipItemIds)
-        {
-            await SendSilentActionAsync(accountName, new ActionMessage
-            {
-                ActionType = ActionType.EquipItem,
-                Parameters = { new RequestParameter { IntParam = (int)itemId } }
-            });
-            await Task.Delay(150);
-        }
-
-        // Fire-and-forget elixirs
-        foreach (var elixirItemId in loadout.ElixirItemIds)
-        {
-            await SendSilentActionAsync(accountName, new ActionMessage
-            {
-                ActionType = ActionType.UseItem,
-                Parameters = { new RequestParameter { IntParam = (int)elixirItemId } }
-            });
-            await Task.Delay(150);
-        }
-
-        await Task.Delay(2000);
-        var loadoutApplied = await WaitForSnapshotConditionAsync(
-            accountName,
-            snapshot =>
-            {
-                var bagContents = snapshot.Player?.BagContents?.Values;
-                return bagContents != null
-                    && loadout.EquipItemIds.All(itemId => !bagContents.Contains(itemId))
-                    && loadout.ElixirItemIds.All(itemId => !bagContents.Contains(itemId));
-            },
-            TimeSpan.FromSeconds(8),
-            pollIntervalMs: 250);
-                if (!loadoutApplied)
-        {
-            var snapshot = await GetSnapshotAsync(accountName);
-            var bagItemIds = snapshot?.Player?.BagContents?.Values?.ToArray() ?? Array.Empty<uint>();
-            var remainingEquip = loadout.EquipItemIds.Where(itemId => bagItemIds.Contains(itemId)).Distinct().ToArray();
-            var remainingElixirs = loadout.ElixirItemIds.Where(itemId => bagItemIds.Contains(itemId)).Distinct().ToArray();
-            var bagPreview = bagItemIds.Take(12).ToArray();
-            Console.WriteLine(
-                $"[LOADOUT-WARN] Loadout not fully applied for '{accountName}' - " +
-                $"remainingEquip=[{string.Join(",", remainingEquip)}], " +
-                $"remainingElixirs=[{string.Join(",", remainingElixirs)}], " +
-                $"bagCount={bagItemIds.Length}, bagPreview=[{string.Join(",", bagPreview)}]. Continuing.");
-        }
-    }
+    // Legacy fixture-driven loadout prep (EnsureLoadoutPreparedAsync,
+    // PrepareLoadoutsOnceAsync, RunLoadoutPrepAsync, PrepareLoadoutAsync) was
+    // removed in P3.6 — the BattlegroundCoordinator's ApplyingLoadouts state
+    // now hands off CharacterSettings.Loadout to BotRunner's LoadoutTask.
 
     internal Task<ResponseResult> SetRuntimeCoordinatorEnabledAsync(bool enabled)
         => SetCoordinatorEnabledAsync(enabled);

@@ -30,7 +30,8 @@ public class WarsongGulchTests
             await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
 
         await BgTestHelper.WaitForBotsAsync(_bot, _output, WarsongGulchFixture.TotalBotCount, "WSG");
-        await _bot.EnsureLoadoutPreparedAsync();
+        // Loadout prep is now driven by the BattlegroundCoordinator's ApplyingLoadouts
+        // state (P3.4) off the CharacterSettings.Loadout stamped at fixture init (P3.6).
 
         var minBotsOnMap = (int)(WarsongGulchFixture.TotalBotCount * 0.75);
         await BgTestHelper.WaitForBgEntryAsync(_bot, _output, WarsongGulchFixture.WsgMapId, minBotsOnMap, "WSG");

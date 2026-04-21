@@ -9,16 +9,10 @@ public class WarsongGulchObjectiveFixture : WarsongGulchFixture
 
     protected override bool UseForegroundAllianceLeader => true;
 
-    // Objective fixtures drive prep + loadout end-to-end during fixture init,
-    // so tests do not need to call EnsureLoadoutPreparedAsync / ReprepareAsync
-    // themselves. They just wait on the BattlegroundCoordinator state.
+    // Objective fixtures drive prep end-to-end during fixture init; the
+    // BattlegroundCoordinator now hands off per-bot loadouts via
+    // ActionType.ApplyLoadout (P3.4) so tests just wait on coordinator state.
     protected override bool PrepareDuringInitialization => true;
-
-    protected override async Task AfterPrepareAsync()
-    {
-        await base.AfterPrepareAsync();
-        await RunLoadoutPrepAsync();
-    }
 }
 
 public sealed class WarsongGulchFlagCaptureObjectiveFixture : WarsongGulchObjectiveFixture
