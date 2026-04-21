@@ -51,7 +51,24 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-### 2026-04-21
+### 2026-04-21 (P4.3)
+- Pass result: `P4.3 LoadoutTaskExecutorTests event-driven coverage is green`
+- Last delta:
+  - `LoadoutTaskExecutorTests.Harness` now wires a `Mock<IWoWEventHandler>` into `IBotContext.EventHandler` and exposes a `SuppressFakeServer` flag so individual tests can drive advancement solely through events.
+  - Added 10 new unit tests that exercise P4.3 behavior: per-step ack filtering (wrong spell id / skill value below target ignored), ack-driven `IsSatisfied` short-circuit, detach removes subscription, attach is idempotent, null event handler is a safe no-op, task advances on the very next `Update()` without a pacing sleep when a matching event fires, single-step plan completes to `Ready` without pacing, polling fallback still reaches `Ready` when no event fires, terminal-state detach is safe, per-step detach releases the previous step's subscription while leaving the active step subscribed.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LoadoutTaskExecutorTests|FullyQualifiedName~LoadoutTaskTests" --logger "console;verbosity=minimal"` -> `passed (36/36)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests" --logger "console;verbosity=minimal"` -> `passed (19/19)`
+- Files changed:
+  - `Tests/BotRunner.Tests/LoadoutTaskExecutorTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Commits: `8add32e9 feat(botrunner): P4.3 event-driven LoadoutTask step advancement`
+- Next command:
+  - `rg -n "correlation_id|CommandAckEvent|RecentCommandAcks" Exports/BotCommLayer docs/TASKS.md`
+- Previous handoff preserved below.
+
+### 2026-04-21 (P4.1/P4.2)
 - Pass result: `P4.1/P4.2 BotRunner snapshot coverage is green`
 - Last delta:
   - Added snapshot-buffer assertions for the new `[SKILL]`, `[UI]`, `[ERROR]`, and `[SYSTEM]` message sources in `BotRunnerServiceSnapshotTests`.

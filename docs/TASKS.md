@@ -128,23 +128,31 @@ commands that have no authoritative SMSG (`.modify money`, `.setskill`,
   - [x] P4.2.3 Confirm that test helpers still work: `GetDeltaMessages`
     already handles the case where deltas arrive only on heartbeat ticks.
 
-- [ ] **P4.3** LoadoutTask event-driven step advancement
-  - [ ] P4.3.1 Extend `LoadoutStep` with an optional
-    `ExpectedAck(IWoWEventHandler)` handle that each step can install
+- [x] **P4.3** LoadoutTask event-driven step advancement
+  - [x] P4.3.1 Extend `LoadoutStep` with an optional
+    `AttachExpectedAck(IWoWEventHandler)` handle that each step installs
     before `TryExecute`. `LearnSpellStep` subscribes to `OnLearnedSpell`
     filtered on its `_spellId`; `AddItemStep` subscribes to
     `OnItemAddedToBag` filtered on its `_itemId`; `SetSkillStep`
-    subscribes to `OnSkillUpdated` filtered on `_skillId`. The first
-    matching event short-circuits `IsSatisfied` → true on the next tick.
-  - [ ] P4.3.2 Keep the polling path as the fallback. Event handle + poll
-    race benignly; whichever flips `IsSatisfied` first wins.
-  - [ ] P4.3.3 Unsubscribe on step completion / task dispose to avoid
-    leaks. Add a guard so the same `LoadoutTask` instance can be
-    re-entered without doubling subscriptions.
-  - [ ] P4.3.4 Unit tests: a mocked event firing on step N flips the
-    task to its next step on the very next `Update()` call without
-    needing the 100ms polling tick; fallback-only path still works when
-    the event never fires.
+    subscribes to `OnSkillUpdated` filtered on `_skillId` and only flips
+    the ack when `NewValue >= _value`. The first matching event flips
+    `AckFired`, which short-circuits `IsSatisfied` → true on the next tick.
+  - [x] P4.3.2 Polling remains the fallback. `IsSatisfied` returns
+    `AckFired || CheckState(context)` so event + poll race benignly; whichever
+    flips first wins.
+  - [x] P4.3.3 `LoadoutTask.Update` detaches the advanced step's
+    subscription immediately after the `while (TryIsSatisfied)` loop, and
+    `TransitionToReady`/`Fail` detach every remaining step. `AttachExpectedAck`
+    is idempotent at both the step (`_ackInstalled` guard) and the task
+    (`_acksAttached` guard) levels so re-entering the same `LoadoutTask` does
+    not double-subscribe.
+  - [x] P4.3.4 Unit tests in `Tests/BotRunner.Tests/LoadoutTaskExecutorTests.cs`
+    now pin: per-step ack filtering; `SuppressFakeServer`-driven advancement
+    on the very next `Update()` without a pacing sleep; single-step plan
+    reaches `Ready` on event alone; polling-only path still reaches `Ready`
+    when no event fires; detach removes the subscription; attach is
+    idempotent; null event handler is a safe no-op; per-step detach on
+    advancement leaves the active step still subscribed.
 
 - [ ] **P4.4** Correlation IDs + structured `CommandAckEvent`
   - [ ] P4.4.1 Add `string correlation_id = <n>;` to `ActionMessage` in
@@ -268,7 +276,30 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
-## Handoff (2026-04-21)
+## Handoff (2026-04-21, P4.3)
+
+- Completed: shipped `P4.3` only. `P4.4` (correlation ids + `CommandAckEvent`) and `P4.5` (coordinator + test migration) were intentionally not started.
+- Commits:
+  - `8add32e9` `feat(botrunner): P4.3 event-driven LoadoutTask step advancement`
+- Validation:
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors, 515 pre-existing warnings)`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors, 727 pre-existing warnings)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LoadoutTaskExecutorTests|FullyQualifiedName~LoadoutTaskTests" --logger "console;verbosity=minimal"` -> `passed (36/36)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests" --logger "console;verbosity=minimal"` -> `passed (19/19)`
+- Notes:
+  - `LoadoutStep` now owns the ack lifecycle: `AttachExpectedAck(IWoWEventHandler?)` installs a filtered subscription on the matching event, `DetachExpectedAck()` removes it, and `AckFired` short-circuits `IsSatisfied` without preventing the polling path from flipping it. Steps that do not override `OnAttachExpectedAck` (AddItemSet, EquipItem, UseItem, LevelUp) stay pure-polling.
+  - `LoadoutTask.Update` attaches all acks once via `AttachExpectedAcks()` on first tick (gated by `_acksAttached`), detaches per-step on advancement, and detaches all remaining steps on terminal transitions (`TransitionToReady`, `Fail`).
+  - Polling fallback untouched: the pacing loop, retry budget, `.additemset`/`.use`/`.levelup` behavior, and `IsOneShot` semantics are all unchanged.
+  - New ack tests deliberately disable the fake-server side-effect (`harness.SuppressFakeServer = true`) so advancement is attributable to the event alone; the existing polling-only end-to-end test was kept to prove the fallback still converges when no event ever fires.
+- Files changed:
+  - `Exports/BotRunner/Tasks/LoadoutTask.cs`
+  - `Tests/BotRunner.Tests/LoadoutTaskExecutorTests.cs`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `rg -n "correlation_id|CommandAckEvent|RecentCommandAcks" Exports/BotCommLayer docs/TASKS.md`
+
+## Handoff (2026-04-21, P4.1/P4.2)
 
 - Completed: shipped `P4.1` and `P4.2` only. `P4.3`, `P4.4`, and `P4.5` were intentionally not started.
 - Commits:

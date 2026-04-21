@@ -32,7 +32,27 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-### 2026-04-21
+### 2026-04-21 (P4.3)
+- Pass result: `P4.3 LoadoutTask event-driven step advancement shipped`
+- Last delta:
+  - `Exports/BotRunner/Tasks/LoadoutTask.cs`: `LoadoutStep` gained `AttachExpectedAck`/`DetachExpectedAck` plus the `AckFired`/`MarkAckFired` plumbing. `LearnSpellStep`, `SetSkillStep`, and `AddItemStep` override `OnAttachExpectedAck` to install filtered subscriptions on `IWoWEventHandler.OnLearnedSpell` / `OnSkillUpdated` / `OnItemAddedToBag`. `LoadoutTask.Update` attaches all acks once on first tick, detaches per-step when `IsSatisfied` flips, and detaches everything on terminal (Ready/Failed). `_acksAttached` guards against double-subscribing on re-entry.
+  - Polling still runs every tick; the event handle is an optional latency optimization that flips `IsSatisfied` on the very next `Update()` without waiting for the 100ms pacing tick. No SMSG-less command (`.levelup`, `.additemset`, `.use`) changed behavior.
+- Validation/tests run:
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors)`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LoadoutTaskExecutorTests|FullyQualifiedName~LoadoutTaskTests" --logger "console;verbosity=minimal"` -> `passed (36/36)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests" --logger "console;verbosity=minimal"` -> `passed (19/19)`
+- Files changed:
+  - `Exports/BotRunner/Tasks/LoadoutTask.cs`
+  - `Tests/BotRunner.Tests/LoadoutTaskExecutorTests.cs`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Commits: `8add32e9 feat(botrunner): P4.3 event-driven LoadoutTask step advancement`
+- Scope note: `P4.4` (correlation ids + `CommandAckEvent`) and `P4.5` (coordinator + test migration) are still open in `docs/TASKS.md` and were intentionally not started.
+- Next command: `rg -n "correlation_id|CommandAckEvent|RecentCommandAcks" Exports/BotCommLayer docs/TASKS.md`
+
+### 2026-04-21 (P4.1/P4.2)
 - Pass result: `P4.1/P4.2 BotRunner plumbing shipped`
 - Last delta:
   - `BotRunnerService.Messages` now buffers learned/unlearned spell, skill-update, item-added, error, and system-message events through the shared FG/BG event surface.
