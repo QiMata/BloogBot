@@ -487,6 +487,9 @@ namespace WoWStateManager.Listeners
                 var leaderAccount = _characterSettings.First().AccountName;
                 var allAccounts = _characterSettings.Select(cs => cs.AccountName);
                 var stagingTargets = BuildBattlegroundStagingTargets();
+                var loadoutSpecs = _characterSettings
+                    .Where(cs => cs.Loadout != null)
+                    .ToDictionary(cs => cs.AccountName, cs => cs.Loadout!, StringComparer.OrdinalIgnoreCase);
 
                 _battlegroundCoordinator = new BattlegroundCoordinator(
                     leaderAccount,
@@ -495,7 +498,8 @@ namespace WoWStateManager.Listeners
                     bgMap,
                     _logger,
                     stagingTargets,
-                    desiredPartyLeaderAccounts);
+                    desiredPartyLeaderAccounts,
+                    loadoutSpecs);
             }
 
             var action = _battlegroundCoordinator.GetAction(accountName, CurrentActivityMemberList);

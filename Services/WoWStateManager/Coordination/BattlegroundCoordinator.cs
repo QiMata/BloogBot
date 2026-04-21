@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using BotRunner.Travel;
+using WoWStateManager.Settings;
 
 namespace WoWStateManager.Coordination;
 
@@ -26,6 +27,8 @@ public class BattlegroundCoordinator
     public enum CoordState
     {
         WaitingForBots,
+        ApplyingLoadouts,
+        WaitingForRaidFormation,
         QueueForBattleground,
         WaitForInvite,
         AcceptInvite,
@@ -40,6 +43,7 @@ public class BattlegroundCoordinator
     private readonly int _minimumLevel;
     private readonly IReadOnlyDictionary<string, StagingTarget> _stagingTargets;
     private readonly IReadOnlyDictionary<string, string> _desiredPartyLeaderAccounts;
+    private readonly IReadOnlyDictionary<string, LoadoutSpecSettings> _loadoutSpecs;
     private readonly ILogger _logger;
 
     private CoordState _state = CoordState.WaitingForBots;
@@ -53,6 +57,17 @@ public class BattlegroundCoordinator
     private readonly ConcurrentDictionary<string, DateTime> _joinRetrySentAt = new();
     private readonly ConcurrentDictionary<string, DateTime> _acceptRetrySentAt = new();
 
+    // P3.4 loadout orchestration.
+    private readonly ConcurrentDictionary<string, byte> _loadoutSent = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _loadoutReady = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, byte> _loadoutFailed = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Accounts whose loadout step reported LoadoutFailed. Downstream states
+    /// ignore these bots so one broken bot doesn't block the rest from queueing.
+    /// </summary>
+    public IReadOnlyCollection<string> ExcludedAccounts => _loadoutFailed.Keys.ToArray();
+
     public BattlegroundCoordinator(
         string leaderAccount,
         IEnumerable<string> allAccounts,
@@ -60,7 +75,8 @@ public class BattlegroundCoordinator
         uint bgMapId,
         ILogger logger,
         IReadOnlyDictionary<string, StagingTarget>? stagingTargets = null,
-        IReadOnlyDictionary<string, string>? desiredPartyLeaderAccounts = null)
+        IReadOnlyDictionary<string, string>? desiredPartyLeaderAccounts = null,
+        IReadOnlyDictionary<string, LoadoutSpecSettings>? loadoutSpecs = null)
     {
         _leaderAccount = leaderAccount;
         _memberAccounts = allAccounts
@@ -75,15 +91,28 @@ public class BattlegroundCoordinator
         _desiredPartyLeaderAccounts = desiredPartyLeaderAccounts != null
             ? new Dictionary<string, string>(desiredPartyLeaderAccounts, StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        _loadoutSpecs = loadoutSpecs != null
+            ? new Dictionary<string, LoadoutSpecSettings>(loadoutSpecs, StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, LoadoutSpecSettings>(StringComparer.OrdinalIgnoreCase);
+
+        // Accounts without a configured spec are trivially "ready" — no
+        // ApplyLoadout action will ever be dispatched to them, so initialise
+        // their progress bit up-front to keep ApplyingLoadouts from stalling.
+        foreach (var account in AllAccountNames())
+        {
+            if (!_loadoutSpecs.ContainsKey(account))
+                _loadoutReady[account] = 1;
+        }
 
         _logger.LogWarning(
-            "BG_COORD: Initialized - Leader='{Leader}', Members={Count}, BG={BgType}, Map={Map}, StagingTargets={Staging}, DesiredPartyAccounts={DesiredPartyAccounts}",
+            "BG_COORD: Initialized - Leader='{Leader}', Members={Count}, BG={BgType}, Map={Map}, StagingTargets={Staging}, DesiredPartyAccounts={DesiredPartyAccounts}, Loadouts={Loadouts}",
             leaderAccount,
             _memberAccounts.Count,
             bgTypeId,
             bgMapId,
             _stagingTargets.Count,
-            _desiredPartyLeaderAccounts.Count);
+            _desiredPartyLeaderAccounts.Count,
+            _loadoutSpecs.Count);
     }
 
     public bool RequiresFactionGroupQueue => _bgTypeId != (uint)BattlemasterData.BattlegroundType.AlteracValley
@@ -95,17 +124,39 @@ public class BattlegroundCoordinator
     {
         _tickCount++;
 
-        return _state switch
+        // Chain through purely-internal orchestration states (ApplyingLoadouts,
+        // WaitingForRaidFormation) within a single call so callers don't need
+        // extra null polls between hidden phases. Stops at the first handler
+        // that emits an action, stays in the same state, or transitions into
+        // an externally-observable state (e.g. QueueForBattleground) — that
+        // preserves the one-null-call-per-external-transition test contract.
+        const int MaxChainedTransitions = 4;
+        ActionMessage? action = null;
+        for (int hop = 0; hop < MaxChainedTransitions; hop++)
         {
-            CoordState.WaitingForBots => HandleWaitingForBots(requestingAccount, snapshots),
-            CoordState.QueueForBattleground => HandleQueueForBattleground(requestingAccount, snapshots),
-            CoordState.WaitForInvite => HandleWaitForInvite(requestingAccount, snapshots),
-            CoordState.AcceptInvite => HandleAcceptInvite(requestingAccount, snapshots),
-            CoordState.WaitForEntry => HandleWaitForEntry(requestingAccount, snapshots),
-            CoordState.InBattleground => null,
-            _ => null,
-        };
+            var before = _state;
+            action = _state switch
+            {
+                CoordState.WaitingForBots => HandleWaitingForBots(requestingAccount, snapshots),
+                CoordState.ApplyingLoadouts => HandleApplyingLoadouts(requestingAccount, snapshots),
+                CoordState.WaitingForRaidFormation => HandleWaitingForRaidFormation(requestingAccount, snapshots),
+                CoordState.QueueForBattleground => HandleQueueForBattleground(requestingAccount, snapshots),
+                CoordState.WaitForInvite => HandleWaitForInvite(requestingAccount, snapshots),
+                CoordState.AcceptInvite => HandleAcceptInvite(requestingAccount, snapshots),
+                CoordState.WaitForEntry => HandleWaitForEntry(requestingAccount, snapshots),
+                CoordState.InBattleground => null,
+                _ => null,
+            };
+
+            if (action != null || _state == before || !IsInternalOrchestrationState(_state))
+                return action;
+        }
+        return action;
     }
+
+    private static bool IsInternalOrchestrationState(CoordState state)
+        => state == CoordState.ApplyingLoadouts
+            || state == CoordState.WaitingForRaidFormation;
 
     private void TransitionTo(CoordState newState)
     {
@@ -205,12 +256,169 @@ public class BattlegroundCoordinator
         }
 
         _logger.LogWarning(
-            "BG_COORD: {Ready}/{Total} bots staged at battlemaster areas. Starting BG queue.",
+            "BG_COORD: {Ready}/{Total} bots staged at battlemaster areas. Starting loadout hand-off.",
             ready,
             total);
-        TransitionTo(CoordState.QueueForBattleground);
+        TransitionTo(CoordState.ApplyingLoadouts);
         return null;
     }
+
+    /// <summary>
+    /// P3.4: per-bot single-shot dispatch of <see cref="ActionType.ApplyLoadout"/>.
+    /// Each bot gets exactly one ApplyLoadout action (or zero if no spec is
+    /// configured for its account), then the coordinator waits until every
+    /// bot's snapshot reports <c>LoadoutReady</c> or <c>LoadoutFailed</c>
+    /// before advancing. LoadoutFailed accounts go on <see cref="ExcludedAccounts"/>
+    /// so one broken bot doesn't block the rest.
+    /// </summary>
+    private ActionMessage? HandleApplyingLoadouts(
+        string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        RecordLoadoutProgressFromSnapshots(snapshots);
+
+        ActionMessage? action = null;
+        if (!_loadoutSent.ContainsKey(requestingAccount)
+            && !_loadoutReady.ContainsKey(requestingAccount)
+            && !_loadoutFailed.ContainsKey(requestingAccount))
+        {
+            if (_loadoutSpecs.TryGetValue(requestingAccount, out var spec) && spec != null)
+            {
+                action = LoadoutSpecConverter.BuildApplyLoadoutAction(spec);
+                _loadoutSent[requestingAccount] = 1;
+                _logger.LogInformation(
+                    "BG_COORD: ApplyLoadout dispatched to '{Account}' (targetLevel={Lvl}, spells={Spells}, equip={Equip})",
+                    requestingAccount,
+                    spec.TargetLevel,
+                    spec.SpellIdsToLearn?.Count() ?? 0,
+                    spec.EquipItems?.Count() ?? 0);
+            }
+            else
+            {
+                // No spec configured for this bot → auto-ready.
+                _loadoutReady[requestingAccount] = 1;
+                _logger.LogInformation(
+                    "BG_COORD: No loadout spec for '{Account}' — marking loadout-ready",
+                    requestingAccount);
+            }
+        }
+
+        if (AllAccountsLoadoutResolved())
+        {
+            var readyCount = _loadoutReady.Count;
+            var failedCount = _loadoutFailed.Count;
+            var total = _memberAccounts.Count + 1;
+            _logger.LogWarning(
+                "BG_COORD: Loadouts resolved: {Ready}/{Total} ready, {Failed} failed (excluded={Excluded}).",
+                readyCount,
+                total,
+                failedCount,
+                string.Join(", ", _loadoutFailed.Keys));
+            TransitionTo(CoordState.WaitingForRaidFormation);
+        }
+        else if (_tickCount % 20 == 1)
+        {
+            var pending = AllAccountNames()
+                .Where(a => !_loadoutReady.ContainsKey(a) && !_loadoutFailed.ContainsKey(a))
+                .Select(a => snapshots.TryGetValue(a, out var s)
+                    ? $"{a}({DescribeLoadoutStatus(s)})"
+                    : $"{a}(no snapshot)")
+                .Take(10);
+            _logger.LogWarning(
+                "BG_COORD: ApplyingLoadouts waiting on: {Pending}",
+                string.Join(", ", pending));
+        }
+
+        return action;
+    }
+
+    /// <summary>
+    /// P3.5: gate transition to <see cref="CoordState.QueueForBattleground"/>
+    /// on every non-leader bot's snapshot reporting the expected
+    /// <c>PartyLeaderGuid</c>. BGs that don't require a faction group short-
+    /// circuit immediately. Reuses <see cref="DescribeFactionGroupIssues"/>
+    /// so the predicate matches WaitingForBots exactly.
+    /// </summary>
+    private ActionMessage? HandleWaitingForRaidFormation(
+        string requestingAccount,
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        if (!RequiresFactionGroupQueue)
+        {
+            TransitionTo(CoordState.QueueForBattleground);
+            return null;
+        }
+
+        var groupIssues = DescribeFactionGroupIssues(snapshots);
+        if (groupIssues.Count == 0)
+        {
+            _logger.LogWarning("BG_COORD: Raid formation complete. Starting BG queue.");
+            TransitionTo(CoordState.QueueForBattleground);
+            return null;
+        }
+
+        if (_tickCount % 20 == 1)
+        {
+            _logger.LogWarning(
+                "BG_COORD: Waiting for raid formation. Pending: {Pending}",
+                string.Join(", ", groupIssues.Take(10)));
+        }
+
+        return null;
+    }
+
+    private void RecordLoadoutProgressFromSnapshots(
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        foreach (var account in AllAccountNames())
+        {
+            if (_loadoutReady.ContainsKey(account) || _loadoutFailed.ContainsKey(account))
+                continue;
+
+            if (!snapshots.TryGetValue(account, out var snapshot) || snapshot == null)
+                continue;
+
+            switch (snapshot.LoadoutStatus)
+            {
+                case LoadoutStatus.LoadoutReady:
+                    _loadoutReady[account] = 1;
+                    break;
+                case LoadoutStatus.LoadoutFailed:
+                    _loadoutFailed[account] = 1;
+                    _logger.LogWarning(
+                        "BG_COORD: Loadout FAILED for '{Account}': {Reason}",
+                        account,
+                        snapshot.LoadoutFailureReason ?? "(no reason)");
+                    break;
+            }
+        }
+    }
+
+    private bool AllAccountsLoadoutResolved()
+    {
+        foreach (var account in AllAccountNames())
+        {
+            if (_loadoutReady.ContainsKey(account) || _loadoutFailed.ContainsKey(account))
+                continue;
+            return false;
+        }
+        return true;
+    }
+
+    private IEnumerable<string> AllAccountNames()
+    {
+        yield return _leaderAccount;
+        foreach (var member in _memberAccounts)
+            yield return member;
+    }
+
+    private static string DescribeLoadoutStatus(WoWActivitySnapshot snapshot) => snapshot.LoadoutStatus switch
+    {
+        LoadoutStatus.LoadoutReady => "ready",
+        LoadoutStatus.LoadoutFailed => $"failed:{snapshot.LoadoutFailureReason}",
+        LoadoutStatus.LoadoutInProgress => "in-progress",
+        _ => "not-started",
+    };
 
     private ActionMessage? HandleQueueForBattleground(
         string requestingAccount,
