@@ -399,10 +399,18 @@ public partial class LiveBotFixture
             $"[{label}] timed out waiting for scripted accounts to quiesce: {string.Join(" || ", finalBlocking)}");
     }
 
-    private static string? DescribeBlockingActionState(string account, WoWActivitySnapshot? snapshot)
+    internal static string? DescribeBlockingActionState(string account, WoWActivitySnapshot? snapshot)
     {
+        // Missing-snapshot and disconnected accounts cannot be made to quiesce — the
+        // bot is not reachable. Treat them as already-idle so tests aren't stuck
+        // waiting for a bot that has dropped (common during BG map transfers for
+        // foreground raid leaders). Scripted-role callers must validate liveness
+        // separately before depending on these accounts.
         if (snapshot == null)
-            return $"{account}:snapshot=null";
+            return null;
+
+        if (snapshot.ConnectionState == Communication.BotConnectionState.BotDisconnected)
+            return null;
 
         var currentAction = snapshot.CurrentAction?.ActionType;
         if (currentAction != null && currentAction != Communication.ActionType.Wait)

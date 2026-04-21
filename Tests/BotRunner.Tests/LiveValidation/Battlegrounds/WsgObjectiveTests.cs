@@ -43,7 +43,11 @@ public abstract class WsgObjectiveTestBase
     private const float HordeCaptureTriggerZ = 346.05f;
     private const float HordeCaptureCrossingOvershoot = 4f;
 
-    private const string HordeCarrierAccount = "WSGBOT1";
+    // The flag carrier must stay connected for the entire capture cycle. Foreground
+    // bots (WSGBOT1 = Horde raid leader) are known to drop during BG map transfers
+    // (packet hook instability), which causes capture scripting to fail in an
+    // unrelated way. Use a Background bot so the carrier stays alive end-to-end.
+    private const string HordeCarrierAccount = "WSGBOT4";
     private const string AllianceFlagObserverAccount = "WSGBOT2";
     private const string HordeFlagObserverAccount = "WSGBOT3";
 
