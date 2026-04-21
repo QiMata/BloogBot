@@ -161,6 +161,62 @@ public class BotRunnerServiceSnapshotTests
     }
 
     [Fact]
+    public void Start_WhenOnlyDiagnosticMessagesChange_KeepsHeartbeatOnlyUntilHeartbeatInterval()
+    {
+        var player = CreatePlayer(new Position(101f, 202f, 30f));
+        var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
+        objectManager.SetupGet(x => x.EventHandler).Returns(new Mock<IWoWEventHandler>(MockBehavior.Loose).Object);
+        objectManager.SetupGet(x => x.HasEnteredWorld).Returns(true);
+        objectManager.SetupGet(x => x.IsInMapTransition).Returns(false);
+        objectManager.SetupGet(x => x.Player).Returns(player.Object);
+        objectManager.SetupGet(x => x.Objects).Returns(new IWoWObject[] { player.Object });
+        objectManager.SetupGet(x => x.Units).Returns(new IWoWUnit[] { player.Object });
+        objectManager.SetupGet(x => x.GameObjects).Returns(Array.Empty<IWoWGameObject>());
+        objectManager.SetupGet(x => x.KnownSpellIds).Returns(Array.Empty<uint>());
+        objectManager.Setup(x => x.GetContainedItems()).Returns(Array.Empty<IWoWItem>());
+
+        var updateClient = new GatedCharacterStateUpdateClient();
+        var service = new BotRunnerService(
+            objectManager.Object,
+            updateClient,
+            new Mock<IDependencyContainer>(MockBehavior.Loose).Object);
+
+        var baselineSignature = PrimeSnapshotSignature(service);
+        InvokeEnqueueDiagnosticMessage(service, "[SYSTEM] Taxi path learned.");
+        InvokeEnqueueDiagnosticMessage(service, "[SKILL] Learned spell 18248");
+
+        try
+        {
+            service.Start();
+            Assert.True(
+                updateClient.WaitForSendCount(1, TimeSpan.FromSeconds(2)),
+                "Expected the first send after diagnostic message churn.");
+
+            var churnSend = updateClient.GetSentSnapshot(0);
+            Assert.True(churnSend.IsHeartbeatOnly);
+            Assert.Empty(churnSend.RecentChatMessages);
+            Assert.Equal(baselineSignature, ReadLastSentSignature(service));
+
+            SetLastFullSnapshotSentAt(service, DateTime.UtcNow - TimeSpan.FromSeconds(3));
+            updateClient.ReleaseOneSend();
+
+            Assert.True(
+                updateClient.WaitForSendCount(2, TimeSpan.FromSeconds(2)),
+                "Expected a follow-up full snapshot once the heartbeat interval elapsed.");
+
+            var heartbeatSend = updateClient.GetSentSnapshot(1);
+            Assert.False(heartbeatSend.IsHeartbeatOnly);
+            Assert.Contains("[SYSTEM] Taxi path learned.", heartbeatSend.RecentChatMessages);
+            Assert.Contains("[SKILL] Learned spell 18248", heartbeatSend.RecentChatMessages);
+            Assert.Equal(baselineSignature, ReadLastSentSignature(service));
+        }
+        finally
+        {
+            service.Stop();
+        }
+    }
+
+    [Fact]
     public void SubscribeToMessageEvents_BuffersWorldStateUpdateMessages()
     {
         var eventHandler = new Mock<IWoWEventHandler>(MockBehavior.Loose);
@@ -416,11 +472,67 @@ public class BotRunnerServiceSnapshotTests
         method!.Invoke(service, null);
     }
 
+    private static void InvokeEnqueueDiagnosticMessage(BotRunnerService service, string message)
+    {
+        var method = typeof(BotRunnerService).GetMethod("EnqueueDiagnosticMessage", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        method!.Invoke(service, new object[] { message });
+    }
+
+    private static object PrimeSnapshotSignature(BotRunnerService service)
+    {
+        InvokePopulateSnapshot(service);
+        InvokeSyncLoadoutStatusIntoSnapshot(service);
+        var signature = InvokeComputeSnapshotSignature(ReadActivitySnapshot(service));
+        SetLastSentSignature(service, signature);
+        SetLastFullSnapshotSentAt(service, DateTime.UtcNow);
+        return signature;
+    }
+
+    private static void InvokeSyncLoadoutStatusIntoSnapshot(BotRunnerService service)
+    {
+        var method = typeof(BotRunnerService).GetMethod("SyncLoadoutStatusIntoSnapshot", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        Assert.NotNull(method);
+        method!.Invoke(service, null);
+    }
+
+    private static object InvokeComputeSnapshotSignature(WoWActivitySnapshot snapshot)
+    {
+        var method = typeof(BotRunnerService).GetMethod("ComputeSnapshotSignature", BindingFlags.Static | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        var signature = method!.Invoke(null, new object[] { snapshot });
+        Assert.NotNull(signature);
+        return signature!;
+    }
+
     private static WoWActivitySnapshot ReadActivitySnapshot(BotRunnerService service)
     {
         var field = typeof(BotRunnerService).GetField("_activitySnapshot", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(field);
         return Assert.IsType<WoWActivitySnapshot>(field!.GetValue(service));
+    }
+
+    private static object ReadLastSentSignature(BotRunnerService service)
+    {
+        var field = typeof(BotRunnerService).GetField("_lastSentSignature", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        var signature = field!.GetValue(service);
+        Assert.NotNull(signature);
+        return signature!;
+    }
+
+    private static void SetLastSentSignature(BotRunnerService service, object signature)
+    {
+        var field = typeof(BotRunnerService).GetField("_lastSentSignature", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        field!.SetValue(service, signature);
+    }
+
+    private static void SetLastFullSnapshotSentAt(BotRunnerService service, DateTime value)
+    {
+        var field = typeof(BotRunnerService).GetField("_lastFullSnapshotSentAt", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        field!.SetValue(service, value);
     }
 
     private static IReadOnlyCollection<string> ReadRecentChatMessages(BotRunnerService service)
@@ -613,6 +725,46 @@ public class BotRunnerServiceSnapshotTests
             Interlocked.Increment(ref _sendCount);
             _sentSignal.Set();
             return Task.FromResult<WoWActivitySnapshot>(null!);
+        }
+    }
+
+    private sealed class GatedCharacterStateUpdateClient : CharacterStateUpdateClient
+    {
+        private readonly object _sync = new();
+        private readonly List<WoWActivitySnapshot> _sentSnapshots = new();
+        private readonly SemaphoreSlim _sendReleaseGate = new(0);
+        private int _sendCount;
+
+        public GatedCharacterStateUpdateClient()
+            : base(NullLogger.Instance)
+        {
+        }
+
+        public bool WaitForSendCount(int expectedCount, TimeSpan timeout)
+            => SpinWait.SpinUntil(() => Volatile.Read(ref _sendCount) >= expectedCount, timeout);
+
+        public WoWActivitySnapshot GetSentSnapshot(int index)
+        {
+            lock (_sync)
+            {
+                return _sentSnapshots[index];
+            }
+        }
+
+        public void ReleaseOneSend() => _sendReleaseGate.Release();
+
+        public override async Task<WoWActivitySnapshot> SendMemberStateUpdateAsync(
+            WoWActivitySnapshot update,
+            CancellationToken ct = default)
+        {
+            lock (_sync)
+            {
+                _sentSnapshots.Add(update.Clone());
+            }
+
+            Interlocked.Increment(ref _sendCount);
+            await _sendReleaseGate.WaitAsync(ct);
+            return null!;
         }
     }
 }
