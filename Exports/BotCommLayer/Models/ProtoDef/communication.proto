@@ -32,6 +32,7 @@ message ActionMessage {
     ActionType action_type = 1;
     repeated RequestParameter parameters = 2;
     ResponseResult actionResult = 3;
+    LoadoutSpec loadout_spec = 4;   // Populated only when action_type=APPLY_LOADOUT; full per-bot prep spec handed off once so BotRunner owns execution pacing.
 }
 
 enum ActionType {
@@ -115,6 +116,7 @@ enum ActionType {
     ACCEPT_BATTLEGROUND = 77;
     LEAVE_BATTLEGROUND = 78;
     TRAVEL_TO = 79;
+    APPLY_LOADOUT = 80;   // P3: one-shot hand-off of full loadout spec (level, spells, skills, items, rep, quests, honor rank). BotRunner owns execution pacing; reports progress via WoWActivitySnapshot.loadout_status.
 }
 
 message ActionMap {
@@ -215,6 +217,56 @@ message WoWActivitySnapshot {
     repeated string desired_party_members = 26; // Desired party member character names this bot should ensure are grouped
     bool desired_party_is_raid = 27;            // True when the desired party shape should be upgraded to a raid
     bool is_heartbeat_only = 28;                // True when the bot is polling for a pending action without a meaningful state change; server must not overwrite CurrentActivityMemberList from this request
+    LoadoutStatus loadout_status = 29;          // P3: per-bot progress through the ApplyLoadout action. Coordinator gates raid-formation on all bots reporting LOADOUT_READY.
+    string loadout_failure_reason = 30;         // P3: populated when loadout_status=LOADOUT_FAILED; human-readable fail step for diagnostics.
+}
+
+// P3: progress states for a bot's single ApplyLoadout action.
+enum LoadoutStatus {
+    LOADOUT_NOT_STARTED = 0;   // Coordinator has not yet sent the spec, or BotRunner has not yet picked it up.
+    LOADOUT_IN_PROGRESS = 1;   // LoadoutTask is actively executing plan steps.
+    LOADOUT_READY = 2;         // All spec items applied (or already present). Bot is safe to raid-invite + queue.
+    LOADOUT_FAILED = 3;        // Irrecoverable error in a plan step; see loadout_failure_reason.
+}
+
+// P3: per-slot equip directive. inventory_slot=0 means "let server pick the default slot".
+message LoadoutEquipItem {
+    uint32 item_id = 1;
+    uint32 inventory_slot = 2;
+}
+
+// P3: skill training directive. Values are the target skill values; BotRunner only raises, never lowers.
+message LoadoutSkillValue {
+    uint32 skill_id = 1;
+    uint32 value = 2;
+    uint32 max = 3;
+}
+
+// P3: faction standing directive. BotRunner uses `.modify reputation` or equivalent to reach at least `standing`.
+message LoadoutFactionRep {
+    uint32 faction_id = 1;
+    int32 standing = 2;
+}
+
+// P3: single-message description of everything a character needs to become
+// raid-ready for its configured activity. StateManager hands this off once
+// per bot via ActionType.APPLY_LOADOUT; BotRunner executes it at its own
+// pace and reports completion via WoWActivitySnapshot.loadout_status. Empty
+// / zero-valued fields mean "don't change" so the spec is additive.
+message LoadoutSpec {
+    uint32 target_level = 1;
+    uint32 honor_rank = 2;
+    uint32 riding_skill = 3;            // Target riding skill value (0/75/150/300).
+    uint32 mount_spell_id = 4;           // Mount summon spell to learn (0 = no mount).
+    uint32 armor_set_id = 5;             // `.additemset <id>` token from MaNGOS item_template.
+    repeated uint32 spell_ids_to_learn = 6;
+    repeated LoadoutSkillValue skills = 7;
+    repeated LoadoutEquipItem equip_items = 8;
+    repeated uint32 supplemental_item_ids = 9;
+    repeated uint32 elixir_item_ids = 10;
+    repeated LoadoutFactionRep faction_reps = 11;
+    repeated uint32 completed_quest_ids = 12;
+    string talent_template = 13;          // Optional named talent plan (e.g. "FuryWarriorPreRaid").
 }
 
 // Progress toward character goals. StateManager populates from snapshot + goal comparison.

@@ -110,7 +110,8 @@ namespace BotRunner
             int PositionBucketX,
             int PositionBucketY,
             int HealthBucket,
-            bool IsDead);
+            bool IsDead,
+            int LoadoutStatus);
 
         // Extracted components
         private readonly DiagnosticsRecorder _diagnosticsRecorder;
@@ -457,7 +458,8 @@ namespace BotRunner
                 positionBucketX,
                 positionBucketY,
                 healthBucket,
-                isDead);
+                isDead,
+                (int)snapshot.LoadoutStatus);
         }
 
         private static void ApplyServerResponseFields(WoWActivitySnapshot target, WoWActivitySnapshot source)
