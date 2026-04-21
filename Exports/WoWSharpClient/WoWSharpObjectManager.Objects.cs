@@ -687,7 +687,7 @@ namespace WoWSharpClient
         }
 
 
-        private void ApplyFieldDiffs(WoWObject obj, Dictionary<uint, object?> updatedFields)
+        private void ApplyFieldDiffs(WoWObject obj, Dictionary<uint, object?> updatedFields, bool suppressSkillUpdateEvents = false)
         {
             bool auraFieldsModified = false;
             foreach (var (key, value) in updatedFields)
@@ -735,7 +735,7 @@ namespace WoWSharpClient
                     // Use a range check instead.
                     if (key >= (uint)EPlayerFields.PLAYER_DUEL_ARBITER && key <= (uint)EPlayerFields.PLAYER_END)
                     {
-                        ApplyPlayerFieldDiffs(player, key, value, _objects);
+                        ApplyPlayerFieldDiffs(player, key, value, _objects, suppressSkillUpdateEvents);
                         fieldHandled = true;
                     }
                     else if (key >= (uint)EUnitFields.UNIT_FIELD_CHARM && key < (uint)EUnitFields.UNIT_END)
@@ -1080,7 +1080,8 @@ namespace WoWSharpClient
             WoWPlayer player,
             uint key,
             object value,
-            List<WoWObject> objects
+            List<WoWObject> objects,
+            bool suppressSkillUpdateEvents
         )
         {
             var field = (EPlayerFields)key;
@@ -1347,16 +1348,21 @@ namespace WoWSharpClient
                         int fieldType = offset % 3;
                         if (skillIndex < 128)
                         {
+                            var skill = player.SkillInfo[skillIndex];
+                            var previousSkillInt1 = skill.SkillInt1;
+                            var previousSkillInt2 = skill.SkillInt2;
                             switch (fieldType)
                             {
                                 case 0:
-                                    player.SkillInfo[skillIndex].SkillInt1 = (uint)value;
+                                    skill.SkillInt1 = (uint)value;
+                                    FireSkillUpdatedEventIfNeeded(skill, previousSkillInt1, previousSkillInt2, suppressSkillUpdateEvents);
                                     break;
                                 case 1:
-                                    player.SkillInfo[skillIndex].SkillInt2 = (uint)value;
+                                    skill.SkillInt2 = (uint)value;
+                                    FireSkillUpdatedEventIfNeeded(skill, previousSkillInt1, previousSkillInt2, suppressSkillUpdateEvents);
                                     break;
                                 case 2:
-                                    player.SkillInfo[skillIndex].SkillInt3 = (uint)value;
+                                    skill.SkillInt3 = (uint)value;
                                     break;
                             }
                         }
@@ -1534,6 +1540,33 @@ namespace WoWSharpClient
                     // Padding field, usually ignored
                     break;
             }
+        }
+
+        private void FireSkillUpdatedEventIfNeeded(
+            SkillInfo skill,
+            uint previousSkillInt1,
+            uint previousSkillInt2,
+            bool suppressSkillUpdateEvents)
+        {
+            if (suppressSkillUpdateEvents)
+                return;
+
+            var previousSkillId = previousSkillInt1 & 0xFFFF;
+            var currentSkillId = skill.SkillInt1 & 0xFFFF;
+            if (currentSkillId == 0)
+                return;
+
+            var previousValue = previousSkillInt2 & 0xFFFF;
+            var previousMax = (previousSkillInt2 >> 16) & 0xFFFF;
+            var currentValue = skill.SkillInt2 & 0xFFFF;
+            var currentMax = (skill.SkillInt2 >> 16) & 0xFFFF;
+
+            var valueChanged = previousValue != currentValue || previousMax != currentMax;
+            var skillReboundWithState = previousSkillId != currentSkillId && (currentValue != 0 || currentMax != 0);
+            if (!valueChanged && !skillReboundWithState)
+                return;
+
+            _eventEmitter.FireOnSkillUpdated(currentSkillId, previousValue, currentValue, currentMax);
         }
 
 

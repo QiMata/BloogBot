@@ -448,6 +448,12 @@ namespace ForegroundBotRunner.Statics
 
         private bool _spellDeltaEventsArmed = false;
 
+        private Dictionary<uint, (uint Current, uint Max)> _lastSkillValuesById = new();
+
+        private bool _skillDeltaEventsArmed = false;
+
+        private string _skillSnapshotCharacter = string.Empty;
+
         /// <summary>
         /// Spell names queued from LEARNED_SPELL events that arrived before the name→ID cache
         /// was ready. Flushed into _persistentLearnedIds once the cache is built.
@@ -620,6 +626,14 @@ namespace ForegroundBotRunner.Statics
         {
             if (Player is not LocalPlayer localPlayer) return;
 
+            var characterName = localPlayer.Name ?? string.Empty;
+            if (characterName != _skillSnapshotCharacter)
+            {
+                _lastSkillValuesById.Clear();
+                _skillDeltaEventsArmed = false;
+                _skillSnapshotCharacter = characterName;
+            }
+
             localPlayer.PlayerSkills.Clear();
             var skillPtr1 = MemoryManager.ReadIntPtr(nint.Add(localPlayer.Pointer, 8));
             if (skillPtr1 == nint.Zero) return;
@@ -630,6 +644,7 @@ namespace ForegroundBotRunner.Statics
             // Sanity check to prevent infinite loops
             if (maxSkills < 0 || maxSkills > 1000) return;
 
+            var currentSkillValues = new Dictionary<uint, (uint Current, uint Max)>();
             for (var i = 0; i < maxSkills + 12; i++)
             {
                 var curPointer = nint.Add(skillPtr2, i * 12);
@@ -642,6 +657,38 @@ namespace ForegroundBotRunner.Statics
 
                 localPlayer.PlayerSkills.Add((short)id);
             }
+
+            foreach (var skill in localPlayer.SkillInfo)
+            {
+                var skillId = skill.SkillInt1 & 0xFFFF;
+                if (skillId == 0)
+                    continue;
+
+                currentSkillValues[skillId] = (
+                    skill.SkillInt2 & 0xFFFF,
+                    (skill.SkillInt2 >> 16) & 0xFFFF);
+            }
+
+            if (_skillDeltaEventsArmed && EventHandler is WoWEventHandler eventHandler)
+            {
+                foreach (var (skillId, currentState) in currentSkillValues.OrderBy(pair => pair.Key))
+                {
+                    if (_lastSkillValuesById.TryGetValue(skillId, out var previousState)
+                        && previousState.Current == currentState.Current
+                        && previousState.Max == currentState.Max)
+                    {
+                        continue;
+                    }
+
+                    var oldValue = _lastSkillValuesById.TryGetValue(skillId, out previousState)
+                        ? previousState.Current
+                        : 0u;
+                    eventHandler.FireOnSkillUpdated(skillId, oldValue, currentState.Current, currentState.Max);
+                }
+            }
+
+            _lastSkillValuesById = currentSkillValues;
+            _skillDeltaEventsArmed = true;
         }
         // EnumerateVisibleObjects callback for Vanilla 1.12.1: ThisCall with (filter, guid)
         // Parameter order is swapped compared to non-Vanilla clients

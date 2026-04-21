@@ -257,6 +257,29 @@ public class BotRunnerServiceSnapshotTests
     }
 
     [Fact]
+    public void SubscribeToMessageEvents_BuffersSkillUpdatedMessages()
+    {
+        var eventHandler = new Mock<IWoWEventHandler>(MockBehavior.Loose);
+        var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
+        objectManager.SetupGet(x => x.EventHandler).Returns(eventHandler.Object);
+
+        var service = new BotRunnerService(
+            objectManager.Object,
+            new CharacterStateUpdateClient(NullLogger.Instance),
+            new Mock<IDependencyContainer>(MockBehavior.Loose).Object);
+
+        eventHandler.Raise(
+            handler => handler.OnSkillUpdated += null!,
+            eventHandler.Object,
+            new SkillUpdatedArgs(356, 75, 76, 150));
+
+        InvokeFlushMessageBuffers(service);
+        var snapshot = ReadActivitySnapshot(service);
+
+        Assert.Contains("[SKILL] Skill 356 75->76/150", snapshot.RecentChatMessages);
+    }
+
+    [Fact]
     public void SubscribeToMessageEvents_BuffersBattlegroundStatusMessages()
     {
         var eventHandler = new Mock<IWoWEventHandler>(MockBehavior.Loose);

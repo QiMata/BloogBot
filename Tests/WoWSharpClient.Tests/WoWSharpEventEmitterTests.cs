@@ -129,6 +129,7 @@ namespace WoWSharpClient.Tests
             _emitter.FireOnSkillMessage("skill");
             _emitter.FireOnLearnedSpell(18248);
             _emitter.FireOnUnlearnedSpell(18248);
+            _emitter.FireOnSkillUpdated(356, 75, 76, 150);
             _emitter.FireOnPartyInvite("Player");
             _emitter.FireOnXpGain(100);
             _emitter.FireOnLootMoney(5000);
@@ -255,6 +256,20 @@ namespace WoWSharpClient.Tests
             _emitter.OnUnlearnedSpell += (s, e) => spellId = e.SpellId;
             _emitter.FireOnUnlearnedSpell(18248);
             Assert.Equal((uint)18248, spellId);
+        }
+
+        [Fact]
+        public void OnSkillUpdated_PassesSkillValues()
+        {
+            SkillUpdatedArgs? args = null;
+            _emitter.OnSkillUpdated += (s, e) => args = e;
+            _emitter.FireOnSkillUpdated(356, 75, 76, 150);
+
+            Assert.NotNull(args);
+            Assert.Equal((uint)356, args!.SkillId);
+            Assert.Equal((uint)75, args.OldValue);
+            Assert.Equal((uint)76, args.NewValue);
+            Assert.Equal((uint)150, args.MaxValue);
         }
 
         [Fact]

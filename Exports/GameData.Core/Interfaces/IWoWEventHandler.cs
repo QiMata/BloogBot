@@ -32,6 +32,7 @@ namespace GameData.Core.Interfaces
         event EventHandler<OnUiMessageArgs> OnSkillMessage;
         event EventHandler<SpellChangedArgs> OnLearnedSpell;
         event EventHandler<SpellChangedArgs> OnUnlearnedSpell;
+        event EventHandler<SkillUpdatedArgs> OnSkillUpdated;
         event EventHandler<EventArgs> OnBlockParryDodge;
         event EventHandler<EventArgs> OnParry;
         event EventHandler<EventArgs> OnSlamReady;
@@ -119,6 +120,14 @@ namespace GameData.Core.Interfaces
     public class SpellChangedArgs(uint spellId) : EventArgs
     {
         public uint SpellId { get; } = spellId;
+    }
+
+    public class SkillUpdatedArgs(uint skillId, uint oldValue, uint newValue, uint maxValue) : EventArgs
+    {
+        public uint SkillId { get; } = skillId;
+        public uint OldValue { get; } = oldValue;
+        public uint NewValue { get; } = newValue;
+        public uint MaxValue { get; } = maxValue;
     }
 
     public class OnXpGainArgs(int xp) : EventArgs

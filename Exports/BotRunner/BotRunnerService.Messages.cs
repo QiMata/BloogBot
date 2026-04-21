@@ -91,6 +91,17 @@ namespace BotRunner
                     }
                 };
 
+                eh.OnSkillUpdated += (_, args) =>
+                {
+                    lock (_recentChatMessages)
+                    {
+                        _recentChatMessages.Enqueue(
+                            $"[SKILL] Skill {args.SkillId} {args.OldValue}->{args.NewValue}/{args.MaxValue}");
+                        while (_recentChatMessages.Count > MaxBufferedMessages)
+                            _recentChatMessages.Dequeue();
+                    }
+                };
+
                 eh.OnWorldStatesInit += (_, worldStates) =>
                 {
                     var summary = string.Join(

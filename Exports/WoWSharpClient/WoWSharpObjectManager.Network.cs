@@ -300,7 +300,7 @@ namespace WoWSharpClient
                                                 existingObject.ObjectType,
                                                 "cached-create");
                                         }
-                                        ApplyFieldDiffs(existingObject, update.UpdatedFields);
+                                        ApplyFieldDiffs(existingObject, update.UpdatedFields, suppressSkillUpdateEvents: true);
                                         if (update.UpdatedFields.Count > 0)
                                         {
                                             ReportTestMutation(
@@ -318,7 +318,7 @@ namespace WoWSharpClient
                                         update.ObjectType,
                                         update.Guid
                                     );
-                                    ApplyFieldDiffs(newObject, update.UpdatedFields);
+                                    ApplyFieldDiffs(newObject, update.UpdatedFields, suppressSkillUpdateEvents: true);
                                     if (update.UpdatedFields.Count > 0)
                                     {
                                         ReportTestMutation(

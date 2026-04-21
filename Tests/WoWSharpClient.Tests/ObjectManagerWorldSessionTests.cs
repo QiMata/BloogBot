@@ -2592,11 +2592,106 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
-    public void EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase()
+    public void ProcessUpdatesAsync_CreateSkillInfo_DoesNotFireOnSkillUpdated()
     {
         ResetObjectManager();
 
         const ulong playerGuid = 0x130;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        SkillUpdatedArgs? updatedArgs = null;
+        var updateCount = 0;
+        EventHandler<SkillUpdatedArgs> handler = (_, args) =>
+        {
+            updateCount++;
+            updatedArgs = args;
+        };
+        WoWSharpEventEmitter.Instance.OnSkillUpdated += handler;
+
+        try
+        {
+            objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+                playerGuid,
+                WoWSharpObjectManager.ObjectUpdateOperation.Add,
+                WoWObjectType.Player,
+                null,
+                new Dictionary<uint, object?>
+                {
+                    [(uint)EPlayerFields.PLAYER_SKILL_INFO_1_1] = (uint)Skills.FISHING,
+                    [(uint)EPlayerFields.PLAYER_SKILL_INFO_1_1 + 1] = 75u | (150u << 16),
+                }));
+
+            UpdateProcessingHelper.DrainPendingUpdates();
+
+            Assert.Equal(0, updateCount);
+            Assert.Null(updatedArgs);
+        }
+        finally
+        {
+            WoWSharpEventEmitter.Instance.OnSkillUpdated -= handler;
+            objectManager.ResetWorldSessionState("ProcessUpdatesAsync_CreateSkillInfo_DoesNotFireOnSkillUpdated");
+        }
+    }
+
+    [Fact]
+    public void ProcessUpdatesAsync_SkillInfoUpdate_FiresOnSkillUpdated()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x131;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.SkillInfo[0].SkillInt1 = (uint)Skills.FISHING;
+        player.SkillInfo[0].SkillInt2 = 75u | (150u << 16);
+
+        SkillUpdatedArgs? updatedArgs = null;
+        var updateCount = 0;
+        EventHandler<SkillUpdatedArgs> handler = (_, args) =>
+        {
+            updateCount++;
+            updatedArgs = args;
+        };
+        WoWSharpEventEmitter.Instance.OnSkillUpdated += handler;
+
+        try
+        {
+            objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+                playerGuid,
+                WoWSharpObjectManager.ObjectUpdateOperation.Update,
+                WoWObjectType.Player,
+                null,
+                new Dictionary<uint, object?>
+                {
+                    [(uint)EPlayerFields.PLAYER_SKILL_INFO_1_1 + 1] = 76u | (150u << 16),
+                }));
+
+            UpdateProcessingHelper.DrainPendingUpdates();
+
+            Assert.Equal(1, updateCount);
+            Assert.NotNull(updatedArgs);
+            Assert.Equal((uint)Skills.FISHING, updatedArgs!.SkillId);
+            Assert.Equal((uint)75, updatedArgs.OldValue);
+            Assert.Equal((uint)76, updatedArgs.NewValue);
+            Assert.Equal((uint)150, updatedArgs.MaxValue);
+        }
+        finally
+        {
+            WoWSharpEventEmitter.Instance.OnSkillUpdated -= handler;
+            objectManager.ResetWorldSessionState("ProcessUpdatesAsync_SkillInfoUpdate_FiresOnSkillUpdated");
+        }
+    }
+
+    [Fact]
+    public void EventEmitter_OnForceTimeSkipped_LocalPlayer_AdvancesMovementTimeBase()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x132;
 
         var objectManager = WoWSharpObjectManager.Instance;
         objectManager.EnterWorld(playerGuid);
