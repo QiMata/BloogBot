@@ -108,7 +108,17 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
     private async Task PrepareLoadoutsOnceAsync()
     {
         await EnsurePreparedAsync();
+        await RunLoadoutPrepAsync();
+    }
 
+    /// <summary>
+    /// Runs the per-account loadout work (gear, riding, mount, elixirs) without first
+    /// calling <see cref="CoordinatorFixtureBase.EnsurePreparedAsync"/>, so it is safe
+    /// to invoke from <c>AfterPrepareAsync</c> (which already runs inside the base
+    /// prep task and would otherwise deadlock on the prep-task lock).
+    /// </summary>
+    protected async Task RunLoadoutPrepAsync()
+    {
         await SetCoordinatorEnabledAsync(false);
 
         try

@@ -84,8 +84,25 @@ public sealed class BattlegroundFixtureConfigurationTests
         var settings = GetCharacterSettings(fixture);
 
         Assert.Equal(WarsongGulchFixture.TotalBotCount, settings.Count);
-        Assert.False(GetPrepareDuringInitialization(fixture));
         AssertForegroundLeaders(settings, WarsongGulchFixture.HordeLeaderAccount, WarsongGulchFixture.AllianceLeaderAccount);
+    }
+
+    [Fact]
+    public void WarsongGulchObjectiveFixture_AutoRunsPrepDuringInitialization()
+    {
+        var fixture = new WarsongGulchObjectiveFixture();
+        Assert.True(
+            GetPrepareDuringInitialization(fixture),
+            "WSG objective fixtures must auto-run prep + loadout in InitializeAsync so tests don't orchestrate setup.");
+    }
+
+    [Fact]
+    public void WarsongGulchFixture_DoesNotAutoPrep_NonObjectiveVariant()
+    {
+        var fixture = new WarsongGulchFixture();
+        Assert.False(
+            GetPrepareDuringInitialization(fixture),
+            "Non-objective WSG fixtures keep test-driven prep to preserve existing callers.");
     }
 
     [Fact]

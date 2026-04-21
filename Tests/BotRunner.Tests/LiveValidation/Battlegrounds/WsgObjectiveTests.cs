@@ -123,13 +123,13 @@ public abstract class WsgObjectiveTestBase
         if (!string.IsNullOrWhiteSpace(_bot.BgAccountName))
             await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
 
+        // Fixture init (PrepareDuringInitialization=true) already waited for all bots
+        // in-world, ran loadout prep, and staged factions at their battlemasters, so
+        // WaitForBotsAsync / EnsureLoadoutPreparedAsync are no longer needed here.
         await _bot.ResetTrackedBattlegroundStateAsync("ObjectiveFreshStart");
-        await BgTestHelper.WaitForBotsAsync(_bot, _output, WarsongGulchFixture.TotalBotCount, "WSG");
-        await _bot.EnsureLoadoutPreparedAsync();
-        // The shared WSG objective fixture may need a fresh restage between test methods,
-        // but running Reprepare while the runtime coordinator is active causes group
-        // formation churn mid-teleport. Pause it first, then let the fixture re-enable
-        // coordination after restaging completes.
+        // Restage between test methods in case a prior method in the same fixture
+        // collection left bots elsewhere; suppress the runtime coordinator while the
+        // teleport settles to avoid group-formation churn mid-restage.
         Assert.Equal(ResponseResult.Success, await _bot.SetRuntimeCoordinatorEnabledAsync(false));
         await _bot.ReprepareAsync();
         await BgTestHelper.WaitForBgEntryAsync(_bot, _output, WarsongGulchFixture.WsgMapId, WarsongGulchFixture.TotalBotCount, "WSG");
