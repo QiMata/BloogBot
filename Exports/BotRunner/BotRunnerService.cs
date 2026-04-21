@@ -97,6 +97,12 @@ namespace BotRunner
         private DateTime _lastFullSnapshotSentAt = DateTime.MinValue;
         private static readonly TimeSpan FullSnapshotHeartbeatInterval = TimeSpan.FromSeconds(2);
 
+        // P3.3: most recent LoadoutTask progress. Cached here so the snapshot keeps
+        // reporting LoadoutReady/LoadoutFailed after the task itself is popped off
+        // the stack (e.g. when downstream tasks take over post-loadout).
+        private Communication.LoadoutStatus _lastLoadoutStatus = Communication.LoadoutStatus.LoadoutNotStarted;
+        private string _lastLoadoutFailureReason = string.Empty;
+
         private readonly record struct SnapshotChangeSignature(
             string ScreenState,
             int ConnectionState,
@@ -234,6 +240,8 @@ namespace BotRunner
                     var snapMapId = _activitySnapshot?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
                     if (snapMapId == 489 && _tickCount % 10 == 0)
                         Log.Information("[BG-DIAG] Snapshot contains MapId=489 at tick {Tick}", _tickCount);
+
+                    SyncLoadoutStatusIntoSnapshot();
 
                     var currentSignature = ComputeSnapshotSignature(_activitySnapshot);
                     var nowUtc = DateTime.UtcNow;
@@ -472,6 +480,69 @@ namespace BotRunner
                 target.DesiredPartyMembers.Add(member);
         }
 
+        /// <summary>
+        /// P3.3: pull the top <see cref="Tasks.LoadoutTask"/>'s progress (if any)
+        /// into <see cref="_lastLoadoutStatus"/>/<see cref="_lastLoadoutFailureReason"/>
+        /// and apply those to the outbound snapshot. Runs before
+        /// <see cref="ComputeSnapshotSignature"/> so a LoadoutStatus transition
+        /// forces a full snapshot send (LoadoutStatus is part of the signature).
+        /// Caching the last-seen status means the snapshot keeps reporting
+        /// LoadoutReady/LoadoutFailed even after the task pops off the stack.
+        /// </summary>
+        internal void SyncLoadoutStatusIntoSnapshot()
+        {
+            if (_botTasks.Count > 0 && _botTasks.Peek() is Tasks.LoadoutTask loadoutTask)
+            {
+                _lastLoadoutStatus = loadoutTask.Status;
+                _lastLoadoutFailureReason = loadoutTask.FailureReason ?? string.Empty;
+            }
+
+            if (_activitySnapshot != null)
+            {
+                _activitySnapshot.LoadoutStatus = _lastLoadoutStatus;
+                _activitySnapshot.LoadoutFailureReason = _lastLoadoutFailureReason;
+            }
+        }
+
+        /// <summary>
+        /// P3.3: handle an incoming <see cref="Communication.ActionType.ApplyLoadout"/>
+        /// action by pushing a single <see cref="Tasks.LoadoutTask"/> onto the
+        /// bot-task stack. Action dispatch skips the normal behavior-tree path
+        /// because ApplyLoadout has no CharacterAction mapping — the whole
+        /// execution lives in <see cref="Tasks.LoadoutTask"/> so BotRunner owns
+        /// pacing and idempotency.
+        /// </summary>
+        internal void HandleApplyLoadoutAction(Communication.ActionMessage action)
+        {
+            if (_botTasks.Count > 0 && _botTasks.Peek() is Tasks.LoadoutTask)
+            {
+                Log.Information(
+                    "[BOT RUNNER] ApplyLoadout received but a LoadoutTask is already active; ignoring duplicate [{Corr}]",
+                    _currentActionCorrelationId);
+                _activitySnapshot.PreviousAction = action;
+                return;
+            }
+
+            var spec = action.LoadoutSpec ?? new Communication.LoadoutSpec();
+            var context = new BotRunnerContext(
+                _objectManager,
+                _botTasks,
+                _container,
+                _behaviorConfig,
+                EnqueueDiagnosticMessage);
+
+            _botTasks.Push(new Tasks.LoadoutTask(context, spec));
+            _activitySnapshot.PreviousAction = action;
+
+            Log.Information(
+                "[BOT RUNNER] ApplyLoadout pushed LoadoutTask (targetLevel={TargetLevel} spells={SpellCount} equip={EquipCount} supplemental={SupplementalCount}) [{Corr}]",
+                spec.TargetLevel,
+                spec.SpellIdsToLearn.Count,
+                spec.EquipItems.Count,
+                spec.SupplementalItemIds.Count,
+                _currentActionCorrelationId);
+        }
+
         private void EnsureActivitySnapshot()
         {
             if (_activitySnapshot != null)
@@ -530,6 +601,12 @@ namespace BotRunner
 
                 if (_diagnosticsRecorder.HandleDiagnosticAction(action))
                     return;
+
+                if (action.ActionType == Communication.ActionType.ApplyLoadout)
+                {
+                    HandleApplyLoadoutAction(action);
+                    return;
+                }
 
                 var actionList = ConvertActionMessageToCharacterActions(action);
                 if (actionList.Count > 0)
