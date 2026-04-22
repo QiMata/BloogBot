@@ -5,8 +5,8 @@ namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
 /// Fixture for BG combat tests. Launches StateManager with CombatBg.settings.json:
-/// TESTBOT1 (FG) + COMBATTEST (BG). COMBATTEST never receives .gm on, so faction
-/// data stays normal and mobs engage naturally.
+/// TESTBOT1 (FG) + COMBATTEST (BG). COMBATTEST relies on account-level GM access
+/// only, so faction data stays normal and mobs engage naturally.
 /// </summary>
 public class CombatBgBotFixture : LiveBotFixture, IAsyncLifetime
 {

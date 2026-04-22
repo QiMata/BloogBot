@@ -179,17 +179,25 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
 
     internal async Task MountRaidForFirstObjectiveAsync()
     {
-        // Mount via GM .cast command with explicit self-target.
+        // Apply the mount aura directly through SOAP so AV prep never toggles runtime GM mode.
         // 23509 = Frostwolf Howler (Horde), 23510 = Stormpike Battle Charger (Alliance)
-        var toggledGmAccounts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await SeedExpectedCharacterNamesFromDatabaseAsync();
         for (var pass = 1; pass <= 3; pass++)
         {
             var snapshots = await QueryAllSnapshotsAsync();
+            var snapshotsByAccount = snapshots
+                .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.AccountName))
+                .GroupBy(snapshot => snapshot.AccountName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
             var pendingAccounts = CharacterSettings
-                .Where(settings =>
+                .Select(settings => new
                 {
-                    var snapshot = snapshots.LastOrDefault(candidate =>
-                        string.Equals(candidate.AccountName, settings.AccountName, StringComparison.OrdinalIgnoreCase));
+                    Settings = settings,
+                    Snapshot = snapshotsByAccount.GetValueOrDefault(settings.AccountName)
+                })
+                .Where(candidate =>
+                {
+                    var snapshot = candidate.Snapshot;
                     if (snapshot == null)
                         return false;
 
@@ -204,31 +212,31 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
             if (pendingAccounts.Length == 0)
                 break;
 
-            foreach (var settings in pendingAccounts)
+            foreach (var pending in pendingAccounts)
             {
+                var settings = pending.Settings;
+                var snapshot = pending.Snapshot!;
+                var characterName = snapshot.CharacterName;
+                if (string.IsNullOrWhiteSpace(characterName))
+                {
+                    Console.WriteLine($"[AV] Mount aura skipped for {settings.AccountName}: snapshot character name unavailable.");
+                    continue;
+                }
+
                 var isHorde = settings.CharacterRace != null && (
                     settings.CharacterRace.Equals("Orc", StringComparison.OrdinalIgnoreCase)
                     || settings.CharacterRace.Equals("Undead", StringComparison.OrdinalIgnoreCase)
                     || settings.CharacterRace.Equals("Tauren", StringComparison.OrdinalIgnoreCase)
                     || settings.CharacterRace.Equals("Troll", StringComparison.OrdinalIgnoreCase));
                 var mountSpellId = isHorde ? 23509 : 23510;
-                await SendSilentGmChatCommandAsync(settings.AccountName, ".gm on");
-                toggledGmAccounts.Add(settings.AccountName);
-                await Task.Delay(75);
-                await SendSilentGmChatCommandAsync(settings.AccountName, ".targetself");
-                await Task.Delay(75);
-                await SendSilentGmChatCommandAsync(settings.AccountName, $".cast {mountSpellId}");
+                var auraResult = await ExecuteGMCommandAsync($".aura {mountSpellId} {characterName}");
+                if (string.IsNullOrWhiteSpace(auraResult) || auraResult.StartsWith("FAULT:", StringComparison.OrdinalIgnoreCase))
+                    Console.WriteLine($"[AV] Mount aura failed for {characterName} ({settings.AccountName}): {auraResult}");
+
                 await Task.Delay(90);
             }
 
             await Task.Delay(800);
-        }
-
-        // Keep mounting reliability while ensuring movement starts with GM mode off.
-        foreach (var accountName in toggledGmAccounts)
-        {
-            await SendSilentGmChatCommandAsync(accountName, ".gm off");
-            await Task.Delay(50);
         }
     }
 

@@ -24,7 +24,7 @@ namespace BotRunner.Tests.LiveValidation.Scenarios;
 ///       "learnSpells": [2575],
 ///       "addItems": [{ "id": 2901, "count": 1 }],
 ///       "setSkills": [{ "id": 186, "current": 1, "max": 300 }],
-///       "gmCommands": [".gm on"]
+///       "gmCommands": [".character level 8"]
 ///     }
 ///   ],
 ///   "action": {
@@ -149,7 +149,7 @@ public class BotSetup
     public List<SkillSpec> SetSkills { get; set; } = new();
 
     /// <summary>
-    /// Raw GM commands to execute via bot chat (e.g. ".gm on", ".character level 8").
+    /// Raw GM commands to execute via bot chat (e.g. ".character level 8", ".quest add 4641").
     /// </summary>
     [JsonPropertyName("gmCommands")]
     public List<string> GmCommands { get; set; } = new();

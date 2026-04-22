@@ -4,7 +4,7 @@ Validates kill-to-loot flow using natural auto-attack combat.
 
 ## Bot Execution Mode
 
-**CombatTest-Only** — Uses dedicated `COMBATTEST` account (never receives `.gm on`). No FG observation or parity comparison. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+**CombatTest-Only** — Uses dedicated `COMBATTEST` account with account-level GM access only. No FG observation or parity comparison. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
 
 ## Test Method
 

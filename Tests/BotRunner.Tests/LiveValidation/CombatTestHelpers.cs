@@ -150,15 +150,14 @@ internal static class CombatTestHelpers
         // Leave any group/raid from previous tests (RFC raid leaves FG in group)
         // VMaNGOS uses .group remove, not .group disband
         await bot.SendGmChatCommandAsync(observerAccount, ".group remove");
-        await bot.SendGmChatCommandAsync(observerAccount, ".gm on");
 
         // Teleport FG observer near the mob area first, then start following
         await bot.BotTeleportAsync(observerAccount, MapId, MobAreaX - 10f, MobAreaY - 10f, MobAreaZ);
         await bot.WaitForTeleportSettledAsync(observerAccount, MobAreaX - 10f, MobAreaY - 10f);
 
         // Start FG following the combat bot so it shadows during the fight
-        var followResult = await bot.StartFollowAsync(observerAccount, combatAccount, followDistance: 8.0f);
-        output.WriteLine($"  [FG-OBSERVER] near mob area, GM on, follow={followResult}.");
+        var followResult = await bot.StartFollowAsync(observerAccount, combatAccount, followDistance: 12.0f);
+        output.WriteLine($"  [FG-OBSERVER] near mob area, account-level GM only, follow={followResult}.");
     }
 
     private static async Task FaceBotTowardTargetBotAsync(

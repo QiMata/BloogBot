@@ -171,7 +171,7 @@ public class TestScenarioRunner
             await _bot.EnsureCleanSlateAsync(account, label, teleportToSafeZone: true);
         }
 
-        // GM commands first (e.g. .gm on)
+        // GM commands first (e.g. .character level 8)
         foreach (var cmd in setup.GmCommands)
         {
             _output.WriteLine($"    GM: {cmd}");

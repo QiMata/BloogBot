@@ -12,8 +12,8 @@ namespace BotRunner.Tests.LiveValidation;
 /// <summary>
 /// Loot corpse integration test — validates the core kill → loot → inventory loop.
 ///
-/// Uses the dedicated COMBATTEST account (never receives .gm on) so mobs interact
-/// normally. GM mode corrupts faction flags causing mobs to evade — COMBATTEST avoids this.
+/// Uses the dedicated COMBATTEST account without runtime GM-mode toggles so mobs
+/// interact normally. Account-level GM access still covers setup commands.
 ///
 /// Flow:
 /// 1) Ensure strict-alive setup state.
@@ -61,7 +61,7 @@ public class LootCorpseTests
         Assert.NotNull(combatAccount);
 
         _output.WriteLine($"=== Combat Test Bot: {_bot.CombatTestCharacterName} ({combatAccount}) ===");
-        _output.WriteLine("Using dedicated non-GM account (never receives .gm on → no factionTemplate corruption)");
+        _output.WriteLine("Using dedicated combat account with account-level GM access only (no runtime GM-mode toggles).");
 
         var passed = await RunLootScenario(combatAccount!, "LOOT");
         Assert.True(passed, "COMBATTEST bot: Loot scenario failed — see test output for details.");

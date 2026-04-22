@@ -80,9 +80,8 @@ namespace WoWStateManager.Settings
 
         /// <summary>
         /// GM level for this account (0=player, 6=full admin).
-        /// Controls command access (e.g. .go xyz, .learn). Does NOT enable in-game GM mode
-        /// (.gm on) — that must be sent separately and should be avoided for combat testing
-        /// because it corrupts factionTemplate.
+        /// Controls command access (e.g. .go xyz, .learn). It does NOT toggle in-game
+        /// runtime GM mode; live tests rely on account-level GM access only.
         /// </summary>
         [JsonProperty("GmLevel")]
         public int GmLevel { get; set; } = 6;

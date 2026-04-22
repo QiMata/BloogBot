@@ -51,6 +51,41 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-22 (Tier 1 slice 1 - no runtime GM toggles)
+- Pass result: `slice shipped; build green; focused MageTeleport live proof blocked twice on Horde teleport arrival`
+- Last delta:
+  - Removed every active live runtime-GM-toggle dispatch/helper in the test suite, including `CombatTestHelpers`, `IntegrationValidationTests`, `MageTeleportTests`, and the AV mount-prep path.
+  - `AlteracValleyFixture.MountRaidForFirstObjectiveAsync()` now applies mount auras through SOAP (`.aura <mountSpellId> <characterName>`) instead of toggling runtime GM mode.
+  - `MageTeleport_Horde_OrgrimmarArrival` now uses the real learned `CastSpell` path with teleport runes instead of GM `.cast`, but the Horde live proof still fails independently with `Spell error for 3567`.
+  - Updated stale comments/docs/test data so the runtime-GM-toggle grep over `Tests Services Exports` now only hits the allowed rule docs.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (1065 warnings, 0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MageTeleportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mage_teleport_no_gm_on.trx"` -> `failed (2 passed, 1 failed, 1 skipped); Horde Orgrimmar arrival did not complete`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (85 warnings, 0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MageTeleportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mage_teleport_no_gm_on_retry.trx"` -> `failed again (2 passed, 1 failed, 1 skipped); Horde path logged "Spell error for 3567" and never satisfied the Orgrimmar arrival assertion`
+- Files changed:
+  - `Services/WoWStateManager/Settings/CharacterSettings.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/AlteracValleyFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatArenaFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatBgBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatTestHelpers.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FIXTURE_LIFECYCLE.md`
+  - `Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MageTeleportTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/RagefireChasmTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Scenarios/TestScenario.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Scenarios/TestScenarioRunner.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/CombatLoopTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/LootCorpseTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - `Tests/RecordedTests.PathingTests.Tests/PathingTestDefinitionTests.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "CombatTestHelpers|CombatBgBotFixture|CombatFgBotFixture|CombatArenaFixture|CombatLoopTests" Tests/BotRunner.Tests/LiveValidation Services/WoWStateManager/Settings/Configs`
+
 ### 2026-04-22 (P5.1)
 - Pass result: `P5.1 coordinator ACK consumption green (BattlegroundCoordinatorLoadoutTests 11/11, full BattlegroundCoordinator* 22/22)`
 - Last delta:

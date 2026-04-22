@@ -18,7 +18,7 @@ This suite currently validates the raw melee entry point through:
 
 **Why COMBATTEST?**
 - account-level GM access for setup commands
-- never receives `.gm on`
+- account-level GM access only
 - avoids faction-template corruption during hostile mob tests
 
 ## Test Flow

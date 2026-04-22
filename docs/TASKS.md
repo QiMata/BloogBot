@@ -6,7 +6,7 @@
 3. Move completed items to `docs/TASKS_ARCHIVE.md`.
 4. **The MaNGOS server is ALWAYS live** (Docker).
 5. **WoW.exe binary parity is THE rule** for physics/movement.
-6. **GM Mode OFF after setup** - `.gm on` corrupts UnitReaction bits. Always `.gm off` before test actions.
+6. **No runtime GM-mode toggles in tests** - `.gm on` corrupts UnitReaction bits. Use account-level GM access only.
 7. **Clear repo-scoped WoW/test processes before building.** DLL injection locks output files.
 8. **Previous phases archived** - see `docs/ARCHIVE.md` and `docs/TASKS_ARCHIVE.md`.
 
@@ -339,6 +339,46 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 ---
 
 ## Handoff (2026-04-22, P5.x LiveValidation ACK migration)
+
+## Handoff (2026-04-22, Tier 1 LiveValidation slice 1)
+
+- Completed: blanket-removed active `.gm on` dispatches/helpers from live validation and supporting comments/docs under `Tests/` / `Services/`.
+  - Deleted the `SetGmModeAsync(...)` helpers from `IntegrationValidationTests` and `MageTeleportTests`.
+  - Removed the FG observer `.gm on` from `CombatTestHelpers` and widened follow distance to keep the observer safely out of aggro range.
+  - Replaced AV mount prep's runtime GM toggle path with SOAP `.aura <mountSpellId> <characterName>` application.
+  - Updated deterministic pathing fixture data plus stale live-validation docs/comments so `rg -n "\.gm on|SendGmChatCommandAsync.*gm on|SetGmModeAsync" Tests Services Exports` now only returns the rule docs (`Tests/CLAUDE.md`, `LiveValidation/docs/OVERHAUL_PLAN.md`).
+  - Tightened `MageTeleport_Horde_OrgrimmarArrival` to use the real learned `CastSpell` path plus rune setup instead of the GM `.cast` shortcut while removing the old GM-mode bracket.
+- Validation:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `No tasks are running which match the specified criteria.`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (1065 warnings, 0 errors)` on the first build after the `.gm on` removal.
+  - `docker ps --format "{{.Names}} {{.Status}}"` -> `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were running/healthy for the live reruns.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MageTeleportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mage_teleport_no_gm_on.trx"` -> `failed (2 passed, 1 failed, 1 skipped)`; `MageTeleport_Horde_OrgrimmarArrival` still did not arrive in Orgrimmar within 15s after helper removal.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (85 warnings, 0 errors)` after switching the Horde mage test from GM `.cast` to the real `CastSpell` path.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MageTeleportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mage_teleport_no_gm_on_retry.trx"` -> `failed again (2 passed, 1 failed, 1 skipped)`; `MageTeleport_Horde_OrgrimmarArrival` logged `Spell error for 3567: Cast failed for spell 3567` and a delayed movement-controller snap to `(1469.8, -4221.5, 59.0)` while the final snapshot still reported Razor Hill.
+- Notes:
+  - Slice 1 code is shipped despite the blocked live proof per the follow-through policy: the failure reproduced twice and looks specific to the long-standing Horde mage teleport live path, not to residual `.gm on` usage.
+  - The retry preserved the slice goal: no runtime GM-mode toggles were reintroduced anywhere in the test suite.
+- Files changed:
+  - `Services/WoWStateManager/Settings/CharacterSettings.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/AlteracValleyFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatArenaFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatBgBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatTestHelpers.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FIXTURE_LIFECYCLE.md`
+  - `Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MageTeleportTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/RagefireChasmTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Scenarios/TestScenario.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/Scenarios/TestScenarioRunner.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/CombatLoopTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/LootCorpseTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - `Tests/RecordedTests.PathingTests.Tests/PathingTestDefinitionTests.cs`
+  - `docs/TASKS.md`
+- Next command: `rg -n "CombatTestHelpers|CombatBgBotFixture|CombatFgBotFixture|CombatArenaFixture|CombatLoopTests" Tests/BotRunner.Tests/LiveValidation Services/WoWStateManager/Settings/Configs`
 
 - Completed: migrated the remaining six `LiveValidation/*` `AssertCommandSucceeded`
   helpers to delegate to `LiveBotFixture.AssertTraceCommandSucceeded`. P4.5.3

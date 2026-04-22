@@ -16,14 +16,14 @@ namespace BotRunner.Tests.LiveValidation;
 /// - Dedicated accounts (ARENAFG1 + ARENABG1), not shared TESTBOT* pool.
 /// - The fixture logs fresh characters in (cinematic auto-dismisses), teleports
 ///   both to the Valley of Trials boar cluster, and hands off control here.
-/// - No <c>.damage</c>, no <c>.gm on/off</c> toggling, no <c>.respawn</c>.
+/// - No <c>.damage</c>, no runtime GM-mode toggling, no <c>.respawn</c>.
 ///   Damage comes from the bot's own auto-attack via <see cref="ActionType.StartMeleeAttack"/>;
 ///   BotRunner's behavior tree owns chase, facing, and attack toggle.
 /// - The test acts as StateManager's consumer: it asks the fixture for a mob
 ///   GUID, dispatches one StartMeleeAttack to the BG bot, and waits for the
 ///   snapshot-observed death of the boar.
 /// - A level-1 warrior with starter gear beats a level-1 mottled boar reliably,
-///   so the surviving-attacker assertion holds even with GM mode OFF.
+///   so the surviving-attacker assertion holds without runtime GM-mode toggles.
 /// </summary>
 [RequiresMangosStack]
 [Collection(CombatArenaCollection.Name)]

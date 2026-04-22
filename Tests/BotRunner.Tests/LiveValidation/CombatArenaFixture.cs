@@ -23,7 +23,7 @@ public sealed class CombatArenaCollection : ICollectionFixture<CombatArenaFixtur
 /// log in fresh (cinematic auto-dismiss is handled by WorldClient on BG and
 /// ForegroundBotWorker on FG). After world entry the fixture teleports both
 /// bots to the Valley of Trials boar cluster so the test can run real combat
-/// against natural mob spawns — no GM .damage, no .gm on/off toggling.
+/// against natural mob spawns — no GM .damage and no runtime GM-mode toggling.
 /// </summary>
 public sealed class CombatArenaFixture : CoordinatorFixtureBase
 {

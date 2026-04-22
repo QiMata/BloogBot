@@ -202,7 +202,6 @@ public class IntegrationValidationTests
         const uint questId = 5441;
 
         await _bot.EnsureCleanSlateAsync(account, label);
-        await SetGmModeAsync(account, label, enabled: true);
         await EnsureReadyAtLocationAsync(account, label, KalimdorMap, EscortQuestX, EscortQuestY, EscortQuestZ);
         await EnsureQuestAbsentAsync(account, label, questId);
 
@@ -264,7 +263,6 @@ public class IntegrationValidationTests
 
         const string label = "BG";
         await _bot.EnsureCleanSlateAsync(account, label);
-        await SetGmModeAsync(account, label, enabled: true);
         await EnsureReadyAtLocationAsync(account, label, KalimdorMap, OrgSafeX, OrgSafeY, OrgSafeZ);
         await EnsureLevelAtLeastAsync(account, label, 10);
         await EnsureSpellAbsentAsync(account, label, DeflectionRank1SpellId);
@@ -275,8 +273,6 @@ public class IntegrationValidationTests
         AssertCommandSucceeded(resetTrace, label, ".reset talents");
         var learnTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".learn {DeflectionRank1SpellId}", captureResponse: true, delayMs: 1000);
         AssertCommandSucceeded(learnTrace, label, $".learn {DeflectionRank1SpellId}");
-        await SetGmModeAsync(account, label, enabled: false);
-
         var learned = await _bot.WaitForSnapshotConditionAsync(
             account,
             s => s.Player?.SpellList?.Contains(DeflectionRank1SpellId) == true,
@@ -308,13 +304,10 @@ public class IntegrationValidationTests
 
         const string label = "BG";
         await _bot.EnsureCleanSlateAsync(account, label);
-        await SetGmModeAsync(account, label, enabled: true);
         await EnsureMoneyAtLeastAsync(account, label, TrainerSetupCopper);
         await EnsureLevelAtLeastAsync(account, label, 10);
         await EnsureSpellAbsentAsync(account, label, BattleShoutSpellId);
         await EnsureReadyAtLocationAsync(account, label, KalimdorMap, RazorHillTrainerX, RazorHillTrainerY, RazorHillTrainerZ);
-        await SetGmModeAsync(account, label, enabled: false);
-
         await _bot.RefreshSnapshotsAsync();
         var snapBefore = await _bot.GetSnapshotAsync(account);
         var spellsBefore = snapBefore?.Player?.SpellList?.Count ?? 0;
@@ -400,13 +393,10 @@ public class IntegrationValidationTests
 
         const string label = "BG";
         await _bot.EnsureCleanSlateAsync(account, label);
-        await SetGmModeAsync(account, label, enabled: true);
         await _bot.BotClearInventoryAsync(account);
         await EnsureMoneyAtLeastAsync(account, label, VendorSetupCopper);
         await EnsureReadyAtLocationAsync(account, label, KalimdorMap, RazorHillVendorX, RazorHillVendorY, RazorHillVendorZ);
         await _bot.BotAddItemAsync(account, LiveBotFixture.TestItems.LinenCloth, 1);
-        await SetGmModeAsync(account, label, enabled: false);
-
         await _bot.RefreshSnapshotsAsync();
         var snapBefore = await _bot.GetSnapshotAsync(account);
         var coinageBefore = snapBefore?.Player?.Coinage ?? 0;
@@ -694,14 +684,6 @@ public class IntegrationValidationTests
         }
 
         return (-1, -1);
-    }
-
-    private async Task SetGmModeAsync(string account, string label, bool enabled)
-    {
-        var command = enabled ? ".gm on" : ".gm off";
-        var trace = await _bot.SendGmChatCommandTrackedAsync(account, command, captureResponse: true, delayMs: 1000, allowWhenDead: true);
-        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
-        _output.WriteLine($"[{label}] GM mode command '{command}' dispatched.");
     }
 
     // P4.5.3: ACK-aware assertion replaces the legacy string-match rejection scan.

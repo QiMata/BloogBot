@@ -4,7 +4,7 @@ All live-validation classes in `Tests/BotRunner.Tests/LiveValidation/` share one
 
 ## Core Rules
 
-1. No bot receives `.gm on`. Setup relies on account-level GM access only.
+1. No test toggles runtime GM mode. Setup relies on account-level GM access only.
 2. `EnsureCleanSlateAsync(account, label)` means revive-if-needed plus safe-zone teleport, not GM flag mutation.
 3. `WWOW_DISABLE_AUTORELEASE_CORPSE_TASK=1` and `WWOW_DISABLE_AUTORETRIEVE_CORPSE_TASK=1` stay enabled for the general live suite. Corpse-recovery coverage must override them explicitly.
 
@@ -104,7 +104,7 @@ For BG, FG, and COMBAT when present:
 
 ## Bot Identity Table
 
-| Account | Role | RunnerType | `.gm on` |
+| Account | Role | RunnerType | Runtime GM mode |
 |---|---|---|---|
 | `TESTBOT1` | ForegroundBot | Foreground | Never |
 | `TESTBOT2` | BackgroundBot | Background | Never |

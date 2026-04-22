@@ -65,7 +65,7 @@ public class RagefireChasmTests
 
     // All RFC accounts — RFCBOT1 is FG raid leader, RFCBOT2-10 are BG members.
     // Dedicated accounts (not shared with TESTBOT1/2) to avoid cross-test state pollution.
-    // GM level 6 for setup commands. Never .gm on — bots stay at HP=1 under damage (immortal).
+    // GM level 6 covers setup commands. Live tests never toggle runtime GM mode.
     private static readonly string[] RfcAccounts =
     [
         "RFCBOT1", "RFCBOT2", "RFCBOT3", "RFCBOT4", "RFCBOT5",

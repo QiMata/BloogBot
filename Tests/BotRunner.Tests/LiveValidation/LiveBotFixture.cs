@@ -216,7 +216,7 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// <summary>Account name of the Foreground bot (from config).</summary>
     public string? FgAccountName { get; private set; }
 
-    /// <summary>Snapshot of the Combat Test bot (non-GM, never receives .gm on).</summary>
+    /// <summary>Snapshot of the combat-test bot (account-level GM access only, no runtime GM-mode toggles).</summary>
     public WoWActivitySnapshot? CombatTestBot { get; private set; }
 
     /// <summary>Account name of the Combat Test bot.</summary>
@@ -804,7 +804,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         // they haven't been set yet) or when explicitly rebuilding (e.g. during init).
 
         // Match by account name:
-        //   COMBATTEST = dedicated non-GM combat testing bot (never receives .gm on)
+        //   COMBATTEST = dedicated combat testing bot using account-level GM access only
         //     - Also assigned to FG or BG based on seeded FgAccountName/BgAccountName
         //   Account matching FgAccountName (seeded from config) = Foreground
         //   Account ending in "1" = Foreground (legacy fallback)

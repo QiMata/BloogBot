@@ -21,7 +21,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | **Dual-Bot Sync** | Both FG and BG run the same scenario simultaneously. FG serves as ground truth for BG behavior. |
 | **Dual-Bot Conditional** | BG always runs. FG runs only when `IsFgActionable` is true. FG observation is best-effort. |
 | **BG-Only** | Only the BG bot runs. No FG observation. BG bugs have no reference comparison. |
-| **CombatTest-Only** | Dedicated COMBATTEST account (never receives `.gm on`). No FG/BG parity comparison. |
+| **CombatTest-Only** | Dedicated COMBATTEST account with account-level GM access only. No FG/BG parity comparison. |
 
 ## Test Class Index
 
@@ -29,7 +29,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 |------------|------|-----------|-----------------|-------|
 | BasicLoopTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Login/physics health checks |
 | BuffAndConsumableTests | Dual-Bot Conditional | BG + FG | Yes (when available) | FG-first, then BG |
-| CombatLoopTests | CombatTest-Only | COMBATTEST | **No** | Non-GM account, avoids faction corruption |
+| CombatLoopTests | CombatTest-Only | COMBATTEST | **No** | Account-level GM only; avoids runtime GM-mode corruption |
 | CraftingProfessionTests | BG-Only | BG | **No** | FG excluded (legacy Lua/UI dependency) |
 | DeathCorpseRunTests | BG default + FG opt-in | BG (+ opt-in FG) | Opt-in only | Historical CRASH-001 not reproduced on 2026-04-15; latest opt-in FG corpse-run passes |
 | EconomyInteractionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Bank/AH parallel validation |

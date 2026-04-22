@@ -61,7 +61,7 @@ public class PathingTestDefinitionTests
     [Fact]
     public void Constructor_SetupCommands_PreservesArray()
     {
-        var commands = new[] { ".tele Orgrimmar", ".gm on" };
+        var commands = new[] { ".tele Orgrimmar" };
         var def = CreateMinimal(setupCommands: commands);
         def.SetupCommands.Should().Equal(commands);
     }

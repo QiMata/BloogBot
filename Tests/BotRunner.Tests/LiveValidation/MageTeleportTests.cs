@@ -56,7 +56,6 @@ public class MageTeleportTests
             var account = _bot.BgAccountName!;
 
             await _bot.EnsureCleanSlateAsync(account, "BG");
-            await SetGmModeAsync(account, enabled: true);
 
             // Teleport to Razor Hill (away from Org)
             await _bot.BotTeleportAsync(account, KalimdorMapId, RazorHillX, RazorHillY, RazorHillZ);
@@ -69,9 +68,24 @@ public class MageTeleportTests
             Assert.NotNull(startPos);
             _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1}, {startPos.Z:F1})");
 
-            // GM .cast is the reliable live path for GM-provisioned self-teleports.
-            var castTrace = await _bot.SendGmChatCommandTrackedAsync(account, $".cast {TeleportOrgrimmar}", captureResponse: true, delayMs: 1000);
-            AssertCommandSucceeded(castTrace, "BG", $".cast {TeleportOrgrimmar}");
+            _output.WriteLine("[SETUP] Teaching Teleport: Orgrimmar (3567)");
+            await _bot.BotLearnSpellAsync(account, TeleportOrgrimmar);
+            var orgrimmarTeleportKnown = await _bot.WaitForSnapshotConditionAsync(
+                account,
+                s => s.Player?.SpellList?.Contains(TeleportOrgrimmar) == true,
+                TimeSpan.FromSeconds(5),
+                pollIntervalMs: 300,
+                progressLabel: "BG teleport-org-learn");
+            Assert.True(orgrimmarTeleportKnown, "Teleport: Orgrimmar should be present in SpellList before cast.");
+            await EnsureTeleportReagentAsync(account, "BG");
+
+            var castResult = await _bot.SendActionAsync(account, new ActionMessage
+            {
+                ActionType = ActionType.CastSpell,
+                Parameters = { new RequestParameter { IntParam = (int)TeleportOrgrimmar } }
+            });
+            _output.WriteLine($"[TEST] CAST_SPELL result: {castResult}");
+            Assert.Equal(ResponseResult.Success, castResult);
 
             // Wait for position change (teleport should be near-instant after cast time)
             var arrived = await _bot.WaitForSnapshotConditionAsync(
@@ -116,8 +130,6 @@ public class MageTeleportTests
         global::Tests.Infrastructure.Skip.IfNot(
             IsAllianceRace(raceSnapshot),
             "Default live fixture uses Horde bots; Stormwind teleport requires an Alliance character.");
-        await SetGmModeAsync(account, enabled: true);
-
         // Learn Teleport: Stormwind
         _output.WriteLine("[SETUP] Teaching Teleport: Stormwind (3561)");
         await _bot.BotLearnSpellAsync(account, TeleportStormwind);
@@ -136,7 +148,6 @@ public class MageTeleportTests
         var startPos = startSnap!.Player?.Unit?.GameObject?.Base?.Position;
         Assert.NotNull(startPos);
         _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1}, {startPos.Z:F1})");
-        await SetGmModeAsync(account, enabled: false);
 
         var castResult = await _bot.SendActionAsync(account, new ActionMessage
         {
@@ -163,7 +174,6 @@ public class MageTeleportTests
         var account = _bot.BgAccountName!;
 
         await _bot.EnsureCleanSlateAsync(account, "BG");
-        await SetGmModeAsync(account, enabled: true);
 
         // Learn Portal: Orgrimmar (11417)
         const uint portalOrgrimmar = 11417;
@@ -190,7 +200,6 @@ public class MageTeleportTests
         var account = _bot.BgAccountName!;
 
         await _bot.EnsureCleanSlateAsync(account, "BG");
-        await SetGmModeAsync(account, enabled: true);
 
         uint[] teleportSpells = { 3567, 3563, 3566, 3561, 3562, 3565 };
         string[] spellNames = { "Orgrimmar", "Undercity", "Thunder Bluff", "Stormwind", "Ironforge", "Darnassus" };
@@ -244,13 +253,6 @@ public class MageTeleportTests
             pollIntervalMs: 300,
             progressLabel: $"{label} teleport-reagent");
         Assert.True(hasReagent, $"[{label}] Rune of Teleportation should be present before casting a self-teleport.");
-    }
-
-    private async Task SetGmModeAsync(string account, bool enabled)
-    {
-        var command = enabled ? ".gm on" : ".gm off";
-        var trace = await _bot.SendGmChatCommandTrackedAsync(account, command, captureResponse: true, delayMs: 1000, allowWhenDead: true);
-        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
     }
 
     // P4.5.3: ACK-first assertion. See LiveBotFixture.AssertTraceCommandSucceeded.
