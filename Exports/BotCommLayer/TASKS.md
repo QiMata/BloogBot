@@ -112,6 +112,25 @@
 4. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-21 (P4.4)
+- Pass result: `ActionMessage correlation ids and CommandAckEvent are part of the canonical contract`
+- Last delta:
+  - `communication.proto` now adds `ActionMessage.correlation_id`, new `CommandAckEvent`, and `WoWActivitySnapshot.recent_command_acks` with the cap-10 ring documented next to the field.
+  - Regenerated `Exports/BotCommLayer/Models/Communication.cs` with `protocsharp.bat` so the new contract ships without any compatibility shim or feature flag.
+- Validation/tests run:
+  - `& .\protocsharp.bat "." ".."` (from `Exports/BotCommLayer/Models/ProtoDef`) -> `succeeded`
+  - `dotnet build Exports/BotCommLayer/BotCommLayer.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (33 warnings, 0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~LoadoutSpecConverterTests" --logger "console;verbosity=minimal"` -> `passed (48/48)`
+- Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
+  - `Exports/BotCommLayer/Models/Communication.cs`
+  - `Exports/BotCommLayer/TASKS.md`
+- Commits:
+  - `9232c83f` `feat(comm): P4.4 add command ack proto schema`
+  - `4d1b7489` `feat(botrunner): P4.4 plumb correlated command acks`
+  - `3f800ed9` `test(botrunner): P4.4 cover command ack round-trips`
+- Next command: `rg -n "LastAckStatus|SendGmChatCommandTrackedAsync|RecentCommandAcks|ContainsCommandRejection" Services/WoWStateManager Tests/BotRunner.Tests docs/TASKS.md`
+
 - Last updated: 2026-04-20
 - Master tracker: `MASTER-SUB-003`
 - Active task: `none`

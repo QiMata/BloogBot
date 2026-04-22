@@ -154,27 +154,27 @@ commands that have no authoritative SMSG (`.modify money`, `.setskill`,
     idempotent; null event handler is a safe no-op; per-step detach on
     advancement leaves the active step still subscribed.
 
-- [ ] **P4.4** Correlation IDs + structured `CommandAckEvent`
-  - [ ] P4.4.1 Add `string correlation_id = <n>;` to `ActionMessage` in
+- [x] **P4.4** Correlation IDs + structured `CommandAckEvent`
+  - [x] P4.4.1 Add `string correlation_id = <n>;` to `ActionMessage` in
     `Exports/BotCommLayer/Models/ProtoDef/communication.proto`.
     StateManager assigns one per dispatch; BotRunner echoes it back.
-  - [ ] P4.4.2 Add a new message
+  - [x] P4.4.2 Add a new message
     `CommandAckEvent { string correlation_id; ActionType action_type;
     enum AckStatus {Pending, Success, Failed, TimedOut} status;
     string failure_reason; uint32 related_id; }` and
     `repeated CommandAckEvent recent_command_acks` on
     `WoWActivitySnapshot` (ring-buffer cap 10; document next to the
     field).
-  - [ ] P4.4.3 `BotRunnerService` populates the ring on every action it
+  - [x] P4.4.3 `BotRunnerService` populates the ring on every action it
     dispatches (including `LoadoutTask` step actions). Include the
     correlation id in the action's `CurrentAction` as it goes into
     `_activitySnapshot.CurrentAction`.
-  - [ ] P4.4.4 `SnapshotChangeSignature` gains
+  - [x] P4.4.4 `SnapshotChangeSignature` gains
     `RecentCommandAckCount` so coordinator-level transitions can react
     to ACK arrivals without heartbeat lag. (Unlike the chat rings, ack
     counts change rarely — per dispatched command, not per chat line —
     so this does not reintroduce the churn from P4.2.)
-  - [ ] P4.4.5 Unit tests: end-to-end round trip — StateManager sends
+  - [x] P4.4.5 Unit tests: end-to-end round trip — StateManager sends
     an action with correlation id, bot pushes a step, emits
     `CommandAckEvent(Success)` or `CommandAckEvent(Failed, reason)`
     in the snapshot.
@@ -275,6 +275,43 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 | G10 | Movement counter semantics unverified                                | P2.2      |
 
 ---
+
+## Handoff (2026-04-21, P4.4)
+
+- Completed: shipped `P4.4` only. `P4.5` was intentionally not started.
+- Commits:
+  - `9232c83f` `feat(comm): P4.4 add command ack proto schema`
+  - `4d1b7489` `feat(botrunner): P4.4 plumb correlated command acks`
+  - `3f800ed9` `test(botrunner): P4.4 cover command ack round-trips`
+- Validation:
+  - `& .\protocsharp.bat "." ".."` (from `Exports/BotCommLayer/Models/ProtoDef`) -> `succeeded`
+  - `dotnet build Exports/BotCommLayer/BotCommLayer.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (33 warnings, 0 errors)`
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 warnings, 0 errors)`
+  - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors; benign vcpkg applocal 'dumpbin' warning emitted)`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors; benign vcpkg applocal 'dumpbin' warning emitted)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LoadoutTaskExecutorTests|FullyQualifiedName~LoadoutTaskTests" --logger "console;verbosity=minimal"` -> `passed (36/36)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests" --logger "console;verbosity=minimal"` -> `passed (22/22)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~LoadoutSpecConverterTests" --logger "console;verbosity=minimal"` -> `passed (48/48)`
+- Notes:
+  - `ActionMessage.correlation_id` now survives the StateManager -> bot -> snapshot round trip. `CharacterStateSocketListener` stamps `account:sequence` ids when a dispatch reaches a bot without an explicit correlation id.
+  - `WoWActivitySnapshot.recent_command_acks` is now the canonical cap-10 structured ACK ring. BotRunner emits `Pending` on dispatch plus `Success`/`Failed`/`TimedOut` on completion, including per-step `LoadoutTask` actions.
+  - `SnapshotChangeSignature` now includes `RecentCommandAckCount`; unlike the chat/error rings dropped in `P4.2`, ACK count only changes per command dispatch/completion, so coordinator-visible ACK arrivals force immediate full snapshots without reintroducing diagnostic churn.
+  - Duplicate `ApplyLoadout` requests now fail the duplicate correlation id without clobbering the original in-flight loadout ACK.
+- Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
+  - `Exports/BotCommLayer/Models/Communication.cs`
+  - `Services/WoWStateManager/Listeners/CharacterStateSocketListener.cs`
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Exports/BotRunner/BotRunnerService.Messages.cs`
+  - `Exports/BotRunner/Tasks/LoadoutTask.cs`
+  - `Tests/BotRunner.Tests/ActionForwardingContractTests.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceSnapshotTests.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceLoadoutDispatchTests.cs`
+  - `Exports/BotCommLayer/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `rg -n "LastAckStatus|SendGmChatCommandTrackedAsync|RecentCommandAcks|ContainsCommandRejection" Services/WoWStateManager Tests/BotRunner.Tests docs/TASKS.md`
 
 ## Handoff (2026-04-21, P4.3)
 
@@ -445,3 +482,4 @@ powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly;
 docker compose -f docker-compose.vmangos-linux.yml build scene-data-service
 docker compose -f docker-compose.vmangos-linux.yml up -d scene-data-service
 ```
+

@@ -51,6 +51,29 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-21 (P4.4)
+- Pass result: `P4.4 structured ACK coverage is green`
+- Last delta:
+  - `ActionForwardingContractTests` now pin `ActionMessage.CorrelationId` and `WoWActivitySnapshot.RecentCommandAcks` proto round-trips, plus the `CharacterStateSocketListener` delivery path that stamps a missing correlation id before the bot sees the action.
+  - `BotRunnerServiceSnapshotTests` now prove that changing the ACK ring count forces an immediate full snapshot instead of waiting for the heartbeat interval.
+  - `BotRunnerServiceLoadoutDispatchTests` now prove a correlated `ApplyLoadout` emits top-level + per-step ACKs on success and that a duplicate correlated `ApplyLoadout` fails the duplicate request without clobbering the original loadout ACK.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors; benign vcpkg applocal 'dumpbin' warning emitted)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LoadoutTaskExecutorTests|FullyQualifiedName~LoadoutTaskTests" --logger "console;verbosity=minimal"` -> `passed (36/36)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests" --logger "console;verbosity=minimal"` -> `passed (22/22)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~LoadoutSpecConverterTests" --logger "console;verbosity=minimal"` -> `passed (48/48)`
+- Files changed:
+  - `Tests/BotRunner.Tests/ActionForwardingContractTests.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceSnapshotTests.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceLoadoutDispatchTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Commits:
+  - `9232c83f` `feat(comm): P4.4 add command ack proto schema`
+  - `4d1b7489` `feat(botrunner): P4.4 plumb correlated command acks`
+  - `3f800ed9` `test(botrunner): P4.4 cover command ack round-trips`
+- Next command:
+  - `rg -n "LastAckStatus|SendGmChatCommandTrackedAsync|RecentCommandAcks|ContainsCommandRejection" Services/WoWStateManager Tests/BotRunner.Tests docs/TASKS.md`
+
 ### 2026-04-21 (P4.3)
 - Pass result: `P4.3 LoadoutTaskExecutorTests event-driven coverage is green`
 - Last delta:

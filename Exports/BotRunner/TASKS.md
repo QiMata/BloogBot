@@ -32,6 +32,30 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-21 (P4.4)
+- Pass result: `P4.4 structured per-command ACKs shipped`
+- Last delta:
+  - `BotRunnerService` now tracks action correlation ids end-to-end, buffers a cap-10 `RecentCommandAcks` ring, stamps correlated `CurrentAction` clones into `_activitySnapshot`, and includes `RecentCommandAckCount` in `SnapshotChangeSignature` so ACK arrivals force immediate full snapshots without reintroducing the `P4.2` chat churn.
+  - `HandleApplyLoadoutAction` seeds correlated step ids for `LoadoutTask`, and `LoadoutTask` now emits per-step `Pending`/`Success`/`TimedOut` `CommandAckEvent`s. Duplicate `ApplyLoadout` requests fail the duplicate correlation id without clobbering the original in-flight loadout ACK.
+  - `CharacterStateSocketListener` now stamps `account:sequence` correlation ids on outbound actions when StateManager hands BotRunner an unstamped command.
+- Validation/tests run:
+  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors)`
+  - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors; benign vcpkg applocal 'dumpbin' warning emitted)`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors; benign vcpkg applocal 'dumpbin' warning emitted)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LoadoutTaskExecutorTests|FullyQualifiedName~LoadoutTaskTests" --logger "console;verbosity=minimal"` -> `passed (36/36)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests" --logger "console;verbosity=minimal"` -> `passed (22/22)`
+- Files changed:
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Exports/BotRunner/BotRunnerService.Messages.cs`
+  - `Exports/BotRunner/Tasks/LoadoutTask.cs`
+  - `Services/WoWStateManager/Listeners/CharacterStateSocketListener.cs`
+  - `Exports/BotRunner/TASKS.md`
+- Commits:
+  - `9232c83f` `feat(comm): P4.4 add command ack proto schema`
+  - `4d1b7489` `feat(botrunner): P4.4 plumb correlated command acks`
+  - `3f800ed9` `test(botrunner): P4.4 cover command ack round-trips`
+- Next command: `rg -n "LastAckStatus|SendGmChatCommandTrackedAsync|RecentCommandAcks|ContainsCommandRejection" Services/WoWStateManager Tests/BotRunner.Tests docs/TASKS.md`
+
 ### 2026-04-21 (P4.3)
 - Pass result: `P4.3 LoadoutTask event-driven step advancement shipped`
 - Last delta:
