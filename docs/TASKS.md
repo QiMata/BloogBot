@@ -338,7 +338,29 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
-## Handoff (2026-04-22, P5.x LiveValidation ACK migration)
+## Handoff (2026-04-22, live-validation Tier 1)
+
+- Commits made:
+  - `8174a87c` `refactor(tests): blanket-remove .gm on from live validation`
+  - `93099a65` `refactor(tests): port CombatBg/CombatFg to fresh-account arena fixtures`
+  - `d85a3cee` `refactor(tests): replace .respawn with natural wait in FishingProfessionTests`
+- Validation commands + outcomes:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> slice 1 green (`1065 warnings, 0 errors`), slice 2 preflight green (`0 warnings, 0 errors`) plus post-harness-fix green (`85 warnings, 0 errors`), slice 3 green (`85 warnings, 0 errors`).
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MageTeleportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mage_teleport_no_gm_on.trx"` -> `failed`; Horde Orgrimmar arrival still did not complete after the GM-toggle removal.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MageTeleportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mage_teleport_no_gm_on_retry.trx"` -> `failed again`; Horde path logged `Spell error for 3567`.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatBgTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=combat_bg_arena_slice2.trx"` -> `skipped (1)` on the first BG-only fresh-account attempt because initial character-name hydration lagged.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatBgTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=combat_bg_arena_slice2_retry.trx"` -> `passed (1/1)` after the `LiveBotFixture` hydration reseed fix.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatFgTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=combat_fg_arena_slice2.trx"` -> `passed (1/1)`.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CaptureForegroundPackets_RatchetStagingCast" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_natural_respawn_slice3.trx"` -> `passed (1/1)` in `1.7826m`; the new long-wait fallback was not needed on this pass because a nearby staged pool was already visible.
+  - `rg -n "\.gm on|SendGmChatCommandAsync.*gm on|SetGmModeAsync" Tests Services Exports` -> slice 1 cleanup grep now only hits the allowed rule docs.
+  - `rg -n "CombatTestHelpers|CombatBgBotFixture|CombatFgBotFixture" Tests` -> slice 2 cleanup grep returned `no matches`.
+  - `rg -n "\.respawn" Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ServerManagement.cs` -> slice 3 cleanup grep returned `no matches`.
+- Files changed:
+  - Slice 1: `Tests/BotRunner.Tests/LiveValidation/{Battlegrounds/AlteracValleyFixture.cs,IntegrationValidationTests.cs,MageTeleportTests.cs,LiveBotFixture.cs,Scenarios/TestScenario.cs,Scenarios/TestScenarioRunner.cs,RagefireChasmTests.cs,LootCorpseTests.cs,FIXTURE_LIFECYCLE.md,docs/CombatLoopTests.md,docs/LootCorpseTests.md,docs/TEST_EXECUTION_MODES.md}`, `Services/WoWStateManager/Settings/CharacterSettings.cs`, `Tests/RecordedTests.PathingTests.Tests/PathingTestDefinitionTests.cs`, `docs/TASKS.md`, `Tests/BotRunner.Tests/TASKS.md`.
+  - Slice 2: `Services/WoWStateManager/Settings/Configs/{CombatBg.config.json,CombatFg.config.json}`, `Tests/BotRunner.Tests/LiveValidation/{CombatBgArenaFixture.cs,CombatFgArenaFixture.cs,CombatBgTests.cs,CombatFgTests.cs,LiveBotFixture.cs,LootCorpseTests.cs}` plus deletion of the legacy Tier-1 combat helper/fixture/collection files, `docs/TASKS.md`, `Tests/BotRunner.Tests/TASKS.md`.
+  - Slice 3: `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`, `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ServerManagement.cs`, `docs/TASKS.md`, `Tests/BotRunner.Tests/TASKS.md`.
+- Next command:
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MageTeleportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mage_teleport_followup_after_tier1.trx"`
 
 ## Handoff (2026-04-22, Tier 1 LiveValidation slice 1)
 
@@ -438,6 +460,8 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ServerManagement.cs`
   - `docs/TASKS.md`
 - Next command: `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_full_class_followup.trx"`
+
+## Handoff (2026-04-22, P5.x LiveValidation ACK migration)
 
 - Completed: migrated the remaining six `LiveValidation/*` `AssertCommandSucceeded`
   helpers to delegate to `LiveBotFixture.AssertTraceCommandSucceeded`. P4.5.3
