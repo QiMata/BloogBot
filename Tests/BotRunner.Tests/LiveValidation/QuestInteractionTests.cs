@@ -195,12 +195,8 @@ public class QuestInteractionTests
     private static bool HasQuest(WoWActivitySnapshot? snap, int questId)
         => snap?.Player?.QuestLogEntries?.Any(q => q.QuestLog1 == (uint)questId) == true;
 
+    // P4.5.3: ACK-first assertion. See LiveBotFixture.AssertTraceCommandSucceeded.
     private void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)
-    {
-        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
-
-        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
-        Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
-    }
+        => LiveBotFixture.AssertTraceCommandSucceeded(trace, label, command);
 
 }

@@ -372,17 +372,6 @@ public class CombatLoopTests
         return unit.Health > 0 && !hasGhostFlag && standState != StandStateDead;
     }
 
-    private static bool ContainsCommandRejection(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return false;
-
-        return text.Contains("no such command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("no such subcommand", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("unknown command", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("not available to you", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static bool ContainsCombatCommandFailure(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -396,11 +385,7 @@ public class CombatLoopTests
     private static bool TraceHasCombatCommandFailure(LiveBotFixture.GmChatCommandTrace trace)
         => trace.ChatMessages.Concat(trace.ErrorMessages).Any(ContainsCombatCommandFailure);
 
+    // P4.5.3: ACK-first assertion. See LiveBotFixture.AssertTraceCommandSucceeded.
     private static void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)
-    {
-        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
-
-        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(ContainsCommandRejection);
-        Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
-    }
+        => LiveBotFixture.AssertTraceCommandSucceeded(trace, label, command);
 }

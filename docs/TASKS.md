@@ -338,6 +338,41 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-22, P5.x LiveValidation ACK migration)
+
+- Completed: migrated the remaining six `LiveValidation/*` `AssertCommandSucceeded`
+  helpers to delegate to `LiveBotFixture.AssertTraceCommandSucceeded`. P4.5.3
+  started this with `IntegrationValidationTests` and `TalentAllocationTests`;
+  this slice closes out: `CombatLoopTests`, `CharacterLifecycleTests`,
+  `BuffAndConsumableTests`, `GatheringProfessionTests`, `MageTeleportTests`,
+  `QuestInteractionTests`. Each file keeps its local `AssertCommandSucceeded`
+  shape (signature-stable) but the body is now a one-line delegation.
+- Non-duplicate helpers preserved: `CombatLoopTests.ContainsCombatCommandFailure`
+  / `TraceHasCombatCommandFailure` stayed — those are combat-specific rejection
+  checks unrelated to the generic command-rejection text scan.
+- Removed: `CombatLoopTests` local `ContainsCommandRejection` copy (identical
+  to the shared `LiveBotFixture.ContainsCommandRejection`, only referenced
+  by the now-delegating `AssertCommandSucceeded`).
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (1062 pre-existing warnings, 0 errors)`
+  - LiveValidation suites require Docker+MaNGOS; deterministic slice already
+    covered by the P5.1 build/test pass.
+- Notes:
+  - ACK gate is additive everywhere: commands not yet wired into `CommandAckEvent`
+    still fall through to `ContainsCommandRejection`, so no LiveValidation test
+    loses coverage. Commands with real ACK signals (e.g. any future tracked
+    ApplyLoadout-equivalent chat command) gain immediate Failed/TimedOut
+    detection.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CharacterLifecycleTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MageTeleportTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs`
+  - `docs/TASKS.md`
+- Next command: `rg -n "private static void AssertCommandSucceeded" Tests/BotRunner.Tests/LiveValidation`
+
 ## Handoff (2026-04-22, P5.1)
 
 - Completed: shipped `P5.1` (Loadout ACK consumption in `BattlegroundCoordinator`).
