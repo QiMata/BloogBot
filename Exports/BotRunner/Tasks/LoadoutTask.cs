@@ -42,11 +42,19 @@ public class LoadoutTask : BotTask, IBotTask
     private List<LoadoutStep>? _plan;
     private int _stepIndex;
     private bool _acksAttached;
+    private readonly Action<CommandAckEvent>? _commandAckSink;
+    private readonly Func<int, string>? _stepCorrelationIdFactory;
 
-    public LoadoutTask(IBotContext context, LoadoutSpec spec)
+    public LoadoutTask(
+        IBotContext context,
+        LoadoutSpec spec,
+        Action<CommandAckEvent>? commandAckSink = null,
+        Func<int, string>? stepCorrelationIdFactory = null)
         : base(context ?? throw new ArgumentNullException(nameof(context)))
     {
         _spec = spec ?? throw new ArgumentNullException(nameof(spec));
+        _commandAckSink = commandAckSink;
+        _stepCorrelationIdFactory = stepCorrelationIdFactory;
     }
 
     public LoadoutStatus Status => _status;
@@ -63,6 +71,7 @@ public class LoadoutTask : BotTask, IBotTask
         if (_plan == null)
         {
             _plan = BuildPlan(_spec);
+            InitializeStepCommandAcks();
             _status = LoadoutStatus.LoadoutInProgress;
             AttachExpectedAcks();
 
@@ -79,6 +88,7 @@ public class LoadoutTask : BotTask, IBotTask
         // advance on the very next Update without waiting for the pacing tick.
         while (_stepIndex < _plan.Count && TryIsSatisfied(_plan[_stepIndex]))
         {
+            EmitStepTerminalAck(_plan[_stepIndex], CommandAckEvent.Types.AckStatus.Success);
             _plan[_stepIndex].DetachExpectedAck();
             _stepIndex++;
         }
@@ -93,6 +103,10 @@ public class LoadoutTask : BotTask, IBotTask
 
         if (step.ExecuteAttempts >= MaxRetriesPerStep)
         {
+            EmitStepTerminalAck(
+                step,
+                CommandAckEvent.Types.AckStatus.TimedOut,
+                $"step '{step.Description}' exceeded {MaxRetriesPerStep} retries without being satisfied");
             Fail($"step '{step.Description}' exceeded {MaxRetriesPerStep} retries without being satisfied");
             return;
         }
@@ -102,9 +116,13 @@ public class LoadoutTask : BotTask, IBotTask
 
         if (step.TryExecute(BotContext))
         {
+            EmitStepPendingAck(step);
             step.MarkExecuted();
             if (step.IsOneShot)
+            {
+                EmitStepTerminalAck(step, CommandAckEvent.Types.AckStatus.Success);
                 _stepIndex++;
+            }
         }
         else
         {
@@ -161,6 +179,38 @@ public class LoadoutTask : BotTask, IBotTask
         }
 
         _acksAttached = true;
+    }
+
+    private void InitializeStepCommandAcks()
+    {
+        if (_plan == null)
+            return;
+
+        for (var stepIndex = 0; stepIndex < _plan.Count; stepIndex++)
+        {
+            var step = _plan[stepIndex];
+            var correlationId = _stepCorrelationIdFactory?.Invoke(stepIndex)
+                ?? $"loadout-step-{stepIndex + 1}";
+            step.InitializeCommandAck(correlationId);
+        }
+    }
+
+    private void EmitStepPendingAck(LoadoutStep step)
+    {
+        if (_commandAckSink == null || step.PendingAckReported)
+            return;
+
+        _commandAckSink(step.CreateCommandAck(CommandAckEvent.Types.AckStatus.Pending));
+        step.MarkPendingAckReported();
+    }
+
+    private void EmitStepTerminalAck(LoadoutStep step, CommandAckEvent.Types.AckStatus status, string? failureReason = null)
+    {
+        if (_commandAckSink == null || !step.PendingAckReported || step.TerminalAckReported)
+            return;
+
+        _commandAckSink(step.CreateCommandAck(status, failureReason));
+        step.MarkTerminalAckReported();
     }
 
     private void DetachAllAcks()
@@ -286,6 +336,9 @@ public class LoadoutTask : BotTask, IBotTask
         private bool _ackInstalled;
         private bool _ackFired;
         private Action? _unsubscribe;
+        private string _correlationId = string.Empty;
+        private bool _pendingAckReported;
+        private bool _terminalAckReported;
 
         public int ExecuteAttempts { get; private set; }
         public int DispatchCount { get; private set; }
@@ -325,8 +378,32 @@ public class LoadoutTask : BotTask, IBotTask
         /// can both observe the flag.
         /// </summary>
         internal bool AckFired => _ackFired;
+        internal bool PendingAckReported => _pendingAckReported;
+        internal bool TerminalAckReported => _terminalAckReported;
 
         protected void MarkAckFired() => _ackFired = true;
+        internal void MarkPendingAckReported() => _pendingAckReported = true;
+        internal void MarkTerminalAckReported() => _terminalAckReported = true;
+        internal virtual ActionType AckActionType => ActionType.SendChat;
+        internal virtual uint RelatedId => 0;
+
+        internal void InitializeCommandAck(string correlationId)
+        {
+            if (string.IsNullOrWhiteSpace(_correlationId))
+                _correlationId = correlationId ?? string.Empty;
+        }
+
+        internal CommandAckEvent CreateCommandAck(CommandAckEvent.Types.AckStatus status, string? failureReason = null)
+        {
+            return new CommandAckEvent
+            {
+                CorrelationId = _correlationId,
+                ActionType = AckActionType,
+                Status = status,
+                FailureReason = failureReason ?? string.Empty,
+                RelatedId = RelatedId,
+            };
+        }
 
         /// <summary>
         /// Subscribe to the step's expected-ack event on the given
@@ -365,6 +442,7 @@ public class LoadoutTask : BotTask, IBotTask
         private readonly uint _spellId;
         public LearnSpellStep(uint spellId) { _spellId = spellId; }
         public uint SpellId => _spellId;
+        internal override uint RelatedId => _spellId;
         public override string Description => $"learn spell {_spellId}";
         public override bool IsSatisfied(IBotContext context)
             => AckFired || KnowsSpell(context.ObjectManager, _spellId);
@@ -406,6 +484,7 @@ public class LoadoutTask : BotTask, IBotTask
         public uint SkillId => _skillId;
         public uint Value => _value;
         public uint Max => _max;
+        internal override uint RelatedId => _skillId;
         public override string Description => $"set skill {_skillId}={_value}/{_max}";
 
         public override bool IsSatisfied(IBotContext context)
@@ -442,6 +521,7 @@ public class LoadoutTask : BotTask, IBotTask
         private readonly uint _itemId;
         public AddItemStep(uint itemId) { _itemId = itemId; }
         public uint ItemId => _itemId;
+        internal override uint RelatedId => _itemId;
         public override string Description => $"add item {_itemId}";
 
         public override bool IsSatisfied(IBotContext context)
@@ -473,6 +553,7 @@ public class LoadoutTask : BotTask, IBotTask
         private readonly uint _setId;
         public AddItemSetStep(uint setId) { _setId = setId; }
         public uint SetId => _setId;
+        internal override uint RelatedId => _setId;
         public override string Description => $"add item set {_setId}";
 
         /// <summary>One-shot: there's no reliable "set X is in bags" predicate.</summary>
@@ -495,6 +576,8 @@ public class LoadoutTask : BotTask, IBotTask
         private ulong _equippedGuid;
         public EquipItemStep(uint itemId) { _itemId = itemId; }
         public uint ItemId => _itemId;
+        internal override ActionType AckActionType => ActionType.EquipItem;
+        internal override uint RelatedId => _itemId;
         public override string Description => $"equip item {_itemId}";
 
         public override bool IsSatisfied(IBotContext context)
@@ -545,6 +628,8 @@ public class LoadoutTask : BotTask, IBotTask
         private readonly uint _itemId;
         public UseItemStep(uint itemId) { _itemId = itemId; }
         public uint ItemId => _itemId;
+        internal override ActionType AckActionType => ActionType.UseItem;
+        internal override uint RelatedId => _itemId;
         public override string Description => $"use item {_itemId}";
 
         /// <summary>One-shot: an elixir is consumed, so post-state = item gone.</summary>
@@ -573,6 +658,7 @@ public class LoadoutTask : BotTask, IBotTask
         private readonly uint _targetLevel;
         public LevelUpStep(uint targetLevel) { _targetLevel = targetLevel; }
         public uint TargetLevel => _targetLevel;
+        internal override uint RelatedId => _targetLevel;
         public override string Description => $"level up to {_targetLevel}";
 
         public override bool IsSatisfied(IBotContext context)

@@ -12,6 +12,7 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Networking.ClientComponents.I;
@@ -39,7 +40,9 @@ namespace BotRunner
         // Message buffers -- collected from IWoWEventHandler events, flushed to snapshot each tick
         private readonly Queue<string> _recentChatMessages = new();
         private readonly Queue<string> _recentErrors = new();
+        private readonly Queue<CommandAckEvent> _recentCommandAckEvents = new();
         private const int MaxBufferedMessages = 50;
+        private const int MaxRecentCommandAcks = 10;
         private bool _battlegroundMessageEventsSubscribed;
 
         // DiagLog writes to file and Serilog. FG context lacks Serilog global config.
@@ -73,6 +76,8 @@ namespace BotRunner
         // Action dispatch correlation: stable token linking receive -> dispatch -> completion logs.
         private string _currentActionCorrelationId = "";
         private long _actionSequenceNumber;
+        private PendingCommandAckState? _activeBehaviorTreeAck;
+        private PendingCommandAckState? _activeLoadoutAck;
 
         private readonly Stack<IBotTask> _botTasks = new();
         private bool _tasksInitialized;
@@ -103,6 +108,9 @@ namespace BotRunner
         private Communication.LoadoutStatus _lastLoadoutStatus = Communication.LoadoutStatus.LoadoutNotStarted;
         private string _lastLoadoutFailureReason = string.Empty;
 
+        // P4.4: include RecentCommandAckCount so coordinator-visible ACK arrivals
+        // trigger an immediate full snapshot. This does not reintroduce the P4.2
+        // chat/error churn because ACK entries change rarely per dispatched command.
         private readonly record struct SnapshotChangeSignature(
             string ScreenState,
             int ConnectionState,
@@ -115,7 +123,13 @@ namespace BotRunner
             int PositionBucketY,
             int HealthBucket,
             bool IsDead,
-            int LoadoutStatus);
+            int LoadoutStatus,
+            int RecentCommandAckCount);
+
+        private readonly record struct PendingCommandAckState(
+            string CorrelationId,
+            Communication.ActionType ActionType,
+            uint RelatedId);
 
         // Extracted components
         private readonly DiagnosticsRecorder _diagnosticsRecorder;
@@ -396,6 +410,14 @@ namespace BotRunner
                             && !string.IsNullOrEmpty(_currentActionCorrelationId))
                         {
                             Log.Information($"[BOT RUNNER] Behavior tree completed with {_behaviorTreeStatus} [{_currentActionCorrelationId}]");
+                            CompleteTrackedCommandAck(
+                                ref _activeBehaviorTreeAck,
+                                _behaviorTreeStatus == BehaviourTreeStatus.Success
+                                    ? CommandAckEvent.Types.AckStatus.Success
+                                    : CommandAckEvent.Types.AckStatus.Failed,
+                                _behaviorTreeStatus == BehaviourTreeStatus.Success
+                                    ? string.Empty
+                                    : "behavior_tree_failed");
                         }
                     }
 
@@ -463,7 +485,134 @@ namespace BotRunner
                 positionBucketY,
                 healthBucket,
                 isDead,
-                (int)snapshot.LoadoutStatus);
+                (int)snapshot.LoadoutStatus,
+                snapshot.RecentCommandAcks.Count);
+        }
+
+        private void EnqueueCommandAckEvent(
+            string? correlationId,
+            Communication.ActionType actionType,
+            CommandAckEvent.Types.AckStatus status,
+            string? failureReason = null,
+            uint relatedId = 0)
+        {
+            if (string.IsNullOrWhiteSpace(correlationId))
+                return;
+
+            lock (_recentCommandAckEvents)
+            {
+                _recentCommandAckEvents.Enqueue(new CommandAckEvent
+                {
+                    CorrelationId = correlationId,
+                    ActionType = actionType,
+                    Status = status,
+                    FailureReason = failureReason ?? string.Empty,
+                    RelatedId = relatedId,
+                });
+            }
+        }
+
+        private void EnqueueCommandAckEvent(CommandAckEvent ackEvent)
+        {
+            ArgumentNullException.ThrowIfNull(ackEvent);
+            EnqueueCommandAckEvent(
+                ackEvent.CorrelationId,
+                ackEvent.ActionType,
+                ackEvent.Status,
+                ackEvent.FailureReason,
+                ackEvent.RelatedId);
+        }
+
+        private void FlushCommandAckEvents()
+        {
+            lock (_recentCommandAckEvents)
+            {
+                while (_recentCommandAckEvents.Count > 0)
+                    _activitySnapshot.RecentCommandAcks.Add(_recentCommandAckEvents.Dequeue());
+            }
+
+            if (_activitySnapshot.RecentCommandAcks.Count > MaxRecentCommandAcks)
+            {
+                var kept = _activitySnapshot.RecentCommandAcks
+                    .Skip(_activitySnapshot.RecentCommandAcks.Count - MaxRecentCommandAcks)
+                    .ToList();
+                _activitySnapshot.RecentCommandAcks.Clear();
+                _activitySnapshot.RecentCommandAcks.Add(kept);
+            }
+        }
+
+        private PendingCommandAckState BeginTrackedCommandAck(ActionMessage action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+
+            var correlationId = string.IsNullOrWhiteSpace(action.CorrelationId)
+                ? $"act-{Interlocked.Increment(ref _actionSequenceNumber)}"
+                : action.CorrelationId;
+            var relatedId = GetRelatedId(action);
+            var tracked = new PendingCommandAckState(correlationId, action.ActionType, relatedId);
+            var currentAction = action.Clone();
+            currentAction.CorrelationId = correlationId;
+
+            _currentActionCorrelationId = correlationId;
+            _activitySnapshot.CurrentAction = currentAction;
+            EnqueueCommandAckEvent(correlationId, action.ActionType, CommandAckEvent.Types.AckStatus.Pending, relatedId: relatedId);
+
+            return tracked;
+        }
+
+        private void CompleteTrackedCommandAck(
+            ref PendingCommandAckState? trackedAck,
+            CommandAckEvent.Types.AckStatus status,
+            string? failureReason = null)
+        {
+            if (trackedAck is not PendingCommandAckState ack)
+                return;
+
+            EnqueueCommandAckEvent(ack.CorrelationId, ack.ActionType, status, failureReason, ack.RelatedId);
+            trackedAck = null;
+        }
+
+        private static uint GetRelatedId(ActionMessage action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+
+            if (action.ActionType == Communication.ActionType.SendChat
+                && action.Parameters.Count > 0
+                && action.Parameters[0].ParameterCase == RequestParameter.ParameterOneofCase.StringParam)
+            {
+                return ParseChatRelatedId(action.Parameters[0].StringParam);
+            }
+
+            if (action.Parameters.Count == 0)
+                return 0;
+
+            var first = action.Parameters[0];
+            return first.ParameterCase switch
+            {
+                RequestParameter.ParameterOneofCase.IntParam when first.IntParam > 0 => (uint)first.IntParam,
+                RequestParameter.ParameterOneofCase.LongParam when first.LongParam > 0 && first.LongParam <= uint.MaxValue => (uint)first.LongParam,
+                _ => 0,
+            };
+        }
+
+        private static uint ParseChatRelatedId(string? command)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+                return 0;
+
+            var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length < 2)
+                return 0;
+
+            return parts[0].ToLowerInvariant() switch
+            {
+                ".learn" when uint.TryParse(parts[1], out var spellId) => spellId,
+                ".additem" when uint.TryParse(parts[1], out var itemId) => itemId,
+                ".additemset" when uint.TryParse(parts[1], out var itemSetId) => itemSetId,
+                ".setskill" when uint.TryParse(parts[1], out var skillId) => skillId,
+                ".levelup" when uint.TryParse(parts[1], out var levelDelta) => levelDelta,
+                _ => 0,
+            };
         }
 
         private static void ApplyServerResponseFields(WoWActivitySnapshot target, WoWActivitySnapshot source)
@@ -498,6 +647,18 @@ namespace BotRunner
                 _activitySnapshot.LoadoutStatus = _lastLoadoutStatus;
                 _activitySnapshot.LoadoutFailureReason = _lastLoadoutFailureReason;
             }
+
+            if (_lastLoadoutStatus == Communication.LoadoutStatus.LoadoutReady)
+            {
+                CompleteTrackedCommandAck(ref _activeLoadoutAck, CommandAckEvent.Types.AckStatus.Success);
+            }
+            else if (_lastLoadoutStatus == Communication.LoadoutStatus.LoadoutFailed)
+            {
+                CompleteTrackedCommandAck(
+                    ref _activeLoadoutAck,
+                    CommandAckEvent.Types.AckStatus.Failed,
+                    _lastLoadoutFailureReason);
+            }
         }
 
         /// <summary>
@@ -520,6 +681,9 @@ namespace BotRunner
             }
 
             var spec = action.LoadoutSpec ?? new Communication.LoadoutSpec();
+            var loadoutCorrelationId = string.IsNullOrWhiteSpace(action.CorrelationId)
+                ? _currentActionCorrelationId
+                : action.CorrelationId;
             var context = new BotRunnerContext(
                 _objectManager,
                 _botTasks,
@@ -527,7 +691,11 @@ namespace BotRunner
                 _behaviorConfig,
                 EnqueueDiagnosticMessage);
 
-            _botTasks.Push(new Tasks.LoadoutTask(context, spec));
+            _botTasks.Push(new Tasks.LoadoutTask(
+                context,
+                spec,
+                EnqueueCommandAckEvent,
+                stepIndex => $"{loadoutCorrelationId}/step-{stepIndex + 1}"));
             _activitySnapshot.PreviousAction = action;
 
             Log.Information(
@@ -592,14 +760,35 @@ namespace BotRunner
                     return;
                 }
 
-                _currentActionCorrelationId = $"act-{Interlocked.Increment(ref _actionSequenceNumber)}";
+                _currentActionCorrelationId = string.IsNullOrWhiteSpace(action.CorrelationId)
+                    ? $"act-{Interlocked.Increment(ref _actionSequenceNumber)}"
+                    : action.CorrelationId;
                 Log.Information($"[BOT RUNNER] Received action from StateManager: {action.ActionType} ({(int)action.ActionType}) [{_currentActionCorrelationId}]");
 
                 if (_diagnosticsRecorder.HandleDiagnosticAction(action))
+                {
+                    _activeBehaviorTreeAck = BeginTrackedCommandAck(action);
+                    CompleteTrackedCommandAck(ref _activeBehaviorTreeAck, CommandAckEvent.Types.AckStatus.Success);
                     return;
+                }
 
                 if (action.ActionType == Communication.ActionType.ApplyLoadout)
                 {
+                    if (_botTasks.Count > 0 && _botTasks.Peek() is Tasks.LoadoutTask)
+                    {
+                        PendingCommandAckState? duplicateLoadoutAck = BeginTrackedCommandAck(action);
+                        _activitySnapshot.PreviousAction = action;
+                        Log.Information(
+                            "[BOT RUNNER] ApplyLoadout received but a LoadoutTask is already active; ignoring duplicate [{Corr}]",
+                            _currentActionCorrelationId);
+                        CompleteTrackedCommandAck(
+                            ref duplicateLoadoutAck,
+                            CommandAckEvent.Types.AckStatus.Failed,
+                            "loadout_task_already_active");
+                        return;
+                    }
+
+                    _activeLoadoutAck = BeginTrackedCommandAck(action);
                     HandleApplyLoadoutAction(action);
                     return;
                 }
@@ -607,6 +796,8 @@ namespace BotRunner
                 var actionList = ConvertActionMessageToCharacterActions(action);
                 if (actionList.Count > 0)
                 {
+                    _activeBehaviorTreeAck = BeginTrackedCommandAck(action);
+
                     if (action.ActionType == Communication.ActionType.CastSpell
                         || action.ActionType == Communication.ActionType.GatherNode)
                     {
@@ -619,6 +810,13 @@ namespace BotRunner
                     _activitySnapshot.PreviousAction = action;
                     return;
                 }
+
+                EnqueueCommandAckEvent(
+                    _currentActionCorrelationId,
+                    action.ActionType,
+                    CommandAckEvent.Types.AckStatus.Failed,
+                    "unsupported_action",
+                    GetRelatedId(action));
             }
 
             if (_behaviorTree != null && _behaviorTreeStatus == BehaviourTreeStatus.Running)

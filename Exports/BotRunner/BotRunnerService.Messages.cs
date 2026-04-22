@@ -210,6 +210,8 @@ namespace BotRunner
                     _activitySnapshot.RecentErrors.Add(kept);
                 }
             }
+
+            FlushCommandAckEvents();
         }
 
         private void EnqueueDiagnosticMessage(string message)

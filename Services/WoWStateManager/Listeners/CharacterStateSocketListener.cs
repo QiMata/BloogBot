@@ -49,6 +49,7 @@ namespace WoWStateManager.Listeners
         /// </summary>
         private readonly ConcurrentDictionary<string, DateTime> _coordinatorSuppressedUntil = new();
         private readonly int _coordinatorSuppressionSeconds;
+        private long _dispatchCorrelationSequence;
 
         private readonly List<CharacterSettings> _characterSettings;
         private readonly MangosSOAPClient? _soapClient;
@@ -220,6 +221,11 @@ namespace WoWStateManager.Listeners
             }
 
             // Log when an action is being delivered to a bot
+            if (response.CurrentAction != null)
+            {
+                response.CurrentAction = StampDispatchCorrelationId(accountName, response.CurrentAction);
+            }
+
             if (response.CurrentAction != null && response.CurrentAction.ActionType != ActionType.Wait)
             {
                 _logger.LogInformation($"DELIVERING ACTION to '{accountName}': {response.CurrentAction.ActionType}");
@@ -355,6 +361,18 @@ namespace WoWStateManager.Listeners
         private sealed record TimestampedAction(ActionMessage Action)
         {
             public DateTime EnqueuedAt { get; } = DateTime.UtcNow;
+        }
+
+        private ActionMessage StampDispatchCorrelationId(string accountName, ActionMessage action)
+        {
+            var stamped = action.Clone();
+            if (string.IsNullOrWhiteSpace(stamped.CorrelationId))
+            {
+                var sequence = Interlocked.Increment(ref _dispatchCorrelationSequence);
+                stamped.CorrelationId = $"{accountName}:{sequence.ToString(CultureInfo.InvariantCulture)}";
+            }
+
+            return stamped;
         }
 
         private int _coordDiagTick;
