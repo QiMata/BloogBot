@@ -338,6 +338,22 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-22, live-validation Tier 1 slice 4 - dual-bot Ratchet staged-pool fishing)
+
+- Completed: replaced the pier open-water direct-cast shortcut in `FishingProfessionTests` with `Fishing_CatchFish_BgAndFg_RatchetStagedPool`, the authoritative FG+BG Ratchet staged-pool proof. Both TESTBOT1 (FG) and TESTBOT2 (BG) are now required in-world (asserted pre- and post-prep against `LiveBotFixture.AllBots`), stage at the Ratchet packet-capture dock, locate a real off-shore fishing pool via `PrepareRatchetFishingStageAsync` (DB spawn query + natural respawn wait + visible-pool confirmation), and dispatch the task-owned `ActionType.StartFishing` flow. `AssertFishingResult` enforces `pool_acquired`, cast-range arrival, channel/bobber observation, and a newly looted item for each bot. Shoreline/open-water direct-cast shortcuts are no longer part of the pass contract.
+- Deletions: removed the pier open-water direct-cast path entirely. Dropped `RunPierOpenWaterFishing*`, `AssertDirectFishing*`, `FormatDirectFishingFailureContext`, `BuildRatchetPierCastCandidates`, `TryDirectFishingCastAsync`, `TryEnsureRatchetPierCastProbeReady`, `EnsureTestNavigationDllResolverRegistered`, `ResolveNavigationDllForTests`, `WaitForPositionSettledAsync`, `MoveToFishingWaypointAsync*`, `WaitForGoToArrivalMessageAsync`, `WaitForFacingSettledAsync`, `WaitForCastReadySnapshotAsync`, `WaitForFishingPoleEquippedAsync`, the facing utilities (`CalculateFacingToPoint/Delta`, `NormalizeAngleRadians`, `FacingDeltaRadians`, `GetMainhandGuid`, `MakeSetFacing`, `MakeGoto`), the pier-specific record types (`DirectFishingRunResult`, `DirectFishingCastCandidate`, `FerryCastTargetSpec`, `DirectFishingCastAttemptResult`, `PositionWaitResult`, `GoToArrivalWaitResult`, `WaypointMoveResult`), the pier/known-pool constants, the Navigation P/Invokes, and the now-unused `System.Reflection` / `System.Runtime.InteropServices` / `BotRunner.Native` usings. File shrank from `3023` -> `1832` lines.
+- Validation:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `No tasks are running which match the specified criteria.`
+  - `docker ps --format "{{.Names}} {{.Status}}"` -> `mangosd`, `realmd`, `maria-db`, `scene-data-service`, `pathfinding-service` all `(healthy)`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (1062 warnings, 0 errors)` in `26s`.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_dual_bot_ratchet_followup.trx"` -> `passed (1/1)` in `1m 49s`.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command:
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_full_class_after_dual_bot_cleanup.trx"`
+
 ## Handoff (2026-04-22, live-validation Tier 1)
 
 - Commits made:

@@ -51,6 +51,23 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-22 (Tier 1 slice 4 - dual-bot Ratchet staged-pool fishing)
+- Pass result: `slice shipped; FG+BG staged-pool fishing live proof green`
+- Last delta:
+  - Replaced `Fishing_CatchFish_BgAndFg_RatchetPierOpenWaterPath` with `Fishing_CatchFish_BgAndFg_RatchetStagedPool`, which asserts both FG and BG are present + hydrated in `LiveBotFixture.AllBots` pre- and post-prep, stages both bots at Ratchet via `PrepareRatchetFishingStageAsync` (DB spawn query + natural respawn wait + visible-pool confirmation) and dispatches the task-owned `ActionType.StartFishing` path for each bot. `AssertFishingResult` already enforces `pool_acquired`, cast-range arrival, channel/bobber observation, and a newly looted item — shoreline/open-water direct-cast shortcuts are no longer permitted.
+  - Deleted the pier open-water direct-cast support: `RunPierOpenWaterFishingWithPacketRecordingAsync`, `RunPierOpenWaterFishingAsync`, `AssertDirectFishingResult`, `AssertDirectFishingPathAndCastAttempt`, `AssertDirectFishingCastPacketsRecorded`, `FormatDirectFishingFailureContext`, `BuildRatchetPierCastCandidates`, `TryDirectFishingCastAsync`, `TryEnsureRatchetPierCastProbeReady`, `EnsureTestNavigationDllResolverRegistered`, `ResolveNavigationDllForTests`, `WaitForPositionSettledAsync`, `MoveToFishingWaypointAsync*`, `WaitForGoToArrivalMessageAsync`, `WaitForFacingSettledAsync`, `WaitForCastReadySnapshotAsync`, `WaitForFishingPoleEquippedAsync`, `CalculateFacingToPoint/Delta`, `NormalizeAngleRadians`, `FacingDeltaRadians`, `GetMainhandGuid`, `MakeSetFacing`, `MakeGoto`, the `DirectFishingRunResult` / `DirectFishingCastCandidate` / `FerryCastTargetSpec` / `DirectFishingCastAttemptResult` / `PositionWaitResult` / `GoToArrivalWaitResult` / `WaypointMoveResult` record types, the pier/ratchet-known-pool constants, the `Navigation` P/Invokes (`SetDataDirectory`/`PreloadMap`/`GetGroundZ`/`LineOfSight`), and the now-unused `System.Reflection` / `System.Runtime.InteropServices` / `BotRunner.Native` usings. `FishingProfessionTests` is now `1832` lines (was `3023`).
+  - Updated the file header comment so `Fishing_CatchFish_BgAndFg_RatchetStagedPool` is described as the authoritative dual-bot staged-pool proof and `Fishing_CaptureForegroundPackets_RatchetStagingCast` is explicitly the focused FG packet-trace baseline.
+- Validation/tests run:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `INFO: No tasks are running which match the specified criteria.`
+  - `docker ps --format "{{.Names}} {{.Status}}"` -> `mangosd Up 46 hours (healthy)`, `realmd Up 46 hours (healthy)`, `maria-db Up 46 hours (healthy)`, `scene-data-service Up 46 hours (healthy)`, `pathfinding-service Up 46 hours (healthy)`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (1062 warnings, 0 errors)` in `26s`
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_dual_bot_ratchet_followup.trx"` -> `passed (1/1)` in `1m 49s` (total run `2m 54s`). Both TESTBOT1 (FG/Gargandurooj) and TESTBOT2 (BG/Thokzugshvrg) staged at the Ratchet packet-capture dock and satisfied the `AssertFishingResult` contract on the real off-shore pool.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_full_class_after_dual_bot_cleanup.trx"`
+
 ### 2026-04-22 (Tier 1 slice 3 - natural fishing pool wait)
 - Pass result: `slice shipped; focused staged fishing live proof green`
 - Last delta:
