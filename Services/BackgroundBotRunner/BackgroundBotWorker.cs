@@ -81,6 +81,9 @@ namespace BackgroundBotRunner
             var accountName = Environment.GetEnvironmentVariable("WWOW_ACCOUNT_NAME");
             var container = CreateClassContainer(accountName, _pathfindingClient);
 
+            var useGmCommands = string.Equals(Environment.GetEnvironmentVariable("WWOW_USE_GM_COMMANDS"), "1", StringComparison.Ordinal);
+            var assignedActivity = Environment.GetEnvironmentVariable("WWOW_ASSIGNED_ACTIVITY");
+
             _botRunner = new BotRunnerService(
                 infrastructure.ObjectManager,
                 _characterStateUpdateClient,
@@ -90,7 +93,9 @@ namespace BackgroundBotRunner
                 talentService: new DynamicTalentService(agentFactoryAccessor),
                 equipmentService: new EquipmentService(),
                 behaviorConfig: LoadBehaviorConfig(configuration),
-                diagnosticPacketTraceRecorder: _packetTraceRecorder);
+                diagnosticPacketTraceRecorder: _packetTraceRecorder,
+                useGmCommands: useGmCommands,
+                assignedActivity: assignedActivity);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)

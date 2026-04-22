@@ -721,6 +721,9 @@ namespace ForegroundBotRunner
 
             var container = CreateClassContainer(_accountName, pathfindingClient);
 
+            var useGmCommands = string.Equals(Environment.GetEnvironmentVariable("WWOW_USE_GM_COMMANDS"), "1", StringComparison.Ordinal);
+            var assignedActivity = Environment.GetEnvironmentVariable("WWOW_ASSIGNED_ACTIVITY");
+
             _botRunner = new BotRunnerService(
                 _objectManager,
                 _stateUpdateClient,
@@ -728,7 +731,9 @@ namespace ForegroundBotRunner
                 agentFactoryAccessor: null, // FG has no network agents
                 accountName: _accountName,
                 behaviorConfig: LoadBehaviorConfig(_configuration),
-                diagnosticPacketTraceRecorder: _packetTraceRecorder);
+                diagnosticPacketTraceRecorder: _packetTraceRecorder,
+                useGmCommands: useGmCommands,
+                assignedActivity: assignedActivity);
 
             _botRunner.Start();
             DiagLog("BotRunnerService started");

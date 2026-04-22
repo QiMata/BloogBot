@@ -147,6 +147,30 @@ namespace WoWStateManager.Settings
         /// </summary>
         [JsonProperty("Loadout", NullValueHandling = NullValueHandling.Ignore)]
         public LoadoutSpecSettings? Loadout { get; set; }
+
+        /// <summary>
+        /// When true, the bot's runner is permitted to issue GM chat commands
+        /// (<c>.tele name</c>, <c>.additem</c>, <c>.learn</c>, <c>.setskill</c>, etc.)
+        /// as part of executing an <see cref="AssignedActivity"/>. This is the
+        /// shortcut-path for tests and authoring environments where we want to
+        /// "force" an activity without requiring the bot to travel and train
+        /// naturally. Defaults to false; production/long-running bots should
+        /// leave this off so the DecisionEngine drives real sub-objectives.
+        /// </summary>
+        [JsonProperty("UseGmCommands")]
+        public bool UseGmCommands { get; set; } = false;
+
+        /// <summary>
+        /// Optional activity descriptor this character is currently assigned to.
+        /// Parsed by <c>BotRunner.Activities.ActivityParser</c> into a concrete
+        /// <c>IActivity</c> at world-entry. Supported values are activity name +
+        /// optional location in brackets, e.g. <c>"Fishing[Ratchet]"</c>,
+        /// <c>"Battleground[WSG]"</c>, <c>"Dungeon[RFC]"</c>. Unknown activities
+        /// log a warning and fall through to the default idle sequence. Null
+        /// means "no assigned activity — idle until an action is dispatched".
+        /// </summary>
+        [JsonProperty("AssignedActivity", NullValueHandling = NullValueHandling.Ignore)]
+        public string? AssignedActivity { get; set; }
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using BotRunner.Activities;
 using BotRunner.Clients;
 using BotRunner.Combat;
 using BotRunner.Helpers;
@@ -34,6 +35,8 @@ namespace BotRunner
         private readonly bool _autoReleaseCorpseTaskEnabled;
         private readonly bool _autoRetrieveCorpseTaskEnabled;
         private readonly string _initialAccountName;
+        private readonly bool _useGmCommands;
+        private readonly string? _assignedActivity;
 
         private WoWActivitySnapshot _activitySnapshot;
 
@@ -167,7 +170,9 @@ namespace BotRunner
                                  ITalentService? talentService = null,
                                  IEquipmentService? equipmentService = null,
                                  Constants.BotBehaviorConfig? behaviorConfig = null,
-                                 IDiagnosticPacketTraceRecorder? diagnosticPacketTraceRecorder = null)
+                                 IDiagnosticPacketTraceRecorder? diagnosticPacketTraceRecorder = null,
+                                 bool useGmCommands = false,
+                                 string? assignedActivity = null)
         {
             _objectManager = objectManager ?? throw new ArgumentNullException(nameof(objectManager));
             _initialAccountName = accountName ?? "?";
@@ -180,6 +185,8 @@ namespace BotRunner
             _container = container ?? throw new ArgumentNullException(nameof(container));
             _behaviorConfig = behaviorConfig ?? new Constants.BotBehaviorConfig();
             _diagnosticPacketTraceRecorder = diagnosticPacketTraceRecorder;
+            _useGmCommands = useGmCommands;
+            _assignedActivity = string.IsNullOrWhiteSpace(assignedActivity) ? null : assignedActivity.Trim();
 
             var logsDir = System.IO.Path.Combine(AppContext.BaseDirectory, "logs");
             System.IO.Directory.CreateDirectory(logsDir);
@@ -1103,6 +1110,23 @@ namespace BotRunner
                 _botTasks.Push(new Tasks.IdleTask(context));
                 Log.Information("[BOT RUNNER] Initialized idle task sequence for {Account} using {Profile} ({Class})",
                     accountName, _container.ClassContainer.Name, @class);
+
+                // Activity dispatch: if this character was assigned an activity by
+                // StateManager (via WWOW_ASSIGNED_ACTIVITY), push the activity task
+                // on top of the idle task so it runs first and drops back to idle
+                // when it pops. The useGmCommands flag gives the activity permission
+                // to short-circuit travel/outfit via GM chat commands.
+                var activity = ActivityResolver.Resolve(_assignedActivity);
+                if (activity != null)
+                {
+                    var activityTask = activity.CreateTask(context, _useGmCommands);
+                    _botTasks.Push(activityTask);
+                    EnqueueDiagnosticMessage(
+                        $"[ACTIVITY] Assigned '{activity.Name}[{activity.Location}]' useGm={_useGmCommands}");
+                    Log.Information(
+                        "[BOT RUNNER] Activity '{Name}[{Location}]' assigned for {Account} (useGmCommands={UseGm})",
+                        activity.Name, activity.Location ?? "(none)", accountName, _useGmCommands);
+                }
             }
             catch (Exception ex)
             {

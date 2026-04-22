@@ -401,17 +401,17 @@ namespace WoWStateManager
                 {
                     case Settings.BotRunnerType.Foreground:
                         _logger.LogInformation($"Starting Foreground bot worker for {accountName} (DLL injection)");
-                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender, characterSettings.BuildConfig?.SpecName, characterSettings.BuildConfig?.TalentBuildName, characterSettings.CharacterNameAttemptOffset);
+                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender, characterSettings.BuildConfig?.SpecName, characterSettings.BuildConfig?.TalentBuildName, characterSettings.CharacterNameAttemptOffset, characterSettings.UseGmCommands, characterSettings.AssignedActivity);
                         break;
 
                     case Settings.BotRunnerType.Background:
                         _logger.LogInformation($"Starting Background bot worker for {accountName} (headless)");
-                        StartBackgroundBotWorker(accountName, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender, characterSettings.BuildConfig?.SpecName, characterSettings.BuildConfig?.TalentBuildName, characterSettings.CharacterNameAttemptOffset);
+                        StartBackgroundBotWorker(accountName, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender, characterSettings.BuildConfig?.SpecName, characterSettings.BuildConfig?.TalentBuildName, characterSettings.CharacterNameAttemptOffset, characterSettings.UseGmCommands, characterSettings.AssignedActivity);
                         break;
 
                     default:
                         _logger.LogWarning($"Unknown RunnerType {characterSettings.RunnerType} for {accountName}, defaulting to Foreground");
-                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender, characterSettings.BuildConfig?.SpecName, characterSettings.BuildConfig?.TalentBuildName, characterSettings.CharacterNameAttemptOffset);
+                        StartForegroundBotWorker(accountName, characterSettings.TargetProcessId, characterSettings.CharacterClass, characterSettings.CharacterRace, characterSettings.CharacterGender, characterSettings.BuildConfig?.SpecName, characterSettings.BuildConfig?.TalentBuildName, characterSettings.CharacterNameAttemptOffset, characterSettings.UseGmCommands, characterSettings.AssignedActivity);
                         break;
                 }
 

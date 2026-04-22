@@ -53,7 +53,7 @@ namespace WoWStateManager
         }
 
 
-        public void StartBackgroundBotWorker(string accountName, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null, int? characterNameAttemptOffset = null)
+        public void StartBackgroundBotWorker(string accountName, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null, int? characterNameAttemptOffset = null, bool useGmCommands = false, string? assignedActivity = null)
         {
             var tokenSource = new CancellationTokenSource();
 
@@ -116,6 +116,9 @@ namespace WoWStateManager
                 psi.Environment["WWOW_TALENT_BUILD"] = talentBuildName;
             if (characterNameAttemptOffset.HasValue)
                 psi.Environment["WWOW_CHARACTER_NAME_ATTEMPT_OFFSET"] = characterNameAttemptOffset.Value.ToString();
+            psi.Environment["WWOW_USE_GM_COMMANDS"] = useGmCommands ? "1" : "0";
+            if (!string.IsNullOrWhiteSpace(assignedActivity))
+                psi.Environment["WWOW_ASSIGNED_ACTIVITY"] = assignedActivity;
 
             var process = Process.Start(psi);
             var pid = (uint?)process?.Id;
@@ -154,7 +157,7 @@ namespace WoWStateManager
         }
 
 
-        public void StartForegroundBotWorker(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null, int? characterNameAttemptOffset = null)
+        public void StartForegroundBotWorker(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null, int? characterNameAttemptOffset = null, bool useGmCommands = false, string? assignedActivity = null)
         {
             // Backoff: prevent rapid re-launch loops if process dies immediately
             if (_lastLaunchTimes.TryGetValue(accountName, out var last) && DateTime.UtcNow - last < MinRelaunchInterval)
@@ -165,7 +168,7 @@ namespace WoWStateManager
             _lastLaunchTimes[accountName] = DateTime.UtcNow;
 
             // Start WoW process and inject the bot worker service
-            StartForegroundBotRunner(accountName, targetProcessId, characterClass, characterRace, characterGender, characterSpec, talentBuildName, characterNameAttemptOffset);
+            StartForegroundBotRunner(accountName, targetProcessId, characterClass, characterRace, characterGender, characterSpec, talentBuildName, characterNameAttemptOffset, useGmCommands, assignedActivity);
         }
 
         /// <summary>
@@ -260,7 +263,7 @@ namespace WoWStateManager
         }
 
 
-        private void StartForegroundBotRunner(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null, int? characterNameAttemptOffset = null)
+        private void StartForegroundBotRunner(string accountName, int? targetProcessId = null, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null, int? characterNameAttemptOffset = null, bool useGmCommands = false, string? assignedActivity = null)
         {
             // Set the path to ForegroundBotRunner.dll in an environment variable
             var foregroundBotDllPath = Path.Combine(AppContext.BaseDirectory, "ForegroundBotRunner.dll");
@@ -285,6 +288,10 @@ namespace WoWStateManager
             Environment.SetEnvironmentVariable(
                 "WWOW_CHARACTER_NAME_ATTEMPT_OFFSET",
                 characterNameAttemptOffset?.ToString());
+            Environment.SetEnvironmentVariable("WWOW_USE_GM_COMMANDS", useGmCommands ? "1" : "0");
+            Environment.SetEnvironmentVariable(
+                "WWOW_ASSIGNED_ACTIVITY",
+                string.IsNullOrWhiteSpace(assignedActivity) ? null : assignedActivity);
             _logger.LogInformation($"Set credentials environment variables for ForegroundBotRunner: WWOW_ACCOUNT_NAME={accountName}");
 
             // Disable packet hooks for crash diagnostics: "Injection:DisablePacketHooks": "true"

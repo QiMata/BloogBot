@@ -51,6 +51,37 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-22 (Tier 1 slice 5 - Ratchet activity cast-position sweep)
+- Pass result: `build green; focused Ratchet fishing live proof failed`
+- Last delta:
+  - Carried forward the new activity plumbing (`UseGmCommands`, `AssignedActivity`, env-var forwarding, `ActivityResolver`) and kept `Fishing.config.json` assigning `Fishing[Ratchet]` to both TESTBOT1 (FG) and TESTBOT2 (BG).
+  - Removed the Ratchet hardcoded waypoint array from `FishingAtRatchetActivity`, added the allowed `.pool update 2628` outfit tick plus `[ACTIVITY] FishingAtRatchet pool_refresh_dispatched master=2628`, and now push `FishingTask` with no geometry baked into the activity.
+  - Added `FishingCastPositionFinder` (direct `Navigation.dll` `GetGroundZ` / `LineOfSight` sphere-sweep) and integrated its per-pool cache/facing path into `FishingTask`, including cache clears on retry / pool change / pop.
+  - Remaining failure mode: the live run never emitted `[TASK] FishingTask cast_position_resolved`, so both bots kept falling back to the legacy `in_cast_range` shoreline path and repeated `loot_window_timeout`; FG also hit `approach_stalled` and one `fell_off_pier`.
+- Validation/tests run:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `INFO: No tasks are running which match the specified criteria.`
+  - `docker ps --format "{{.Names}} {{.Status}}" | Select-String -Pattern 'mangos|realm|maria|scene|pathfind' | ForEach-Object { $_.Line }` -> `scene-data-service`, `war-scenedata`, `mangosd`, `realmd`, `pathfinding-service`, `maria-db` all `Up ... (healthy)`.
+  - `dotnet build Exports/BotRunner/BotRunner.csproj -c Release -v minimal`; `dotnet build Services/WoWStateManager/WoWStateManager.csproj -c Release -v minimal`; `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj -c Release -v minimal`; `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj -c Release -v minimal`; `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> all succeeded (`0` errors).
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_sphere_sweep.trx" *> "tmp/test-runtime/results-live/fishing_sphere_sweep.console.txt"; exit $LASTEXITCODE` -> `failed (1 test, 1 failure)` in `3m 52s`; see `tmp/test-runtime/results-live/fishing_sphere_sweep.console.txt`.
+  - `PowerShell Add-Type Navigation probe in Bot/Release/net8.0` -> `GetGroundZ(-960, -3770)=5.566`, `GetGroundZ(-955, -3782)=-8.182`, `GetGroundZ(-949.932, -3766.883)=3.703`; native DLL loading is not the blocker.
+- Files changed:
+  - `Services/WoWStateManager/Settings/CharacterSettings.cs`
+  - `Services/WoWStateManager/StateManagerWorker.BotManagement.cs`
+  - `Services/WoWStateManager/StateManagerWorker.cs`
+  - `Services/WoWStateManager/Settings/Configs/Fishing.config.json`
+  - `Services/BackgroundBotRunner/BackgroundBotWorker.cs`
+  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs`
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Exports/BotRunner/Activities/IActivity.cs`
+  - `Exports/BotRunner/Activities/ActivityResolver.cs`
+  - `Exports/BotRunner/Activities/FishingAtRatchetActivity.cs`
+  - `Exports/BotRunner/Tasks/FishingCastPositionFinder.cs`
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_sphere_sweep_retry.trx"`
+
 ### 2026-04-22 (Tier 1 slice 4 - dual-bot Ratchet staged-pool fishing)
 - Pass result: `slice shipped; FG+BG staged-pool fishing live proof green`
 - Last delta:

@@ -338,6 +338,35 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-22, live-validation Tier 1 slice 5 - Ratchet activity cast-position sweep)
+
+- Completed: carried forward the per-character activity plumbing (`UseGmCommands`, `AssignedActivity`, runner env vars, BotRunner activity dispatch), removed the hardcoded Ratchet fishing waypoints from `FishingAtRatchetActivity`, inserted the allowed `.pool update 2628` outfit tick, added `FishingCastPositionFinder` with direct `Navigation.dll` `GetGroundZ` / `LineOfSight` probes, and integrated per-pool cast-position caching + explicit facing into `FishingTask`.
+- Remaining blocker: the focused Ratchet live slice is still red. Neither bot emitted `[TASK] FishingTask cast_position_resolved`, so both continued to fall back to the legacy shoreline `in_cast_range` path and repeated `loot_window_timeout`; FG also hit repeated `approach_stalled` retries and one `fell_off_pier` abort near the end of the run.
+- Validation:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `INFO: No tasks are running which match the specified criteria.`
+  - `docker ps --format "{{.Names}} {{.Status}}" | Select-String -Pattern 'mangos|realm|maria|scene|pathfind' | ForEach-Object { $_.Line }` -> `scene-data-service`, `war-scenedata`, `mangosd`, `realmd`, `pathfinding-service`, `maria-db` all `Up ... (healthy)`.
+  - `dotnet build Exports/BotRunner/BotRunner.csproj -c Release -v minimal`; `dotnet build Services/WoWStateManager/WoWStateManager.csproj -c Release -v minimal`; `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj -c Release -v minimal`; `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj -c Release -v minimal`; `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> all succeeded (`0` errors).
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_sphere_sweep.trx" *> "tmp/test-runtime/results-live/fishing_sphere_sweep.console.txt"; exit $LASTEXITCODE` -> `failed (1 test, 1 failure)` in `3m 52s`; FG never reached `fishing_loot_success`.
+  - `PowerShell Add-Type Navigation probe in Bot/Release/net8.0` -> `GetGroundZ(map=1, x=-960, y=-3770, z=9, search=40)=5.566`, `GetGroundZ(-955, -3782, 9, 40)=-8.182`, `GetGroundZ(-949.932, -3766.883, 9, 40)=3.703`; `Navigation.dll` and `Physics.dll` are present in `Bot/Release/net8.0/` and `Bot/Release/net8.0/x86/`.
+- Files changed:
+  - `Services/WoWStateManager/Settings/CharacterSettings.cs`
+  - `Services/WoWStateManager/StateManagerWorker.BotManagement.cs`
+  - `Services/WoWStateManager/StateManagerWorker.cs`
+  - `Services/WoWStateManager/Settings/Configs/Fishing.config.json`
+  - `Services/BackgroundBotRunner/BackgroundBotWorker.cs`
+  - `Services/ForegroundBotRunner/ForegroundBotWorker.cs`
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Exports/BotRunner/Activities/IActivity.cs`
+  - `Exports/BotRunner/Activities/ActivityResolver.cs`
+  - `Exports/BotRunner/Activities/FishingAtRatchetActivity.cs`
+  - `Exports/BotRunner/Tasks/FishingCastPositionFinder.cs`
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command:
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_sphere_sweep_retry.trx"`
+
 ## Handoff (2026-04-22, live-validation Tier 1 slice 4 - dual-bot Ratchet staged-pool fishing)
 
 - Completed: replaced the pier open-water direct-cast shortcut in `FishingProfessionTests` with `Fishing_CatchFish_BgAndFg_RatchetStagedPool`, the authoritative FG+BG Ratchet staged-pool proof. Both TESTBOT1 (FG) and TESTBOT2 (BG) are now required in-world (asserted pre- and post-prep against `LiveBotFixture.AllBots`), stage at the Ratchet packet-capture dock, locate a real off-shore fishing pool via `PrepareRatchetFishingStageAsync` (DB spawn query + natural respawn wait + visible-pool confirmation), and dispatch the task-owned `ActionType.StartFishing` flow. `AssertFishingResult` enforces `pool_acquired`, cast-range arrival, channel/bobber observation, and a newly looted item for each bot. Shoreline/open-water direct-cast shortcuts are no longer part of the pass contract.
