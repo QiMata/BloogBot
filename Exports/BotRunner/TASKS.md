@@ -32,6 +32,22 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-21 (P4.5)
+- Pass result: `P4.5 coordinator + test migration to structured ACKs shipped; Phase P4 closed`
+- Last delta:
+  - `BattlegroundCoordinator.LastAckStatus(correlationId, snapshots)` scans every bot's `RecentCommandAcks` ring and returns the most recent status (terminal beats Pending).
+  - `LiveBotFixture.BotChat.SendGmChatCommandTrackedAsync` stamps a `test:<account>:<seq>` correlation id on every tracked dispatch; `GmChatCommandTrace` exposes `CorrelationId` / `AckStatus` / `AckFailureReason`.
+  - `LiveBotFixture.AssertTraceCommandSucceeded` prefers the ACK status when present and falls back to `ContainsCommandRejection`. `IntegrationValidationTests` and `TalentAllocationTests` now delegate their `AssertCommandSucceeded` helpers to it.
+  - `BattlegroundCoordinatorAckTests` pins the `LastAckStatus` contract (null / Pending / terminal-over-Pending / cross-snapshot scan).
+- Validation/tests run:
+  - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors)`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundCoordinator|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests|FullyQualifiedName~LoadoutTaskExecutorTests|FullyQualifiedName~ActionForwardingContractTests" --logger "console;verbosity=minimal"` -> `passed (109/109)`
+- Commits:
+  - `4c39065c` `feat(coord): P4.5.1 add LastAckStatus helper on BattlegroundCoordinator`
+  - `e8306a9f` `test(botrunner): P4.5.2/P4.5.3 expose AckStatus in GmChatCommandTrace`
+- Next command: `rg -n "^- \\[ \\]|Active task:" docs/TASKS.md`
+
 ### 2026-04-21 (P4.4)
 - Pass result: `P4.4 structured per-command ACKs shipped`
 - Last delta:

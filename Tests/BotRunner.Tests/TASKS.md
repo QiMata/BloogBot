@@ -51,6 +51,31 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-21 (P4.5)
+- Pass result: `P4.5 coordinator + test migration to structured ACKs shipped; Phase P4 closed`
+- Last delta:
+  - `BattlegroundCoordinatorAckTests` pins the new static `BattlegroundCoordinator.LastAckStatus(correlationId, snapshots)` contract: null for missing ids, Pending propagation, terminal-beats-Pending precedence, failed-with-reason, and cross-snapshot correlation scan.
+  - `LiveBotFixture.BotChat.SendGmChatCommandTrackedAsync` stamps a `test:<account>:<seq>` correlation id on every tracked dispatch and surfaces the matching `CommandAckEvent` as `GmChatCommandTrace.AckStatus` / `AckFailureReason`.
+  - `LiveBotFixture.AssertTraceCommandSucceeded` is the new ACK-first shared assertion; `IntegrationValidationTests` and `TalentAllocationTests` `AssertCommandSucceeded` helpers now delegate to it. The legacy `ContainsCommandRejection` fallback stays for not-yet-migrated call sites.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundCoordinator|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests|FullyQualifiedName~LoadoutTaskExecutorTests|FullyQualifiedName~ActionForwardingContractTests" --logger "console;verbosity=minimal"` -> `passed (109/109)`
+- Files changed:
+  - `Services/WoWStateManager/Coordination/BattlegroundCoordinator.cs`
+  - `Tests/BotRunner.Tests/BattlegroundCoordinatorAckTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Assertions.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TalentAllocationTests.cs`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Commits:
+  - `4c39065c` `feat(coord): P4.5.1 add LastAckStatus helper on BattlegroundCoordinator`
+  - `e8306a9f` `test(botrunner): P4.5.2/P4.5.3 expose AckStatus in GmChatCommandTrace`
+- Next command: `rg -n "^- \\[ \\]|Active task:" docs/TASKS.md`
+
 ### 2026-04-21 (P4.4)
 - Pass result: `P4.4 structured ACK coverage is green`
 - Last delta:

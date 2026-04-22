@@ -179,23 +179,29 @@ commands that have no authoritative SMSG (`.modify money`, `.setskill`,
     `CommandAckEvent(Success)` or `CommandAckEvent(Failed, reason)`
     in the snapshot.
 
-- [ ] **P4.5** Coordinator + test migration to structured ACKs
-  - [ ] P4.5.1 `BattlegroundCoordinator` gains a `LastAckStatus` helper
-    that reads `snapshot.RecentCommandAcks` for a given correlation id.
-    Existing `LoadoutStatus` enum stays — it's the per-phase roll-up;
-    `CommandAckEvent` is the per-command receipt.
-  - [ ] P4.5.2 `LiveBotFixture.BotChat.SendGmChatCommandTrackedAsync`
-    returns `GmChatCommandTrace` with an added `AckStatus` field pulled
-    from the snapshot's `RecentCommandAcks` by correlation id. Tests
-    can then assert `trace.AckStatus == AckStatus.Success` instead of
-    string-matching `trace.ChatMessages`.
-  - [ ] P4.5.3 Migrate the `EnsureTaxiNodesEnabledAsync` /
-    `ContainsCommandRejection` call sites in `LiveValidation/` off raw
-    string matching, one fixture at a time. Keep `ContainsCommandRejection`
-    as a deprecated fallback for commands we haven't mapped yet.
-  - [ ] P4.5.4 Unit tests: driver test that feeds a scripted
-    `RecentCommandAcks` sequence through `BattlegroundCoordinator` and
-    asserts the state transitions fire at the right correlation id.
+- [x] **P4.5** Coordinator + test migration to structured ACKs
+  - [x] P4.5.1 `BattlegroundCoordinator.LastAckStatus(correlationId, snapshots)`
+    scans every bot's `RecentCommandAcks` ring and returns the latest
+    status for the id (terminal Success/Failed/TimedOut beats Pending).
+    `LoadoutStatus` stays as the per-phase roll-up; `CommandAckEvent`
+    is the per-command receipt.
+  - [x] P4.5.2 `LiveBotFixture.BotChat.SendGmChatCommandTrackedAsync`
+    stamps a `test:<account>:<seq>` correlation id on the outbound
+    `ActionMessage` (StateManager only stamps empty ids, so the test id
+    survives end-to-end) and returns `GmChatCommandTrace` with
+    `CorrelationId`, `AckStatus`, and `AckFailureReason` populated from
+    the matching `CommandAckEvent` in `RecentCommandAcks`.
+  - [x] P4.5.3 `LiveBotFixture.AssertTraceCommandSucceeded` is the new
+    ACK-first helper — `AckStatus ∈ {Failed, TimedOut}` is an
+    authoritative rejection; otherwise falls back to
+    `ContainsCommandRejection` for commands not yet wired into the ACK
+    ring. `IntegrationValidationTests` and `TalentAllocationTests`
+    delegate their local `AssertCommandSucceeded` to it. Remaining
+    fixtures still use the legacy path and will be migrated incrementally.
+  - [x] P4.5.4 `BattlegroundCoordinatorAckTests` feeds scripted
+    `RecentCommandAcks` rings through `LastAckStatus` and pins the
+    Pending/terminal precedence, cross-snapshot scan, missing-id, and
+    failed-with-reason contracts.
 
 ### Design invariants
 - **No new catch-all `.learn all_*`.** Explicit IDs only, per curated
@@ -275,6 +281,33 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 | G10 | Movement counter semantics unverified                                | P2.2      |
 
 ---
+
+## Handoff (2026-04-21, P4.5)
+
+- Completed: shipped `P4.5` only. Phase `P4` is now fully closed (P4.1-P4.5).
+- Commits:
+  - `4c39065c` `feat(coord): P4.5.1 add LastAckStatus helper on BattlegroundCoordinator`
+  - `e8306a9f` `test(botrunner): P4.5.2/P4.5.3 expose AckStatus in GmChatCommandTrace`
+- Validation:
+  - `dotnet build Services/WoWStateManager/WoWStateManager.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors)`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundCoordinator|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests|FullyQualifiedName~LoadoutTaskExecutorTests|FullyQualifiedName~ActionForwardingContractTests" --logger "console;verbosity=minimal"` -> `passed (109/109)`
+- Notes:
+  - `BattlegroundCoordinator.LastAckStatus` is static and reusable — coordinator state handlers can key on a dispatched `ActionMessage`'s correlation id to react to ACK arrivals without repeating the scan logic. Integration into further coordinator transitions is deferred until a concrete driver shows up that needs it.
+  - `SendGmChatCommandTrackedAsync` now stamps a test-owned `test:<account>:<seq>` correlation id on every dispatched `ActionMessage`. `CharacterStateSocketListener.StampDispatchCorrelationId` only stamps when the id is empty, so the test id survives to the snapshot.
+  - Migration policy: only `AssertCommandSucceeded` helpers in `IntegrationValidationTests` and `TalentAllocationTests` were moved over. The rest continue to use `ContainsCommandRejection` until the backing command wires a `CommandAckEvent`. The legacy helper is intentionally still exposed from `LiveBotFixture.Assertions.cs`.
+- Files changed:
+  - `Services/WoWStateManager/Coordination/BattlegroundCoordinator.cs`
+  - `Tests/BotRunner.Tests/BattlegroundCoordinatorAckTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Assertions.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TalentAllocationTests.cs`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "^- \\[ \\]|Active task:" docs/TASKS.md`
 
 ## Handoff (2026-04-21, P4.4)
 
