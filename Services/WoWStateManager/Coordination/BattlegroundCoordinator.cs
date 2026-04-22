@@ -62,6 +62,12 @@ public class BattlegroundCoordinator
     private readonly ConcurrentDictionary<string, byte> _loadoutReady = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, byte> _loadoutFailed = new(StringComparer.OrdinalIgnoreCase);
 
+    // P5.1 loadout ACK correlation — populated when ApplyLoadout is dispatched so
+    // RecordLoadoutProgressFromSnapshots can short-circuit on terminal ACKs even
+    // when snapshot.LoadoutStatus is slow to flip (e.g. pre-task failures like
+    // "loadout_task_already_active").
+    private readonly ConcurrentDictionary<string, string> _loadoutCorrelationIds = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Accounts whose loadout step reported LoadoutFailed. Downstream states
     /// ignore these bots so one broken bot doesn't block the rest from queueing.
@@ -285,10 +291,14 @@ public class BattlegroundCoordinator
             if (_loadoutSpecs.TryGetValue(requestingAccount, out var spec) && spec != null)
             {
                 action = LoadoutSpecConverter.BuildApplyLoadoutAction(spec);
+                var correlationId = $"bg-coord:loadout:{requestingAccount}:{Guid.NewGuid():N}";
+                action.CorrelationId = correlationId;
+                _loadoutCorrelationIds[requestingAccount] = correlationId;
                 _loadoutSent[requestingAccount] = 1;
                 _logger.LogInformation(
-                    "BG_COORD: ApplyLoadout dispatched to '{Account}' (targetLevel={Lvl}, spells={Spells}, equip={Equip})",
+                    "BG_COORD: ApplyLoadout dispatched to '{Account}' (corr={CorrelationId}, targetLevel={Lvl}, spells={Spells}, equip={Equip})",
                     requestingAccount,
+                    correlationId,
                     spec.TargetLevel,
                     spec.SpellIdsToLearn?.Count() ?? 0,
                     spec.EquipItems?.Count() ?? 0);
@@ -375,6 +385,40 @@ public class BattlegroundCoordinator
             if (_loadoutReady.ContainsKey(account) || _loadoutFailed.ContainsKey(account))
                 continue;
 
+            // P5.1: ACK-driven short-circuit. If the dispatched ApplyLoadout has a
+            // terminal ack, consume it first. This closes the gap where the bot
+            // rejects the action before LoadoutStatus advances (e.g.
+            // "loadout_task_already_active", "unsupported_action", or a step
+            // TimedOut) — without this, the coordinator would wait forever on
+            // snapshot.LoadoutStatus that never flips.
+            if (_loadoutCorrelationIds.TryGetValue(account, out var correlationId))
+            {
+                var ack = LastAck(correlationId, snapshots);
+                if (ack != null)
+                {
+                    switch (ack.Status)
+                    {
+                        case CommandAckEvent.Types.AckStatus.Success:
+                            _loadoutReady[account] = 1;
+                            _logger.LogInformation(
+                                "BG_COORD: Loadout ACK Success for '{Account}' (corr={CorrelationId})",
+                                account,
+                                correlationId);
+                            continue;
+                        case CommandAckEvent.Types.AckStatus.Failed:
+                        case CommandAckEvent.Types.AckStatus.TimedOut:
+                            _loadoutFailed[account] = 1;
+                            _logger.LogWarning(
+                                "BG_COORD: Loadout ACK {Status} for '{Account}' (corr={CorrelationId}): {Reason}",
+                                ack.Status,
+                                account,
+                                correlationId,
+                                string.IsNullOrWhiteSpace(ack.FailureReason) ? "(no reason)" : ack.FailureReason);
+                            continue;
+                    }
+                }
+            }
+
             if (!snapshots.TryGetValue(account, out var snapshot) || snapshot == null)
                 continue;
 
@@ -421,18 +465,20 @@ public class BattlegroundCoordinator
     };
 
     /// <summary>
-    /// P4.5.1: Return the most recent <see cref="CommandAckEvent.Types.AckStatus"/> observed for a given
+    /// P4.5.1 / P5.1: Return the most recent <see cref="CommandAckEvent"/> observed for a given
     /// correlation id across all provided bot snapshots, or <c>null</c> if no ACK has been seen yet.
     /// Terminal statuses (Success/Failed/TimedOut) are preferred over Pending when both are present.
+    /// Callers that only need the status should prefer <see cref="LastAckStatus"/>; callers that
+    /// need the failure reason (e.g. coordinator failure logging) use this richer overload.
     /// </summary>
-    public static CommandAckEvent.Types.AckStatus? LastAckStatus(
+    public static CommandAckEvent? LastAck(
         string correlationId,
         IReadOnlyDictionary<string, WoWActivitySnapshot> snapshots)
     {
         if (string.IsNullOrWhiteSpace(correlationId) || snapshots == null)
             return null;
 
-        CommandAckEvent.Types.AckStatus? latest = null;
+        CommandAckEvent? latestPending = null;
         foreach (var snapshot in snapshots.Values)
         {
             if (snapshot == null)
@@ -447,15 +493,24 @@ public class BattlegroundCoordinator
                 // Terminal beats Pending — stop at first terminal hit in this snapshot;
                 // otherwise remember Pending and keep scanning other snapshots.
                 if (ack.Status != CommandAckEvent.Types.AckStatus.Pending)
-                    return ack.Status;
+                    return ack;
 
-                latest ??= ack.Status;
+                latestPending ??= ack;
                 break;
             }
         }
 
-        return latest;
+        return latestPending;
     }
+
+    /// <summary>
+    /// P4.5.1: Thin status-only wrapper around <see cref="LastAck"/>. Preserved for callers
+    /// and tests that only need the <see cref="CommandAckEvent.Types.AckStatus"/> enum.
+    /// </summary>
+    public static CommandAckEvent.Types.AckStatus? LastAckStatus(
+        string correlationId,
+        IReadOnlyDictionary<string, WoWActivitySnapshot> snapshots)
+        => LastAck(correlationId, snapshots)?.Status;
 
     private ActionMessage? HandleQueueForBattleground(
         string requestingAccount,

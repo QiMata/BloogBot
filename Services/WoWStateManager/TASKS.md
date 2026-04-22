@@ -17,6 +17,36 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+- Last updated: 2026-04-22 (P5.1)
+- Active task: none — P5.1 loadout ACK consumption shipped; next narrow slice
+  would extend ACK-driven short-circuit into `HandleQueueForBattleground` if a
+  concrete failure driver shows up.
+- Last delta:
+  - `BattlegroundCoordinator.HandleApplyingLoadouts` now pre-stamps each
+    dispatched `ApplyLoadout` with `bg-coord:loadout:<account>:<guid>` and
+    records it in `_loadoutCorrelationIds`. `RecordLoadoutProgressFromSnapshots`
+    consults `LastAck(correlationId, snapshots)` before snapshot.LoadoutStatus,
+    so terminal ACKs (Success/Failed/TimedOut) resolve the account even when
+    LoadoutStatus never flips (pre-task rejection, step TimedOut).
+  - `LastAckStatus` factored into `LastAck` + thin `LastAckStatus` wrapper.
+    Coordinator consumers get the failure reason; the `P4.5.1` status-only
+    callers (including `BattlegroundCoordinatorAckTests`) keep working.
+  - No changes to `CharacterStateSocketListener` — `StampDispatchCorrelationId`
+    already respects non-empty ids, so the coordinator stamp survives
+    end-to-end.
+- Pass result: `P5.1 loadout ACK consumption green (22/22 BattlegroundCoordinator tests)`
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (1062 pre-existing warnings, 0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~BattlegroundCoordinator" -v minimal` -> `passed (22/22)`
+- Files changed:
+  - `Services/WoWStateManager/Coordination/BattlegroundCoordinator.cs`
+  - `Tests/BotRunner.Tests/BattlegroundCoordinatorLoadoutTests.cs`
+  - `docs/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "AssertCommandSucceeded|AssertTraceCommandSucceeded" Tests/BotRunner.Tests/LiveValidation`
+
+### Previous handoff (2026-04-20)
 - Last updated: 2026-04-20
 - Active task: roll the now-proven desired-party queue contract into the next battleground objective slice.
 - Last delta:

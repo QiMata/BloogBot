@@ -119,6 +119,140 @@ public class BattlegroundCoordinatorLoadoutTests
     }
 
     [Fact]
+    public void ApplyingLoadouts_StampsCorrelationId_OnDispatchedApplyLoadout()
+    {
+        // P5.1: coordinator must pre-stamp an ApplyLoadout CorrelationId so the
+        // downstream ACK flow can be correlated even if the listener's sequence
+        // stamper doesn't run (e.g. unit-test paths). The stamp also anchors the
+        // coordinator's own ACK bookkeeping.
+        var loadouts = new Dictionary<string, LoadoutSpecSettings>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["BGLEADER"] = new() { TargetLevel = 60 },
+        };
+        var coordinator = BuildCoordinator(AvBgType, AvMapId, loadouts: loadouts, accounts: new[] { "BGLEADER", "BGMEMBER1" });
+        var snapshots = ReadySnapshots("BGLEADER", "BGMEMBER1", mapId: StagingMapId);
+
+        var action = coordinator.GetAction("BGLEADER", snapshots);
+
+        Assert.NotNull(action);
+        Assert.Equal(ActionType.ApplyLoadout, action!.ActionType);
+        Assert.False(string.IsNullOrWhiteSpace(action.CorrelationId), "ApplyLoadout action must carry a coordinator-stamped CorrelationId");
+        Assert.StartsWith("bg-coord:loadout:BGLEADER:", action.CorrelationId);
+    }
+
+    [Fact]
+    public void ApplyingLoadouts_Consumes_Success_AckFromSnapshot()
+    {
+        // P5.1: ACK Success short-circuits the snapshot.LoadoutStatus gate. Drive the
+        // dispatch, then feed back a Success ACK carrying the stamped correlation id
+        // without flipping snapshot.LoadoutStatus — the coordinator should still
+        // mark the bot ready and advance.
+        var loadouts = new Dictionary<string, LoadoutSpecSettings>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["BGLEADER"] = new() { TargetLevel = 60 },
+        };
+        var coordinator = BuildCoordinator(AvBgType, AvMapId, loadouts: loadouts, accounts: new[] { "BGLEADER", "BGMEMBER1" });
+        var snapshots = ReadySnapshots("BGLEADER", "BGMEMBER1", mapId: StagingMapId);
+
+        var leaderAction = coordinator.GetAction("BGLEADER", snapshots);
+        Assert.NotNull(leaderAction);
+        var correlationId = leaderAction!.CorrelationId;
+        Assert.False(string.IsNullOrWhiteSpace(correlationId));
+
+        // No LoadoutStatus flip — only an ACK Success for BGLEADER's correlation id.
+        AddAck(snapshots, "BGLEADER", correlationId, CommandAckEvent.Types.AckStatus.Success);
+
+        // Advance: next poll should consume the ACK and stay OR advance (AV auto-
+        // advances once all accounts resolved). BGMEMBER1 has no spec → auto-ready.
+        Assert.Null(coordinator.GetAction("BGLEADER", snapshots));
+        Assert.Equal(BattlegroundCoordinator.CoordState.QueueForBattleground, coordinator.State);
+        Assert.DoesNotContain("BGLEADER", coordinator.ExcludedAccounts);
+    }
+
+    [Fact]
+    public void ApplyingLoadouts_Consumes_Failed_AckFromSnapshot_AndExcludesAccount()
+    {
+        // P5.1: ACK Failed must mark the account as failed even when
+        // snapshot.LoadoutStatus never flips to LoadoutFailed (e.g. pre-task
+        // "loadout_task_already_active" or "unsupported_action" rejections).
+        var loadouts = new Dictionary<string, LoadoutSpecSettings>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["BGLEADER"] = new() { TargetLevel = 60 },
+            ["BGMEMBER1"] = new() { TargetLevel = 60 },
+        };
+        var coordinator = BuildCoordinator(AvBgType, AvMapId, loadouts: loadouts, accounts: new[] { "BGLEADER", "BGMEMBER1" });
+        var snapshots = ReadySnapshots("BGLEADER", "BGMEMBER1", mapId: StagingMapId);
+
+        var leaderAction = coordinator.GetAction("BGLEADER", snapshots);
+        var memberAction = coordinator.GetAction("BGMEMBER1", snapshots);
+        Assert.NotNull(leaderAction);
+        Assert.NotNull(memberAction);
+
+        AddAck(snapshots, "BGLEADER", leaderAction!.CorrelationId, CommandAckEvent.Types.AckStatus.Success);
+        AddAck(snapshots, "BGMEMBER1", memberAction!.CorrelationId, CommandAckEvent.Types.AckStatus.Failed, "loadout_task_already_active");
+
+        // Snapshot.LoadoutStatus intentionally left as LoadoutNotStarted — the
+        // coordinator must rely on the ACK to resolve BGMEMBER1.
+        Assert.Null(coordinator.GetAction("BGLEADER", snapshots));
+        Assert.Equal(BattlegroundCoordinator.CoordState.QueueForBattleground, coordinator.State);
+        Assert.Contains("BGMEMBER1", coordinator.ExcludedAccounts);
+        Assert.DoesNotContain("BGLEADER", coordinator.ExcludedAccounts);
+    }
+
+    [Fact]
+    public void ApplyingLoadouts_Consumes_TimedOut_AckFromSnapshot_AndExcludesAccount()
+    {
+        // P5.1: ACK TimedOut (step exceeded retry cap) must be treated as a
+        // terminal failure — coordinator excludes the bot and continues.
+        var loadouts = new Dictionary<string, LoadoutSpecSettings>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["BGLEADER"] = new() { TargetLevel = 60 },
+            ["BGMEMBER1"] = new() { TargetLevel = 60 },
+        };
+        var coordinator = BuildCoordinator(AvBgType, AvMapId, loadouts: loadouts, accounts: new[] { "BGLEADER", "BGMEMBER1" });
+        var snapshots = ReadySnapshots("BGLEADER", "BGMEMBER1", mapId: StagingMapId);
+
+        var leaderAction = coordinator.GetAction("BGLEADER", snapshots);
+        var memberAction = coordinator.GetAction("BGMEMBER1", snapshots);
+
+        AddAck(snapshots, "BGLEADER", leaderAction!.CorrelationId, CommandAckEvent.Types.AckStatus.Success);
+        AddAck(snapshots, "BGMEMBER1", memberAction!.CorrelationId, CommandAckEvent.Types.AckStatus.TimedOut,
+            "step 'learn 1234' exceeded retries");
+
+        Assert.Null(coordinator.GetAction("BGLEADER", snapshots));
+        Assert.Equal(BattlegroundCoordinator.CoordState.QueueForBattleground, coordinator.State);
+        Assert.Contains("BGMEMBER1", coordinator.ExcludedAccounts);
+    }
+
+    [Fact]
+    public void ApplyingLoadouts_PendingAckDoesNotAdvance_AndIsOverriddenByTerminal()
+    {
+        // P5.1: Pending ACKs must not be treated as terminal. The coordinator
+        // stays in ApplyingLoadouts until a terminal ACK (or snapshot.LoadoutStatus)
+        // is observed.
+        var loadouts = new Dictionary<string, LoadoutSpecSettings>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["BGLEADER"] = new() { TargetLevel = 60 },
+        };
+        var coordinator = BuildCoordinator(AvBgType, AvMapId, loadouts: loadouts, accounts: new[] { "BGLEADER", "BGMEMBER1" });
+        var snapshots = ReadySnapshots("BGLEADER", "BGMEMBER1", mapId: StagingMapId);
+
+        var leaderAction = coordinator.GetAction("BGLEADER", snapshots);
+        Assert.NotNull(leaderAction);
+        var corr = leaderAction!.CorrelationId;
+
+        // Only Pending recorded — coordinator must hold.
+        AddAck(snapshots, "BGLEADER", corr, CommandAckEvent.Types.AckStatus.Pending);
+        Assert.Null(coordinator.GetAction("BGLEADER", snapshots));
+        Assert.Equal(BattlegroundCoordinator.CoordState.ApplyingLoadouts, coordinator.State);
+
+        // Terminal Success arrives later — coordinator advances.
+        AddAck(snapshots, "BGLEADER", corr, CommandAckEvent.Types.AckStatus.Success);
+        Assert.Null(coordinator.GetAction("BGLEADER", snapshots));
+        Assert.Equal(BattlegroundCoordinator.CoordState.QueueForBattleground, coordinator.State);
+    }
+
+    [Fact]
     public void WaitingForRaidFormation_HoldsWhenFactionGroupNotFormed_ReleasesWhenLeaderGuidMatches()
     {
         // WSG (faction group required) with a desired-party leader mapping.
@@ -249,5 +383,21 @@ public class BattlegroundCoordinatorLoadoutTests
         var snapshot = snapshots[account];
         snapshot.LoadoutStatus = status;
         snapshot.LoadoutFailureReason = failureReason;
+    }
+
+    private static void AddAck(
+        ConcurrentDictionary<string, WoWActivitySnapshot> snapshots,
+        string account,
+        string correlationId,
+        CommandAckEvent.Types.AckStatus status,
+        string failureReason = "")
+    {
+        snapshots[account].RecentCommandAcks.Add(new CommandAckEvent
+        {
+            CorrelationId = correlationId,
+            ActionType = ActionType.ApplyLoadout,
+            Status = status,
+            FailureReason = failureReason,
+        });
     }
 }

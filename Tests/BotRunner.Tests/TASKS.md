@@ -51,6 +51,28 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-22 (P5.1)
+- Pass result: `P5.1 coordinator ACK consumption green (BattlegroundCoordinatorLoadoutTests 11/11, full BattlegroundCoordinator* 22/22)`
+- Last delta:
+  - `BattlegroundCoordinatorLoadoutTests` now pin P5.1 behavior: ApplyLoadout
+    actions carry a coordinator-stamped `bg-coord:loadout:<account>:<guid>`
+    correlation id; Success/Failed/TimedOut ACKs resolve accounts without
+    requiring `snapshot.LoadoutStatus` to flip; Pending ACKs leave the
+    coordinator waiting on the terminal signal.
+  - `BattlegroundCoordinator` no longer leaves `LastAckStatus` as a test-only
+    helper — `RecordLoadoutProgressFromSnapshots` closes the pre-task-
+    rejection gap (`loadout_task_already_active`, `unsupported_action`) and
+    the step-TimedOut gap on the active ACK ring.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (1062 pre-existing warnings, 0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~BattlegroundCoordinator" -v minimal` -> `passed (22/22)`
+- Files changed:
+  - `Services/WoWStateManager/Coordination/BattlegroundCoordinator.cs`
+  - `Tests/BotRunner.Tests/BattlegroundCoordinatorLoadoutTests.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "AssertCommandSucceeded|AssertTraceCommandSucceeded" Tests/BotRunner.Tests/LiveValidation`
+
 ### 2026-04-21 (P4.5)
 - Pass result: `P4.5 coordinator + test migration to structured ACKs shipped; Phase P4 closed`
 - Last delta:

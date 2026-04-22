@@ -218,6 +218,62 @@ commands that have no authoritative SMSG (`.modify money`, `.setskill`,
 
 ---
 
+## P5 - Coordinator ACK Consumption
+
+`P4` opened the correlated ACK plumbing but left `BattlegroundCoordinator.LastAckStatus`
+as a static helper with only test coverage. `P5` turns ACKs into a real coordinator
+signal, starting with the narrowest sub-phase that already has full ACK support on
+the dispatch side.
+
+### Context
+`HandleApplyingLoadouts` currently gates `ApplyingLoadouts → WaitingForRaidFormation`
+entirely on `WoWActivitySnapshot.LoadoutStatus`. That works when a `LoadoutTask`
+runs to completion, but it leaves two gaps where the coordinator stalls forever:
+
+1. **Pre-task rejection.** `BotRunnerService.Messages.cs` emits `CommandAckEvent.Failed`
+   with reason `loadout_task_already_active` or `unsupported_action` *before* any
+   `LoadoutTask` starts — `LoadoutStatus` never flips.
+2. **Step-level TimedOut.** `LoadoutTask` emits `CommandAckEvent.TimedOut` for a
+   step that exceeds `MaxRetriesPerStep`. Terminal status reaches the snapshot
+   ACK ring, but `LoadoutStatus` may still read `LoadoutInProgress` for a tick.
+
+### Rules
+1. **ACK gates are additive, not replacements.** `snapshot.LoadoutStatus` remains
+   the primary signal. ACK-driven short-circuit only activates when the ACK is
+   terminal and the coordinator has not yet resolved the account.
+2. **Deterministic correlation IDs.** Coordinator-dispatched actions pre-stamp
+   their own correlation id; `CharacterStateSocketListener.StampDispatchCorrelationId`
+   already respects non-empty ids, so the pre-stamp survives end-to-end.
+3. **No new proto fields, no new listener plumbing.** Consume only what `P4.4`/`P4.5`
+   already put on the wire.
+
+### Sub-phases
+
+- [x] **P5.1** Loadout ACK consumption in `BattlegroundCoordinator.HandleApplyingLoadouts`
+  - [x] P5.1.1 Factor `LastAckStatus` into `LastAck` (returns `CommandAckEvent?`)
+    + thin `LastAckStatus` wrapper. Coordinator consumers need the failure
+    reason; tests that only care about status stay unaffected.
+  - [x] P5.1.2 Pre-stamp each dispatched `ApplyLoadout` action with
+    `bg-coord:loadout:<account>:<guid>`; record the id in `_loadoutCorrelationIds`.
+  - [x] P5.1.3 `RecordLoadoutProgressFromSnapshots` consults `LastAck` before
+    `LoadoutStatus`. Terminal Success → `_loadoutReady`; Failed/TimedOut →
+    `_loadoutFailed` with the ack reason; Pending is ignored so the existing
+    `LoadoutStatus` gate still holds.
+  - [x] P5.1.4 Unit tests in `BattlegroundCoordinatorLoadoutTests` cover
+    correlation-id stamping and Success/Failed/TimedOut/Pending ACK outcomes
+    without relying on `LoadoutStatus`.
+
+### Design invariants
+- **Coordinator-owned correlation ids.** Coordinator-dispatched actions stamp
+  deterministic ids (prefix `bg-coord:<phase>:<account>:<guid>`). Listener-stamped
+  sequence ids only apply when the dispatcher left `CorrelationId` empty.
+- **One direction, no round-trip.** Coordinator writes the id on dispatch; the
+  bot echoes it back through `CommandAckEvent`. No new RPC, no new storage.
+- **Polling stays.** ACK resolution is a short-circuit for terminal gaps, not
+  a replacement for `snapshot.LoadoutStatus`.
+
+---
+
 ## P2 - WoW.exe Packet Handling & ACK Parity (COMPLETE)
 
 ### Context
@@ -281,6 +337,36 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 | G10 | Movement counter semantics unverified                                | P2.2      |
 
 ---
+
+## Handoff (2026-04-22, P5.1)
+
+- Completed: shipped `P5.1` (Loadout ACK consumption in `BattlegroundCoordinator`).
+  `P4.5.1`'s `LastAckStatus` is no longer test-only — `HandleApplyingLoadouts`
+  now pre-stamps correlation ids and `RecordLoadoutProgressFromSnapshots` closes
+  the pre-task-rejection + step-TimedOut gaps where `snapshot.LoadoutStatus`
+  never flips.
+- Validation:
+  - `tasklist //FI "IMAGENAME eq WoW.exe" //FO LIST` -> `No tasks are running which match the specified criteria.`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (1062 pre-existing warnings, 0 errors)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~BattlegroundCoordinator" -v minimal` -> `passed (22/22)`
+- Notes:
+  - `LastAckStatus` now delegates to a richer `LastAck` helper that returns the full
+    `CommandAckEvent` (so coordinators can log failure reasons). Existing
+    `BattlegroundCoordinatorAckTests` stay green because the status-only wrapper
+    preserves the `P4.5.1` contract.
+  - `HandleApplyingLoadouts` pre-stamps `ActionMessage.CorrelationId` with
+    `bg-coord:loadout:<account>:<guid>`. `CharacterStateSocketListener.StampDispatchCorrelationId`
+    already skips stamping when `CorrelationId` is non-empty, so the coordinator id
+    survives end-to-end to the `CommandAckEvent` without listener changes.
+  - ACK gate is additive: `snapshot.LoadoutStatus` still drives resolution when no
+    ACK has arrived; terminal ACKs short-circuit only when the account is still
+    unresolved. Pending ACKs are deliberately ignored so the coordinator keeps
+    waiting on the concrete LoadoutStatus / terminal ack.
+- Files changed:
+  - `Services/WoWStateManager/Coordination/BattlegroundCoordinator.cs`
+  - `Tests/BotRunner.Tests/BattlegroundCoordinatorLoadoutTests.cs`
+  - `docs/TASKS.md`
+- Next command: `rg -n "AssertCommandSucceeded|AssertTraceCommandSucceeded" Tests/BotRunner.Tests/LiveValidation`
 
 ## Handoff (2026-04-21, P4.5)
 
