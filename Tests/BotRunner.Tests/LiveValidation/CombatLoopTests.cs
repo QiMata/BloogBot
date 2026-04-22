@@ -66,81 +66,91 @@ public class CombatLoopTests
             $"FG={_bot.FgAccount}/{fgSnap.CharacterName} " +
             $"(level={fgSnap.Player?.Unit?.GameObject?.Level}, HP={fgSnap.Player?.Unit?.Health}/{fgSnap.Player?.Unit?.MaxHealth})");
 
-        var targetGuid = await FindLivingBoarGuidAsync(_bot.BgAccount, bgSelfGuid, TimeSpan.FromSeconds(20));
+        // Pick a single boar visible to BOTH bots so the FG viewport frames the fight
+        // (both attackers piling on the same mob keeps them clustered rather than
+        // chasing divergent targets off into the brush).
+        var targetGuid = await FindBoarVisibleToBothBotsAsync(
+            bgSelfGuid,
+            fgSelfGuid,
+            TimeSpan.FromSeconds(20));
         Assert.True(targetGuid != 0,
-            "Valley of Trials Mottled Boar must be visible in BG snapshot within 20s of staging.");
+            "A Mottled Boar must be visible in both BG and FG NearbyUnits within 20s of staging.");
 
-        _output.WriteLine($"[ARENA] BG dispatching StartMeleeAttack on boar 0x{targetGuid:X}");
-        var dispatch = await _bot.SendActionAsync(_bot.BgAccount, new ActionMessage
+        _output.WriteLine($"[ARENA] Both bots auto-attacking boar 0x{targetGuid:X}");
+        var attack = new ActionMessage
+        {
+            ActionType = ActionType.StartMeleeAttack,
+            Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
+        };
+        var bgDispatch = await _bot.SendActionAsync(_bot.BgAccount, attack);
+        var fgDispatch = await _bot.SendActionAsync(_bot.FgAccount, new ActionMessage
         {
             ActionType = ActionType.StartMeleeAttack,
             Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
         });
-        Assert.Equal(ResponseResult.Success, dispatch);
+        Assert.Equal(ResponseResult.Success, bgDispatch);
+        Assert.Equal(ResponseResult.Success, fgDispatch);
 
         // BotRunner's BuildStartMeleeAttackSequence owns chase, facing, and
-        // auto-attack toggle. We only poll for the snapshot-observed death.
-        var deadOrGone = await WaitForMobDeadOrGoneAsync(_bot.BgAccount, targetGuid, TimeSpan.FromSeconds(45));
+        // auto-attack toggle per bot. With both attacking the same mob it dies
+        // faster; we poll BOTH snapshots and accept the first that reports it
+        // dead/gone — creature despawn removes it from NearbyUnits for every
+        // observer, but health can snapshot as 0 on one side before the other.
+        var deadOrGone = await WaitForMobDeadOrGoneOnEitherBotAsync(
+            targetGuid,
+            TimeSpan.FromSeconds(45));
         Assert.True(deadOrGone,
             $"Boar 0x{targetGuid:X} should die from real melee combat within 45s (no .damage used).");
 
         await _bot.RefreshSnapshotsAsync();
         var bgAfter = await _bot.GetSnapshotAsync(_bot.BgAccount);
+        var fgAfter = await _bot.GetSnapshotAsync(_bot.FgAccount);
         Assert.NotNull(bgAfter);
+        Assert.NotNull(fgAfter);
         var bgHealth = bgAfter!.Player?.Unit?.Health ?? 0;
+        var fgHealth = fgAfter!.Player?.Unit?.Health ?? 0;
         Assert.True(bgHealth > 0,
             $"BG attacker should survive a level 1 boar fight (HP={bgHealth} after kill).");
+        Assert.True(fgHealth > 0,
+            $"FG attacker should survive a level 1 boar fight (HP={fgHealth} after kill).");
 
         _output.WriteLine(
-            $"[ARENA] Success: boar dead via auto-attack; BG HP={bgAfter.Player?.Unit?.Health}/{bgAfter.Player?.Unit?.MaxHealth}, " +
-            $"level={bgAfter.Player?.Unit?.GameObject?.Level}");
+            $"[ARENA] Success: boar dead via dual auto-attack; " +
+            $"BG HP={bgAfter.Player?.Unit?.Health}/{bgAfter.Player?.Unit?.MaxHealth} lvl={bgAfter.Player?.Unit?.GameObject?.Level}, " +
+            $"FG HP={fgAfter.Player?.Unit?.Health}/{fgAfter.Player?.Unit?.MaxHealth} lvl={fgAfter.Player?.Unit?.GameObject?.Level}");
     }
 
-    private async Task<ulong> FindLivingBoarGuidAsync(string account, ulong selfGuid, TimeSpan timeout)
+    private async Task<ulong> FindBoarVisibleToBothBotsAsync(
+        ulong bgSelfGuid,
+        ulong fgSelfGuid,
+        TimeSpan timeout)
     {
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < timeout)
         {
             await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var candidates = snap?.NearbyUnits?
-                .Where(u =>
-                {
-                    var guid = u.GameObject?.Base?.Guid ?? 0UL;
-                    if (guid == 0 || guid == selfGuid)
-                        return false;
-                    if ((guid & CreatureGuidHighMask) != CreatureGuidHighPrefix)
-                        return false;
-                    if (u.Health == 0 || u.MaxHealth == 0)
-                        return false;
-                    if (u.GameObject?.Level > 10)
-                        return false;
-                    if (u.MaxHealth > 200)
-                        return false;
-                    if (u.NpcFlags != 0)
-                        return false;
+            var bgSnap = await _bot.GetSnapshotAsync(_bot.BgAccount);
+            var fgSnap = await _bot.GetSnapshotAsync(_bot.FgAccount);
 
-                    var entry = u.GameObject?.Entry ?? 0;
-                    var name = u.GameObject?.Name ?? string.Empty;
-                    return entry == MottledBoarEntry
-                        || string.Equals(name, MottledBoarName, StringComparison.OrdinalIgnoreCase)
-                        || name.Contains("mottled boar", StringComparison.OrdinalIgnoreCase);
-                })
-                .OrderBy(u => u.GameObject?.Level ?? uint.MaxValue)
-                .ThenBy(u => u.MaxHealth)
-                .ToList() ?? [];
+            var bgBoarGuids = CollectLivingBoarGuids(bgSnap, bgSelfGuid);
+            var fgBoarGuids = CollectLivingBoarGuids(fgSnap, fgSelfGuid);
 
-            if (candidates.Count > 0)
+            // Prefer a boar observed in BOTH snapshots — that guarantees both
+            // bots are in interaction range and the FG viewport can frame it.
+            var shared = bgBoarGuids.Intersect(fgBoarGuids).FirstOrDefault();
+            if (shared != 0)
             {
-                var mob = candidates[0];
-                var guid = mob.GameObject?.Base?.Guid ?? 0UL;
-                var pos = mob.GameObject?.Base?.Position;
-                var name = string.IsNullOrWhiteSpace(mob.GameObject?.Name) ? "<unknown>" : mob.GameObject.Name;
                 _output.WriteLine(
-                    $"    Candidate boar 0x{guid:X}: name='{name}' entry={mob.GameObject?.Entry ?? 0} " +
-                    $"HP={mob.Health}/{mob.MaxHealth} at ({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F1})");
-                if (guid != 0)
-                    return guid;
+                    $"    Shared target 0x{shared:X} visible to both bots " +
+                    $"(BG knows {bgBoarGuids.Count} boars, FG knows {fgBoarGuids.Count}).");
+                return shared;
+            }
+
+            if (bgBoarGuids.Count > 0 && fgBoarGuids.Count > 0)
+            {
+                _output.WriteLine(
+                    $"    Both bots see boars but no overlap yet " +
+                    $"(BG={bgBoarGuids.Count}, FG={fgBoarGuids.Count}); waiting for FG/BG range to align.");
             }
 
             await Task.Delay(500);
@@ -149,15 +159,46 @@ public class CombatLoopTests
         return 0UL;
     }
 
-    private async Task<bool> WaitForMobDeadOrGoneAsync(string account, ulong targetGuid, TimeSpan timeout)
+    private static List<ulong> CollectLivingBoarGuids(WoWActivitySnapshot? snap, ulong selfGuid)
+    {
+        return snap?.NearbyUnits?
+            .Where(u =>
+            {
+                var guid = u.GameObject?.Base?.Guid ?? 0UL;
+                if (guid == 0 || guid == selfGuid)
+                    return false;
+                if ((guid & CreatureGuidHighMask) != CreatureGuidHighPrefix)
+                    return false;
+                if (u.Health == 0 || u.MaxHealth == 0)
+                    return false;
+                if (u.GameObject?.Level > 10)
+                    return false;
+                if (u.MaxHealth > 200)
+                    return false;
+                if (u.NpcFlags != 0)
+                    return false;
+
+                var entry = u.GameObject?.Entry ?? 0;
+                var name = u.GameObject?.Name ?? string.Empty;
+                return entry == MottledBoarEntry
+                    || string.Equals(name, MottledBoarName, StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("mottled boar", StringComparison.OrdinalIgnoreCase);
+            })
+            .Select(u => u.GameObject?.Base?.Guid ?? 0UL)
+            .Where(guid => guid != 0)
+            .ToList() ?? new List<ulong>();
+    }
+
+    private async Task<bool> WaitForMobDeadOrGoneOnEitherBotAsync(ulong targetGuid, TimeSpan timeout)
     {
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < timeout)
         {
             await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            var target = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
-            if (target == null || target.Health == 0)
+            var bgSnap = await _bot.GetSnapshotAsync(_bot.BgAccount);
+            var fgSnap = await _bot.GetSnapshotAsync(_bot.FgAccount);
+
+            if (IsTargetDeadOrGone(bgSnap, targetGuid) || IsTargetDeadOrGone(fgSnap, targetGuid))
                 return true;
 
             await Task.Delay(350);
@@ -165,4 +206,11 @@ public class CombatLoopTests
 
         return false;
     }
+
+    private static bool IsTargetDeadOrGone(WoWActivitySnapshot? snap, ulong targetGuid)
+    {
+        var target = snap?.NearbyUnits?.FirstOrDefault(u => (u.GameObject?.Base?.Guid ?? 0UL) == targetGuid);
+        return target == null || target.Health == 0;
+    }
+
 }
