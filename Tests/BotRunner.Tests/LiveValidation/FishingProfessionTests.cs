@@ -18,7 +18,11 @@ namespace BotRunner.Tests.LiveValidation;
 /// the <c>Fishing[Ratchet]</c> activity with <c>UseGmCommands=true</c> —
 /// then polls each bot's snapshot until the <c>FishingTask fishing_loot_success</c>
 /// diagnostic appears. Everything between "bot entered world" and "caught a fish"
-/// is owned by <c>BotRunner.Activities.FishingAtRatchetActivity</c> + FishingTask.
+/// is owned by <see cref="BotRunner.Tasks.FishingTask"/>, which the
+/// <see cref="BotRunner.Activities.ActivityResolver"/> instantiates directly with
+/// <c>location="Ratchet"</c>. The task itself drives the GM-command outfit
+/// setup and the <c>.tele name &lt;character&gt; Ratchet</c> travel — there is
+/// no per-(activity, location) wrapper class.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class FishingProfessionTests
@@ -26,7 +30,7 @@ public class FishingProfessionTests
     private static readonly TimeSpan FishingLootDeadline = TimeSpan.FromMinutes(3);
     private const string LootSuccessMarker = "[TASK] FishingTask fishing_loot_success";
     private const string PoolAcquiredMarker = "[TASK] FishingTask pool_acquired";
-    private const string ActivityStartMarker = "[ACTIVITY] FishingAtRatchet start";
+    private const string ActivityStartMarker = "[TASK] FishingTask activity_start";
 
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;

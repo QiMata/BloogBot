@@ -25,6 +25,10 @@ namespace BotRunner.Combat
         // Real trainers grant this alongside fishing spells; GM .learn does not.
         public const uint FishingPoleProficiency = 7738;
 
+        // Vendor item IDs
+        public const uint FishingPoleItemId = 6256;       // Basic Fishing Pole (sold by Bait & Tackle vendors)
+        public const uint NightcrawlerBaitItemId = NightcrawlerBait;
+
         // Fishing bobber display IDs (vanilla 1.12.1)
         public const uint BobberDisplayId = 668;
         internal const float MinimumPoolCastTargetDistanceFromPlayer = 12f;

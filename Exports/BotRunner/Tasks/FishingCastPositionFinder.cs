@@ -142,7 +142,7 @@ public static class FishingCastPositionFinder
         try
         {
             NavigationDllResolver.Register();
-            return LineOfSightNative(mapId, fromX, fromY, fromZ, toX, toY, toZ);
+            return LineOfSightNative(mapId, new XYZ(fromX, fromY, fromZ), new XYZ(toX, toY, toZ));
         }
         catch
         {
@@ -159,5 +159,5 @@ public static class FishingCastPositionFinder
 
     [DllImport("Navigation", CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
     [return: MarshalAs(UnmanagedType.I1)]
-    private static extern bool LineOfSightNative(uint mapId, float fx, float fy, float fz, float tx, float ty, float tz);
+    private static extern bool LineOfSightNative(uint mapId, XYZ from, XYZ to);
 }

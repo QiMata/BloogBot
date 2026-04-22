@@ -17,14 +17,30 @@ namespace BotRunner.Tasks;
 /// </summary>
 public class FishingTask : BotTask, IBotTask
 {
-    public FishingTask(IBotContext botContext, IReadOnlyList<Position>? searchWaypoints = null)
+    public FishingTask(
+        IBotContext botContext,
+        IReadOnlyList<Position>? searchWaypoints = null,
+        string? location = null,
+        bool useGmCommands = false,
+        uint? masterPoolId = null)
         : base(botContext)
     {
         _searchWaypoints = searchWaypoints ?? [];
+        _location = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
+        _useGmCommands = useGmCommands;
+        _masterPoolId = masterPoolId;
+        _state = useGmCommands
+            ? FishingState.EnsureGearAndSpells
+            : (_location != null ? FishingState.TravelToLocation : FishingState.EnsurePoleEquipped);
+        _activityAnnounced = false;
     }
 
     private enum FishingState
     {
+        EnsureGearAndSpells,
+        AwaitGearAndSpells,
+        TravelToLocation,
+        AwaitTravelArrival,
         EnsurePoleEquipped,
         AwaitPoleEquip,
         EnsureLureApplied,
@@ -39,6 +55,18 @@ public class FishingTask : BotTask, IBotTask
         LootCatch,
         AwaitLootCompletion,
     }
+
+    private readonly string? _location;
+    private readonly bool _useGmCommands;
+    private readonly uint? _masterPoolId;
+    private int _outfitStep;
+    private int _outfitSettleTicks;
+    private Position? _travelStartPosition;
+    private DateTime _travelDispatchedAt;
+    private bool _travelDispatched;
+    private bool _activityAnnounced;
+    private const int TravelTimeoutMs = 12_000;
+    private const int OutfitSettleTicks = 5;
 
     // WoW fishing bobbers land 15-30y from the player. Pool fishing works up to ~30y.
     // The bot should cast from docks/shoreline without walking into water.
@@ -89,7 +117,7 @@ public class FishingTask : BotTask, IBotTask
     private const int LootWindowTimeoutMs = 5000;
     private const int LootCompletionTimeoutMs = 3000;
 
-    private FishingState _state = FishingState.EnsurePoleEquipped;
+    private FishingState _state;
     private DateTime _stateEnteredAt = DateTime.UtcNow;
     private uint _fishingSpellId;
     private int _castsAttempted;
@@ -146,8 +174,27 @@ public class FishingTask : BotTask, IBotTask
 
         EnsureStartingBagSnapshot();
 
+        if (!_activityAnnounced)
+        {
+            _activityAnnounced = true;
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask activity_start location={_location ?? "(none)"} useGm={_useGmCommands} masterPoolId={_masterPoolId?.ToString() ?? "(none)"}");
+        }
+
         switch (_state)
         {
+            case FishingState.EnsureGearAndSpells:
+                TickEnsureGearAndSpells();
+                return;
+            case FishingState.AwaitGearAndSpells:
+                TickAwaitGearAndSpells();
+                return;
+            case FishingState.TravelToLocation:
+                TickTravelToLocation(player);
+                return;
+            case FishingState.AwaitTravelArrival:
+                TickAwaitTravelArrival(player);
+                return;
             case FishingState.EnsurePoleEquipped:
                 EnsurePoleEquipped();
                 return;
@@ -187,6 +234,115 @@ public class FishingTask : BotTask, IBotTask
             case FishingState.AwaitLootCompletion:
                 AwaitLootCompletion();
                 return;
+        }
+    }
+
+    private void TickEnsureGearAndSpells()
+    {
+        // One chat command per tick to avoid flooding. Steps are idempotent
+        // (.additem/.learn/.setskill all no-op when already satisfied), so we
+        // can re-run them on every fishing dispatch without side effects.
+        var om = ObjectManager;
+        switch (_outfitStep)
+        {
+            case 0:
+                om.SendChatMessage($".additem {FishingData.FishingPoleItemId} 1");
+                break;
+            case 1:
+                om.SendChatMessage($".additem {FishingData.NightcrawlerBaitItemId} 1");
+                break;
+            case 2:
+                om.SendChatMessage($".learn {FishingData.FishingRank1}");
+                break;
+            case 3:
+                om.SendChatMessage($".learn {FishingData.FishingPoleProficiency}");
+                break;
+            case 4:
+                om.SendChatMessage($".setskill {FishingData.FishingSkillId} 75 300");
+                break;
+            case 5:
+                if (_masterPoolId.HasValue)
+                {
+                    om.SendChatMessage($".pool update {_masterPoolId.Value}");
+                    BotContext.AddDiagnosticMessage(
+                        $"[TASK] FishingTask pool_refresh_dispatched master={_masterPoolId.Value}");
+                }
+                break;
+            case 6:
+                BotContext.AddDiagnosticMessage("[TASK] FishingTask outfit_complete");
+                _outfitSettleTicks = 0;
+                SetState(FishingState.AwaitGearAndSpells);
+                _outfitStep++;
+                return;
+        }
+
+        _outfitStep++;
+    }
+
+    private void TickAwaitGearAndSpells()
+    {
+        // Brief settle to let the GM commands apply (.additem/.learn/.setskill)
+        // before we start checking pole/lure inventory. The actual readiness
+        // gate is the existing EnsurePoleEquipped state below.
+        _outfitSettleTicks++;
+        if (_outfitSettleTicks < OutfitSettleTicks)
+            return;
+
+        SetState(_location != null
+            ? FishingState.TravelToLocation
+            : FishingState.EnsurePoleEquipped);
+    }
+
+    private void TickTravelToLocation(IWoWLocalPlayer player)
+    {
+        if (_location == null)
+        {
+            SetState(FishingState.EnsurePoleEquipped);
+            return;
+        }
+
+        // Use the GM tele command to jump to the named location. We send
+        // ".tele name <character> <location>" when player.Name is populated;
+        // BG-side name population can lag a few ticks after login/teleport,
+        // so we fall back to the self-form ".tele <location>" if needed
+        // (server still resolves the executing character by chat sender).
+        // .tele resolves to a server-defined safe location, so we never
+        // hardcode coordinates here.
+        _travelStartPosition = player.Position;
+        var characterName = player.Name;
+        var command = string.IsNullOrWhiteSpace(characterName)
+            ? $".tele {_location}"
+            : $".tele name {characterName} {_location}";
+        ObjectManager.SendChatMessage(command);
+        BotContext.AddDiagnosticMessage(
+            $"[TASK] FishingTask travel_dispatched location={_location} command='{command}'");
+        _travelDispatched = true;
+        _travelDispatchedAt = DateTime.UtcNow;
+        SetState(FishingState.AwaitTravelArrival);
+    }
+
+    private void TickAwaitTravelArrival(IWoWLocalPlayer player)
+    {
+        if (!_travelDispatched || _travelStartPosition == null)
+        {
+            SetState(FishingState.TravelToLocation);
+            return;
+        }
+
+        var moved = player.Position.DistanceTo(_travelStartPosition);
+        if (moved > 10f)
+        {
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask travel_arrived location={_location} pos=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1})");
+            SetState(FishingState.EnsurePoleEquipped);
+            return;
+        }
+
+        if ((DateTime.UtcNow - _travelDispatchedAt).TotalMilliseconds >= TravelTimeoutMs)
+        {
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask travel_timeout location={_location} pos=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1})");
+            SetState(FishingState.EnsurePoleEquipped);
         }
     }
 
@@ -488,8 +644,7 @@ public class FishingTask : BotTask, IBotTask
 
         var poolDistance = player.Position.DistanceTo(pool.Position);
         FishingCastPosition? resolvedCastPosition = null;
-        var zDelta = MathF.Abs(player.Position.Z - pool.Position.Z);
-        if ((_cachedCastPosition == null || _cachedCastPoolGuid != pool.Guid) && zDelta > 2.0f)
+        if (_cachedCastPoolGuid != pool.Guid)
         {
             _cachedCastPosition = FishingCastPositionFinder.FindForPool(player.MapId, player.Position, pool.Position);
             _cachedCastPoolGuid = pool.Guid;
@@ -498,6 +653,11 @@ public class FishingTask : BotTask, IBotTask
                 var castPosition = _cachedCastPosition.Value;
                 BotContext.AddDiagnosticMessage(
                     $"[TASK] FishingTask cast_position_resolved pos=({castPosition.Position.X:F1},{castPosition.Position.Y:F1},{castPosition.Position.Z:F1}) facing={castPosition.FacingRadians:F2} edgeDist={castPosition.EdgeDistance:F1} los={castPosition.HasLineOfSight}");
+            }
+            else
+            {
+                BotContext.AddDiagnosticMessage(
+                    $"[TASK] FishingTask cast_position_unresolved guid=0x{pool.Guid:X} playerPos=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1}) poolPos=({pool.Position.X:F1},{pool.Position.Y:F1},{pool.Position.Z:F1})");
             }
         }
 

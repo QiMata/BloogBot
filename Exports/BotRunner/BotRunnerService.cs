@@ -1112,20 +1112,19 @@ namespace BotRunner
                     accountName, _container.ClassContainer.Name, @class);
 
                 // Activity dispatch: if this character was assigned an activity by
-                // StateManager (via WWOW_ASSIGNED_ACTIVITY), push the activity task
-                // on top of the idle task so it runs first and drops back to idle
-                // when it pops. The useGmCommands flag gives the activity permission
-                // to short-circuit travel/outfit via GM chat commands.
-                var activity = ActivityResolver.Resolve(_assignedActivity);
-                if (activity != null)
+                // StateManager (via WWOW_ASSIGNED_ACTIVITY), push the resolved
+                // root task on top of the idle task so it runs first and drops
+                // back to idle when it pops. The useGmCommands flag lets the
+                // task short-circuit outfit/travel via GM chat commands.
+                var activityTask = ActivityResolver.Resolve(context, _assignedActivity, _useGmCommands);
+                if (activityTask != null)
                 {
-                    var activityTask = activity.CreateTask(context, _useGmCommands);
                     _botTasks.Push(activityTask);
                     EnqueueDiagnosticMessage(
-                        $"[ACTIVITY] Assigned '{activity.Name}[{activity.Location}]' useGm={_useGmCommands}");
+                        $"[ACTIVITY] Assigned '{_assignedActivity}' useGm={_useGmCommands}");
                     Log.Information(
-                        "[BOT RUNNER] Activity '{Name}[{Location}]' assigned for {Account} (useGmCommands={UseGm})",
-                        activity.Name, activity.Location ?? "(none)", accountName, _useGmCommands);
+                        "[BOT RUNNER] Activity '{Descriptor}' assigned for {Account} (useGmCommands={UseGm})",
+                        _assignedActivity, accountName, _useGmCommands);
                 }
             }
             catch (Exception ex)
