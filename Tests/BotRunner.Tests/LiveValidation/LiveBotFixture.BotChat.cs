@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -399,16 +400,22 @@ public partial class LiveBotFixture
             }
         }
 
+        // P4.5.2: stamp a test-owned correlation id so we can correlate the
+        // CommandAckEvent in RecentCommandAcks back to this exact dispatch.
+        var correlationId = $"test:{accountName}:{Interlocked.Increment(ref _testCorrelationSequence).ToString(CultureInfo.InvariantCulture)}";
         var action = new ActionMessage
         {
             ActionType = ActionType.SendChat,
+            CorrelationId = correlationId,
             Parameters = { new RequestParameter { StringParam = command } }
         };
 
         var dispatchResult = await SendActionAsync(accountName, action, emitOutput);
-        _logger.LogInformation("[ACTION] Sent {Type} to {Account} → {Result}", action.ActionType, accountName, dispatchResult);
+        _logger.LogInformation("[ACTION] Sent {Type} to {Account} → {Result} [{Corr}]", action.ActionType, accountName, dispatchResult, correlationId);
         var chats = new List<string>();
         var errors = new List<string>();
+        CommandAckEvent.Types.AckStatus? ackStatus = null;
+        string? ackFailureReason = null;
         if (captureResponse && _stateManagerClient != null)
         {
             var pollDeadlineUtc = DateTime.UtcNow.AddMilliseconds(GetTrackedChatCommandDelayMs(command, delayMs));
@@ -435,6 +442,13 @@ public partial class LiveBotFixture
                 chats = GetDeltaMessages(baselineChats, responseSnapshot.RecentChatMessages);
                 errors = GetDeltaMessages(baselineErrors, responseSnapshot.RecentErrors);
 
+                var ackMatch = FindLatestMatchingAck(responseSnapshot, correlationId);
+                if (ackMatch != null)
+                {
+                    ackStatus = ackMatch.Status;
+                    ackFailureReason = string.IsNullOrEmpty(ackMatch.FailureReason) ? null : ackMatch.FailureReason;
+                }
+
                 if (actionSeen && !responseSeen && (chats.Count > 0 || errors.Count > 0))
                 {
                     responseSeen = true;
@@ -445,7 +459,22 @@ public partial class LiveBotFixture
             LogChatCommandResponses(accountName, command, chats, errors);
         }
 
-        return new GmChatCommandTrace(attemptCount, dispatchResult, chats, errors);
+        return new GmChatCommandTrace(attemptCount, dispatchResult, chats, errors, correlationId, ackStatus, ackFailureReason);
+    }
+
+    private static CommandAckEvent? FindLatestMatchingAck(WoWActivitySnapshot snapshot, string correlationId)
+    {
+        CommandAckEvent? pendingMatch = null;
+        for (var i = snapshot.RecentCommandAcks.Count - 1; i >= 0; i--)
+        {
+            var ack = snapshot.RecentCommandAcks[i];
+            if (!string.Equals(ack.CorrelationId, correlationId, StringComparison.Ordinal))
+                continue;
+            if (ack.Status != CommandAckEvent.Types.AckStatus.Pending)
+                return ack;
+            pendingMatch ??= ack;
+        }
+        return pendingMatch;
     }
 
 

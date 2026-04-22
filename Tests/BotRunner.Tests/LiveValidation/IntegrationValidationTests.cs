@@ -704,11 +704,9 @@ public class IntegrationValidationTests
         _output.WriteLine($"[{label}] GM mode command '{command}' dispatched.");
     }
 
+    // P4.5.3: ACK-aware assertion replaces the legacy string-match rejection scan.
+    // Falls back to ContainsCommandRejection when the bot hasn't emitted a
+    // CommandAckEvent for this action type yet.
     private static void AssertCommandSucceeded(LiveBotFixture.GmChatCommandTrace trace, string label, string command)
-    {
-        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
-
-        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(LiveBotFixture.ContainsCommandRejection);
-        Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
-    }
+        => LiveBotFixture.AssertTraceCommandSucceeded(trace, label, command);
 }

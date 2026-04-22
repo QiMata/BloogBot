@@ -436,6 +436,28 @@ public partial class LiveBotFixture
     /// <summary>Execute any GM command via SOAP.</summary>
 
 
+    /// <summary>
+    /// P4.5.3: structured-ACK-first assertion that a tracked bot chat command dispatched and
+    /// completed without a rejection. Prefers the <see cref="CommandAckEvent"/> status when the
+    /// bot reported one (<see cref="CommandAckEvent.Types.AckStatus.Failed"/> or
+    /// <see cref="CommandAckEvent.Types.AckStatus.TimedOut"/> → authoritative failure), and falls
+    /// back to the legacy <see cref="ContainsCommandRejection"/> text scan for commands the bot
+    /// hasn't wired into the ACK ring yet. Keeps the old string-match as a deprecated fallback,
+    /// per <c>docs/TASKS.md</c> P4.5.3.
+    /// </summary>
+    internal static void AssertTraceCommandSucceeded(GmChatCommandTrace trace, string label, string command)
+    {
+        Assert.Equal(ResponseResult.Success, trace.DispatchResult);
+
+        if (trace.AckStatus is CommandAckEvent.Types.AckStatus.Failed or CommandAckEvent.Types.AckStatus.TimedOut)
+        {
+            Assert.Fail($"[{label}] {command} reported ACK {trace.AckStatus} (reason={trace.AckFailureReason ?? "(none)"}).");
+        }
+
+        var rejected = trace.ChatMessages.Concat(trace.ErrorMessages).Any(ContainsCommandRejection);
+        Assert.False(rejected, $"[{label}] {command} was rejected by command table or permissions.");
+    }
+
     internal static bool ContainsCommandRejection(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))

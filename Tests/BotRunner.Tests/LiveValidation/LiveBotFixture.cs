@@ -55,6 +55,12 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     private readonly Dictionary<string, int> _soapCommandCounts = new(StringComparer.OrdinalIgnoreCase);
 
+    // P4.5.2: monotonic counter feeding per-dispatch correlation ids stamped on
+    // ActionMessages. StateManager's StampDispatchCorrelationId only stamps
+    // when the field is empty, so a test-owned id survives end-to-end and can
+    // be used to look up the CommandAckEvent in RecentCommandAcks.
+    private long _testCorrelationSequence;
+
     private readonly Dictionary<string, Dictionary<string, int>> _chatCommandCountsByAccount = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly Dictionary<string, int> _lastPrintedChatCountByAccount = new(StringComparer.OrdinalIgnoreCase);
@@ -1371,7 +1377,10 @@ public partial class LiveBotFixture : IAsyncLifetime
         int AttemptCount,
         ResponseResult DispatchResult,
         IReadOnlyList<string> ChatMessages,
-        IReadOnlyList<string> ErrorMessages);
+        IReadOnlyList<string> ErrorMessages,
+        string? CorrelationId = null,
+        CommandAckEvent.Types.AckStatus? AckStatus = null,
+        string? AckFailureReason = null);
 
 
     public sealed record DeathInductionResult(
