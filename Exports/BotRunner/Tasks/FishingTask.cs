@@ -143,7 +143,8 @@ public class FishingTask : BotTask, IBotTask
     private DateTime _approachProgressAt = DateTime.UtcNow;
     private float _approachProgressDistance = float.MaxValue;
     private bool _castPreparationIssued;
-    private readonly IReadOnlyList<Position> _searchWaypoints;
+    private IReadOnlyList<Position> _searchWaypoints;
+    private bool _defaultSearchWaypointsGenerated;
     private readonly Dictionary<int, Position> _resolvedSearchWaypoints = [];
     private int _searchWaypointIndex;
     private DateTime _searchStartedAt;
@@ -462,6 +463,24 @@ public class FishingTask : BotTask, IBotTask
         {
             if (ElapsedMs >= PoolAcquireTimeoutMs)
             {
+                if (_searchWaypoints.Count == 0 && !_defaultSearchWaypointsGenerated)
+                {
+                    // No explicit waypoints configured (e.g., we just teleported
+                    // to a named landmark like Ratchet and the pool is not in
+                    // the immediate gameobject visibility window). Generate a
+                    // generic radial sweep around the current position so the
+                    // bot can naturally walk into pool-streaming range.
+                    _defaultSearchWaypointsGenerated = true;
+                    var generated = BuildDefaultSearchWaypoints(player.Position);
+                    if (generated.Count > 0)
+                    {
+                        _searchWaypoints = generated;
+                        _searchWaypointIndex = 0;
+                        BotContext.AddDiagnosticMessage(
+                            $"[TASK] FishingTask default_search_waypoints_generated count={generated.Count} center=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1})");
+                    }
+                }
+
                 if (_searchWaypoints.Count > 0 && _searchWaypointIndex < _searchWaypoints.Count)
                 {
                     Logger.LogInformation("[FISH] No pool visible after {Timeout}ms; starting search walk with {Count} waypoints.",
@@ -1682,6 +1701,26 @@ public class FishingTask : BotTask, IBotTask
     {
         _cachedCastPosition = null;
         _cachedCastPoolGuid = 0;
+    }
+
+    private static IReadOnlyList<Position> BuildDefaultSearchWaypoints(Position center)
+    {
+        // 8-direction radial sweep at ~28y. The bot walks toward each in turn
+        // until a fishing pool enters streaming range. This kicks in when a
+        // named teleport (e.g. ".tele Ratchet") drops the bot at a landmark
+        // that doesn't have an immediately visible fishing pool, so we don't
+        // hardcode pier coordinates per location.
+        const float radius = 28f;
+        var waypoints = new Position[8];
+        for (var i = 0; i < waypoints.Length; i++)
+        {
+            var angle = (i / (float)waypoints.Length) * MathF.PI * 2f;
+            waypoints[i] = new Position(
+                center.X + (MathF.Cos(angle) * radius),
+                center.Y + (MathF.Sin(angle) * radius),
+                center.Z);
+        }
+        return waypoints;
     }
 
     private void PopFishingTask(string reason)
