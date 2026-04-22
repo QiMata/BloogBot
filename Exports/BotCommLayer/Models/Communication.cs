@@ -34,138 +34,146 @@ namespace Communication {
             "YXJkUmVxdWVzdEgAQgsKCXBhcmFtZXRlciIsChRTbmFwc2hvdFF1ZXJ5UmVx",
             "dWVzdBIUCgxhY2NvdW50X25hbWUYASABKAkiWgoUQWN0aW9uRm9yd2FyZFJl",
             "cXVlc3QSFAoMYWNjb3VudF9uYW1lGAEgASgJEiwKBmFjdGlvbhgCIAEoCzIc",
-            "LmNvbW11bmljYXRpb24uQWN0aW9uTWVzc2FnZSLbAQoNQWN0aW9uTWVzc2Fn",
+            "LmNvbW11bmljYXRpb24uQWN0aW9uTWVzc2FnZSLzAQoNQWN0aW9uTWVzc2Fn",
             "ZRIuCgthY3Rpb25fdHlwZRgBIAEoDjIZLmNvbW11bmljYXRpb24uQWN0aW9u",
             "VHlwZRIzCgpwYXJhbWV0ZXJzGAIgAygLMh8uY29tbXVuaWNhdGlvbi5SZXF1",
             "ZXN0UGFyYW1ldGVyEjMKDGFjdGlvblJlc3VsdBgDIAEoDjIdLmNvbW11bmlj",
             "YXRpb24uUmVzcG9uc2VSZXN1bHQSMAoMbG9hZG91dF9zcGVjGAQgASgLMhou",
-            "Y29tbXVuaWNhdGlvbi5Mb2Fkb3V0U3BlYyI6CglBY3Rpb25NYXASLQoHYWN0",
-            "aW9ucxgBIAMoCzIcLmNvbW11bmljYXRpb24uQWN0aW9uTWVzc2FnZSKFAQoS",
-            "U3RhdGVDaGFuZ2VSZXF1ZXN0EjMKC2NoYW5nZV90eXBlGAEgASgOMh4uY29t",
-            "bXVuaWNhdGlvbi5TdGF0ZUNoYW5nZVR5cGUSOgoRcmVxdWVzdF9wYXJhbWV0",
-            "ZXIYAiABKAsyHy5jb21tdW5pY2F0aW9uLlJlcXVlc3RQYXJhbWV0ZXIifQoT",
-            "U3RhdGVDaGFuZ2VSZXNwb25zZRIvCghyZXNwb25zZRgBIAEoDjIdLmNvbW11",
-            "bmljYXRpb24uUmVzcG9uc2VSZXN1bHQSNQoJc25hcHNob3RzGAIgAygLMiIu",
-            "Y29tbXVuaWNhdGlvbi5Xb1dBY3Rpdml0eVNuYXBzaG90IvkBChNDaGFyYWN0",
-            "ZXJEZWZpbml0aW9uEhQKDGFjY291bnRfbmFtZRgBIAEoCRIQCghvcGVubmVz",
-            "cxgCIAEoAhIZChFjb25zY2llbnRpb3VzbmVzcxgDIAEoAhIUCgxleHRyYXZl",
-            "cnNpb24YBCABKAISFQoNYWdyZWVhYmxlbmVzcxgFIAEoAhITCgtuZXVyb3Rp",
-            "Y2lzbRgGIAEoAhISCgpzaG91bGRfcnVuGAcgASgIEjEKC3J1bm5lcl90eXBl",
-            "GAggASgOMhwuY29tbXVuaWNhdGlvbi5Cb3RSdW5uZXJUeXBlEhYKDmJ1aWxk",
-            "X3RlbXBsYXRlGAkgASgJInkKEFJlcXVlc3RQYXJhbWV0ZXISFQoLZmxvYXRf",
-            "cGFyYW0YASABKAJIABITCglpbnRfcGFyYW0YAiABKAVIABIUCgpsb25nX3Bh",
-            "cmFtGAMgASgDSAASFgoMc3RyaW5nX3BhcmFtGAQgASgJSABCCwoJcGFyYW1l",
-            "dGVyIpkIChNXb1dBY3Rpdml0eVNuYXBzaG90EhEKCXRpbWVzdGFtcBgBIAEo",
-            "DRITCgthY2NvdW50TmFtZRgCIAEoCRIfCgZwbGF5ZXIYAyABKAsyDy5nYW1l",
-            "LldvV1BsYXllchI0Cg5wcmV2aW91c0FjdGlvbhgEIAEoCzIcLmNvbW11bmlj",
-            "YXRpb24uQWN0aW9uTWVzc2FnZRIzCg1jdXJyZW50QWN0aW9uGAUgASgLMhwu",
-            "Y29tbXVuaWNhdGlvbi5BY3Rpb25NZXNzYWdlEioKDW5lYXJieU9iamVjdHMY",
-            "BiADKAsyEy5nYW1lLldvV0dhbWVPYmplY3QSIgoLbmVhcmJ5VW5pdHMYByAD",
-            "KAsyDS5nYW1lLldvV1VuaXQSFQoNY2hhcmFjdGVyTmFtZRgIIAEoCRITCgtz",
-            "Y3JlZW5TdGF0ZRgJIAEoCRIoCgxtb3ZlbWVudERhdGEYCiABKAsyEi5nYW1l",
-            "Lk1vdmVtZW50RGF0YRIXCg9wYXJ0eUxlYWRlckd1aWQYCyABKAQSGgoScmVj",
-            "ZW50Q2hhdE1lc3NhZ2VzGAwgAygJEhQKDHJlY2VudEVycm9ycxgNIAMoCRI6",
-            "Cg9jb25uZWN0aW9uU3RhdGUYDiABKA4yIS5jb21tdW5pY2F0aW9uLkJvdENv",
-            "bm5lY3Rpb25TdGF0ZRIcChRpc09iamVjdE1hbmFnZXJWYWxpZBgPIAEoCBIX",
-            "Cg9pc01hcFRyYW5zaXRpb24YECABKAgSDwoHaXNEZWx0YRgRIAEoCBIYChBz",
-            "bmFwc2hvdFNlcXVlbmNlGBIgASgNEhQKDGJhc2VTZXF1ZW5jZRgTIAEoDRIU",
-            "CgxjdXJyZW50TWFwSWQYFCABKA0SOAoQdHJhdmVsX29iamVjdGl2ZRgVIAEo",
-            "CzIeLmNvbW11bmljYXRpb24uVHJhdmVsT2JqZWN0aXZlEjYKD2NoYXJhY3Rl",
-            "cl9nb2FscxgWIAEoCzIdLmNvbW11bmljYXRpb24uQ2hhcmFjdGVyR29hbHMS",
-            "PAoScHJvZ3Jlc3Npb25fc3RhdHVzGBcgASgLMiAuY29tbXVuaWNhdGlvbi5Q",
-            "cm9ncmVzc2lvblN0YXR1cxIRCglpc0luZG9vcnMYGCABKAgSIQoZZGVzaXJl",
-            "ZF9wYXJ0eV9sZWFkZXJfbmFtZRgZIAEoCRIdChVkZXNpcmVkX3BhcnR5X21l",
-            "bWJlcnMYGiADKAkSHQoVZGVzaXJlZF9wYXJ0eV9pc19yYWlkGBsgASgIEhkK",
-            "EWlzX2hlYXJ0YmVhdF9vbmx5GBwgASgIEjQKDmxvYWRvdXRfc3RhdHVzGB0g",
-            "ASgOMhwuY29tbXVuaWNhdGlvbi5Mb2Fkb3V0U3RhdHVzEh4KFmxvYWRvdXRf",
-            "ZmFpbHVyZV9yZWFzb24YHiABKAkiOwoQTG9hZG91dEVxdWlwSXRlbRIPCgdp",
-            "dGVtX2lkGAEgASgNEhYKDmludmVudG9yeV9zbG90GAIgASgNIkEKEUxvYWRv",
-            "dXRTa2lsbFZhbHVlEhAKCHNraWxsX2lkGAEgASgNEg0KBXZhbHVlGAIgASgN",
-            "EgsKA21heBgDIAEoDSI5ChFMb2Fkb3V0RmFjdGlvblJlcBISCgpmYWN0aW9u",
-            "X2lkGAEgASgNEhAKCHN0YW5kaW5nGAIgASgFIqUDCgtMb2Fkb3V0U3BlYxIU",
-            "Cgx0YXJnZXRfbGV2ZWwYASABKA0SEgoKaG9ub3JfcmFuaxgCIAEoDRIUCgxy",
-            "aWRpbmdfc2tpbGwYAyABKA0SFgoObW91bnRfc3BlbGxfaWQYBCABKA0SFAoM",
-            "YXJtb3Jfc2V0X2lkGAUgASgNEhoKEnNwZWxsX2lkc190b19sZWFybhgGIAMo",
-            "DRIwCgZza2lsbHMYByADKAsyIC5jb21tdW5pY2F0aW9uLkxvYWRvdXRTa2ls",
-            "bFZhbHVlEjQKC2VxdWlwX2l0ZW1zGAggAygLMh8uY29tbXVuaWNhdGlvbi5M",
-            "b2Fkb3V0RXF1aXBJdGVtEh0KFXN1cHBsZW1lbnRhbF9pdGVtX2lkcxgJIAMo",
-            "DRIXCg9lbGl4aXJfaXRlbV9pZHMYCiADKA0SNgoMZmFjdGlvbl9yZXBzGAsg",
-            "AygLMiAuY29tbXVuaWNhdGlvbi5Mb2Fkb3V0RmFjdGlvblJlcBIbChNjb21w",
-            "bGV0ZWRfcXVlc3RfaWRzGAwgAygNEhcKD3RhbGVudF90ZW1wbGF0ZRgNIAEo",
-            "CSKbAQoRUHJvZ3Jlc3Npb25TdGF0dXMSGwoTZ2Vhcl9jb21wbGV0aW9uX3Bj",
-            "dBgBIAEoAhIVCg1nb2xkX3Byb2dyZXNzGAIgASgFEhkKEWN1cnJlbnRfb2Jq",
-            "ZWN0aXZlGAMgASgJEh4KFmNvbXBsZXRlZF9xdWVzdF9jaGFpbnMYBCADKAkS",
-            "FwoPcHJvZmVzc2lvbl9nYXBzGAUgASgFIq8BCg5DaGFyYWN0ZXJHb2FscxIR",
-            "CglzcGVjX25hbWUYASABKAkSGQoRdGFsZW50X2J1aWxkX25hbWUYAiABKAkS",
-            "GgoSZ29sZF90YXJnZXRfY29wcGVyGAMgASgFEhgKEHNraWxsX3ByaW9yaXRp",
-            "ZXMYBCADKAkSFAoMcXVlc3RfY2hhaW5zGAUgAygJEiMKG21heF9jb25zdW1h",
-            "YmxlX3NwZW5kX2NvcHBlchgGIAEoBSKoAQoPVHJhdmVsT2JqZWN0aXZlEhUK",
-            "DXRhcmdldF9tYXBfaWQYASABKA0SJwoPdGFyZ2V0X3Bvc2l0aW9uGAIgASgL",
-            "Mg4uZ2FtZS5Qb3NpdGlvbhIcChR0YXJnZXRfbG9jYXRpb25fbmFtZRgDIAEo",
-            "CRIZChFhbGxvd19oZWFydGhzdG9uZRgEIAEoCBIcChRhbGxvd19jbGFzc190",
-            "ZWxlcG9ydBgFIAEoCCJPCghMb2dFbnRyeRINCgVsZXZlbBgBIAEoCRIQCghj",
-            "YXRlZ29yeRgCIAEoCRIPCgdtZXNzYWdlGAMgASgJEhEKCXRpbWVzdGFtcBgE",
-            "IAEoCSqODAoKQWN0aW9uVHlwZRIICgRXQUlUEAASCAoER09UTxABEhEKDUlO",
-            "VEVSQUNUX1dJVEgQAhIRCg1TRUxFQ1RfR09TU0lQEAMSFAoQU0VMRUNUX1RB",
-            "WElfTk9ERRAEEhAKDEFDQ0VQVF9RVUVTVBAFEhEKDURFQ0xJTkVfUVVFU1QQ",
-            "BhIRCg1TRUxFQ1RfUkVXQVJEEAcSEgoOQ09NUExFVEVfUVVFU1QQCBIPCgtU",
-            "UkFJTl9TS0lMTBAJEhAKDFRSQUlOX1RBTEVOVBAKEg8KC09GRkVSX1RSQURF",
-            "EAsSDgoKT0ZGRVJfR09MRBAMEg4KCk9GRkVSX0lURU0QDRIQCgxBQ0NFUFRf",
-            "VFJBREUQDhIRCg1ERUNMSU5FX1RSQURFEA8SEQoNRU5DSEFOVF9UUkFERRAQ",
-            "EhIKDkxPQ0tQSUNLX1RSQURFEBESEgoOUFJPTU9URV9MRUFERVIQEhIVChFQ",
-            "Uk9NT1RFX0FTU0lTVEFOVBATEhgKFFBST01PVEVfTE9PVF9NQU5BR0VSEBQS",
-            "EgoOU0VUX0dST1VQX0xPT1QQFRIPCgtBU1NJR05fTE9PVBAWEhIKDkxPT1Rf",
-            "Uk9MTF9ORUVEEBcSEwoPTE9PVF9ST0xMX0dSRUVEEBgSDQoJTE9PVF9QQVNT",
-            "EBkSFQoRU0VORF9HUk9VUF9JTlZJVEUQGhIXChNBQ0NFUFRfR1JPVVBfSU5W",
-            "SVRFEBsSGAoUREVDTElORV9HUk9VUF9JTlZJVEUQHBIPCgtLSUNLX1BMQVlF",
-            "UhAdEg8KC0xFQVZFX0dST1VQEB4SEQoNRElTQkFORF9HUk9VUBAfEhYKElNU",
-            "QVJUX01FTEVFX0FUVEFDSxAgEhcKE1NUQVJUX1JBTkdFRF9BVFRBQ0sQIRIV",
-            "ChFTVEFSVF9XQU5EX0FUVEFDSxAiEg8KC1NUT1BfQVRUQUNLECMSDgoKQ0FT",
-            "VF9TUEVMTBAkEg0KCVNUT1BfQ0FTVBAlEgwKCFVTRV9JVEVNECYSDgoKRVFV",
-            "SVBfSVRFTRAnEhAKDFVORVFVSVBfSVRFTRAoEhAKDERFU1RST1lfSVRFTRAp",
-            "Eg0KCU1PVkVfSVRFTRAqEg8KC1NQTElUX1NUQUNLECsSDAoIQlVZX0lURU0Q",
-            "LBIQCgxCVVlCQUNLX0lURU0QLRINCglTRUxMX0lURU0QLhIPCgtSRVBBSVJf",
-            "SVRFTRAvEhQKEFJFUEFJUl9BTExfSVRFTVMQMBIQCgxESVNNSVNTX0JVRkYQ",
-            "MRINCglSRVNVUlJFQ1QQMhIJCgVDUkFGVBAzEgkKBUxPR0lOEDQSCgoGTE9H",
-            "T1VUEDUSFAoQQ1JFQVRFX0NIQVJBQ1RFUhA2EhQKEERFTEVURV9DSEFSQUNU",
-            "RVIQNxIPCgtFTlRFUl9XT1JMRBA4Eg8KC0xPT1RfQ09SUFNFEDkSEgoOUkVM",
-            "RUFTRV9DT1JQU0UQOhITCg9SRVRSSUVWRV9DT1JQU0UQOxIPCgtTS0lOX0NP",
-            "UlBTRRA8Eg8KC0dBVEhFUl9OT0RFED0SDQoJU0VORF9DSEFUED4SDgoKU0VU",
-            "X0ZBQ0lORxA/EhAKDFZJU0lUX1ZFTkRPUhBAEhEKDVZJU0lUX1RSQUlORVIQ",
-            "QRIXChNWSVNJVF9GTElHSFRfTUFTVEVSEEISEQoNU1RBUlRfRklTSElORxBD",
-            "EhkKFVNUQVJUX0dBVEhFUklOR19ST1VURRBEEg4KCkNIRUNLX01BSUwQRRIb",
-            "ChdTVEFSVF9QSFlTSUNTX1JFQ09SRElORxBGEhoKFlNUT1BfUEhZU0lDU19S",
-            "RUNPUkRJTkcQRxIXChNTVEFSVF9EVU5HRU9ORUVSSU5HEEgSEwoPQ09OVkVS",
-            "VF9UT19SQUlEEEkSGAoUQ0hBTkdFX1JBSURfU1VCR1JPVVAQShIRCg1GT0xM",
-            "T1dfVEFSR0VUEEsSFQoRSk9JTl9CQVRUTEVHUk9VTkQQTBIXChNBQ0NFUFRf",
-            "QkFUVExFR1JPVU5EEE0SFgoSTEVBVkVfQkFUVExFR1JPVU5EEE4SDQoJVFJB",
-            "VkVMX1RPEE8SEQoNQVBQTFlfTE9BRE9VVBBQKi8KDUJvdFJ1bm5lclR5cGUS",
-            "DgoKRk9SRUdST1VORBAAEg4KCkJBQ0tHUk9VTkQQASqqAQoPU3RhdGVDaGFu",
-            "Z2VUeXBlEggKBE5BTUUQABIMCghPUEVOTkVTUxABEhUKEUNPTlNDSUVOVElP",
-            "VVNORVNTEAISEAoMRVhUUkFWRVJTSU9OEAMSEQoNQUdSRUVBQkxFTkVTUxAE",
-            "Eg8KC05FVVJPVElDSVNNEAUSFwoTQ09PUkRJTkFUT1JfRU5BQkxFRBAGEhkK",
-            "FURSQUlOX1BFTkRJTkdfQUNUSU9OUxAHKjsKDlJlc3BvbnNlUmVzdWx0EgsK",
-            "B1NVQ0NFU1MQABILCgdGQUlMVVJFEAESDwoLSU5fUFJPR1JFU1MQAiqsAQoS",
-            "Qm90Q29ubmVjdGlvblN0YXRlEhQKEEJPVF9ESVNDT05ORUNURUQQABIWChJC",
-            "T1RfQVVUSEVOVElDQVRJTkcQARITCg9CT1RfQ0hBUl9TRUxFQ1QQAhIWChJC",
-            "T1RfRU5URVJJTkdfV09STEQQAxIQCgxCT1RfSU5fV09STEQQBBIUChBCT1Rf",
-            "VFJBTlNGRVJSSU5HEAUSEwoPQk9UX0xPR0dJTkdfT1VUEAYqaAoNTG9hZG91",
-            "dFN0YXR1cxIXChNMT0FET1VUX05PVF9TVEFSVEVEEAASFwoTTE9BRE9VVF9J",
-            "Tl9QUk9HUkVTUxABEhEKDUxPQURPVVRfUkVBRFkQAhISCg5MT0FET1VUX0ZB",
-            "SUxFRBADYgZwcm90bzM="));
+            "Y29tbXVuaWNhdGlvbi5Mb2Fkb3V0U3BlYxIWCg5jb3JyZWxhdGlvbl9pZBgF",
+            "IAEoCSKBAgoPQ29tbWFuZEFja0V2ZW50EhYKDmNvcnJlbGF0aW9uX2lkGAEg",
+            "ASgJEi4KC2FjdGlvbl90eXBlGAIgASgOMhkuY29tbXVuaWNhdGlvbi5BY3Rp",
+            "b25UeXBlEjgKBnN0YXR1cxgDIAEoDjIoLmNvbW11bmljYXRpb24uQ29tbWFu",
+            "ZEFja0V2ZW50LkFja1N0YXR1cxIWCg5mYWlsdXJlX3JlYXNvbhgEIAEoCRIS",
+            "CgpyZWxhdGVkX2lkGAUgASgNIkAKCUFja1N0YXR1cxILCgdQRU5ESU5HEAAS",
+            "CwoHU1VDQ0VTUxABEgoKBkZBSUxFRBACEg0KCVRJTUVEX09VVBADIjoKCUFj",
+            "dGlvbk1hcBItCgdhY3Rpb25zGAEgAygLMhwuY29tbXVuaWNhdGlvbi5BY3Rp",
+            "b25NZXNzYWdlIoUBChJTdGF0ZUNoYW5nZVJlcXVlc3QSMwoLY2hhbmdlX3R5",
+            "cGUYASABKA4yHi5jb21tdW5pY2F0aW9uLlN0YXRlQ2hhbmdlVHlwZRI6ChFy",
+            "ZXF1ZXN0X3BhcmFtZXRlchgCIAEoCzIfLmNvbW11bmljYXRpb24uUmVxdWVz",
+            "dFBhcmFtZXRlciJ9ChNTdGF0ZUNoYW5nZVJlc3BvbnNlEi8KCHJlc3BvbnNl",
+            "GAEgASgOMh0uY29tbXVuaWNhdGlvbi5SZXNwb25zZVJlc3VsdBI1CglzbmFw",
+            "c2hvdHMYAiADKAsyIi5jb21tdW5pY2F0aW9uLldvV0FjdGl2aXR5U25hcHNo",
+            "b3Qi+QEKE0NoYXJhY3RlckRlZmluaXRpb24SFAoMYWNjb3VudF9uYW1lGAEg",
+            "ASgJEhAKCG9wZW5uZXNzGAIgASgCEhkKEWNvbnNjaWVudGlvdXNuZXNzGAMg",
+            "ASgCEhQKDGV4dHJhdmVyc2lvbhgEIAEoAhIVCg1hZ3JlZWFibGVuZXNzGAUg",
+            "ASgCEhMKC25ldXJvdGljaXNtGAYgASgCEhIKCnNob3VsZF9ydW4YByABKAgS",
+            "MQoLcnVubmVyX3R5cGUYCCABKA4yHC5jb21tdW5pY2F0aW9uLkJvdFJ1bm5l",
+            "clR5cGUSFgoOYnVpbGRfdGVtcGxhdGUYCSABKAkieQoQUmVxdWVzdFBhcmFt",
+            "ZXRlchIVCgtmbG9hdF9wYXJhbRgBIAEoAkgAEhMKCWludF9wYXJhbRgCIAEo",
+            "BUgAEhQKCmxvbmdfcGFyYW0YAyABKANIABIWCgxzdHJpbmdfcGFyYW0YBCAB",
+            "KAlIAEILCglwYXJhbWV0ZXIi1ggKE1dvV0FjdGl2aXR5U25hcHNob3QSEQoJ",
+            "dGltZXN0YW1wGAEgASgNEhMKC2FjY291bnROYW1lGAIgASgJEh8KBnBsYXll",
+            "chgDIAEoCzIPLmdhbWUuV29XUGxheWVyEjQKDnByZXZpb3VzQWN0aW9uGAQg",
+            "ASgLMhwuY29tbXVuaWNhdGlvbi5BY3Rpb25NZXNzYWdlEjMKDWN1cnJlbnRB",
+            "Y3Rpb24YBSABKAsyHC5jb21tdW5pY2F0aW9uLkFjdGlvbk1lc3NhZ2USKgoN",
+            "bmVhcmJ5T2JqZWN0cxgGIAMoCzITLmdhbWUuV29XR2FtZU9iamVjdBIiCgtu",
+            "ZWFyYnlVbml0cxgHIAMoCzINLmdhbWUuV29XVW5pdBIVCg1jaGFyYWN0ZXJO",
+            "YW1lGAggASgJEhMKC3NjcmVlblN0YXRlGAkgASgJEigKDG1vdmVtZW50RGF0",
+            "YRgKIAEoCzISLmdhbWUuTW92ZW1lbnREYXRhEhcKD3BhcnR5TGVhZGVyR3Vp",
+            "ZBgLIAEoBBIaChJyZWNlbnRDaGF0TWVzc2FnZXMYDCADKAkSFAoMcmVjZW50",
+            "RXJyb3JzGA0gAygJEjoKD2Nvbm5lY3Rpb25TdGF0ZRgOIAEoDjIhLmNvbW11",
+            "bmljYXRpb24uQm90Q29ubmVjdGlvblN0YXRlEhwKFGlzT2JqZWN0TWFuYWdl",
+            "clZhbGlkGA8gASgIEhcKD2lzTWFwVHJhbnNpdGlvbhgQIAEoCBIPCgdpc0Rl",
+            "bHRhGBEgASgIEhgKEHNuYXBzaG90U2VxdWVuY2UYEiABKA0SFAoMYmFzZVNl",
+            "cXVlbmNlGBMgASgNEhQKDGN1cnJlbnRNYXBJZBgUIAEoDRI4ChB0cmF2ZWxf",
+            "b2JqZWN0aXZlGBUgASgLMh4uY29tbXVuaWNhdGlvbi5UcmF2ZWxPYmplY3Rp",
+            "dmUSNgoPY2hhcmFjdGVyX2dvYWxzGBYgASgLMh0uY29tbXVuaWNhdGlvbi5D",
+            "aGFyYWN0ZXJHb2FscxI8ChJwcm9ncmVzc2lvbl9zdGF0dXMYFyABKAsyIC5j",
+            "b21tdW5pY2F0aW9uLlByb2dyZXNzaW9uU3RhdHVzEhEKCWlzSW5kb29ycxgY",
+            "IAEoCBIhChlkZXNpcmVkX3BhcnR5X2xlYWRlcl9uYW1lGBkgASgJEh0KFWRl",
+            "c2lyZWRfcGFydHlfbWVtYmVycxgaIAMoCRIdChVkZXNpcmVkX3BhcnR5X2lz",
+            "X3JhaWQYGyABKAgSGQoRaXNfaGVhcnRiZWF0X29ubHkYHCABKAgSNAoObG9h",
+            "ZG91dF9zdGF0dXMYHSABKA4yHC5jb21tdW5pY2F0aW9uLkxvYWRvdXRTdGF0",
+            "dXMSHgoWbG9hZG91dF9mYWlsdXJlX3JlYXNvbhgeIAEoCRI7ChNyZWNlbnRf",
+            "Y29tbWFuZF9hY2tzGB8gAygLMh4uY29tbXVuaWNhdGlvbi5Db21tYW5kQWNr",
+            "RXZlbnQiOwoQTG9hZG91dEVxdWlwSXRlbRIPCgdpdGVtX2lkGAEgASgNEhYK",
+            "DmludmVudG9yeV9zbG90GAIgASgNIkEKEUxvYWRvdXRTa2lsbFZhbHVlEhAK",
+            "CHNraWxsX2lkGAEgASgNEg0KBXZhbHVlGAIgASgNEgsKA21heBgDIAEoDSI5",
+            "ChFMb2Fkb3V0RmFjdGlvblJlcBISCgpmYWN0aW9uX2lkGAEgASgNEhAKCHN0",
+            "YW5kaW5nGAIgASgFIqUDCgtMb2Fkb3V0U3BlYxIUCgx0YXJnZXRfbGV2ZWwY",
+            "ASABKA0SEgoKaG9ub3JfcmFuaxgCIAEoDRIUCgxyaWRpbmdfc2tpbGwYAyAB",
+            "KA0SFgoObW91bnRfc3BlbGxfaWQYBCABKA0SFAoMYXJtb3Jfc2V0X2lkGAUg",
+            "ASgNEhoKEnNwZWxsX2lkc190b19sZWFybhgGIAMoDRIwCgZza2lsbHMYByAD",
+            "KAsyIC5jb21tdW5pY2F0aW9uLkxvYWRvdXRTa2lsbFZhbHVlEjQKC2VxdWlw",
+            "X2l0ZW1zGAggAygLMh8uY29tbXVuaWNhdGlvbi5Mb2Fkb3V0RXF1aXBJdGVt",
+            "Eh0KFXN1cHBsZW1lbnRhbF9pdGVtX2lkcxgJIAMoDRIXCg9lbGl4aXJfaXRl",
+            "bV9pZHMYCiADKA0SNgoMZmFjdGlvbl9yZXBzGAsgAygLMiAuY29tbXVuaWNh",
+            "dGlvbi5Mb2Fkb3V0RmFjdGlvblJlcBIbChNjb21wbGV0ZWRfcXVlc3RfaWRz",
+            "GAwgAygNEhcKD3RhbGVudF90ZW1wbGF0ZRgNIAEoCSKbAQoRUHJvZ3Jlc3Np",
+            "b25TdGF0dXMSGwoTZ2Vhcl9jb21wbGV0aW9uX3BjdBgBIAEoAhIVCg1nb2xk",
+            "X3Byb2dyZXNzGAIgASgFEhkKEWN1cnJlbnRfb2JqZWN0aXZlGAMgASgJEh4K",
+            "FmNvbXBsZXRlZF9xdWVzdF9jaGFpbnMYBCADKAkSFwoPcHJvZmVzc2lvbl9n",
+            "YXBzGAUgASgFIq8BCg5DaGFyYWN0ZXJHb2FscxIRCglzcGVjX25hbWUYASAB",
+            "KAkSGQoRdGFsZW50X2J1aWxkX25hbWUYAiABKAkSGgoSZ29sZF90YXJnZXRf",
+            "Y29wcGVyGAMgASgFEhgKEHNraWxsX3ByaW9yaXRpZXMYBCADKAkSFAoMcXVl",
+            "c3RfY2hhaW5zGAUgAygJEiMKG21heF9jb25zdW1hYmxlX3NwZW5kX2NvcHBl",
+            "chgGIAEoBSKoAQoPVHJhdmVsT2JqZWN0aXZlEhUKDXRhcmdldF9tYXBfaWQY",
+            "ASABKA0SJwoPdGFyZ2V0X3Bvc2l0aW9uGAIgASgLMg4uZ2FtZS5Qb3NpdGlv",
+            "bhIcChR0YXJnZXRfbG9jYXRpb25fbmFtZRgDIAEoCRIZChFhbGxvd19oZWFy",
+            "dGhzdG9uZRgEIAEoCBIcChRhbGxvd19jbGFzc190ZWxlcG9ydBgFIAEoCCJP",
+            "CghMb2dFbnRyeRINCgVsZXZlbBgBIAEoCRIQCghjYXRlZ29yeRgCIAEoCRIP",
+            "CgdtZXNzYWdlGAMgASgJEhEKCXRpbWVzdGFtcBgEIAEoCSqODAoKQWN0aW9u",
+            "VHlwZRIICgRXQUlUEAASCAoER09UTxABEhEKDUlOVEVSQUNUX1dJVEgQAhIR",
+            "Cg1TRUxFQ1RfR09TU0lQEAMSFAoQU0VMRUNUX1RBWElfTk9ERRAEEhAKDEFD",
+            "Q0VQVF9RVUVTVBAFEhEKDURFQ0xJTkVfUVVFU1QQBhIRCg1TRUxFQ1RfUkVX",
+            "QVJEEAcSEgoOQ09NUExFVEVfUVVFU1QQCBIPCgtUUkFJTl9TS0lMTBAJEhAK",
+            "DFRSQUlOX1RBTEVOVBAKEg8KC09GRkVSX1RSQURFEAsSDgoKT0ZGRVJfR09M",
+            "RBAMEg4KCk9GRkVSX0lURU0QDRIQCgxBQ0NFUFRfVFJBREUQDhIRCg1ERUNM",
+            "SU5FX1RSQURFEA8SEQoNRU5DSEFOVF9UUkFERRAQEhIKDkxPQ0tQSUNLX1RS",
+            "QURFEBESEgoOUFJPTU9URV9MRUFERVIQEhIVChFQUk9NT1RFX0FTU0lTVEFO",
+            "VBATEhgKFFBST01PVEVfTE9PVF9NQU5BR0VSEBQSEgoOU0VUX0dST1VQX0xP",
+            "T1QQFRIPCgtBU1NJR05fTE9PVBAWEhIKDkxPT1RfUk9MTF9ORUVEEBcSEwoP",
+            "TE9PVF9ST0xMX0dSRUVEEBgSDQoJTE9PVF9QQVNTEBkSFQoRU0VORF9HUk9V",
+            "UF9JTlZJVEUQGhIXChNBQ0NFUFRfR1JPVVBfSU5WSVRFEBsSGAoUREVDTElO",
+            "RV9HUk9VUF9JTlZJVEUQHBIPCgtLSUNLX1BMQVlFUhAdEg8KC0xFQVZFX0dS",
+            "T1VQEB4SEQoNRElTQkFORF9HUk9VUBAfEhYKElNUQVJUX01FTEVFX0FUVEFD",
+            "SxAgEhcKE1NUQVJUX1JBTkdFRF9BVFRBQ0sQIRIVChFTVEFSVF9XQU5EX0FU",
+            "VEFDSxAiEg8KC1NUT1BfQVRUQUNLECMSDgoKQ0FTVF9TUEVMTBAkEg0KCVNU",
+            "T1BfQ0FTVBAlEgwKCFVTRV9JVEVNECYSDgoKRVFVSVBfSVRFTRAnEhAKDFVO",
+            "RVFVSVBfSVRFTRAoEhAKDERFU1RST1lfSVRFTRApEg0KCU1PVkVfSVRFTRAq",
+            "Eg8KC1NQTElUX1NUQUNLECsSDAoIQlVZX0lURU0QLBIQCgxCVVlCQUNLX0lU",
+            "RU0QLRINCglTRUxMX0lURU0QLhIPCgtSRVBBSVJfSVRFTRAvEhQKEFJFUEFJ",
+            "Ul9BTExfSVRFTVMQMBIQCgxESVNNSVNTX0JVRkYQMRINCglSRVNVUlJFQ1QQ",
+            "MhIJCgVDUkFGVBAzEgkKBUxPR0lOEDQSCgoGTE9HT1VUEDUSFAoQQ1JFQVRF",
+            "X0NIQVJBQ1RFUhA2EhQKEERFTEVURV9DSEFSQUNURVIQNxIPCgtFTlRFUl9X",
+            "T1JMRBA4Eg8KC0xPT1RfQ09SUFNFEDkSEgoOUkVMRUFTRV9DT1JQU0UQOhIT",
+            "Cg9SRVRSSUVWRV9DT1JQU0UQOxIPCgtTS0lOX0NPUlBTRRA8Eg8KC0dBVEhF",
+            "Ul9OT0RFED0SDQoJU0VORF9DSEFUED4SDgoKU0VUX0ZBQ0lORxA/EhAKDFZJ",
+            "U0lUX1ZFTkRPUhBAEhEKDVZJU0lUX1RSQUlORVIQQRIXChNWSVNJVF9GTElH",
+            "SFRfTUFTVEVSEEISEQoNU1RBUlRfRklTSElORxBDEhkKFVNUQVJUX0dBVEhF",
+            "UklOR19ST1VURRBEEg4KCkNIRUNLX01BSUwQRRIbChdTVEFSVF9QSFlTSUNT",
+            "X1JFQ09SRElORxBGEhoKFlNUT1BfUEhZU0lDU19SRUNPUkRJTkcQRxIXChNT",
+            "VEFSVF9EVU5HRU9ORUVSSU5HEEgSEwoPQ09OVkVSVF9UT19SQUlEEEkSGAoU",
+            "Q0hBTkdFX1JBSURfU1VCR1JPVVAQShIRCg1GT0xMT1dfVEFSR0VUEEsSFQoR",
+            "Sk9JTl9CQVRUTEVHUk9VTkQQTBIXChNBQ0NFUFRfQkFUVExFR1JPVU5EEE0S",
+            "FgoSTEVBVkVfQkFUVExFR1JPVU5EEE4SDQoJVFJBVkVMX1RPEE8SEQoNQVBQ",
+            "TFlfTE9BRE9VVBBQKi8KDUJvdFJ1bm5lclR5cGUSDgoKRk9SRUdST1VORBAA",
+            "Eg4KCkJBQ0tHUk9VTkQQASqqAQoPU3RhdGVDaGFuZ2VUeXBlEggKBE5BTUUQ",
+            "ABIMCghPUEVOTkVTUxABEhUKEUNPTlNDSUVOVElPVVNORVNTEAISEAoMRVhU",
+            "UkFWRVJTSU9OEAMSEQoNQUdSRUVBQkxFTkVTUxAEEg8KC05FVVJPVElDSVNN",
+            "EAUSFwoTQ09PUkRJTkFUT1JfRU5BQkxFRBAGEhkKFURSQUlOX1BFTkRJTkdf",
+            "QUNUSU9OUxAHKjsKDlJlc3BvbnNlUmVzdWx0EgsKB1NVQ0NFU1MQABILCgdG",
+            "QUlMVVJFEAESDwoLSU5fUFJPR1JFU1MQAiqsAQoSQm90Q29ubmVjdGlvblN0",
+            "YXRlEhQKEEJPVF9ESVNDT05ORUNURUQQABIWChJCT1RfQVVUSEVOVElDQVRJ",
+            "TkcQARITCg9CT1RfQ0hBUl9TRUxFQ1QQAhIWChJCT1RfRU5URVJJTkdfV09S",
+            "TEQQAxIQCgxCT1RfSU5fV09STEQQBBIUChBCT1RfVFJBTlNGRVJSSU5HEAUS",
+            "EwoPQk9UX0xPR0dJTkdfT1VUEAYqaAoNTG9hZG91dFN0YXR1cxIXChNMT0FE",
+            "T1VUX05PVF9TVEFSVEVEEAASFwoTTE9BRE9VVF9JTl9QUk9HUkVTUxABEhEK",
+            "DUxPQURPVVRfUkVBRFkQAhISCg5MT0FET1VUX0ZBSUxFRBADYgZwcm90bzM="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), typeof(global::Communication.LoadoutStatus), }, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.AsyncRequest), global::Communication.AsyncRequest.Parser, new[]{ "Id", "ActivitySnapshot", "StateChange", "SnapshotQuery", "ActionForward" }, new[]{ "Parameter" }, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.SnapshotQueryRequest), global::Communication.SnapshotQueryRequest.Parser, new[]{ "AccountName" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActionForwardRequest), global::Communication.ActionForwardRequest.Parser, new[]{ "AccountName", "Action" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActionMessage), global::Communication.ActionMessage.Parser, new[]{ "ActionType", "Parameters", "ActionResult", "LoadoutSpec" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActionMessage), global::Communication.ActionMessage.Parser, new[]{ "ActionType", "Parameters", "ActionResult", "LoadoutSpec", "CorrelationId" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CommandAckEvent), global::Communication.CommandAckEvent.Parser, new[]{ "CorrelationId", "ActionType", "Status", "FailureReason", "RelatedId" }, null, new[]{ typeof(global::Communication.CommandAckEvent.Types.AckStatus) }, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActionMap), global::Communication.ActionMap.Parser, new[]{ "Actions" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeRequest), global::Communication.StateChangeRequest.Parser, new[]{ "ChangeType", "RequestParameter" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response", "Snapshots" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CharacterDefinition), global::Communication.CharacterDefinition.Parser, new[]{ "AccountName", "Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism", "ShouldRun", "RunnerType", "BuildTemplate" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.RequestParameter), global::Communication.RequestParameter.Parser, new[]{ "FloatParam", "IntParam", "LongParam", "StringParam" }, new[]{ "Parameter" }, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition", "IsDelta", "SnapshotSequence", "BaseSequence", "CurrentMapId", "TravelObjective", "CharacterGoals", "ProgressionStatus", "IsIndoors", "DesiredPartyLeaderName", "DesiredPartyMembers", "DesiredPartyIsRaid", "IsHeartbeatOnly", "LoadoutStatus", "LoadoutFailureReason" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.WoWActivitySnapshot), global::Communication.WoWActivitySnapshot.Parser, new[]{ "Timestamp", "AccountName", "Player", "PreviousAction", "CurrentAction", "NearbyObjects", "NearbyUnits", "CharacterName", "ScreenState", "MovementData", "PartyLeaderGuid", "RecentChatMessages", "RecentErrors", "ConnectionState", "IsObjectManagerValid", "IsMapTransition", "IsDelta", "SnapshotSequence", "BaseSequence", "CurrentMapId", "TravelObjective", "CharacterGoals", "ProgressionStatus", "IsIndoors", "DesiredPartyLeaderName", "DesiredPartyMembers", "DesiredPartyIsRaid", "IsHeartbeatOnly", "LoadoutStatus", "LoadoutFailureReason", "RecentCommandAcks" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.LoadoutEquipItem), global::Communication.LoadoutEquipItem.Parser, new[]{ "ItemId", "InventorySlot" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.LoadoutSkillValue), global::Communication.LoadoutSkillValue.Parser, new[]{ "SkillId", "Value", "Max" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.LoadoutFactionRep), global::Communication.LoadoutFactionRep.Parser, new[]{ "FactionId", "Standing" }, null, null, null, null),
@@ -1264,6 +1272,7 @@ namespace Communication {
       parameters_ = other.parameters_.Clone();
       actionResult_ = other.actionResult_;
       loadoutSpec_ = other.loadoutSpec_ != null ? other.loadoutSpec_.Clone() : null;
+      correlationId_ = other.correlationId_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -1323,6 +1332,21 @@ namespace Communication {
       }
     }
 
+    /// <summary>Field number for the "correlation_id" field.</summary>
+    public const int CorrelationIdFieldNumber = 5;
+    private string correlationId_ = "";
+    /// <summary>
+    /// P4.4: StateManager stamps one per dispatch; BotRunner echoes it back in CurrentAction / CommandAckEvent.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string CorrelationId {
+      get { return correlationId_; }
+      set {
+        correlationId_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -1342,6 +1366,7 @@ namespace Communication {
       if(!parameters_.Equals(other.parameters_)) return false;
       if (ActionResult != other.ActionResult) return false;
       if (!object.Equals(LoadoutSpec, other.LoadoutSpec)) return false;
+      if (CorrelationId != other.CorrelationId) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -1353,6 +1378,7 @@ namespace Communication {
       hash ^= parameters_.GetHashCode();
       if (ActionResult != global::Communication.ResponseResult.Success) hash ^= ActionResult.GetHashCode();
       if (loadoutSpec_ != null) hash ^= LoadoutSpec.GetHashCode();
+      if (CorrelationId.Length != 0) hash ^= CorrelationId.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -1384,6 +1410,10 @@ namespace Communication {
         output.WriteRawTag(34);
         output.WriteMessage(LoadoutSpec);
       }
+      if (CorrelationId.Length != 0) {
+        output.WriteRawTag(42);
+        output.WriteString(CorrelationId);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -1407,6 +1437,10 @@ namespace Communication {
         output.WriteRawTag(34);
         output.WriteMessage(LoadoutSpec);
       }
+      if (CorrelationId.Length != 0) {
+        output.WriteRawTag(42);
+        output.WriteString(CorrelationId);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -1426,6 +1460,9 @@ namespace Communication {
       }
       if (loadoutSpec_ != null) {
         size += 1 + pb::CodedOutputStream.ComputeMessageSize(LoadoutSpec);
+      }
+      if (CorrelationId.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(CorrelationId);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -1451,6 +1488,9 @@ namespace Communication {
           LoadoutSpec = new global::Communication.LoadoutSpec();
         }
         LoadoutSpec.MergeFrom(other.LoadoutSpec);
+      }
+      if (other.CorrelationId.Length != 0) {
+        CorrelationId = other.CorrelationId;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -1488,6 +1528,10 @@ namespace Communication {
               LoadoutSpec = new global::Communication.LoadoutSpec();
             }
             input.ReadMessage(LoadoutSpec);
+            break;
+          }
+          case 42: {
+            CorrelationId = input.ReadString();
             break;
           }
         }
@@ -1528,10 +1572,375 @@ namespace Communication {
             input.ReadMessage(LoadoutSpec);
             break;
           }
+          case 42: {
+            CorrelationId = input.ReadString();
+            break;
+          }
         }
       }
     }
     #endif
+
+  }
+
+  [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
+  public sealed partial class CommandAckEvent : pb::IMessage<CommandAckEvent>
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      , pb::IBufferMessage
+  #endif
+  {
+    private static readonly pb::MessageParser<CommandAckEvent> _parser = new pb::MessageParser<CommandAckEvent>(() => new CommandAckEvent());
+    private pb::UnknownFieldSet _unknownFields;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pb::MessageParser<CommandAckEvent> Parser { get { return _parser; } }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static pbr::MessageDescriptor Descriptor {
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[4]; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    pbr::MessageDescriptor pb::IMessage.Descriptor {
+      get { return Descriptor; }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public CommandAckEvent() {
+      OnConstruction();
+    }
+
+    partial void OnConstruction();
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public CommandAckEvent(CommandAckEvent other) : this() {
+      correlationId_ = other.correlationId_;
+      actionType_ = other.actionType_;
+      status_ = other.status_;
+      failureReason_ = other.failureReason_;
+      relatedId_ = other.relatedId_;
+      _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public CommandAckEvent Clone() {
+      return new CommandAckEvent(this);
+    }
+
+    /// <summary>Field number for the "correlation_id" field.</summary>
+    public const int CorrelationIdFieldNumber = 1;
+    private string correlationId_ = "";
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string CorrelationId {
+      get { return correlationId_; }
+      set {
+        correlationId_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "action_type" field.</summary>
+    public const int ActionTypeFieldNumber = 2;
+    private global::Communication.ActionType actionType_ = global::Communication.ActionType.Wait;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Communication.ActionType ActionType {
+      get { return actionType_; }
+      set {
+        actionType_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "status" field.</summary>
+    public const int StatusFieldNumber = 3;
+    private global::Communication.CommandAckEvent.Types.AckStatus status_ = global::Communication.CommandAckEvent.Types.AckStatus.Pending;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public global::Communication.CommandAckEvent.Types.AckStatus Status {
+      get { return status_; }
+      set {
+        status_ = value;
+      }
+    }
+
+    /// <summary>Field number for the "failure_reason" field.</summary>
+    public const int FailureReasonFieldNumber = 4;
+    private string failureReason_ = "";
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public string FailureReason {
+      get { return failureReason_; }
+      set {
+        failureReason_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+      }
+    }
+
+    /// <summary>Field number for the "related_id" field.</summary>
+    public const int RelatedIdFieldNumber = 5;
+    private uint relatedId_;
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint RelatedId {
+      get { return relatedId_; }
+      set {
+        relatedId_ = value;
+      }
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override bool Equals(object other) {
+      return Equals(other as CommandAckEvent);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public bool Equals(CommandAckEvent other) {
+      if (ReferenceEquals(other, null)) {
+        return false;
+      }
+      if (ReferenceEquals(other, this)) {
+        return true;
+      }
+      if (CorrelationId != other.CorrelationId) return false;
+      if (ActionType != other.ActionType) return false;
+      if (Status != other.Status) return false;
+      if (FailureReason != other.FailureReason) return false;
+      if (RelatedId != other.RelatedId) return false;
+      return Equals(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override int GetHashCode() {
+      int hash = 1;
+      if (CorrelationId.Length != 0) hash ^= CorrelationId.GetHashCode();
+      if (ActionType != global::Communication.ActionType.Wait) hash ^= ActionType.GetHashCode();
+      if (Status != global::Communication.CommandAckEvent.Types.AckStatus.Pending) hash ^= Status.GetHashCode();
+      if (FailureReason.Length != 0) hash ^= FailureReason.GetHashCode();
+      if (RelatedId != 0) hash ^= RelatedId.GetHashCode();
+      if (_unknownFields != null) {
+        hash ^= _unknownFields.GetHashCode();
+      }
+      return hash;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public override string ToString() {
+      return pb::JsonFormatter.ToDiagnosticString(this);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void WriteTo(pb::CodedOutputStream output) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      output.WriteRawMessage(this);
+    #else
+      if (CorrelationId.Length != 0) {
+        output.WriteRawTag(10);
+        output.WriteString(CorrelationId);
+      }
+      if (ActionType != global::Communication.ActionType.Wait) {
+        output.WriteRawTag(16);
+        output.WriteEnum((int) ActionType);
+      }
+      if (Status != global::Communication.CommandAckEvent.Types.AckStatus.Pending) {
+        output.WriteRawTag(24);
+        output.WriteEnum((int) Status);
+      }
+      if (FailureReason.Length != 0) {
+        output.WriteRawTag(34);
+        output.WriteString(FailureReason);
+      }
+      if (RelatedId != 0) {
+        output.WriteRawTag(40);
+        output.WriteUInt32(RelatedId);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(output);
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+      if (CorrelationId.Length != 0) {
+        output.WriteRawTag(10);
+        output.WriteString(CorrelationId);
+      }
+      if (ActionType != global::Communication.ActionType.Wait) {
+        output.WriteRawTag(16);
+        output.WriteEnum((int) ActionType);
+      }
+      if (Status != global::Communication.CommandAckEvent.Types.AckStatus.Pending) {
+        output.WriteRawTag(24);
+        output.WriteEnum((int) Status);
+      }
+      if (FailureReason.Length != 0) {
+        output.WriteRawTag(34);
+        output.WriteString(FailureReason);
+      }
+      if (RelatedId != 0) {
+        output.WriteRawTag(40);
+        output.WriteUInt32(RelatedId);
+      }
+      if (_unknownFields != null) {
+        _unknownFields.WriteTo(ref output);
+      }
+    }
+    #endif
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public int CalculateSize() {
+      int size = 0;
+      if (CorrelationId.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(CorrelationId);
+      }
+      if (ActionType != global::Communication.ActionType.Wait) {
+        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) ActionType);
+      }
+      if (Status != global::Communication.CommandAckEvent.Types.AckStatus.Pending) {
+        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) Status);
+      }
+      if (FailureReason.Length != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeStringSize(FailureReason);
+      }
+      if (RelatedId != 0) {
+        size += 1 + pb::CodedOutputStream.ComputeUInt32Size(RelatedId);
+      }
+      if (_unknownFields != null) {
+        size += _unknownFields.CalculateSize();
+      }
+      return size;
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(CommandAckEvent other) {
+      if (other == null) {
+        return;
+      }
+      if (other.CorrelationId.Length != 0) {
+        CorrelationId = other.CorrelationId;
+      }
+      if (other.ActionType != global::Communication.ActionType.Wait) {
+        ActionType = other.ActionType;
+      }
+      if (other.Status != global::Communication.CommandAckEvent.Types.AckStatus.Pending) {
+        Status = other.Status;
+      }
+      if (other.FailureReason.Length != 0) {
+        FailureReason = other.FailureReason;
+      }
+      if (other.RelatedId != 0) {
+        RelatedId = other.RelatedId;
+      }
+      _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+    }
+
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public void MergeFrom(pb::CodedInputStream input) {
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+      input.ReadRawMessage(this);
+    #else
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+            break;
+          case 10: {
+            CorrelationId = input.ReadString();
+            break;
+          }
+          case 16: {
+            ActionType = (global::Communication.ActionType) input.ReadEnum();
+            break;
+          }
+          case 24: {
+            Status = (global::Communication.CommandAckEvent.Types.AckStatus) input.ReadEnum();
+            break;
+          }
+          case 34: {
+            FailureReason = input.ReadString();
+            break;
+          }
+          case 40: {
+            RelatedId = input.ReadUInt32();
+            break;
+          }
+        }
+      }
+    #endif
+    }
+
+    #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+      uint tag;
+      while ((tag = input.ReadTag()) != 0) {
+      if ((tag & 7) == 4) {
+        // Abort on any end group tag.
+        return;
+      }
+      switch(tag) {
+          default:
+            _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+            break;
+          case 10: {
+            CorrelationId = input.ReadString();
+            break;
+          }
+          case 16: {
+            ActionType = (global::Communication.ActionType) input.ReadEnum();
+            break;
+          }
+          case 24: {
+            Status = (global::Communication.CommandAckEvent.Types.AckStatus) input.ReadEnum();
+            break;
+          }
+          case 34: {
+            FailureReason = input.ReadString();
+            break;
+          }
+          case 40: {
+            RelatedId = input.ReadUInt32();
+            break;
+          }
+        }
+      }
+    }
+    #endif
+
+    #region Nested types
+    /// <summary>Container for nested types declared in the CommandAckEvent message type.</summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public static partial class Types {
+      public enum AckStatus {
+        [pbr::OriginalName("PENDING")] Pending = 0,
+        [pbr::OriginalName("SUCCESS")] Success = 1,
+        [pbr::OriginalName("FAILED")] Failed = 2,
+        [pbr::OriginalName("TIMED_OUT")] TimedOut = 3,
+      }
+
+    }
+    #endregion
 
   }
 
@@ -1550,7 +1959,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[4]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[5]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -1737,7 +2146,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[5]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[6]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -1981,7 +2390,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[6]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[7]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -2208,7 +2617,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[7]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[8]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -2708,7 +3117,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[8]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[9]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -3112,7 +3521,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[9]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[10]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -3162,6 +3571,7 @@ namespace Communication {
       isHeartbeatOnly_ = other.isHeartbeatOnly_;
       loadoutStatus_ = other.loadoutStatus_;
       loadoutFailureReason_ = other.loadoutFailureReason_;
+      recentCommandAcks_ = other.recentCommandAcks_.Clone();
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -3595,6 +4005,20 @@ namespace Communication {
       }
     }
 
+    /// <summary>Field number for the "recent_command_acks" field.</summary>
+    public const int RecentCommandAcksFieldNumber = 31;
+    private static readonly pb::FieldCodec<global::Communication.CommandAckEvent> _repeated_recentCommandAcks_codec
+        = pb::FieldCodec.ForMessage(250, global::Communication.CommandAckEvent.Parser);
+    private readonly pbc::RepeatedField<global::Communication.CommandAckEvent> recentCommandAcks_ = new pbc::RepeatedField<global::Communication.CommandAckEvent>();
+    /// <summary>
+    /// P4.4: structured command-ack ring buffer (cap 10).
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public pbc::RepeatedField<global::Communication.CommandAckEvent> RecentCommandAcks {
+      get { return recentCommandAcks_; }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -3640,6 +4064,7 @@ namespace Communication {
       if (IsHeartbeatOnly != other.IsHeartbeatOnly) return false;
       if (LoadoutStatus != other.LoadoutStatus) return false;
       if (LoadoutFailureReason != other.LoadoutFailureReason) return false;
+      if(!recentCommandAcks_.Equals(other.recentCommandAcks_)) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -3677,6 +4102,7 @@ namespace Communication {
       if (IsHeartbeatOnly != false) hash ^= IsHeartbeatOnly.GetHashCode();
       if (LoadoutStatus != global::Communication.LoadoutStatus.LoadoutNotStarted) hash ^= LoadoutStatus.GetHashCode();
       if (LoadoutFailureReason.Length != 0) hash ^= LoadoutFailureReason.GetHashCode();
+      hash ^= recentCommandAcks_.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -3800,6 +4226,7 @@ namespace Communication {
         output.WriteRawTag(242, 1);
         output.WriteString(LoadoutFailureReason);
       }
+      recentCommandAcks_.WriteTo(output, _repeated_recentCommandAcks_codec);
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -3915,6 +4342,7 @@ namespace Communication {
         output.WriteRawTag(242, 1);
         output.WriteString(LoadoutFailureReason);
       }
+      recentCommandAcks_.WriteTo(ref output, _repeated_recentCommandAcks_codec);
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -4005,6 +4433,7 @@ namespace Communication {
       if (LoadoutFailureReason.Length != 0) {
         size += 2 + pb::CodedOutputStream.ComputeStringSize(LoadoutFailureReason);
       }
+      size += recentCommandAcks_.CalculateSize(_repeated_recentCommandAcks_codec);
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
       }
@@ -4118,6 +4547,7 @@ namespace Communication {
       if (other.LoadoutFailureReason.Length != 0) {
         LoadoutFailureReason = other.LoadoutFailureReason;
       }
+      recentCommandAcks_.Add(other.recentCommandAcks_);
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
 
@@ -4276,6 +4706,10 @@ namespace Communication {
           }
           case 242: {
             LoadoutFailureReason = input.ReadString();
+            break;
+          }
+          case 250: {
+            recentCommandAcks_.AddEntriesFrom(input, _repeated_recentCommandAcks_codec);
             break;
           }
         }
@@ -4438,6 +4872,10 @@ namespace Communication {
             LoadoutFailureReason = input.ReadString();
             break;
           }
+          case 250: {
+            recentCommandAcks_.AddEntriesFrom(ref input, _repeated_recentCommandAcks_codec);
+            break;
+          }
         }
       }
     }
@@ -4463,7 +4901,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[10]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[11]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -4701,7 +5139,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[11]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[12]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -4976,7 +5414,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[12]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[13]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -5218,7 +5656,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[13]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[14]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -5806,7 +6244,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[14]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[15]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -6160,7 +6598,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[15]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[16]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -6544,7 +6982,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[16]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[17]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -6906,7 +7344,7 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public static pbr::MessageDescriptor Descriptor {
-      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[17]; }
+      get { return global::Communication.CommunicationReflection.Descriptor.MessageTypes[18]; }
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]

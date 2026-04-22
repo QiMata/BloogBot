@@ -33,6 +33,22 @@ message ActionMessage {
     repeated RequestParameter parameters = 2;
     ResponseResult actionResult = 3;
     LoadoutSpec loadout_spec = 4;   // Populated only when action_type=APPLY_LOADOUT; full per-bot prep spec handed off once so BotRunner owns execution pacing.
+    string correlation_id = 5;      // P4.4: StateManager stamps one per dispatch; BotRunner echoes it back in CurrentAction / CommandAckEvent.
+}
+
+message CommandAckEvent {
+    enum AckStatus {
+        PENDING = 0;
+        SUCCESS = 1;
+        FAILED = 2;
+        TIMED_OUT = 3;
+    }
+
+    string correlation_id = 1;
+    ActionType action_type = 2;
+    AckStatus status = 3;
+    string failure_reason = 4;
+    uint32 related_id = 5;
 }
 
 enum ActionType {
@@ -219,6 +235,7 @@ message WoWActivitySnapshot {
     bool is_heartbeat_only = 28;                // True when the bot is polling for a pending action without a meaningful state change; server must not overwrite CurrentActivityMemberList from this request
     LoadoutStatus loadout_status = 29;          // P3: per-bot progress through the ApplyLoadout action. Coordinator gates raid-formation on all bots reporting LOADOUT_READY.
     string loadout_failure_reason = 30;         // P3: populated when loadout_status=LOADOUT_FAILED; human-readable fail step for diagnostics.
+    repeated CommandAckEvent recent_command_acks = 31; // P4.4: structured command-ack ring buffer (cap 10).
 }
 
 // P3: progress states for a bot's single ApplyLoadout action.
