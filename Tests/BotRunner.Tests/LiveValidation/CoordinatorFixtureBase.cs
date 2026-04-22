@@ -294,6 +294,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
         var lastCount = -1;
         var lastChange = stopwatch.Elapsed;
         var lastMissingDiagnostics = string.Empty;
+        var lastReseedAt = TimeSpan.Zero;
 
         while (stopwatch.Elapsed < maxTimeout)
         {
@@ -305,6 +306,18 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             var missingDiagnostics = await DescribeMissingAccountsAsync();
             if (currentCount >= expectedCount)
                 return;
+
+            // Freshly created BG characters can reach InWorld before their in-bot
+            // ObjectManager.Player.Name has hydrated, leaving snapshot.CharacterName
+            // blank and the hydration gate unsatisfied. A periodic reseed from the
+            // characters DB (where MaNGOS persisted the name at char-create time)
+            // lets NormalizeSnapshotCharacterName fill the gap without changing
+            // the bot runtime. Rate-limited so we don't hammer MySQL on every tick.
+            if (stopwatch.Elapsed - lastReseedAt >= TimeSpan.FromSeconds(6))
+            {
+                await SeedExpectedCharacterNamesFromDatabaseAsync();
+                lastReseedAt = stopwatch.Elapsed;
+            }
 
             if (currentCount != lastCount || !string.Equals(missingDiagnostics, lastMissingDiagnostics, StringComparison.Ordinal))
             {

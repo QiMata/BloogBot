@@ -204,7 +204,15 @@ public partial class LiveBotFixture
     }
 
 
-    private async Task SeedExpectedCharacterNamesFromDatabaseAsync()
+    /// <summary>
+    /// Populates <c>_knownCharacterNamesByAccount</c> from the characters DB for every
+    /// configured account. Safe to re-invoke — missing rows are skipped, and any later
+    /// row is remembered. Derived fixtures call this during a <c>WaitForExactBotCountAsync</c>
+    /// retry so freshly-created BG characters (whose in-bot <c>ObjectManager.Player.Name</c>
+    /// can lag the server-side row) still pass the hydration gate via
+    /// <see cref="NormalizeSnapshotCharacterName"/>.
+    /// </summary>
+    protected internal async Task SeedExpectedCharacterNamesFromDatabaseAsync()
     {
         var accountsToResolve = new HashSet<string>(KnownAccountNamesForCharacterResolution, StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(BgAccountName))
