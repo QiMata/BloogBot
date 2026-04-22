@@ -420,6 +420,43 @@ public class BattlegroundCoordinator
         _ => "not-started",
     };
 
+    /// <summary>
+    /// P4.5.1: Return the most recent <see cref="CommandAckEvent.Types.AckStatus"/> observed for a given
+    /// correlation id across all provided bot snapshots, or <c>null</c> if no ACK has been seen yet.
+    /// Terminal statuses (Success/Failed/TimedOut) are preferred over Pending when both are present.
+    /// </summary>
+    public static CommandAckEvent.Types.AckStatus? LastAckStatus(
+        string correlationId,
+        IReadOnlyDictionary<string, WoWActivitySnapshot> snapshots)
+    {
+        if (string.IsNullOrWhiteSpace(correlationId) || snapshots == null)
+            return null;
+
+        CommandAckEvent.Types.AckStatus? latest = null;
+        foreach (var snapshot in snapshots.Values)
+        {
+            if (snapshot == null)
+                continue;
+
+            for (var i = snapshot.RecentCommandAcks.Count - 1; i >= 0; i--)
+            {
+                var ack = snapshot.RecentCommandAcks[i];
+                if (!string.Equals(ack.CorrelationId, correlationId, StringComparison.Ordinal))
+                    continue;
+
+                // Terminal beats Pending — stop at first terminal hit in this snapshot;
+                // otherwise remember Pending and keep scanning other snapshots.
+                if (ack.Status != CommandAckEvent.Types.AckStatus.Pending)
+                    return ack.Status;
+
+                latest ??= ack.Status;
+                break;
+            }
+        }
+
+        return latest;
+    }
+
     private ActionMessage? HandleQueueForBattleground(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
