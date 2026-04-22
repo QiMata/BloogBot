@@ -51,7 +51,17 @@ public class FishingProfessionTests
 
     private readonly record struct RatchetFishingPoolRefreshResult(
         RatchetFishingStageReadiness Readiness,
-        IReadOnlyList<uint> SpawnedLocalPoolEntries);
+        IReadOnlyList<uint> SpawnedLocalPoolEntries,
+        bool AlternateLocationRetryRequested);
+
+    private readonly record struct AlternateFishingRetryLocation(
+        string StageName,
+        string TeleportName,
+        int MapId,
+        float X,
+        float Y,
+        float Z,
+        float SearchRadius);
 
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
@@ -98,6 +108,8 @@ public class FishingProfessionTests
     private const int RatchetLocalWaypointQueryLimit = 16;
     private const int RatchetLocalWaypointCount = 8;
     private const int RatchetPoolRefreshLimit = 8;
+    private static readonly TimeSpan NaturalFishingPoolRespawnTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan AlternateFishingPoolRetryTimeout = TimeSpan.FromSeconds(90);
     private const uint MainhandSlot = 15;
     private static readonly int FishingTimeoutMs = (new BotBehaviorConfig().MaxFishingCasts * 30000) + 20000;
     private static readonly float FishingPoolDetectRange = new BotBehaviorConfig().FishingPoolDetectRange;
@@ -112,6 +124,13 @@ public class FishingProfessionTests
         2621u,
         2626u,
         2627u
+    ];
+
+    private static readonly AlternateFishingRetryLocation[] AlternateFishingRetryLocations =
+    [
+        new("alternate-bootybay", "BootyBay", 0, -14297.2f, 530.993f, 8.77916f, 500f),
+        new("alternate-auberdine", "Auberdine", 1, 6501.4f, 481.607f, 6.27062f, 450f),
+        new("alternate-azshara", "Azshara", 1, 3341.36f, -4603.79f, 92.5027f, 600f)
     ];
 
     private static readonly uint[] FishingSpellSyncIds =
@@ -658,6 +677,21 @@ public class FishingProfessionTests
                 searchWaypoints,
                 $"{label} {stage.Name}-stream",
                 requireVisiblePool: false);
+            if (refreshResult.AlternateLocationRetryRequested)
+            {
+                _output.WriteLine(
+                    $"[{label}] Ratchet stage '{stage.Name}' exhausted the natural-respawn budget. " +
+                    "Retrying once from an alternate named-tele fishing location.");
+
+                var alternatePreparation = await TryPrepareAlternateFishingStageAsync(account, characterName, label);
+                if (alternatePreparation.HasValue)
+                    return alternatePreparation.Value;
+
+                throw new Xunit.Sdk.XunitException(
+                    $"[{label}] No fishing pool became visible within the natural-respawn budget at Ratchet stage '{stage.Name}', " +
+                    "and the one alternate named-tele retry also failed.");
+            }
+
             var prioritizedSearchWaypoints = FishingPoolStagePlanner.CreatePrioritizedSearchWaypoints(
                 stageSpawns,
                 refreshResult.SpawnedLocalPoolEntries,
@@ -948,6 +982,118 @@ public class FishingProfessionTests
         return (waypoints, spawns);
     }
 
+    private async Task<RatchetFishingStagePreparation?> TryPrepareAlternateFishingStageAsync(
+        string account,
+        string? characterName,
+        string label)
+    {
+        var selectedLocation = await ChooseAlternateFishingRetryLocationAsync(label);
+        _output.WriteLine(
+            $"[{label}] Alternate fishing retry uses '{selectedLocation.TeleportName}' " +
+            $"at ({selectedLocation.X:F1},{selectedLocation.Y:F1},{selectedLocation.Z:F1}) map={selectedLocation.MapId}.");
+
+        if (!string.IsNullOrWhiteSpace(characterName))
+        {
+            await _bot.BotTeleportToNamedAsync(account, characterName, selectedLocation.TeleportName);
+        }
+        else
+        {
+            await _bot.BotTeleportAsync(
+                account,
+                selectedLocation.MapId,
+                selectedLocation.X,
+                selectedLocation.Y,
+                selectedLocation.Z + 2f);
+        }
+
+        await _bot.WaitForZStabilizationAsync(account, waitMs: 2000);
+
+        var rawSpawns = await _bot.QueryGameObjectSpawnsNearAsync(
+            FishingData.KnownFishingPoolEntries.ToArray(),
+            selectedLocation.MapId,
+            selectedLocation.X,
+            selectedLocation.Y,
+            selectedLocation.SearchRadius,
+            limit: RatchetLocalWaypointQueryLimit);
+        var spawns = FishingPoolStagePlanner.MaterializeSpawns(rawSpawns);
+        var waypoints = spawns.Count > 0
+            ? FishingPoolStagePlanner.CreateSearchWaypoints(
+                spawns,
+                selectedLocation.X,
+                selectedLocation.Y,
+                selectedLocation.Z,
+                localSpawnDistance: MathF.Min(selectedLocation.SearchRadius, 120f),
+                waypointCount: RatchetLocalWaypointCount,
+                standoffDistance: 8f).ToList()
+            : [(selectedLocation.X, selectedLocation.Y, selectedLocation.Z)];
+
+        _output.WriteLine(
+            $"[{label}] Alternate fishing retry DB pool candidates: " +
+            (spawns.Count > 0
+                ? string.Join(" | ", spawns.Select(spawn => $"entry={spawn.Entry} pool={spawn.PoolEntry?.ToString() ?? "none"} dist={spawn.Distance2D:F1}"))
+                : "none"));
+        _output.WriteLine(
+            $"[{label}] Alternate fishing retry search waypoints: " +
+            string.Join(" | ", waypoints.Select(waypoint => $"({waypoint.x:F1},{waypoint.y:F1},{waypoint.z:F1})")));
+
+        var visiblePool = await WaitForNearbyFishingPoolNearStageAsync(
+            account,
+            label,
+            selectedLocation.MapId,
+            selectedLocation.X,
+            selectedLocation.Y,
+            selectedLocation.SearchRadius,
+            AlternateFishingPoolRetryTimeout);
+        if (visiblePool?.Position == null)
+        {
+            _output.WriteLine(
+                $"[{label}] Alternate fishing retry at '{selectedLocation.TeleportName}' timed out after " +
+                $"{AlternateFishingPoolRetryTimeout.TotalSeconds:F0}s without a nearby visible pool.");
+            return null;
+        }
+
+        _output.WriteLine(
+            $"[{label}] Alternate fishing retry found pool '{visiblePool.Name}' " +
+            $"at ({visiblePool.Position.X:F1},{visiblePool.Position.Y:F1},{visiblePool.Position.Z:F1}) " +
+            $"distance={visiblePool.Distance:F1}y.");
+        return new RatchetFishingStagePreparation(
+            StageName: selectedLocation.StageName,
+            StageX: selectedLocation.X,
+            StageY: selectedLocation.Y,
+            StageZ: selectedLocation.Z,
+            Readiness: RatchetFishingStageReadiness.VisiblePoolReady,
+            SpawnedLocalPoolEntries: Array.Empty<uint>(),
+            SearchWaypoints: waypoints);
+    }
+
+    private async Task<AlternateFishingRetryLocation> ChooseAlternateFishingRetryLocationAsync(string label)
+    {
+        AlternateFishingRetryLocation? bestLocation = null;
+        var bestSpawnCount = int.MinValue;
+
+        foreach (var candidate in AlternateFishingRetryLocations)
+        {
+            var spawns = await _bot.QueryGameObjectSpawnsNearAsync(
+                FishingData.KnownFishingPoolEntries.ToArray(),
+                candidate.MapId,
+                candidate.X,
+                candidate.Y,
+                candidate.SearchRadius,
+                limit: RatchetLocalWaypointQueryLimit);
+            _output.WriteLine(
+                $"[{label}] Alternate retry candidate '{candidate.TeleportName}' has {spawns.Count} DB fishing-pool spawn(s) " +
+                $"within {candidate.SearchRadius:F0}y.");
+
+            if (spawns.Count > bestSpawnCount)
+            {
+                bestSpawnCount = spawns.Count;
+                bestLocation = candidate;
+            }
+        }
+
+        return bestLocation ?? AlternateFishingRetryLocations[0];
+    }
+
     private async Task<RatchetFishingPoolRefreshResult> RefreshRatchetFishingPoolsAsync(
         string commandAccount,
         string account,
@@ -978,17 +1124,18 @@ public class FishingProfessionTests
             var clearedRespawns = await _bot.ClearFishingPoolRespawnTimersAsync(MapId, stageX, stageY, RatchetLocalWaypointSearchRadius);
             _output.WriteLine($"[{label}] Cleared {clearedRespawns} nearby fishing-pool respawn timers.");
 
-            var respawnTrace = await _bot.SendGmChatCommandTrackedAsync(
-                commandAccount,
-                ".respawn",
-                captureResponse: true,
-                delayMs: 1000);
-            var respawnResponses = respawnTrace.ChatMessages.Concat(respawnTrace.ErrorMessages).ToArray();
             _output.WriteLine(
-                $"[{label}] nearby .respawn after clearing timers via {commandAccount}: " +
-                $"{(respawnResponses.Length > 0 ? string.Join(" || ", respawnResponses) : respawnTrace.DispatchResult.ToString())}");
+                $"[{label}] Waiting up to {NaturalFishingPoolRespawnTimeout.TotalMinutes:F0} minute(s) for a natural nearby pool respawn " +
+                $"after clearing timers; command sender remained '{commandAccount}' but no runtime respawn command is dispatched.");
 
-            var visiblePoolAfterRespawn = await WaitForVisibleFishingPoolAsync(account, TimeSpan.FromSeconds(4));
+            var visiblePoolAfterRespawn = await WaitForNearbyFishingPoolNearStageAsync(
+                account,
+                label,
+                MapId,
+                stageX,
+                stageY,
+                RatchetLocalWaypointSearchRadius,
+                NaturalFishingPoolRespawnTimeout);
             if (visiblePoolAfterRespawn?.Position != null)
             {
                 _output.WriteLine(
@@ -1001,8 +1148,21 @@ public class FishingProfessionTests
                         .Select(state => state.PoolEntry)
                         .Distinct()
                         .OrderBy(poolEntry => poolEntry)
-                        .ToArray());
+                        .ToArray(),
+                    AlternateLocationRetryRequested: false);
             }
+
+            _output.WriteLine(
+                $"[{label}] No nearby staged pool became visible within the natural-respawn budget. " +
+                "Escalating to the one alternate named-tele retry.");
+            return new RatchetFishingPoolRefreshResult(
+                RatchetFishingStageReadiness.NoLocalChildSpawned,
+                respawnableLocalChildSpawnStates
+                    .Select(state => state.PoolEntry)
+                    .Distinct()
+                    .OrderBy(poolEntry => poolEntry)
+                    .ToArray(),
+                AlternateLocationRetryRequested: true);
         }
         else
         {
@@ -1027,7 +1187,8 @@ public class FishingProfessionTests
                 $"({visiblePoolBeforeRefresh.Position.X:F1},{visiblePoolBeforeRefresh.Position.Y:F1},{visiblePoolBeforeRefresh.Position.Z:F1}) distance={visiblePoolBeforeRefresh.Distance:F1}y");
             return new RatchetFishingPoolRefreshResult(
                 RatchetFishingStageReadiness.VisiblePoolReady,
-                Array.Empty<uint>());
+                Array.Empty<uint>(),
+                AlternateLocationRetryRequested: false);
         }
 
         for (var attempt = 0; attempt < poolRefreshPlan.Count; attempt++)
@@ -1073,7 +1234,8 @@ public class FishingProfessionTests
                     $"({visiblePool.Position.X:F1},{visiblePool.Position.Y:F1},{visiblePool.Position.Z:F1}) distance={visiblePool.Distance:F1}y");
                 return new RatchetFishingPoolRefreshResult(
                     RatchetFishingStageReadiness.VisiblePoolReady,
-                    spawnedLocalChildPools.OrderBy(poolEntry => poolEntry).ToArray());
+                    spawnedLocalChildPools.OrderBy(poolEntry => poolEntry).ToArray(),
+                    AlternateLocationRetryRequested: false);
             }
         }
 
@@ -1086,14 +1248,16 @@ public class FishingProfessionTests
         {
             return new RatchetFishingPoolRefreshResult(
                 RatchetFishingStageReadiness.VisiblePoolReady,
-                spawnedLocalChildPools.OrderBy(poolEntry => poolEntry).ToArray());
+                spawnedLocalChildPools.OrderBy(poolEntry => poolEntry).ToArray(),
+                AlternateLocationRetryRequested: false);
         }
 
         return new RatchetFishingPoolRefreshResult(
             spawnedLocalChildPools.Count > 0
                 ? RatchetFishingStageReadiness.LocalChildSpawnedButInvisible
                 : RatchetFishingStageReadiness.NoLocalChildSpawned,
-            spawnedLocalChildPools.OrderBy(poolEntry => poolEntry).ToArray());
+            spawnedLocalChildPools.OrderBy(poolEntry => poolEntry).ToArray(),
+            AlternateLocationRetryRequested: false);
     }
 
     private static string FormatRatchetChildSpawnState(LiveBotFixture.PoolGameObjectSpawnState state)
@@ -1789,6 +1953,74 @@ public class FishingProfessionTests
         return null;
     }
 
+    private static VisibleFishingPool? FindNearestNearbyFishingPoolNearStage(
+        WoWActivitySnapshot? snapshot,
+        int expectedMapId,
+        float stageX,
+        float stageY,
+        float maxStageDistance)
+    {
+        var mapId = snapshot?.Player?.Unit?.GameObject?.Base?.MapId ?? snapshot?.CurrentMapId ?? 0;
+        if (mapId != expectedMapId)
+            return null;
+
+        return snapshot?.MovementData?.NearbyGameObjects?
+            .Where(IsFishingPool)
+            .Where(gameObject => gameObject.Position != null
+                && Distance2D(gameObject.Position.X, gameObject.Position.Y, stageX, stageY) <= maxStageDistance)
+            .OrderBy(gameObject => Distance2D(gameObject.Position!.X, gameObject.Position.Y, stageX, stageY))
+            .ThenBy(gameObject => gameObject.DistanceToPlayer)
+            .Select(gameObject => new VisibleFishingPool(
+                gameObject.Entry,
+                gameObject.Name ?? "FishingPool",
+                gameObject.DistanceToPlayer,
+                gameObject.Position))
+            .FirstOrDefault();
+    }
+
+    private async Task<VisibleFishingPool?> WaitForNearbyFishingPoolNearStageAsync(
+        string account,
+        string label,
+        int expectedMapId,
+        float stageX,
+        float stageY,
+        float maxStageDistance,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        var lastProgressLogAt = DateTime.UtcNow;
+        WoWActivitySnapshot? lastSnapshot = null;
+
+        do
+        {
+            var snapshot = await RefreshAndGetSnapshotAsync(account);
+            lastSnapshot = snapshot;
+            var pool = FindNearestNearbyFishingPoolNearStage(
+                snapshot,
+                expectedMapId,
+                stageX,
+                stageY,
+                maxStageDistance);
+            if (pool?.Position != null)
+                return pool;
+
+            if (DateTime.UtcNow - lastProgressLogAt >= TimeSpan.FromSeconds(15))
+            {
+                _output.WriteLine(
+                    $"[{label}] Still waiting for a nearby staged fishing pool. " +
+                    $"map={expectedMapId} stage=({stageX:F1},{stageY:F1}) radius={maxStageDistance:F0}y timeout={timeout.TotalSeconds:F0}s");
+                lastProgressLogAt = DateTime.UtcNow;
+            }
+
+            await Task.Delay(500);
+        }
+        while (DateTime.UtcNow < deadline);
+
+        LogNearbyObjectSummary(account, lastSnapshot);
+        LogNearbyMovementGameObjectSummary(account, lastSnapshot);
+        return null;
+    }
+
     private async Task<PositionWaitResult> WaitForPositionSettledAsync(
         string account,
         float x,
@@ -2410,6 +2642,15 @@ public class FishingProfessionTests
                     || gameObject.Name.Contains("Swarm", StringComparison.OrdinalIgnoreCase)
                     || gameObject.Name.Contains("Wreckage", StringComparison.OrdinalIgnoreCase)));
 
+    private static bool IsFishingPool(global::Game.GameObjectSnapshot gameObject)
+        => FishingData.KnownFishingPoolEntries.Contains(gameObject.Entry)
+            || (!string.IsNullOrWhiteSpace(gameObject.Name)
+                && (gameObject.Name.Contains("School", StringComparison.OrdinalIgnoreCase)
+                    || gameObject.Name.Contains("Pool", StringComparison.OrdinalIgnoreCase)
+                    || gameObject.Name.Contains("Debris", StringComparison.OrdinalIgnoreCase)
+                    || gameObject.Name.Contains("Swarm", StringComparison.OrdinalIgnoreCase)
+                    || gameObject.Name.Contains("Wreckage", StringComparison.OrdinalIgnoreCase)));
+
     private void LogNearbyObjectSummary(string account, WoWActivitySnapshot? snapshot)
     {
         var playerPosition = snapshot?.Player?.Unit?.GameObject?.Base?.Position;
@@ -2430,6 +2671,20 @@ public class FishingProfessionTests
         _output.WriteLine(
             $"[{account}] No fishing pool detected. nearbyObjectCount={snapshot?.NearbyObjects?.Count ?? 0} " +
             $"objects=[{string.Join(", ", nearbyObjects)}]");
+    }
+
+    private void LogNearbyMovementGameObjectSummary(string account, WoWActivitySnapshot? snapshot)
+    {
+        var nearbyGameObjects = snapshot?.MovementData?.NearbyGameObjects?
+            .Take(8)
+            .Select(gameObject =>
+                $"{gameObject.Entry}:{gameObject.Name ?? "?"}:dist={gameObject.DistanceToPlayer:F1}:pos=({gameObject.Position?.X:F1},{gameObject.Position?.Y:F1},{gameObject.Position?.Z:F1})")
+            .ToArray()
+            ?? [];
+
+        _output.WriteLine(
+            $"[{account}] No staged fishing pool detected in NearbyGameObjects. nearbyGameObjectCount={snapshot?.MovementData?.NearbyGameObjects?.Count ?? 0} " +
+            $"objects=[{string.Join(", ", nearbyGameObjects)}]");
     }
 
     private static float Distance3D(Game.Position playerPosition, Game.Position? objectPosition)

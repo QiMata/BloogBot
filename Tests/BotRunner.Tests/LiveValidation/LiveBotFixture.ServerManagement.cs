@@ -740,8 +740,8 @@ public partial class LiveBotFixture
     /// <summary>
     /// Clears persisted respawn timers for fishing pool gameobjects near a given position.
     /// This only removes rows from characters.gameobject_respawn; callers still need to
-    /// trigger an appropriate in-world refresh (for example, a nearby .respawn) if they
-    /// want loaded objects to become interactable again.
+    /// wait for natural respawn or restage at a different live fishing location before
+    /// expecting nearby pools to become interactable again.
     /// </summary>
     public async Task<int> ClearFishingPoolRespawnTimersAsync(int mapId, float centerX, float centerY, float radius)
     {

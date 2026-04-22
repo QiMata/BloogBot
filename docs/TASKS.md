@@ -417,6 +417,28 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `docs/TASKS.md`
 - Next command: `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_natural_respawn_slice3.trx"`
 
+## Handoff (2026-04-22, Tier 1 LiveValidation slice 3)
+
+- Completed: removed the forced fishing-pool refresh command from `FishingProfessionTests` and replaced it with a natural nearby-pool wait plus one alternate named-tele retry path.
+  - `RefreshRatchetFishingPoolsAsync(...)` now clears nearby pool respawn timers, then waits up to `5` minutes for a staged fishing pool to reappear from `MovementData.NearbyGameObjects` without issuing any runtime respawn command.
+  - If the natural wait exhausts its budget, `PrepareRatchetFishingStageAsync(...)` now performs exactly one alternate named-tele retry, choosing the best DB-backed coastal candidate from `BootyBay` / `Auberdine` / `Azshara`.
+  - Added stage-scoped nearby-gameobject polling/logging so fishing-pool visibility failures now print both `NearbyObjects` and `NearbyGameObjects` evidence.
+  - Updated the fishing respawn-timer helper comment in `LiveBotFixture.ServerManagement.cs` to reflect the natural-wait / alternate-restage flow.
+- Validation:
+  - `rg -n "\.respawn" Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ServerManagement.cs` -> `no matches`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (85 warnings, 0 errors)`
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `No tasks are running which match the specified criteria.` before the live rerun.
+  - `docker ps --format "{{.Names}} {{.Status}}" | Select-String -Pattern "mangos|realm|maria|scene-data|pathfinding"` -> `scene-data-service`, `mangosd`, `realmd`, `pathfinding-service`, and `maria-db` were running/healthy.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CaptureForegroundPackets_RatchetStagingCast" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_natural_respawn_slice3.trx"` -> `passed (1/1)` in `1.7826m`.
+- Notes:
+  - This focused rerun stayed on the fast path: a nearby staged pool was already visible after Ratchet staging, so the new `5`-minute natural-wait budget and the alternate named-tele retry were not consumed on this run.
+  - The slice still ships because the forbidden forced-refresh path is fully removed, the focused staged fishing task stays green, and the longer fallback is now available for the slow-respawn cases that motivated the change.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ServerManagement.cs`
+  - `docs/TASKS.md`
+- Next command: `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_full_class_followup.trx"`
+
 - Completed: migrated the remaining six `LiveValidation/*` `AssertCommandSucceeded`
   helpers to delegate to `LiveBotFixture.AssertTraceCommandSucceeded`. P4.5.3
   started this with `IntegrationValidationTests` and `TalentAllocationTests`;

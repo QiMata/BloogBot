@@ -51,6 +51,22 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-22 (Tier 1 slice 3 - natural fishing pool wait)
+- Pass result: `slice shipped; focused staged fishing live proof green`
+- Last delta:
+  - Replaced the forced fishing-pool refresh path in `FishingProfessionTests` with a natural nearby-pool wait driven by `snapshot.MovementData.NearbyGameObjects`, using a `5` minute budget after clearing nearby respawn timers.
+  - Added one alternate named-tele retry path for the staged fishing prep: when Ratchet exhausts the natural wait budget, the test now chooses the best DB-backed coastal fallback from `BootyBay`, `Auberdine`, or `Azshara` and retries exactly once.
+  - Added extra nearby-gameobject diagnostics for staged fishing failures and updated the fishing respawn-timer helper comment in `LiveBotFixture.ServerManagement.cs` to match the new no-forced-refresh flow.
+- Validation/tests run:
+  - `forced fishing refresh grep over FishingProfessionTests + LiveBotFixture.ServerManagement` -> `no matches`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (85 warnings, 0 errors)`
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CaptureForegroundPackets_RatchetStagingCast" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_natural_respawn_slice3.trx"` -> `passed (1/1)` in `1.7826m`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ServerManagement.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_full_class_followup.trx"`
+
 ### 2026-04-22 (Tier 1 slice 2 - fresh-account combat arena fixtures)
 - Pass result: `slice shipped; CombatBgTests retry green after fresh-BG hydration fix; CombatFgTests green`
 - Last delta:
