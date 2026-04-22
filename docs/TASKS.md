@@ -338,6 +338,35 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-22, live-validation Tier 1 slice 6 - inline Ratchet activity into FishingTask)
+
+- Completed:
+  - Diagnosed the previous failure as a critical P/Invoke ABI mismatch in `FishingCastPositionFinder.LineOfSightNative`. The C++ export `bool LineOfSight(uint32_t mapId, XYZ from, XYZ to)` takes `XYZ` by value; the C# declaration was passing seven loose floats and the resulting stack mismatch raised `System.AccessViolationException` and crashed the StateManager process on the first finder call. Switched to the same `XYZ`-by-value pattern that `WoWSharpClient.NativePhysicsInterop` and `Services.PathfindingService.Navigation` already use.
+  - Refactored away `Exports/BotRunner/Activities/FishingAtRatchetActivity.cs` and the entire `IActivity` interface per "no individual activity files" + ".tele name <name> Ratchet" directives. `ActivityResolver.Resolve` now returns `IBotTask` directly, and `FishingTask` itself owns the full sequence: GM-command outfit setup (`.additem` 6256/6530, `.learn` 7620/7738, `.setskill 356 75 300`, `.pool update <id>`), then `.tele name <character> <location>` (with self-form fallback), then the existing fishing flow.
+  - Removed the `zDelta>2` gate so the cast-position finder always runs, and added a `cast_position_unresolved` diagnostic for the null case.
+  - Added a generic 8-direction radial search-walk fallback (`BuildDefaultSearchWaypoints`, ~28y) so a `FishingTask` dispatched with no explicit waypoints can still find pools that are outside the immediate gameobject visibility window from a named landmark.
+  - Updated the live test marker from `[ACTIVITY] FishingAtRatchet start` to `[TASK] FishingTask activity_start`.
+- Remaining blocker: Ratchet live slice still fails on dock navigation, not on the cast resolver. With the ABI fix in place, BG bot now successfully runs the search-walk, finds pool 180655 at 44.8y on waypoint 6/8, and the resolver returns `cast_position_resolved pos=(-968.8,-3783.5,6.6) edgeDist=22.5`. But the actual approach to that standoff drops the bot into water at Z=2.8 (approachZ=6.6) and the existing `fell_off_pier` guard pops the task. FG is still stuck earlier in the search-walk on multiple `search_walk_stalled` events.
+- Validation:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `INFO: No tasks are running which match the specified criteria.`
+  - `docker ps --format "{{.Names}} {{.Status}}"` -> `mangosd`, `realmd`, `maria-db`, `scene-data-service`, `pathfinding-service` all `Up ... (healthy)`.
+  - Build (Release, all five projects: `Exports/BotRunner`, `Services/WoWStateManager`, `Services/BackgroundBotRunner`, `Services/ForegroundBotRunner`, `Tests/BotRunner.Tests`) -> `0 errors`.
+  - Native PowerShell probe (`Add-Type` against `Bot/Release/net8.0/Navigation.dll`): `GetGroundZ(-958,-3768)=5.605`, `GetGroundZ(-958,-3770)=1.265`, `GetGroundZ(-960,-3770)=5.566`, `GetGroundZ(-963,-3771)=5.441`, `GetGroundZ(-955,-3782)=-8.182`, `GetGroundZ(-957.18,-3778.92)=...` (closest bay pool spawn at ~24y from the `.tele Ratchet` landing point). The Ratchet pier is genuinely ~1y wide along Y at the staging X.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test ... fishing_search_walk_fallback.trx ...` -> `failed (1/1)`. BG: full pipeline through `cast_position_resolved` then `fell_off_pier`. FG: stuck on `search_walk_stalled`. No more `AccessViolationException`.
+- Files changed:
+  - `Exports/BotRunner/Activities/ActivityResolver.cs` (rewritten)
+  - `Exports/BotRunner/Activities/FishingAtRatchetActivity.cs` (deleted)
+  - `Exports/BotRunner/Activities/IActivity.cs` (deleted)
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Exports/BotRunner/Combat/FishingData.cs`
+  - `Exports/BotRunner/Tasks/FishingCastPositionFinder.cs`
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Commits pushed: `91cbd44a fix(fishing): inline Ratchet activity into FishingTask and fix LineOfSight ABI`, `884772bd feat(fishing): generic radial search-walk fallback when no waypoints provided`.
+- Next command: `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_dock_navigation_retry.trx"`
+
 ## Handoff (2026-04-22, live-validation Tier 1 slice 5 - Ratchet activity cast-position sweep)
 
 - Completed: carried forward the per-character activity plumbing (`UseGmCommands`, `AssignedActivity`, runner env vars, BotRunner activity dispatch), removed the hardcoded Ratchet fishing waypoints from `FishingAtRatchetActivity`, inserted the allowed `.pool update 2628` outfit tick, added `FishingCastPositionFinder` with direct `Navigation.dll` `GetGroundZ` / `LineOfSight` probes, and integrated per-pool cast-position caching + explicit facing into `FishingTask`.

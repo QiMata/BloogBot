@@ -51,6 +51,33 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-22 (Tier 1 slice 6 - inline Ratchet activity into FishingTask)
+- Pass result: `build green; LineOfSight ABI fix lands; activity refactor lands; live Ratchet still failing on navigation, not on the cast resolver itself`
+- Last delta:
+  - Diagnosed the prior failure as a critical P/Invoke ABI mismatch in `FishingCastPositionFinder.LineOfSightNative` — the C++ export takes `XYZ` structs by value, the C# declaration was sending seven loose floats, and the resulting stack mismatch raised `System.AccessViolationException` and crashed the StateManager host on the first finder call. Switched the P/Invoke to the same `XYZ`-by-value pattern that `NativePhysicsInterop` and `PathfindingService` already use; the cast-position resolver now returns a real result (BG bot resolved `(-971.9,-3771.7,6.0)` and arrived at it).
+  - Refactored away `Exports/BotRunner/Activities/FishingAtRatchetActivity.cs` and the entire `IActivity` interface per "no individual activity files" + ".tele name <name> Ratchet" guidance. `ActivityResolver.Resolve` now returns `IBotTask` directly, and `FishingTask` itself owns the full sequence: GM-command outfit setup (`.additem`/`.learn`/`.setskill`/`.pool update`), then `.tele name <character> <location>` (with a self-form `.tele <location>` fallback when the character name is not yet populated, e.g. BG), then the existing fishing flow. The master-pool-id table (Ratchet -> 2628) lives in the resolver, not in a per-location class.
+  - Removed the `zDelta>2` gate so the cast-position finder always tries to resolve a pier-top standoff before falling back to the legacy shoreline path, and added a `cast_position_unresolved` diagnostic for the null case so we can see when the sweep finds no edge.
+  - Added a generic 8-direction radial search-walk fallback (`BuildDefaultSearchWaypoints`, ~28y radius) so a `FishingTask` dispatched with no explicit waypoints (the new common case) can still find pools that fall outside the immediate gameobject window from a named landmark like Ratchet town.
+  - Updated the live test marker from `[ACTIVITY] FishingAtRatchet start` to `[TASK] FishingTask activity_start`.
+- Validation/tests run:
+  - Build: rebuilt all five projects (`Exports/BotRunner`, `Services/WoWStateManager`, `Services/BackgroundBotRunner`, `Services/ForegroundBotRunner`, `Tests/BotRunner.Tests`) clean (`0 errors`).
+  - Native probes (PowerShell `Add-Type` against `Bot/Release/net8.0/Navigation.dll`): `GetGroundZ` returns dock surface (~5.4-5.6) at `(-958..-965, -3768..-3771)` and water bottom (~-8) just one yard south, so the Ratchet pier is genuinely ~1y wide here; `GetGroundZ(-957.18,-3778.92)` was the closest bay pool spawn at ~24y from the `.tele Ratchet` landing point.
+  - Live focused slice (`fishing_search_walk_fallback`): both bots emit `activity_start`, finish outfit, dispatch `.tele Ratchet`, generate the 8-waypoint radial fallback, and BG actually reaches `search_walk_found_pool guid=...180655 distance=44.8` followed by `cast_position_resolved pos=(-968.8,-3783.5,6.6) edgeDist=22.5 los=False`. From there the navigation drops the bot through to terrain Z=2.8 and `fell_off_pier` aborts the task; FG never makes it through the search ring (multiple `search_walk_stalled` events). So the cast-resolver is doing its job — what's left is keeping the bot on the dock during the approach.
+- Files changed:
+  - `Exports/BotRunner/Activities/ActivityResolver.cs` (rewritten)
+  - `Exports/BotRunner/Activities/FishingAtRatchetActivity.cs` (deleted)
+  - `Exports/BotRunner/Activities/IActivity.cs` (deleted)
+  - `Exports/BotRunner/BotRunnerService.cs` (resolver call site)
+  - `Exports/BotRunner/Combat/FishingData.cs` (added `FishingPoleItemId`/`NightcrawlerBaitItemId`)
+  - `Exports/BotRunner/Tasks/FishingCastPositionFinder.cs` (P/Invoke ABI fix)
+  - `Exports/BotRunner/Tasks/FishingTask.cs` (new outfit/travel phases, default search waypoints, diagnostics)
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs` (activity_start marker)
+- Commits pushed: `91cbd44a fix(fishing): inline Ratchet activity into FishingTask and fix LineOfSight ABI`, `884772bd feat(fishing): generic radial search-walk fallback when no waypoints provided`.
+- Open work for next session:
+  - Keep the bot on top of the pier during the approach to the resolved cast position. The cast resolver picks Z=6.6 (dock surface), but when the search-walk drops the bot at terrain Z=3.7 on the dock-side approach, the navigation routes it through water (`playerZ` drops to 2.8) and the `fell_off_pier` guard pops the task. Likely fixes: (a) require the search-walk to land on a waypoint whose ground Z matches the cast position before declaring the pool acquired, (b) shrink/relax the `fell_off_pier` guard so the bot can recover during a brief Z dip, (c) refine the radial waypoints to prefer dock-surface Z probes over straight-line cardinal points.
+  - FG-side `search_walk_stalled` on multiple radial waypoints suggests FG's WoW.exe physics is rejecting the path probes. Worth instrumenting `mode=` on FG separately to confirm whether it's a navmesh issue or a physics drop.
+- Next command (focused live re-run after a navigation tweak): `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_dock_navigation_retry.trx"`
+
 ### 2026-04-22 (Tier 1 slice 5 - Ratchet activity cast-position sweep)
 - Pass result: `build green; focused Ratchet fishing live proof failed`
 - Last delta:
