@@ -494,9 +494,20 @@ public partial class LiveBotFixture : IAsyncLifetime
             // Track "ever seen InWorld" per account to handle this flickering.
             var sw = Stopwatch.StartNew();
             var everSeenInWorld = new Dictionary<string, WoWActivitySnapshot>();
+            var lastCharacterNameReseedAt = TimeSpan.Zero;
 
             while (sw.Elapsed < InitialWorldEntryTimeout && !worldCts.Token.IsCancellationRequested)
             {
+                // Freshly created BG-only rosters can reach InWorld before their
+                // in-bot player name hydrates. Periodically reseed the known
+                // account->character mapping from the characters DB so those
+                // snapshots can satisfy the initial hydration gate.
+                if (sw.Elapsed - lastCharacterNameReseedAt >= TimeSpan.FromSeconds(6))
+                {
+                    await SeedExpectedCharacterNamesFromDatabaseAsync();
+                    lastCharacterNameReseedAt = sw.Elapsed;
+                }
+
                 var snapshots = await _stateManagerClient.QuerySnapshotsAsync(null, worldCts.Token);
 
                 foreach (var snap in snapshots)

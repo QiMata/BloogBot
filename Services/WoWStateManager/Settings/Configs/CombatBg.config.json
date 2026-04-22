@@ -1,6 +1,6 @@
 [
   {
-    "AccountName": "TESTBOT1",
+    "AccountName": "BGONLYBG1",
     "CharacterClass": "Warrior",
     "CharacterRace": "Orc",
     "CharacterGender": "Male",
@@ -11,10 +11,13 @@
     "Agreeableness": 1.0,
     "Neuroticism": 1.0,
     "ShouldRun": true,
-    "RunnerType": "Foreground"
+    "RunnerType": "Background",
+    "Loadout": {
+      "TargetLevel": 1
+    }
   },
   {
-    "AccountName": "COMBATTEST",
+    "AccountName": "BGONLYBG2",
     "CharacterClass": "Warrior",
     "CharacterRace": "Orc",
     "CharacterGender": "Male",
@@ -25,6 +28,9 @@
     "Agreeableness": 1.0,
     "Neuroticism": 1.0,
     "ShouldRun": true,
-    "RunnerType": "Background"
+    "RunnerType": "Background",
+    "Loadout": {
+      "TargetLevel": 1
+    }
   }
 ]

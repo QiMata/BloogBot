@@ -30,10 +30,10 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~LootCorpseTests" --configuration Release
 /// </summary>
-[Collection(CombatBgValidationCollection.Name)]
+[Collection(CombatBgArenaCollection.Name)]
 public class LootCorpseTests
 {
-    private readonly CombatBgBotFixture _bot;
+    private readonly CombatBgArenaFixture _bot;
     private readonly ITestOutputHelper _output;
 
     private const int MapId = 1;
@@ -46,7 +46,7 @@ public class LootCorpseTests
     private const uint VileFamiliarEntry = 3101;
     private const float MeleeRange = 5f;
 
-    public LootCorpseTests(CombatBgBotFixture bot, ITestOutputHelper output)
+    public LootCorpseTests(CombatBgArenaFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
@@ -57,13 +57,14 @@ public class LootCorpseTests
     [SkippableFact]
     public async Task Loot_KillAndLootMob_InventoryChanges()
     {
-        var combatAccount = _bot.CombatTestAccountName;
-        Assert.NotNull(combatAccount);
+        var combatAccount = _bot.PrimaryBgAccount;
+        await _bot.RefreshSnapshotsAsync();
+        var combatSnapshot = await _bot.GetSnapshotAsync(combatAccount);
 
-        _output.WriteLine($"=== Combat Test Bot: {_bot.CombatTestCharacterName} ({combatAccount}) ===");
-        _output.WriteLine("Using dedicated combat account with account-level GM access only (no runtime GM-mode toggles).");
+        _output.WriteLine($"=== Combat Test Bot: {combatSnapshot?.CharacterName ?? "(unknown)"} ({combatAccount}) ===");
+        _output.WriteLine("Using the primary fresh BG combat account with account-level GM access only.");
 
-        var passed = await RunLootScenario(combatAccount!, "LOOT");
+        var passed = await RunLootScenario(combatAccount, "LOOT");
         Assert.True(passed, "COMBATTEST bot: Loot scenario failed — see test output for details.");
     }
 

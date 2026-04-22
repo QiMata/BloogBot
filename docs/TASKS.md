@@ -380,6 +380,43 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `docs/TASKS.md`
 - Next command: `rg -n "CombatTestHelpers|CombatBgBotFixture|CombatFgBotFixture|CombatArenaFixture|CombatLoopTests" Tests/BotRunner.Tests/LiveValidation Services/WoWStateManager/Settings/Configs`
 
+## Handoff (2026-04-22, Tier 1 LiveValidation slice 2)
+
+- Completed: ported `CombatBgTests` and `CombatFgTests` onto dedicated fresh-account arena fixtures/configs, removed the legacy shared combat helper path, and kept the combat assertions on real boar kills with one `StartMeleeAttack` dispatch per attacker.
+  - Rewrote `CombatBg.config.json` and `CombatFg.config.json` to use dedicated Orc Warrior fresh-account rosters (`BGONLY*`, `FGONLY*`) modeled on `CombatArena.config.json`.
+  - Added `CombatBgArenaFixture` and `CombatFgArenaFixture`, both `CoordinatorFixtureBase`-backed with prep-time teleports to the Valley of Trials boar cluster and coordinator suppression during direct-action staging.
+  - Rewrote `CombatBgTests` / `CombatFgTests` to find a single boar visible to both attackers, dispatch one melee-start action per bot, poll for snapshot-confirmed death, and assert every attacker survives.
+  - Deleted the old combat helper/fixture/collection trio and made the minimal `LootCorpseTests` collection/fixture swap needed to keep the project compiling after that removal.
+  - Hardened `LiveBotFixture.InitializeAsync()` with periodic DB character-name reseeding during the initial hydration wait so fresh BG-only rosters can pass the first in-world gate instead of stalling with blank `CharacterName` fields.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (0 warnings, 0 errors)` before the first live run.
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `No tasks are running which match the specified criteria.` before each live run.
+  - `docker ps --format "{{.Names}} {{.Status}}" | Select-String -Pattern "mangos|realm|maria|scene-data|pathfinding"` -> `scene-data-service`, `mangosd`, `realmd`, `pathfinding-service`, and `maria-db` were running/healthy.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatBgTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=combat_bg_arena_slice2.trx"` -> `skipped (1)` on the first attempt; both BG bots reached `InWorld`, but the initial fixture gate still saw blank `CharacterName` values and never counted them as hydrated.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (85 warnings, 0 errors)` after the initial-hydration reseed fix in `LiveBotFixture`.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatBgTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=combat_bg_arena_slice2_retry.trx"` -> `passed (1/1)` in `58.1491s`.
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatFgTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=combat_fg_arena_slice2.trx"` -> `passed (1/1)` in `2.7348m`.
+  - `rg -n "CombatTestHelpers|CombatBgBotFixture|CombatFgBotFixture" Tests` -> `no matches`.
+- Notes:
+  - The only slice-2 harness change outside the direct combat files is the new periodic reseed in `LiveBotFixture.InitializeAsync()`; it was required because the BG-only fresh-account case exposed a gap that the mixed FG/BG `CombatArenaFixture` path had previously masked.
+  - `LootCorpseTests` now rides the new BG arena fixture because deleting the legacy BG combat fixture would otherwise leave a dangling compile reference. No behavioral changes were made to the corpse-loot assertions themselves.
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/CombatBg.config.json`
+  - `Services/WoWStateManager/Settings/Configs/CombatFg.config.json`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatBgArenaFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatFgArenaFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatBgTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatFgTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatBgBotFixture.cs` (deleted)
+  - `Tests/BotRunner.Tests/LiveValidation/CombatFgBotFixture.cs` (deleted)
+  - `Tests/BotRunner.Tests/LiveValidation/CombatBgValidationCollection.cs` (deleted)
+  - `Tests/BotRunner.Tests/LiveValidation/CombatFgValidationCollection.cs` (deleted)
+  - `Tests/BotRunner.Tests/LiveValidation/CombatTestHelpers.cs` (deleted)
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs`
+  - `docs/TASKS.md`
+- Next command: `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_natural_respawn_slice3.trx"`
+
 - Completed: migrated the remaining six `LiveValidation/*` `AssertCommandSucceeded`
   helpers to delegate to `LiveBotFixture.AssertTraceCommandSucceeded`. P4.5.3
   started this with `IntegrationValidationTests` and `TalentAllocationTests`;

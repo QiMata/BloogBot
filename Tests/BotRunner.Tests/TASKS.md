@@ -51,10 +51,36 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-22 (Tier 1 slice 2 - fresh-account combat arena fixtures)
+- Pass result: `slice shipped; CombatBgTests retry green after fresh-BG hydration fix; CombatFgTests green`
+- Last delta:
+  - Replaced the Tier-1 combat suites with dedicated fresh-account arena rosters/configs (`BGONLY*`, `FGONLY*`) and new `CoordinatorFixtureBase`-backed prep fixtures that stage both bots at the Valley of Trials boar cluster.
+  - Rewrote `CombatBgTests` and `CombatFgTests` to share the `CombatLoopTests`-style proximity pattern: find one boar visible to both attackers, dispatch one `StartMeleeAttack` per bot, wait for snapshot-confirmed death, and assert every attacker survives.
+  - Deleted the old shared combat helper path plus the legacy BG/FG combat fixture + collection files, and updated `LootCorpseTests` to use the new BG arena fixture so the test project still compiles after that deletion.
+  - Hardened `LiveBotFixture.InitializeAsync()` with periodic DB character-name reseeding during the initial in-world wait; the first BG-only live run exposed that fresh headless rosters can reach `InWorld` before `CharacterName` hydrates.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (0 warnings, 0 errors)`
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatBgTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=combat_bg_arena_slice2.trx"` -> `skipped (1)`; fresh BG-only hydration stalled with blank `CharacterName`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal` -> `succeeded (85 warnings, 0 errors)` after the initial-hydration reseed fix
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatBgTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=combat_bg_arena_slice2_retry.trx"` -> `passed (1/1)`
+  - `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CombatFgTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=combat_fg_arena_slice2.trx"` -> `passed (1/1)`
+  - `legacy Tier-1 combat helper/fixture grep across Tests` -> `no matches`
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/CombatBg.config.json`
+  - `Services/WoWStateManager/Settings/Configs/CombatFg.config.json`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatBgArenaFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatFgArenaFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatBgTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatFgTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `WWOW_DATA_DIR='D:/MaNGOS/data' dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_natural_respawn_slice3.trx"`
+
 ### 2026-04-22 (Tier 1 slice 1 - no runtime GM toggles)
 - Pass result: `slice shipped; build green; focused MageTeleport live proof blocked twice on Horde teleport arrival`
 - Last delta:
-  - Removed every active live runtime-GM-toggle dispatch/helper in the test suite, including `CombatTestHelpers`, `IntegrationValidationTests`, `MageTeleportTests`, and the AV mount-prep path.
+  - Removed every active live runtime-GM-toggle dispatch/helper in the test suite, including the legacy Tier-1 combat helper/observer path, `IntegrationValidationTests`, `MageTeleportTests`, and the AV mount-prep path.
   - `AlteracValleyFixture.MountRaidForFirstObjectiveAsync()` now applies mount auras through SOAP (`.aura <mountSpellId> <characterName>`) instead of toggling runtime GM mode.
   - `MageTeleport_Horde_OrgrimmarArrival` now uses the real learned `CastSpell` path with teleport runes instead of GM `.cast`, but the Horde live proof still fails independently with `Spell error for 3567`.
   - Updated stale comments/docs/test data so the runtime-GM-toggle grep over `Tests Services Exports` now only hits the allowed rule docs.
@@ -67,9 +93,8 @@ Known remaining work in this owner: `0` items.
   - `Services/WoWStateManager/Settings/CharacterSettings.cs`
   - `Tests/BotRunner.Tests/LiveValidation/Battlegrounds/AlteracValleyFixture.cs`
   - `Tests/BotRunner.Tests/LiveValidation/CombatArenaFixture.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/CombatBgBotFixture.cs`
   - `Tests/BotRunner.Tests/LiveValidation/CombatLoopTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/CombatTestHelpers.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/CombatFgTests.cs`
   - `Tests/BotRunner.Tests/LiveValidation/FIXTURE_LIFECYCLE.md`
   - `Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs`
   - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
@@ -84,7 +109,7 @@ Known remaining work in this owner: `0` items.
   - `Tests/RecordedTests.PathingTests.Tests/PathingTestDefinitionTests.cs`
   - `docs/TASKS.md`
   - `Tests/BotRunner.Tests/TASKS.md`
-- Next command: `rg -n "CombatTestHelpers|CombatBgBotFixture|CombatFgBotFixture|CombatArenaFixture|CombatLoopTests" Tests/BotRunner.Tests/LiveValidation Services/WoWStateManager/Settings/Configs`
+- Next command: `rg -n "CombatArenaFixture|CombatLoopTests|MageTeleportTests|AlteracValleyFixture" Tests/BotRunner.Tests/LiveValidation Services/WoWStateManager/Settings/Configs`
 
 ### 2026-04-22 (P5.1)
 - Pass result: `P5.1 coordinator ACK consumption green (BattlegroundCoordinatorLoadoutTests 11/11, full BattlegroundCoordinator* 22/22)`
