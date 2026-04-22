@@ -85,6 +85,31 @@ public class ActionForwardingContractTests
     }
 
     [Fact]
+    public void ActionForwardRequest_RoundTrip_PreservesCorrelationId()
+    {
+        var request = new AsyncRequest
+        {
+            ActionForward = new ActionForwardRequest
+            {
+                AccountName = "TESTBOT3",
+                Action = new ActionMessage
+                {
+                    ActionType = ActionType.ApplyLoadout,
+                    CorrelationId = "acct-123:42",
+                    LoadoutSpec = new LoadoutSpec { TargetLevel = 60u }
+                }
+            }
+        };
+
+        var bytes = request.ToByteArray();
+        var deserialized = AsyncRequest.Parser.ParseFrom(bytes);
+
+        Assert.Equal("acct-123:42", deserialized.ActionForward.Action.CorrelationId);
+        Assert.Equal(ActionType.ApplyLoadout, deserialized.ActionForward.Action.ActionType);
+        Assert.Equal(60u, deserialized.ActionForward.Action.LoadoutSpec.TargetLevel);
+    }
+
+    [Fact]
     public void StateChangeResponse_ActionResult_Roundtrip()
     {
         var response = new StateChangeResponse
@@ -210,6 +235,33 @@ public class ActionForwardingContractTests
         Assert.Equal("HordeLeader", deserialized.DesiredPartyLeaderName);
         Assert.Equal(["HordeMember1", "HordeMember2"], deserialized.DesiredPartyMembers);
         Assert.True(deserialized.DesiredPartyIsRaid);
+    }
+
+    [Fact]
+    public void WoWActivitySnapshot_RoundTrip_PreservesRecentCommandAcks()
+    {
+        var snapshot = new WoWActivitySnapshot
+        {
+            AccountName = "WSGBOT1",
+            CharacterName = "AckBot",
+        };
+        snapshot.RecentCommandAcks.Add(new CommandAckEvent
+        {
+            CorrelationId = "WSGBOT1:17",
+            ActionType = ActionType.ApplyLoadout,
+            Status = CommandAckEvent.Types.AckStatus.Success,
+            FailureReason = string.Empty,
+            RelatedId = 23509u,
+        });
+
+        var bytes = snapshot.ToByteArray();
+        var deserialized = WoWActivitySnapshot.Parser.ParseFrom(bytes);
+
+        var ack = Assert.Single(deserialized.RecentCommandAcks);
+        Assert.Equal("WSGBOT1:17", ack.CorrelationId);
+        Assert.Equal(ActionType.ApplyLoadout, ack.ActionType);
+        Assert.Equal(CommandAckEvent.Types.AckStatus.Success, ack.Status);
+        Assert.Equal(23509u, ack.RelatedId);
     }
 
     // ===== Dead/ghost state detection =====
@@ -595,6 +647,20 @@ public class ActionForwardingContractTests
         {
             Environment.SetEnvironmentVariable("WWOW_COORDINATOR_MODE", previousMode);
         }
+    }
+
+    [Fact]
+    public void HandleRequest_DeliveredPendingAction_StampsMissingCorrelationId()
+    {
+        var listener = CreateListener("TESTBOT1");
+        Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.SendChat }));
+
+        var response = InvokeHandleRequest(listener, BuildReadySnapshot("TESTBOT1"));
+
+        Assert.NotNull(response.CurrentAction);
+        Assert.Equal(ActionType.SendChat, response.CurrentAction.ActionType);
+        Assert.False(string.IsNullOrWhiteSpace(response.CurrentAction.CorrelationId));
+        Assert.StartsWith("TESTBOT1:", response.CurrentAction.CorrelationId, StringComparison.Ordinal);
     }
 
     [Fact]

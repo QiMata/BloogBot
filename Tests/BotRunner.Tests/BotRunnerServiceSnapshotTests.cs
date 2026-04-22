@@ -217,6 +217,58 @@ public class BotRunnerServiceSnapshotTests
     }
 
     [Fact]
+    public void Start_WhenCommandAckCountChanges_SendsImmediateFullSnapshot()
+    {
+        var player = CreatePlayer(new Position(101f, 202f, 30f));
+        var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
+        objectManager.SetupGet(x => x.EventHandler).Returns(new Mock<IWoWEventHandler>(MockBehavior.Loose).Object);
+        objectManager.SetupGet(x => x.HasEnteredWorld).Returns(true);
+        objectManager.SetupGet(x => x.IsInMapTransition).Returns(false);
+        objectManager.SetupGet(x => x.Player).Returns(player.Object);
+        objectManager.SetupGet(x => x.Objects).Returns(new IWoWObject[] { player.Object });
+        objectManager.SetupGet(x => x.Units).Returns(new IWoWUnit[] { player.Object });
+        objectManager.SetupGet(x => x.GameObjects).Returns(Array.Empty<IWoWGameObject>());
+        objectManager.SetupGet(x => x.KnownSpellIds).Returns(Array.Empty<uint>());
+        objectManager.Setup(x => x.GetContainedItems()).Returns(Array.Empty<IWoWItem>());
+
+        var updateClient = new GatedCharacterStateUpdateClient();
+        var service = new BotRunnerService(
+            objectManager.Object,
+            updateClient,
+            new Mock<IDependencyContainer>(MockBehavior.Loose).Object);
+
+        _ = PrimeSnapshotSignature(service);
+        InvokeEnqueueCommandAckEvent(service, new CommandAckEvent
+        {
+            CorrelationId = "corr-1",
+            ActionType = ActionType.SendChat,
+            Status = CommandAckEvent.Types.AckStatus.Pending,
+            RelatedId = 12345u,
+        });
+
+        try
+        {
+            service.Start();
+            Assert.True(
+                updateClient.WaitForSendCount(1, TimeSpan.FromSeconds(2)),
+                "Expected an immediate full snapshot when the ACK ring changed.");
+
+            var ackSend = updateClient.GetSentSnapshot(0);
+            Assert.False(ackSend.IsHeartbeatOnly);
+            var ack = Assert.Single(ackSend.RecentCommandAcks);
+            Assert.Equal("corr-1", ack.CorrelationId);
+            Assert.Equal(ActionType.SendChat, ack.ActionType);
+            Assert.Equal(CommandAckEvent.Types.AckStatus.Pending, ack.Status);
+            Assert.Equal(12345u, ack.RelatedId);
+        }
+        finally
+        {
+            updateClient.ReleaseOneSend();
+            service.Stop();
+        }
+    }
+
+    [Fact]
     public void SubscribeToMessageEvents_BuffersWorldStateUpdateMessages()
     {
         var eventHandler = new Mock<IWoWEventHandler>(MockBehavior.Loose);
@@ -477,6 +529,18 @@ public class BotRunnerServiceSnapshotTests
         var method = typeof(BotRunnerService).GetMethod("EnqueueDiagnosticMessage", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
         method!.Invoke(service, new object[] { message });
+    }
+
+    private static void InvokeEnqueueCommandAckEvent(BotRunnerService service, CommandAckEvent ackEvent)
+    {
+        var method = typeof(BotRunnerService).GetMethod(
+            "EnqueueCommandAckEvent",
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            null,
+            new[] { typeof(CommandAckEvent) },
+            null);
+        Assert.NotNull(method);
+        method!.Invoke(service, new object[] { ackEvent });
     }
 
     private static object PrimeSnapshotSignature(BotRunnerService service)
