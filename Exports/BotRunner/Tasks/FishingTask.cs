@@ -116,6 +116,11 @@ public class FishingTask : BotTask, IBotTask
     // facing direction) touches down on the pool. Casting from exactly this distance makes
     // the bobber land on the pool itself, which is what triggers the fishing-pool loot.
     private const float IdealCastingDistanceFromPool = 18f;
+    // Maximum Z delta between the player (who is standing on the pier when the resolver
+    // runs) and a pathfinding-interpolated standoff or any intermediate navmesh node.
+    // Anything farther away means the navmesh route drops into water / climbs terrain —
+    // not a valid pier standoff.
+    private const float PathfindingPierLayerZTolerance = 3f;
     // Pool acquisition reach. Set to match FishingPoolDetectRange so any pool the
     // ObjectManager has streamed in can be locked immediately after teleport, which
     // skips the blind radial search walk. Skipping search walk is important because
@@ -169,9 +174,70 @@ public class FishingTask : BotTask, IBotTask
     private Position? _searchWaypointPathHeadDiagnostic;
     private int _searchWaypointPathNodesDiagnostic;
     private string _searchWaypointTravelModeDiagnostic = "none";
+    private readonly HashSet<ulong> _unreachablePoolGuids = [];
+    private readonly object _inventoryFullLock = new();
+    private string? _pendingInventoryFullMessage;
+    private bool _inventoryErrorHandlerSubscribed;
+
+    private void EnsureInventoryErrorHandler()
+    {
+        if (_inventoryErrorHandlerSubscribed)
+            return;
+
+        var handler = EventHandler;
+        if (handler == null)
+            return;
+
+        handler.OnErrorMessage += OnInventoryErrorMessage;
+        _inventoryErrorHandlerSubscribed = true;
+    }
+
+    private void ReleaseInventoryErrorHandler()
+    {
+        if (!_inventoryErrorHandlerSubscribed)
+            return;
+
+        var handler = EventHandler;
+        if (handler != null)
+            handler.OnErrorMessage -= OnInventoryErrorMessage;
+        _inventoryErrorHandlerSubscribed = false;
+    }
+
+    private void OnInventoryErrorMessage(object? sender, OnUiMessageArgs args)
+    {
+        var message = args?.Message;
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        // Server-side SMSG_INVENTORY_CHANGE_FAILURE is rendered as "Inventory change
+        // failed: Inventory is full" by the WorldClient pipeline. The UI client also
+        // surfaces "Inventory is full." directly. Both indicate the bag can't hold
+        // the pending loot item, which is a fatal condition for a fishing task that
+        // is supposed to actually catch and receive a fish.
+        if (message.IndexOf("Inventory is full", StringComparison.OrdinalIgnoreCase) < 0
+            && message.IndexOf("InventoryFull", StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            return;
+        }
+
+        lock (_inventoryFullLock)
+            _pendingInventoryFullMessage = message;
+    }
+
+    private bool TryConsumeInventoryFull(out string message)
+    {
+        lock (_inventoryFullLock)
+        {
+            message = _pendingInventoryFullMessage ?? string.Empty;
+            _pendingInventoryFullMessage = null;
+            return message.Length > 0;
+        }
+    }
 
     public void Update()
     {
+        EnsureInventoryErrorHandler();
+
         var player = ObjectManager.Player;
         if (player?.Position == null)
         {
@@ -183,6 +249,18 @@ public class FishingTask : BotTask, IBotTask
         {
             ObjectManager.StopAllMovement();
             PopFishingTask("combat");
+            return;
+        }
+
+        // If the server told us the bag is full, no amount of retrying will let a fish
+        // land. Surface the specific reason so the test can distinguish "bobber missed
+        // the pool" from "caught a fish but bag was full" and bail out immediately.
+        if (TryConsumeInventoryFull(out var inventoryFullMessage))
+        {
+            Logger.LogWarning("[FISH] Inventory-full error from server: {Message}", inventoryFullMessage);
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask inventory_full message=\"{inventoryFullMessage}\"");
+            PopFishingTask("inventory_full");
             return;
         }
 
@@ -254,27 +332,33 @@ public class FishingTask : BotTask, IBotTask
     private void TickEnsureGearAndSpells()
     {
         // One chat command per tick to avoid flooding. Steps are idempotent
-        // (.additem/.learn/.setskill all no-op when already satisfied), so we
-        // can re-run them on every fishing dispatch without side effects.
+        // (.learn/.setskill no-op when already satisfied). Step 0 strips the
+        // bag before re-adding the pole + bait so the test doesn't accumulate
+        // duplicate fishing poles across runs and then silently hit "Inventory
+        // is full" when a fish tries to drop.
         var om = ObjectManager;
         switch (_outfitStep)
         {
             case 0:
-                om.SendChatMessage($".additem {FishingData.FishingPoleItemId} 1");
+                om.SendChatMessage(".reset items");
+                BotContext.AddDiagnosticMessage("[TASK] FishingTask outfit_reset_items");
                 break;
             case 1:
-                om.SendChatMessage($".additem {FishingData.NightcrawlerBaitItemId} 1");
+                om.SendChatMessage($".additem {FishingData.FishingPoleItemId} 1");
                 break;
             case 2:
-                om.SendChatMessage($".learn {FishingData.FishingRank1}");
+                om.SendChatMessage($".additem {FishingData.NightcrawlerBaitItemId} 1");
                 break;
             case 3:
-                om.SendChatMessage($".learn {FishingData.FishingPoleProficiency}");
+                om.SendChatMessage($".learn {FishingData.FishingRank1}");
                 break;
             case 4:
-                om.SendChatMessage($".setskill {FishingData.FishingSkillId} 75 300");
+                om.SendChatMessage($".learn {FishingData.FishingPoleProficiency}");
                 break;
             case 5:
+                om.SendChatMessage($".setskill {FishingData.FishingSkillId} 75 300");
+                break;
+            case 6:
                 if (_masterPoolId.HasValue)
                 {
                     om.SendChatMessage($".pool update {_masterPoolId.Value}");
@@ -282,7 +366,7 @@ public class FishingTask : BotTask, IBotTask
                         $"[TASK] FishingTask pool_refresh_dispatched master={_masterPoolId.Value}");
                 }
                 break;
-            case 6:
+            case 7:
                 BotContext.AddDiagnosticMessage("[TASK] FishingTask outfit_complete");
                 _outfitSettleTicks = 0;
                 SetState(FishingState.AwaitGearAndSpells);
@@ -476,27 +560,14 @@ public class FishingTask : BotTask, IBotTask
         {
             if (ElapsedMs >= PoolAcquireTimeoutMs)
             {
-                if (_searchWaypoints.Count == 0 && !_defaultSearchWaypointsGenerated)
-                {
-                    // No explicit waypoints configured (e.g., we just teleported
-                    // to a named landmark like Ratchet and the pool is not in
-                    // the immediate gameobject visibility window). Generate a
-                    // generic radial sweep around the current position so the
-                    // bot can naturally walk into pool-streaming range.
-                    _defaultSearchWaypointsGenerated = true;
-                    var generated = BuildDefaultSearchWaypoints(player.Position);
-                    if (generated.Count > 0)
-                    {
-                        _searchWaypoints = generated;
-                        _searchWaypointIndex = 0;
-                        BotContext.AddDiagnosticMessage(
-                            $"[TASK] FishingTask default_search_waypoints_generated count={generated.Count} center=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1})");
-                    }
-                }
-
+                // If explicit waypoints were configured by the caller, use them. Otherwise
+                // don't start a blind radial sweep — it oscillates the bot around the
+                // teleport landing without actually finding anything the pier-layer
+                // acquisition filter would accept. Fail cleanly instead so the caller
+                // (and the test) see a clear "nothing fishable from this pier" signal.
                 if (_searchWaypoints.Count > 0 && _searchWaypointIndex < _searchWaypoints.Count)
                 {
-                    Logger.LogInformation("[FISH] No pool visible after {Timeout}ms; starting search walk with {Count} waypoints.",
+                    Logger.LogInformation("[FISH] No pool visible after {Timeout}ms; starting search walk with {Count} caller-supplied waypoints.",
                         PoolAcquireTimeoutMs, _searchWaypoints.Count);
                     BotContext.AddDiagnosticMessage(
                         $"[TASK] FishingTask search_walk_start waypoints={_searchWaypoints.Count}");
@@ -506,17 +577,36 @@ public class FishingTask : BotTask, IBotTask
                 }
                 else
                 {
-                    Logger.LogWarning("[FISH] No visible fishing pool within {Range}y.", Config.FishingPoolDetectRange);
-                    PopFishingTask("no_fishing_pool");
+                    var rejectedCount = _unreachablePoolGuids.Count;
+                    var reason = rejectedCount > 0 ? "no_pier_reachable_pool" : "no_fishing_pool";
+                    Logger.LogWarning("[FISH] No pier-reachable fishing pool within {Range}y (rejected={Rejected}).",
+                        Config.FishingPoolDetectRange, rejectedCount);
+                    BotContext.AddDiagnosticMessage(
+                        $"[TASK] FishingTask {reason} rejected={rejectedCount} detectRange={Config.FishingPoolDetectRange:F0}");
+                    PopFishingTask(reason);
                 }
             }
 
             return;
         }
 
+        // Validate cast position BEFORE committing to this pool. A pool whose only
+        // reachable standoff would land the bot in water (bad navmesh snap, far offshore
+        // spawn) is better skipped — the next-nearest pool may be casteable from the
+        // same pier. If no candidate resolves we mark the pool unreachable so the
+        // acquisition loop doesn't re-pick it on every tick.
+        var castPreview = TryResolveCastPosition(player.MapId, player.Position, pool.Position, out var previewSource);
+        if (castPreview == null)
+        {
+            MarkPoolUnreachable(pool.Guid, "no_valid_cast_position", player.Position, pool.Position);
+            return;
+        }
+
         TrackActivePool(pool.Guid);
+        _cachedCastPosition = castPreview;
+        _cachedCastPoolGuid = pool.Guid;
         BotContext.AddDiagnosticMessage(
-            $"[TASK] FishingTask pool_acquired guid=0x{pool.Guid:X} entry={pool.Entry} distance={poolDistance:F1}");
+            $"[TASK] FishingTask pool_acquired guid=0x{pool.Guid:X} entry={pool.Entry} distance={poolDistance:F1} castSource={previewSource}");
 
         // Always go through MoveToFishingPool so elevated-surface cast positions
         // and shoreline approaches are resolved before casting.
@@ -530,9 +620,18 @@ public class FishingTask : BotTask, IBotTask
         var poolDistance = pool?.Position != null ? player.Position.DistanceTo(pool.Position) : float.MaxValue;
         if (pool != null && poolDistance <= MaxPoolLockDistance)
         {
+            var castPreview = TryResolveCastPosition(player.MapId, player.Position, pool.Position, out var previewSource);
+            if (castPreview == null)
+            {
+                MarkPoolUnreachable(pool.Guid, "no_valid_cast_position", player.Position, pool.Position);
+                return;
+            }
+
             TrackActivePool(pool.Guid);
+            _cachedCastPosition = castPreview;
+            _cachedCastPoolGuid = pool.Guid;
             BotContext.AddDiagnosticMessage(
-                $"[TASK] FishingTask search_walk_found_pool guid=0x{pool.Guid:X} entry={pool.Entry} distance={poolDistance:F1} waypoint={_searchWaypointIndex}/{_searchWaypoints.Count}");
+                $"[TASK] FishingTask search_walk_found_pool guid=0x{pool.Guid:X} entry={pool.Entry} distance={poolDistance:F1} waypoint={_searchWaypointIndex}/{_searchWaypoints.Count} castSource={previewSource}");
             Logger.LogInformation("[FISH] Pool found during search walk at {Distance:F1}y.", poolDistance);
             ClearNavigation();
             // Always move to the resolved cast/approach position first, even if
@@ -649,14 +748,26 @@ public class FishingTask : BotTask, IBotTask
 
     private void MoveToFishingPool(IWoWLocalPlayer player)
     {
-        // If the bot walked into water during approach, stop and pop.
-        // Fishing requires standing on solid ground (dock/shoreline), not swimming.
+        // If the bot walked into water during approach, the chosen standoff wasn't
+        // actually pier-reachable (bad navmesh bridge, detached structure, etc.).
+        // Mark the pool unreachable and let acquisition pick the next candidate —
+        // the task shouldn't pop on a single bad pool when others may be fishable.
+        var tracked = _activePoolGuid != 0
+            ? ObjectManager.GameObjects.FirstOrDefault(g => g.Guid == _activePoolGuid)
+            : null;
         if (player.IsSwimming)
         {
             ObjectManager.ForceStopImmediate();
-            Logger.LogWarning("[FISH] Entered water while approaching pool; aborting.");
-            BotContext.AddDiagnosticMessage("[TASK] FishingTask retry reason=player_swimming_approach");
-            PopFishingTask("player_swimming");
+            Logger.LogWarning("[FISH] Entered water while approaching pool; skipping this pool.");
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask player_swimming_approach guid=0x{_activePoolGuid:X} playerPos=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1})");
+            if (_activePoolGuid != 0 && tracked?.Position != null)
+                MarkPoolUnreachable(_activePoolGuid, "player_swimming_approach", player.Position, tracked.Position);
+            ClearNavigation();
+            _cachedApproachPosition = null;
+            ClearCastPositionCache();
+            _activePoolGuid = 0;
+            SetState(FishingState.AcquireFishingPool);
             return;
         }
 
@@ -678,26 +789,7 @@ public class FishingTask : BotTask, IBotTask
         FishingCastPosition? resolvedCastPosition = null;
         if (_cachedCastPoolGuid != pool.Guid)
         {
-            // Pathfinding is navmesh-authoritative: every returned node is on a walkable
-            // surface by construction, so the approach can reach it without clipping off
-            // a pier lip. Always prefer it when available, even when local physics could
-            // supply a tighter edge-drop standoff — the tighter position is frequently
-            // right on the dock edge, which both FG and BG physics then slide off.
-            var castPositionSource = "pathfinding";
-            _cachedCastPosition = TryResolveCastViaPathfinding(player.MapId, player.Position, pool.Position);
-
-            // Fall back to the local sphere-sweep edge finder (BG only — needs local
-            // Navigation.dll) when pathfinding declines.
-            if (_cachedCastPosition == null && SupportsNativeLocalPhysicsQueries)
-            {
-                _cachedCastPosition = FishingCastPositionFinder.FindForPool(
-                    player.MapId,
-                    player.Position,
-                    pool.Position);
-                if (_cachedCastPosition != null)
-                    castPositionSource = "native";
-            }
-
+            _cachedCastPosition = TryResolveCastPosition(player.MapId, player.Position, pool.Position, out var castPositionSource);
             _cachedCastPoolGuid = pool.Guid;
             if (_cachedCastPosition != null)
             {
@@ -712,8 +804,19 @@ public class FishingTask : BotTask, IBotTask
             }
         }
 
-        if (_cachedCastPosition != null && _cachedCastPoolGuid == pool.Guid)
-            resolvedCastPosition = _cachedCastPosition.Value;
+        // If no valid cast standoff resolves, don't fall through to the geometric
+        // shoreline approach (which is content to project into open water). Mark the
+        // pool unreachable and let AcquireFishingPool pick the next-nearest pool.
+        if (_cachedCastPosition == null || _cachedCastPoolGuid != pool.Guid)
+        {
+            MarkPoolUnreachable(pool.Guid, "no_valid_cast_position", player.Position, pool.Position);
+            ClearNavigation();
+            _activePoolGuid = 0;
+            SetState(FishingState.AcquireFishingPool);
+            return;
+        }
+
+        resolvedCastPosition = _cachedCastPosition.Value;
         // Do not skip the shoreline resolver from every legal cast distance. Ratchet's
         // farther dock standoffs can satisfy LOS while still producing NOT_FISHABLE from
         // the server. Only the tighter near-edge positions should cast in place.
@@ -755,8 +858,10 @@ public class FishingTask : BotTask, IBotTask
             _reachedApproachLevelForActivePool = true;
 
         // Detect if the bot fell off the pier (Z dropped significantly below approach position).
-        // The BG bot's physics can drop through the pier edge, leaving it at terrain level.
-        // When this happens, the bot walks under the pier through its support posts.
+        // When this happens the navmesh claimed the candidate was reachable but physics
+        // disagreed (step-off, broken plank, unmodeled edge). Don't pop the whole task —
+        // mark this pool unreachable so the acquisition loop picks the next nearest pool
+        // that actually works from this pier.
         if (_reachedApproachLevelForActivePool
             && approachPosition.Z - player.Position.Z > FellOffPierZThreshold)
         {
@@ -764,8 +869,13 @@ public class FishingTask : BotTask, IBotTask
             Logger.LogWarning("[FISH] Player Z ({PlayerZ:F1}) dropped far below approach Z ({ApproachZ:F1}) — fell off pier.",
                 player.Position.Z, approachPosition.Z);
             BotContext.AddDiagnosticMessage(
-                $"[TASK] FishingTask fell_off_pier playerZ={player.Position.Z:F1} approachZ={approachPosition.Z:F1}");
-            PopFishingTask("fell_off_pier");
+                $"[TASK] FishingTask fell_off_pier playerZ={player.Position.Z:F1} approachZ={approachPosition.Z:F1} guid=0x{pool.Guid:X}");
+            MarkPoolUnreachable(pool.Guid, "fell_off_pier", player.Position, pool.Position);
+            ClearNavigation();
+            _cachedApproachPosition = null;
+            ClearCastPositionCache();
+            _activePoolGuid = 0;
+            SetState(FishingState.AcquireFishingPool);
             return;
         }
 
@@ -1072,7 +1182,118 @@ public class FishingTask : BotTask, IBotTask
         if (tracked?.Position != null)
             return tracked;
 
-        return FishingData.FindNearestFishingPool(ObjectManager, playerPosition, Config.FishingPoolDetectRange);
+        // Exclude pools we already proved we can't cast at (no on-pier standoff available).
+        // Otherwise the same far-offshore pool would get re-picked on every acquisition
+        // tick and the task would never consider the closer, actually-reachable pool.
+        return ObjectManager.GameObjects
+            .Where(FishingData.IsFishingPool)
+            .Where(gameObject => gameObject.Position != null
+                && gameObject.Position.DistanceTo(playerPosition) <= Config.FishingPoolDetectRange
+                && !_unreachablePoolGuids.Contains(gameObject.Guid))
+            .OrderBy(gameObject => gameObject.Position!.DistanceTo(playerPosition))
+            .FirstOrDefault();
+    }
+
+    private FishingCastPosition? TryResolveCastPosition(uint mapId, Position playerPosition, Position poolPosition, out string source)
+    {
+        // Primary: pool-centric ring sweep (BG / scene-data-backed). Probes ground Z in a
+        // ring around the pool, keeps only on-pier hits, LOS-tests each against the pool,
+        // and validates that the bot can actually reach the candidate via navmesh without
+        // the route dropping into water. That chain rejects candidates on detached piers,
+        // on far shores reachable only by swimming, and inside pier-support pillars.
+        if (SupportsNativeLocalPhysicsQueries)
+        {
+            var native = FishingCastPositionFinder.FindForPool(
+                mapId,
+                playerPosition,
+                poolPosition,
+                candidate => IsCastStandoffReachable(mapId, playerPosition, candidate));
+            if (native != null)
+            {
+                source = "native";
+                return native;
+            }
+        }
+
+        // Fallback: pathfinding interpolation with a pier-layer Z guard. Used when local
+        // physics isn't available (FG) or the ring sweep found no LOS-clear candidate.
+        var pathfinding = TryResolveCastViaPathfinding(mapId, playerPosition, poolPosition);
+        if (pathfinding != null)
+        {
+            source = "pathfinding";
+            return pathfinding;
+        }
+
+        source = "none";
+        return null;
+    }
+
+    private bool IsCastStandoffReachable(uint mapId, Position playerPosition, Position candidate)
+    {
+        var client = Container.PathfindingClient;
+        if (client == null || !client.IsAvailable)
+            return true; // No pathfinding available: accept the candidate, caller will fail loudly if it's wrong.
+
+        Position[] path;
+        try
+        {
+            path = client.GetPath(mapId, playerPosition, candidate, smoothPath: false);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (path == null || path.Length == 0)
+            return false;
+
+        // Coarse gate: every path node must sit near the pier layer. A route that dips
+        // well below (through water) means the candidate is only reachable by swimming.
+        foreach (var node in path)
+        {
+            if ((playerPosition.Z - node.Z) > PathfindingPierLayerZTolerance)
+                return false;
+        }
+
+        // Fine gate: sample ground Z along each path segment. Detour sometimes bridges
+        // two nearby on-pier polys whose midpoint is actually over open water (detached
+        // wreckage, disconnected shore). The node Z stays on-pier at both endpoints but
+        // there's no walkable surface between them. Densely sampling exposes the gap
+        // before the bot commits to the walk. Only feasible when local physics is
+        // available; for FG we fall back to the coarse check.
+        if (SupportsNativeLocalPhysicsQueries)
+        {
+            var pierZ = playerPosition.Z;
+            const int samplesPerSegment = 5;
+            for (var i = 0; i < path.Length - 1; i++)
+            {
+                var a = path[i];
+                var b = path[i + 1];
+                for (var s = 1; s <= samplesPerSegment; s++)
+                {
+                    var t = s / (float)(samplesPerSegment + 1);
+                    var sx = a.X + ((b.X - a.X) * t);
+                    var sy = a.Y + ((b.Y - a.Y) * t);
+                    var (sz, found) = WoWSharpClient.Movement.NativeLocalPhysics.GetGroundZ(
+                        mapId, sx, sy, pierZ + 4f, 15f);
+                    if (!found)
+                        return false;
+                    if (MathF.Abs(sz - pierZ) > PathfindingPierLayerZTolerance)
+                        return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private void MarkPoolUnreachable(ulong poolGuid, string reason, Position playerPosition, Position poolPosition)
+    {
+        if (_unreachablePoolGuids.Add(poolGuid))
+        {
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask pool_unreachable guid=0x{poolGuid:X} reason={reason} playerPos=({playerPosition.X:F1},{playerPosition.Y:F1},{playerPosition.Z:F1}) poolPos=({poolPosition.X:F1},{poolPosition.Y:F1},{poolPosition.Z:F1})");
+        }
     }
 
     private bool HasFishingState(IWoWLocalPlayer player)
@@ -1123,11 +1344,16 @@ public class FishingTask : BotTask, IBotTask
         if (path == null || path.Length == 0)
             return null;
 
+        // Pool positions on Vanilla are at the water plane (often Z=0) and MaNGOS
+        // sometimes serves a far-out pool whose navmesh snap lands in deep/submerged
+        // navmesh (Z dozens of yards below the pier). Reject any standoff that isn't
+        // on the same layer as the bot — otherwise the interpolation happily returns a
+        // point at Z=-23 in the middle of the bay and the bot walks straight in.
+        bool IsOnPierLayer(Position p) => MathF.Abs(p.Z - playerPosition.Z) <= PathfindingPierLayerZTolerance;
+
         // Navmesh pathfinding snaps both endpoints to walkable polys, so every returned
         // segment is on solid ground. Walk the path from the pool end back toward the bot
         // and interpolate to find the point at IdealCastingDistanceFromPool from the pool.
-        // This is the distance where the bobber (which flies ~18y ahead of the player)
-        // lands on the pool, which is what actually triggers the fishing loot table.
         for (var i = path.Length - 1; i > 0; i--)
         {
             var nearPool = path[i];
@@ -1135,8 +1361,6 @@ public class FishingTask : BotTask, IBotTask
             var distNearPool = nearPool.DistanceTo(poolPosition);
             var distNearPlayer = nearPlayer.DistanceTo(poolPosition);
 
-            // Want a point on the segment where distance to pool equals the target.
-            // Only valid when the segment brackets the target (one end closer, one farther).
             var minDist = MathF.Min(distNearPool, distNearPlayer);
             var maxDist = MathF.Max(distNearPool, distNearPlayer);
             if (IdealCastingDistanceFromPool < minDist || IdealCastingDistanceFromPool > maxDist)
@@ -1149,15 +1373,21 @@ public class FishingTask : BotTask, IBotTask
                 nearPool.X + ((nearPlayer.X - nearPool.X) * t),
                 nearPool.Y + ((nearPlayer.Y - nearPool.Y) * t),
                 nearPool.Z + ((nearPlayer.Z - nearPool.Z) * t));
+
+            if (!IsOnPierLayer(interpolated))
+                continue;
+
             return BuildPathfindingCastPosition(interpolated, poolPosition, IdealCastingDistanceFromPool);
         }
 
-        // No segment brackets the ideal distance. Fall back to the path node in cast range
-        // that's closest to the ideal distance.
+        // No segment brackets the ideal distance on-layer. Fall back to the path node in
+        // cast range that's on the pier layer AND closest to the ideal distance.
         Position? bestNode = null;
         float bestScore = float.MaxValue;
         foreach (var node in path)
         {
+            if (!IsOnPierLayer(node))
+                continue;
             var distToPool = node.DistanceTo(poolPosition);
             if (distToPool < MinCastingDistance || distToPool > MaxCastingDistance)
                 continue;
@@ -1172,23 +1402,23 @@ public class FishingTask : BotTask, IBotTask
         if (bestNode != null)
             return BuildPathfindingCastPosition(bestNode, poolPosition, bestNode.DistanceTo(poolPosition));
 
-        // If no path node is in casting range at all, use the endpoint closest to the pool
-        // when it's at least reasonably near; otherwise decline and let the caller fall
-        // through to the native finder or shoreline approach.
+        // If no path node is in casting range AND on the pier layer, decline. The caller
+        // will emit cast_position_unresolved and the task will back off rather than
+        // marching the bot into the water after a bad navmesh snap.
         var endpoint = path[path.Length - 1];
         var endpointDist = endpoint.DistanceTo(poolPosition);
-        if (endpointDist > MaxCastingDistance + 10f)
+        if (endpointDist > MaxCastingDistance + 10f || !IsOnPierLayer(endpoint))
             return null;
 
         return BuildPathfindingCastPosition(endpoint, poolPosition, endpointDist);
     }
 
-    private static FishingCastPosition BuildPathfindingCastPosition(Position standoff, Position poolPosition, float distToPool)
+    private static FishingCastPosition BuildPathfindingCastPosition(Position standoff, Position poolPosition, float distToPool, bool hasLineOfSight = true)
     {
         var facing = MathF.Atan2(poolPosition.Y - standoff.Y, poolPosition.X - standoff.X);
         if (facing < 0f)
             facing += MathF.PI * 2f;
-        return new FishingCastPosition(standoff, facing, distToPool, HasLineOfSight: true);
+        return new FishingCastPosition(standoff, facing, distToPool, HasLineOfSight: hasLineOfSight);
     }
 
     private Position ResolveFishingApproachPosition(IWoWLocalPlayer player, Position poolPosition)
@@ -1881,6 +2111,7 @@ public class FishingTask : BotTask, IBotTask
     private void PopFishingTask(string reason)
     {
         ClearCastPositionCache();
+        ReleaseInventoryErrorHandler();
         PopTask(reason);
     }
 
