@@ -479,6 +479,71 @@ public partial class LiveBotFixture
 
 
     /// <summary>
+    /// Send a chat command and block until the server actually executes it (not just
+    /// queues it). Stamps a unique correlation id on the ActionMessage and polls the
+    /// account's snapshot until either the <c>previousAction</c> echoes that correlation,
+    /// or a <see cref="CommandAckEvent"/> with that correlation appears in
+    /// <c>recent_command_acks</c>. Exits as soon as either signal fires.
+    ///
+    /// This is the synchronous server-ACK primitive used by multi-step setup helpers
+    /// (e.g. pool rotate + respawn) that issue many same-string chat commands in a row
+    /// — <see cref="SendGmChatCommandAsync"/>'s existing tracked dispatcher returns on
+    /// queue-ack, which lets the caller pile commands into the bot's outbound queue
+    /// faster than the bot actually sends them to the world server, and
+    /// <c>MatchesExecutedSendChatCommand</c>'s command-string match can't tell
+    /// same-string sends apart. Correlation id avoids both problems.
+    /// </summary>
+    /// <returns>True if the server echoed the correlation within the timeout; false
+    /// on timeout. Terminal ack failure returns false as well.</returns>
+    public async Task<bool> SendGmChatCommandAndAwaitServerAckAsync(
+        string accountName,
+        string command,
+        int timeoutMs = 6000,
+        int pollIntervalMs = 100)
+    {
+        if (_stateManagerClient == null)
+            return false;
+
+        var correlationId = $"shodan-sync:{accountName}:{Interlocked.Increment(ref _testCorrelationSequence).ToString(CultureInfo.InvariantCulture)}";
+        var action = new ActionMessage
+        {
+            ActionType = ActionType.SendChat,
+            CorrelationId = correlationId,
+            Parameters = { new RequestParameter { StringParam = command } }
+        };
+
+        var dispatchResult = await SendActionAsync(accountName, action, emitOutput: false);
+        if (dispatchResult != ResponseResult.Success)
+            return false;
+
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(pollIntervalMs);
+            await RefreshSnapshotsAsync();
+
+            var snap = await GetSnapshotAsync(accountName);
+            if (snap == null)
+                continue;
+
+            // Preferred signal: a terminal CommandAckEvent for our correlation id.
+            var ack = FindLatestMatchingAck(snap, correlationId);
+            if (ack != null && ack.Status != CommandAckEvent.Types.AckStatus.Pending)
+                return ack.Status == CommandAckEvent.Types.AckStatus.Success;
+
+            // Fallback signal: previousAction reports our correlation — the bot's
+            // runtime dispatched this specific action to the server.
+            if (snap.PreviousAction != null
+                && string.Equals(snap.PreviousAction.CorrelationId, correlationId, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Make the bot select itself (CMSG_SET_SELECTION → own GUID).
     /// Required before GM commands like .setskill that need a selected target.
     /// This is an internal bot command — nothing is sent to server chat.

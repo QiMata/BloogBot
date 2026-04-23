@@ -842,11 +842,12 @@ public partial class LiveBotFixture
             // Teleport bot a couple yards above the water so `.gobject select`'s 10y
             // nearest-object check can see the pool regardless of whether it's currently
             // visible or waiting on a respawn timer. `.go xyz` via bot chat accepts any
-            // coordinates, including over water.
-            await SendGmChatCommandAsync(accountName, string.Create(CultureInfo.InvariantCulture,
+            // coordinates, including over water. Synchronous per-command dispatch — each
+            // command blocks on server ACK before the next fires.
+            await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
                 $".go xyz {spawn.X:F2} {spawn.Y:F2} {stagingZ:F2} {mapId}"));
-            await SendGmChatCommandAsync(accountName, ".gobject select");
-            await SendGmChatCommandAsync(accountName, ".gobject respawn");
+            await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".gobject select");
+            await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".gobject respawn");
             processed++;
         }
 
@@ -855,7 +856,7 @@ public partial class LiveBotFixture
         // middle of the water. Callers that want to skip this can pass the center coords.
         var returnX = stagingX ?? centerX;
         var returnY = stagingY ?? centerY;
-        await SendGmChatCommandAsync(accountName, string.Create(CultureInfo.InvariantCulture,
+        await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
             $".go xyz {returnX:F2} {returnY:F2} {stagingZ:F2} {mapId}"));
 
         _logger.LogInformation("[FISHING-RESPAWN] Respawned {Count} pool spawn locations near ({X:F1},{Y:F1})",
@@ -947,13 +948,18 @@ public partial class LiveBotFixture
             // Teleport a couple yards above water level so the 10y nearest-object
             // select preferentially hits the pool (if one is active here) rather
             // than dock decorations on the pier above.
-            await SendGmChatCommandAsync(accountName, string.Create(CultureInfo.InvariantCulture,
+            // Using the synchronous per-command primitive: each command waits for
+            // server ACK via correlation id before the next one fires. That's the
+            // only way to guarantee ordering when the same command string is sent
+            // repeatedly (.gobject select / .gobject despawn) without letting the
+            // bot's outbound chat queue swallow them all.
+            await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
                 $".go xyz {spawn.X:F2} {spawn.Y:F2} {stagingZ:F2} {mapId}"));
-            await SendGmChatCommandAsync(accountName, ".gobject select");
+            await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".gobject select");
             // `.gobject despawn` is a no-op when the selected GO isn't a pool (or
             // when nothing was in range); in that case `UpdatePool` simply isn't
             // triggered and we continue to the next spawn XY.
-            await SendGmChatCommandAsync(accountName, ".gobject despawn");
+            await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".gobject despawn");
         }
 
         _logger.LogInformation("[FISHING-ROTATE] Completed rotation pass across {Count} pool XYs near ({X:F1},{Y:F1})",
