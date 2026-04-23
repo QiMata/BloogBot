@@ -969,6 +969,156 @@ public partial class LiveBotFixture
     }
 
     /// <summary>
+    /// Fishing-hole game object template entry IDs spawned as children of master pool 2628
+    /// (the Barrens coast fishing pools). Used to recognize pools inside snapshot.NearbyObjects.
+    /// 180582 = Floating Wreckage; 180655 = Schools of Tastyfish / Oily Blackmouth School.
+    /// </summary>
+    private static readonly HashSet<uint> BarrensFishingPoolEntries = new() { 180582u, 180655u };
+
+    /// <summary>
+    /// Asks the server for the currently-active children of master pool 2628 via
+    /// <c>.pool spawns 2628</c>, parses the per-child chat responses, and returns the
+    /// distance from the supplied center to the nearest active spawn. Returns
+    /// <c>float.MaxValue</c> when no spawns parse.
+    ///
+    /// Uses the server's authoritative pool state rather than the bot's snapshot
+    /// NearbyObjects because the snapshot's GO visibility streams can lag or omit
+    /// entries immediately after a teleport; the server's in-memory PoolSpawns table
+    /// updates synchronously with <c>.gobject despawn</c>/<c>respawn</c>.
+    /// </summary>
+    public async Task<float> GetClosestActivePoolDistanceAsync(
+        string accountName,
+        int masterPoolId,
+        float centerX,
+        float centerY)
+    {
+        // Capture baseline chat so we can isolate the response to this specific query.
+        var beforeSnap = await GetSnapshotAsync(accountName);
+        var baselineChatCount = beforeSnap?.RecentChatMessages.Count ?? 0;
+
+        await SendGmChatCommandAndAwaitServerAckAsync(accountName,
+            string.Create(CultureInfo.InvariantCulture, $".pool spawns {masterPoolId}"),
+            timeoutMs: 6000);
+
+        // Give the server another tick or two to emit per-child lines — .pool spawns
+        // fires one PSendSysMessage per active child, which arrive as distinct chat
+        // packets after the action ack.
+        await Task.Delay(800);
+        await RefreshSnapshotsAsync();
+        var afterSnap = await GetSnapshotAsync(accountName);
+        if (afterSnap == null)
+            return float.MaxValue;
+
+        var best = float.MaxValue;
+        var chats = afterSnap.RecentChatMessages;
+        for (var i = baselineChatCount; i < chats.Count; i++)
+        {
+            var line = chats[i];
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+            // `.pool spawns` emits rows like
+            //   "Guid: 19455 Entry: 180582 (...) Name: Floating Wreckage ... <x> <y> <z> <map>"
+            // We only care about the numeric x/y toward the tail.
+            if (!TryParsePoolSpawnsPosition(line, out var x, out var y))
+                continue;
+            var dx = x - centerX;
+            var dy = y - centerY;
+            var dist = MathF.Sqrt((dx * dx) + (dy * dy));
+            if (dist < best)
+                best = dist;
+        }
+
+        return best;
+    }
+
+    private static bool TryParsePoolSpawnsPosition(string chatLine, out float x, out float y)
+    {
+        // The localized MaNGOS string interleaves quite a bit before the coordinates,
+        // but the trailing numeric tail is stable: "<float> <float> <float> <int>"
+        // (x y z mapId). Scan tokens and take the first three floats that come in
+        // sequence before a trailing integer — that's the x y z triplet.
+        x = 0f;
+        y = 0f;
+        var tokens = chatLine.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i + 3 < tokens.Length; i++)
+        {
+            if (float.TryParse(tokens[i], NumberStyles.Float, CultureInfo.InvariantCulture, out var cx)
+                && float.TryParse(tokens[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var cy)
+                && float.TryParse(tokens[i + 2], NumberStyles.Float, CultureInfo.InvariantCulture, out var _)
+                && int.TryParse(tokens[i + 3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var _))
+            {
+                x = cx;
+                y = cy;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Iterative, verification-driven pool setup: loop rotate -> respawn -> check until
+    /// Shodan confirms a fishing pool is visible within <paramref name="acceptDistance"/>
+    /// of the pier landing, or until <paramref name="maxIterations"/> rounds are exhausted.
+    ///
+    /// Each iteration:
+    ///   1. Teleport Shodan to the pier landing and refresh her snapshot.
+    ///   2. If a fishing-hole game object appears in NearbyObjects within the accept
+    ///      distance, return success immediately — the fishing task can now acquire it.
+    ///   3. Otherwise, despawn at every fishing-hole spawn XY within <paramref name="rotateRadius"/>
+    ///      (forces VMaNGOS master pool 2628 to re-roll every active slot it holds in
+    ///      this area), then respawn at the closest <paramref name="respawnLimit"/> XYs
+    ///      to wake whatever sub-pool children just got rolled in.
+    ///
+    /// Returns true if a close pool is confirmed visible; false on timeout.
+    /// </summary>
+    public async Task<bool> EnsureCloseFishingPoolActiveNearAsync(
+        string accountName,
+        int mapId,
+        float centerX,
+        float centerY,
+        float stagingZ,
+        float acceptDistance = 55f,
+        float rotateRadius = 200f,
+        int respawnLimit = 5,
+        int maxIterations = 5)
+    {
+        const int masterPoolId = 2628;
+        for (var iteration = 1; iteration <= maxIterations; iteration++)
+        {
+            // Park Shodan at the landing so `.pool spawns` is issued from a stable
+            // location (doesn't affect the query result, but keeps the chat scope clean).
+            await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
+                $".go xyz {centerX:F2} {centerY:F2} {stagingZ:F2} {mapId}"));
+
+            var closest = await GetClosestActivePoolDistanceAsync(
+                accountName, masterPoolId, centerX, centerY);
+            _logger.LogInformation("[FISHING-ENSURE] iter={Iter} closest active pool = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration, closest, acceptDistance);
+
+            if (closest <= acceptDistance)
+            {
+                _logger.LogInformation("[FISHING-ENSURE] Close pool confirmed at {Dist:F1}y on iteration {Iter}.",
+                    closest, iteration);
+                return true;
+            }
+
+            // No close pool yet. Force a re-roll across the whole Barrens coast (every
+            // sub-pool's XY), then wake any newly-rolled close children.
+            _ = await RotateFishingPoolsNearAsync(
+                accountName, mapId, centerX, centerY, rotateRadius, stagingZ);
+
+            _ = await RespawnFishingPoolsNearAsync(
+                accountName, mapId, centerX, centerY, rotateRadius,
+                stagingZ, stagingX: centerX, stagingY: centerY,
+                maxLocations: respawnLimit);
+        }
+
+        _logger.LogWarning("[FISHING-ENSURE] Exhausted {Max} iterations without surfacing a close pool.",
+            maxIterations);
+        return false;
+    }
+
+    /// <summary>
     /// Level-60 Vanilla Mage best-in-slot equip list. Every item slot a player can equip
     /// is represented (head, neck, shoulders, back, chest, wrist, hands, waist, legs, feet,
     /// two rings, two trinkets, mainhand, off-hand held, ranged wand). Item IDs are the

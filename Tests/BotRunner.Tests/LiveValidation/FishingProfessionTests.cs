@@ -77,34 +77,25 @@ public class FishingProfessionTests
         {
             await _bot.EnsureShodanLoadoutAsync(shodanAccount!, _bot.ShodanCharacterName);
 
-            // Step A — rotate the master pool. Despawning whichever children are
-            // currently active forces VMaNGOS's PoolManager::UpdatePool to roll a
-            // fresh child into each vacated slot. This raises the probability that
-            // a pool close to the pier (rather than the farthest one in the master
-            // pool) ends up in the currently-active set.
-            var rotated = await _bot.RotateFishingPoolsNearAsync(
+            // Iterative verify-loop: rotate the master pool -> respawn close children ->
+            // check Shodan's NearbyObjects for a pool within pier reach. Repeats until a
+            // close pool is confirmed visible or the iteration budget is exhausted.
+            // Covers the full Barrens coast (rotateRadius=200y) so every sub-pool in
+            // master 2628 is touched on each round; the close-XY respawn limit wakes
+            // whatever just rotated into the active set.
+            var poolReady = await _bot.EnsureCloseFishingPoolActiveNearAsync(
                 shodanAccount!,
                 kalimdorMapId,
                 ratchetLandingX,
                 ratchetLandingY,
-                poolSearchRadius,
-                stagingZ: ratchetLandingZ + 2f);
-
-            // Step B — wake whichever children just got rolled into the active set.
-            // Without this they'd spawn on a fresh respawn timer (minutes) and the
-            // fishing task would still see nothing near the pier.
-            var respawned = await _bot.RespawnFishingPoolsNearAsync(
-                shodanAccount!,
-                kalimdorMapId,
-                ratchetLandingX,
-                ratchetLandingY,
-                poolSearchRadius,
                 stagingZ: ratchetLandingZ + 2f,
-                stagingX: ratchetLandingX,
-                stagingY: ratchetLandingY,
-                maxLocations: 5);
+                acceptDistance: 55f,
+                rotateRadius: 200f,
+                respawnLimit: 5,
+                maxIterations: 5);
+
             _output.WriteLine(
-                $"[FISHING] Pre-test rotated {rotated} pool XYs and respawned {respawned} locations around the Ratchet pier via Shodan.");
+                $"[FISHING] Pre-test pool setup via Shodan: poolReady={poolReady}.");
         }
         else
         {
