@@ -10,7 +10,7 @@ using Pathfinding;
 
 namespace WoWSharpClient.Movement;
 
-internal static class NativeLocalPhysics
+public static class NativeLocalPhysics
 {
     private static bool _initialized;
     private static bool _mapsPreloaded;
@@ -18,11 +18,13 @@ internal static class NativeLocalPhysics
     private static List<uint> _preloadedMapIds = [];
     private static HashSet<uint> _preloadedMapIdSet = [];
     internal static Func<NativePhysics.PhysicsInput, NativePhysics.PhysicsOutput>? TestStepOverride { get; set; }
-    internal static Action<uint>? TestClearSceneCacheOverride { get; set; }
-    internal static Action<uint>? TestPreloadMapOverride { get; set; }
-    internal static Action<string>? TestSetDataDirectoryOverride { get; set; }
-    internal static Func<string?>? TestResolveDataDirectoryOverride { get; set; }
-    internal static Func<uint, float, float, float, float, (float groundZ, bool found)>? TestGetGroundZOverride { get; set; }
+    public static Action<uint>? TestClearSceneCacheOverride { get; set; }
+    public static Action<uint>? TestPreloadMapOverride { get; set; }
+    public static Action<string>? TestSetDataDirectoryOverride { get; set; }
+    public static Func<string?>? TestResolveDataDirectoryOverride { get; set; }
+    public static Func<uint, float, float, float, float, (float groundZ, bool found)>? TestGetGroundZOverride { get; set; }
+    public static Func<uint, float, float, float, float, float, float, bool>? TestLineOfSightOverride { get; set; }
+    public static Func<uint, float, float, float, float, float, float, bool>? TestSegmentIntersectsDynamicObjectsOverride { get; set; }
     public static IReadOnlyList<uint> PreloadedMapIds => _preloadedMapIds;
 
     public static PhysicsOutput Step(PhysicsInput proto)
@@ -181,6 +183,9 @@ internal static class NativeLocalPhysics
     public static bool LineOfSight(uint mapId, float fromX, float fromY, float fromZ,
         float toX, float toY, float toZ)
     {
+        if (TestLineOfSightOverride != null)
+            return TestLineOfSightOverride(mapId, fromX, fromY, fromZ, toX, toY, toZ);
+
         EnsureInitialized();
         return NativePhysics.LineOfSight(mapId,
             new NativePhysics.XYZ(fromX, fromY, fromZ),
@@ -193,6 +198,9 @@ internal static class NativeLocalPhysics
     public static bool SegmentIntersectsDynamicObjects(uint mapId,
         float x0, float y0, float z0, float x1, float y1, float z1)
     {
+        if (TestSegmentIntersectsDynamicObjectsOverride != null)
+            return TestSegmentIntersectsDynamicObjectsOverride(mapId, x0, y0, z0, x1, y1, z1);
+
         EnsureInitialized();
         return NativePhysics.SegmentIntersectsDynamicObjects(mapId, x0, y0, z0, x1, y1, z1);
     }

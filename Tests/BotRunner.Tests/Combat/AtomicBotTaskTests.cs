@@ -35,9 +35,8 @@ internal static class AtomicTaskTestHelpers
                 new Position(start.X, start.Y, start.Z),
                 new Position(end.X, end.Y, end.Z)
             ]);
-        pathfinding
-            .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-            .Returns(true);
+        WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => true;
+        WoWSharpClient.Movement.NativeLocalPhysics.TestGetGroundZOverride = (_, _, _, z, _) => (z, true);
         pathfinding
             .Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
             .Returns((uint _, Position position, float __) => (1u, position));
@@ -758,8 +757,7 @@ public class FishingTaskTests
 
                     return [];
                 });
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns((uint _, Position __, Position to) => Math.Abs(to.X - 8f) > 0.1f);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, tx, _, _) => Math.Abs(tx - 8f) > 0.1f;
         });
 
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
@@ -815,8 +813,7 @@ public class FishingTaskTests
                     end.X <= 2.1f
                         ? [start, end]
                         : []);
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns((uint _, Position __, Position to) => to.X <= 1.1f);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, tx, _, _) => tx <= 1.1f;
         });
 
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
@@ -886,8 +883,7 @@ public class FishingTaskTests
 
                     return [];
                 });
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
 
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
@@ -1006,8 +1002,7 @@ public class FishingTaskTests
         {
             pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
                 .Returns(Array.Empty<Position>());
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
         var diagnostics = new List<string>();
         ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
@@ -1069,8 +1064,7 @@ public class FishingTaskTests
         {
             pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
                 .Returns(probePath);
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
         var diagnostics = new List<string>();
         ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
@@ -1122,8 +1116,7 @@ public class FishingTaskTests
                     Math.Abs(end.X) <= 8.1f
                         ? [start, end]
                         : []);
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
         var diagnostics = new List<string>();
         ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
@@ -1175,8 +1168,7 @@ public class FishingTaskTests
                 .Returns((uint _, Position position, float __) => (1u, position));
             pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
                 .Returns(Array.Empty<Position>());
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
         ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
             .Callback<string>(message => diagnostics.Add(message));
@@ -1227,8 +1219,7 @@ public class FishingTaskTests
                 .Returns((uint _, Position position, float __) => (1u, position));
             pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
                 .Returns(Array.Empty<Position>());
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
         ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
             .Callback<string>(message => diagnostics.Add(message));
@@ -1279,8 +1270,7 @@ public class FishingTaskTests
                 .Returns((uint _, Position position, float __) => (1u, position));
             pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
                 .Returns(Array.Empty<Position>());
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
         ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
             .Callback<string>(message => diagnostics.Add(message));
@@ -1344,8 +1334,7 @@ public class FishingTaskTests
                             nearCurrentCandidate
                         }
                         : Array.Empty<Position>());
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
         var diagnostics = new List<string>();
         ctx.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
@@ -1406,8 +1395,7 @@ public class FishingTaskTests
                             new Position(end.X, end.Y, end.Z)
                         }
                         : Array.Empty<Position>());
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
 
         var player = AtomicTaskTestHelpers.CreatePlayer(currentPosition);
@@ -2034,11 +2022,7 @@ public class FishingTaskTests
         // MoveToFishingPool, which navigates toward an approach candidate.
         var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext(configurePathfinding: pf =>
         {
-            pf.Setup(p => p.IsInLineOfSight(
-                    It.IsAny<uint>(),
-                    It.IsAny<Position>(),
-                    It.IsAny<Position>()))
-                .Returns((uint _, Position from, Position to) => from.Y > 1f || to.Y > 1f);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, fy, _, _, ty, _) => fy > 1f || ty > 1f;
         });
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
         player.Setup(p => p.SkillInfo).Returns(
@@ -2165,8 +2149,7 @@ public class FishingTaskTests
                     }).ToArray());
             pf.Setup(p => p.FindNearestWalkablePoint(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<float>()))
                 .Returns((uint _, Position position, float __) => (1u, position));
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns((uint _, Position fromPosition, Position __) => fromPosition.X > 2f);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, fx, _, _, _, _, _) => fx > 2f;
         });
 
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(1f, 0f, 0f));
@@ -3158,17 +3141,15 @@ public class RetrieveCorpseTaskTests
                     blockedCorner,
                     new Position(end.X, end.Y, end.Z)
                 ]);
-            pathfinding
-                .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns((uint mapId, Position from, Position to) =>
-                {
-                    var blockedSegment =
-                        MathF.Abs(from.X - firstCorner.X) < 0.01f &&
-                        MathF.Abs(from.Y - firstCorner.Y) < 0.01f &&
-                        MathF.Abs(to.X - blockedCorner.X) < 0.01f &&
-                        MathF.Abs(to.Y - blockedCorner.Y) < 0.01f;
-                    return !blockedSegment;
-                });
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, fx, fy, _, tx, ty, _) =>
+            {
+                var blockedSegment =
+                    MathF.Abs(fx - firstCorner.X) < 0.01f &&
+                    MathF.Abs(fy - firstCorner.Y) < 0.01f &&
+                    MathF.Abs(tx - blockedCorner.X) < 0.01f &&
+                    MathF.Abs(ty - blockedCorner.Y) < 0.01f;
+                return !blockedSegment;
+            };
         });
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0, 0, 0));
         om.Setup(o => o.Player).Returns(player.Object);

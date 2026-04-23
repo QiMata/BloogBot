@@ -100,12 +100,6 @@ namespace BotRunner.Clients
         private DateTime _lastFailureTime = DateTime.MinValue;
         private const int FailureResetTimeoutSeconds = 60;
 
-        /// <summary>
-        /// True when Physics.dll is available for local spatial queries (BG bots).
-        /// False in FG bots (running inside WoW.exe — game handles physics natively).
-        /// </summary>
-        private readonly bool _hasLocalPhysics;
-
         public PathfindingClient() : this(DefaultPathRequestTimeoutMs) { }
 
         protected PathfindingClient(int pathRequestTimeoutMs) : base()
@@ -115,13 +109,11 @@ namespace BotRunner.Clients
 
         public PathfindingClient(
             string ipAddress, int port, ILogger logger,
-            int pathRequestTimeoutMs = DefaultPathRequestTimeoutMs,
-            bool hasLocalPhysics = false)
+            int pathRequestTimeoutMs = DefaultPathRequestTimeoutMs)
             : base(ipAddress, port, logger)
         {
             _logger = logger;
             _pathRequestTimeoutMs = pathRequestTimeoutMs;
-            _hasLocalPhysics = hasLocalPhysics;
         }
 
         public bool IsAvailable => _consecutiveFailures == 0;
@@ -181,33 +173,23 @@ namespace BotRunner.Clients
 
         // ═══════════════════════════════════════════════════════════════
         //  LOCAL: Spatial queries via NativeLocalPhysics (Physics.dll)
+        //  GetGroundZ + IsInLineOfSight are intentionally NOT wrapped
+        //  here — callers go straight to NativeLocalPhysics.
+        //  SegmentIntersectsDynamicObjects stays for now because
+        //  there's no drop-in static replacement at every call site.
         // ═══════════════════════════════════════════════════════════════
-
-        public virtual (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
-        {
-            if (!_hasLocalPhysics) return (0f, false);
-            return WoWSharpClient.Movement.NativeLocalPhysics.GetGroundZ(
-                mapId, position.X, position.Y, position.Z, maxSearchDist);
-        }
 
         public virtual (float groundZ, bool found)[] BatchGetGroundZ(uint mapId, Position[] positions, float maxSearchDist = 10.0f)
         {
             var results = new (float groundZ, bool found)[positions.Length];
             for (int i = 0; i < positions.Length; i++)
-                results[i] = GetGroundZ(mapId, positions[i], maxSearchDist);
+                results[i] = WoWSharpClient.Movement.NativeLocalPhysics.GetGroundZ(
+                    mapId, positions[i].X, positions[i].Y, positions[i].Z, maxSearchDist);
             return results;
-        }
-
-        public virtual bool IsInLineOfSight(uint mapId, Position from, Position to)
-        {
-            if (!_hasLocalPhysics) return true; // No local collision data — assume clear LOS
-            return WoWSharpClient.Movement.NativeLocalPhysics.LineOfSight(
-                mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
         }
 
         public virtual bool SegmentIntersectsDynamicObjects(uint mapId, Position from, Position to)
         {
-            if (!_hasLocalPhysics) return false;
             return WoWSharpClient.Movement.NativeLocalPhysics.SegmentIntersectsDynamicObjects(
                 mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
         }
@@ -221,9 +203,6 @@ namespace BotRunner.Clients
             float maxDistance = 12.0f,
             float deltaTime = 0.05f)
         {
-            if (!_hasLocalPhysics)
-                return LocalSegmentSimulationResult.Unavailable(from);
-
             var dx = to.X - from.X;
             var dy = to.Y - from.Y;
             var dz = to.Z - from.Z;

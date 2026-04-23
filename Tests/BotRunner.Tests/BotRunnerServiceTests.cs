@@ -278,10 +278,6 @@ namespace BotRunner.Tests
                 PathSegmentAffordance.Walk, _path.Length > 0,
                 0, 0, 0, 0, 0f, 0f, 0f, 0, 0, 0, 0, 0f, 0f, 0f);
 
-        public override bool IsInLineOfSight(uint mapId, Position from, Position to) => true;
-
-        public override (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
-            => (0f, false);
     }
 
     internal sealed class TestPathfindingClient(Position[] path) : PathfindingClient

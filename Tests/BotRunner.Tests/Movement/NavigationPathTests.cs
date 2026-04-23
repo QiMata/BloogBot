@@ -2456,30 +2456,51 @@ public class NavigationPathTests
         Assert.True(navPath.ShouldHoldPositionForTransport(current, ridingWaypoint));
     }
 
-    private sealed class DelegatePathfindingClient(
-        Func<uint, Position, Position, bool, Position[]> getPath,
-        Func<uint, Position, Position, bool>? isInLineOfSight = null,
-        Func<uint, Position, float, (float, bool)>? getGroundZ = null,
-        Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? getPathWithNearbyObjects = null,
-        Func<uint, Position, float, (bool onNavmesh, Position nearestPoint)>? isPointOnNavmesh = null,
-        Func<uint, Position, float, (uint areaType, Position nearestPoint)>? findNearestWalkablePoint = null,
-        Func<uint, Position, Position, bool>? segmentIntersectsDynamicObjects = null,
-        Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Race, Gender, PathfindingRouteResult>? getPathResult = null,
-        Func<uint, Position, Position, Race, Gender, float, LocalSegmentSimulationResult>? simulateLocalSegment = null) : PathfindingClient
+    private sealed class DelegatePathfindingClient : PathfindingClient
     {
-        private readonly Func<uint, Position, Position, bool, Position[]> _getPath = getPath;
-        private readonly Func<uint, Position, Position, bool> _isInLineOfSight =
-            isInLineOfSight ?? ((_, _, _) => true);
-        private readonly Func<uint, Position, float, (float, bool)>? _getGroundZ = getGroundZ;
-        private readonly Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? _getPathWithNearbyObjects = getPathWithNearbyObjects;
-        private readonly Func<uint, Position, float, (bool onNavmesh, Position nearestPoint)> _isPointOnNavmesh =
-            isPointOnNavmesh ?? ((_, position, _) => (true, position));
-        private readonly Func<uint, Position, float, (uint areaType, Position nearestPoint)> _findNearestWalkablePoint =
-            findNearestWalkablePoint ?? ((_, position, _) => (1u, position));
-        private readonly Func<uint, Position, Position, bool> _segmentIntersectsDynamicObjects =
-            segmentIntersectsDynamicObjects ?? ((_, _, _) => false);
-        private readonly Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Race, Gender, PathfindingRouteResult>? _getPathResult = getPathResult;
-        private readonly Func<uint, Position, Position, Race, Gender, float, LocalSegmentSimulationResult>? _simulateLocalSegment = simulateLocalSegment;
+        private readonly Func<uint, Position, Position, bool, Position[]> _getPath;
+        private readonly Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? _getPathWithNearbyObjects;
+        private readonly Func<uint, Position, float, (bool onNavmesh, Position nearestPoint)> _isPointOnNavmesh;
+        private readonly Func<uint, Position, float, (uint areaType, Position nearestPoint)> _findNearestWalkablePoint;
+        private readonly Func<uint, Position, Position, bool> _segmentIntersectsDynamicObjects;
+        private readonly Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Race, Gender, PathfindingRouteResult>? _getPathResult;
+        private readonly Func<uint, Position, Position, Race, Gender, float, LocalSegmentSimulationResult>? _simulateLocalSegment;
+
+        public DelegatePathfindingClient(
+            Func<uint, Position, Position, bool, Position[]> getPath,
+            Func<uint, Position, Position, bool>? isInLineOfSight = null,
+            Func<uint, Position, float, (float, bool)>? getGroundZ = null,
+            Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? getPathWithNearbyObjects = null,
+            Func<uint, Position, float, (bool onNavmesh, Position nearestPoint)>? isPointOnNavmesh = null,
+            Func<uint, Position, float, (uint areaType, Position nearestPoint)>? findNearestWalkablePoint = null,
+            Func<uint, Position, Position, bool>? segmentIntersectsDynamicObjects = null,
+            Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Race, Gender, PathfindingRouteResult>? getPathResult = null,
+            Func<uint, Position, Position, Race, Gender, float, LocalSegmentSimulationResult>? simulateLocalSegment = null)
+        {
+            _getPath = getPath;
+            _getPathWithNearbyObjects = getPathWithNearbyObjects;
+            _isPointOnNavmesh = isPointOnNavmesh ?? ((_, position, _) => (true, position));
+            _findNearestWalkablePoint = findNearestWalkablePoint ?? ((_, position, _) => (1u, position));
+            _segmentIntersectsDynamicObjects = segmentIntersectsDynamicObjects ?? ((_, _, _) => false);
+            _getPathResult = getPathResult;
+            _simulateLocalSegment = simulateLocalSegment;
+
+            // GroundZ + LineOfSight no longer flow through PathfindingClient.
+            // Install them on NativeLocalPhysics so the production NavigationPath
+            // calls (which now go straight to the static helper) still observe
+            // the per-test mock. Tests in this suite are serialized via
+            // [Collection], so static-state leakage between cases is bounded.
+            var losDelegate = isInLineOfSight ?? ((_, _, _) => true);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride =
+                (mapId, fx, fy, fz, tx, ty, tz) => losDelegate(mapId, new Position(fx, fy, fz), new Position(tx, ty, tz));
+
+            if (getGroundZ != null)
+                WoWSharpClient.Movement.NativeLocalPhysics.TestGetGroundZOverride =
+                    (mapId, x, y, z, maxDist) => getGroundZ(mapId, new Position(x, y, z), maxDist);
+            else
+                WoWSharpClient.Movement.NativeLocalPhysics.TestGetGroundZOverride =
+                    (mapId, x, y, z, _) => (z, true);
+        }
 
         public int LegacyGetPathCalls { get; private set; }
         public int OverlayGetPathCalls { get; private set; }
@@ -2537,12 +2558,6 @@ public class NavigationPathTests
                 MaxGapDistance: 0f,
                 MaxDropHeight: 0f);
         }
-
-        public override bool IsInLineOfSight(uint mapId, Position from, Position to)
-            => _isInLineOfSight(mapId, from, to);
-
-        public override (float groundZ, bool found) GetGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
-            => _getGroundZ?.Invoke(mapId, position, maxSearchDist) ?? (position.Z, true);
 
         public override (bool onNavmesh, Position nearestPoint) IsPointOnNavmesh(uint mapId, Position position, float searchRadius = 4.0f)
             => _isPointOnNavmesh(mapId, position, searchRadius);

@@ -167,8 +167,7 @@ namespace BackgroundBotRunner
             var pathfindingClient = new PathfindingClient(
                 GetRequiredSetting(configuration, "PathfindingService:IpAddress"),
                 pathfindingPort,
-                _loggerFactory.CreateLogger<PathfindingClient>(),
-                hasLocalPhysics: true);
+                _loggerFactory.CreateLogger<PathfindingClient>());
 
             var characterStateListenerPort = ParseRequiredInt(configuration, "CharacterStateListener:Port");
             var characterStateUpdateClient = new CharacterStateUpdateClient(

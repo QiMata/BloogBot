@@ -666,7 +666,6 @@ public class FishingTask : BotTask, IBotTask
         if (_cachedCastPoolGuid != pool.Guid)
         {
             _cachedCastPosition = FishingCastPositionFinder.FindForPool(
-                Container.PathfindingClient,
                 player.MapId,
                 player.Position,
                 pool.Position);
@@ -1669,11 +1668,14 @@ public class FishingTask : BotTask, IBotTask
     {
         try
         {
-            return Container.PathfindingClient?.IsInLineOfSight(mapId, fromPosition, toPosition) ?? true;
+            return WoWSharpClient.Movement.NativeLocalPhysics.LineOfSight(
+                mapId,
+                fromPosition.X, fromPosition.Y, fromPosition.Z,
+                toPosition.X, toPosition.Y, toPosition.Z);
         }
         catch (Exception ex)
         {
-            Logger.LogDebug(ex, "[FISH] LOS probe failed; treating pathfinding LOS as unavailable.");
+            Logger.LogDebug(ex, "[FISH] LOS probe failed; treating native LOS as unavailable.");
             return true;
         }
     }

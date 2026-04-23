@@ -19,9 +19,7 @@ public class GoToTaskFallbackTests
             pathfinding
                 .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
                 .Returns(Array.Empty<Position>());
-            pathfinding
-                .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(true);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => true;
         });
 
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
@@ -49,9 +47,7 @@ public class GoToTaskFallbackTests
             pathfinding
                 .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
                 .Returns(Array.Empty<Position>());
-            pathfinding
-                .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(true);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => true;
         });
 
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
@@ -85,9 +81,7 @@ public class GoToTaskFallbackTests
             pathfinding
                 .Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
                 .Returns(Array.Empty<Position>());
-            pathfinding
-                .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
 
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));

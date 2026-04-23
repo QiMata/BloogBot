@@ -78,9 +78,7 @@ public class GoToArrivalTests
                         JumpGapCount: 0, SafeDropCount: 0, UnsafeDropCount: 0, BlockedCount: 0,
                         MaxClimbHeight: 0f, MaxGapDistance: 0f, MaxDropHeight: 0f);
                 });
-        pathfinding
-            .Setup(client => client.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-            .Returns(true);
+        WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => true;
 
         var navPath = new NavigationPath(pathfinding.Object, () => 0, enableProbeHeuristics: false);
         var destination = new Position(10f, 0f, 38f);

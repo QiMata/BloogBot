@@ -71,9 +71,7 @@ public class CombatRotationTaskTests : IDisposable
                 new Position(start.X, start.Y, start.Z),
                 new Position(end.X, end.Y, end.Z)
             ]);
-        _pathfinding
-            .Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-            .Returns(true);
+        WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => true;
         _pathfinding
             .Setup(p => p.GetPath(
                 It.IsAny<uint>(),

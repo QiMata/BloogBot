@@ -5,6 +5,7 @@ using Pathfinding;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System;
+using WoWSharpClient.Movement;
 
 namespace BotRunner.Movement;
 
@@ -731,8 +732,8 @@ public class NavigationPath(
 
                     // Validate the deflection point is reachable (LOS check via pathfinding service)
                     bool reachable = false;
-                    try { reachable = _pathfinding.IsInLineOfSight(mapId, currentPosition, candidate); }
-                    catch { /* IPC failure — skip deflection this frame */ }
+                    try { reachable = NativeLocalPhysics.LineOfSight(mapId, currentPosition.X, currentPosition.Y, currentPosition.Z, candidate.X, candidate.Y, candidate.Z); }
+                    catch { /* native LOS failure — skip deflection this frame */ }
 
                     if (reachable)
                     {
@@ -1420,7 +1421,7 @@ public class NavigationPath(
 
         try
         {
-            isInLineOfSight = _pathfinding.IsInLineOfSight(mapId, from, to);
+            isInLineOfSight = NativeLocalPhysics.LineOfSight(mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
             return true;
         }
         catch
@@ -1911,8 +1912,10 @@ public class NavigationPath(
             {
                 // Check if the segment AFTER the next waypoint has LOS. If not, the
                 // next waypoint is likely a corner that must be honored.
-                _nextSegmentBlocked = !_pathfinding!.IsInLineOfSight(
-                    mapId, _waypoints[_currentIndex + 1], _waypoints[_currentIndex + 2]);
+                var losFrom = _waypoints[_currentIndex + 1];
+                var losTo = _waypoints[_currentIndex + 2];
+                _nextSegmentBlocked = !NativeLocalPhysics.LineOfSight(
+                    mapId, losFrom.X, losFrom.Y, losFrom.Z, losTo.X, losTo.Y, losTo.Z);
             }
             catch { _nextSegmentBlocked = false; }
         }
@@ -2033,7 +2036,7 @@ public class NavigationPath(
         var snapReferenceZ = start.Z;
         if (_pathfinding != null)
         {
-            var (supportZ, foundSupport) = _pathfinding.GetGroundZ(mapId, start, maxSearchDist: 12.0f);
+            var (supportZ, foundSupport) = NativeLocalPhysics.GetGroundZ(mapId, start.X, start.Y, start.Z, maxSearchDist: 12.0f);
             if (foundSupport && float.IsFinite(supportZ))
                 snapReferenceZ = MathF.Max(snapReferenceZ, supportZ);
         }
@@ -2252,7 +2255,7 @@ public class NavigationPath(
         for (int i = 0; i < path.Length; i++)
         {
             var wp = path[i];
-            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, wp);
+            var (groundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, wp.X, wp.Y, wp.Z);
             if (found && MathF.Abs(groundZ - wp.Z) <= MAX_Z_CORRECTION)
             {
                 corrected[i] = new Position(wp.X, wp.Y, groundZ);
@@ -2602,7 +2605,7 @@ public class NavigationPath(
 
         try
         {
-            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, position);
+            var (groundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, position.X, position.Y, position.Z);
             if (!found || !float.IsFinite(groundZ))
                 return false;
 
@@ -3026,7 +3029,7 @@ public class NavigationPath(
 
         try
         {
-            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, new Position(probeX, probeY, currentPos.Z));
+            var (groundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, probeX, probeY, currentPos.Z);
             if (!found) return float.MaxValue; // void/no ground = lethal
             var drop = currentPos.Z - groundZ;
             return drop > 0 ? drop : 0f;
@@ -3075,7 +3078,7 @@ public class NavigationPath(
 
         try
         {
-            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, new Position(probeX, probeY, currentPos.Z));
+            var (groundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, probeX, probeY, currentPos.Z);
             if (!found) return float.MaxValue; // void/no ground = lethal
             var drop = currentPos.Z - groundZ;
             return drop > 0 ? drop : 0f;
@@ -3229,7 +3232,7 @@ public class NavigationPath(
             if (snappedPoint == null)
                 return null;
 
-            var (groundZ, found) = _pathfinding.GetGroundZ(mapId, snappedPoint);
+            var (groundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, snappedPoint.X, snappedPoint.Y, snappedPoint.Z);
             if (!found)
                 return null;
 
@@ -3419,7 +3422,7 @@ public class NavigationPath(
 
             try
             {
-                var (midGroundZ, found) = _pathfinding.GetGroundZ(mapId, new Position(midX, midY, midZ));
+                var (midGroundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, midX, midY, midZ);
                 if (!found) continue;
 
                 var depthFromWp1 = wp1.Z - midGroundZ;
@@ -3685,11 +3688,11 @@ public class NavigationPath(
                     sample.Y - perpY * _capsuleRadius,
                     sample.Z);
 
-                var (leftZ, leftFound) = _pathfinding.GetGroundZ(mapId, probeLeft);
+                var (leftZ, leftFound) = NativeLocalPhysics.GetGroundZ(mapId, probeLeft.X, probeLeft.Y, probeLeft.Z);
                 if (!leftFound || MathF.Abs(leftZ - sample.Z) > LATERAL_Z_THRESHOLD)
                     return false;
 
-                var (rightZ, rightFound) = _pathfinding.GetGroundZ(mapId, probeRight);
+                var (rightZ, rightFound) = NativeLocalPhysics.GetGroundZ(mapId, probeRight.X, probeRight.Y, probeRight.Z);
                 if (!rightFound || MathF.Abs(rightZ - sample.Z) > LATERAL_Z_THRESHOLD)
                     return false;
             }
@@ -3739,7 +3742,7 @@ public class NavigationPath(
 
         try
         {
-            return _pathfinding.IsInLineOfSight(mapId, headTop, headProbe);
+            return NativeLocalPhysics.LineOfSight(mapId, headTop.X, headTop.Y, headTop.Z, headProbe.X, headProbe.Y, headProbe.Z);
         }
         catch
         {

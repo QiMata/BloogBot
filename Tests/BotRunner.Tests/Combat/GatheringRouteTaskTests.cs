@@ -179,8 +179,7 @@ public class GatheringRouteTaskTests
         {
             pf.Setup(p => p.GetPath(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>(), It.IsAny<bool>()))
                 .Returns([]);
-            pf.Setup(p => p.IsInLineOfSight(It.IsAny<uint>(), It.IsAny<Position>(), It.IsAny<Position>()))
-                .Returns(false);
+            WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => false;
         });
 
         var player = AtomicTaskTestHelpers.CreatePlayer(new Position(0f, 0f, 0f));
