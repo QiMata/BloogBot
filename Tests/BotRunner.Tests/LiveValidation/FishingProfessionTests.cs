@@ -75,7 +75,7 @@ public class FishingProfessionTests
         var shodanAccount = _bot.ShodanAccountName;
         if (!string.IsNullOrWhiteSpace(shodanAccount))
         {
-            await _bot.EnsureShodanLoadoutAsync(shodanAccount!, _bot.ShodanCharacterName);
+            await _bot.EnsureShodanAdminLoadoutAsync(shodanAccount!, _bot.ShodanCharacterName);
 
             // Iterative verify-loop: rotate the master pool -> respawn close children ->
             // check Shodan's NearbyObjects for a pool within pier reach. Repeats until a

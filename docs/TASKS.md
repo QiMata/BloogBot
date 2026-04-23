@@ -338,6 +338,28 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-23, live-validation Tier 1 slice 10 - Shodan idles correctly and admin loadout equips)
+
+- Completed:
+  - Fixed the Shodan activity leak in `Services/WoWStateManager/StateManagerWorker.BotManagement.cs`. `TESTBOT1` launches were leaving `WWOW_ASSIGNED_ACTIVITY=Fishing[Ratchet]` in process-global env state, and the next background launch inherited it. `StartBackgroundBotWorker(...)` now explicitly removes optional env vars when absent, and `StartForegroundBotRunner(...)` now clears the same optional globals when null, so `UseGmCommands=true` with no `AssignedActivity` leaves Shodan idle instead of auto-running `FishingTask`.
+  - Added a dedicated admin loadout path in `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ShodanLoadout.cs` and switched `FishingProfessionTests` to use it. The helper levels Shodan to 60, resets items, learns wand proficiency (`5019`), `.additem`s a slot-correct mage BIS list, then dispatches `ActionType.EquipItem` per item and waits until each item leaves the bag snapshot. This proves the items are equipped, not merely added to inventory.
+  - Corrected the slot map after live validation exposed bad IDs in the earlier list. The final validated loadout is Frostfire-based with `22498/22499/22496/22503/22501/22502/22497/22500`, neck `23058`, cloak `22731`, rings `23062/23031`, trinkets `23046/19379`, main-hand `22589`, and ranged wand `22820`. No fishing pole is present.
+- Remaining blocker: the focused Ratchet fishing slice is still red, but for a different reason. Shodan now logs in, stands still, and only acts when the fixture sends explicit GM chat. The next failure is the pool-staging verifier: `EnsureCloseFishingPoolActiveNearAsync(...)` keeps logging `closest active pool = 340282346638528859811704183484516925440.0y` (`float.MaxValue`), which means the current `.pool spawns 2628` response parsing is not surfacing child coordinates in the captured chat path.
+- Validation:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `dotnet build Services/WoWStateManager/WoWStateManager.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_shodan_idle_check.trx"` -> `failed (1/1)`; confirmed Shodan no longer auto-runs fishing, but the original loadout list failed on a bad neck-slot item id.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_shodan_loadout_fix.trx"` -> `failed (1/1)`; TRX now contains `[SHODAN-LOADOUT] Added and equipped 16 BIS items for 'SHODAN'.` and no Shodan-owned `FishingTask` activity, but `FISHING-ENSURE` still returns `float.MaxValue` for the closest active pool and FG times out waiting for a pier-reachable pool.
+  - Artifacts: `tmp/test-runtime/results-live/fishing_shodan_idle_check.trx`, `tmp/test-runtime/results-live/fishing_shodan_loadout_fix.trx`.
+- Files changed:
+  - `Services/WoWStateManager/StateManagerWorker.BotManagement.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ShodanLoadout.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command (after the verifier rework): `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_shodan_pool_verifier_rework.trx" *> "tmp/test-runtime/results-live/fishing_shodan_pool_verifier_rework.console.txt"`
+
 ## Handoff (2026-04-23, live-validation Tier 1 slice 9 - pathfinding-first cast resolver; both bots stand on pier edge and cast)
 
 - Completed:

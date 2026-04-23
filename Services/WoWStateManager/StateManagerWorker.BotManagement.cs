@@ -52,6 +52,20 @@ namespace WoWStateManager
             }
         }
 
+        private static void SetOrRemoveProcessEnvironment(IDictionary<string, string?> environment, string key, string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                environment.Remove(key);
+                return;
+            }
+
+            environment[key] = value;
+        }
+
+        private static void SetOrClearEnvironmentVariable(string key, string? value)
+            => Environment.SetEnvironmentVariable(key, string.IsNullOrWhiteSpace(value) ? null : value);
+
 
         public void StartBackgroundBotWorker(string accountName, string? characterClass = null, string? characterRace = null, string? characterGender = null, string? characterSpec = null, string? talentBuildName = null, int? characterNameAttemptOffset = null, bool useGmCommands = false, string? assignedActivity = null)
         {
@@ -104,21 +118,17 @@ namespace WoWStateManager
             psi.Environment["CharacterStateListener__IpAddress"] = _configuration["CharacterStateClient:IpAddress"] ?? "127.0.0.1";
             psi.Environment["CharacterStateListener__Port"] = _configuration["CharacterStateListener:Port"] ?? "5002";
             psi.Environment["RealmEndpoint__IpAddress"] = _configuration["RealmEndpoint:IpAddress"] ?? "127.0.0.1";
-            if (!string.IsNullOrEmpty(characterClass))
-                psi.Environment["WWOW_CHARACTER_CLASS"] = characterClass;
-            if (!string.IsNullOrEmpty(characterRace))
-                psi.Environment["WWOW_CHARACTER_RACE"] = characterRace;
-            if (!string.IsNullOrEmpty(characterGender))
-                psi.Environment["WWOW_CHARACTER_GENDER"] = characterGender;
-            if (!string.IsNullOrEmpty(characterSpec))
-                psi.Environment["WWOW_CHARACTER_SPEC"] = characterSpec;
-            if (!string.IsNullOrEmpty(talentBuildName))
-                psi.Environment["WWOW_TALENT_BUILD"] = talentBuildName;
-            if (characterNameAttemptOffset.HasValue)
-                psi.Environment["WWOW_CHARACTER_NAME_ATTEMPT_OFFSET"] = characterNameAttemptOffset.Value.ToString();
+            SetOrRemoveProcessEnvironment(psi.Environment, "WWOW_CHARACTER_CLASS", characterClass);
+            SetOrRemoveProcessEnvironment(psi.Environment, "WWOW_CHARACTER_RACE", characterRace);
+            SetOrRemoveProcessEnvironment(psi.Environment, "WWOW_CHARACTER_GENDER", characterGender);
+            SetOrRemoveProcessEnvironment(psi.Environment, "WWOW_CHARACTER_SPEC", characterSpec);
+            SetOrRemoveProcessEnvironment(psi.Environment, "WWOW_TALENT_BUILD", talentBuildName);
+            SetOrRemoveProcessEnvironment(
+                psi.Environment,
+                "WWOW_CHARACTER_NAME_ATTEMPT_OFFSET",
+                characterNameAttemptOffset?.ToString());
             psi.Environment["WWOW_USE_GM_COMMANDS"] = useGmCommands ? "1" : "0";
-            if (!string.IsNullOrWhiteSpace(assignedActivity))
-                psi.Environment["WWOW_ASSIGNED_ACTIVITY"] = assignedActivity;
+            SetOrRemoveProcessEnvironment(psi.Environment, "WWOW_ASSIGNED_ACTIVITY", assignedActivity);
 
             var process = Process.Start(psi);
             var pid = (uint?)process?.Id;
@@ -275,23 +285,16 @@ namespace WoWStateManager
             // The password is always "PASSWORD" as set by MangosSOAPClient.CreateAccountAsync
             Environment.SetEnvironmentVariable("WWOW_ACCOUNT_NAME", accountName);
             Environment.SetEnvironmentVariable("WWOW_ACCOUNT_PASSWORD", "PASSWORD");
-            if (!string.IsNullOrEmpty(characterClass))
-                Environment.SetEnvironmentVariable("WWOW_CHARACTER_CLASS", characterClass);
-            if (!string.IsNullOrEmpty(characterRace))
-                Environment.SetEnvironmentVariable("WWOW_CHARACTER_RACE", characterRace);
-            if (!string.IsNullOrEmpty(characterGender))
-                Environment.SetEnvironmentVariable("WWOW_CHARACTER_GENDER", characterGender);
-            if (!string.IsNullOrEmpty(characterSpec))
-                Environment.SetEnvironmentVariable("WWOW_CHARACTER_SPEC", characterSpec);
-            if (!string.IsNullOrEmpty(talentBuildName))
-                Environment.SetEnvironmentVariable("WWOW_TALENT_BUILD", talentBuildName);
-            Environment.SetEnvironmentVariable(
+            SetOrClearEnvironmentVariable("WWOW_CHARACTER_CLASS", characterClass);
+            SetOrClearEnvironmentVariable("WWOW_CHARACTER_RACE", characterRace);
+            SetOrClearEnvironmentVariable("WWOW_CHARACTER_GENDER", characterGender);
+            SetOrClearEnvironmentVariable("WWOW_CHARACTER_SPEC", characterSpec);
+            SetOrClearEnvironmentVariable("WWOW_TALENT_BUILD", talentBuildName);
+            SetOrClearEnvironmentVariable(
                 "WWOW_CHARACTER_NAME_ATTEMPT_OFFSET",
                 characterNameAttemptOffset?.ToString());
             Environment.SetEnvironmentVariable("WWOW_USE_GM_COMMANDS", useGmCommands ? "1" : "0");
-            Environment.SetEnvironmentVariable(
-                "WWOW_ASSIGNED_ACTIVITY",
-                string.IsNullOrWhiteSpace(assignedActivity) ? null : assignedActivity);
+            SetOrClearEnvironmentVariable("WWOW_ASSIGNED_ACTIVITY", assignedActivity);
             _logger.LogInformation($"Set credentials environment variables for ForegroundBotRunner: WWOW_ACCOUNT_NAME={accountName}");
 
             // Disable packet hooks for crash diagnostics: "Injection:DisablePacketHooks": "true"
