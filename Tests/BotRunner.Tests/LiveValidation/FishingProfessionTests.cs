@@ -57,6 +57,32 @@ public class FishingProfessionTests
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot account not available.");
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG bot account not available.");
 
+        // Force-respawn every fishing pool near the Ratchet pier before dispatching the
+        // activity. `.pool update` schedules new pool members with a fresh respawn delay
+        // (PoolManager::Spawn1Object with instantly=false), which means a freshly harvested
+        // master pool 2628 won't present visible pools for several minutes. Teleporting one
+        // bot through each DB-recorded spawn location and issuing `.gobject select` +
+        // `.gobject respawn` bypasses the delay and guarantees that the closest-to-landing
+        // pool is visible when the task begins. Center and radius bracket all five Ratchet
+        // pool spawn XYs queried from `mangos.gameobject` (closest ~24y, farthest ~74y
+        // from the .tele Ratchet landing).
+        const int kalimdorMapId = 1;
+        const float ratchetLandingX = -956.7f;
+        const float ratchetLandingY = -3754.7f;
+        const float ratchetLandingZ = 5.3f;
+        const float poolSearchRadius = 100f;
+        var respawned = await _bot.RespawnFishingPoolsNearAsync(
+            bgAccount!,
+            kalimdorMapId,
+            ratchetLandingX,
+            ratchetLandingY,
+            poolSearchRadius,
+            stagingZ: ratchetLandingZ + 2f,
+            stagingX: ratchetLandingX,
+            stagingY: ratchetLandingY);
+        _output.WriteLine(
+            $"[FISHING] Pre-test respawned {respawned} fishing pool spawn locations around the Ratchet pier.");
+
         _output.WriteLine(
             $"[FISHING] Waiting up to {FishingLootDeadline.TotalMinutes:F0}m for both FG ('{fgAccount}') and BG ('{bgAccount}') " +
             "to report FishingTask fishing_loot_success via the Fishing[Ratchet] activity.");

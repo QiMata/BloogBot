@@ -732,49 +732,118 @@ public partial class LiveBotFixture
     // ---- World Database Queries ----
 
     /// <summary>
-    /// Query the MaNGOS gameobject table for existing spawn locations of a given template entry.
-    /// Returns up to <paramref name="limit"/> (map, x, y, z) tuples.
-    /// </summary>
-
-
     /// <summary>
-    /// Clears persisted respawn timers for fishing pool gameobjects near a given position.
-    /// This only removes rows from characters.gameobject_respawn; callers still need to
-    /// wait for natural respawn or restage at a different live fishing location before
-    /// expecting nearby pools to become interactable again.
+    /// Forces the fishing pool gameobjects nearest to the given center to respawn
+    /// immediately, regardless of their scheduled respawn timers.
+    ///
+    /// Why this helper exists: <c>.pool update &lt;id&gt;</c> only schedules new pool members
+    /// with a fresh respawn delay (see <c>PoolManager::Spawn1Object</c> at
+    /// <c>instantly=false</c>), so it doesn't produce visible pools for a test that just
+    /// looted them. <c>.gobject respawn</c> on a selected gameobject calls
+    /// <c>GameObject::Respawn()</c> which sets <c>m_respawnTime = time(nullptr)</c> and
+    /// clears the DB entry — the next <c>GameObject::Update</c> tick marks the object
+    /// spawned and visible. We teleport the specified bot on top of each known pool
+    /// spawn location (<c>.gobject select</c> needs a 10y range to find the GO), run
+    /// <c>.gobject select</c> followed by <c>.gobject respawn</c>, then land the bot back
+    /// at a safe staging point.
+    ///
+    /// <paramref name="maxLocations"/> caps how many pool spawn points are force-respawned.
+    /// Keeping the count small matters in practice because every <c>.gobject *</c> chat
+    /// dispatch is serialized through the bot's outbound action queue (~2 seconds each).
+    /// The bot is typically already in a fishing activity while this runs, so finishing
+    /// before the FishingTask's <c>PoolAcquireTimeoutMs</c> expires is what keeps the
+    /// closest pool visible when the task starts its acquisition pass.
+    ///
+    /// Returns the number of pool locations the helper teleported to and attempted to
+    /// respawn (not necessarily the number of GameObjects that actually changed state —
+    /// already-visible pools are safe no-ops).
     /// </summary>
-    public async Task<int> ClearFishingPoolRespawnTimersAsync(int mapId, float centerX, float centerY, float radius)
+    public async Task<int> RespawnFishingPoolsNearAsync(
+        string accountName,
+        int mapId,
+        float centerX,
+        float centerY,
+        float radius,
+        float stagingZ,
+        float? stagingX = null,
+        float? stagingY = null,
+        int maxLocations = 2)
     {
+        // Query the closest N fishing pool spawn locations. Templates with
+        // gameobject_template.type = 25 are the fishing-hole GO type.
+        List<(float X, float Y, float Z)> spawns;
         try
         {
-            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosCharDbConnectionString);
+            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosWorldDbConnectionString);
             await conn.OpenAsync();
 
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
-                DELETE gr FROM gameobject_respawn gr
-                INNER JOIN mangos.gameobject g ON gr.guid = g.guid
-                INNER JOIN mangos.gameobject_template gt ON g.id = gt.entry
+                SELECT DISTINCT position_x, position_y, position_z
+                FROM gameobject g
+                INNER JOIN gameobject_template gt ON g.id = gt.entry
                 WHERE gt.type = 25
-                  AND gr.map = @map
-                  AND g.position_x BETWEEN @minX AND @maxX
-                  AND g.position_y BETWEEN @minY AND @maxY";
+                  AND g.map = @map
+                  AND POW(g.position_x - @cx, 2) + POW(g.position_y - @cy, 2) <= POW(@r, 2)
+                ORDER BY POW(g.position_x - @cx, 2) + POW(g.position_y - @cy, 2) ASC
+                LIMIT @lim";
             cmd.Parameters.AddWithValue("@map", mapId);
-            cmd.Parameters.AddWithValue("@minX", centerX - radius);
-            cmd.Parameters.AddWithValue("@maxX", centerX + radius);
-            cmd.Parameters.AddWithValue("@minY", centerY - radius);
-            cmd.Parameters.AddWithValue("@maxY", centerY + radius);
+            cmd.Parameters.AddWithValue("@cx", centerX);
+            cmd.Parameters.AddWithValue("@cy", centerY);
+            cmd.Parameters.AddWithValue("@r", radius);
+            cmd.Parameters.AddWithValue("@lim", Math.Max(1, maxLocations));
 
-            var deleted = await cmd.ExecuteNonQueryAsync();
-            _logger.LogInformation("[MySQL] Cleared {Count} fishing pool respawn timers near ({X:F0},{Y:F0}) radius={Radius}",
-                deleted, centerX, centerY, radius);
-
-            return deleted;
+            spawns = new List<(float X, float Y, float Z)>();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var x = reader.GetFloat(0);
+                var y = reader.GetFloat(1);
+                var z = reader.GetFloat(2);
+                spawns.Add((x, y, z));
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning("[MySQL] ClearFishingPoolRespawnTimers failed: {Error}", ex.Message);
+            _logger.LogWarning("[FISHING-RESPAWN] DB query for pool spawns failed: {Error}", ex.Message);
             return 0;
         }
+
+        if (spawns.Count == 0)
+        {
+            _logger.LogInformation("[FISHING-RESPAWN] No fishing pool spawns found near ({X:F1},{Y:F1}) r={R}",
+                centerX, centerY, radius);
+            return 0;
+        }
+
+        _logger.LogInformation("[FISHING-RESPAWN] Force-respawning {Count} nearest pool spawn locations via {Bot}",
+            spawns.Count, accountName);
+
+        var processed = 0;
+        foreach (var spawn in spawns)
+        {
+            // Teleport bot a couple yards above the water so `.gobject select`'s 10y
+            // nearest-object check can see the pool regardless of whether it's currently
+            // visible or waiting on a respawn timer. `.go xyz` via bot chat accepts any
+            // coordinates, including over water.
+            await SendGmChatCommandAsync(accountName, string.Create(CultureInfo.InvariantCulture,
+                $".go xyz {spawn.X:F2} {spawn.Y:F2} {stagingZ:F2} {mapId}"));
+            await SendGmChatCommandAsync(accountName, ".gobject select");
+            await SendGmChatCommandAsync(accountName, ".gobject respawn");
+            processed++;
+        }
+
+        // Return the bot to a known safe staging point (typically the pier landing) so
+        // the FishingTask's next acquisition tick sees the bot on the pier, not in the
+        // middle of the water. Callers that want to skip this can pass the center coords.
+        var returnX = stagingX ?? centerX;
+        var returnY = stagingY ?? centerY;
+        await SendGmChatCommandAsync(accountName, string.Create(CultureInfo.InvariantCulture,
+            $".go xyz {returnX:F2} {returnY:F2} {stagingZ:F2} {mapId}"));
+
+        _logger.LogInformation("[FISHING-RESPAWN] Respawned {Count} pool spawn locations near ({X:F1},{Y:F1})",
+            processed, centerX, centerY);
+
+        return processed;
     }
 }
