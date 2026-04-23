@@ -338,6 +338,29 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-23, live-validation Tier 1 slice 9 - pathfinding-first cast resolver; both bots stand on pier edge and cast)
+
+- Completed:
+  - Re-architected the Ratchet fishing approach so both FG and BG land on the pier edge and cast into the pool every run, instead of falling off or swimming. User-confirmed screenshot (2026-04-23) shows both TESTBOT1 (FG) and TESTBOT2 (BG) standing on the Ratchet pier with fishing rods cast into the water.
+  - Raised `MaxPoolLockDistance` from `45f` to `80f` (matching `FishingPoolDetectRange`) so a pool visible from the teleport landing is acquired immediately. This skips the blind 8-direction radial `BuildDefaultSearchWaypoints` sweep entirely — that sweep was the root of both failure modes (FG climbed Ratchet town structures east of the dock, BG walked off the dock into water).
+  - Gated the "direct" and "straight-probe" search-walk fallbacks (`CanDirectSearchWalkFallback`, `CanSearchWaypointStraightProbePath`) on `SupportsNativeLocalPhysicsQueries`. Without reliable local LOS (FG, scene-data-less managers), `TryHasLineOfSight` always returned `true`, which let the bot walk any Z-matching short stride — including straight off a dock lip into water. FG now requires a real navmesh path for every move.
+  - Made the cast-position resolver pathfinding-first for both runners. `TryResolveCastViaPathfinding` goes through `PathfindingClient.GetPath`, scans the returned path from the pool end backward, and interpolates on the first segment that brackets `IdealCastingDistanceFromPool` (`18f`, the bobber landing distance) so the resulting standoff puts the bobber right on the pool. If no segment brackets 18y, falls back to the in-range node closest to 18y, then to the endpoint. Native sphere-sweep (`FishingCastPositionFinder.FindForPool`) is the secondary when pathfinding declines — reversing the previous order — because the navmesh-authoritative path is always walkable, while the native edge finder can select a standoff right on the dock edge that BG physics slides off.
+- Remaining blocker: loot table. Both bots cast successfully at `edgeDist=18.0 los=True` from `(-975.0,-3792.8,5.8)` (pathfinding-interpolated), BG emits `loot_window_open count=1 coins=0 items=[]` but the loot has no fish — the bobber appears to land beside the pool rather than on it. This is a cast-aiming / facing precision issue, not a navigation issue. Next iteration target.
+- Validation:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `INFO: No tasks are running which match the specified criteria.`
+  - `docker ps --format "{{.Names}} {{.Status}}"` -> `mangosd`, `realmd`, `maria-db`, `scene-data-service`, `war-scenedata`, `pathfinding-service` all `Up ... (healthy)`.
+  - Build (Release, all five projects: `Exports/BotRunner`, `Services/WoWStateManager`, `Services/BackgroundBotRunner`, `Services/ForegroundBotRunner`, `Tests/BotRunner.Tests`) -> `0 errors`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test ... fishing_bobber_landing_distance.trx ...` -> `failed (1/1)` on `Fishing_CatchFish_BgAndFg_RatchetStagedPool`. Positioning is clean for both bots — evidence:
+    - BG: `pool_acquired distance=52.4` -> `cast_position_resolved source=pathfinding pos=(-975.0,-3792.8,5.8) edgeDist=18.0 los=True` -> continuous `approaching_pool` with `playerZ` staying at 5.2-6.9 (on dock) -> `cast_position_arrived distance=16.0 edgeDist=18.0 los=True` -> `cast_started attempt=1 spell=18248`. No `fell_off_pier`, no `player_swimming`.
+    - FG: `pool_acquired distance=52.4` -> same `cast_position_resolved` -> continuous `approaching_pool` with `playerZ` staying at 5.1-5.6 (on dock) -> `cast_position_arrived distance=15.8 edgeDist=18.0 los=True` -> `cast_started attempt=1 spell=18248`. No `fell_off_pier`, no `player_swimming`, no search walk.
+  - Artifacts: `tmp/test-runtime/results-live/fishing_bobber_landing_distance.trx`, `.console.txt`.
+  - User visual confirmation: screenshot showing both TESTBOT1 and TESTBOT2 on the Ratchet pier edge with active fishing lines into the water.
+- Files changed:
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command (focused live rerun after a cast-aiming tweak): `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_bobber_aim_into_pool.trx" *> "tmp/test-runtime/results-live/fishing_bobber_aim_into_pool.console.txt"`
+
 ## Handoff (2026-04-23, live-validation Tier 1 slice 8 - phase-gated fell_off_pier; BG Ratchet fishing green)
 
 - Completed:

@@ -51,6 +51,32 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-23 (Tier 1 slice 9 - pathfinding-first cast resolver; both bots cast from pier edge)
+- Pass result: `build green; focused live Ratchet slice still red overall (empty loot window), but positioning is perfect for both bots \u2014 user visual confirmation that FG and BG stand on the pier edge with fishing lines cast into the water`
+- Last delta:
+  - Raised `MaxPoolLockDistance` from `45f` to `80f` (matches `FishingPoolDetectRange`) so pools visible at the teleport landing are locked immediately and the 8-direction radial search walk never runs. That search walk was the root cause of both bots' navigation failure modes (FG climbed town structures east of the dock; BG wandered off the pier into water).
+  - Gated `CanDirectSearchWalkFallback` and `CanSearchWaypointStraightProbePath` on `SupportsNativeLocalPhysicsQueries`. FG's `TryHasLineOfSight` always returned `true` with no local physics, which previously let the bot walk any Z-matching short stride off a dock lip. FG now requires a navmesh path for every move.
+  - Rewrote the cast-position resolver to be pathfinding-first for both FG and BG. `TryResolveCastViaPathfinding` asks `PathfindingClient.GetPath(player, pool)` for a navmesh route, then scans path segments from the pool end backward, interpolating on the first segment that brackets `IdealCastingDistanceFromPool = 18f` (the bobber landing distance) so the bot ends up exactly where the bobber lands on the pool. Falls back to the in-range node closest to 18y, then the endpoint. The native sphere-sweep finder stays as a secondary source for BG when pathfinding declines.
+  - Added `IdealCastingDistanceFromPool` constant (`18f`). Kept `MinCastingDistance`/`MaxCastingDistance` gates so odd pathfinding results can still be discarded.
+- Validation/tests run:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `INFO: No tasks are running which match the specified criteria.`
+  - `docker ps --format "{{.Names}} {{.Status}}"` -> `mangosd`, `realmd`, `maria-db`, `scene-data-service`, `war-scenedata`, `pathfinding-service` all `Up (healthy)`.
+  - Build (Release, all five projects) -> `0 errors`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test ... fishing_bobber_landing_distance.trx ...` -> `failed (1/1)`; positioning is clean:
+    - BG: `pool_acquired distance=52.4` -> `cast_position_resolved source=pathfinding pos=(-975.0,-3792.8,5.8) edgeDist=18.0 los=True` -> `approaching_pool` with `playerZ` 5.2-6.9 (on dock) -> `cast_position_arrived distance=16.0 edgeDist=18.0 los=True` -> `cast_started attempt=1`. No `fell_off_pier`, no `player_swimming`.
+    - FG: same cast position, `playerZ` 5.1-5.6 throughout, `cast_position_arrived distance=15.8 edgeDist=18.0 los=True` -> `cast_started attempt=1`. No search walk, no `fell_off_pier`, no `player_swimming`.
+  - Artifacts: `tmp/test-runtime/results-live/fishing_bobber_landing_distance.trx`, `.console.txt`.
+  - Visual: user screenshot showing both TESTBOT1 and TESTBOT2 standing on the pier edge with rods extended and bobbers in the water.
+- Files changed:
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Open work for next session:
+  - Loot window opens (`loot_window_open count=1 coins=0 items=[]`) but with no fish. The bobber is landing adjacent to the pool, not on it. Likely fixes: (a) tighten the facing so `atan2(pool - standoff)` is computed against the actual bobber landing rather than pool center, (b) verify the `BobberLandingDistance` constant matches real Vanilla client behavior (the sphere-sweep finder uses `18f`; if the client's actual bobber throw is closer to 20-22y, the standoff should shift), (c) after `cast_position_arrived`, issue a `SetFacing` that includes a small vertical aim component since the pool sits 5y below the player and the bobber trajectory is parabolic.
+  - Keep pathfinding-first. Do not revert to the native-first resolver; the native standoff sits on the dock edge where both physics models slide off.
+- Next command (focused live re-run after a bobber-aim tweak): `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_bobber_aim_into_pool.trx" *> "tmp/test-runtime/results-live/fishing_bobber_aim_into_pool.console.txt"`
+
 ### 2026-04-23 (Tier 1 slice 8 - phase-gated fell_off_pier; BG Ratchet fishing green)
 - Pass result: `build green; focused live Ratchet slice still red overall but BG now completes end to end (search_walk_found_pool -> cast_position_resolved -> cast_position_arrived -> cast_started -> fishing_loot_success lootItems=[6361]); FG now fails on a separate player_swimming_approach guard, not fell_off_pier`
 - Last delta:

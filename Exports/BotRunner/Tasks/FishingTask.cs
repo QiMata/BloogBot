@@ -112,7 +112,16 @@ public class FishingTask : BotTask, IBotTask
     private const float ResolvedCastArrivalMaxZDelta = 1.5f;
     private const float FellOffPierOnApproachZTolerance = 1.5f;
     private const float FellOffPierZThreshold = 3f;
-    private const float MaxPoolLockDistance = 45f;
+    // Sweet-spot distance where the bobber (which lands ~18y ahead of the player in their
+    // facing direction) touches down on the pool. Casting from exactly this distance makes
+    // the bobber land on the pool itself, which is what triggers the fishing-pool loot.
+    private const float IdealCastingDistanceFromPool = 18f;
+    // Pool acquisition reach. Set to match FishingPoolDetectRange so any pool the
+    // ObjectManager has streamed in can be locked immediately after teleport, which
+    // skips the blind radial search walk. Skipping search walk is important because
+    // FG's WoW.exe physics can overshoot waypoints and climb nearby non-dock terrain
+    // while trying to find a pool, leaving the bot far from a walkable cast position.
+    private const float MaxPoolLockDistance = 80f;
     private const int CastStabilizeDelayMs = 250;
     private const int CastStabilizeTimeoutMs = 1500;
     private const int CastConfirmationTimeoutMs = 5000;
@@ -669,18 +678,32 @@ public class FishingTask : BotTask, IBotTask
         FishingCastPosition? resolvedCastPosition = null;
         if (_cachedCastPoolGuid != pool.Guid)
         {
-            _cachedCastPosition = SupportsNativeLocalPhysicsQueries
-                ? FishingCastPositionFinder.FindForPool(
+            // Pathfinding is navmesh-authoritative: every returned node is on a walkable
+            // surface by construction, so the approach can reach it without clipping off
+            // a pier lip. Always prefer it when available, even when local physics could
+            // supply a tighter edge-drop standoff — the tighter position is frequently
+            // right on the dock edge, which both FG and BG physics then slide off.
+            var castPositionSource = "pathfinding";
+            _cachedCastPosition = TryResolveCastViaPathfinding(player.MapId, player.Position, pool.Position);
+
+            // Fall back to the local sphere-sweep edge finder (BG only — needs local
+            // Navigation.dll) when pathfinding declines.
+            if (_cachedCastPosition == null && SupportsNativeLocalPhysicsQueries)
+            {
+                _cachedCastPosition = FishingCastPositionFinder.FindForPool(
                     player.MapId,
                     player.Position,
-                    pool.Position)
-                : null;
+                    pool.Position);
+                if (_cachedCastPosition != null)
+                    castPositionSource = "native";
+            }
+
             _cachedCastPoolGuid = pool.Guid;
             if (_cachedCastPosition != null)
             {
                 var castPosition = _cachedCastPosition.Value;
                 BotContext.AddDiagnosticMessage(
-                    $"[TASK] FishingTask cast_position_resolved pos=({castPosition.Position.X:F1},{castPosition.Position.Y:F1},{castPosition.Position.Z:F1}) facing={castPosition.FacingRadians:F2} edgeDist={castPosition.EdgeDistance:F1} los={castPosition.HasLineOfSight}");
+                    $"[TASK] FishingTask cast_position_resolved source={castPositionSource} pos=({castPosition.Position.X:F1},{castPosition.Position.Y:F1},{castPosition.Position.Z:F1}) facing={castPosition.FacingRadians:F2} edgeDist={castPosition.EdgeDistance:F1} los={castPosition.HasLineOfSight}");
             }
             else
             {
@@ -1080,6 +1103,94 @@ public class FishingTask : BotTask, IBotTask
         SetState(FishingState.AcquireFishingPool);
     }
 
+    private FishingCastPosition? TryResolveCastViaPathfinding(uint mapId, Position playerPosition, Position poolPosition)
+    {
+        var client = Container.PathfindingClient;
+        if (client == null || !client.IsAvailable)
+            return null;
+
+        Position[] path;
+        try
+        {
+            path = client.GetPath(mapId, playerPosition, poolPosition, smoothPath: false);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "[FISH] Pathfinding cast-position query failed.");
+            return null;
+        }
+
+        if (path == null || path.Length == 0)
+            return null;
+
+        // Navmesh pathfinding snaps both endpoints to walkable polys, so every returned
+        // segment is on solid ground. Walk the path from the pool end back toward the bot
+        // and interpolate to find the point at IdealCastingDistanceFromPool from the pool.
+        // This is the distance where the bobber (which flies ~18y ahead of the player)
+        // lands on the pool, which is what actually triggers the fishing loot table.
+        for (var i = path.Length - 1; i > 0; i--)
+        {
+            var nearPool = path[i];
+            var nearPlayer = path[i - 1];
+            var distNearPool = nearPool.DistanceTo(poolPosition);
+            var distNearPlayer = nearPlayer.DistanceTo(poolPosition);
+
+            // Want a point on the segment where distance to pool equals the target.
+            // Only valid when the segment brackets the target (one end closer, one farther).
+            var minDist = MathF.Min(distNearPool, distNearPlayer);
+            var maxDist = MathF.Max(distNearPool, distNearPlayer);
+            if (IdealCastingDistanceFromPool < minDist || IdealCastingDistanceFromPool > maxDist)
+                continue;
+
+            var segmentLen = MathF.Max(distNearPlayer - distNearPool, 0.0001f);
+            var t = (IdealCastingDistanceFromPool - distNearPool) / segmentLen;
+            t = Math.Clamp(t, 0f, 1f);
+            var interpolated = new Position(
+                nearPool.X + ((nearPlayer.X - nearPool.X) * t),
+                nearPool.Y + ((nearPlayer.Y - nearPool.Y) * t),
+                nearPool.Z + ((nearPlayer.Z - nearPool.Z) * t));
+            return BuildPathfindingCastPosition(interpolated, poolPosition, IdealCastingDistanceFromPool);
+        }
+
+        // No segment brackets the ideal distance. Fall back to the path node in cast range
+        // that's closest to the ideal distance.
+        Position? bestNode = null;
+        float bestScore = float.MaxValue;
+        foreach (var node in path)
+        {
+            var distToPool = node.DistanceTo(poolPosition);
+            if (distToPool < MinCastingDistance || distToPool > MaxCastingDistance)
+                continue;
+            var score = MathF.Abs(distToPool - IdealCastingDistanceFromPool);
+            if (score < bestScore)
+            {
+                bestNode = node;
+                bestScore = score;
+            }
+        }
+
+        if (bestNode != null)
+            return BuildPathfindingCastPosition(bestNode, poolPosition, bestNode.DistanceTo(poolPosition));
+
+        // If no path node is in casting range at all, use the endpoint closest to the pool
+        // when it's at least reasonably near; otherwise decline and let the caller fall
+        // through to the native finder or shoreline approach.
+        var endpoint = path[path.Length - 1];
+        var endpointDist = endpoint.DistanceTo(poolPosition);
+        if (endpointDist > MaxCastingDistance + 10f)
+            return null;
+
+        return BuildPathfindingCastPosition(endpoint, poolPosition, endpointDist);
+    }
+
+    private static FishingCastPosition BuildPathfindingCastPosition(Position standoff, Position poolPosition, float distToPool)
+    {
+        var facing = MathF.Atan2(poolPosition.Y - standoff.Y, poolPosition.X - standoff.X);
+        if (facing < 0f)
+            facing += MathF.PI * 2f;
+        return new FishingCastPosition(standoff, facing, distToPool, HasLineOfSight: true);
+    }
+
     private Position ResolveFishingApproachPosition(IWoWLocalPlayer player, Position poolPosition)
     {
         // Return cached position if we're still targeting the same pool.
@@ -1273,6 +1384,14 @@ public class FishingTask : BotTask, IBotTask
         if (MathF.Abs(playerPosition.Z - waypoint.Z) > SearchWaypointDirectFallbackMaxZDelta)
             return false;
 
+        // Direct walking bypasses the navmesh. It's only safe when the line-of-sight probe
+        // can actually verify the segment. Without reliable local physics (FG) the LOS probe
+        // returns "clear" unconditionally, which would let the bot walk straight off a pier
+        // lip because Z equality doesn't imply walkable ground. In that case, require a real
+        // navmesh path instead of trusting the Z+distance heuristic.
+        if (!SupportsNativeLocalPhysicsQueries)
+            return false;
+
         return TryHasLineOfSight(mapId, playerPosition, waypoint);
     }
 
@@ -1405,6 +1524,13 @@ public class FishingTask : BotTask, IBotTask
     private bool CanSearchWaypointStraightProbePath(uint mapId, Position playerPosition, Position candidate)
     {
         if (MathF.Abs(playerPosition.Z - candidate.Z) > SearchWaypointDirectFallbackMaxZDelta)
+            return false;
+
+        // Same reasoning as CanDirectSearchWalkFallback: a 2-node navmesh path is only safe
+        // to follow without intermediate nodes when LOS can actually verify the segment.
+        // FG returns true from TryHasLineOfSight even when the physics can't check, so fall
+        // through to full navmesh routing there instead of accepting the straight probe.
+        if (!SupportsNativeLocalPhysicsQueries)
             return false;
 
         return TryHasLineOfSight(mapId, playerPosition, candidate);
