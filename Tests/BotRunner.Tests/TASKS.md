@@ -51,6 +51,27 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-23 (Tier 1 slice 8 - phase-gated fell_off_pier; BG Ratchet fishing green)
+- Pass result: `build green; focused live Ratchet slice still red overall but BG now completes end to end (search_walk_found_pool -> cast_position_resolved -> cast_position_arrived -> cast_started -> fishing_loot_success lootItems=[6361]); FG now fails on a separate player_swimming_approach guard, not fell_off_pier`
+- Last delta:
+  - Phase-gated the `fell_off_pier` guard in `Exports/BotRunner/Tasks/FishingTask.cs`. Added `_reachedApproachLevelForActivePool` plus constants `FellOffPierOnApproachZTolerance` and `FellOffPierZThreshold`. The drop-below-approach check now only fires after we have observed the player within `1.5` yards of the approach Z for the current active pool, so a resolver that picks a dock-top standoff while the bot is still at water level no longer pops the task on the first tick. Latch resets via the existing `ClearCastPositionCache` path (used by both `TrackActivePool` pool-change resets and `RetryFromPool`).
+  - No other behavior changes. Local-physics split from slice 7 is untouched, no `PathfindingClient.GetGroundZ` / `IsInLineOfSight` resurrection, no new `Navigation.dll` P/Invokes, no duplicate activity class, no hardcoded Ratchet coordinates.
+- Validation/tests run:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `INFO: No tasks are running which match the specified criteria.`
+  - `docker ps --format "{{.Names}} {{.Status}}"` -> verified `mangosd`, `realmd`, `maria-db`, `scene-data-service`, `war-scenedata`, `pathfinding-service` all `Up 2 days (healthy)`.
+  - Build (Release, all five projects: `Exports/BotRunner`, `Services/WoWStateManager`, `Services/BackgroundBotRunner`, `Services/ForegroundBotRunner`, `Tests/BotRunner.Tests`) -> `0 errors`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_dock_navigation_retry_after_pier_tweak.trx" *> "tmp/test-runtime/results-live/fishing_dock_navigation_retry_after_pier_tweak.console.txt"` -> `failed (1/1)`; artifacts: `tmp/test-runtime/results-live/fishing_dock_navigation_retry_after_pier_tweak.trx`, `.console.txt`.
+  - Live result: BG is fully green end to end — `search_walk_found_pool guid=0xF11002C1AF004C1E entry=180655 distance=45.0 waypoint=5/8` -> `cast_position_resolved pos=(-968.1,-3783.4,6.6) facing=4.63 edgeDist=22.5 los=True` -> steady `approaching_pool` progression with playerZ climbing 5.0 -> 5.5 (no `fell_off_pier` fires) -> `cast_position_arrived distance=24.6 edgeDist=22.5 los=True` -> `cast_started attempt=1 spell=18248` -> `loot_window_open` -> `loot_bag_delta items=[6361]` -> `fishing_loot_success`. FG still fails, but now on `retry reason=player_swimming_approach` -> `pop reason=player_swimming` because FG's search walk takes it into deeper water at Z≈0 / -1; `IsSwimming` fires before the pier phase gate has anything to evaluate.
+- Files changed:
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Open work for next session:
+  - FG Ratchet fishing is now the lone blocker for the dual-bot slice. Likely approaches: (a) filter the default radial search waypoints to reject candidates whose support Z is below a reasonable dock floor (so FG's south-west sweep doesn't end up in deep water), (b) let the bot take a few approach ticks while swimming before popping — e.g. re-route to the resolved cast position's X/Y and allow the server-side swim/stand transition to update `IsSwimming`, (c) add a light instrumentation pass that prints FG support-Z of `travelTarget` per waypoint before any behavior change.
+  - Keep the current phase-gate as-is. If a future regression brings fell_off_pier back as the dominant failure mode, flipping the latch condition is the right lever, not reverting.
+- Next command (focused live re-run after an FG swim-approach tweak): `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_fg_swim_recovery.trx" *> "tmp/test-runtime/results-live/fishing_fg_swim_recovery.console.txt"`
+
 ### 2026-04-22 (Tier 1 slice 7 - post-wrapper-removal validation)
 - Pass result: `build green; deterministic wrapper-removal coverage green; live Ratchet slice restored to the dock-navigation blocker`
 - Last delta:

@@ -110,6 +110,8 @@ public class FishingTask : BotTask, IBotTask
     private const float ApproachProgressResetDistance = 1.5f;
     private const float ResolvedCastArrivalRadius2D = 3f;
     private const float ResolvedCastArrivalMaxZDelta = 1.5f;
+    private const float FellOffPierOnApproachZTolerance = 1.5f;
+    private const float FellOffPierZThreshold = 3f;
     private const float MaxPoolLockDistance = 45f;
     private const int CastStabilizeDelayMs = 250;
     private const int CastStabilizeTimeoutMs = 1500;
@@ -139,6 +141,7 @@ public class FishingTask : BotTask, IBotTask
     private ulong _cachedApproachPoolGuid;
     private FishingCastPosition? _cachedCastPosition;
     private ulong _cachedCastPoolGuid;
+    private bool _reachedApproachLevelForActivePool;
     private ulong _failedApproachPoolGuid;
     private readonly List<Position> _failedApproachPositions = [];
     private DateTime _approachProgressAt = DateTime.UtcNow;
@@ -719,10 +722,20 @@ public class FishingTask : BotTask, IBotTask
 
         ObserveApproachProgress(approachDistance);
 
+        // Note whether the bot has actually reached the approach elevation at any point
+        // since acquiring this pool. The "fell_off_pier" guard below only fires when we
+        // observe a real drop *after* being on the pier — not when a search-walk finishes
+        // at water level and the cast resolver picks a dock-top standoff the bot has
+        // never stood on. Without this phase gate the task pops immediately the first
+        // time MoveToFishingPool runs from below the dock.
+        if (MathF.Abs(player.Position.Z - approachPosition.Z) <= FellOffPierOnApproachZTolerance)
+            _reachedApproachLevelForActivePool = true;
+
         // Detect if the bot fell off the pier (Z dropped significantly below approach position).
         // The BG bot's physics can drop through the pier edge, leaving it at terrain level.
         // When this happens, the bot walks under the pier through its support posts.
-        if (approachPosition.Z - player.Position.Z > 3f)
+        if (_reachedApproachLevelForActivePool
+            && approachPosition.Z - player.Position.Z > FellOffPierZThreshold)
         {
             ObjectManager.ForceStopImmediate();
             Logger.LogWarning("[FISH] Player Z ({PlayerZ:F1}) dropped far below approach Z ({ApproachZ:F1}) — fell off pier.",
@@ -1716,6 +1729,7 @@ public class FishingTask : BotTask, IBotTask
     {
         _cachedCastPosition = null;
         _cachedCastPoolGuid = 0;
+        _reachedApproachLevelForActivePool = false;
     }
 
     private static IReadOnlyList<Position> BuildDefaultSearchWaypoints(Position center)

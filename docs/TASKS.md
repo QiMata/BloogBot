@@ -338,6 +338,31 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-23, live-validation Tier 1 slice 8 - phase-gated fell_off_pier; BG Ratchet fishing green)
+
+- Completed:
+  - Diagnosed the remaining BG blocker as a misnamed guard: `fell_off_pier` in `FishingTask.MoveToFishingPool` was tripping on the very first tick any time the resolved cast position sat on an elevated surface (Z=6.6) while the player was still at water / terrain level (Z=2.8). The name implies "was on the pier and fell off"; the old `approachPosition.Z - player.Position.Z > 3f` check had no phase, so a bot that never stood on the pier immediately got popped with `fell_off_pier`.
+  - Added a phase gate to the guard. A new `_reachedApproachLevelForActivePool` latch flips to true the first time the player is within `FellOffPierOnApproachZTolerance` (1.5y) of the resolved approach Z. The drop check now requires that latch before popping, so only a real drop after the bot was already on the dock qualifies as "fell off". The latch resets together with the cast-position cache via `ClearCastPositionCache`, so retries and pool changes start fresh. Constants introduced: `FellOffPierOnApproachZTolerance = 1.5f`, `FellOffPierZThreshold = 3f`.
+  - Did not touch the local-physics split, did not reintroduce `PathfindingClient.GetGroundZ` / `IsInLineOfSight` wrappers, did not add Navigation.dll P/Invokes, did not resurrect the deleted `FishingAtRatchetActivity` / `IActivity`, did not hardcode Ratchet coordinates.
+- Remaining blocker: FG Ratchet fishing. With the phase gate in place BG completes the slice end to end; FG still fails, but on a different guard (`player_swimming_approach` → `pop reason=player_swimming`) because FG's teleport + search walk drops it into deeper water at Z≈0 / Z≈-1 and the swim guard in `MoveToFishingPool` fires before the pier check. Fixing that is a separate pass — either a search-walk filter that refuses waypoints with water-level support Z, or an approach mode that lets the bot walk out of shallow water before popping.
+- Validation:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `INFO: No tasks are running which match the specified criteria.`
+  - `docker ps --format "{{.Names}} {{.Status}}"` -> `mangosd`, `realmd`, `maria-db`, `scene-data-service`, `war-scenedata`, `pathfinding-service` all `Up 2 days (healthy)`.
+  - `dotnet build Exports/BotRunner/BotRunner.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors` (515 warnings, unchanged).
+  - `dotnet build Services/WoWStateManager/WoWStateManager.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors`.
+  - `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors`.
+  - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_dock_navigation_retry_after_pier_tweak.trx" *> "tmp/test-runtime/results-live/fishing_dock_navigation_retry_after_pier_tweak.console.txt"` -> `failed (1/1)` (BG succeeded, FG failed); artifacts: `tmp/test-runtime/results-live/fishing_dock_navigation_retry_after_pier_tweak.trx`, `.console.txt`.
+  - Live markers (BG, end-to-end green): `activity_start location=Ratchet` -> `outfit_complete` -> `travel_dispatched command='.tele Ratchet'` -> `default_search_waypoints_generated count=8` -> `search_walk_found_pool guid=0xF11002C1AF004C1E entry=180655 distance=45.0 waypoint=5/8` -> `cast_position_resolved pos=(-968.1,-3783.4,6.6) facing=4.63 edgeDist=22.5 los=True` -> sequential `approaching_pool` steps from distance 44.5 down to 25.4 with playerZ climbing 5.0 -> 5.5 (no premature `fell_off_pier`) -> `cast_position_arrived distance=24.6 edgeDist=22.5 los=True` -> `cast_started attempt=1 spell=18248` -> `loot_window_open` -> `loot_bag_delta items=[6361]` -> `fishing_loot_success lootWindowSeen=True lootItemSeen=True bobberSeen=True lootItems=[6361]` -> `pop reason=fishing_loot_success`.
+  - Live markers (FG, failing separately): `search_walk_found_pool ... distance=43.7 waypoint=5/8` -> `cast_position_unresolved ... playerPos=(-972.0,-3762.5,0.0) poolPos=(-969.8,-3805.1,0.0)` -> `approaching_pool playerZ=0.0` -> `approaching_pool playerZ=-1.3` -> `retry reason=player_swimming_approach` -> `pop reason=player_swimming`. FG is in deeper water, so the earlier `IsSwimming` guard pops before the phase-gated pier guard is ever evaluated.
+- Files changed:
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command (focused live re-run after an FG swim-approach tweak): `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_fg_swim_recovery.trx" *> "tmp/test-runtime/results-live/fishing_fg_swim_recovery.console.txt"`
+
 ## Handoff (2026-04-22, live-validation Tier 1 slice 7 - post-wrapper-removal validation)
 
 - Completed:
