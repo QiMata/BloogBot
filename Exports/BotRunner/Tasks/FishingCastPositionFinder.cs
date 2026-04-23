@@ -1,7 +1,6 @@
-using BotRunner.Native;
+using BotRunner.Clients;
 using GameData.Core.Models;
 using System;
-using System.Runtime.InteropServices;
 
 namespace BotRunner.Tasks;
 
@@ -11,9 +10,17 @@ public readonly record struct FishingCastPosition(
     float EdgeDistance,
     bool HasLineOfSight);
 
+/// <summary>
+/// Sphere-sweep cast-position finder for elevated fishing surfaces (docks,
+/// piers, shoreline cliffs). Walks a ray from the bot toward the target pool,
+/// samples ground Z every <see cref="EdgeProbeStep"/> yards, and picks the
+/// first standoff behind a sharp drop-off. All native queries route through
+/// <see cref="PathfindingClient"/> (GroundZ + LineOfSight) — there is no
+/// direct <c>Navigation.dll</c> P/Invoke here, so the existing ABI-correct
+/// wrappers in <c>NativeLocalPhysics</c> are the single source of truth.
+/// </summary>
 public static class FishingCastPositionFinder
 {
-    private const float InvalidGroundZ = -50000f;
     private const float EdgeProbeStep = 1.5f;
     private const float MaxProbeDistance = 32f;
     private const float EdgeDropThreshold = 3.0f;
@@ -21,14 +28,13 @@ public static class FishingCastPositionFinder
     private const float GroundProbeMaxSearchDistance = 40f;
     private const float BobberLandingDistance = 18f;
 
-    private static bool _nativeUnavailable;
-
     public static FishingCastPosition? FindForPool(
+        PathfindingClient? pathfindingClient,
         uint mapId,
         Position botPosition,
         Position poolPosition)
     {
-        if (_nativeUnavailable)
+        if (pathfindingClient == null)
             return null;
 
         var deltaX = poolPosition.X - botPosition.X;
@@ -41,14 +47,14 @@ public static class FishingCastPositionFinder
         var dirY = deltaY / distanceToPool2D;
         var probeZ = botPosition.Z + GroundProbeHeightOffset;
 
-        if (!TryGetGroundZ(mapId, botPosition.X, botPosition.Y, probeZ, GroundProbeMaxSearchDistance, out var previousGroundZ))
+        if (!TryGetGroundZ(pathfindingClient, mapId, botPosition.X, botPosition.Y, probeZ, out var previousGroundZ))
             return null;
 
         for (var edgeDistance = EdgeProbeStep; edgeDistance <= MaxProbeDistance; edgeDistance += EdgeProbeStep)
         {
             var candidateX = botPosition.X + (dirX * edgeDistance);
             var candidateY = botPosition.Y + (dirY * edgeDistance);
-            if (!TryGetGroundZ(mapId, candidateX, candidateY, probeZ, GroundProbeMaxSearchDistance, out var currentGroundZ))
+            if (!TryGetGroundZ(pathfindingClient, mapId, candidateX, candidateY, probeZ, out var currentGroundZ))
                 continue;
 
             if ((previousGroundZ - currentGroundZ) < EdgeDropThreshold)
@@ -66,23 +72,19 @@ public static class FishingCastPositionFinder
 
                 var standX = botPosition.X + (dirX * standDistance);
                 var standY = botPosition.Y + (dirY * standDistance);
-                if (!TryGetGroundZ(mapId, standX, standY, probeZ, GroundProbeMaxSearchDistance, out var standGroundZ))
+                if (!TryGetGroundZ(pathfindingClient, mapId, standX, standY, probeZ, out var standGroundZ))
                     continue;
 
                 var standPosition = new Position(standX, standY, standGroundZ + 1.0f);
                 var bobberLandingX = standX + (dirX * BobberLandingDistance);
                 var bobberLandingY = standY + (dirY * BobberLandingDistance);
-                if (!TryGetGroundZ(mapId, bobberLandingX, bobberLandingY, standPosition.Z + GroundProbeHeightOffset, GroundProbeMaxSearchDistance, out var bobberLandingGroundZ))
+                if (!TryGetGroundZ(pathfindingClient, mapId, bobberLandingX, bobberLandingY, standPosition.Z + GroundProbeHeightOffset, out var bobberLandingGroundZ))
                     continue;
 
-                var hasLineOfSight = TryLineOfSight(
+                var hasLineOfSight = pathfindingClient.IsInLineOfSight(
                     mapId,
-                    standPosition.X,
-                    standPosition.Y,
-                    standPosition.Z + 1.5f,
-                    bobberLandingX,
-                    bobberLandingY,
-                    bobberLandingGroundZ + 0.5f);
+                    new Position(standPosition.X, standPosition.Y, standPosition.Z + 1.5f),
+                    new Position(bobberLandingX, bobberLandingY, bobberLandingGroundZ + 0.5f));
                 var facing = NormalizeFacing(MathF.Atan2(poolPosition.Y - standPosition.Y, poolPosition.X - standPosition.X));
                 var result = new FishingCastPosition(
                     standPosition,
@@ -102,62 +104,21 @@ public static class FishingCastPositionFinder
     }
 
     private static bool TryGetGroundZ(
+        PathfindingClient pathfindingClient,
         uint mapId,
         float x,
         float y,
         float z,
-        float maxSearchDist,
         out float groundZ)
     {
-        groundZ = default;
-        if (_nativeUnavailable)
-            return false;
-
-        try
-        {
-            NavigationDllResolver.Register();
-            groundZ = GetGroundZNative(mapId, x, y, z, maxSearchDist);
-            return groundZ > InvalidGroundZ;
-        }
-        catch
-        {
-            _nativeUnavailable = true;
-            groundZ = default;
-            return false;
-        }
-    }
-
-    private static bool TryLineOfSight(
-        uint mapId,
-        float fromX,
-        float fromY,
-        float fromZ,
-        float toX,
-        float toY,
-        float toZ)
-    {
-        if (_nativeUnavailable)
-            return false;
-
-        try
-        {
-            NavigationDllResolver.Register();
-            return LineOfSightNative(mapId, new XYZ(fromX, fromY, fromZ), new XYZ(toX, toY, toZ));
-        }
-        catch
-        {
-            _nativeUnavailable = true;
-            return false;
-        }
+        var (probedZ, found) = pathfindingClient.GetGroundZ(
+            mapId,
+            new Position(x, y, z),
+            GroundProbeMaxSearchDistance);
+        groundZ = probedZ;
+        return found;
     }
 
     private static float NormalizeFacing(float radians)
         => radians >= 0f ? radians : radians + (MathF.PI * 2f);
-
-    [DllImport("Navigation", CallingConvention = CallingConvention.Cdecl, EntryPoint = "GetGroundZ")]
-    private static extern float GetGroundZNative(uint mapId, float x, float y, float z, float maxSearchDist);
-
-    [DllImport("Navigation", CallingConvention = CallingConvention.Cdecl, EntryPoint = "LineOfSight")]
-    [return: MarshalAs(UnmanagedType.I1)]
-    private static extern bool LineOfSightNative(uint mapId, XYZ from, XYZ to);
 }

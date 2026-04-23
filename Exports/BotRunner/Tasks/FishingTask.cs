@@ -665,7 +665,11 @@ public class FishingTask : BotTask, IBotTask
         FishingCastPosition? resolvedCastPosition = null;
         if (_cachedCastPoolGuid != pool.Guid)
         {
-            _cachedCastPosition = FishingCastPositionFinder.FindForPool(player.MapId, player.Position, pool.Position);
+            _cachedCastPosition = FishingCastPositionFinder.FindForPool(
+                Container.PathfindingClient,
+                player.MapId,
+                player.Position,
+                pool.Position);
             _cachedCastPoolGuid = pool.Guid;
             if (_cachedCastPosition != null)
             {
