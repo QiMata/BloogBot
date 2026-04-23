@@ -30,5 +30,20 @@
     "RunnerType": "Background",
     "UseGmCommands": true,
     "AssignedActivity": "Fishing[Ratchet]"
+  },
+  {
+    "AccountName": "SHODAN",
+    "CharacterClass": "Mage",
+    "CharacterRace": "Gnome",
+    "CharacterGender": "Female",
+    "GmLevel": 6,
+    "Openness": 1.0,
+    "Conscientiousness": 1.0,
+    "Extraversion": 1.0,
+    "Agreeableness": 1.0,
+    "Neuroticism": 1.0,
+    "ShouldRun": true,
+    "RunnerType": "Background",
+    "UseGmCommands": true
   }
 ]

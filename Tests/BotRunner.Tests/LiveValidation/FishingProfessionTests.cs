@@ -59,29 +59,41 @@ public class FishingProfessionTests
 
         // Force-respawn every fishing pool near the Ratchet pier before dispatching the
         // activity. `.pool update` schedules new pool members with a fresh respawn delay
-        // (PoolManager::Spawn1Object with instantly=false), which means a freshly harvested
-        // master pool 2628 won't present visible pools for several minutes. Teleporting one
-        // bot through each DB-recorded spawn location and issuing `.gobject select` +
-        // `.gobject respawn` bypasses the delay and guarantees that the closest-to-landing
-        // pool is visible when the task begins. Center and radius bracket all five Ratchet
-        // pool spawn XYs queried from `mangos.gameobject` (closest ~24y, farthest ~74y
-        // from the .tele Ratchet landing).
+        // (PoolManager::Spawn1Object with instantly=false), so a freshly harvested master
+        // pool 2628 won't present visible pools for several minutes. Teleporting through
+        // each DB-recorded spawn location and issuing `.gobject select` + `.gobject
+        // respawn` bypasses the delay and puts the closest pool into visibility for the
+        // fishing task. We run this on Shodan (the dedicated GM-admin character, female
+        // Gnome Mage) so the teleports don't race with the fishing task's own `.tele
+        // Ratchet` on the test bots.
         const int kalimdorMapId = 1;
         const float ratchetLandingX = -956.7f;
         const float ratchetLandingY = -3754.7f;
         const float ratchetLandingZ = 5.3f;
         const float poolSearchRadius = 100f;
-        var respawned = await _bot.RespawnFishingPoolsNearAsync(
-            bgAccount!,
-            kalimdorMapId,
-            ratchetLandingX,
-            ratchetLandingY,
-            poolSearchRadius,
-            stagingZ: ratchetLandingZ + 2f,
-            stagingX: ratchetLandingX,
-            stagingY: ratchetLandingY);
-        _output.WriteLine(
-            $"[FISHING] Pre-test respawned {respawned} fishing pool spawn locations around the Ratchet pier.");
+
+        var shodanAccount = _bot.ShodanAccountName;
+        if (!string.IsNullOrWhiteSpace(shodanAccount))
+        {
+            await _bot.EnsureShodanLoadoutAsync(shodanAccount!, _bot.ShodanCharacterName);
+
+            var respawned = await _bot.RespawnFishingPoolsNearAsync(
+                shodanAccount!,
+                kalimdorMapId,
+                ratchetLandingX,
+                ratchetLandingY,
+                poolSearchRadius,
+                stagingZ: ratchetLandingZ + 2f,
+                stagingX: ratchetLandingX,
+                stagingY: ratchetLandingY,
+                maxLocations: 5);
+            _output.WriteLine(
+                $"[FISHING] Pre-test respawned {respawned} fishing pool spawn locations around the Ratchet pier via Shodan.");
+        }
+        else
+        {
+            _output.WriteLine("[FISHING] Shodan admin bot not available; skipping pre-test pool respawn.");
+        }
 
         _output.WriteLine(
             $"[FISHING] Waiting up to {FishingLootDeadline.TotalMinutes:F0}m for both FG ('{fgAccount}') and BG ('{bgAccount}') " +

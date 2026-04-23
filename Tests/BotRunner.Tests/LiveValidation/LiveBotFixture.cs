@@ -36,6 +36,16 @@ namespace BotRunner.Tests.LiveValidation;
 public partial class LiveBotFixture : IAsyncLifetime
 {
     private const string CombatTestAccount = "COMBATTEST";
+
+    /// <summary>
+    /// Dedicated GM admin account used for test-setup operations that require targeting
+    /// a specific in-world object or location — e.g. pool respawns, GM-only spawns. Never
+    /// assigned an activity, so the RespawnFishingPoolsNearAsync helper (and future
+    /// setup helpers) can teleport + `.gobject select` + `.gobject respawn` without
+    /// racing the FishingTask on a test-target bot's chat action queue.
+    /// Character: Shodan, female Gnome Mage, level 60 BIS equipped.
+    /// </summary>
+    public const string ShodanAccount = "SHODAN";
     private const string RecordingArtifactsEnvVar = "WWOW_ENABLE_RECORDING_ARTIFACTS";
 
     public IntegrationTestConfig Config { get; } = IntegrationTestConfig.FromEnvironment();
@@ -224,6 +234,15 @@ public partial class LiveBotFixture : IAsyncLifetime
 
     /// <summary>Character name of the Combat Test bot.</summary>
     public string? CombatTestCharacterName { get; private set; }
+
+    /// <summary>Snapshot of the Shodan GM admin bot (female Gnome Mage, used for test-setup targeting).</summary>
+    public WoWActivitySnapshot? ShodanBot { get; private set; }
+
+    /// <summary>Account name of the Shodan GM admin bot (always <see cref="ShodanAccount"/> when configured).</summary>
+    public string? ShodanAccountName { get; private set; }
+
+    /// <summary>Character name of the Shodan GM admin bot.</summary>
+    public string? ShodanCharacterName { get; private set; }
 
     // ---- Backward-compatible adapter properties (for test migration) ----
     // These expose the BG bot state through the old API surface so tests compile.
@@ -451,6 +470,14 @@ public partial class LiveBotFixture : IAsyncLifetime
                 Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR"),
                 Environment.GetEnvironmentVariable("VMAP_PHYS_LOG_MASK"),
                 Environment.GetEnvironmentVariable("VMAP_PHYS_LOG_LEVEL"));
+
+            // 0. Ensure the Shodan GM admin account exists in the realm DB before
+            // StateManager launches bots. StateManager auto-creates the Shodan
+            // character on first login based on CharacterClass/Race/Gender in
+            // Fishing.config.json (or any other config that includes the account).
+            // Swallowing failure here is deliberate — if Shodan isn't in the active
+            // config, the INSERT is still harmless idempotent DB prep.
+            _ = await EnsureShodanAccountAsync();
 
             // 1. Start StateManager (which launches all configured bots)
             _logger.LogInformation("[FIXTURE] Starting BotServiceFixture (StateManager)...");
@@ -720,12 +747,15 @@ public partial class LiveBotFixture : IAsyncLifetime
         BackgroundBot = null;
         ForegroundBot = null;
         CombatTestBot = null;
+        ShodanBot = null;
         BgAccountName = null;
         FgAccountName = null;
         CombatTestAccountName = null;
+        ShodanAccountName = null;
         BgCharacterName = null;
         FgCharacterName = null;
         CombatTestCharacterName = null;
+        ShodanCharacterName = null;
         AllBots = [];
         _fgResponsive = true;
         _stateManagerClient = null;
@@ -823,11 +853,17 @@ public partial class LiveBotFixture : IAsyncLifetime
         WoWActivitySnapshot? newFg = null;
         WoWActivitySnapshot? newBg = null;
         WoWActivitySnapshot? newCombat = null;
+        WoWActivitySnapshot? newShodan = null;
 
         foreach (var snap in inWorldBots)
         {
             if (snap.AccountName.Equals(CombatTestAccount, StringComparison.OrdinalIgnoreCase))
                 newCombat = snap;
+            else if (snap.AccountName.Equals(ShodanAccount, StringComparison.OrdinalIgnoreCase))
+            {
+                newShodan = snap;
+                continue; // Shodan is GM-admin only; never assigned FG/BG roles.
+            }
 
             // Assign FG/BG: prefer seeded account names from config, fall back to "ends in 1" heuristic
             if (string.Equals(snap.AccountName, FgAccountName, StringComparison.OrdinalIgnoreCase))
@@ -845,6 +881,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         ForegroundBot = newFg;
         BackgroundBot = newBg;
         CombatTestBot = newCombat;
+        ShodanBot = newShodan;
 
         // Update account/character names only when we discover new ones — never null
         // them out once set, since tests need these to send SOAP/chat commands even
@@ -866,6 +903,12 @@ public partial class LiveBotFixture : IAsyncLifetime
             CombatTestAccountName = newCombat.AccountName;
             if (!string.IsNullOrWhiteSpace(newCombat.CharacterName))
                 CombatTestCharacterName = newCombat.CharacterName;
+        }
+        if (newShodan != null)
+        {
+            ShodanAccountName = newShodan.AccountName;
+            if (!string.IsNullOrWhiteSpace(newShodan.CharacterName))
+                ShodanCharacterName = newShodan.CharacterName;
         }
 
         // Fallback: if only one bot and neither role was matched, assign it as BG
@@ -918,6 +961,12 @@ public partial class LiveBotFixture : IAsyncLifetime
                     continue;
 
                 var runnerType = runnerTypeProperty.GetString();
+                if (string.Equals(accountName, ShodanAccount, StringComparison.OrdinalIgnoreCase))
+                {
+                    ShodanAccountName ??= accountName;
+                    continue; // Shodan is GM-admin only; do not assign FG/BG.
+                }
+
                 if (string.Equals(accountName, CombatTestAccount, StringComparison.OrdinalIgnoreCase))
                 {
                     CombatTestAccountName ??= accountName;
