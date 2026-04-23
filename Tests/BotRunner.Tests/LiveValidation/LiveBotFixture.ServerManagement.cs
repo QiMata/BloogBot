@@ -865,6 +865,104 @@ public partial class LiveBotFixture
     }
 
     /// <summary>
+    /// Forces VMaNGOS master pool 2628 (and any other fishing master pool in the
+    /// supplied radius) to re-roll which children are active, so the fishing bot
+    /// has a chance to see a pool close to the pier instead of whatever random
+    /// 8-of-N the server happens to be holding.
+    ///
+    /// How master pools rotate on VMaNGOS: each child pool is either in the
+    /// "active" set (spawned or waiting on a respawn timer) or completely absent
+    /// from memory. When an active child is despawned via <c>.gobject despawn</c>,
+    /// <c>PoolManager::UpdatePool</c> immediately rolls a NEW child from the
+    /// pool to fill the vacated slot (see <c>PoolGroup&lt;GameObject&gt;::SpawnObject</c>
+    /// with <c>triggerFrom = despawned GUID</c>). That new child enters "waiting
+    /// on a fresh respawn timer" state. Calling <c>.gobject respawn</c> on it
+    /// then wakes it immediately.
+    ///
+    /// This routine: (1) for every known fishing-pool spawn XY within the radius,
+    /// teleport Shodan there and issue <c>.gobject select</c> + <c>.gobject
+    /// despawn</c> — this kicks the rotation for any currently-active children
+    /// at that XY; (2) pass the resulting per-XY sequence to the existing
+    /// <see cref="RespawnFishingPoolsNearAsync"/> to immediately wake whatever
+    /// children were just rolled into the active set.
+    ///
+    /// Returns the number of pool spawn locations that were processed.
+    /// </summary>
+    public async Task<int> RotateFishingPoolsNearAsync(
+        string accountName,
+        int mapId,
+        float centerX,
+        float centerY,
+        float radius,
+        float stagingZ)
+    {
+        List<(float X, float Y, float Z)> spawns;
+        try
+        {
+            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosWorldDbConnectionString);
+            await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT DISTINCT position_x, position_y, position_z
+                FROM gameobject g
+                INNER JOIN gameobject_template gt ON g.id = gt.entry
+                WHERE gt.type = 25
+                  AND g.map = @map
+                  AND POW(g.position_x - @cx, 2) + POW(g.position_y - @cy, 2) <= POW(@r, 2)
+                ORDER BY POW(g.position_x - @cx, 2) + POW(g.position_y - @cy, 2) ASC";
+            cmd.Parameters.AddWithValue("@map", mapId);
+            cmd.Parameters.AddWithValue("@cx", centerX);
+            cmd.Parameters.AddWithValue("@cy", centerY);
+            cmd.Parameters.AddWithValue("@r", radius);
+
+            spawns = new List<(float X, float Y, float Z)>();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var x = reader.GetFloat(0);
+                var y = reader.GetFloat(1);
+                var z = reader.GetFloat(2);
+                spawns.Add((x, y, z));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[FISHING-ROTATE] DB query for pool spawns failed: {Error}", ex.Message);
+            return 0;
+        }
+
+        if (spawns.Count == 0)
+        {
+            _logger.LogInformation("[FISHING-ROTATE] No fishing pool spawns found near ({X:F1},{Y:F1}) r={R}",
+                centerX, centerY, radius);
+            return 0;
+        }
+
+        _logger.LogInformation("[FISHING-ROTATE] Rotating {Count} pool spawn locations via {Bot} to force master re-roll",
+            spawns.Count, accountName);
+
+        foreach (var spawn in spawns)
+        {
+            // Teleport a couple yards above water level so the 10y nearest-object
+            // select preferentially hits the pool (if one is active here) rather
+            // than dock decorations on the pier above.
+            await SendGmChatCommandAsync(accountName, string.Create(CultureInfo.InvariantCulture,
+                $".go xyz {spawn.X:F2} {spawn.Y:F2} {stagingZ:F2} {mapId}"));
+            await SendGmChatCommandAsync(accountName, ".gobject select");
+            // `.gobject despawn` is a no-op when the selected GO isn't a pool (or
+            // when nothing was in range); in that case `UpdatePool` simply isn't
+            // triggered and we continue to the next spawn XY.
+            await SendGmChatCommandAsync(accountName, ".gobject despawn");
+        }
+
+        _logger.LogInformation("[FISHING-ROTATE] Completed rotation pass across {Count} pool XYs near ({X:F1},{Y:F1})",
+            spawns.Count, centerX, centerY);
+
+        return spawns.Count;
+    }
+
+    /// <summary>
     /// Level-60 Vanilla Mage best-in-slot equip list. Every item slot a player can equip
     /// is represented (head, neck, shoulders, back, chest, wrist, hands, waist, legs, feet,
     /// two rings, two trinkets, mainhand, off-hand held, ranged wand). Item IDs are the
