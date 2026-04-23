@@ -338,6 +338,41 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-22, live-validation Tier 1 slice 7 - post-wrapper-removal validation)
+
+- Completed:
+  - Validated `2597067d` end to end against the focused Ratchet fishing slice instead of assuming the wrapper removal was behavior-preserving. The ABI crash fix from `91cbd44a` held: no `[StateManager-ERR] AccessViolationException` returned anywhere in the live evidence.
+  - Restored the pre-removal runtime split for local-physics queries without reintroducing `PathfindingClient.GetGroundZ` / `PathfindingClient.IsInLineOfSight` or adding new `Navigation.dll` imports. `NavigationPath` and `FishingTask` now ask a single `BotRunner.Helpers.LocalPhysicsSupport` helper whether native local-physics queries are reliable for the current `IObjectManager`; BG / scene-data-backed managers still use `WoWSharpClient.Movement.NativeLocalPhysics` directly, while FG managers fall back to the old "GroundZ unavailable / LOS treated as clear" behavior that the deleted wrappers were effectively providing.
+  - Fixed the deterministic test harness fallout from the wrapper removal. `DelegatePathfindingClient` now implements `GetPathResult(...)` so `NavigationPath` can exercise the same path-result contract production uses, `GoToArrivalTests` now installs `NativeLocalPhysics.TestGetGroundZOverride`, and the stall-detection performance test was updated to match the current `NavigationPath` recovery path.
+- Remaining blocker: the wrapper removal itself is no longer the main issue. FG behavior is back to the earlier search-walk shape instead of failing immediately, and BG is back to the pre-wrapper-removal blocker: it finds pool `180655`, resolves a dock-top cast position, then drops below the pier and trips `fell_off_pier`. The productive next iteration is dock navigation / pier-approach handling, not more wrapper rollback.
+- Validation:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `INFO: No tasks are running which match the specified criteria.`
+  - `docker ps` -> verified `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were up / healthy before the live run.
+  - `dotnet build Exports/BotRunner/BotRunner.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet build Services/WoWStateManager/WoWStateManager.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet build Services/BackgroundBotRunner/BackgroundBotRunner.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet build Services/ForegroundBotRunner/ForegroundBotRunner.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~PathfindingPerformanceTests|FullyQualifiedName~AtomicBotTaskTests|FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~GoToTaskFallbackTests|FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~BotRunnerServiceTests" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-deterministic" --logger "trx;LogFileName=post_wrapper_removal_unit.trx"` -> `passed (195/195)`; see `tmp/test-runtime/results-deterministic/post_wrapper_removal_unit.trx`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~AtomicBotTaskTests|FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~GoToTaskFallbackTests|FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~BotRunnerServiceTests" --logger "console;verbosity=minimal"` -> `passed (194/194)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingPerformanceTests.GetNextWaypoint_LOSStringPull_SkipsIntermediateWaypoints|FullyQualifiedName~PathfindingPerformanceTests.GetNextWaypoint_StallDetection_TriggersRecalculation" --logger "console;verbosity=minimal"` -> `passed (2/2)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses` -> identified repo-scoped leftovers after an earlier timed-out deterministic run (`dotnet.exe` PID `31400`, `testhost.x86.exe` PID `11752`).
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> stopped only those repo-scoped processes; no blanket process kill used.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_post_wrapper_removal.trx" *> "tmp/test-runtime/results-live/fishing_post_wrapper_removal.console.txt"` -> `failed (1/1)` with the expected remaining navigation blockers; see `tmp/test-runtime/results-live/fishing_post_wrapper_removal.trx` and `tmp/test-runtime/results-live/fishing_post_wrapper_removal.console.utf8.txt`.
+  - Live markers from `fishing_post_wrapper_removal.trx`: FG now advances through mixed `probe_rejected` / `path` / `direct` / `navigate` search-walk modes before `search_walk_exhausted` instead of failing immediately after wrapper removal; BG reaches `search_walk_found_pool guid=0xF11002C1AF004C1E entry=180655`, resolves `cast_position_resolved pos=(-970.2,-3785.9,6.6) facing=4.73 edgeDist=25.5 los=False`, then hits `fell_off_pier playerZ=2.8 approachZ=6.6`.
+- Files changed:
+  - `Exports/BotRunner/Helpers/LocalPhysicsSupport.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Exports/BotRunner/Helpers/NavigationPathFactory.cs`
+  - `Exports/BotRunner/Movement/NavigationPathFactory.cs`
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `Tests/BotRunner.Tests/Movement/PathfindingPerformanceTests.cs`
+  - `Tests/BotRunner.Tests/Movement/GoToArrivalTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_dock_navigation_retry_after_pier_tweak.trx" *> "tmp/test-runtime/results-live/fishing_dock_navigation_retry_after_pier_tweak.console.txt"`
+
 ## Handoff (2026-04-22, live-validation Tier 1 slice 6 - inline Ratchet activity into FishingTask)
 
 - Completed:

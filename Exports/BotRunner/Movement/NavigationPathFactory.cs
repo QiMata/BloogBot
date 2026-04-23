@@ -1,4 +1,5 @@
 using BotRunner.Clients;
+using BotRunner.Helpers;
 using GameData.Core.Constants;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
@@ -66,6 +67,7 @@ public static class NavigationPathFactory
             nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end),
             stuckRecoveryGenerationProvider: stuckRecoveryGenerationProvider ?? (() => objectManager.MovementStuckRecoveryGeneration),
             race: capabilities.Race,
-            gender: capabilities.Gender);
+            gender: capabilities.Gender,
+            supportsNativeLocalPhysicsQueries: LocalPhysicsSupport.SupportsReliableQueries(objectManager));
     }
 }

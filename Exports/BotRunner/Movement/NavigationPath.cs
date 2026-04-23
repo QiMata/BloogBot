@@ -392,13 +392,15 @@ public class NavigationPath(
     Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? nearbyObjectProvider = null,
     Func<int>? stuckRecoveryGenerationProvider = null,
     Race race = 0,
-    Gender gender = 0)
+    Gender gender = 0,
+    bool supportsNativeLocalPhysicsQueries = true)
 {
     private readonly PathfindingClient? _pathfinding = pathfinding;
     private readonly Func<long> _tickProvider = tickProvider ?? (() => Environment.TickCount64);
     private readonly bool _enableProbeHeuristics = enableProbeHeuristics;
     private readonly bool _enableDynamicProbeSkipping = enableProbeHeuristics && enableDynamicProbeSkipping;
     private readonly bool _strictPathValidation = strictPathValidation;
+    private readonly bool _supportsNativeLocalPhysicsQueries = supportsNativeLocalPhysicsQueries;
     private readonly float _capsuleRadius = capsuleRadius;
     private readonly float _capsuleHeight = capsuleHeight;
     private readonly Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? _nearbyObjectProvider = nearbyObjectProvider;
@@ -732,7 +734,7 @@ public class NavigationPath(
 
                     // Validate the deflection point is reachable (LOS check via pathfinding service)
                     bool reachable = false;
-                    try { reachable = NativeLocalPhysics.LineOfSight(mapId, currentPosition.X, currentPosition.Y, currentPosition.Z, candidate.X, candidate.Y, candidate.Z); }
+                    try { reachable = QueryLineOfSight(mapId, currentPosition, candidate); }
                     catch { /* native LOS failure — skip deflection this frame */ }
 
                     if (reachable)
@@ -1411,9 +1413,28 @@ public class NavigationPath(
         return TryGetLineOfSight(from, to, mapId, out var isInLineOfSight) && isInLineOfSight;
     }
 
+    private (float groundZ, bool found) QueryGroundZ(uint mapId, Position position, float maxSearchDist = 10.0f)
+        => QueryGroundZ(mapId, position.X, position.Y, position.Z, maxSearchDist);
+
+    private (float groundZ, bool found) QueryGroundZ(uint mapId, float x, float y, float z, float maxSearchDist = 10.0f)
+    {
+        if (!_supportsNativeLocalPhysicsQueries)
+            return (0f, false);
+
+        return NativeLocalPhysics.GetGroundZ(mapId, x, y, z, maxSearchDist);
+    }
+
+    private bool QueryLineOfSight(uint mapId, Position from, Position to)
+    {
+        if (!_supportsNativeLocalPhysicsQueries)
+            return true;
+
+        return NativeLocalPhysics.LineOfSight(mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
+    }
+
     private bool TryGetLineOfSight(Position from, Position to, uint mapId, out bool isInLineOfSight)
     {
-        if (_pathfinding == null)
+        if (_pathfinding == null || !_supportsNativeLocalPhysicsQueries)
         {
             isInLineOfSight = true;
             return true;
@@ -1421,7 +1442,7 @@ public class NavigationPath(
 
         try
         {
-            isInLineOfSight = NativeLocalPhysics.LineOfSight(mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z);
+            isInLineOfSight = QueryLineOfSight(mapId, from, to);
             return true;
         }
         catch
@@ -1652,7 +1673,7 @@ public class NavigationPath(
         out LocalSegmentSimulationResult simulation)
     {
         simulation = LocalSegmentSimulationResult.Unavailable(from);
-        if (_pathfinding == null)
+        if (_pathfinding == null || !_supportsNativeLocalPhysicsQueries)
             return true;
 
         var segmentDistance2D = from.DistanceTo2D(to);
@@ -1875,7 +1896,7 @@ public class NavigationPath(
     /// </summary>
     private Position[] ValidateSegmentsAgainstDynamicObjects(uint mapId, Position[] path)
     {
-        if (_pathfinding == null || path.Length < 2)
+        if (_pathfinding == null || !_supportsNativeLocalPhysicsQueries || path.Length < 2)
             return path;
 
         for (int i = 0; i < path.Length - 1; i++)
@@ -1914,8 +1935,7 @@ public class NavigationPath(
                 // next waypoint is likely a corner that must be honored.
                 var losFrom = _waypoints[_currentIndex + 1];
                 var losTo = _waypoints[_currentIndex + 2];
-                _nextSegmentBlocked = !NativeLocalPhysics.LineOfSight(
-                    mapId, losFrom.X, losFrom.Y, losFrom.Z, losTo.X, losTo.Y, losTo.Z);
+                _nextSegmentBlocked = !QueryLineOfSight(mapId, losFrom, losTo);
             }
             catch { _nextSegmentBlocked = false; }
         }
@@ -2036,7 +2056,7 @@ public class NavigationPath(
         var snapReferenceZ = start.Z;
         if (_pathfinding != null)
         {
-            var (supportZ, foundSupport) = NativeLocalPhysics.GetGroundZ(mapId, start.X, start.Y, start.Z, maxSearchDist: 12.0f);
+            var (supportZ, foundSupport) = QueryGroundZ(mapId, start, maxSearchDist: 12.0f);
             if (foundSupport && float.IsFinite(supportZ))
                 snapReferenceZ = MathF.Max(snapReferenceZ, supportZ);
         }
@@ -2255,7 +2275,7 @@ public class NavigationPath(
         for (int i = 0; i < path.Length; i++)
         {
             var wp = path[i];
-            var (groundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, wp.X, wp.Y, wp.Z);
+            var (groundZ, found) = QueryGroundZ(mapId, wp);
             if (found && MathF.Abs(groundZ - wp.Z) <= MAX_Z_CORRECTION)
             {
                 corrected[i] = new Position(wp.X, wp.Y, groundZ);
@@ -2600,12 +2620,12 @@ public class NavigationPath(
     private bool TryGetCollisionSupportZ(uint mapId, Position position, out float supportZ)
     {
         supportZ = position.Z;
-        if (_pathfinding == null)
+        if (_pathfinding == null || !_supportsNativeLocalPhysicsQueries)
             return false;
 
         try
         {
-            var (groundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, position.X, position.Y, position.Z);
+            var (groundZ, found) = QueryGroundZ(mapId, position);
             if (!found || !float.IsFinite(groundZ))
                 return false;
 
@@ -3017,7 +3037,7 @@ public class NavigationPath(
     /// </summary>
     public float ProbeEdgeAhead(Position currentPos, Position targetWaypoint, uint mapId, float probeDistance = CLIFF_PROBE_DISTANCE)
     {
-        if (_pathfinding == null) return -1f;
+        if (_pathfinding == null || !_supportsNativeLocalPhysicsQueries) return -1f;
 
         var dx = targetWaypoint.X - currentPos.X;
         var dy = targetWaypoint.Y - currentPos.Y;
@@ -3029,7 +3049,7 @@ public class NavigationPath(
 
         try
         {
-            var (groundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, probeX, probeY, currentPos.Z);
+            var (groundZ, found) = QueryGroundZ(mapId, probeX, probeY, currentPos.Z);
             if (!found) return float.MaxValue; // void/no ground = lethal
             var drop = currentPos.Z - groundZ;
             return drop > 0 ? drop : 0f;
@@ -3070,7 +3090,7 @@ public class NavigationPath(
     /// <param name="probeDistance">How far to probe from current position.</param>
     private float ProbeEdgeAtAngle(Position currentPos, float headingRadians, float angleOffsetRadians, uint mapId, float probeDistance)
     {
-        if (_pathfinding == null) return -1f;
+        if (_pathfinding == null || !_supportsNativeLocalPhysicsQueries) return -1f;
 
         var probeAngle = headingRadians + angleOffsetRadians;
         var probeX = currentPos.X + MathF.Cos(probeAngle) * probeDistance;
@@ -3078,7 +3098,7 @@ public class NavigationPath(
 
         try
         {
-            var (groundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, probeX, probeY, currentPos.Z);
+            var (groundZ, found) = QueryGroundZ(mapId, probeX, probeY, currentPos.Z);
             if (!found) return float.MaxValue; // void/no ground = lethal
             var drop = currentPos.Z - groundZ;
             return drop > 0 ? drop : 0f;
@@ -3232,7 +3252,7 @@ public class NavigationPath(
             if (snappedPoint == null)
                 return null;
 
-            var (groundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, snappedPoint.X, snappedPoint.Y, snappedPoint.Z);
+            var (groundZ, found) = QueryGroundZ(mapId, snappedPoint);
             if (!found)
                 return null;
 
@@ -3405,7 +3425,7 @@ public class NavigationPath(
     /// </summary>
     public GapInfo[] DetectGaps(uint mapId)
     {
-        if (_pathfinding == null || _waypoints.Length < 2)
+        if (_pathfinding == null || !_supportsNativeLocalPhysicsQueries || _waypoints.Length < 2)
             return [];
 
         var gaps = new List<GapInfo>();
@@ -3422,7 +3442,7 @@ public class NavigationPath(
 
             try
             {
-                var (midGroundZ, found) = NativeLocalPhysics.GetGroundZ(mapId, midX, midY, midZ);
+                var (midGroundZ, found) = QueryGroundZ(mapId, midX, midY, midZ);
                 if (!found) continue;
 
                 var depthFromWp1 = wp1.Z - midGroundZ;
@@ -3649,7 +3669,7 @@ public class NavigationPath(
     private bool IsSegmentWideEnoughForCharacter(Position from, Position to, uint mapId)
     {
         // If pathfinding is unavailable, skip the check (conservative: assume OK).
-        if (_pathfinding == null)
+        if (_pathfinding == null || !_supportsNativeLocalPhysicsQueries)
             return true;
 
         const float LATERAL_Z_THRESHOLD = 2.0f;
@@ -3688,11 +3708,11 @@ public class NavigationPath(
                     sample.Y - perpY * _capsuleRadius,
                     sample.Z);
 
-                var (leftZ, leftFound) = NativeLocalPhysics.GetGroundZ(mapId, probeLeft.X, probeLeft.Y, probeLeft.Z);
+                var (leftZ, leftFound) = QueryGroundZ(mapId, probeLeft);
                 if (!leftFound || MathF.Abs(leftZ - sample.Z) > LATERAL_Z_THRESHOLD)
                     return false;
 
-                var (rightZ, rightFound) = NativeLocalPhysics.GetGroundZ(mapId, probeRight.X, probeRight.Y, probeRight.Z);
+                var (rightZ, rightFound) = QueryGroundZ(mapId, probeRight);
                 if (!rightFound || MathF.Abs(rightZ - sample.Z) > LATERAL_Z_THRESHOLD)
                     return false;
             }
@@ -3726,7 +3746,7 @@ public class NavigationPath(
     /// <returns>True if headroom is sufficient; false if ceiling is too low.</returns>
     private bool HasSufficientHeadroom(Position from, Position to, uint mapId)
     {
-        if (_pathfinding == null)
+        if (_pathfinding == null || !_supportsNativeLocalPhysicsQueries)
             return true; // Can't check — assume clear
 
         // Sample the midpoint of the segment.
@@ -3742,7 +3762,7 @@ public class NavigationPath(
 
         try
         {
-            return NativeLocalPhysics.LineOfSight(mapId, headTop.X, headTop.Y, headTop.Z, headProbe.X, headProbe.Y, headProbe.Z);
+            return QueryLineOfSight(mapId, headTop, headProbe);
         }
         catch
         {

@@ -1,4 +1,5 @@
 using BotRunner.Combat;
+using BotRunner.Helpers;
 using BotRunner.Interfaces;
 using GameData.Core.Enums;
 using GameData.Core.Frames;
@@ -665,10 +666,12 @@ public class FishingTask : BotTask, IBotTask
         FishingCastPosition? resolvedCastPosition = null;
         if (_cachedCastPoolGuid != pool.Guid)
         {
-            _cachedCastPosition = FishingCastPositionFinder.FindForPool(
-                player.MapId,
-                player.Position,
-                pool.Position);
+            _cachedCastPosition = SupportsNativeLocalPhysicsQueries
+                ? FishingCastPositionFinder.FindForPool(
+                    player.MapId,
+                    player.Position,
+                    pool.Position)
+                : null;
             _cachedCastPoolGuid = pool.Guid;
             if (_cachedCastPosition != null)
             {
@@ -1105,7 +1108,7 @@ public class FishingTask : BotTask, IBotTask
         const float distStep = 3f;
 
         var client = Container.PathfindingClient;
-        if (client == null)
+        if (client == null || !SupportsNativeLocalPhysicsQueries)
             return null;
 
         // Build sample points: rings radiating outward from pool at each angle.
@@ -1454,7 +1457,7 @@ public class FishingTask : BotTask, IBotTask
     private Position? FindBestSearchWaypointCandidate(uint mapId, Position playerPosition, Position waypoint)
     {
         var client = Container.PathfindingClient;
-        if (client == null)
+        if (client == null || !SupportsNativeLocalPhysicsQueries)
             return null;
 
         var samplePoints = new List<Position> { waypoint };
@@ -1645,6 +1648,9 @@ public class FishingTask : BotTask, IBotTask
             ? "none"
             : $"({position.X:F1},{position.Y:F1},{position.Z:F1})";
 
+    private bool SupportsNativeLocalPhysicsQueries
+        => LocalPhysicsSupport.SupportsReliableQueries(ObjectManager);
+
     private bool CanCastFromPosition(uint mapId, Position fromPosition, Position poolPosition)
     {
         var castTarget = FishingData.GetPoolCastTarget(fromPosition, poolPosition, CastTargetInsetFromPool);
@@ -1666,6 +1672,9 @@ public class FishingTask : BotTask, IBotTask
 
     private bool TryHasLineOfSight(uint mapId, Position fromPosition, Position toPosition)
     {
+        if (!SupportsNativeLocalPhysicsQueries)
+            return true;
+
         try
         {
             return WoWSharpClient.Movement.NativeLocalPhysics.LineOfSight(

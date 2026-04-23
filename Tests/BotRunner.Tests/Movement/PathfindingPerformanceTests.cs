@@ -185,31 +185,37 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
     [UnitTest]
     public void GetNextWaypoint_StallDetection_TriggersRecalculation()
     {
-        // Arrange: track recalculation via GetPath call count
+        // Arrange: track recalculation via GetPath call count. Use a blocked
+        // corner scenario that stays outside the acceptance radius so repeated
+        // same-position samples hit the stalled-near-waypoint recovery path.
         var pathCallCount = 0;
-        var pathfinding = new DelegatePathfindingClient((_, start, end, _) =>
-        {
-            pathCallCount++;
-            return new[] { start, new Position(50f, 0f, 0f), end };
-        });
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            {
+                pathCallCount++;
+                return
+                [
+                    new Position(10f, 0f, 0f),
+                    new Position(10f, 10f, 0f)
+                ];
+            },
+            isInLineOfSight: (_, from, to) => !(from.Y < 0.5f && to.Y >= 7f));
 
         long tick = 0;
         var navPath = new NavigationPath(pathfinding, () => tick);
-        var destination = new Position(100f, 0f, 0f);
+        var currentPos = new Position(4f, 0f, 0f);
+        var destination = new Position(10f, 20f, 0f);
 
         // Initial path calculation
-        var stuckPos = new Position(45f, 0f, 0f);
-        navPath.GetNextWaypoint(stuckPos, destination, MapId, allowDirectFallback: false);
+        navPath.GetNextWaypoint(currentPos, destination, MapId, allowDirectFallback: false, minWaypointDistance: 4f);
         var initialPathCalls = pathCallCount;
         output.WriteLine($"Initial path calls: {initialPathCalls}");
 
-        // Act: simulate being stuck at the same position for many ticks
-        // STALLED_SAMPLE_THRESHOLD is 6, call enough times to exceed it
-        // Each call must advance tick past cooldown (2000ms) to allow recalculation
-        for (int i = 0; i < 20; i++)
+        // Act: simulate being stuck at the same position for many ticks.
+        for (int i = 0; i < 30; i++)
         {
             tick += 100; // 100ms per tick
-            navPath.GetNextWaypoint(stuckPos, destination, MapId, allowDirectFallback: false);
+            navPath.GetNextWaypoint(currentPos, destination, MapId, allowDirectFallback: false, minWaypointDistance: 4f);
         }
 
         var postStallPathCalls = pathCallCount;
@@ -443,6 +449,7 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
         private readonly Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? _getPathWithNearbyObjects;
         private readonly Func<uint, Position, float, (bool onNavmesh, Position nearestPoint)> _isPointOnNavmesh;
         private readonly Func<uint, Position, float, (uint areaType, Position nearestPoint)> _findNearestWalkablePoint;
+        private readonly Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Race, Gender, PathfindingRouteResult>? _getPathResult;
 
         public DelegatePathfindingClient(
             Func<uint, Position, Position, bool, Position[]> getPath,
@@ -450,11 +457,13 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
             Func<uint, Position, float, (float, bool)>? getGroundZ = null,
             Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Position[]>? getPathWithNearbyObjects = null,
             Func<uint, Position, float, (bool onNavmesh, Position nearestPoint)>? isPointOnNavmesh = null,
-            Func<uint, Position, float, (uint areaType, Position nearestPoint)>? findNearestWalkablePoint = null)
+            Func<uint, Position, float, (uint areaType, Position nearestPoint)>? findNearestWalkablePoint = null,
+            Func<uint, Position, Position, IReadOnlyList<DynamicObjectProto>?, bool, Race, Gender, PathfindingRouteResult>? getPathResult = null)
         {
             _getPath = getPath;
             _getPathWithNearbyObjects = getPathWithNearbyObjects;
             _isPointOnNavmesh = isPointOnNavmesh ?? ((_, position, _) => (true, position));
+            _getPathResult = getPathResult;
 
             // GroundZ + LOS now go straight to NativeLocalPhysics; install
             // per-test overrides so the production code under test still
@@ -489,6 +498,49 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
             LastNearbyObjects = nearbyObjects?.ToArray();
             return _getPathWithNearbyObjects?.Invoke(mapId, start, end, nearbyObjects, smoothPath)
                 ?? _getPath(mapId, start, end, smoothPath);
+        }
+
+        public override PathfindingRouteResult GetPathResult(uint mapId, Position start, Position end, IReadOnlyList<DynamicObjectProto>? nearbyObjects, bool smoothPath = false, Race race = 0, Gender gender = 0)
+        {
+            if (_getPathResult is not null)
+                return _getPathResult(mapId, start, end, nearbyObjects, smoothPath, race, gender);
+
+            Position[] corners;
+            if (nearbyObjects != null)
+            {
+                OverlayGetPathCalls++;
+                LastNearbyObjects = nearbyObjects.ToArray();
+                corners = _getPathWithNearbyObjects?.Invoke(mapId, start, end, nearbyObjects, smoothPath)
+                    ?? _getPath(mapId, start, end, smoothPath);
+            }
+            else
+            {
+                LegacyGetPathCalls++;
+                corners = _getPath(mapId, start, end, smoothPath);
+            }
+
+            return new PathfindingRouteResult(
+                Corners: corners,
+                Result: corners.Length > 0 ? "native_path" : "no_path",
+                RawCornerCount: (uint)corners.Length,
+                BlockedSegmentIndex: null,
+                BlockedReason: "none",
+                MaxAffordance: PathSegmentAffordance.Walk,
+                PathSupported: corners.Length > 0,
+                StepUpCount: 0,
+                DropCount: 0,
+                CliffCount: 0,
+                VerticalCount: 0,
+                TotalZGain: 0f,
+                TotalZLoss: 0f,
+                MaxSlopeAngleDeg: 0f,
+                JumpGapCount: 0,
+                SafeDropCount: 0,
+                UnsafeDropCount: 0,
+                BlockedCount: 0,
+                MaxClimbHeight: 0f,
+                MaxGapDistance: 0f,
+                MaxDropHeight: 0f);
         }
 
         public override (bool onNavmesh, Position nearestPoint) IsPointOnNavmesh(uint mapId, Position position, float searchRadius = 4.0f)

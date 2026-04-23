@@ -79,6 +79,7 @@ public class GoToArrivalTests
                         MaxClimbHeight: 0f, MaxGapDistance: 0f, MaxDropHeight: 0f);
                 });
         WoWSharpClient.Movement.NativeLocalPhysics.TestLineOfSightOverride = (_, _, _, _, _, _, _) => true;
+        WoWSharpClient.Movement.NativeLocalPhysics.TestGetGroundZOverride = (_, _, _, z, _) => (z, true);
 
         var navPath = new NavigationPath(pathfinding.Object, () => 0, enableProbeHeuristics: false);
         var destination = new Position(10f, 0f, 38f);

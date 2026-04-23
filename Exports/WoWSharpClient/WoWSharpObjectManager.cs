@@ -99,6 +99,7 @@ namespace WoWSharpClient
         internal double WorldTimeNowMs => _worldTimeTracker?.NowMS.TotalMilliseconds ?? 0;
         internal Func<IAgentFactory> AgentFactoryAccessor => _agentFactoryAccessor;
         internal bool IsInControlInternal => _isInControl;
+        public bool SupportsNativeLocalPhysicsQueries => _useLocalPhysics || _sceneDataClient != null;
 
         // Expose sniffing state for InventoryManager (InteractWithGameObject diagnostics)
         internal bool SniffingGameObjUse { get => _sniffingGameObjUse; set => _sniffingGameObjUse = value; }

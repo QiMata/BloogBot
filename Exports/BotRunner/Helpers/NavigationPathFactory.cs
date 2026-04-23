@@ -29,7 +29,8 @@ public static class NavigationPathFactory
             nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end),
             stuckRecoveryGenerationProvider: () => objectManager.MovementStuckRecoveryGeneration,
             race: player?.Race ?? 0,
-            gender: player?.Gender ?? 0);
+            gender: player?.Gender ?? 0,
+            supportsNativeLocalPhysicsQueries: LocalPhysicsSupport.SupportsReliableQueries(objectManager));
     }
 
     /// <summary>
@@ -53,6 +54,7 @@ public static class NavigationPathFactory
             nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end),
             stuckRecoveryGenerationProvider: () => objectManager.MovementStuckRecoveryGeneration,
             race: player?.Race ?? 0,
-            gender: player?.Gender ?? 0);
+            gender: player?.Gender ?? 0,
+            supportsNativeLocalPhysicsQueries: LocalPhysicsSupport.SupportsReliableQueries(objectManager));
     }
 }

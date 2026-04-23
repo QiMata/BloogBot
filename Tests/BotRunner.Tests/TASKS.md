@@ -51,6 +51,37 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-22 (Tier 1 slice 7 - post-wrapper-removal validation)
+- Pass result: `build green; deterministic wrapper-removal coverage green; live Ratchet slice restored to the dock-navigation blocker`
+- Last delta:
+  - Validated `2597067d` instead of treating it as a purely mechanical cleanup. The live slice no longer regresses early after the `PathfindingClient` wrapper removal, and the `LineOfSight` ABI crash from `91cbd44a` stayed fixed: no `AccessViolationException` returned in the new FG/BG proof.
+  - Added `BotRunner.Helpers.LocalPhysicsSupport` and threaded `supportsNativeLocalPhysicsQueries` into both `NavigationPathFactory` call sites plus `FishingTask`. BG / scene-data-backed managers still use `WoWSharpClient.Movement.NativeLocalPhysics` directly, but FG managers now decline GroundZ / LOS local-physics queries the same way the deleted wrappers effectively did. This restores the old runtime behavior split without reintroducing `PathfindingClient.GetGroundZ`, `PathfindingClient.IsInLineOfSight`, or duplicate `Navigation.dll` P/Invokes.
+  - Fixed the deterministic test fallout from the static `NativeLocalPhysics` override conversion: `DelegatePathfindingClient` now implements `GetPathResult(...)`, `GoToArrivalTests` now installs `NativeLocalPhysics.TestGetGroundZOverride`, and the stall-detection benchmark test was updated to exercise the current `NavigationPath` stalled-near-waypoint recovery path.
+- Validation/tests run:
+  - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `INFO: No tasks are running which match the specified criteria.`
+  - `docker ps` -> verified `mangosd`, `realmd`, `maria-db`, `scene-data-service`, and `pathfinding-service` were up / healthy.
+  - Build: rebuilt `Exports/BotRunner`, `Services/WoWStateManager`, `Services/BackgroundBotRunner`, `Services/ForegroundBotRunner`, and `Tests/BotRunner.Tests` clean (`0 errors`).
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~PathfindingPerformanceTests|FullyQualifiedName~AtomicBotTaskTests|FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~GoToTaskFallbackTests|FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~BotRunnerServiceTests" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-deterministic" --logger "trx;LogFileName=post_wrapper_removal_unit.trx"` -> `passed (195/195)`; artifact: `tmp/test-runtime/results-deterministic/post_wrapper_removal_unit.trx`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~AtomicBotTaskTests|FullyQualifiedName~CombatRotationTaskTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~GoToTaskFallbackTests|FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~BotRunnerServiceTests" --logger "console;verbosity=minimal"` -> `passed (194/194)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingPerformanceTests.GetNextWaypoint_LOSStringPull_SkipsIntermediateWaypoints|FullyQualifiedName~PathfindingPerformanceTests.GetNextWaypoint_StallDetection_TriggersRecalculation" --logger "console;verbosity=minimal"` -> `passed (2/2)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -ListRepoScopedProcesses` -> found repo-scoped leftovers from an earlier timed-out deterministic pass (`dotnet.exe` PID `31400`, `testhost.x86.exe` PID `11752`).
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> cleaned only those repo-scoped processes.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_post_wrapper_removal.trx" *> "tmp/test-runtime/results-live/fishing_post_wrapper_removal.console.txt"` -> `failed (1/1)`; artifacts: `tmp/test-runtime/results-live/fishing_post_wrapper_removal.trx`, `tmp/test-runtime/results-live/fishing_post_wrapper_removal.console.utf8.txt`.
+  - Live result: FG is back to the pre-wrapper-removal search-walk shape (`probe_rejected` / `path` / `direct` / `navigate` / `arrived` markers) before `search_walk_exhausted`; BG reaches `search_walk_found_pool guid=0xF11002C1AF004C1E entry=180655`, resolves `cast_position_resolved pos=(-970.2,-3785.9,6.6) facing=4.73 edgeDist=25.5 los=False`, then still aborts on `fell_off_pier playerZ=2.8 approachZ=6.6`.
+- Files changed:
+  - `Exports/BotRunner/Helpers/LocalPhysicsSupport.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.cs`
+  - `Exports/BotRunner/Helpers/NavigationPathFactory.cs`
+  - `Exports/BotRunner/Movement/NavigationPathFactory.cs`
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `Tests/BotRunner.Tests/Movement/PathfindingPerformanceTests.cs`
+  - `Tests/BotRunner.Tests/Movement/GoToArrivalTests.cs`
+- Open work for next session:
+  - Treat the remaining blocker as a dock-navigation issue, not a wrapper-removal issue. The most likely productive tweak is still in `FishingTask.MoveToFishingPool`: either relax the `fell_off_pier` guard during the initial climb back onto the dock, or make the search-walk accept only a waypoint whose support Z matches the resolved cast-position Z before the pool is considered acquired.
+  - FG still ends in `search_walk_exhausted`, but it is no longer the early wrapper-removal regression. If we need one more instrumentation-only pass before behavior changes, logging FG `mode=` plus support-Z data around the rejected/stalled waypoints should tell us whether the remaining problem is navmesh rejection or bad local-physics support.
+- Next command (focused live re-run after one dock-navigation tweak): `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_dock_navigation_retry_after_pier_tweak.trx" *> "tmp/test-runtime/results-live/fishing_dock_navigation_retry_after_pier_tweak.console.txt"`
+
 ### 2026-04-22 (Tier 1 slice 6 - inline Ratchet activity into FishingTask)
 - Pass result: `build green; LineOfSight ABI fix lands; activity refactor lands; live Ratchet still failing on navigation, not on the cast resolver itself`
 - Last delta:
