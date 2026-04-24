@@ -502,11 +502,50 @@ namespace BotRunner
                         break;
                     case CharacterAction.StartFishing:
                     {
-                        var fishingSearchWaypoints = ParseGatheringRoutePositions(actionEntry.Item2);
+                        string? fishingLocation = null;
+                        var useGmCommands = false;
+                        uint? masterPoolId = null;
+                        var waypointStartIndex = 0;
+
+                        // Backward-compatible schema:
+                        //   legacy: [x, y, z, ...]
+                        //   current: [location?, useGmCommands?, masterPoolId?, x, y, z, ...]
+                        if (actionEntry.Item2.Count > 0 && actionEntry.Item2[0] is string locationParam)
+                        {
+                            fishingLocation = string.IsNullOrWhiteSpace(locationParam)
+                                ? null
+                                : locationParam.Trim();
+                            waypointStartIndex = 1;
+
+                            if (actionEntry.Item2.Count > waypointStartIndex
+                                && TryParseIntParameter(actionEntry.Item2[waypointStartIndex], out var useGmParam))
+                            {
+                                useGmCommands = useGmParam != 0;
+                                waypointStartIndex++;
+                            }
+
+                            if (actionEntry.Item2.Count > waypointStartIndex
+                                && TryParseIntParameter(actionEntry.Item2[waypointStartIndex], out var masterPoolParam))
+                            {
+                                masterPoolId = masterPoolParam > 0
+                                    ? (uint)masterPoolParam
+                                    : null;
+                                waypointStartIndex++;
+                            }
+                        }
+
+                        var fishingSearchWaypoints = ParseGatheringRoutePositions(actionEntry.Item2.Skip(waypointStartIndex));
                         builder.Do("Queue Fishing Task", time =>
                         {
                             if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.FishingTask)
-                                _botTasks.Push(new Tasks.FishingTask(context, fishingSearchWaypoints.Count > 0 ? fishingSearchWaypoints : null));
+                            {
+                                _botTasks.Push(new Tasks.FishingTask(
+                                    context,
+                                    fishingSearchWaypoints.Count > 0 ? fishingSearchWaypoints : null,
+                                    location: fishingLocation,
+                                    useGmCommands: useGmCommands,
+                                    masterPoolId: masterPoolId));
+                            }
                             return BehaviourTreeStatus.Success;
                         });
                         break;
@@ -1212,6 +1251,22 @@ namespace BotRunner
                 .Where(entry => entry != 0)
                 .Distinct()
                 .ToList();
+
+        private static bool TryParseIntParameter(object rawParameter, out int value)
+        {
+            switch (rawParameter)
+            {
+                case int intParam:
+                    value = intParam;
+                    return true;
+                case long longParam when longParam >= int.MinValue && longParam <= int.MaxValue:
+                    value = (int)longParam;
+                    return true;
+                default:
+                    value = 0;
+                    return false;
+            }
+        }
 
         private static List<Position> ParseGatheringRoutePositions(IEnumerable<object> rawParameters)
         {
