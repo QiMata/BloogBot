@@ -338,6 +338,27 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-24, Shodan test-director overhaul slice 1 - inventory + UnequipItemTests pilot)
+- Completed:
+  - Audited the 70 top-level `Tests/BotRunner.Tests/LiveValidation/*.cs` files for direct FG/BG GM-command usage and grouped them by migration category. ~45 are SHODAN-CANDIDATE (test-body GM setup that should move to Shodan), the others are ACTIVITY-OWNED, NO-GM-USAGE, ALREADY-SHODAN, or FIXTURE-INFRASTRUCTURE. Inventory landed at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`.
+  - Added the first Shodan test-director helper: `LiveBotFixture.StageBotRunnerLoadoutAsync(targetAccount, label, spellsToLearn?, skillsToSet?, itemsToAdd?, cleanSlate, clearInventoryFirst)` with declarative `SkillDirective` / `ItemDirective` records (`Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`). The helper refuses to be called against Shodan herself and rejects empty target accounts.
+  - Migrated `UnequipItemTests.cs` as the pilot. It now launches `Equipment.config.json` (TESTBOT1 + TESTBOT2 + SHODAN, no `AssignedActivity`), stages each role via `StageBotRunnerLoadoutAsync`, then dispatches only `ActionType.EquipItem` and `ActionType.UnequipItem`. The test body issues no GM commands. Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/UnequipItemTests.md`.
+  - Created `Services/WoWStateManager/Settings/Configs/Equipment.config.json` to back the new pilot launch (and any subsequent Equipment / Wand / generic-loadout migrations).
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors` (1066 warnings, unchanged).
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - Live `UnequipItemTests` rerun is the next manual step — the deterministic safety bundle is the only thing run during this slice because the live equipment slice would re-trigger a StateManager restart (`Equipment.config.json` is new) and the previous Ratchet rerun already proved `EnsureSettingsAsync` switching across configs in this session.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md` (new)
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs` (new)
+  - `Tests/BotRunner.Tests/LiveValidation/UnequipItemTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/UnequipItemTests.md`
+  - `Services/WoWStateManager/Settings/Configs/Equipment.config.json` (new)
+  - `docs/TASKS.md`
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UnequipItemTests.UnequipItem_MainhandWeapon_MovesToBags" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=unequip_shodan_pilot_1.trx"`
+
 ## Handoff (2026-04-24, live-validation Tier 1 slice 13 - FG StartFishing pending-action delivery)
 - Completed:
   - Root-caused the simplified one-roster Ratchet failure to one-shot pending action delivery during FG transition-skip windows. StateManager was draining `_pendingActions` into a heartbeat response backed by the cached snapshot, while FG could still be in `ObjectManager.IsInMapTransition`; BotRunner merged the response, hit the transition-skip `continue`, then the next snapshot population cleared `CurrentAction` before `UpdateBehaviorTree(...)` could see it.

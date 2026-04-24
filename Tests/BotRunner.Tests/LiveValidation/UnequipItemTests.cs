@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -12,10 +13,18 @@ namespace BotRunner.Tests.LiveValidation;
 /// <summary>
 /// Unequip item integration test — validates ActionType.UnequipItem.
 ///
-/// Each bot (BG + FG) independently:
-///   1) Ensure Worn Mace (item 36) is equipped in mainhand via .additem + EquipItem.
-///   2) Send ActionType.UnequipItem with EquipSlot.MainHand (16).
-///   3) Verify mainhand slot is empty and item moved back to bags.
+/// First migrated slice of the Shodan test-director overhaul
+/// (see LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md).
+///
+/// Shape:
+///   1) <see cref="LiveBotFixture.EnsureSettingsAsync"/> launches TESTBOT1 +
+///      TESTBOT2 + SHODAN together via <c>Equipment.config.json</c>.
+///   2) <see cref="LiveBotFixture.StageBotRunnerLoadoutAsync"/> stages the
+///      target with mace proficiency, Maces skill, and a Worn Mace in bags.
+///      The test body issues no GM commands of its own.
+///   3) The test dispatches <c>ActionType.EquipItem</c> then
+///      <c>ActionType.UnequipItem</c> against each role and asserts on
+///      snapshot changes.
 ///
 /// EquipSlot 16 = MainHand. The dispatch maps to EquipmentAgent.UnequipItemAsync
 /// which sends CMSG_AUTOSTORE_BAG_ITEM.
@@ -32,41 +41,52 @@ public class UnequipItemTests
     private const uint MainhandSlot = 15; // Inventory map key for mainhand
     private const int MainhandEquipSlot = 16; // EquipSlot enum value for UnequipItem
     private const uint OneHandMaceSpell = 198;
+    private const uint MacesSkillId = 54;
 
     public UnequipItemTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
     public async Task UnequipItem_MainhandWeapon_MovesToBags()
     {
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
+        var equipmentSettingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Equipment.config.json");
+
+        await _bot.EnsureSettingsAsync(equipmentSettingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+
+        var bgAccount = _bot.BgAccountName;
+        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG bot account not available.");
         _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
 
-        bool bgPassed, fgPassed = false;
         var hasFg = _bot.IsFgActionable;
-
+        string? fgAccount = null;
         if (hasFg)
         {
-            var fgAccount = _bot.FgAccountName!;
-            Assert.NotNull(fgAccount);
+            fgAccount = _bot.FgAccountName;
+            Assert.False(string.IsNullOrWhiteSpace(fgAccount), "FG actionable but FgAccountName is null.");
             _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
+        }
+
+        bool bgPassed, fgPassed = false;
+        if (hasFg)
+        {
             _output.WriteLine("[PARITY] Running BG and FG unequip scenarios in parallel.");
 
-            var bgTask = RunUnequipScenario(bgAccount, "BG");
-            var fgTask = RunUnequipScenario(fgAccount, "FG");
+            var bgTask = RunUnequipScenario(bgAccount!, "BG");
+            var fgTask = RunUnequipScenario(fgAccount!, "FG");
             await Task.WhenAll(bgTask, fgTask);
             bgPassed = await bgTask;
             fgPassed = await fgTask;
         }
         else
         {
-            bgPassed = await RunUnequipScenario(bgAccount, "BG");
+            bgPassed = await RunUnequipScenario(bgAccount!, "BG");
             _output.WriteLine("\nFG Bot: NOT AVAILABLE");
         }
 
@@ -77,24 +97,24 @@ public class UnequipItemTests
 
     private async Task<bool> RunUnequipScenario(string account, string label)
     {
-        await _bot.EnsureCleanSlateAsync(account, label);
+        // Shodan-directed staging: one call replaces the previous mix of
+        // EnsureCleanSlate + BotClearInventory + BotLearnSpell + BotSetSkill +
+        // BotAddItem scattered through the test body.
+        await _bot.StageBotRunnerLoadoutAsync(
+            account,
+            label,
+            spellsToLearn: new[] { OneHandMaceSpell },
+            skillsToSet: new[] { new LiveBotFixture.SkillDirective(MacesSkillId, 1, 300) },
+            itemsToAdd: new[] { new LiveBotFixture.ItemDirective(WornMace, 1) });
 
-        // Step 0: Clear inventory to ensure bag space for unequip destination
-        _output.WriteLine($"  [{label}] Step 0: Clearing inventory for clean unequip test.");
-        await _bot.BotClearInventoryAsync(account, includeExtraBags: false);
-        await Task.Delay(1000);
+        if (!await WaitForBagItemAsync(account, WornMace, TimeSpan.FromSeconds(5)))
+        {
+            _output.WriteLine($"  [{label}] Worn Mace never observed in bags after staging; aborting.");
+            return false;
+        }
 
-        // Step 1: Learn mace proficiency if needed
-        _output.WriteLine($"  [{label}] Step 1: Ensuring mace proficiency.");
-        await _bot.BotLearnSpellAsync(account, OneHandMaceSpell);
-        await _bot.BotSetSkillAsync(account, 54, 1, 300); // skill 54 = Maces
-        await Task.Delay(500);
-
-        // Step 2: Add and equip a Worn Mace
-        _output.WriteLine($"  [{label}] Step 2: Adding and equipping Worn Mace (item {WornMace}).");
-        await _bot.BotAddItemAsync(account, WornMace);
-        await WaitForBagItemAsync(account, WornMace, TimeSpan.FromSeconds(5));
-
+        // EquipItem is part of the precondition for the UnequipItem test, but
+        // it is still a real BotRunner action — not a GM command.
         var equipResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.EquipItem,
@@ -102,7 +122,6 @@ public class UnequipItemTests
         });
         Assert.Equal(ResponseResult.Success, equipResult);
 
-        // Wait for equip to complete
         var equipped = await WaitForMainhandEquippedAsync(account, TimeSpan.FromSeconds(5));
         if (!equipped)
         {
@@ -110,15 +129,14 @@ public class UnequipItemTests
             return false;
         }
 
-        // Record state before unequip
         await _bot.RefreshSnapshotsAsync();
         var snapBefore = await _bot.GetSnapshotAsync(account);
         var maceCountBefore = CountBagItem(snapBefore, WornMace);
         var mainhandGuidBefore = GetMainhandGuid(snapBefore);
         _output.WriteLine($"  [{label}] Before unequip: mainhand=0x{mainhandGuidBefore:X}, maces in bags={maceCountBefore}");
 
-        // Step 3: Unequip mainhand
-        _output.WriteLine($"  [{label}] Step 3: Sending UnequipItem (EquipSlot={MainhandEquipSlot}).");
+        // UnequipItem is the action under test.
+        _output.WriteLine($"  [{label}] Dispatching UnequipItem (EquipSlot={MainhandEquipSlot}).");
         var unequipResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.UnequipItem,
@@ -128,7 +146,6 @@ public class UnequipItemTests
         Assert.Equal(ResponseResult.Success, unequipResult);
         await Task.Delay(500);
 
-        // Step 4: Verify mainhand is empty and item moved to bags
         var mainhandEmpty = false;
         var maceInBags = false;
         var sw = Stopwatch.StartNew();
@@ -188,5 +205,20 @@ public class UnequipItemTests
             await Task.Delay(200);
         }
         return false;
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException(
+            $"Could not locate repo path: {Path.Combine(segments)}");
     }
 }

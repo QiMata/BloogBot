@@ -6,25 +6,31 @@ Tests unequipping a weapon from mainhand slot — verifies it moves back to bags
 
 **Dual-Bot Conditional** — Both bots run unequip scenarios in parallel. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
 
+This is the first migrated slice of the Shodan test-director overhaul (see
+[SHODAN_MIGRATION_INVENTORY.md](SHODAN_MIGRATION_INVENTORY.md)). The test
+launches `Equipment.config.json` (TESTBOT1 + TESTBOT2 + SHODAN), stages
+the BotRunner under test through `StageBotRunnerLoadoutAsync`, and then
+dispatches only `ActionType.EquipItem` and `ActionType.UnequipItem`.
+The test body issues no GM commands.
+
 ## Test Methods (1)
 
 ### UnequipItem_MainhandWeapon_MovesToBags
 
-**Bots:** BG (TESTBOT2) + FG (TESTBOT1)
+**Bots:** BG (TESTBOT2) + FG (TESTBOT1) + SHODAN (test director)
 
-**Fixture Setup:** `EnsureCleanSlateAsync()`.
+**Fixture Setup:** `EnsureSettingsAsync(Equipment.config.json)`.
 
 **Test Flow (per bot):**
 
 | Step | Action | Details |
 |------|--------|---------|
-| 0 | Clear inventory | `BotClearInventoryAsync(includeExtraBags=false)` — preserve equipped gear. Wait 1s. |
-| 1 | Learn mace skill | `BotLearnSpellAsync(198)` + `BotSetSkillAsync(54, 1, 300)`. Wait 500ms. |
-| 2 | Add weapon | `BotAddItemAsync(36)` — Worn Mace. Poll 5s for bag appearance. |
-| 3 | Equip weapon | **Dispatch `ActionType.EquipItem`** with `IntParam = 36`. Assert Success. Poll 5s for mainhand equipped. |
-| 4 | Record state | Snapshot: `mainhandGuidBefore` (slot 15), `maceCountBefore` (item 36 in bags) |
-| 5 | Unequip | **Dispatch `ActionType.UnequipItem`** with `IntParam = 16` (MainhandEquipSlot enum) |
-| 6 | Verify | Poll 5s (200ms interval): check mainhand GUID changed or empty, mace count increased in bags |
+| 0 | Stage loadout | `StageBotRunnerLoadoutAsync(account, label, spells=[198], skills=[(54,1,300)], items=[(36,1)])` — clean slate, clear bag 0, learn mace proficiency, set Maces skill, add Worn Mace. |
+| 1 | Wait for bag | Poll 5s for Worn Mace appearance in bags. |
+| 2 | Equip weapon | **Dispatch `ActionType.EquipItem`** with `IntParam = 36`. Assert Success. Poll 5s for mainhand equipped. |
+| 3 | Record state | Snapshot: `mainhandGuidBefore` (slot 15), `maceCountBefore` (item 36 in bags) |
+| 4 | Unequip | **Dispatch `ActionType.UnequipItem`** with `IntParam = 16` (MainhandEquipSlot enum) |
+| 5 | Verify | Poll 5s (200ms interval): check mainhand GUID changed or empty, mace count increased in bags |
 
 **StateManager/BotRunner Action Flow:**
 
@@ -45,6 +51,11 @@ Tests unequipping a weapon from mainhand slot — verifies it moves back to bags
 
 **Key IDs:** Item 36 = Worn Mace. Spell 198 = One-Hand Maces. Skill 54 = Maces.
 
-**GM Commands:** None (all via ActionType dispatch).
+**GM Commands in test body:** None. All GM staging is encapsulated by
+`StageBotRunnerLoadoutAsync` (Shodan test-director helper). The helper
+internally still routes `.learn` / `.setskill` / `.additem` through the
+target bot's chat layer because MaNGOS resolves those commands against
+the sender's own character; a follow-up pass can switch to Shodan
+cross-targeting or SOAP name-targeted variants.
 
 **Assertions:** Mainhand filled after equip. Mainhand empty after unequip. Mace appears in bags after unequip.

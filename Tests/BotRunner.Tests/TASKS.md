@@ -14,6 +14,14 @@
 5. Update this file in the same session as any BotRunner test delta.
 
 ## Active Priorities
+0. Shodan test-director migration (started 2026-04-24)
+- [x] Audit top-level `LiveValidation/*.cs` for FG/BG GM-command usage and group by category. Inventory at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`.
+- [x] Add `LiveBotFixture.StageBotRunnerLoadoutAsync(...)` test-director helper plus `Equipment.config.json` for migrated equipment-loadout tests.
+- [x] Pilot migration: `UnequipItemTests` now stages via Shodan-director helper and dispatches only `ActionType.EquipItem` / `UnequipItem` from the test body.
+- [ ] Migrate `EquipmentEquipTests` and `WandAttackTests` next; they share the `Equipment.config.json` launch and the same `StageBotRunnerLoadoutAsync` shape.
+- [ ] Promote remaining SHODAN-CANDIDATE tests in priority order (professions / loadout, then economy / NPC, then movement / navigation, then combat / quest / misc).
+- [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
+
 1. Live-validation expectation cleanup
 - [x] Remove stale FG coinage stub assumptions from mail/trainer live assertions now that `WoWPlayer.Coinage` is descriptor-backed.
 - [x] Sweep remaining live-validation suites for FG/BG divergence assumptions that are no longer true.
