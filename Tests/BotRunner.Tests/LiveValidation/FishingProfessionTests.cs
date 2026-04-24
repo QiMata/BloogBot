@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Communication;
 using Tests.Infrastructure;
-using WoWStateManager.Settings;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -13,20 +13,23 @@ namespace BotRunner.Tests.LiveValidation;
 /// <summary>
 /// Authoritative dual-bot fishing live validation.
 ///
-/// The fixture uses the dedicated GM admin bot Shodan to stage a pier-reachable
-/// Ratchet pool before the fishing bots launch. The test first runs a
-/// Shodan-only settings file, equips Shodan, rotates/respawns Barrens master
-/// pool 2628 until a close pool is visible from the Ratchet landing, then
-/// restarts into <c>Fishing.config.json</c> where TESTBOT1 (FG) and TESTBOT2
-/// (BG) auto-run <c>Fishing[Ratchet]</c>. Everything from the fishing bots'
-/// world-entry to <c>FishingTask fishing_loot_success</c> remains owned by
-/// <see cref="BotRunner.Tasks.FishingTask"/> and the
-/// <see cref="BotRunner.Activities.ActivityResolver"/>.
+/// The fixture uses a single FG+BG+Shodan roster launch. Shodan stages a
+/// pier-reachable Ratchet pool, then FG and BG stay idle until the test
+/// explicitly dispatches <c>ActionType.StartFishing</c> for each phase. Once
+/// dispatched, everything from <c>FishingTask activity_start</c> to
+/// <c>FishingTask fishing_loot_success</c> remains owned by
+/// <see cref="BotRunner.Tasks.FishingTask"/>.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class FishingProfessionTests
 {
     private static readonly TimeSpan FishingLootDeadline = TimeSpan.FromMinutes(3);
+    private const string RatchetLocation = "Ratchet";
+    private const int RatchetMasterPoolId = 2628;
+    private const int KalimdorMapId = 1;
+    private const float RatchetLandingX = -956.7f;
+    private const float RatchetLandingY = -3754.7f;
+    private const float RatchetLandingZ = 5.3f;
     private const string LootSuccessMarker = "[TASK] FishingTask fishing_loot_success";
     private const string PoolAcquiredMarker = "[TASK] FishingTask pool_acquired";
     private const string ActivityStartMarker = "[TASK] FishingTask activity_start";
@@ -44,97 +47,77 @@ public class FishingProfessionTests
     [SkippableFact]
     public async Task Fishing_CatchFish_BgAndFg_RatchetStagedPool()
     {
-        var shodanOnlySettingsPath = ResolveRepoPath(
-            "Services", "WoWStateManager", "Settings", "Configs", "Fishing.ShodanOnly.config.json");
-        var (fgOnlySettingsPath, bgOnlySettingsPath) = CreateSingleBotFishingSettings();
+        var fishingSettingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Fishing.config.json");
 
-        await PrepareShodanStagedPoolAsync(shodanOnlySettingsPath);
-
-        await _bot.EnsureSettingsAsync(fgOnlySettingsPath);
+        await _bot.EnsureSettingsAsync(fishingSettingsPath);
         _bot.SetOutput(_output);
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
-
-        var fgAccount = _bot.FgAccountName;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot account not available.");
-
-        _output.WriteLine(
-            $"[FISHING] Waiting up to {FishingLootDeadline.TotalMinutes:F0}m for FG ('{fgAccount}') " +
-            "to report FishingTask fishing_loot_success via the Fishing[Ratchet] activity.");
-
-        var fgResult = await WaitForSingleLootSuccessAsync(fgAccount!, "FG", FishingLootDeadline);
-
-        Assert.True(fgResult.SawActivityStart,
-            $"[FG] Activity start diagnostic '{ActivityStartMarker}' never appeared; activity did not dispatch. " +
-            $"{FormatChatTail(fgResult.RecentChat)}");
-        Assert.True(fgResult.SawPoolAcquired,
-            $"[FG] FishingTask never acquired a pool; activity moved to fish phase but no pool entered cast range. " +
-            $"{FormatChatTail(fgResult.RecentChat)}");
-        Assert.True(fgResult.SawLootSuccess,
-            $"[FG] FishingTask never reached fishing_loot_success within {FishingLootDeadline.TotalMinutes:F0}m. " +
-            $"{FormatChatTail(fgResult.RecentChat)}");
-
-        await PrepareShodanStagedPoolAsync(shodanOnlySettingsPath);
-
-        await _bot.EnsureSettingsAsync(bgOnlySettingsPath);
-        _bot.SetOutput(_output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
-
-        var bgAccount = _bot.BgAccountName;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG bot account not available.");
-
-        _output.WriteLine(
-            $"[FISHING] Waiting up to {FishingLootDeadline.TotalMinutes:F0}m for BG ('{bgAccount}') " +
-            "to report FishingTask fishing_loot_success via the Fishing[Ratchet] activity.");
-
-        var bgResult = await WaitForSingleLootSuccessAsync(bgAccount!, "BG", FishingLootDeadline);
-
-        Assert.True(bgResult.SawActivityStart,
-            $"[BG] Activity start diagnostic '{ActivityStartMarker}' never appeared; activity did not dispatch. " +
-            $"{FormatChatTail(bgResult.RecentChat)}");
-        Assert.True(bgResult.SawPoolAcquired,
-            $"[BG] FishingTask never acquired a pool; activity moved to fish phase but no pool entered cast range. " +
-            $"{FormatChatTail(bgResult.RecentChat)}");
-        Assert.True(bgResult.SawLootSuccess,
-            $"[BG] FishingTask never reached fishing_loot_success within {FishingLootDeadline.TotalMinutes:F0}m. " +
-            $"{FormatChatTail(bgResult.RecentChat)}");
-
-        _output.WriteLine(
-            $"[FISHING] Both roles reported fishing_loot_success in isolated runs. FG last loot: '{fgResult.LastLootLine}' | BG last loot: '{bgResult.LastLootLine}'");
-    }
-
-    private async Task PrepareShodanStagedPoolAsync(string shodanOnlySettingsPath)
-    {
-        await _bot.EnsureSettingsAsync(shodanOnlySettingsPath);
-        _bot.SetOutput(_output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
-
-        const int kalimdorMapId = 1;
-        const float ratchetLandingX = -956.7f;
-        const float ratchetLandingY = -3754.7f;
-        const float ratchetLandingZ = 5.3f;
 
         var shodanAccount = _bot.ShodanAccountName;
+        var fgAccount = _bot.FgAccountName;
+        var bgAccount = _bot.BgAccountName;
+
         Assert.False(
             string.IsNullOrWhiteSpace(shodanAccount),
-            "Shodan admin bot was not launched by Fishing.ShodanOnly.config.json.");
+            "Shodan admin bot was not launched by Fishing.config.json.");
+        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot account not available.");
+        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG bot account not available.");
 
         await _bot.EnsureShodanAdminLoadoutAsync(shodanAccount!, _bot.ShodanCharacterName);
 
-        var poolReady = await _bot.EnsureCloseFishingPoolActiveNearAsync(
+        var fgStageReady = await _bot.EnsureCloseFishingPoolActiveNearAsync(
             shodanAccount!,
-            kalimdorMapId,
-            ratchetLandingX,
-            ratchetLandingY,
-            stagingZ: ratchetLandingZ + 2f,
+            KalimdorMapId,
+            RatchetLandingX,
+            RatchetLandingY,
+            stagingZ: RatchetLandingZ + 2f,
             acceptDistance: 55f,
             rotateRadius: 200f,
             respawnLimit: 5,
             maxIterations: 5);
-
         Assert.True(
-            poolReady,
-            "[FISHING] Shodan could not surface a close Ratchet pool before the fishing bot launched.");
-        _output.WriteLine("[FISHING] Pre-run pool setup via Shodan: poolReady=True.");
+            fgStageReady,
+            "[FISHING] Shodan could not surface a close Ratchet pool before the FG phase.");
+
+        var fgDispatchResult = await _bot.SendActionAsync(fgAccount!, CreateStartFishingAction());
+        Assert.Equal(ResponseResult.Success, fgDispatchResult);
+
+        _output.WriteLine(
+            $"[FISHING] Waiting up to {FishingLootDeadline.TotalMinutes:F0}m for FG ('{fgAccount}') " +
+            "to report FishingTask fishing_loot_success via an action-dispatched FishingTask.");
+
+        var fgResult = await WaitForSingleLootSuccessAsync(fgAccount!, "FG", FishingLootDeadline);
+
+        AssertFishingSuccess("FG", fgResult);
+
+        var bgStageReady = await _bot.EnsureCloseFishingPoolActiveNearAsync(
+            shodanAccount!,
+            KalimdorMapId,
+            RatchetLandingX,
+            RatchetLandingY,
+            stagingZ: RatchetLandingZ + 2f,
+            acceptDistance: 55f,
+            rotateRadius: 200f,
+            respawnLimit: 5,
+            maxIterations: 5);
+        Assert.True(
+            bgStageReady,
+            "[FISHING] Shodan could not surface a close Ratchet pool before the BG phase.");
+
+        var bgDispatchResult = await _bot.SendActionAsync(bgAccount!, CreateStartFishingAction());
+        Assert.Equal(ResponseResult.Success, bgDispatchResult);
+
+        _output.WriteLine(
+            $"[FISHING] Waiting up to {FishingLootDeadline.TotalMinutes:F0}m for BG ('{bgAccount}') " +
+            "to report FishingTask fishing_loot_success via an action-dispatched FishingTask.");
+
+        var bgResult = await WaitForSingleLootSuccessAsync(bgAccount!, "BG", FishingLootDeadline);
+
+        AssertFishingSuccess("BG", bgResult);
+
+        _output.WriteLine(
+            $"[FISHING] Both roles reported fishing_loot_success without roster restarts. FG last loot: '{fgResult.LastLootLine}' | BG last loot: '{bgResult.LastLootLine}'");
     }
 
     private async Task<SingleFishingPollResult> WaitForSingleLootSuccessAsync(string accountName, string roleLabel, TimeSpan timeout)
@@ -197,6 +180,33 @@ public class FishingProfessionTests
         return "recentChat=[" + string.Join(" || ", tail) + "]";
     }
 
+    private static ActionMessage CreateStartFishingAction()
+    {
+        return new ActionMessage
+        {
+            ActionType = ActionType.StartFishing,
+            Parameters =
+            {
+                new RequestParameter { StringParam = RatchetLocation },
+                new RequestParameter { IntParam = 1 },
+                new RequestParameter { IntParam = RatchetMasterPoolId },
+            }
+        };
+    }
+
+    private static void AssertFishingSuccess(string roleLabel, SingleFishingPollResult result)
+    {
+        Assert.True(result.SawActivityStart,
+            $"[{roleLabel}] Activity start diagnostic '{ActivityStartMarker}' never appeared; action dispatch never started FishingTask. " +
+            $"{FormatChatTail(result.RecentChat)}");
+        Assert.True(result.SawPoolAcquired,
+            $"[{roleLabel}] FishingTask never acquired a pool; task started but no pool entered cast range. " +
+            $"{FormatChatTail(result.RecentChat)}");
+        Assert.True(result.SawLootSuccess,
+            $"[{roleLabel}] FishingTask never reached fishing_loot_success within {FishingLootDeadline.TotalMinutes:F0}m. " +
+            $"{FormatChatTail(result.RecentChat)}");
+    }
+
     private static string ResolveRepoPath(params string[] segments)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -210,31 +220,6 @@ public class FishingProfessionTests
         }
 
         throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
-    }
-
-    private static (string FgOnlySettingsPath, string BgOnlySettingsPath) CreateSingleBotFishingSettings()
-    {
-        var fishingRoster = CoordinatorFixtureBase.LoadCharacterSettingsFromConfig("Fishing.config.json");
-
-        var fgOnlyRoster = fishingRoster
-            .Where(settings => settings.RunnerType == BotRunnerType.Foreground)
-            .ToArray();
-        var bgOnlyRoster = fishingRoster
-            .Where(settings => settings.RunnerType == BotRunnerType.Background
-                && !string.Equals(settings.AccountName, "SHODAN", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-
-        Assert.Single(fgOnlyRoster);
-        Assert.Single(bgOnlyRoster);
-
-        var fgOnlySettingsPath = CoordinatorFixtureBase.WriteSettingsFile(
-            fgOnlyRoster,
-            "Fishing.FgOnly.runtime.config.json");
-        var bgOnlySettingsPath = CoordinatorFixtureBase.WriteSettingsFile(
-            bgOnlyRoster,
-            "Fishing.BgOnly.runtime.config.json");
-
-        return (fgOnlySettingsPath, bgOnlySettingsPath);
     }
 
     private sealed record SingleFishingPollResult(

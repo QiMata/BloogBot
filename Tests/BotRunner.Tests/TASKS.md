@@ -51,6 +51,42 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-24 (Tier 1 slice 12 - single-launch Ratchet fishing; BG LOS fix via pathfinding-first cast source)
+- Pass result: `build green; deterministic slice green; single-launch Ratchet fishing is green on two consecutive focused reruns after restoring pathfinding-first cast selection for both bots; a third rerun stalled upstream in Shodan pool staging`
+- Last delta:
+  - `FishingProfessionTests.cs` now runs the Ratchet proof from one shared `Fishing.config.json` roster. FG, BG, and Shodan launch together once; Shodan stages a close pool; the test dispatches `ActionType.StartFishing` to FG with `["Ratchet", 1, 2628]`, waits for `fishing_loot_success`, re-stages, then dispatches the same action to BG.
+  - `Fishing.config.json` no longer assigns `Fishing[Ratchet]` to TESTBOT1 or TESTBOT2, so both bots stay idle until the test sends the action. The dedicated `Fishing.ShodanOnly.config.json` roster is gone.
+  - `ActionDispatcher.StartFishing` now forwards `location`, `useGmCommands`, and `masterPoolId` into `FishingTask`, and `BotRunnerServiceFishingDispatchTests` cover both the new metadata-aware payload and the legacy waypoint-only payload.
+  - `FishingTask.TryResolveCastPosition(...)` is pathfinding-first again. The current user-reported BG LOS screenshot matched the logs exactly: BG was reacquiring `castSource=native` at `distance≈18.2` and casting into the pier. With the pathfinding-first selector restored, both FG and BG reacquire `castSource=pathfinding` and finish from the same ~16y pier-edge standoff.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> verified the required MaNGOS + scene/pathfinding services were `Up`/`healthy` before live validation.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_action_driven_single_launch_pathfinding_first_1.trx" *> "tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_1.console.txt"` -> `passed (1/1)` in `20.8074m`; one TESTBOT1 `WoW.exe` launch, one fixture-ready line, one initial custom-settings restart, FG `castSource=pathfinding` -> `fishing_loot_success`, BG `castSource=pathfinding` -> `fishing_loot_success`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_action_driven_single_launch_pathfinding_first_2.trx" *> "tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_2.console.txt"` -> `passed (1/1)`; TRX again shows FG/BG `castSource=pathfinding` and both `fishing_loot_success`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_action_driven_single_launch_pathfinding_first_3.trx" *> "tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_3.console.txt"` -> `shell timed out after 30m`; the console stopped progressing in `FISHING-WAKE-*` during Shodan pool staging before any fishing action dispatch. Follow-up `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` stopped the lingering repo-scoped processes.
+- Artifacts:
+  - `tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_1.trx`
+  - `tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_1.console.txt`
+  - `tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_2.trx`
+  - `tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_2.console.txt`
+  - `tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_3.console.txt`
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Exports/BotRunner/Tasks/FishingTask.cs`
+  - `Services/WoWStateManager/Settings/Configs/Fishing.config.json`
+  - `Services/WoWStateManager/Settings/Configs/Fishing.ShodanOnly.config.json` (deleted)
+  - `Tests/BotRunner.Tests/BotRunnerServiceFishingDispatchTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/FishingProfessionTests.md`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_action_driven_single_launch_pathfinding_first_4.trx" *> "tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_4.console.txt"`
+
 ### 2026-04-24 (Tier 1 slice 11 - Shodan staged Ratchet fishing stabilized 4x green)
 - Pass result: `build green; deterministic live-fixture slices green; the focused Ratchet fishing slice is now green in four consecutive formal reruns`
 - Last delta:

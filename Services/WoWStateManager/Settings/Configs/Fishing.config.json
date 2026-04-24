@@ -12,8 +12,7 @@
     "Neuroticism": 1.0,
     "ShouldRun": true,
     "RunnerType": "Foreground",
-    "UseGmCommands": true,
-    "AssignedActivity": "Fishing[Ratchet]"
+    "UseGmCommands": true
   },
   {
     "AccountName": "TESTBOT2",
@@ -28,8 +27,7 @@
     "Neuroticism": 1.0,
     "ShouldRun": true,
     "RunnerType": "Background",
-    "UseGmCommands": true,
-    "AssignedActivity": "Fishing[Ratchet]"
+    "UseGmCommands": true
   },
   {
     "AccountName": "SHODAN",

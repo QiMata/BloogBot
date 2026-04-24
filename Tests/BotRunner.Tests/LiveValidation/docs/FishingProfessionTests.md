@@ -1,6 +1,6 @@
 # FishingProfessionTests
 
-Dual-bot live validation for the task-owned Ratchet fishing path.
+Dual-bot live validation for the single-launch, action-driven Ratchet fishing path.
 
 ## Bot Execution Mode
 
@@ -8,11 +8,14 @@ Dual-bot live validation for the task-owned Ratchet fishing path.
 
 ## Purpose
 
-This suite proves that both BG and FG run the same high-level fishing contract:
+This suite proves that both BG and FG run the same high-level fishing contract from one shared roster launch:
 
-1. teleport to Ratchet via `.tele name {charName} Ratchet`
-2. dispatch `ActionType.StartFishing`
-3. let `FishingTask` equip the pole, acquire the nearest visible pool, move into a castable LOS position, cast, wait for the bite, open the loot window, and finish after the catch reaches bags
+1. launch `Fishing.config.json` once with FG, BG, and Shodan all online
+2. have Shodan stage a close Ratchet pool
+3. dispatch `ActionType.StartFishing` to FG with parameters:
+   `["Ratchet", 1, 2628]`
+4. let `FishingTask` own gear/spell setup, `.tele name <char> Ratchet`, `.pool update 2628`, pool acquisition, cast positioning, cast/loot, and completion
+5. re-stage with Shodan, then dispatch the same `StartFishing` action to BG
 
 ## Production Links
 
@@ -34,20 +37,23 @@ This suite proves that both BG and FG run the same high-level fishing contract:
 
 ## Test Flow
 
-1. `EnsureCleanSlateAsync(..., teleportToSafeZone: true)` runs for both bots, and FG is checked with `CheckFgActionableAsync(requireTeleportProbe: false)`.
-2. Both bots learn fishing, set fishing skill to `75`, clear items, receive a fishing pole plus `Nightcrawler Bait`, and teleport to Ratchet with the named GM teleport.
-3. The test queries nearby DB-backed pool rows, builds a local Ratchet child-pool refresh plan, and classifies the staged result instead of flattening everything into "no pool." The normal staged refresh now updates near-stage Ratchet child pools first (`2620`, `2619`, `2627`) and only falls back to master pool `2628` after the local child set stays empty.
-4. Both bots now prefer the same fixed local stage order before dispatch: `packet-capture -> parity`. If a stage surfaces a visible natural pool, the test continues immediately. If local Ratchet child pools report spawned objects but still stay invisible, the harness can still proceed with a bounded local search-waypoint set and logs that the blocker is now visibility/streaming or the short pier search route. If both dock stages stay empty, the harness runs direct child-pool probes and can fall back with another bounded local search set when those probes prove nearby Ratchet children are spawnable.
-5. The test dispatches `ActionType.StartFishing` for BG and FG.
-6. `FishingTask` owns:
+1. `EnsureSettingsAsync(Fishing.config.json)` launches FG + BG + Shodan once. TESTBOT1 and TESTBOT2 stay idle because `AssignedActivity` is absent from the roster.
+2. Shodan equips the dedicated admin mage loadout and stages a close Ratchet pool via `EnsureCloseFishingPoolActiveNearAsync(...)`.
+3. The test dispatches `ActionType.StartFishing` to FG with:
+   - `location = "Ratchet"`
+   - `useGmCommands = 1`
+   - `masterPoolId = 2628`
+4. `FishingTask` owns:
    - pole equip
    - bait application to the equipped pole
+   - GM-driven prep (`.learn`, `.setskill`, `.pool update`, named teleport) because `useGmCommands = 1`
    - pool acquisition
    - pool approach and LOS-aware cast positioning
    - cast start
    - channel / bobber confirmation
    - loot-window handling
    - completion after a newly looted catch appears in bags
+5. After FG reports `FishingTask fishing_loot_success`, Shodan re-stages a close pool and the test dispatches the same `StartFishing` action to BG.
 
 ## Assertions
 
@@ -87,26 +93,29 @@ Both bots must show all of the following:
 ## Validation
 
 ```powershell
-dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingPoolStagePlannerTests|FullyQualifiedName~AtomicBotTaskTests" --logger "console;verbosity=minimal"
-dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=minimal"
+dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"
+powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly
+$env:WWOW_DATA_DIR='D:/MaNGOS/data'
+dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live"
 ```
 
 Latest focused results:
-- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore` -> succeeded
-- Targeted deterministic slice (`FishingTaskTests|AtomicBotTaskTests`) -> `30 passed`
-- Focused FG packet capture already proved the task-owned path can succeed end-to-end: `pool_acquired`, `in_cast_range_current`, `cast_started`, and `fishing_loot_success` all fired and `packets_TESTBOT1.csv` was recorded.
-- Latest 2026-04-02 focused FG rerun on the current binaries is green and captured the full success chain from the packet-capture dock: `pool_acquired`, `in_cast_range_current`, `cast_started`, `loot_bag_delta items=[6361]`, `fishing_loot_success`, and `pop reason=fishing_loot_success`.
-- A separate earlier focused live fishing pass also proved the runtime contract can succeed end-to-end on live data: BG completed a live catch with `skill 75 -> 76`, `bestPool=17.3y`, `lootSuccess=True`, and `catchDelta=[6358]`.
-- The newest runtime delta tightens search-walk travel targets again: an unreachable `8y` local step now falls back to a reachable `4y` or `2y` step before the task gives up on that probe.
-- Latest 2026-04-02 focused dual rerun on the current binaries is green: FG completed `fishing_loot_success` with loot item `[6303]`, and BG completed `fishing_loot_success` with loot item `[6358]`.
-- Important scope note: this latest green dual rerun acquired immediate local pools and never entered `search_walk`, so the blocked-corner guard is currently proven by deterministic coverage plus the earlier live stuck-generation diagnostics rather than by a fresh staged-search live rerun.
-- Because the harness now keeps staged visibility explicit, the remaining open work is no longer basic focused dual runtime completion. It is the comparison/instrumentation slice: keep the green FG and dual live baselines, then tighten authoritative staged visibility / `.pool spawns` attribution on nondeterministic reruns and perform the actual FG/BG packet-sequence comparison.
+- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> succeeded
+- Targeted deterministic slice (`FishingPoolActivationAnalyzerTests|LiveBotFixtureBotChatTests|GatheringRouteSelectionTests|BotRunnerServiceFishingDispatchTests`) -> `33 passed`
+- `2026-04-24` focused live single-launch rerun `fishing_action_driven_single_launch_pathfinding_first_1.trx` is green:
+  - FG: `pool_acquired ... castSource=pathfinding` -> `cast_position_arrived distance=15.8 edgeDist=18.0 los=True` -> `fishing_loot_success`
+  - BG: `pool_acquired ... castSource=pathfinding` -> `cast_position_arrived distance=16.0 edgeDist=18.0 los=True` -> `fishing_loot_success`
+  - Console counts: one TESTBOT1 `WoW.exe` launch, one fixture-ready line, one initial `Restarting with custom settings: ...Fishing.config.json`, and no mid-test roster restarts
+- `2026-04-24` focused live single-launch rerun `fishing_action_driven_single_launch_pathfinding_first_2.trx` is also green with the same `castSource=pathfinding` outcome for both bots.
+- `2026-04-24` focused live single-launch rerun `fishing_action_driven_single_launch_pathfinding_first_3.console.txt` is inconclusive. The fixture stalled during Shodan `FISHING-WAKE-*` pool staging before either `StartFishing` dispatch, so it does not count as a fishing-placement regression.
+- The current open question is staging reliability, not the BG dock LOS issue from the latest screenshot. After restoring the pathfinding-first cast resolver, both bots are again fishing from the same pier-edge standoff instead of BG's old native dock-interior stand point.
 
 ## Current Focus
 
-- keep the focused fishing slice meaningful with both bots asserted from the Ratchet named teleport
+- keep the focused fishing slice meaningful with one shared FG+BG+Shodan roster launch
 - keep the success contract tied to the bobber-interact -> loot-window -> bag-delta sequence
+- keep `StartFishing` action dispatch authoritative for both FG and BG instead of relying on roster restarts or `AssignedActivity`
 - treat staged Ratchet visibility and authoritative `.pool spawns` capture as the first blocker on reruns that do not surface an immediate local pool, then treat any post-acquisition failure as shoreline/pathfinding/LOS work
 - use FG as the live packet/timing reference; the focused FG packet-capture slice is green again on the current binaries
 - keep the `MovementStuckRecoveryGeneration` search-walk guard covered whenever the dual slice re-enters local pier search

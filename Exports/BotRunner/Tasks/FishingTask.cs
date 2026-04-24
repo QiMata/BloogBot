@@ -1196,11 +1196,23 @@ public class FishingTask : BotTask, IBotTask
 
     private FishingCastPosition? TryResolveCastPosition(uint mapId, Position playerPosition, Position poolPosition, out string source)
     {
-        // Primary: pool-centric ring sweep (BG / scene-data-backed). Probes ground Z in a
+        // Primary: pathfinding interpolation with a pier-layer Z guard. Ratchet's reliable
+        // casts come from the walkable pier-edge route, and the navmesh path is the best
+        // signal for that stand point. Keeping this first prevents BG from reusing a
+        // native-only dock-interior candidate that technically passes LOS but still throws
+        // the rod into the pier from too far inboard.
+        var pathfinding = TryResolveCastViaPathfinding(mapId, playerPosition, poolPosition);
+        if (pathfinding != null)
+        {
+            source = "pathfinding";
+            return pathfinding;
+        }
+
+        // Fallback: pool-centric ring sweep (BG / scene-data-backed). Probes ground Z in a
         // ring around the pool, keeps only on-pier hits, LOS-tests each against the pool,
         // and validates that the bot can actually reach the candidate via navmesh without
-        // the route dropping into water. That chain rejects candidates on detached piers,
-        // on far shores reachable only by swimming, and inside pier-support pillars.
+        // the route dropping into water. Keep it as the recovery path when pathfinding
+        // declines rather than the default selector.
         if (SupportsNativeLocalPhysicsQueries)
         {
             var native = FishingCastPositionFinder.FindForPool(
@@ -1213,15 +1225,6 @@ public class FishingTask : BotTask, IBotTask
                 source = "native";
                 return native;
             }
-        }
-
-        // Fallback: pathfinding interpolation with a pier-layer Z guard. Used when local
-        // physics isn't available (FG) or the ring sweep found no LOS-clear candidate.
-        var pathfinding = TryResolveCastViaPathfinding(mapId, playerPosition, poolPosition);
-        if (pathfinding != null)
-        {
-            source = "pathfinding";
-            return pathfinding;
         }
 
         source = "none";
