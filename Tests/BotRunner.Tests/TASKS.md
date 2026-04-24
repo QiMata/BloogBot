@@ -51,6 +51,33 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-24 (Tier 1 slice 13 - pending-action readiness gate)
+- Pass result: `single-launch Ratchet fishing passes with no AssignedActivity workaround; FG and BG both receive StartFishing and report fishing_loot_success`
+- Last delta:
+  - Added `ActionForwardingContractTests` coverage that pins pending action behavior across heartbeat/full-snapshot readiness boundaries: ready heartbeats deliver, transition heartbeats defer, and non-actionable full snapshots defer until a later ready snapshot.
+  - The live regression is proven fixed by `fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat`: FG receives `StartFishing`, pushes `FishingTask`, reports `update_entered` and `activity_start`, then loots successfully; BG repeats the same flow in the same `Fishing.config.json` launch.
+  - The test remains action-driven. `Fishing.config.json` still does not assign `Fishing[Ratchet]` to TESTBOT1/TESTBOT2, and the pathfinding-first cast-position fix remains intact.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`
+  - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> required MaNGOS plus pathfinding/scene-data services were running/healthy.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.trx" *> "tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.console.txt"` -> `passed (1/1)` in `4m 48s`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Artifacts:
+  - `tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.trx`
+  - `tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.console.txt`
+  - `D:\World of Warcraft\logs\botrunner_TESTBOT1.diag.log`
+  - `Bot/Release/net8.0/logs/botrunner_TESTBOT2.diag.log`
+- Files changed:
+  - `Tests/BotRunner.Tests/ActionForwardingContractTests.cs`
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Services/WoWStateManager/Listeners/CharacterStateSocketListener.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `git status --short`
+
 ### 2026-04-24 (Tier 1 slice 12 - single-launch Ratchet fishing; BG LOS fix via pathfinding-first cast source)
 - Pass result: `build green; deterministic slice green; single-launch Ratchet fishing is green on two consecutive focused reruns after restoring pathfinding-first cast selection for both bots; a third rerun stalled upstream in Shodan pool staging`
 - Last delta:

@@ -338,6 +338,35 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-24, live-validation Tier 1 slice 13 - FG StartFishing pending-action delivery)
+- Completed:
+  - Root-caused the simplified one-roster Ratchet failure to one-shot pending action delivery during FG transition-skip windows. StateManager was draining `_pendingActions` into a heartbeat response backed by the cached snapshot, while FG could still be in `ObjectManager.IsInMapTransition`; BotRunner merged the response, hit the transition-skip `continue`, then the next snapshot population cleared `CurrentAction` before `UpdateBehaviorTree(...)` could see it.
+  - `BotRunnerService` heartbeat payloads now carry the lightweight readiness fields StateManager needs: `ScreenState`, `ConnectionState`, `IsObjectManagerValid`, and `IsMapTransition`.
+  - `CharacterStateSocketListener` now drains queued external/test actions only when the current heartbeat/full snapshot is actionable (`InWorld`, `BotInWorld`, object manager valid, not map transition). If not actionable, the pending action stays queued for the next ready update instead of being burned.
+  - Added `ActionForwardingContractTests` coverage for ready-heartbeat delivery, transition-heartbeat deferral, and non-actionable full-snapshot deferral.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `docker ps --format "table {{.Names}}\t{{.Status}}"` -> confirmed `mangosd`, `realmd`, `maria-db`, `pathfinding-service`, and `scene-data-service` were running/healthy before live validation.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.trx" *> "tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.console.txt"` -> `passed (1/1)` in `4m 48s`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `D:\World of Warcraft\logs\botrunner_TESTBOT1.diag.log` -> `21:57:10.498 [ACTION-RECV] type=StartFishing params=3 ready=True`, then `tasks=2(FishingTask)`.
+  - `Bot/Release/net8.0/logs/botrunner_TESTBOT2.diag.log` -> `21:58:37.471 [ACTION-RECV] type=StartFishing params=3 ready=True`, then `tasks=2(FishingTask)`.
+  - `tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.trx` -> FG/BG `FishingTask update_entered`, `activity_start`, and final `fishing_loot_success` for both roles with no roster restart.
+  - `tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.console.txt`
+  - `tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.exit.txt`
+- Files changed:
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Services/WoWStateManager/Listeners/CharacterStateSocketListener.cs`
+  - `Tests/BotRunner.Tests/ActionForwardingContractTests.cs`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `git status --short`
+
 ## Handoff (2026-04-24, live-validation Tier 1 slice 12 - single-launch Ratchet fishing; BG pathfinding cast restored)
 - Completed:
   - Simplified `Fishing_CatchFish_BgAndFg_RatchetStagedPool` down to one `EnsureSettingsAsync(Fishing.config.json)` launch. The test now keeps FG + BG + Shodan online together, stages with Shodan, dispatches `ActionType.StartFishing` to FG, re-stages, then dispatches the same action to BG. `Fishing.config.json` no longer assigns `Fishing[Ratchet]` to TESTBOT1/TESTBOT2, and the obsolete `Fishing.ShodanOnly.config.json` roster file was deleted.

@@ -281,6 +281,10 @@ namespace BotRunner
                             AccountName = _activitySnapshot.AccountName ?? _initialAccountName,
                             CharacterName = _activitySnapshot.CharacterName ?? string.Empty,
                             IsHeartbeatOnly = true,
+                            ScreenState = _activitySnapshot.ScreenState ?? string.Empty,
+                            ConnectionState = _activitySnapshot.ConnectionState,
+                            IsObjectManagerValid = _activitySnapshot.IsObjectManagerValid,
+                            IsMapTransition = _activitySnapshot.IsMapTransition,
                         };
                     }
 

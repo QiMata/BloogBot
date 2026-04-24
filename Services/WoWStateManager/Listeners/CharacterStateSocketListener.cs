@@ -184,9 +184,13 @@ namespace WoWStateManager.Listeners
 
             var prioritizeCoordinatorAction = ShouldPrioritizeCoordinatorAction(response.CurrentAction);
 
+            var pendingActionDeliveryReady = IsPendingActionDeliveryReady(request, response);
+
             // Inject pending test/external action (overrides coordinated action if present).
             // Use FIFO so rapid multi-step setup actions (target -> chat command, etc.) are not dropped.
-            if (!prioritizeCoordinatorAction && _pendingActions.TryGetValue(accountName, out var pendingQueue))
+            if (!prioritizeCoordinatorAction
+                && pendingActionDeliveryReady
+                && _pendingActions.TryGetValue(accountName, out var pendingQueue))
             {
                 while (pendingQueue.TryDequeue(out var timestampedAction))
                 {
@@ -219,6 +223,17 @@ namespace WoWStateManager.Listeners
                 if (pendingQueue.IsEmpty)
                     _pendingActions.TryRemove(accountName, out _);
             }
+            else if (!pendingActionDeliveryReady && _pendingActions.ContainsKey(accountName))
+            {
+                _logger.LogDebug(
+                    "DEFERRING PENDING ACTION for '{AccountName}': heartbeat={Heartbeat} screen={ScreenState} conn={ConnectionState} valid={IsValid} transition={IsTransition}",
+                    accountName,
+                    request.IsHeartbeatOnly,
+                    request.IsHeartbeatOnly && HasHeartbeatReadinessFields(request) ? request.ScreenState : response.ScreenState,
+                    request.IsHeartbeatOnly && HasHeartbeatReadinessFields(request) ? request.ConnectionState : response.ConnectionState,
+                    request.IsHeartbeatOnly && HasHeartbeatReadinessFields(request) ? request.IsObjectManagerValid : response.IsObjectManagerValid,
+                    request.IsHeartbeatOnly && HasHeartbeatReadinessFields(request) ? request.IsMapTransition : response.IsMapTransition);
+            }
 
             // Log when an action is being delivered to a bot
             if (response.CurrentAction != null)
@@ -232,6 +247,26 @@ namespace WoWStateManager.Listeners
             }
 
             return response;
+        }
+
+        private static bool IsPendingActionDeliveryReady(WoWActivitySnapshot request, WoWActivitySnapshot response)
+        {
+            var readiness = request.IsHeartbeatOnly && HasHeartbeatReadinessFields(request)
+                ? request
+                : response;
+
+            return string.Equals(readiness.ScreenState, "InWorld", StringComparison.Ordinal)
+                && readiness.ConnectionState == BotConnectionState.BotInWorld
+                && readiness.IsObjectManagerValid
+                && !readiness.IsMapTransition;
+        }
+
+        private static bool HasHeartbeatReadinessFields(WoWActivitySnapshot request)
+        {
+            return !string.IsNullOrWhiteSpace(request.ScreenState)
+                || request.ConnectionState != BotConnectionState.BotDisconnected
+                || request.IsObjectManagerValid
+                || request.IsMapTransition;
         }
 
         private bool ShouldPrioritizeCoordinatorAction(ActionMessage? currentAction)

@@ -17,6 +17,30 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-24 (Pending action heartbeat readiness)
+- Last updated: 2026-04-24
+- Active task: none - the simplified Ratchet `StartFishing` regression is fixed and covered.
+- Last delta:
+  - `CharacterStateSocketListener` now treats queued external/test actions as one-shot work that must only be drained when the bot is currently actionable: `ScreenState=InWorld`, `ConnectionState=BotInWorld`, `IsObjectManagerValid=true`, and `IsMapTransition=false`.
+  - Heartbeat requests with readiness fields use the heartbeat's current readiness instead of the aliased cached full snapshot. Older heartbeats without readiness fields still fall back to the cached response snapshot.
+  - If a pending action is present but the bot is not actionable, the action remains queued and the listener logs a debug deferral instead of returning an action that BotRunner can drop during a transition-skip loop.
+- Pass result: `FG and BG StartFishing delivery green in the one-roster Ratchet live run; ActionForwardingContract transition-deferral coverage green`
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.trx" *> "tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.console.txt"` -> `passed (1/1)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/Listeners/CharacterStateSocketListener.cs`
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Tests/BotRunner.Tests/ActionForwardingContractTests.cs`
+  - `docs/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `git status --short`
+
+### Previous handoff (2026-04-22)
 - Last updated: 2026-04-22 (P5.1)
 - Active task: none — P5.1 loadout ACK consumption shipped; next narrow slice
   would extend ACK-driven short-circuit into `HandleQueueForBattleground` if a

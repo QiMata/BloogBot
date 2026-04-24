@@ -32,6 +32,27 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-24 (Heartbeat readiness for action dispatch)
+- Pass result: `FG/BG action-dispatched Ratchet fishing is green in one shared Fishing.config.json launch; deterministic BotRunner dispatch/snapshot coverage stayed green`
+- Last delta:
+  - `BotRunnerService` now includes lightweight readiness fields on heartbeat-only snapshots (`ScreenState`, `ConnectionState`, `IsObjectManagerValid`, `IsMapTransition`). This gives StateManager current transition/readiness state before it consumes a queued one-shot action.
+  - The fix preserves the simplified action-driven fishing flow and leaves `FishingTask.TryResolveCastPosition(...)` pathfinding-first. No `AssignedActivity: "Fishing[Ratchet]"` workaround was reintroduced.
+  - Root cause from FG diag: `StartFishing` could be returned while FG was in a transition-skip loop; `UpdateBehaviorTree(...)` was skipped and the next object-manager snapshot cleared `CurrentAction`, so no `[ACTION-RECV]` appeared.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.trx" *> "tmp/test-runtime/results-live/fishing_action_driven_single_launch_pathfinding_first_8_after_ready_heartbeat.console.txt"` -> `passed (1/1)`; FG diag shows `[ACTION-RECV] type=StartFishing params=3 ready=True` followed by `tasks=2(FishingTask)`, and the TRX shows FG/BG `fishing_loot_success`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Services/WoWStateManager/Listeners/CharacterStateSocketListener.cs`
+  - `Tests/BotRunner.Tests/ActionForwardingContractTests.cs`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `git status --short`
+
 ### 2026-04-24 (Fishing single-launch follow-up)
 - Pass result: `StartFishing metadata forwarding shipped; pathfinding-first fishing standoff restored; deterministic coverage green and the focused live Ratchet slice is green twice after the BG LOS regression fix`
 - Last delta:

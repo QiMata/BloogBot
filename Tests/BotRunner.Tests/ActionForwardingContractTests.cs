@@ -664,6 +664,77 @@ public class ActionForwardingContractTests
     }
 
     [Fact]
+    public void HandleRequest_DeliversPendingAction_OnReadyHeartbeatWithReadinessFields()
+    {
+        var listener = CreateListener("TESTBOT1");
+        _ = InvokeHandleRequest(listener, BuildReadySnapshot("TESTBOT1"));
+
+        Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.StartFishing }));
+
+        var response = InvokeHandleRequest(listener, new WoWActivitySnapshot
+        {
+            AccountName = "TESTBOT1",
+            CharacterName = "TESTBOT1",
+            IsHeartbeatOnly = true,
+            ScreenState = "InWorld",
+            ConnectionState = BotConnectionState.BotInWorld,
+            IsObjectManagerValid = true,
+            IsMapTransition = false,
+        });
+
+        Assert.NotNull(response.CurrentAction);
+        Assert.Equal(ActionType.StartFishing, response.CurrentAction.ActionType);
+    }
+
+    [Fact]
+    public void HandleRequest_DefersPendingAction_OnTransitionHeartbeat()
+    {
+        var listener = CreateListener("TESTBOT1");
+        _ = InvokeHandleRequest(listener, BuildReadySnapshot("TESTBOT1"));
+
+        Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.StartFishing }));
+
+        var transitionResponse = InvokeHandleRequest(listener, new WoWActivitySnapshot
+        {
+            AccountName = "TESTBOT1",
+            CharacterName = "TESTBOT1",
+            IsHeartbeatOnly = true,
+            ScreenState = "InWorld",
+            ConnectionState = BotConnectionState.BotTransferring,
+            IsObjectManagerValid = false,
+            IsMapTransition = true,
+        });
+
+        Assert.Null(transitionResponse.CurrentAction);
+
+        var readyResponse = InvokeHandleRequest(listener, BuildReadySnapshot("TESTBOT1"));
+
+        Assert.NotNull(readyResponse.CurrentAction);
+        Assert.Equal(ActionType.StartFishing, readyResponse.CurrentAction.ActionType);
+    }
+
+    [Fact]
+    public void HandleRequest_DefersPendingAction_WhenFullSnapshotNotActionable()
+    {
+        var listener = CreateListener("TESTBOT1");
+        Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.StartFishing }));
+
+        var transitioning = BuildReadySnapshot("TESTBOT1");
+        transitioning.ConnectionState = BotConnectionState.BotTransferring;
+        transitioning.IsObjectManagerValid = false;
+        transitioning.IsMapTransition = true;
+
+        var transitionResponse = InvokeHandleRequest(listener, transitioning);
+
+        Assert.Null(transitionResponse.CurrentAction);
+
+        var readyResponse = InvokeHandleRequest(listener, BuildReadySnapshot("TESTBOT1"));
+
+        Assert.NotNull(readyResponse.CurrentAction);
+        Assert.Equal(ActionType.StartFishing, readyResponse.CurrentAction.ActionType);
+    }
+
+    [Fact]
     public void HandleRequest_BattlegroundMode_PopulatesDesiredPartyState_ForGroupQueueFactions()
     {
         var previousMode = Environment.GetEnvironmentVariable("WWOW_COORDINATOR_MODE");
@@ -883,6 +954,7 @@ public class ActionForwardingContractTests
             AccountName = accountName,
             CharacterName = characterName ?? accountName,
             ScreenState = "InWorld",
+            ConnectionState = BotConnectionState.BotInWorld,
             IsObjectManagerValid = true,
             CurrentMapId = 0,
             PartyLeaderGuid = partyLeaderGuid,
