@@ -24,13 +24,13 @@ public class FishingPoolActivationAnalyzerTests
     }
 
     [Fact]
-    public void ClassifyPoolSpawnStateResponses_ReturnsSpawnedWhenPoolUpdateShowsActiveObject()
+    public void ClassifyPoolSpawnStateResponses_KeepsPositivePoolUpdateCountLinesAsUnknown()
     {
         var state = FishingPoolActivationAnalyzer.ClassifyPoolSpawnStateResponses(
             2620u,
             ["Pool #2620: 1 objects spawned [limit = 1]"]);
 
-        Assert.Equal(FishingPoolActivationState.Spawned, state);
+        Assert.Equal(FishingPoolActivationState.Unknown, state);
     }
 
     [Fact]

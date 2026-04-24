@@ -117,6 +117,9 @@ public partial class LiveBotFixture
         if (command.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase))
             return Math.Max(requestedDelayMs, 3500);
 
+        if (command.StartsWith(".pool info ", StringComparison.OrdinalIgnoreCase))
+            return Math.Max(requestedDelayMs, 3500);
+
         if (command.StartsWith(".pool update ", StringComparison.OrdinalIgnoreCase))
             return Math.Max(requestedDelayMs, 2500);
 
@@ -134,6 +137,9 @@ public partial class LiveBotFixture
         if (command.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase))
             return 2500;
 
+        if (command.StartsWith(".pool info ", StringComparison.OrdinalIgnoreCase))
+            return 2500;
+
         if (command.StartsWith(".pool update ", StringComparison.OrdinalIgnoreCase))
             return 1500;
 
@@ -149,6 +155,9 @@ public partial class LiveBotFixture
             return 1200;
 
         if (command.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase))
+            return 800;
+
+        if (command.StartsWith(".pool info ", StringComparison.OrdinalIgnoreCase))
             return 800;
 
         if (command.StartsWith(".pool update ", StringComparison.OrdinalIgnoreCase))

@@ -1,3 +1,5 @@
+using BotRunner.Clients;
+using BotRunner.Tasks;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,10 +10,12 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 using Communication;
+using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
 using Tests.Infrastructure;
 using Xunit;
@@ -20,6 +24,32 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 internal readonly record struct AccountCharacterRecord(string Name, byte RaceId, byte ClassId, byte GenderId);
+internal readonly record struct FishingPoolSpawnSite(int PoolId, float X, float Y, float Z, float Distance2D);
+internal readonly record struct FishingPoolGameObjectSite(int PoolId, uint Guid, uint Entry, float X, float Y, float Z);
+internal readonly record struct GameObjectSelectResult(
+    bool HasSelection,
+    bool NoGameObjectsFound,
+    uint Guid,
+    int? PoolId,
+    uint Entry,
+    float X,
+    float Y,
+    float Z,
+    float DistanceFromExpected,
+    string? RawLine);
+internal readonly record struct GameObjectTargetResult(
+    bool Found,
+    uint Guid,
+    uint Entry,
+    float X,
+    float Y,
+    float Z,
+    string? RawLine);
+internal readonly record struct PoolInfoChildPoolResult(
+    bool Parsed,
+    uint PoolId,
+    bool Active,
+    string? RawLine);
 
 public partial class LiveBotFixture
 {
@@ -29,6 +59,23 @@ public partial class LiveBotFixture
         isBigEndian: true);
 
     private static readonly BigInteger SrpGenerator = new(7);
+
+    private static readonly Regex GameObjectSelectPattern = new(
+        @"(?<guid>\d+)(?:\s+\(Pool\s+(?<pool>\d+)\))?,\s+Entry\s+(?<entry>\d+).*?\[(?<name>.+?)\s+X:(?<x>[+-]?\d+(?:\.\d+)?)\s+Y:(?<y>[+-]?\d+(?:\.\d+)?)\s+Z:(?<z>[+-]?\d+(?:\.\d+)?)\s+MapId:(?<map>\d+)\]",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex GameObjectTargetPattern = new(
+        @"Selected object:\s*\|cffffffff\|Hgameobject:(?<guid>\d+)\|h\[(?<name>.+?)\]\|h\|r\s+GUID:\s*(?<detailGuid>\d+)\s+ID:\s*(?<entry>\d+)\s+X:\s*(?<x>[+-]?\d+(?:\.\d+)?)\s+Y:\s*(?<y>[+-]?\d+(?:\.\d+)?)\s+Z:\s*(?<z>[+-]?\d+(?:\.\d+)?)\s+MapId:\s*(?<map>\d+)\s+Orientation:\s*(?<orientation>[+-]?\d+(?:\.\d+)?)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private static readonly Regex PoolInfoChildPoolPattern = new(
+        @"(?<pool>\d+)\s+-\s+\|cffffffff\|Hpool:(?<poolLink>\d+)\|h\[(?<name>.+?)\]\|h\|r\s+AutoSpawn:\s*(?<auto>\d+)\s+MaxLimit:\s*(?<max>\d+)\s+Creatures:\s*(?<creatures>\d+)\s+GameObjecs:\s*(?<gos>\d+)\s+Pools\s+(?<pools>\d+)\s*(?<active>\[active\])?",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+    private const float FishingDesiredPoolDistance = 24f;
+    private const float FishingPoolDistanceTolerance = 14f;
+    private const float FishingMinCastingDistance = FishingDesiredPoolDistance - FishingPoolDistanceTolerance;
+    private const float FishingMaxCastingDistance = FishingDesiredPoolDistance + FishingPoolDistanceTolerance;
+    private const float FishingIdealCastingDistanceFromPool = 18f;
+    private const float FishingPathfindingPierLayerZTolerance = 3f;
+    private const float VisiblePoolMatchTolerance = 6f;
 
     // ---- MySQL direct helpers (bypass disabled GM commands in some repacks) ----
 
@@ -238,6 +285,8 @@ public partial class LiveBotFixture
             accountsToResolve.Add(FgAccountName);
         if (!string.IsNullOrWhiteSpace(CombatTestAccountName))
             accountsToResolve.Add(CombatTestAccountName);
+        if (!string.IsNullOrWhiteSpace(ShodanAccountName))
+            accountsToResolve.Add(ShodanAccountName);
 
         foreach (var accountName in accountsToResolve)
         {
@@ -250,6 +299,8 @@ public partial class LiveBotFixture
                 FgCharacterName ??= characterName;
             if (string.Equals(accountName, CombatTestAccountName, StringComparison.OrdinalIgnoreCase))
                 CombatTestCharacterName ??= characterName;
+            if (string.Equals(accountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+                ShodanCharacterName ??= characterName;
         }
     }
 
@@ -748,7 +799,766 @@ public partial class LiveBotFixture
 
     // ---- World Database Queries ----
 
-    /// <summary>
+    private async Task<List<FishingPoolSpawnSite>> QueryMasterPoolSpawnSitesAsync(
+        int masterPoolId,
+        int mapId,
+        float centerX,
+        float centerY,
+        float radius,
+        int? limit = null)
+    {
+        using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosWorldDbConnectionString);
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        var sql = new StringBuilder(@"
+            SELECT
+                pp.pool_id,
+                go.position_x,
+                go.position_y,
+                go.position_z
+            FROM pool_pool pp
+            INNER JOIN (
+                SELECT pool_entry, MIN(guid) AS guid
+                FROM pool_gameobject
+                GROUP BY pool_entry
+            ) anchor ON anchor.pool_entry = pp.pool_id
+            INNER JOIN gameobject go ON go.guid = anchor.guid
+            WHERE pp.mother_pool = @masterPoolId
+              AND go.map = @map
+              AND POW(go.position_x - @cx, 2) + POW(go.position_y - @cy, 2) <= POW(@radius, 2)
+            ORDER BY POW(go.position_x - @cx, 2) + POW(go.position_y - @cy, 2) ASC");
+        if (limit.HasValue)
+            sql.AppendLine(" LIMIT @limit");
+
+        cmd.CommandText = sql.ToString();
+        cmd.Parameters.AddWithValue("@masterPoolId", masterPoolId);
+        cmd.Parameters.AddWithValue("@map", mapId);
+        cmd.Parameters.AddWithValue("@cx", centerX);
+        cmd.Parameters.AddWithValue("@cy", centerY);
+        cmd.Parameters.AddWithValue("@radius", radius);
+        if (limit.HasValue)
+            cmd.Parameters.AddWithValue("@limit", Math.Max(1, limit.Value));
+
+        var spawns = new List<FishingPoolSpawnSite>();
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            var poolId = reader.GetInt32(0);
+            var x = reader.GetFloat(1);
+            var y = reader.GetFloat(2);
+            var z = reader.GetFloat(3);
+            spawns.Add(new FishingPoolSpawnSite(poolId, x, y, z, Distance2D(centerX, centerY, x, y)));
+        }
+
+        return spawns;
+    }
+
+    private async Task<List<FishingPoolGameObjectSite>> QueryMasterPoolGameObjectSitesAsync(int masterPoolId, int mapId)
+    {
+        using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosWorldDbConnectionString);
+        await conn.OpenAsync();
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT
+                pp.pool_id,
+                pg.guid,
+                go.id,
+                go.position_x,
+                go.position_y,
+                go.position_z
+            FROM pool_pool pp
+            INNER JOIN pool_gameobject pg ON pg.pool_entry = pp.pool_id
+            INNER JOIN gameobject go ON go.guid = pg.guid
+            WHERE pp.mother_pool = @masterPoolId
+              AND go.map = @map
+            ORDER BY pp.pool_id, pg.guid";
+        cmd.Parameters.AddWithValue("@masterPoolId", masterPoolId);
+        cmd.Parameters.AddWithValue("@map", mapId);
+
+        var sites = new List<FishingPoolGameObjectSite>();
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            sites.Add(new FishingPoolGameObjectSite(
+                PoolId: reader.GetInt32(0),
+                Guid: Convert.ToUInt32(reader.GetValue(1), CultureInfo.InvariantCulture),
+                Entry: Convert.ToUInt32(reader.GetValue(2), CultureInfo.InvariantCulture),
+                X: reader.GetFloat(3),
+                Y: reader.GetFloat(4),
+                Z: reader.GetFloat(5)));
+        }
+
+        return sites;
+    }
+
+    private async Task<int> RestoreBarrensFishingPoolBaselineAsync(string accountName, int mapId)
+    {
+        const int masterPoolId = 2628;
+        List<FishingPoolGameObjectSite> gameObjects;
+        try
+        {
+            gameObjects = await QueryMasterPoolGameObjectSitesAsync(masterPoolId, mapId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[FISHING-BASELINE] Failed to query master-pool child gameobjects: {Error}", ex.Message);
+            return 0;
+        }
+
+        if (gameObjects.Count == 0)
+            return 0;
+
+        static string PositionKey(FishingPoolGameObjectSite site)
+            => string.Create(
+                CultureInfo.InvariantCulture,
+                $"{MathF.Round(site.X, 2):F2}|{MathF.Round(site.Y, 2):F2}|{MathF.Round(site.Z, 2):F2}");
+
+        var positionCounts = gameObjects
+            .GroupBy(PositionKey)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+
+        var repaired = 0;
+        foreach (var poolGroup in gameObjects.GroupBy(site => site.PoolId).OrderBy(group => group.Key))
+        {
+            var uniquePositionCount = poolGroup
+                .Select(PositionKey)
+                .Distinct(StringComparer.Ordinal)
+                .Count();
+            if (uniquePositionCount <= 1)
+                continue;
+
+            var anchor = poolGroup
+                .OrderBy(site => positionCounts[PositionKey(site)])
+                .ThenBy(site => site.Guid)
+                .First();
+
+            foreach (var site in poolGroup)
+            {
+                if (site.Guid == anchor.Guid)
+                    continue;
+
+                var delta = Distance2D(site.X, site.Y, anchor.X, anchor.Y);
+                if (delta <= 0.25f && MathF.Abs(site.Z - anchor.Z) <= 0.25f)
+                    continue;
+
+                var moveCommand = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $".gobject move {site.Guid} {anchor.X:F2} {anchor.Y:F2} {anchor.Z:F2}");
+                if (!await SendGmChatCommandAndAwaitServerAckAsync(accountName, moveCommand, timeoutMs: 8000))
+                {
+                    _logger.LogWarning(
+                        "[FISHING-BASELINE] Failed to restore guid={Guid} entry={Entry} for pool {PoolId} onto ({X:F1},{Y:F1},{Z:F1}).",
+                        site.Guid,
+                        site.Entry,
+                        site.PoolId,
+                        anchor.X,
+                        anchor.Y,
+                        anchor.Z);
+                    continue;
+                }
+
+                repaired++;
+                _logger.LogInformation(
+                    "[FISHING-BASELINE] Restored guid={Guid} entry={Entry} for pool {PoolId} from ({FromX:F1},{FromY:F1},{FromZ:F1}) to ({ToX:F1},{ToY:F1},{ToZ:F1}) using anchor guid={AnchorGuid}.",
+                    site.Guid,
+                    site.Entry,
+                    site.PoolId,
+                    site.X,
+                    site.Y,
+                    site.Z,
+                    anchor.X,
+                    anchor.Y,
+                    anchor.Z,
+                    anchor.Guid);
+            }
+        }
+
+        return repaired;
+    }
+
+    private static bool TryParseGameObjectSelectLine(
+        string response,
+        float expectedX,
+        float expectedY,
+        out GameObjectSelectResult result)
+    {
+        result = default;
+        if (string.IsNullOrWhiteSpace(response))
+            return false;
+
+        var match = GameObjectSelectPattern.Match(response);
+        if (!match.Success)
+            return false;
+
+        if (!uint.TryParse(match.Groups["entry"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var entry)
+            || !float.TryParse(match.Groups["x"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
+            || !float.TryParse(match.Groups["y"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var y)
+            || !float.TryParse(match.Groups["z"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
+        {
+            return false;
+        }
+
+        int? poolId = null;
+        if (int.TryParse(match.Groups["pool"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedPoolId))
+            poolId = parsedPoolId;
+
+        result = new GameObjectSelectResult(
+            HasSelection: true,
+            NoGameObjectsFound: false,
+            Guid: uint.TryParse(match.Groups["guid"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var guid)
+                ? guid
+                : 0u,
+            PoolId: poolId,
+            Entry: entry,
+            X: x,
+            Y: y,
+            Z: z,
+            DistanceFromExpected: Distance2D(expectedX, expectedY, x, y),
+            RawLine: response);
+        return true;
+    }
+
+    internal static bool TryParseGameObjectTargetLine(string response, out GameObjectTargetResult result)
+    {
+        result = default;
+        if (string.IsNullOrWhiteSpace(response))
+            return false;
+
+        var match = GameObjectTargetPattern.Match(response);
+        if (!match.Success)
+            return false;
+
+        if (!uint.TryParse(match.Groups["guid"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var guid)
+            || !uint.TryParse(match.Groups["entry"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var entry)
+            || !float.TryParse(match.Groups["x"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
+            || !float.TryParse(match.Groups["y"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var y)
+            || !float.TryParse(match.Groups["z"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var z))
+        {
+            return false;
+        }
+
+        result = new GameObjectTargetResult(
+            Found: true,
+            Guid: guid,
+            Entry: entry,
+            X: x,
+            Y: y,
+            Z: z,
+            RawLine: response);
+        return true;
+    }
+
+    internal static bool TryParsePoolInfoChildPoolLine(string response, out PoolInfoChildPoolResult result)
+    {
+        result = default;
+        if (string.IsNullOrWhiteSpace(response))
+            return false;
+
+        var match = PoolInfoChildPoolPattern.Match(response);
+        if (!match.Success)
+            return false;
+
+        if (!uint.TryParse(match.Groups["pool"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var poolId))
+            return false;
+
+        result = new PoolInfoChildPoolResult(
+            Parsed: true,
+            PoolId: poolId,
+            Active: response.Contains("[active]", StringComparison.OrdinalIgnoreCase),
+            RawLine: response);
+        return true;
+    }
+
+    private static IEnumerable<string> GetObservedResponseLines(
+        IReadOnlyList<string> baseline,
+        int baselineCount,
+        IReadOnlyList<string> current)
+    {
+        if (current.Count > baselineCount)
+        {
+            foreach (var message in current.Skip(baselineCount))
+            {
+                if (!string.IsNullOrWhiteSpace(message))
+                    yield return message;
+            }
+
+            yield break;
+        }
+
+        foreach (var message in GetDeltaMessages(baseline, current))
+        {
+            if (!string.IsNullOrWhiteSpace(message))
+                yield return message;
+        }
+    }
+
+    private async Task<string[]> SendGmChatCommandAndCollectResponseLinesAsync(
+        string accountName,
+        string command,
+        int timeoutMs = 5000,
+        int settleMs = 700,
+        int pollIntervalMs = 100)
+    {
+        if (_stateManagerClient == null)
+            return Array.Empty<string>();
+
+        var baseline = await GetSnapshotAsync(accountName);
+        var baselineChats = baseline?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
+        var baselineErrors = baseline?.RecentErrors.ToArray() ?? Array.Empty<string>();
+        var baselineChatCount = baseline?.RecentChatMessages.Count ?? 0;
+        var baselineErrorCount = baseline?.RecentErrors.Count ?? 0;
+
+        var correlationId = $"shodan-collect:{accountName}:{Interlocked.Increment(ref _testCorrelationSequence).ToString(CultureInfo.InvariantCulture)}";
+        var action = new ActionMessage
+        {
+            ActionType = ActionType.SendChat,
+            CorrelationId = correlationId,
+            Parameters = { new RequestParameter { StringParam = command } }
+        };
+
+        var dispatchResult = await SendActionAsync(accountName, action, emitOutput: false);
+        if (dispatchResult != ResponseResult.Success)
+            return Array.Empty<string>();
+
+        var deadline = DateTime.UtcNow.AddMilliseconds(GetTrackedChatCommandDelayMs(command, timeoutMs));
+        var lastResponseSeenUtc = DateTime.MinValue;
+        var actionSeen = false;
+        var observed = Array.Empty<string>();
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(pollIntervalMs);
+            await RefreshSnapshotsAsync();
+
+            var snapshot = await GetSnapshotAsync(accountName);
+            if (snapshot == null)
+                continue;
+
+            if (!actionSeen)
+            {
+                var ack = FindLatestMatchingAck(snapshot, correlationId);
+                if ((ack != null && ack.Status != CommandAckEvent.Types.AckStatus.Pending)
+                    || (snapshot.PreviousAction != null
+                        && string.Equals(snapshot.PreviousAction.CorrelationId, correlationId, StringComparison.Ordinal)))
+                {
+                    actionSeen = true;
+                    var postActionDeadline = DateTime.UtcNow.AddMilliseconds(GetTrackedChatCommandPostActionTailMs(command));
+                    if (postActionDeadline > deadline)
+                        deadline = postActionDeadline;
+                }
+            }
+
+            var lines = GetObservedResponseLines(baselineChats, baselineChatCount, snapshot.RecentChatMessages)
+                .Concat(GetObservedResponseLines(baselineErrors, baselineErrorCount, snapshot.RecentErrors))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (lines.Length > 0)
+            {
+                observed = lines;
+                lastResponseSeenUtc = DateTime.UtcNow;
+            }
+
+            if (lastResponseSeenUtc != DateTime.MinValue
+                && DateTime.UtcNow - lastResponseSeenUtc >= TimeSpan.FromMilliseconds(Math.Max(
+                    settleMs,
+                    GetTrackedChatCommandResponseSettleMs(command))))
+            {
+                break;
+            }
+        }
+
+        return observed;
+    }
+
+    private static string FormatCommandEvidence(IReadOnlyCollection<string> responses, string emptyDetail)
+    {
+        if (responses.Count == 0)
+            return emptyDetail;
+
+        const int maxResponses = 4;
+        var formatted = responses
+            .Take(maxResponses)
+            .Select(response => string.Join(" ", response.Split(['\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)))
+            .ToArray();
+        var suffix = responses.Count > maxResponses ? $" || ... ({responses.Count - maxResponses} more)" : string.Empty;
+        return string.Join(" || ", formatted) + suffix;
+    }
+
+    private async Task<bool> TeleportToFishingPoolProbeAsync(
+        string accountName,
+        int mapId,
+        FishingPoolSpawnSite spawn,
+        string logPrefix,
+        float? probeX = null,
+        float? probeY = null)
+    {
+        var targetX = probeX ?? spawn.X;
+        var targetY = probeY ?? spawn.Y;
+        var teleportZ = spawn.Z + 2f;
+        var teleported = await SendGmChatCommandAndAwaitServerAckAsync(
+            accountName,
+            string.Create(CultureInfo.InvariantCulture, $".go xyz {targetX:F2} {targetY:F2} {teleportZ:F2} {mapId}"));
+        if (!teleported)
+        {
+            _logger.LogWarning(
+                "[{LogPrefix}] Teleport ack failed for pool {PoolId} at probe ({ProbeX:F1},{ProbeY:F1},{Z:F1}) targeting spawn ({X:F1},{Y:F1}).",
+                logPrefix, spawn.PoolId, targetX, targetY, teleportZ, spawn.X, spawn.Y);
+            return false;
+        }
+
+        var settled = await WaitForTeleportSettledAsync(
+            accountName,
+            targetX,
+            targetY,
+            timeoutMs: 6000,
+            progressLabel: $"{logPrefix} pool {spawn.PoolId}",
+            xyToleranceYards: 10f);
+        if (!settled)
+        {
+            _logger.LogWarning(
+                "[{LogPrefix}] Teleport did not settle for pool {PoolId} at probe ({ProbeX:F1},{ProbeY:F1}) targeting spawn ({X:F1},{Y:F1}).",
+                logPrefix, spawn.PoolId, targetX, targetY, spawn.X, spawn.Y);
+        }
+
+        return true;
+    }
+
+    private async Task<GameObjectSelectResult> SelectGameObjectAtCurrentLocationAsync(
+        string accountName,
+        FishingPoolSpawnSite spawn,
+        string logPrefix)
+    {
+        var responseLines = await SendGmChatCommandAndCollectResponseLinesAsync(
+            accountName,
+            ".gobject select",
+            timeoutMs: 4000,
+            settleMs: 900);
+
+        GameObjectSelectResult? bestMatch = null;
+        var sawNoGameObjects = false;
+        foreach (var response in responseLines)
+        {
+            if (response.Contains("No gameobjects found", StringComparison.OrdinalIgnoreCase))
+            {
+                sawNoGameObjects = true;
+                continue;
+            }
+
+            if (!TryParseGameObjectSelectLine(response, spawn.X, spawn.Y, out var parsed))
+                continue;
+
+            if (bestMatch == null || parsed.DistanceFromExpected < bestMatch.Value.DistanceFromExpected)
+                bestMatch = parsed;
+        }
+
+        if (bestMatch != null)
+        {
+            _logger.LogInformation(
+                "[{LogPrefix}] pool {PoolId} selected entry={Entry} at ({X:F1},{Y:F1},{Z:F1}) delta={Delta:F1} raw='{Raw}'",
+                logPrefix,
+                spawn.PoolId,
+                bestMatch.Value.Entry,
+                bestMatch.Value.X,
+                bestMatch.Value.Y,
+                bestMatch.Value.Z,
+                bestMatch.Value.DistanceFromExpected,
+                bestMatch.Value.RawLine);
+            return bestMatch.Value;
+        }
+
+        if (sawNoGameObjects)
+        {
+            _logger.LogInformation(
+                "[{LogPrefix}] pool {PoolId} had no selectable gameobject near ({X:F1},{Y:F1}).",
+                logPrefix, spawn.PoolId, spawn.X, spawn.Y);
+            return new GameObjectSelectResult(
+                HasSelection: false,
+                NoGameObjectsFound: true,
+                Guid: 0u,
+                PoolId: spawn.PoolId,
+                Entry: 0,
+                X: spawn.X,
+                Y: spawn.Y,
+                Z: spawn.Z,
+                DistanceFromExpected: float.MaxValue,
+                RawLine: "No gameobjects found!");
+        }
+
+        _logger.LogInformation(
+            "[{LogPrefix}] pool {PoolId} select produced no parseable responses. raw=[{Responses}]",
+            logPrefix,
+            spawn.PoolId,
+            responseLines.Length == 0 ? "none" : string.Join(" || ", responseLines));
+        return new GameObjectSelectResult(
+            HasSelection: false,
+            NoGameObjectsFound: false,
+            Guid: 0u,
+            PoolId: spawn.PoolId,
+            Entry: 0,
+            X: spawn.X,
+            Y: spawn.Y,
+            Z: spawn.Z,
+            DistanceFromExpected: float.MaxValue,
+            RawLine: null);
+    }
+
+    private async Task<GameObjectSelectResult> SelectGameObjectNearSpawnAsync(
+        string accountName,
+        int mapId,
+        FishingPoolSpawnSite spawn,
+        string logPrefix,
+        float? probeX = null,
+        float? probeY = null)
+    {
+        var teleported = await TeleportToFishingPoolProbeAsync(accountName, mapId, spawn, logPrefix, probeX, probeY);
+        if (!teleported)
+            return default;
+
+        return await SelectGameObjectAtCurrentLocationAsync(accountName, spawn, logPrefix);
+    }
+
+    private async Task<GameObjectSelectResult> RespawnAndSelectGameObjectNearSpawnAsync(
+        string accountName,
+        int mapId,
+        FishingPoolSpawnSite spawn,
+        string logPrefix,
+        float? probeX = null,
+        float? probeY = null)
+    {
+        var teleported = await TeleportToFishingPoolProbeAsync(accountName, mapId, spawn, logPrefix, probeX, probeY);
+        if (!teleported)
+            return default;
+
+        var respawned = await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".respawn");
+        if (!respawned)
+        {
+            _logger.LogInformation(
+                "[{LogPrefix}] pool {PoolId} generic .respawn ack did not arrive at ({X:F1},{Y:F1}).",
+                logPrefix,
+                spawn.PoolId,
+                probeX ?? spawn.X,
+                probeY ?? spawn.Y);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "[{LogPrefix}] pool {PoolId} issued generic .respawn at ({X:F1},{Y:F1}).",
+                logPrefix,
+                spawn.PoolId,
+                probeX ?? spawn.X,
+                probeY ?? spawn.Y);
+            await Task.Delay(250);
+        }
+
+        return await SelectGameObjectAtCurrentLocationAsync(accountName, spawn, logPrefix);
+    }
+
+    private static bool IsSelectableFishingPool(GameObjectSelectResult selected)
+        => selected.HasSelection
+           && BarrensFishingPoolEntries.Contains(selected.Entry)
+           && selected.DistanceFromExpected <= 8f;
+
+    private static IEnumerable<(float X, float Y, string Label)> EnumerateWakeProbePoints(
+        FishingPoolSpawnSite spawn,
+        float stagingX,
+        float stagingY)
+    {
+        yield return (spawn.X, spawn.Y, "exact");
+
+        var dx = stagingX - spawn.X;
+        var dy = stagingY - spawn.Y;
+        var distance = MathF.Sqrt((dx * dx) + (dy * dy));
+        if (distance < 0.1f)
+            yield break;
+
+        var offset = MathF.Min(8f, MathF.Max(3f, distance - 1f));
+        yield return (
+            spawn.X + ((dx / distance) * offset),
+            spawn.Y + ((dy / distance) * offset),
+            "toward-staging");
+    }
+
+    private float GetClosestVisibleFishingPoolDistance(WoWActivitySnapshot? snapshot, float centerX, float centerY)
+    {
+        var distances = new List<float>();
+
+        if (snapshot?.NearbyObjects != null)
+        {
+            foreach (var gameObject in snapshot.NearbyObjects)
+            {
+                if (!BarrensFishingPoolEntries.Contains(gameObject.Entry) || gameObject.Base?.Position == null)
+                    continue;
+
+                distances.Add(Distance2D(centerX, centerY, gameObject.Base.Position.X, gameObject.Base.Position.Y));
+            }
+        }
+
+        if (snapshot?.MovementData?.NearbyGameObjects != null)
+        {
+            foreach (var gameObject in snapshot.MovementData.NearbyGameObjects)
+            {
+                if (!BarrensFishingPoolEntries.Contains(gameObject.Entry) || gameObject.Position == null)
+                    continue;
+
+                distances.Add(Distance2D(centerX, centerY, gameObject.Position.X, gameObject.Position.Y));
+            }
+        }
+
+        return distances.Count == 0 ? float.MaxValue : distances.Min();
+    }
+
+    private float GetClosestVisibleFishingPoolDistance(
+        WoWActivitySnapshot? snapshot,
+        float centerX,
+        float centerY,
+        IReadOnlyList<FishingPoolSpawnSite> candidateSites)
+    {
+        if (candidateSites.Count == 0)
+            return float.MaxValue;
+
+        bool MatchesCandidate(float x, float y)
+            => candidateSites.Any(site => Distance2D(site.X, site.Y, x, y) <= VisiblePoolMatchTolerance);
+
+        var distances = new List<float>();
+
+        if (snapshot?.NearbyObjects != null)
+        {
+            foreach (var gameObject in snapshot.NearbyObjects)
+            {
+                if (!BarrensFishingPoolEntries.Contains(gameObject.Entry) || gameObject.Base?.Position == null)
+                    continue;
+
+                var pos = gameObject.Base.Position;
+                if (!MatchesCandidate(pos.X, pos.Y))
+                    continue;
+
+                distances.Add(Distance2D(centerX, centerY, pos.X, pos.Y));
+            }
+        }
+
+        if (snapshot?.MovementData?.NearbyGameObjects != null)
+        {
+            foreach (var gameObject in snapshot.MovementData.NearbyGameObjects)
+            {
+                if (!BarrensFishingPoolEntries.Contains(gameObject.Entry) || gameObject.Position == null)
+                    continue;
+
+                var pos = gameObject.Position;
+                if (!MatchesCandidate(pos.X, pos.Y))
+                    continue;
+
+                distances.Add(Distance2D(centerX, centerY, pos.X, pos.Y));
+            }
+        }
+
+        return distances.Count == 0 ? float.MaxValue : distances.Min();
+    }
+
+    private async Task<float> GetClosestSelectableFishingPoolDistanceAsync(
+        string accountName,
+        int mapId,
+        IReadOnlyList<FishingPoolSpawnSite> candidateSites,
+        string logPrefix,
+        int iteration)
+    {
+        var best = float.MaxValue;
+
+        foreach (var site in candidateSites)
+        {
+            var selected = await SelectGameObjectNearSpawnAsync(accountName, mapId, site, logPrefix);
+            if (!selected.HasSelection
+                || !BarrensFishingPoolEntries.Contains(selected.Entry)
+                || selected.DistanceFromExpected > 8f)
+            {
+                continue;
+            }
+
+            best = Math.Min(best, site.Distance2D);
+            _logger.LogInformation(
+                "[{LogPrefix}] iter={Iter} selectable close pool={PoolId} dist={Dist:F1}y entry={Entry} delta={Delta:F1}",
+                logPrefix,
+                iteration,
+                site.PoolId,
+                site.Distance2D,
+                selected.Entry,
+                selected.DistanceFromExpected);
+        }
+
+        return best;
+    }
+
+    private async Task<float> WakeAndGetClosestSelectableFishingPoolDistanceAsync(
+        string accountName,
+        int mapId,
+        IReadOnlyList<FishingPoolSpawnSite> candidateSites,
+        float stagingX,
+        float stagingY,
+        float stagingZ,
+        string logPrefix,
+        int iteration)
+    {
+        if (candidateSites.Count == 0)
+            return float.MaxValue;
+
+        var best = float.MaxValue;
+        foreach (var site in candidateSites)
+        {
+            GameObjectSelectResult selected = default;
+            var confirmed = false;
+            foreach (var (probeX, probeY, label) in EnumerateWakeProbePoints(site, stagingX, stagingY))
+            {
+                selected = await RespawnAndSelectGameObjectNearSpawnAsync(
+                    accountName,
+                    mapId,
+                    site,
+                    $"{logPrefix}-{label}",
+                    probeX,
+                    probeY);
+                if (!IsSelectableFishingPool(selected))
+                    continue;
+
+                confirmed = true;
+                break;
+            }
+
+            if (!confirmed)
+            {
+                _logger.LogInformation(
+                    "[{LogPrefix}] iter={Iter} pool={PoolId} dist={Dist:F1}y did not surface a selectable fishing pool after probe-local generic .respawn.",
+                    logPrefix,
+                    iteration,
+                    site.PoolId,
+                    site.Distance2D);
+            }
+
+            if (!confirmed || !IsSelectableFishingPool(selected))
+                continue;
+
+            await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".gobject respawn");
+            best = Math.Min(best, site.Distance2D);
+            _logger.LogInformation(
+                "[{LogPrefix}] iter={Iter} selectable close pool confirmed via direct select: pool={PoolId} dist={Dist:F1}y entry={Entry}",
+                logPrefix,
+                iteration,
+                site.PoolId,
+                site.Distance2D,
+                selected.Entry);
+        }
+
+        await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
+            $".go xyz {stagingX:F2} {stagingY:F2} {stagingZ:F2} {mapId}"));
+        await WaitForTeleportSettledAsync(
+            accountName,
+            stagingX,
+            stagingY,
+            timeoutMs: 6000,
+            progressLabel: $"{logPrefix} return",
+            xyToleranceYards: 10f);
+
+        return best;
+    }
+
     /// <summary>
     /// Forces the fishing pool gameobjects nearest to the given center to respawn
     /// immediately, regardless of their scheduled respawn timers.
@@ -756,13 +1566,12 @@ public partial class LiveBotFixture
     /// Why this helper exists: <c>.pool update &lt;id&gt;</c> only schedules new pool members
     /// with a fresh respawn delay (see <c>PoolManager::Spawn1Object</c> at
     /// <c>instantly=false</c>), so it doesn't produce visible pools for a test that just
-    /// looted them. <c>.gobject respawn</c> on a selected gameobject calls
-    /// <c>GameObject::Respawn()</c> which sets <c>m_respawnTime = time(nullptr)</c> and
-    /// clears the DB entry — the next <c>GameObject::Update</c> tick marks the object
-    /// spawned and visible. We teleport the specified bot on top of each known pool
-    /// spawn location (<c>.gobject select</c> needs a 10y range to find the GO), run
-    /// <c>.gobject select</c> followed by <c>.gobject respawn</c>, then land the bot back
-    /// at a safe staging point.
+    /// looted them. The generic <c>.respawn</c> command walks nearby world objects and
+    /// calls <c>Respawn()</c> on each one, including GameObjects on the loaded grid. We
+    /// teleport the specified bot on top of each known pool spawn location so the active
+    /// pooled child loads nearby, issue <c>.respawn</c> to wake it if it was waiting on a
+    /// respawn timer, then use <c>.gobject select</c> to confirm a fishing pool actually
+    /// surfaced before returning the bot to the staging point.
     ///
     /// <paramref name="maxLocations"/> caps how many pool spawn points are force-respawned.
     /// Keeping the count small matters in practice because every <c>.gobject *</c> chat
@@ -786,69 +1595,53 @@ public partial class LiveBotFixture
         float? stagingY = null,
         int maxLocations = 2)
     {
-        // Query the closest N fishing pool spawn locations. Templates with
-        // gameobject_template.type = 25 are the fishing-hole GO type.
-        List<(float X, float Y, float Z)> spawns;
+        const int masterPoolId = 2628;
+        List<FishingPoolSpawnSite> spawns;
         try
         {
-            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosWorldDbConnectionString);
-            await conn.OpenAsync();
-
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = @"
-                SELECT DISTINCT position_x, position_y, position_z
-                FROM gameobject g
-                INNER JOIN gameobject_template gt ON g.id = gt.entry
-                WHERE gt.type = 25
-                  AND g.map = @map
-                  AND POW(g.position_x - @cx, 2) + POW(g.position_y - @cy, 2) <= POW(@r, 2)
-                ORDER BY POW(g.position_x - @cx, 2) + POW(g.position_y - @cy, 2) ASC
-                LIMIT @lim";
-            cmd.Parameters.AddWithValue("@map", mapId);
-            cmd.Parameters.AddWithValue("@cx", centerX);
-            cmd.Parameters.AddWithValue("@cy", centerY);
-            cmd.Parameters.AddWithValue("@r", radius);
-            cmd.Parameters.AddWithValue("@lim", Math.Max(1, maxLocations));
-
-            spawns = new List<(float X, float Y, float Z)>();
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                var x = reader.GetFloat(0);
-                var y = reader.GetFloat(1);
-                var z = reader.GetFloat(2);
-                spawns.Add((x, y, z));
-            }
+            spawns = await QueryMasterPoolSpawnSitesAsync(
+                masterPoolId,
+                mapId,
+                centerX,
+                centerY,
+                radius,
+                limit: maxLocations);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning("[FISHING-RESPAWN] DB query for pool spawns failed: {Error}", ex.Message);
+            _logger.LogWarning("[FISHING-RESPAWN] DB query for master pool sites failed: {Error}", ex.Message);
             return 0;
         }
 
         if (spawns.Count == 0)
         {
-            _logger.LogInformation("[FISHING-RESPAWN] No fishing pool spawns found near ({X:F1},{Y:F1}) r={R}",
+            _logger.LogInformation("[FISHING-RESPAWN] No master-pool fishing sites found near ({X:F1},{Y:F1}) r={R}",
                 centerX, centerY, radius);
             return 0;
         }
 
-        _logger.LogInformation("[FISHING-RESPAWN] Force-respawning {Count} nearest pool spawn locations via {Bot}",
+        _logger.LogInformation("[FISHING-RESPAWN] Force-respawning {Count} nearest master-pool sites via {Bot}",
             spawns.Count, accountName);
 
         var processed = 0;
         foreach (var spawn in spawns)
         {
-            // Teleport bot a couple yards above the water so `.gobject select`'s 10y
-            // nearest-object check can see the pool regardless of whether it's currently
-            // visible or waiting on a respawn timer. `.go xyz` via bot chat accepts any
-            // coordinates, including over water. Synchronous per-command dispatch — each
-            // command blocks on server ACK before the next fires.
-            await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
-                $".go xyz {spawn.X:F2} {spawn.Y:F2} {stagingZ:F2} {mapId}"));
-            await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".gobject select");
-            await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".gobject respawn");
-            processed++;
+            var selected = await RespawnAndSelectGameObjectNearSpawnAsync(accountName, mapId, spawn, "FISHING-RESPAWN");
+            var confirmedFishingPool = selected.HasSelection
+                && BarrensFishingPoolEntries.Contains(selected.Entry)
+                && selected.DistanceFromExpected <= 8f;
+
+            if (confirmedFishingPool)
+            {
+                processed++;
+                continue;
+            }
+
+            _logger.LogInformation(
+                "[FISHING-RESPAWN] pool {PoolId} had no selectable fishing gameobject near ({X:F1},{Y:F1}) after probe-local generic .respawn.",
+                spawn.PoolId,
+                spawn.X,
+                spawn.Y);
         }
 
         // Return the bot to a known safe staging point (typically the pier landing) so
@@ -858,6 +1651,13 @@ public partial class LiveBotFixture
         var returnY = stagingY ?? centerY;
         await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
             $".go xyz {returnX:F2} {returnY:F2} {stagingZ:F2} {mapId}"));
+        await WaitForTeleportSettledAsync(
+            accountName,
+            returnX,
+            returnY,
+            timeoutMs: 6000,
+            progressLabel: "FISHING-RESPAWN return",
+            xyToleranceYards: 10f);
 
         _logger.LogInformation("[FISHING-RESPAWN] Respawned {Count} pool spawn locations near ({X:F1},{Y:F1})",
             processed, centerX, centerY);
@@ -889,53 +1689,36 @@ public partial class LiveBotFixture
     ///
     /// Returns the number of pool spawn locations that were processed.
     /// </summary>
-    public async Task<int> RotateFishingPoolsNearAsync(
+    private async Task<int> RotateFishingPoolsNearAsync(
         string accountName,
         int mapId,
         float centerX,
         float centerY,
         float radius,
-        float stagingZ)
+        float stagingZ,
+        IReadOnlyList<FishingPoolSpawnSite>? targetSites = null,
+        int iteration = 0,
+        float acceptDistance = 55f)
     {
-        List<(float X, float Y, float Z)> spawns;
+        const int masterPoolId = 2628;
+        List<FishingPoolSpawnSite> spawns;
         try
         {
-            using var conn = new MySql.Data.MySqlClient.MySqlConnection(MangosWorldDbConnectionString);
-            await conn.OpenAsync();
-
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = @"
-                SELECT DISTINCT position_x, position_y, position_z
-                FROM gameobject g
-                INNER JOIN gameobject_template gt ON g.id = gt.entry
-                WHERE gt.type = 25
-                  AND g.map = @map
-                  AND POW(g.position_x - @cx, 2) + POW(g.position_y - @cy, 2) <= POW(@r, 2)
-                ORDER BY POW(g.position_x - @cx, 2) + POW(g.position_y - @cy, 2) ASC";
-            cmd.Parameters.AddWithValue("@map", mapId);
-            cmd.Parameters.AddWithValue("@cx", centerX);
-            cmd.Parameters.AddWithValue("@cy", centerY);
-            cmd.Parameters.AddWithValue("@r", radius);
-
-            spawns = new List<(float X, float Y, float Z)>();
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                var x = reader.GetFloat(0);
-                var y = reader.GetFloat(1);
-                var z = reader.GetFloat(2);
-                spawns.Add((x, y, z));
-            }
+            // Rotation has to touch the full Barrens-coast master pool, not just the
+            // local Ratchet subset. If the current active 8-of-21 excludes the local
+            // children entirely, a local-only despawn pass can never force a close
+            // child into the active set.
+            spawns = await QueryMasterPoolSpawnSitesAsync(masterPoolId, mapId, centerX, centerY, 99999f);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning("[FISHING-ROTATE] DB query for pool spawns failed: {Error}", ex.Message);
+            _logger.LogWarning("[FISHING-ROTATE] DB query for master pool sites failed: {Error}", ex.Message);
             return 0;
         }
 
         if (spawns.Count == 0)
         {
-            _logger.LogInformation("[FISHING-ROTATE] No fishing pool spawns found near ({X:F1},{Y:F1}) r={R}",
+            _logger.LogInformation("[FISHING-ROTATE] No master-pool fishing sites found near ({X:F1},{Y:F1}) r={R}",
                 centerX, centerY, radius);
             return 0;
         }
@@ -943,29 +1726,174 @@ public partial class LiveBotFixture
         _logger.LogInformation("[FISHING-ROTATE] Rotating {Count} pool spawn locations via {Bot} to force master re-roll",
             spawns.Count, accountName);
 
+        var targetPoolIds = new HashSet<int>(
+            targetSites?.Select(site => site.PoolId) ?? Enumerable.Empty<int>());
+        var processed = 0;
         foreach (var spawn in spawns)
         {
-            // Teleport a couple yards above water level so the 10y nearest-object
-            // select preferentially hits the pool (if one is active here) rather
-            // than dock decorations on the pier above.
-            // Using the synchronous per-command primitive: each command waits for
-            // server ACK via correlation id before the next one fires. That's the
-            // only way to guarantee ordering when the same command string is sent
-            // repeatedly (.gobject select / .gobject despawn) without letting the
-            // bot's outbound chat queue swallow them all.
-            await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
-                $".go xyz {spawn.X:F2} {spawn.Y:F2} {stagingZ:F2} {mapId}"));
-            await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".gobject select");
-            // `.gobject despawn` is a no-op when the selected GO isn't a pool (or
-            // when nothing was in range); in that case `UpdatePool` simply isn't
-            // triggered and we continue to the next spawn XY.
-            await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".gobject despawn");
+            var selected = await SelectGameObjectNearSpawnAsync(accountName, mapId, spawn, "FISHING-ROTATE");
+            if (!selected.HasSelection
+                || !BarrensFishingPoolEntries.Contains(selected.Entry)
+                || selected.DistanceFromExpected > 8f)
+            {
+                continue;
+            }
+
+            if (targetPoolIds.Contains(spawn.PoolId))
+            {
+                _logger.LogInformation(
+                    "[FISHING-ROTATE] pool {PoolId} is already a target-site fishing pool at {Dist:F1}y; stopping rotation before despawn.",
+                    spawn.PoolId,
+                    spawn.Distance2D);
+                break;
+            }
+
+            // `.gobject despawn` is a no-op when nothing valid was selected. We only
+            // fire it after a parsed fishing-pool selection so the rotation pass never
+            // targets dock decorations or unrelated nearby game objects.
+            if (await SendGmChatCommandAndAwaitServerAckAsync(accountName, ".gobject despawn"))
+            {
+                processed++;
+                if (targetSites is { Count: > 0 })
+                {
+                    var closestActiveTarget = await GetClosestActivePoolDistanceAsync(
+                        accountName,
+                        targetSites,
+                        "FISHING-ACTIVE-DURING-ROTATE",
+                        iteration);
+                    _logger.LogInformation(
+                        "[FISHING-ROTATE] after despawning pool {PoolId}, closest active target pool = {Dist:F1}y (accept={Accept:F0}y)",
+                        spawn.PoolId,
+                        closestActiveTarget,
+                        acceptDistance);
+                    if (closestActiveTarget <= acceptDistance)
+                        break;
+                }
+            }
         }
 
-        _logger.LogInformation("[FISHING-ROTATE] Completed rotation pass across {Count} pool XYs near ({X:F1},{Y:F1})",
-            spawns.Count, centerX, centerY);
+        await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
+            $".go xyz {centerX:F2} {centerY:F2} {stagingZ:F2} {mapId}"));
+        await WaitForTeleportSettledAsync(
+            accountName,
+            centerX,
+            centerY,
+            timeoutMs: 6000,
+            progressLabel: "FISHING-ROTATE return",
+            xyToleranceYards: 10f);
 
-        return spawns.Count;
+        _logger.LogInformation("[FISHING-ROTATE] Completed rotation pass across {Count} pool XYs near ({X:F1},{Y:F1})",
+            processed, centerX, centerY);
+
+        return processed;
+    }
+
+    private async Task<bool> RelocateNearestActiveFishingPoolToTargetSiteAsync(
+        string accountName,
+        int mapId,
+        float centerX,
+        float centerY,
+        float stagingZ,
+        IReadOnlyList<FishingPoolSpawnSite> targetSites)
+    {
+        if (targetSites.Count == 0)
+            return false;
+
+        const int masterPoolId = 2628;
+        List<FishingPoolSpawnSite> spawns;
+        try
+        {
+            spawns = await QueryMasterPoolSpawnSitesAsync(masterPoolId, mapId, centerX, centerY, 99999f);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[FISHING-RELOCATE] DB query for master-pool sites failed: {Error}", ex.Message);
+            return false;
+        }
+
+        var targetSite = targetSites
+            // Empirically prefer the south-pier pool when relocating. The
+            // 2620 landing-adjacent spot is easy to make selectable, but it
+            // has been much more prone to FG loot-window timeouts after a
+            // forced move. 2627 still stays within the accepted pier envelope
+            // and gives the cast resolver a roomier water approach.
+            .OrderBy(site => site.PoolId == 2627 ? 0 : 1)
+            .ThenBy(site => site.Distance2D)
+            .First();
+        var targetPoolIds = new HashSet<int>(targetSites.Select(site => site.PoolId));
+        var relocated = false;
+
+        _logger.LogInformation(
+            "[FISHING-RELOCATE] Targeting pool {PoolId} at ({X:F1},{Y:F1},{Z:F1}) dist={Dist:F1}y for relocation fallback.",
+            targetSite.PoolId,
+            targetSite.X,
+            targetSite.Y,
+            targetSite.Z,
+            targetSite.Distance2D);
+
+        foreach (var spawn in spawns)
+        {
+            var selected = await SelectGameObjectNearSpawnAsync(accountName, mapId, spawn, "FISHING-RELOCATE");
+            if (!selected.HasSelection
+                || selected.Guid == 0u
+                || !BarrensFishingPoolEntries.Contains(selected.Entry)
+                || selected.DistanceFromExpected > 8f)
+            {
+                continue;
+            }
+
+            if (targetPoolIds.Contains(spawn.PoolId))
+            {
+                _logger.LogInformation(
+                    "[FISHING-RELOCATE] target-site pool {PoolId} is already selectable via guid={Guid}; relocation not needed.",
+                    spawn.PoolId,
+                    selected.Guid);
+                relocated = true;
+                break;
+            }
+
+            var moveCommand = string.Create(
+                CultureInfo.InvariantCulture,
+                $".gobject move {selected.Guid} {targetSite.X:F2} {targetSite.Y:F2} {targetSite.Z:F2}");
+            if (!await SendGmChatCommandAndAwaitServerAckAsync(accountName, moveCommand, timeoutMs: 8000))
+            {
+                _logger.LogWarning(
+                    "[FISHING-RELOCATE] Move ack failed for guid={Guid} entry={Entry} from pool {PoolId} to target pool {TargetPoolId}.",
+                    selected.Guid,
+                    selected.Entry,
+                    spawn.PoolId,
+                    targetSite.PoolId);
+                continue;
+            }
+
+            _logger.LogInformation(
+                "[FISHING-RELOCATE] moved guid={Guid} entry={Entry} from pool {PoolId} ({X:F1},{Y:F1},{Z:F1}) to target pool {TargetPoolId} ({TargetX:F1},{TargetY:F1},{TargetZ:F1}).",
+                selected.Guid,
+                selected.Entry,
+                spawn.PoolId,
+                selected.X,
+                selected.Y,
+                selected.Z,
+                targetSite.PoolId,
+                targetSite.X,
+                targetSite.Y,
+                targetSite.Z);
+            relocated = true;
+            break;
+        }
+
+        await SendGmChatCommandAndAwaitServerAckAsync(
+            accountName,
+            string.Create(CultureInfo.InvariantCulture, $".go xyz {centerX:F2} {centerY:F2} {stagingZ:F2} {mapId}"));
+        await WaitForTeleportSettledAsync(
+            accountName,
+            centerX,
+            centerY,
+            timeoutMs: 6000,
+            progressLabel: "FISHING-RELOCATE return",
+            xyToleranceYards: 10f);
+
+        return relocated;
     }
 
     /// <summary>
@@ -976,89 +1904,250 @@ public partial class LiveBotFixture
     private static readonly HashSet<uint> BarrensFishingPoolEntries = new() { 180582u, 180655u };
 
     /// <summary>
-    /// Asks the server for the currently-active children of master pool 2628 via
-    /// <c>.pool spawns 2628</c>, parses the per-child chat responses, and returns the
-    /// distance from the supplied center to the nearest active spawn. Returns
-    /// <c>float.MaxValue</c> when no spawns parse.
-    ///
-    /// Uses the server's authoritative pool state rather than the bot's snapshot
-    /// NearbyObjects because the snapshot's GO visibility streams can lag or omit
-    /// entries immediately after a teleport; the server's in-memory PoolSpawns table
-    /// updates synchronously with <c>.gobject despawn</c>/<c>respawn</c>.
+    /// Returns the closest fishing-pool distance currently visible to the bot from the
+    /// supplied center, based on snapshot nearby-object streams. Polls briefly because
+    /// nearby GO visibility can lag a tick or two after the landing teleport.
     /// </summary>
-    public async Task<float> GetClosestActivePoolDistanceAsync(
+    public async Task<float> GetClosestVisibleFishingPoolDistanceAsync(
         string accountName,
-        int masterPoolId,
         float centerX,
-        float centerY)
+        float centerY,
+        int timeoutMs = 4000)
+        => await GetClosestVisibleFishingPoolDistanceAsync(
+            accountName,
+            centerX,
+            centerY,
+            timeoutMs,
+            candidateSites: null);
+
+    private async Task<float> GetClosestVisibleFishingPoolDistanceAsync(
+        string accountName,
+        float centerX,
+        float centerY,
+        int timeoutMs,
+        IReadOnlyList<FishingPoolSpawnSite>? candidateSites)
     {
-        // Capture baseline chat so we can isolate the response to this specific query.
-        var beforeSnap = await GetSnapshotAsync(accountName);
-        var baselineChatCount = beforeSnap?.RecentChatMessages.Count ?? 0;
-
-        await SendGmChatCommandAndAwaitServerAckAsync(accountName,
-            string.Create(CultureInfo.InvariantCulture, $".pool spawns {masterPoolId}"),
-            timeoutMs: 6000);
-
-        // Give the server another tick or two to emit per-child lines — .pool spawns
-        // fires one PSendSysMessage per active child, which arrive as distinct chat
-        // packets after the action ack.
-        await Task.Delay(800);
-        await RefreshSnapshotsAsync();
-        var afterSnap = await GetSnapshotAsync(accountName);
-        if (afterSnap == null)
-            return float.MaxValue;
-
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
         var best = float.MaxValue;
-        var chats = afterSnap.RecentChatMessages;
-        for (var i = baselineChatCount; i < chats.Count; i++)
+
+        while (DateTime.UtcNow < deadline)
         {
-            var line = chats[i];
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-            // `.pool spawns` emits rows like
-            //   "Guid: 19455 Entry: 180582 (...) Name: Floating Wreckage ... <x> <y> <z> <map>"
-            // We only care about the numeric x/y toward the tail.
-            if (!TryParsePoolSpawnsPosition(line, out var x, out var y))
-                continue;
-            var dx = x - centerX;
-            var dy = y - centerY;
-            var dist = MathF.Sqrt((dx * dx) + (dy * dy));
-            if (dist < best)
-                best = dist;
+            await RefreshSnapshotsAsync();
+            var snapshot = GetTrackedSnapshotForAccount(accountName) ?? await GetSnapshotAsync(accountName);
+            best = Math.Min(
+                best,
+                candidateSites == null
+                    ? GetClosestVisibleFishingPoolDistance(snapshot, centerX, centerY)
+                    : GetClosestVisibleFishingPoolDistance(snapshot, centerX, centerY, candidateSites));
+            if (best < float.MaxValue)
+                return best;
+
+            await Task.Delay(250);
         }
 
         return best;
     }
 
-    private static bool TryParsePoolSpawnsPosition(string chatLine, out float x, out float y)
+    private IReadOnlyList<FishingPoolSpawnSite> GetFgPierReachableCloseSites(
+        int mapId,
+        float centerX,
+        float centerY,
+        float centerZ,
+        IReadOnlyList<FishingPoolSpawnSite> closeSites)
     {
-        // The localized MaNGOS string interleaves quite a bit before the coordinates,
-        // but the trailing numeric tail is stable: "<float> <float> <float> <int>"
-        // (x y z mapId). Scan tokens and take the first three floats that come in
-        // sequence before a trailing integer — that's the x y z triplet.
-        x = 0f;
-        y = 0f;
-        var tokens = chatLine.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-        for (var i = 0; i + 3 < tokens.Length; i++)
+        if (closeSites.Count == 0)
+            return closeSites;
+
+        var playerPosition = new Position(centerX, centerY, centerZ);
+        var client = new PathfindingClient("127.0.0.1", 5001, _loggerFactory.CreateLogger<PathfindingClient>());
+        var reachable = new List<FishingPoolSpawnSite>();
+        var diagnostics = new List<string>();
+
+        foreach (var site in closeSites)
         {
-            if (float.TryParse(tokens[i], NumberStyles.Float, CultureInfo.InvariantCulture, out var cx)
-                && float.TryParse(tokens[i + 1], NumberStyles.Float, CultureInfo.InvariantCulture, out var cy)
-                && float.TryParse(tokens[i + 2], NumberStyles.Float, CultureInfo.InvariantCulture, out var _)
-                && int.TryParse(tokens[i + 3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var _))
-            {
-                x = cx;
-                y = cy;
-                return true;
-            }
+            var poolPosition = new Position(site.X, site.Y, site.Z);
+            var castPosition = TryResolveFishingCastViaPathfinding(client, (uint)mapId, playerPosition, poolPosition);
+            diagnostics.Add(
+                castPosition == null
+                    ? $"pool={site.PoolId} dist={site.Distance2D:F1} fgReachable=False"
+                    : $"pool={site.PoolId} dist={site.Distance2D:F1} fgReachable=True cast=({castPosition.Value.Position.X:F1},{castPosition.Value.Position.Y:F1},{castPosition.Value.Position.Z:F1}) edge={castPosition.Value.EdgeDistance:F1}");
+
+            if (castPosition != null)
+                reachable.Add(site);
         }
-        return false;
+
+        _logger.LogInformation(
+            "[FISHING-ENSURE] FG reachability filter: {Diagnostics}",
+            string.Join(" | ", diagnostics));
+
+        return reachable;
+    }
+
+    private static FishingCastPosition? TryResolveFishingCastViaPathfinding(
+        PathfindingClient client,
+        uint mapId,
+        Position playerPosition,
+        Position poolPosition)
+    {
+        if (!client.IsAvailable)
+            return null;
+
+        Position[] path;
+        try
+        {
+            path = client.GetPath(mapId, playerPosition, poolPosition, smoothPath: false);
+        }
+        catch
+        {
+            return null;
+        }
+
+        if (path == null || path.Length == 0)
+            return null;
+
+        bool IsOnPierLayer(Position p) => MathF.Abs(p.Z - playerPosition.Z) <= FishingPathfindingPierLayerZTolerance;
+
+        for (var i = path.Length - 1; i > 0; i--)
+        {
+            var nearPool = path[i];
+            var nearPlayer = path[i - 1];
+            var distNearPool = nearPool.DistanceTo(poolPosition);
+            var distNearPlayer = nearPlayer.DistanceTo(poolPosition);
+
+            var minDist = MathF.Min(distNearPool, distNearPlayer);
+            var maxDist = MathF.Max(distNearPool, distNearPlayer);
+            if (FishingIdealCastingDistanceFromPool < minDist || FishingIdealCastingDistanceFromPool > maxDist)
+                continue;
+
+            var segmentLen = MathF.Max(distNearPlayer - distNearPool, 0.0001f);
+            var t = (FishingIdealCastingDistanceFromPool - distNearPool) / segmentLen;
+            t = Math.Clamp(t, 0f, 1f);
+            var interpolated = new Position(
+                nearPool.X + ((nearPlayer.X - nearPool.X) * t),
+                nearPool.Y + ((nearPlayer.Y - nearPool.Y) * t),
+                nearPool.Z + ((nearPlayer.Z - nearPool.Z) * t));
+
+            if (!IsOnPierLayer(interpolated))
+                continue;
+
+            return BuildFishingCastPosition(interpolated, poolPosition, FishingIdealCastingDistanceFromPool);
+        }
+
+        Position? bestNode = null;
+        var bestScore = float.MaxValue;
+        foreach (var node in path)
+        {
+            if (!IsOnPierLayer(node))
+                continue;
+
+            var distToPool = node.DistanceTo(poolPosition);
+            if (distToPool < FishingMinCastingDistance || distToPool > FishingMaxCastingDistance)
+                continue;
+
+            var score = MathF.Abs(distToPool - FishingIdealCastingDistanceFromPool);
+            if (score >= bestScore)
+                continue;
+
+            bestNode = node;
+            bestScore = score;
+        }
+
+        if (bestNode != null)
+            return BuildFishingCastPosition(bestNode, poolPosition, bestNode.DistanceTo(poolPosition));
+
+        var endpoint = path[path.Length - 1];
+        var endpointDist = endpoint.DistanceTo(poolPosition);
+        if (endpointDist > FishingMaxCastingDistance + 10f || !IsOnPierLayer(endpoint))
+            return null;
+
+        return BuildFishingCastPosition(endpoint, poolPosition, endpointDist);
+    }
+
+    private static FishingCastPosition BuildFishingCastPosition(Position standoff, Position poolPosition, float distToPool)
+    {
+        var facing = MathF.Atan2(poolPosition.Y - standoff.Y, poolPosition.X - standoff.X);
+        if (facing < 0f)
+            facing += MathF.PI * 2f;
+
+        return new FishingCastPosition(standoff, facing, distToPool, HasLineOfSight: true);
+    }
+
+    private async Task<(FishingPoolActivationState State, IReadOnlyList<string> EvidenceResponses)> QueryPoolSpawnStateAsync(
+        string accountName,
+        FishingPoolSpawnSite spawn,
+        string logPrefix,
+        int iteration)
+    {
+        var spawnResponses = await SendGmChatCommandAndCollectResponseLinesAsync(
+            accountName,
+            string.Create(CultureInfo.InvariantCulture, $".pool spawns {spawn.PoolId}"),
+            timeoutMs: 5000,
+            settleMs: 1000);
+
+        var evidenceResponses = spawnResponses
+            .Where(response => !string.IsNullOrWhiteSpace(response))
+            .ToArray();
+        var poolEntry = Convert.ToUInt32(spawn.PoolId, CultureInfo.InvariantCulture);
+        var state = FishingPoolActivationAnalyzer.ClassifyPoolSpawnStateResponses(poolEntry, evidenceResponses);
+
+        _logger.LogInformation(
+            "[{LogPrefix}] iter={Iter} pool={PoolId} dist={Dist:F1}y .pool spawns => {SpawnEvidence} => {State}",
+            logPrefix,
+            iteration,
+            spawn.PoolId,
+            spawn.Distance2D,
+            FormatCommandEvidence(spawnResponses, "no active spawns reported"),
+            state);
+
+        return (state, evidenceResponses);
+    }
+
+    private async Task<float> GetClosestActivePoolDistanceAsync(
+        string accountName,
+        IReadOnlyList<FishingPoolSpawnSite> candidateSites,
+        string logPrefix,
+        int iteration)
+    {
+        if (candidateSites.Count == 0)
+            return float.MaxValue;
+
+        var activeSites = new List<FishingPoolSpawnSite>();
+        foreach (var site in candidateSites.OrderBy(site => site.Distance2D))
+        {
+            var (state, _) = await QueryPoolSpawnStateAsync(accountName, site, logPrefix, iteration);
+            if (state == FishingPoolActivationState.Spawned)
+                activeSites.Add(site);
+        }
+
+        _logger.LogInformation(
+            "[{LogPrefix}] iter={Iter} active target pools => {ActivePools}",
+            logPrefix,
+            iteration,
+            activeSites.Count == 0
+                ? "none"
+                : string.Join(", ", activeSites.Select(site => $"{site.PoolId}@{site.Distance2D:F1}y")));
+
+        if (activeSites.Count == 0)
+            return float.MaxValue;
+
+        foreach (var site in activeSites)
+        {
+            _logger.LogInformation(
+                "[{LogPrefix}] iter={Iter} close active pool confirmed via .pool spawns: pool={PoolId} dist={Dist:F1}y",
+                logPrefix,
+                iteration,
+                site.PoolId,
+                site.Distance2D);
+        }
+
+        return activeSites[0].Distance2D;
     }
 
     /// <summary>
-    /// Iterative, verification-driven pool setup: loop rotate -> respawn -> check until
-    /// Shodan confirms a fishing pool is visible within <paramref name="acceptDistance"/>
-    /// of the pier landing, or until <paramref name="maxIterations"/> rounds are exhausted.
+    /// Iterative, verification-driven pool setup: loop check -> rotate -> respawn -> check
+    /// until Shodan confirms a fishing pool is visible within
+    /// <paramref name="acceptDistance"/> of the pier landing, or until
+    /// <paramref name="maxIterations"/> rounds are exhausted.
     ///
     /// Each iteration:
     ///   1. Teleport Shodan to the pier landing and refresh her snapshot.
@@ -1083,113 +2172,271 @@ public partial class LiveBotFixture
         int maxIterations = 5)
     {
         const int masterPoolId = 2628;
+        var repairedBaseline = await RestoreBarrensFishingPoolBaselineAsync(accountName, mapId);
+        if (repairedBaseline > 0)
+        {
+            _logger.LogInformation(
+                "[FISHING-ENSURE] Restored {Count} relocated Barrens pool child gameobject(s) before staging.",
+                repairedBaseline);
+        }
+
+        IReadOnlyList<FishingPoolSpawnSite> closeSites;
+        IReadOnlyList<FishingPoolSpawnSite> fgReachableCloseSites;
+        try
+        {
+            closeSites = await QueryMasterPoolSpawnSitesAsync(masterPoolId, mapId, centerX, centerY, acceptDistance);
+            fgReachableCloseSites = GetFgPierReachableCloseSites(mapId, centerX, centerY, stagingZ - 2f, closeSites);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("[FISHING-ENSURE] Failed to query master-pool sites: {Error}", ex.Message);
+            return false;
+        }
+
+        _logger.LogInformation(
+            "[FISHING-ENSURE] Close-site plan: {Sites}",
+            closeSites.Count == 0
+                ? "none"
+                : string.Join(" | ", closeSites.Select(site => $"pool={site.PoolId} dist={site.Distance2D:F1} pos=({site.X:F1},{site.Y:F1},{site.Z:F1})")));
+        _logger.LogInformation(
+            "[FISHING-ENSURE] FG-reachable close-site plan: {Sites}",
+            fgReachableCloseSites.Count == 0
+                ? "none"
+                : string.Join(" | ", fgReachableCloseSites.Select(site => $"pool={site.PoolId} dist={site.Distance2D:F1} pos=({site.X:F1},{site.Y:F1},{site.Z:F1})")));
+
         for (var iteration = 1; iteration <= maxIterations; iteration++)
         {
-            // Park Shodan at the landing so `.pool spawns` is issued from a stable
-            // location (doesn't affect the query result, but keeps the chat scope clean).
             await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
                 $".go xyz {centerX:F2} {centerY:F2} {stagingZ:F2} {mapId}"));
+            await WaitForTeleportSettledAsync(
+                accountName,
+                centerX,
+                centerY,
+                timeoutMs: 6000,
+                progressLabel: $"FISHING-ENSURE landing iter {iteration}",
+                xyToleranceYards: 10f);
 
-            var closest = await GetClosestActivePoolDistanceAsync(
-                accountName, masterPoolId, centerX, centerY);
-            _logger.LogInformation("[FISHING-ENSURE] iter={Iter} closest active pool = {Dist:F1}y (accept={Accept:F0}y)",
-                iteration, closest, acceptDistance);
+            var visibilitySites = fgReachableCloseSites.Count > 0 ? fgReachableCloseSites : closeSites;
+            var closestVisible = await GetClosestVisibleFishingPoolDistanceAsync(accountName, centerX, centerY, 4000, visibilitySites);
+            _logger.LogInformation("[FISHING-ENSURE] iter={Iter} closest FG-reachable visible pool = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration, closestVisible, acceptDistance);
 
-            if (closest <= acceptDistance)
+            if (closestVisible <= acceptDistance)
             {
-                _logger.LogInformation("[FISHING-ENSURE] Close pool confirmed at {Dist:F1}y on iteration {Iter}.",
-                    closest, iteration);
+                _logger.LogInformation("[FISHING-ENSURE] FG-reachable visible pool confirmed at {Dist:F1}y on iteration {Iter}.",
+                    closestVisible, iteration);
                 return true;
             }
 
-            // No close pool yet. Force a re-roll across the whole Barrens coast (every
-            // sub-pool's XY), then wake any newly-rolled close children.
+            var closestSelectable = await GetClosestSelectableFishingPoolDistanceAsync(
+                accountName,
+                mapId,
+                visibilitySites,
+                "FISHING-SELECT",
+                iteration);
+            _logger.LogInformation(
+                "[FISHING-ENSURE] iter={Iter} closest selectable FG-reachable close pool = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration,
+                closestSelectable,
+                acceptDistance);
+            if (closestSelectable <= acceptDistance)
+            {
+                _logger.LogInformation(
+                    "[FISHING-ENSURE] FG-reachable selectable pool confirmed at {Dist:F1}y on iteration {Iter}.",
+                    closestSelectable,
+                    iteration);
+                return true;
+            }
+
+            await SendGmChatCommandAndAwaitServerAckAsync(accountName, string.Create(CultureInfo.InvariantCulture,
+                $".go xyz {centerX:F2} {centerY:F2} {stagingZ:F2} {mapId}"));
+            await WaitForTeleportSettledAsync(
+                accountName,
+                centerX,
+                centerY,
+                timeoutMs: 6000,
+                progressLabel: $"FISHING-ENSURE re-stage iter {iteration}",
+                xyToleranceYards: 10f);
+
+            var closestActive = await GetClosestActivePoolDistanceAsync(
+                accountName,
+                visibilitySites,
+                "FISHING-ACTIVE",
+                iteration);
+            _logger.LogInformation(
+                "[FISHING-ENSURE] iter={Iter} closest active close pool = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration,
+                closestActive,
+                acceptDistance);
+
+            // No close visible pool yet. Force a re-roll across the whole Barrens coast
+            // (every master-pool child site in range), then wake the nearest children.
             _ = await RotateFishingPoolsNearAsync(
-                accountName, mapId, centerX, centerY, rotateRadius, stagingZ);
+                accountName,
+                mapId,
+                centerX,
+                centerY,
+                rotateRadius,
+                stagingZ,
+                targetSites: visibilitySites,
+                iteration: iteration,
+                acceptDistance: acceptDistance);
+
+            var closestActiveAfterRotate = await GetClosestActivePoolDistanceAsync(
+                accountName,
+                visibilitySites,
+                "FISHING-ACTIVE-POST-ROTATE",
+                iteration);
+            _logger.LogInformation(
+                "[FISHING-ENSURE] iter={Iter} closest active close pool after rotate = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration,
+                closestActiveAfterRotate,
+                acceptDistance);
 
             _ = await RespawnFishingPoolsNearAsync(
-                accountName, mapId, centerX, centerY, rotateRadius,
+                accountName, mapId, centerX, centerY, acceptDistance,
                 stagingZ, stagingX: centerX, stagingY: centerY,
-                maxLocations: respawnLimit);
+                maxLocations: Math.Max(1, Math.Min(respawnLimit, closeSites.Count)));
+
+            var closestSelectableAfterRespawn = await GetClosestSelectableFishingPoolDistanceAsync(
+                accountName,
+                mapId,
+                visibilitySites,
+                "FISHING-SELECT-POST-RESPAWN",
+                iteration);
+            _logger.LogInformation(
+                "[FISHING-ENSURE] iter={Iter} closest selectable FG-reachable close pool after respawn = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration,
+                closestSelectableAfterRespawn,
+                acceptDistance);
+            if (closestSelectableAfterRespawn <= acceptDistance)
+            {
+                _logger.LogInformation(
+                    "[FISHING-ENSURE] FG-reachable selectable pool confirmed at {Dist:F1}y immediately after respawn on iteration {Iter}.",
+                    closestSelectableAfterRespawn,
+                    iteration);
+                return true;
+            }
+
+            var closestVisibleAfterRespawn = await GetClosestVisibleFishingPoolDistanceAsync(accountName, centerX, centerY, 4000, visibilitySites);
+            _logger.LogInformation(
+                "[FISHING-ENSURE] iter={Iter} closest FG-reachable visible pool after respawn = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration,
+                closestVisibleAfterRespawn,
+                acceptDistance);
+            if (closestVisibleAfterRespawn <= acceptDistance)
+            {
+                _logger.LogInformation(
+                    "[FISHING-ENSURE] FG-reachable visible pool confirmed at {Dist:F1}y immediately after respawn on iteration {Iter}.",
+                    closestVisibleAfterRespawn,
+                    iteration);
+                return true;
+            }
+
+            var closestSelectableAfterWake = await WakeAndGetClosestSelectableFishingPoolDistanceAsync(
+                accountName,
+                mapId,
+                visibilitySites,
+                centerX,
+                centerY,
+                stagingZ,
+                "FISHING-WAKE",
+                iteration);
+            _logger.LogInformation(
+                "[FISHING-ENSURE] iter={Iter} closest selectable FG-reachable close pool after wake = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration,
+                closestSelectableAfterWake,
+                acceptDistance);
+            if (closestSelectableAfterWake <= acceptDistance)
+            {
+                _logger.LogInformation(
+                    "[FISHING-ENSURE] FG-reachable selectable pool confirmed at {Dist:F1}y via targeted wake-up on iteration {Iter}.",
+                    closestSelectableAfterWake,
+                    iteration);
+                return true;
+            }
+
+            var closestVisibleAfterWake = await GetClosestVisibleFishingPoolDistanceAsync(accountName, centerX, centerY, 4000, visibilitySites);
+            _logger.LogInformation(
+                "[FISHING-ENSURE] iter={Iter} closest FG-reachable visible pool after wake = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration,
+                closestVisibleAfterWake,
+                acceptDistance);
+            if (closestVisibleAfterWake <= acceptDistance)
+            {
+                _logger.LogInformation(
+                    "[FISHING-ENSURE] FG-reachable visible pool confirmed at {Dist:F1}y after targeted wake-up on iteration {Iter}.",
+                    closestVisibleAfterWake,
+                    iteration);
+                return true;
+            }
+
+            var relocated = await RelocateNearestActiveFishingPoolToTargetSiteAsync(
+                accountName,
+                mapId,
+                centerX,
+                centerY,
+                stagingZ,
+                visibilitySites);
+            if (!relocated)
+                continue;
+
+            var closestSelectableAfterRelocate = await GetClosestSelectableFishingPoolDistanceAsync(
+                accountName,
+                mapId,
+                visibilitySites,
+                "FISHING-SELECT-POST-RELOCATE",
+                iteration);
+            _logger.LogInformation(
+                "[FISHING-ENSURE] iter={Iter} closest selectable FG-reachable close pool after relocate = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration,
+                closestSelectableAfterRelocate,
+                acceptDistance);
+            if (closestSelectableAfterRelocate <= acceptDistance)
+            {
+                _logger.LogInformation(
+                    "[FISHING-ENSURE] FG-reachable selectable pool confirmed at {Dist:F1}y after relocation fallback on iteration {Iter}.",
+                    closestSelectableAfterRelocate,
+                    iteration);
+                return true;
+            }
+
+            var closestVisibleAfterRelocate = await GetClosestVisibleFishingPoolDistanceAsync(accountName, centerX, centerY, 4000, visibilitySites);
+            _logger.LogInformation(
+                "[FISHING-ENSURE] iter={Iter} closest FG-reachable visible pool after relocate = {Dist:F1}y (accept={Accept:F0}y)",
+                iteration,
+                closestVisibleAfterRelocate,
+                acceptDistance);
+            if (closestVisibleAfterRelocate <= acceptDistance)
+            {
+                _logger.LogInformation(
+                    "[FISHING-ENSURE] FG-reachable visible pool confirmed at {Dist:F1}y after relocation fallback on iteration {Iter}.",
+                    closestVisibleAfterRelocate,
+                    iteration);
+                return true;
+            }
         }
 
-        _logger.LogWarning("[FISHING-ENSURE] Exhausted {Max} iterations without surfacing a close pool.",
+        var finalClosestSelectable = await WakeAndGetClosestSelectableFishingPoolDistanceAsync(
+            accountName,
+            mapId,
+            fgReachableCloseSites.Count > 0 ? fgReachableCloseSites : closeSites,
+            centerX,
+            centerY,
+            stagingZ,
+            "FISHING-WAKE",
+            maxIterations + 1);
+        if (finalClosestSelectable <= acceptDistance)
+        {
+            _logger.LogInformation(
+                "[FISHING-ENSURE] Final close selectable pool confirmed at {Dist:F1}y after {Max} rotation rounds.",
+                finalClosestSelectable,
+                maxIterations);
+            return true;
+        }
+
+        _logger.LogWarning("[FISHING-ENSURE] Exhausted {Max} iterations without confirming a close active pool.",
             maxIterations);
         return false;
-    }
-
-    /// <summary>
-    /// Level-60 Vanilla Mage best-in-slot equip list. Every item slot a player can equip
-    /// is represented (head, neck, shoulders, back, chest, wrist, hands, waist, legs, feet,
-    /// two rings, two trinkets, mainhand, off-hand held, ranged wand). Item IDs are the
-    /// well-documented Phase 5-6 classic BIS picks for a mage, all of which exist in the
-    /// standard 1.12.1 item table the server ships with. Shodan is GM-only and is never
-    /// used in combat, so gear here is cosmetic — but the user explicitly asked for every
-    /// slot to be accounted for, so we account for every slot.
-    /// </summary>
-    private static readonly (string SlotName, int ItemId)[] ShodanMageBestInSlot =
-    {
-        ("Head",       16914), // Netherwind Crown (T2)
-        ("Neck",       19149), // Choker of the Fire Lord (MC)
-        ("Shoulders",  16917), // Netherwind Mantle (T2)
-        ("Back",       22731), // Cloak of the Shrouded Mists (Naxx)
-        ("Chest",      16916), // Netherwind Robes (T2)
-        ("Wrist",      19141), // Bracers of Arcane Accuracy (AQ40)
-        ("Hands",      19143), // Hands of Power (AQ40)
-        ("Waist",      19132), // Mana Igniting Cord (BWL)
-        ("Legs",       16915), // Netherwind Pants (T2)
-        ("Feet",       19140), // Sandals of the Insightful Mind (AQ40)
-        ("Finger1",    19434), // Band of Forced Concentration (AQ40)
-        ("Finger2",    19147), // Ring of the Fallen God (C'Thun)
-        ("Trinket1",   18820), // Talisman of Ephemeral Power (MC)
-        ("Trinket2",   19379), // Neltharion's Tear (BWL)
-        ("MainHand",   22589), // Atiesh, Greatstaff of the Guardian (Mage)
-        ("Ranged",     18348), // Dragonbreath Hand Cannon (BWL) — wand/ranged placeholder
-    };
-
-    /// <summary>
-    /// Raises Shodan to level 60 and equips a full BIS mage loadout in every slot.
-    /// Idempotent: safe to call each fixture init; .character level / .additem no-op
-    /// when the state already matches. Requires Shodan to be in-world (the bot chat
-    /// pipeline queues commands against the character's session).
-    /// </summary>
-    public async Task EnsureShodanLoadoutAsync(string shodanAccountName, string? shodanCharacterName = null)
-    {
-        if (string.IsNullOrWhiteSpace(shodanAccountName))
-        {
-            _logger.LogWarning("[SHODAN-LOADOUT] Skipped — shodanAccountName was empty.");
-            return;
-        }
-
-        // Level to 60 via SOAP (needs either the selected player or a character name).
-        if (!string.IsNullOrWhiteSpace(shodanCharacterName))
-        {
-            var levelResult = await ExecuteGMCommandAsync($".character level {shodanCharacterName} 60");
-            _logger.LogInformation("[SHODAN-LOADOUT] .character level 60 -> {Result}", levelResult);
-        }
-        else
-        {
-            // Fall back to bot-chat self-targeting when character name hasn't hydrated yet.
-            await SendGmChatCommandAsync(shodanAccountName, ".character level 60");
-        }
-
-        // Add + equip each BIS piece. `.additem <id>` adds to Shodan's bags; we then use
-        // the selected-self target of `.equip <id>` via bot chat to move the item into
-        // the correct slot. On VMaNGOS `.additem <id>` + `.equip <id>` is the standard
-        // way to pre-outfit a character via chat.
-        foreach (var (slotName, itemId) in ShodanMageBestInSlot)
-        {
-            await SendGmChatCommandAsync(shodanAccountName,
-                string.Create(CultureInfo.InvariantCulture, $".additem {itemId} 1"));
-        }
-
-        // Request each item be auto-equipped. `.equip` is not a stock command on all
-        // MaNGOS builds; the safer path is `.additemset` or relying on the client to
-        // equip via autoloot flow. For Shodan we only need items in the bag for the
-        // "every slot accounted for" requirement — actual equip state isn't asserted.
-        // If the server supports `.equip <id>`, callers can extend here later.
-
-        _logger.LogInformation("[SHODAN-LOADOUT] Queued {Count} BIS item adds for '{Account}'.",
-            ShodanMageBestInSlot.Length, shodanAccountName);
     }
 }

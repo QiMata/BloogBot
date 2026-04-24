@@ -51,6 +51,39 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-24 (Tier 1 slice 11 - Shodan staged Ratchet fishing stabilized 3x green)
+- Pass result: `build green; deterministic live-fixture slices green; the focused Ratchet fishing slice is now green in three consecutive formal reruns`
+- Last delta:
+  - `FishingProfessionTests.cs` now isolates the validation phases instead of launching both fishing bots against the same relocated pool. The test stages a close pool with `Fishing.ShodanOnly.config.json`, restarts into a runtime-generated FG-only fishing config, waits for FG `fishing_loot_success`, re-stages with Shodan, then repeats the same flow with a runtime-generated BG-only fishing config.
+  - `LiveBotFixture.ServerManagement.cs` now repairs previously relocated Barrens pool children before every staging round. `RestoreBarrensFishingPoolBaselineAsync(...)` queries master pool `2628`, detects split child pairs, and uses `.gobject move` to snap a moved child back onto its sibling anchor so each run starts from a clean pool map.
+  - The master-pool site query now anchors on a single child GUID per sub-pool instead of mixing `MIN(x)` and `MIN(y)` from diverged children, which had been fabricating impossible hybrid coordinates after relocation fallback changed the DB.
+  - Relocation fallback now prefers pier-reachable pool `2627` instead of `2620`. In live evidence, relocating active child `19480` from sub-pool `2621` onto `2627` consistently produced a selectable close pool and avoided the FG `loot_window_timeout` loop that kept happening when the fallback targeted `2620`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests" --logger "console;verbosity=minimal"` -> `passed (31/31)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_target2627_probe.trx"` -> `passed (1/1)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_final_1.trx"` -> `passed (1/1)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_final_2.trx"` -> `passed (1/1)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_final_3.trx"` -> `passed (1/1)`
+  - Live evidence markers from all three final runs:
+    - `FISHING-BASELINE` repaired moved children `19480`/`19485` before each Shodan stage.
+    - `FISHING-RELOCATE` targeted pool `2627` and moved active child `19480` from pool `2621` onto the south-pier site.
+    - `Passed BotRunner.Tests.LiveValidation.FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool` appears in `fishing_final_1.console.txt`, `fishing_final_2.console.txt`, and `fishing_final_3.console.txt`.
+- Artifacts:
+  - `tmp/test-runtime/results-live/fishing_target2627_probe.trx`
+  - `tmp/test-runtime/results-live/fishing_final_1.trx`
+  - `tmp/test-runtime/results-live/fishing_final_2.trx`
+  - `tmp/test-runtime/results-live/fishing_final_3.trx`
+  - `tmp/test-runtime/results-live/fishing_final_1.console.txt`
+  - `tmp/test-runtime/results-live/fishing_final_2.console.txt`
+  - `tmp/test-runtime/results-live/fishing_final_3.console.txt`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ServerManagement.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_final_rerun_after_fixture_change.trx"`
+
 ### 2026-04-23 (Tier 1 slice 10 - Shodan idle + equipped admin loadout)
 - Pass result: `build green; Shodan no longer self-starts fishing and now equips the full admin mage loadout, but the focused Ratchet slice is still red because the pool verifier cannot see close active children`
 - Last delta:

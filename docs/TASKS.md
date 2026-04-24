@@ -338,6 +338,33 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-24, live-validation Tier 1 slice 11 - Shodan staging stabilized; Ratchet fishing green 3x)
+- Completed:
+  - Closed the focused live fishing blocker. `Fishing_CatchFish_BgAndFg_RatchetStagedPool` now passes reliably by keeping Shodan isolated for staging, then validating FG and BG in separate runtime-generated fishing rosters so they never contend for the same relocated pool GUID.
+  - `LiveBotFixture.ServerManagement.cs` now repairs previously relocated Barrens master-pool children before each staging pass (`FISHING-BASELINE`), queries one stable anchor child row per pool instead of mixing `MIN(x)`/`MIN(y)` across diverged children, and prefers relocating an active child onto pier-reachable pool `2627` instead of the shallower `2620` landing-adjacent site.
+  - `FishingProfessionTests.cs` now stages Shodan through `Fishing.ShodanOnly.config.json`, runs FG-only fishing, re-stages with Shodan, then runs BG-only fishing. That preserves task-owned fishing behavior while removing the same-pool race that was invalidating dual-bot runs after relocation fallback.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `succeeded`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests" --logger "console;verbosity=minimal"` -> `passed (31/31)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_target2627_probe.trx"` -> `passed (1/1)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_final_1.trx"` -> `passed (1/1)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_final_2.trx"` -> `passed (1/1)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_final_3.trx"` -> `passed (1/1)`
+- Evidence:
+  - `tmp/test-runtime/results-live/fishing_target2627_probe.trx`
+  - `tmp/test-runtime/results-live/fishing_final_1.trx`
+  - `tmp/test-runtime/results-live/fishing_final_2.trx`
+  - `tmp/test-runtime/results-live/fishing_final_3.trx`
+  - `tmp/test-runtime/results-live/fishing_final_1.console.txt`
+  - `tmp/test-runtime/results-live/fishing_final_2.console.txt`
+  - `tmp/test-runtime/results-live/fishing_final_3.console.txt`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/FishingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ServerManagement.cs`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_final_rerun_after_fixture_change.trx"`
+
 ## Handoff (2026-04-23, live-validation Tier 1 slice 10 - Shodan idles correctly and admin loadout equips)
 
 - Completed:

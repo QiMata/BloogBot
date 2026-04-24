@@ -1019,7 +1019,13 @@ public partial class LiveBotFixture : IAsyncLifetime
         if (BgAccountName != null || FgAccountName != null)
             return bgReady && fgReady;
 
-        return everSeenInWorld.Count >= 2;
+        if (!string.IsNullOrWhiteSpace(CombatTestAccountName))
+            return everSeenInWorld.ContainsKey(CombatTestAccountName);
+
+        if (!string.IsNullOrWhiteSpace(ShodanAccountName))
+            return everSeenInWorld.ContainsKey(ShodanAccountName);
+
+        return everSeenInWorld.Count >= Math.Max(1, ExpectedBotCount);
     }
 
     private List<string> GetMissingRequiredRoles(Dictionary<string, WoWActivitySnapshot> everSeenInWorld)
@@ -1059,6 +1065,9 @@ public partial class LiveBotFixture : IAsyncLifetime
 
         if (string.Equals(accountName, CombatTestAccountName, StringComparison.OrdinalIgnoreCase))
             return CombatTestCharacterName;
+
+        if (string.Equals(accountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+            return ShodanCharacterName;
 
         return AllBots
             .FirstOrDefault(bot => string.Equals(bot.AccountName, accountName, StringComparison.OrdinalIgnoreCase))

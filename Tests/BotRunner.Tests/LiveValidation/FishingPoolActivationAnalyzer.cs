@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 
 namespace BotRunner.Tests.LiveValidation;
 
@@ -72,9 +71,6 @@ internal static class FishingPoolActivationAnalyzer
             return FishingPoolActivationState.Unknown;
 
         if (materializedResponses.Any(response => IsSpawnRowForPool(response, poolEntry)))
-            return FishingPoolActivationState.Spawned;
-
-        if (materializedResponses.Any(response => IsPositivePoolUpdateCountLine(response, poolEntry)))
             return FishingPoolActivationState.Spawned;
 
         return FishingPoolActivationState.Unknown;
@@ -159,20 +155,5 @@ internal static class FishingPoolActivationAnalyzer
             || response.Contains($"poolid {poolEntry}", StringComparison.OrdinalIgnoreCase)
             || response.Contains($"pool={poolEntry}", StringComparison.OrdinalIgnoreCase)
             || response.Contains($"[pool {poolEntry}]", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsPositivePoolUpdateCountLine(string response, uint poolEntry)
-    {
-        if (string.IsNullOrWhiteSpace(response) || IsPoolCommandErrorResponse(response))
-            return false;
-
-        var match = Regex.Match(
-            response,
-            $@"Pool\s*#\s*{poolEntry}\s*:\s*(\d+)\s+objects\s+spawned",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-        if (!match.Success)
-            return false;
-
-        return int.TryParse(match.Groups[1].Value, out var count) && count > 0;
     }
 }
