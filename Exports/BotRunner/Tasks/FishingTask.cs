@@ -66,6 +66,7 @@ public class FishingTask : BotTask, IBotTask
     private DateTime _travelDispatchedAt;
     private bool _travelDispatched;
     private bool _activityAnnounced;
+    private bool _updateEntryAnnounced;
     private const int TravelTimeoutMs = 12_000;
     private const int OutfitSettleTicks = 5;
 
@@ -236,6 +237,13 @@ public class FishingTask : BotTask, IBotTask
 
     public void Update()
     {
+        if (!_updateEntryAnnounced)
+        {
+            _updateEntryAnnounced = true;
+            BotContext.AddDiagnosticMessage(
+                $"[TASK] FishingTask update_entered location={_location ?? "(none)"} useGm={_useGmCommands} masterPoolId={_masterPoolId?.ToString() ?? "(none)"}");
+        }
+
         EnsureInventoryErrorHandler();
 
         var player = ObjectManager.Player;
@@ -2113,6 +2121,7 @@ public class FishingTask : BotTask, IBotTask
 
     private void PopFishingTask(string reason)
     {
+        BotContext.AddDiagnosticMessage($"[TASK] FishingTask pop reason={reason}");
         ClearCastPositionCache();
         ReleaseInventoryErrorHandler();
         PopTask(reason);
