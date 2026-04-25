@@ -22,6 +22,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | **Dual-Bot Conditional** | BG always runs. FG runs only when `IsFgActionable` is true. FG observation is best-effort. |
 | **Shodan BG-action** | FG, BG, and SHODAN launch together; SHODAN stages setup, BG receives the behavior action, and FG stays idle for topology parity. |
 | **Shodan BG-action / FG gap** | FG, BG, and SHODAN launch together; SHODAN stages setup, executable BG actions run, and foreground-dependent paths are explicit tracked skips until the FG runtime gap is fixed. |
+| **Shodan FG+BG-action / tracked skip** | FG, BG, and SHODAN launch together; SHODAN stages setup, FG/BG receive behavior actions where supported, and blocked subcases skip with a documented runtime gap. |
 | **BG-Only** | Only the BG bot runs. No FG observation. BG bugs have no reference comparison. |
 | **CombatTest-Only** | Dedicated COMBATTEST account with account-level GM access only. No FG/BG parity comparison. |
 
@@ -48,7 +49,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | LootCorpseTests | CombatTest-Only | COMBATTEST | **No** | Kill→loot with dedicated combat account |
 | MapTransitionTests | BG-Only | BG | **No** | Deeprun Tram bounce validation |
 | NavigationTests | BG-Only | BG | **No** | Pathfinding + Z-trace (some runs probe both) |
-| NpcInteractionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Vendor/Trainer/FlightMaster |
+| NpcInteractionTests | Shodan FG+BG-action / tracked skip | BG + FG + SHODAN | Vendor/flight/object-manager yes | Shodan-staged NPC interactions; trainer subcase skips due live funding/mailbox staging gap |
 | OrgrimmarGroundZAnalysisTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Post-teleport ground Z |
 | QuestInteractionTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged add/complete/remove quest snapshot plumbing |
 | QuestObjectiveTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged quest objective combat action |

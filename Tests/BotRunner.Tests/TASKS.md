@@ -30,7 +30,8 @@
 - [x] Migrate `MailSystemTests` / `MailParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained mailbox and SOAP mail-money/item staging; BG dispatches only `ActionType.CheckMail` while FG stays idle for topology parity.
 - [x] Migrate `TradingTests` / `TradeParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained trade-spot/loadout/coinage staging; BG offer/decline passes, while foreground-dependent transfer/parity paths are explicit tracked skips due FG trade ACK failures.
 - [x] Migrate `GossipQuestTests` / `QuestObjectiveTests` / `QuestInteractionTests` / `StarterQuestTests` to the Shodan shape via `Economy.config.json` + fixture-contained quest location/state staging; BG dispatches only `InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or `CompleteQuest` while FG stays idle for topology parity.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`NpcInteractionTests`, then spirit healer, movement / navigation, combat / misc).
+- [x] Migrate `NpcInteractionTests` to the Shodan shape via `NpcInteraction.config.json` + fixture-contained NPC location/loadout staging; vendor, flight-master, and object-manager checks dispatch to FG/BG, while trainer is an explicit tracked skip behind the live funding/mailbox staging gap.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`SpiritHealerTests`, then movement / navigation, combat / misc).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -70,6 +71,27 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan NPC interaction migration slice)
+- Pass result: `NpcInteractionTests now follows the Shodan test-director action-target split; live NPC validation passed 3 and skipped 1 tracked trainer funding/mailbox gap`
+- Last delta:
+  - Added `NpcInteraction.config.json` with `NPCBG1` Background Orc Hunter, `NPCFG1` Foreground Orc Rogue, and SHODAN as the Background Gnome Mage director.
+  - Added fixture-contained Razor Hill hunter trainer and Orgrimmar flight-master staging helpers plus `StageBotRunnerSpellAbsentAsync`.
+  - Test bodies resolve action targets with `ResolveBotRunnerActionTargets(...)`; vendor, flight-master, and object-manager paths dispatch only BotRunner actions or assert snapshots after Shodan staging.
+  - `Trainer_LearnAvailableSpells` is skipped with a documented live funding/mailbox gap after pre-skip diagnostics showed `.modify money` unavailable/no-op and SOAP mail funding uncollectable during Orgrimmar mailbox staging.
+  - Refreshed `NpcInteractionTests.md`, `TEST_EXECUTION_MODES.md`, and moved `NpcInteractionTests.cs` to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NpcInteractionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=npc_interaction_shodan.trx"` -> `passed 3, skipped 1`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Services/WoWStateManager/Settings/Configs/NpcInteraction.config.json`
+  - live-validation docs and task trackers.
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/SpiritHealerTests.cs`
+
 ### 2026-04-25 (Shodan quest group migration slice)
 - Pass result: `GossipQuestTests, QuestObjectiveTests, QuestInteractionTests, and StarterQuestTests now follow the Shodan test-director action-target split; live quest group validation passed 6/6`
 - Last delta:

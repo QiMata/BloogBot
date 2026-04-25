@@ -338,6 +338,33 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 14 - NpcInteractionTests)
+
+- Completed:
+  - Migrated `NpcInteractionTests.cs` to the Shodan test-director pattern with `Services/WoWStateManager/Settings/Configs/NpcInteraction.config.json`. `NPCBG1` is the Background Orc Hunter action target, `NPCFG1` is the Foreground Orc Rogue action target, and SHODAN is the Background Gnome Mage director.
+  - Added fixture-contained Razor Hill hunter trainer and Orgrimmar flight-master staging helpers, plus spell-unlearn staging for the trainer path. The test body resolves action recipients with `ResolveBotRunnerActionTargets(...)`; SHODAN remains director-only.
+  - Vendor, flight-master, and object-manager checks now dispatch only `ActionType.VisitVendor` / `VisitFlightMaster` or assert snapshots after Shodan staging. `Trainer_LearnAvailableSpells` is Shodan-shaped but skipped with a tracked live funding/mailbox staging gap.
+  - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/NpcInteractionTests.md`, execution-mode index updated, and inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `NpcInteractionTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~26.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NpcInteractionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=npc_interaction_shodan.trx"` -> `passed 3, skipped 1`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/npc_interaction_shodan.trx` -> vendor, flight-master, and object-manager paths passed; trainer skipped with the documented funding/mailbox reason.
+  - `tmp/test-runtime/results-live/npc_interaction_shodan_final.trx` -> pre-skip diagnostic failure captured `[SHODAN-STAGE] BG mailbox staging failed` after strict Orgrimmar mailbox staging could not enable GM mode; SOAP `Trainer Gold` mail remained uncollectable and target coinage stayed `0`.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Services/WoWStateManager/Settings/Configs/NpcInteraction.config.json`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/NpcInteractionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - task trackers.
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/SpiritHealerTests.cs`
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 13 - quest group)
 
 - Completed:

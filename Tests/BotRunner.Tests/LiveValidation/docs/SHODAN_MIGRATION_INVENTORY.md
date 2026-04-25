@@ -52,6 +52,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `QuestObjectiveTests.cs` | Migrated: `Economy.config.json`; fixture-contained quest/objective-area staging; BG dispatches `StartMeleeAttack` only after quest state is staged. |
 | `QuestInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained quest add/complete/remove staging keeps the test body GM-free while it asserts snapshot quest-state projection. |
 | `StarterQuestTests.cs` | Migrated: `Economy.config.json`; fixture-contained Kaltunk/Gornek staging; BG dispatches `AcceptQuest` / `CompleteQuest` only while FG stays idle for topology parity. |
+| `NpcInteractionTests.cs` | Migrated: `NpcInteraction.config.json`; fixture-contained vendor, flight-master, NPC flag, hunter trainer, and loadout staging; vendor/flight/object-manager paths dispatch to FG/BG, while trainer is a documented skip behind the live funding/mailbox staging gap. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -70,7 +71,6 @@ Economy / NPC-interaction tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `NpcInteractionTests.cs` | `.tele` to NPC, loadout prep |
 | `SpiritHealerTests.cs` | `.die` + `.tele` to graveyard |
 
 Movement / navigation tests:
@@ -100,7 +100,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~27 SHODAN-CANDIDATE files (after the quest group moved to ALREADY-SHODAN).
+Total: ~26 SHODAN-CANDIDATE files (after `NpcInteractionTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -372,6 +372,25 @@ passed `6/6`. The first post-migration live attempt
 fixed the reward-completion assertion to match MaNGOS 1.12 `.quest complete`
 snapshot behavior and moved the quest-objective staging point to a nearby
 attackable Durotar mob cluster.
+
+`NpcInteractionTests.cs` uses `NpcInteraction.config.json` with `NPCBG1` as a
+Background Orc Hunter action target, `NPCFG1` as a Foreground Orc Rogue action
+target, and SHODAN as the Background Gnome Mage director. The slice adds
+fixture-contained Razor Hill hunter trainer and Orgrimmar flight-master staging
+helpers, moves NPC setup out of the test body, and resolves action recipients
+through `ResolveBotRunnerActionTargets(...)` so SHODAN is never an action
+target. Vendor, flight-master, and object-manager checks dispatch only
+`ActionType.VisitVendor` / `VisitFlightMaster` or inspect snapshots after
+Shodan staging.
+
+Migration result on this slice: live artifact `npc_interaction_shodan.trx`
+passed `3` and skipped `1`. `Trainer_LearnAvailableSpells` is Shodan-shaped
+but skipped because this live environment cannot currently fund the hunter:
+in-client `.modify money` is unavailable/no-op for BotRunner accounts, and
+SOAP `.send money` creates mail that remains uncollectable during Orgrimmar
+mailbox staging. The pre-skip failure artifact
+`npc_interaction_shodan_final.trx` captured `[SHODAN-STAGE] BG mailbox staging
+failed` after strict mailbox staging could not enable GM mode.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

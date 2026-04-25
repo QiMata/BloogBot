@@ -32,6 +32,19 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-25 (NPC Shodan migration observation)
+- Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated NPC live validation passed 3 with 1 tracked trainer funding/mailbox skip`
+- Last delta:
+  - `NpcInteractionTests` now dispatches only NPC interaction `ActionType` messages or asserts snapshots after Shodan-directed staging.
+  - Vendor, flight-master, and object-manager coverage runs on FG/BG action targets; `Trainer_LearnAvailableSpells` is skipped after Shodan launch because live funding for trainer purchases is blocked by the documented money/mailbox staging gap.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NpcInteractionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=npc_interaction_shodan.trx"` -> `passed 3, skipped 1`.
+- Files changed:
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/SpiritHealerTests.cs`
+
 ### 2026-04-25 (Quest Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated quest-group live validation passed 6/6`
 - Last delta:

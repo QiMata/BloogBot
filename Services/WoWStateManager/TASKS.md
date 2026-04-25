@@ -17,6 +17,23 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan NPC interaction config slice)
+- Last updated: 2026-04-25
+- Active task: none - this slice only added a live-validation roster for the Shodan NPC migration.
+- Last delta:
+  - Added `NpcInteraction.config.json` with `NPCBG1` Background Orc Hunter, `NPCFG1` Foreground Orc Rogue, and SHODAN as Background Gnome Mage director.
+  - The roster keeps both BotRunner action targets online for vendor, flight-master, and object-manager NPC checks while preserving a hunter target for the trainer path.
+- Pass result: `NPC interaction migration shape green; live NPC validation passed 3 and skipped 1 tracked trainer funding/mailbox gap`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~NpcInteractionTests" --logger "trx;LogFileName=npc_interaction_shodan.trx"` -> `passed 3, skipped 1`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/NpcInteraction.config.json`
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/SpiritHealerTests.cs`
+
 ### 2026-04-25 (Shodan quest config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.

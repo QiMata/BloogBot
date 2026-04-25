@@ -485,6 +485,34 @@ public partial class LiveBotFixture
             z: 44.0f,
             cleanSlate);
 
+    public Task<bool> StageBotRunnerAtRazorHillHunterTrainerAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+        => StageBotRunnerAtQuestLocationAsync(
+            targetAccountName,
+            targetRoleLabel,
+            "Razor Hill hunter trainer",
+            mapId: 1,
+            x: 275.341f,
+            y: -4704.0f,
+            z: 14.712f,
+            cleanSlate);
+
+    public Task<bool> StageBotRunnerAtOrgrimmarFlightMasterAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+        => StageBotRunnerAtQuestLocationAsync(
+            targetAccountName,
+            targetRoleLabel,
+            "Orgrimmar flight master",
+            mapId: 1,
+            x: 1676.25f,
+            y: -4313.45f,
+            z: 64.72f,
+            cleanSlate);
+
     public async Task<bool> StageBotRunnerQuestAbsentAsync(
         string targetAccountName,
         string targetRoleLabel,
@@ -584,6 +612,36 @@ public partial class LiveBotFixture
             TimeSpan.FromSeconds(12),
             pollIntervalMs: 300,
             progressLabel: $"{targetRoleLabel} quest {questId} complete");
+    }
+
+    public async Task<bool> StageBotRunnerSpellAbsentAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint spellId)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' unlearning spell {SpellId}",
+            targetRoleLabel,
+            targetAccountName,
+            spellId);
+
+        await BotSelectSelfAsync(targetAccountName);
+        await Task.Delay(300);
+        var trace = await SendGmChatCommandTrackedAsync(
+            targetAccountName,
+            $".unlearn {spellId}",
+            captureResponse: true,
+            delayMs: 1000);
+        AssertTraceCommandSucceeded(trace, targetRoleLabel, ".unlearn");
+
+        return await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snap => snap.Player?.SpellList?.Contains(spellId) != true,
+            TimeSpan.FromSeconds(12),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} unlearn {spellId}");
     }
 
     private async Task<bool> StageBotRunnerAtQuestLocationAsync(
