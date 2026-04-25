@@ -1,10 +1,13 @@
 # StarterQuestTests
 
-BG-first live baseline for accepting and turning in quest `4641` through real NPC interaction.
+Shodan-staged BG live baseline for accepting and turning in quest `4641`
+through real NPC interaction.
 
 ## Bot Execution Mode
 
-**BG-Only** — BG-only quest accept/turn-in baseline. No FG observation. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+**Shodan BG-action** - `Economy.config.json` launches `ECONFG1`, `ECONBG1`,
+and SHODAN. SHODAN is the director-only staging account, `ECONBG1` receives
+`AcceptQuest` / `CompleteQuest`, and `ECONFG1` stays idle for topology parity.
 
 This suite currently exercises:
 - `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
@@ -17,34 +20,52 @@ This suite currently exercises:
 
 ### Quest_AcceptAndTurnIn_StarterQuest
 
-**Bots:** BG only. FG is a packet/timing reference for future follow-up, not an asserted path in this suite.
+**Bots:** BG action target (`ECONBG1`) plus idle FG topology participant
+(`ECONFG1`) and SHODAN director.
 
 ## Test Flow
 
-1. `EnsureCleanSlateAsync()`.
-2. Pre-flight teleport to Orgrimmar safe zone to stabilize the next teleport.
-3. Force-remove stale quest `4641`.
-4. Teleport near Kaltunk and wait until the quest giver is visible in `NearbyUnits`.
-5. Dispatch `ActionType.AcceptQuest` with Kaltunk's GUID and quest `4641`.
-6. Poll `QuestLogEntries` until quest `4641` appears.
-7. Teleport near Gornek and wait until the turn-in NPC is visible.
-8. Dispatch `ActionType.CompleteQuest` with Gornek's GUID and quest `4641`.
-9. Poll `QuestLogEntries` until quest `4641` is gone.
+1. Assert the configured `Economy.config.json` roster matches live
+   characters and resolves SHODAN as director-only.
+2. Remove stale quest `4641` through the fixture-contained quest-state helper.
+3. Clean-slate BG and stage it near Kaltunk through
+   `StageBotRunnerAtValleyOfTrialsQuestGiverAsync`.
+4. Resolve Kaltunk from the live snapshot and dispatch `ActionType.AcceptQuest`
+   with quest `4641`.
+5. Poll `QuestLogEntries` until quest `4641` appears.
+6. Stage BG near Gornek through
+   `StageBotRunnerAtValleyOfTrialsQuestTurnInAsync`.
+7. Resolve Gornek and dispatch `ActionType.CompleteQuest` with quest `4641`.
+8. Poll `QuestLogEntries` until quest `4641` is gone, then remove it again in
+   cleanup and return BG to the Orgrimmar trade staging point.
 
 ## Runtime Linkage
 
-- Accept path: `BotRunnerService.ActionDispatch` -> `AcceptQuestSequence` in `BotRunnerService.Sequences.NPC.cs` -> `WoWSharpObjectManager.AcceptQuestFromNpcAsync(...)`.
-- Complete path: `BotRunnerService.ActionDispatch` -> `CompleteQuestSequence` in `BotRunnerService.Sequences.NPC.cs` -> `WoWSharpObjectManager.CompleteQuestAsync(...)`.
-- Snapshot verification path: `BotRunnerService.Snapshot` writes `Player.QuestLogEntries`.
-- The suite is closer to the final behavior target than `QuestInteractionTests`, but it is still action-driven inside the test. The planned overhaul endpoint is task ownership via `AcceptQuestTask` / `CompleteQuestTask`.
+- Accept path: `BotRunnerService.ActionDispatch` -> `AcceptQuestSequence` in
+  `BotRunnerService.Sequences.NPC.cs` ->
+  `WoWSharpObjectManager.AcceptQuestFromNpcAsync(...)`.
+- Complete path: `BotRunnerService.ActionDispatch` -> `CompleteQuestSequence`
+  in `BotRunnerService.Sequences.NPC.cs` ->
+  `WoWSharpObjectManager.CompleteQuestAsync(...)`.
+- Snapshot verification path: `BotRunnerService.Snapshot` writes
+  `Player.QuestLogEntries`.
+- Fixture staging: `LiveBotFixture.TestDirector` quest-location and
+  quest-state helpers.
+- The suite is closer to the final behavior target than `QuestInteractionTests`,
+  but it is still action-driven inside the test. The planned overhaul endpoint
+  is task ownership via `AcceptQuestTask` / `CompleteQuestTask`.
 
 ## Metrics
 
 The live assertions require:
 - Kaltunk and Gornek visible through normal snapshot updates
 - `AcceptQuest` dispatch succeeds and quest `4641` appears in the snapshot
-- `CompleteQuest` dispatch succeeds and quest `4641` disappears from the snapshot
+- `CompleteQuest` dispatch succeeds and quest `4641` disappears from the
+  snapshot
 
 ## Current Status
 
-`2026-03-11`: the focused quest/NPC validation slice passed `8/8`. `StarterQuestTests` is green as a BG-first baseline, but it is still part of the remaining BRT-OVR-002 action-to-task migration work.
+`2026-04-25`: migrated to the Shodan director pattern. Live artifact
+`quest_group_shodan_rerun.trx` passed as part of the four-class quest group
+run (`6/6` total). The suite remains BG-action-only while FG stays online for
+topology parity.

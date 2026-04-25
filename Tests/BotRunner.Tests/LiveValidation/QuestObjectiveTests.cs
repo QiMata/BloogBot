@@ -8,10 +8,8 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// V2.17: Quest objective tests. Teleport to Durotar, accept quest via GM (.quest add),
-/// kill mobs, check kill count in quest log.
-///
-/// Run: dotnet test --filter "FullyQualifiedName~QuestObjectiveTests" --configuration Release
+/// Shodan-directed quest objective coverage. SHODAN stages quest state and
+/// position; the BG BotRunner target receives only combat action dispatch.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class QuestObjectiveTests
@@ -19,10 +17,6 @@ public class QuestObjectiveTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int KalimdorMapId = 1;
-    // Valley of Trials -- mobs and quest NPCs
-    private const float DurotarX = -601.0f, DurotarY = -4297.0f, DurotarZ = 41.0f;
-    // "Sarkoth" quest (ID 790) -- kill Sarkoth in Valley of Trials, simple kill quest
     private const uint SarkothQuestId = 790;
 
     public QuestObjectiveTests(LiveBotFixture bot, ITestOutputHelper output)
@@ -30,98 +24,84 @@ public class QuestObjectiveTests
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Quest_KillObjective_CountIncrementsAndCompletes()
     {
-        var account = _bot.BgAccountName!;
+        await QuestTestSupport.EnsureQuestSettingsAsync(_bot, _output);
+        var target = QuestTestSupport.ResolveBgActionTarget(_bot, _output);
 
-        await _bot.EnsureCleanSlateAsync(account, "BG");
+        var staged = await _bot.StageBotRunnerAtDurotarQuestObjectiveAreaAsync(
+            target.AccountName,
+            target.RoleLabel);
+        Assert.True(staged, $"{target.RoleLabel}: expected to stage near Durotar quest objective mobs.");
 
-        // Teleport to Durotar / Valley of Trials
-        _output.WriteLine($"[SETUP] Teleporting to Durotar ({DurotarX}, {DurotarY}, {DurotarZ})");
-        await _bot.BotTeleportAsync(account, KalimdorMapId, DurotarX, DurotarY, DurotarZ);
-        await _bot.WaitForTeleportSettledAsync(account, DurotarX, DurotarY);
+        var absent = await _bot.StageBotRunnerQuestAbsentAsync(
+            target.AccountName,
+            target.RoleLabel,
+            SarkothQuestId);
+        Assert.True(absent, $"{target.RoleLabel}: quest {SarkothQuestId} should be absent before staging.");
 
-        // Complete any existing version of this quest first
-        await _bot.SendGmChatCommandAsync(account, $".quest remove {SarkothQuestId}");
-        await Task.Delay(1000);
-
-        // Add the quest via GM command
-        _output.WriteLine($"[SETUP] Adding quest {SarkothQuestId} via .quest add");
-        await _bot.SendGmChatCommandAsync(account, $".quest add {SarkothQuestId}");
-        await Task.Delay(2000);
-
-        // Verify quest is in the quest log
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        Assert.NotNull(snap);
-
-        var questEntries = snap!.Player?.QuestLogEntries?.ToList()
-            ?? new System.Collections.Generic.List<Game.QuestLogEntry>();
-        _output.WriteLine($"[TEST] Quest log entries: {questEntries.Count}");
-
-        var questFound = questEntries.Any(q => q.QuestId == SarkothQuestId);
-        if (!questFound)
+        try
         {
-            // Check QuestLog1 field which sometimes stores quest ID
-            questFound = questEntries.Any(q => q.QuestLog1 == SarkothQuestId);
-        }
-        _output.WriteLine($"[TEST] Quest {SarkothQuestId} in log: {questFound}");
+            var added = await _bot.StageBotRunnerQuestAddedAsync(
+                target.AccountName,
+                target.RoleLabel,
+                SarkothQuestId);
+            Assert.True(added, $"{target.RoleLabel}: quest {SarkothQuestId} should appear in the quest log.");
 
-        // Log all quest entries for debugging
-        foreach (var qe in questEntries)
-        {
-            _output.WriteLine($"  Quest: id={qe.QuestId}, log1={qe.QuestLog1}, log2={qe.QuestLog2}, log3={qe.QuestLog3}");
-        }
-
-        // Find a nearby mob to attack
-        await _bot.WaitForNearbyUnitsPopulatedAsync(account, timeoutMs: 5000, progressLabel: "BG quest-mob-search");
-        await _bot.RefreshSnapshotsAsync();
-        snap = await _bot.GetSnapshotAsync(account);
-        var nearbyUnits = snap?.NearbyUnits?.ToList()
-            ?? new System.Collections.Generic.List<Game.WoWUnit>();
-        _output.WriteLine($"[TEST] Nearby units: {nearbyUnits.Count}");
-
-        // Look for attackable mobs (NpcFlags == 0 means it's not an NPC with services)
-        var mob = nearbyUnits.FirstOrDefault(u => u.NpcFlags == 0 && u.Health > 0);
-        if (mob != null)
-        {
-            _output.WriteLine($"[TEST] Found mob: {mob.GameObject?.Name}, health={mob.Health}, guid=0x{mob.GameObject?.Base?.Guid:X}");
-
-            // Attack the mob
-            var attackResult = await _bot.SendActionAsync(account, new ActionMessage
-            {
-                ActionType = ActionType.StartMeleeAttack,
-                Parameters = { new RequestParameter { LongParam = (long)(mob.GameObject?.Base?.Guid ?? 0) } }
-            });
-            _output.WriteLine($"[TEST] START_MELEE_ATTACK result: {attackResult}");
-
-            // Wait for combat to resolve
-            await Task.Delay(15000);
-
-            // Check quest log for progress
             await _bot.RefreshSnapshotsAsync();
-            var afterSnap = await _bot.GetSnapshotAsync(account);
+            var snap = await _bot.GetSnapshotAsync(target.AccountName);
+            Assert.NotNull(snap);
+
+            var questEntries = snap!.Player?.QuestLogEntries?.ToList() ?? [];
+            Assert.True(
+                questEntries.Any(q => q.QuestLog1 == SarkothQuestId || q.QuestId == SarkothQuestId),
+                $"{target.RoleLabel}: quest {SarkothQuestId} should be visible before combat.");
+
+            await _bot.WaitForNearbyUnitsPopulatedAsync(
+                target.AccountName,
+                timeoutMs: 5000,
+                progressLabel: $"{target.RoleLabel} quest-mob-search");
+            await _bot.RefreshSnapshotsAsync();
+            snap = await _bot.GetSnapshotAsync(target.AccountName);
+            var mob = snap?.NearbyUnits.FirstOrDefault(unit => unit.NpcFlags == 0 && unit.Health > 0);
+
+            global::Tests.Infrastructure.Skip.If(
+                mob == null,
+                $"{target.RoleLabel}: no attackable quest-area mob found after Shodan staging.");
+
+            var mobGuid = mob!.GameObject?.Base?.Guid ?? 0UL;
+            _output.WriteLine(
+                $"[QUEST] Found mob: {mob.GameObject?.Name}, health={mob.Health}, guid=0x{mobGuid:X}");
+            Assert.True(mobGuid != 0, $"{target.RoleLabel}: mob should have a valid GUID.");
+
+            var attackResult = await QuestTestSupport.SendQuestActionAsync(
+                _bot,
+                _output,
+                target,
+                QuestTestSupport.MakeStartMeleeAttack(mobGuid),
+                "StartMeleeAttack",
+                timeoutSeconds: 12);
+            Assert.Equal(ResponseResult.Success, attackResult);
+
+            await Task.Delay(12000);
+            await _bot.RefreshSnapshotsAsync();
+            var afterSnap = await _bot.GetSnapshotAsync(target.AccountName);
             Assert.NotNull(afterSnap);
-            var afterQuests = afterSnap!.Player?.QuestLogEntries?.ToList()
-                ?? new System.Collections.Generic.List<Game.QuestLogEntry>();
-            _output.WriteLine($"[TEST] Quest log after combat: {afterQuests.Count} entries");
-            foreach (var qe in afterQuests)
+            var afterQuests = afterSnap!.Player?.QuestLogEntries?.ToList() ?? [];
+            _output.WriteLine($"[QUEST] Quest log after combat: {afterQuests.Count} entries");
+            foreach (var entry in afterQuests.Take(5))
             {
-                _output.WriteLine($"  Quest: id={qe.QuestId}, log1={qe.QuestLog1}, log2={qe.QuestLog2}, log3={qe.QuestLog3}");
+                _output.WriteLine(
+                    $"  Quest: id={entry.QuestId}, log1={entry.QuestLog1}, log2={entry.QuestLog2}, log3={entry.QuestLog3}");
             }
         }
-        else
+        finally
         {
-            _output.WriteLine("[TEST] No attackable mobs found nearby");
+            await _bot.StageBotRunnerQuestAbsentAsync(target.AccountName, target.RoleLabel, SarkothQuestId);
         }
-
-        // Cleanup: remove quest
-        await _bot.SendGmChatCommandAsync(account, $".quest remove {SarkothQuestId}");
-        await Task.Delay(500);
     }
 }

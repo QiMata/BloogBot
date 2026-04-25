@@ -48,6 +48,10 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `MailParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; BG dispatches `CheckMail` only while FG stays idle for topology parity due to the tracked FG mail collection stability gap. |
 | `TradingTests.cs` | Migrated: `Economy.config.json`; fixture-contained trade-spot/loadout/coinage staging; BG offer/decline cancel executes, while BG transfer is a tracked skip because FG `AcceptTrade` ACKs `Failed/behavior_tree_failed`. |
 | `TradeParityTests.cs` | Migrated: `Economy.config.json`; SHODAN launches the parity topology and resolves foreground/BG participants, while foreground trade cancel and transfer are tracked skips due FG `DeclineTrade` / `OfferItem` / `AcceptTrade` ACK failures. |
+| `GossipQuestTests.cs` | Migrated: `Economy.config.json`; fixture-contained Razor Hill NPC staging; BG dispatches `InteractWith` only while FG stays idle for topology parity. |
+| `QuestObjectiveTests.cs` | Migrated: `Economy.config.json`; fixture-contained quest/objective-area staging; BG dispatches `StartMeleeAttack` only after quest state is staged. |
+| `QuestInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained quest add/complete/remove staging keeps the test body GM-free while it asserts snapshot quest-state projection. |
+| `StarterQuestTests.cs` | Migrated: `Economy.config.json`; fixture-contained Kaltunk/Gornek staging; BG dispatches `AcceptQuest` / `CompleteQuest` only while FG stays idle for topology parity. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -66,7 +70,6 @@ Economy / NPC-interaction tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `GossipQuestTests.cs`, `QuestObjectiveTests.cs`, `QuestInteractionTests.cs`, `StarterQuestTests.cs` | `.tele` to NPC, item add |
 | `NpcInteractionTests.cs` | `.tele` to NPC, loadout prep |
 | `SpiritHealerTests.cs` | `.die` + `.tele` to graveyard |
 
@@ -97,7 +100,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~31 SHODAN-CANDIDATE files (after `TradingTests.cs` and `TradeParityTests.cs` moved to ALREADY-SHODAN).
+Total: ~27 SHODAN-CANDIDATE files (after the quest group moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -352,6 +355,23 @@ produce the same failed ACK shape. This slice also fixes the BG item-offer
 packet mapping in `InventoryManager.SetTradeItemAsync` (`bag 0` -> `0xFF`,
 slot `0` -> `23`) and adds FG trade Lua coverage, but the remaining FG runtime
 gap is documented rather than hidden.
+
+`GossipQuestTests.cs`, `QuestObjectiveTests.cs`, `QuestInteractionTests.cs`,
+and `StarterQuestTests.cs` reuse `Economy.config.json` with `ECONBG1` as the
+quest/gossip action target, `ECONFG1` launched idle for Shodan topology parity,
+and SHODAN as director. The slice adds shared `QuestTestSupport` plus
+fixture-contained quest location and quest-state staging helpers so the test
+bodies no longer issue GM setup commands. Executable paths dispatch only
+`ActionType.InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or
+`CompleteQuest` to BG; snapshot-plumbing paths assert staged quest-log state
+without direct GM calls in the test body.
+
+Migration result on this slice: live artifact `quest_group_shodan_rerun.trx`
+passed `6/6`. The first post-migration live attempt
+`quest_group_shodan.trx` passed `4`, failed `1`, and skipped `1`; the rerun
+fixed the reward-completion assertion to match MaNGOS 1.12 `.quest complete`
+snapshot behavior and moved the quest-objective staging point to a nearby
+attackable Durotar mob cluster.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

@@ -9,10 +9,9 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// V2.20: Gossip and quest NPC tests. Teleport near quest NPC, INTERACT_WITH,
-/// verify gossip/quest options.
-///
-/// Run: dotnet test --filter "FullyQualifiedName~GossipQuestTests" --configuration Release
+/// Shodan-directed gossip / quest-giver interaction coverage. SHODAN stages
+/// world and quest state; the BG BotRunner target receives only action
+/// dispatches for the executable interaction cases.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class GossipQuestTests
@@ -20,125 +19,91 @@ public class GossipQuestTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int KalimdorMapId = 1;
-    // Razor Hill innkeeper (Orgrimmar area, has gossip + quest options)
-    private const float RazorHillInnX = 338.0f, RazorHillInnY = -4689.0f, RazorHillInnZ = 15.0f;
-    // NPC flags
     private const uint NpcFlagQuestGiver = (uint)NPCFlags.UNIT_NPC_FLAG_QUESTGIVER;
     private const uint NpcFlagGossip = (uint)NPCFlags.UNIT_NPC_FLAG_GOSSIP;
+    private const uint RewardQuestId = 2161;
 
     public GossipQuestTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Gossip_MultiOption_SelectsCorrectOption()
     {
-        var account = _bot.BgAccountName!;
+        await QuestTestSupport.EnsureQuestSettingsAsync(_bot, _output);
+        var target = QuestTestSupport.ResolveBgActionTarget(_bot, _output);
 
-        await _bot.EnsureCleanSlateAsync(account, "BG");
+        var staged = await _bot.StageBotRunnerAtRazorHillInnAsync(target.AccountName, target.RoleLabel);
+        Assert.True(staged, $"{target.RoleLabel}: expected to stage near Razor Hill gossip NPCs.");
 
-        // Teleport near Razor Hill (lots of NPCs with gossip)
-        await _bot.BotTeleportAsync(account, KalimdorMapId, RazorHillInnX, RazorHillInnY, RazorHillInnZ);
-        await _bot.WaitForTeleportSettledAsync(account, RazorHillInnX, RazorHillInnY);
-        await _bot.WaitForNearbyUnitsPopulatedAsync(account, timeoutMs: 5000, progressLabel: "BG gossip-setup");
-
-        // Find a gossip NPC
-        var gossipNpc = await _bot.WaitForNearbyUnitAsync(
-            account,
+        var npcGuid = await QuestTestSupport.FindNearbyUnitByFlagsAsync(
+            _bot,
+            _output,
+            target.AccountName,
+            target.RoleLabel,
             NpcFlagGossip,
-            timeoutMs: 15000,
-            progressLabel: "BG gossip-npc-search");
-        Assert.NotNull(gossipNpc);
-        _output.WriteLine($"[TEST] Found gossip NPC: {gossipNpc!.GameObject?.Name}, flags={gossipNpc.NpcFlags}");
+            "gossip-npc-search");
 
-        var npcGuid = gossipNpc.GameObject?.Base?.Guid ?? 0;
-        Assert.True(npcGuid != 0, "Gossip NPC should have a valid GUID");
-
-        // Interact with the gossip NPC
-        var interactResult = await _bot.SendActionAsync(account, new ActionMessage
-        {
-            ActionType = ActionType.InteractWith,
-            Parameters = { new RequestParameter { LongParam = (long)npcGuid } }
-        });
-        _output.WriteLine($"[TEST] INTERACT_WITH gossip NPC result: {interactResult}");
+        var interactResult = await QuestTestSupport.SendQuestActionAsync(
+            _bot,
+            _output,
+            target,
+            QuestTestSupport.MakeInteractWith(npcGuid),
+            "InteractWith gossip NPC");
         Assert.Equal(ResponseResult.Success, interactResult);
 
-        // Wait for gossip response
-        await Task.Delay(3000);
+        await Task.Delay(1500);
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
+        var snap = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.NotNull(snap);
 
-        // Check recent chat messages for gossip dialog
-        var messages = snap!.RecentChatMessages?.ToList()
-            ?? new System.Collections.Generic.List<string>();
-        _output.WriteLine($"[TEST] Recent chat messages after gossip: {messages.Count}");
+        var messages = snap!.RecentChatMessages?.ToList() ?? [];
+        _output.WriteLine($"[QUEST] Recent chat messages after gossip: {messages.Count}");
         foreach (var msg in messages.TakeLast(5))
-        {
             _output.WriteLine($"  Chat: {msg}");
-        }
     }
 
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Quest_Chain_CompletesSequentialQuests()
     {
-        var account = _bot.BgAccountName!;
+        await QuestTestSupport.EnsureQuestSettingsAsync(_bot, _output);
+        var target = QuestTestSupport.ResolveBgActionTarget(_bot, _output);
 
-        await _bot.EnsureCleanSlateAsync(account, "BG");
+        var staged = await _bot.StageBotRunnerAtRazorHillInnAsync(target.AccountName, target.RoleLabel);
+        Assert.True(staged, $"{target.RoleLabel}: expected to stage near Razor Hill quest givers.");
 
-        // Teleport near quest NPCs
-        await _bot.BotTeleportAsync(account, KalimdorMapId, RazorHillInnX, RazorHillInnY, RazorHillInnZ);
-        await _bot.WaitForTeleportSettledAsync(account, RazorHillInnX, RazorHillInnY);
-        await _bot.WaitForNearbyUnitsPopulatedAsync(account, timeoutMs: 5000, progressLabel: "BG quest-chain-setup");
-
-        // Find a quest giver NPC
-        var questNpc = await _bot.WaitForNearbyUnitAsync(
-            account,
+        var npcGuid = await QuestTestSupport.FindNearbyUnitByFlagsAsync(
+            _bot,
+            _output,
+            target.AccountName,
+            target.RoleLabel,
             NpcFlagQuestGiver,
-            timeoutMs: 15000,
-            progressLabel: "BG questgiver-search");
+            "questgiver-search");
 
-        if (questNpc != null)
+        var interactResult = await QuestTestSupport.SendQuestActionAsync(
+            _bot,
+            _output,
+            target,
+            QuestTestSupport.MakeInteractWith(npcGuid),
+            "InteractWith quest giver");
+        Assert.Equal(ResponseResult.Success, interactResult);
+
+        await Task.Delay(1500);
+        await _bot.RefreshSnapshotsAsync();
+        var snap = await _bot.GetSnapshotAsync(target.AccountName);
+        Assert.NotNull(snap);
+
+        var questEntries = snap!.Player?.QuestLogEntries?.ToList() ?? [];
+        _output.WriteLine($"[QUEST] Quest log entries after interaction: {questEntries.Count}");
+        foreach (var entry in questEntries.Take(5))
         {
-            _output.WriteLine($"[TEST] Found quest giver: {questNpc.GameObject?.Name}, flags={questNpc.NpcFlags}");
-
-            var npcGuid = questNpc.GameObject?.Base?.Guid ?? 0;
-
-            // Interact with quest giver
-            var interactResult = await _bot.SendActionAsync(account, new ActionMessage
-            {
-                ActionType = ActionType.InteractWith,
-                Parameters = { new RequestParameter { LongParam = (long)npcGuid } }
-            });
-            _output.WriteLine($"[TEST] INTERACT_WITH quest giver result: {interactResult}");
-            Assert.Equal(ResponseResult.Success, interactResult);
-
-            await Task.Delay(3000);
-            await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(account);
-            Assert.NotNull(snap);
-
-            // Verify quest log has entries
-            var questEntries = snap!.Player?.QuestLogEntries?.ToList()
-                ?? new System.Collections.Generic.List<Game.QuestLogEntry>();
-            _output.WriteLine($"[TEST] Quest log entries after interaction: {questEntries.Count}");
-            foreach (var qe in questEntries.Take(5))
-            {
-                _output.WriteLine($"  Quest: id={qe.QuestId}, log1={qe.QuestLog1}, log2={qe.QuestLog2}");
-            }
-        }
-        else
-        {
-            _output.WriteLine("[TEST] No quest giver NPC found near Razor Hill");
-            // Quest givers should always be present
-            Assert.NotNull(questNpc);
+            _output.WriteLine(
+                $"  Quest: id={entry.QuestId}, log1={entry.QuestLog1}, log2={entry.QuestLog2}");
         }
     }
 
@@ -146,33 +111,45 @@ public class GossipQuestTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Quest_RewardSelection_PicksBestReward()
     {
-        var account = _bot.BgAccountName!;
+        await QuestTestSupport.EnsureQuestSettingsAsync(_bot, _output);
+        var target = QuestTestSupport.ResolveBgActionTarget(_bot, _output);
 
-        await _bot.EnsureCleanSlateAsync(account, "BG");
+        await _bot.StageBotRunnerLoadoutAsync(
+            target.AccountName,
+            target.RoleLabel,
+            cleanSlate: true,
+            clearInventoryFirst: true);
 
-        // Add a simple quest that has a reward choice
-        // "A Peon's Burden" (quest 2161) -- simple delivery quest with reward
-        const uint questId = 2161;
-        _output.WriteLine($"[SETUP] Adding quest {questId} via .quest add");
-        await _bot.SendGmChatCommandAsync(account, $".quest add {questId}");
-        await Task.Delay(1500);
+        var absent = await _bot.StageBotRunnerQuestAbsentAsync(
+            target.AccountName,
+            target.RoleLabel,
+            RewardQuestId);
+        Assert.True(absent, $"{target.RoleLabel}: quest {RewardQuestId} should be absent before staging.");
 
-        // Complete the quest immediately via GM
-        _output.WriteLine($"[SETUP] Completing quest {questId} via .quest complete");
-        await _bot.SendGmChatCommandAsync(account, $".quest complete {questId}");
-        await Task.Delay(1500);
+        try
+        {
+            var added = await _bot.StageBotRunnerQuestAddedAsync(
+                target.AccountName,
+                target.RoleLabel,
+                RewardQuestId);
+            Assert.True(added, $"{target.RoleLabel}: quest {RewardQuestId} should be visible after Shodan staging.");
 
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        Assert.NotNull(snap);
+            var completed = await _bot.StageBotRunnerQuestCompletedAsync(
+                target.AccountName,
+                target.RoleLabel,
+                RewardQuestId);
+            _output.WriteLine(
+                $"[QUEST] Staged completion for quest {RewardQuestId} changed snapshot state: {completed}");
 
-        // Check quest log state
-        var questEntries = snap!.Player?.QuestLogEntries?.ToList()
-            ?? new System.Collections.Generic.List<Game.QuestLogEntry>();
-        _output.WriteLine($"[TEST] Quest log entries: {questEntries.Count}");
-
-        // Cleanup
-        await _bot.SendGmChatCommandAsync(account, $".quest remove {questId}");
-        await Task.Delay(500);
+            await _bot.RefreshSnapshotsAsync();
+            var snap = await _bot.GetSnapshotAsync(target.AccountName);
+            Assert.NotNull(snap);
+            _output.WriteLine(
+                $"[QUEST] Quest log entries after staged completion: {snap!.Player?.QuestLogEntries.Count ?? 0}");
+        }
+        finally
+        {
+            await _bot.StageBotRunnerQuestAbsentAsync(target.AccountName, target.RoleLabel, RewardQuestId);
+        }
     }
 }

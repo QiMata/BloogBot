@@ -29,7 +29,8 @@
 - [x] Migrate `EconomyInteractionTests` to the Shodan shape via `Economy.config.json` + fixture-contained bank/AH/mail staging; FG/BG dispatch only `ActionType.InteractWith` or `CheckMail`.
 - [x] Migrate `MailSystemTests` / `MailParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained mailbox and SOAP mail-money/item staging; BG dispatches only `ActionType.CheckMail` while FG stays idle for topology parity.
 - [x] Migrate `TradingTests` / `TradeParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained trade-spot/loadout/coinage staging; BG offer/decline passes, while foreground-dependent transfer/parity paths are explicit tracked skips due FG trade ACK failures.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (quest group: `GossipQuestTests` / `QuestObjectiveTests` / `QuestInteractionTests` / `StarterQuestTests`, then NPC, then movement / navigation, then combat / misc).
+- [x] Migrate `GossipQuestTests` / `QuestObjectiveTests` / `QuestInteractionTests` / `StarterQuestTests` to the Shodan shape via `Economy.config.json` + fixture-contained quest location/state staging; BG dispatches only `InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or `CompleteQuest` while FG stays idle for topology parity.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`NpcInteractionTests`, then spirit healer, movement / navigation, combat / misc).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -69,6 +70,30 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan quest group migration slice)
+- Pass result: `GossipQuestTests, QuestObjectiveTests, QuestInteractionTests, and StarterQuestTests now follow the Shodan test-director action-target split; live quest group validation passed 6/6`
+- Last delta:
+  - Reused `Economy.config.json` with `ECONBG1` as the quest/gossip action target, `ECONFG1` idle for topology parity, and SHODAN as director.
+  - Added `QuestTestSupport` plus fixture-contained quest location and quest-state helpers for Razor Hill, Valley of Trials, Durotar objective staging, and quest add/complete/remove setup.
+  - Test bodies now avoid GM setup calls and dispatch only BotRunner actions (`InteractWith`, `StartMeleeAttack`, `AcceptQuest`, `CompleteQuest`) where behavior is under test.
+  - Added `GossipQuestTests.md`, `QuestObjectiveTests.md`, refreshed `QuestInteractionTests.md` / `StarterQuestTests.md`, updated `TEST_EXECUTION_MODES.md`, and moved all four files to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GossipQuestTests|FullyQualifiedName~QuestObjectiveTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=quest_group_shodan_rerun.trx"` -> `passed (6/6)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_shodan_anchor_quest_slice.trx"` -> `failed (known anchor instability: FG never reached fishing_loot_success within 3m after loot_window_timeout retries and max_casts_reached)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/GossipQuestTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/QuestObjectiveTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/QuestTestSupport.cs`
+  - live-validation docs and task trackers.
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money" Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`
+
 ### 2026-04-25 (Shodan Trading migration slice)
 - Pass result: `TradingTests and TradeParityTests now follow the Shodan test-director action-target split; live trading validation passed 1 and skipped 3 tracked foreground trade action gaps`
 - Last delta:

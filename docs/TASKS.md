@@ -338,6 +338,35 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 13 - quest group)
+
+- Completed:
+  - Migrated `GossipQuestTests.cs`, `QuestObjectiveTests.cs`, `QuestInteractionTests.cs`, and `StarterQuestTests.cs` to the Shodan test-director pattern. The slice reuses `Services/WoWStateManager/Settings/Configs/Economy.config.json` with `ECONBG1` as the quest/gossip action target, `ECONFG1` launched idle for topology parity, and SHODAN as Background Gnome Mage director.
+  - Added `QuestTestSupport` plus fixture-contained quest location and quest-state staging helpers in `LiveBotFixture.TestDirector.cs` for Razor Hill, Valley of Trials, Durotar objective staging, and quest add/complete/remove setup.
+  - Test bodies no longer issue GM setup commands. Executable behavior paths dispatch only `ActionType.InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or `CompleteQuest` to BG; snapshot-plumbing paths assert fixture-staged quest-log state.
+  - Docs added/refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/GossipQuestTests.md`, `QuestObjectiveTests.md`, `QuestInteractionTests.md`, and `StarterQuestTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: all four files moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~27.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GossipQuestTests|FullyQualifiedName~QuestObjectiveTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~StarterQuestTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=quest_group_shodan_rerun.trx"` -> `passed (6/6)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_shodan_anchor_quest_slice.trx"` -> `failed (known anchor instability: FG never reached fishing_loot_success within 3m after loot_window_timeout retries and max_casts_reached)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/quest_group_shodan_rerun.trx` -> all quest-group tests passed.
+  - `tmp/test-runtime/results-live/quest_group_shodan.trx` -> first post-migration attempt passed `4`, failed `1`, and skipped `1`; the rerun fixed the reward-completion assertion and moved quest-objective staging to a nearby attackable Durotar mob cluster.
+  - `tmp/test-runtime/results-live/fishing_shodan_anchor_quest_slice.trx` -> Ratchet anchor failed in the documented FG fishing instability path (`loot_window_timeout` retries, `max_casts_reached`), not a quest-slice regression.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/GossipQuestTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/QuestObjectiveTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/QuestTestSupport.cs`
+  - live-validation docs and task trackers.
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money" Tests/BotRunner.Tests/LiveValidation/NpcInteractionTests.cs`
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 12 - TradingTests/TradeParityTests)
 
 - Completed:

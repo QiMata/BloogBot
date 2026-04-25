@@ -429,6 +429,225 @@ public partial class LiveBotFixture
             xyToleranceYards: 60f);
     }
 
+    public Task<bool> StageBotRunnerAtRazorHillInnAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+        => StageBotRunnerAtQuestLocationAsync(
+            targetAccountName,
+            targetRoleLabel,
+            "Razor Hill inn",
+            mapId: 1,
+            x: 338.0f,
+            y: -4689.0f,
+            z: 15.0f,
+            cleanSlate);
+
+    public Task<bool> StageBotRunnerAtValleyOfTrialsQuestGiverAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+        => StageBotRunnerAtQuestLocationAsync(
+            targetAccountName,
+            targetRoleLabel,
+            "Valley of Trials Kaltunk",
+            mapId: 1,
+            x: -607.43f,
+            y: -4251.33f,
+            z: 42.04f,
+            cleanSlate);
+
+    public Task<bool> StageBotRunnerAtValleyOfTrialsQuestTurnInAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = false)
+        => StageBotRunnerAtQuestLocationAsync(
+            targetAccountName,
+            targetRoleLabel,
+            "Valley of Trials Gornek",
+            mapId: 1,
+            x: -600.13f,
+            y: -4186.19f,
+            z: 44.27f,
+            cleanSlate);
+
+    public Task<bool> StageBotRunnerAtDurotarQuestObjectiveAreaAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+        => StageBotRunnerAtQuestLocationAsync(
+            targetAccountName,
+            targetRoleLabel,
+            "Durotar quest objective",
+            mapId: 1,
+            x: -620.0f,
+            y: -4385.0f,
+            z: 44.0f,
+            cleanSlate);
+
+    public async Task<bool> StageBotRunnerQuestAbsentAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint questId)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' removing quest {QuestId}",
+            targetRoleLabel,
+            targetAccountName,
+            questId);
+
+        await BotSelectSelfAsync(targetAccountName);
+        await Task.Delay(500);
+        var trace = await SendGmChatCommandTrackedAsync(
+            targetAccountName,
+            $".quest remove {questId}",
+            captureResponse: true,
+            delayMs: 1500);
+        AssertTraceCommandSucceeded(trace, targetRoleLabel, ".quest remove");
+
+        return await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snap => !HasQuestInSnapshot(snap, questId),
+            TimeSpan.FromSeconds(10),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} quest {questId} absent");
+    }
+
+    public async Task<bool> StageBotRunnerQuestAddedAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint questId)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' adding quest {QuestId}",
+            targetRoleLabel,
+            targetAccountName,
+            questId);
+
+        await BotSelectSelfAsync(targetAccountName);
+        await Task.Delay(500);
+        var trace = await SendGmChatCommandTrackedAsync(
+            targetAccountName,
+            $".quest add {questId}",
+            captureResponse: true,
+            delayMs: 1500);
+        AssertTraceCommandSucceeded(trace, targetRoleLabel, ".quest add");
+
+        return await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snap => HasQuestInSnapshot(snap, questId),
+            TimeSpan.FromSeconds(12),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} quest {questId} added");
+    }
+
+    public async Task<bool> StageBotRunnerQuestCompletedAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint questId)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        await RefreshSnapshotsAsync();
+        var before = FindQuestEntry(await GetSnapshotAsync(targetAccountName), questId);
+        var baselineLog2 = before?.QuestLog2 ?? 0;
+        var baselineLog3 = before?.QuestLog3 ?? 0;
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' completing quest {QuestId}",
+            targetRoleLabel,
+            targetAccountName,
+            questId);
+
+        await BotSelectSelfAsync(targetAccountName);
+        await Task.Delay(500);
+        var trace = await SendGmChatCommandTrackedAsync(
+            targetAccountName,
+            $".quest complete {questId}",
+            captureResponse: true,
+            delayMs: 1500);
+        AssertTraceCommandSucceeded(trace, targetRoleLabel, ".quest complete");
+
+        return await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snap =>
+            {
+                var quest = FindQuestEntry(snap, questId);
+                return quest == null
+                    || quest.QuestLog2 != baselineLog2
+                    || quest.QuestLog3 != baselineLog3;
+            },
+            TimeSpan.FromSeconds(12),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} quest {questId} complete");
+    }
+
+    private async Task<bool> StageBotRunnerAtQuestLocationAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        string locationLabel,
+        int mapId,
+        float x,
+        float y,
+        float z,
+        bool cleanSlate)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' {Location} stage map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            locationLabel,
+            mapId,
+            x,
+            y,
+            z);
+
+        await BotTeleportAsync(targetAccountName, mapId, x, y, z);
+
+        var settled = await WaitForTeleportSettledAsync(
+            targetAccountName,
+            x,
+            y,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} {locationLabel} stage",
+            xyToleranceYards: 60f);
+
+        var hasUnits = await WaitForNearbyUnitsPopulatedAsync(
+            targetAccountName,
+            timeoutMs: 15000,
+            progressLabel: $"{targetRoleLabel} {locationLabel} units");
+
+        return settled && hasUnits;
+    }
+
+    private void ValidateBotRunnerStageTarget(string targetAccountName)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+    }
+
+    private static Game.QuestLogEntry? FindQuestEntry(WoWActivitySnapshot? snapshot, uint questId)
+        => snapshot?.Player?.QuestLogEntries?.FirstOrDefault(q =>
+            q.QuestLog1 == questId || q.QuestId == questId);
+
+    private static bool HasQuestInSnapshot(WoWActivitySnapshot? snapshot, uint questId)
+        => FindQuestEntry(snapshot, questId) != null;
+
     /// <summary>
     /// Stage a BotRunner target beside Grimtak at Razor Hill for vendor
     /// buy/sell packet baselines. The coordinate teleport stays inside the

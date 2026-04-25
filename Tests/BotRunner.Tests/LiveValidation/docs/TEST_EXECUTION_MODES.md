@@ -39,6 +39,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | FishingProfessionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Ratchet fishing task path |
 | GatheringProfessionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Mining + Herbalism routes |
 | GatheringRouteSelectionTests | N/A (unit test) | None | N/A | Pure unit test, no live bots |
+| GossipQuestTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged gossip/quest-giver interaction |
 | GroupFormationTests | Dual-Bot Sync | BG + FG | **Required** | Both bots must be available (invite/accept) |
 | MailSystemTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged mailbox plus SOAP money/item mail |
 | MailParityTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | BG CheckMail baseline; FG mail collection tracked separately |
@@ -49,9 +50,10 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | NavigationTests | BG-Only | BG | **No** | Pathfinding + Z-trace (some runs probe both) |
 | NpcInteractionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Vendor/Trainer/FlightMaster |
 | OrgrimmarGroundZAnalysisTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Post-teleport ground Z |
-| QuestInteractionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Add/Complete/Remove quest |
+| QuestInteractionTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged add/complete/remove quest snapshot plumbing |
+| QuestObjectiveTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged quest objective combat action |
 | SpellCastOnTargetTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Battle Shout parallel cast |
-| StarterQuestTests | BG-Only | BG | **No** | Quest accept/turn-in baseline |
+| StarterQuestTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged quest accept/turn-in baseline |
 | TalentAllocationTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Learn talent scenarios |
 | UnequipItemTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Mainhand unequip |
 | VendorBuySellTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | BG packet buy/sell baseline; FG launched for topology parity |
@@ -66,7 +68,7 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 4. **LootCorpseTests** — Uses COMBATTEST account. Consider adding FG loot reference.
 5. **MapTransitionTests** — BG-only. FG map transition observation would catch desync.
 6. **NavigationTests** — BG-only. FG position comparison would catch movement divergence.
-7. **StarterQuestTests** — BG-only baseline. Low priority for FG parity.
+7. **StarterQuestTests / GossipQuestTests / QuestObjectiveTests / QuestInteractionTests** - Shodan topology is in place, but the migrated quest group is BG-action-only while FG stays idle for topology parity.
 8. **VendorBuySellTests** - Shodan topology is in place, but the migrated slice is still a BG packet baseline; add FG behavior parity separately.
 9. **MailSystemTests / MailParityTests** - Shodan topology is in place, but committed mail actions are BG-only until FG `CheckMail` collection is stable under combined-suite load.
 10. **TradingTests / TradeParityTests** - Shodan topology is in place, but foreground `DeclineTrade`, `OfferItem`, and `AcceptTrade` currently ACK `Failed/behavior_tree_failed`; transfer/parity paths stay explicit skips until the FG trade action surface is stable.
