@@ -338,6 +338,29 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan BgInteraction migration slice)
+
+- Completed:
+  - Migrated `BgInteractionTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG economy/NPC smoke action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
+  - Moved item, bank, auction-house, mailbox, mail-money, coinage, and flight-master setup behind fixture helpers. The migrated test body no longer issues direct GM setup calls.
+  - The BG target dispatches only `ActionType.InteractWith`, `ActionType.CheckMail`, and `ActionType.VisitFlightMaster`.
+  - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/BgInteractionTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `BgInteractionTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now `9`.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BgInteractionTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BgInteractionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=bg_interaction_shodan.trx"` -> `passed overall (3 passed, 2 skipped)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/bg_interaction_shodan.trx` -> `AuctionHouse_InteractWithAuctioneer`, `Mail_SendGoldAndCollect_CoinageChanges`, and `FlightMaster_DiscoverAndTakeFlight` passed; bank deposit and Deeprun Tram are tracked skips.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/BgInteractionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/BgInteractionTests.md`
+  - live-validation docs and task trackers.
+- Next command:
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BattlegroundQueueTests.cs`
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 22 - LootCorpseTests)
 
 - Completed:

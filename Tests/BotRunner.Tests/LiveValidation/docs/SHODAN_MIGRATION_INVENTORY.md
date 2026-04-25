@@ -66,6 +66,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `DeathCorpseRunTests.cs` | Migrated: `Loot.config.json`; fixture-contained Razor Hill corpse staging and cleanup; BG dispatches `ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and `StopPhysicsRecording` while FG remains opt-in for CRASH-001 regression proof. |
 | `BuffAndConsumableTests.cs` | Migrated: `Loot.config.json`; fixture-contained elixir and aura cleanup staging; BG dispatches `UseItem` / `DismissBuff` while FG stays idle for topology parity, with unstable aura/dismiss paths tracked as skips. |
 | `ConsumableUsageTests.cs` | Migrated: `Loot.config.json`; fixture-contained Elixir of Lion's Strength staging; BG dispatches `UseItem` while FG stays idle for topology parity. |
+| `BgInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained bank/AH/mail/flight-master staging; BG dispatches `InteractWith`, `CheckMail`, and `VisitFlightMaster` while bank deposit and Deeprun Tram remain tracked skips. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -93,7 +94,6 @@ Combat / death / buffs / misc:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `BgInteractionTests.cs` | BG UI setup, buff prep |
 | `BattlegroundQueueTests.cs` | Queue staging teleport |
 | `SpellCastOnTargetTests.cs` | `.learn` spell, target mob staging |
 | `TaxiTests.cs`, `TaxiTransportParityTests.cs`, `TransportTests.cs` | `.tele` to taxi/transport, gold add |
@@ -101,7 +101,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: 10 SHODAN-CANDIDATE files (after `BuffAndConsumableTests.cs` and `ConsumableUsageTests.cs` moved to ALREADY-SHODAN).
+Total: 9 SHODAN-CANDIDATE files (after `BgInteractionTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -552,6 +552,23 @@ passed overall with `1` pass and `2` tracked skips. The legacy
 consumable path produces a stable Lion's Strength aura assertion and until
 `WoWSharpClient` exposes enough buff metadata for `DismissBuff` to prove
 removal (`BB-BUFF-001`).
+
+`BgInteractionTests.cs` reuses `Economy.config.json` with `ECONBG1` as the BG
+economy/NPC smoke action target, `ECONFG1` launched idle for Shodan topology
+parity, and SHODAN as director. The slice moves item, bank, auction-house,
+mailbox, mail-money, coinage, and flight-master setup behind fixture helpers.
+The test body dispatches only `ActionType.InteractWith`,
+`ActionType.CheckMail`, and `ActionType.VisitFlightMaster` to the BG target.
+
+Migration result on this slice: live artifact `bg_interaction_shodan.trx`
+passed overall with `3` passed and `2` tracked skips.
+`AuctionHouse_InteractWithAuctioneer`, `Mail_SendGoldAndCollect_CoinageChanges`,
+and `FlightMaster_DiscoverAndTakeFlight` passed.
+`Bank_DepositItem_MovesToBankSlot` is Shodan-staged and proves banker
+`InteractWith`, then skips because no bank deposit `ActionType` surface exists
+yet. `DeeprunTram_RideTransport_ArrivesAtDestination` skips because this smoke
+suite uses the Horde economy roster; the dedicated transport slice owns
+Deeprun Tram validation.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

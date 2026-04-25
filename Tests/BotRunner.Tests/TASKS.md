@@ -41,7 +41,8 @@
 - [x] Migrate `LootCorpseTests` to the Shodan shape via `Loot.config.json` + fixture-contained clean-bag and Durotar mob-area staging; BG dispatches only `StartMeleeAttack`, `StopAttack`, and `LootCorpse` while FG stays idle for topology parity.
 - [x] Migrate `DeathCorpseRunTests` to the Shodan shape via `Loot.config.json` + fixture-contained Razor Hill corpse staging and cleanup; BG dispatches only `ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and `StopPhysicsRecording`, while FG remains opt-in for CRASH-001 regression proof.
 - [x] Migrate `BuffAndConsumableTests` / `ConsumableUsageTests` to the Shodan shape via `Loot.config.json` + fixture-contained elixir/aura staging; BG dispatches only `UseItem` / `DismissBuff`, with stricter aura/dismiss paths tracked as skips.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`BgInteractionTests`, then battleground queue / spell target / transport / parity / integration / ack).
+- [x] Migrate `BgInteractionTests` to the Shodan shape via `Economy.config.json` + fixture-contained bank/AH/mail/flight-master staging; BG dispatches only `InteractWith`, `CheckMail`, and `VisitFlightMaster`, with bank deposit and Deeprun Tram tracked as skips.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`BattlegroundQueueTests`, then spell target / transport / parity / integration / ack).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -81,6 +82,27 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan BgInteraction migration slice)
+- Pass result: `BgInteractionTests now follows the Shodan test-director action-target split; live validation passed overall with 3 BG passes and 2 tracked skips`
+- Last delta:
+  - Reused `Economy.config.json` with `ECONBG1` as the BG economy/NPC smoke action target, `ECONFG1` launched idle for topology parity, and SHODAN as director.
+  - Moved item, bank, auction-house, mailbox, mail-money, coinage, and flight-master staging behind fixture helpers.
+  - The test body dispatches only `ActionType.InteractWith`, `ActionType.CheckMail`, and `ActionType.VisitFlightMaster`; no inline setup GM commands remain.
+  - Auction-house interaction, mail collection, and flight-master visit passed. Bank deposit is a tracked skip after banker interaction because no bank deposit `ActionType` exists yet; Deeprun Tram is a tracked skip for the dedicated transport slice.
+  - Added `BgInteractionTests.md`, refreshed `TEST_EXECUTION_MODES.md`, and moved `BgInteractionTests.cs` to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BgInteractionTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BgInteractionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=bg_interaction_shodan.trx"` -> `passed overall (3 passed, 2 skipped)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/BgInteractionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/BgInteractionTests.md`
+  - live-validation docs and task trackers.
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BattlegroundQueueTests.cs`
+
 ### 2026-04-25 (Shodan Buff/Consumable migration slice)
 - Pass result: `BuffAndConsumableTests and ConsumableUsageTests now follow the Shodan test-director action-target split; live validation passed overall with 1 BG pass and 2 tracked skips`
 - Last delta:
