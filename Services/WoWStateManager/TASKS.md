@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan Corner/Tile navigation config observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
+- Last delta:
+  - `CornerNavigationTests` and `TileBoundaryCrossingTests` now run against `Economy.config.json` with `ECONBG1` as the navigation action target, `ECONFG1` idle for topology parity, and SHODAN as director.
+  - Navigation coordinate staging moved into `LiveBotFixture` helpers; no WoWStateManager runtime change was required.
+- Pass result: `Corner/tile navigation migration shape green; live navigation validation passed 6/6`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~CornerNavigationTests|FullyQualifiedName~TileBoundaryCrossingTests" --logger "trx;LogFileName=corner_tile_navigation_shodan.trx"` -> `passed (6/6)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/MovementSpeedTests.cs`
+
 ### 2026-04-25 (Shodan TravelPlanner config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.

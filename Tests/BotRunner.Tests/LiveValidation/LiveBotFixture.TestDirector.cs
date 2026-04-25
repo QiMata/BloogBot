@@ -496,6 +496,49 @@ public partial class LiveBotFixture
         return settled;
     }
 
+    public async Task<bool> StageBotRunnerAtNavigationPointAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        int mapId,
+        float x,
+        float y,
+        float z,
+        string locationLabel,
+        bool cleanSlate = true,
+        float xyToleranceYards = 8f,
+        int zStabilizationWaitMs = 1000)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' navigation point '{Label}' map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            locationLabel,
+            mapId,
+            x,
+            y,
+            z);
+
+        await BotTeleportAsync(targetAccountName, mapId, x, y, z);
+
+        var settled = await WaitForTeleportSettledAsync(
+            targetAccountName,
+            x,
+            y,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} {locationLabel}",
+            xyToleranceYards: xyToleranceYards);
+
+        if (settled && zStabilizationWaitMs > 0)
+            await WaitForZStabilizationAsync(targetAccountName, waitMs: zStabilizationWaitMs);
+
+        return settled;
+    }
+
     /// <summary>
     /// Stage a BotRunner target near the Valley of Trials creature cluster for
     /// action-driven combat tests. The arbitrary-coordinate teleport is kept in

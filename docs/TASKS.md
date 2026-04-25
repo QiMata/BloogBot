@@ -338,6 +338,34 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 19 - CornerNavigationTests / TileBoundaryCrossingTests)
+
+- Completed:
+  - Migrated `CornerNavigationTests.cs` and `TileBoundaryCrossingTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG navigation action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
+  - Added fixture-contained arbitrary navigation coordinate staging via `StageBotRunnerAtNavigationPointAsync(...)`; the migrated test bodies no longer issue direct `BotTeleportAsync(...)` setup calls.
+  - Route checks dispatch only BG `ActionType.TravelTo`, while snapshot-only probes rely on Shodan-owned staging and snapshot assertions.
+  - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/CornerNavigationTests.md` and `Tests/BotRunner.Tests/LiveValidation/docs/TileBoundaryCrossingTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: both files moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~20.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|BgAccountName|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/CornerNavigationTests.cs Tests/BotRunner.Tests/LiveValidation/TileBoundaryCrossingTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CornerNavigationTests|FullyQualifiedName~TileBoundaryCrossingTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=corner_tile_navigation_shodan.trx"` -> `passed (6/6)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/corner_tile_navigation_shodan.trx` -> Orgrimmar bank-to-AH route, RFC corridor route, obstacle snapshot, Undercity tunnel snapshot, Orgrimmar tile boundary, and Durotar open tile boundary all passed.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/CornerNavigationTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TileBoundaryCrossingTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/CornerNavigationTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TileBoundaryCrossingTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - task trackers.
+- Next command:
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/MovementSpeedTests.cs`
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 18 - TravelPlannerTests)
 
 - Completed:

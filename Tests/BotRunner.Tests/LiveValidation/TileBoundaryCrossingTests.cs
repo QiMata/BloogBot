@@ -1,18 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Communication;
-using Tests.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// R9.1: Validates that bot movement is smooth across ADT tile boundaries.
-/// Each WoW ADT tile is 533.33y. When the bot crosses a boundary, the
-/// SceneDataClient loads new tiles — this test verifies no position warps,
-/// no collision loss, and smooth arrival.
+/// Shodan-directed ADT tile-boundary movement validation. SHODAN stages the BG
+/// action target near each boundary; the BotRunner target receives only
+/// TravelTo actions for the movement probes.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class TileBoundaryCrossingTests
@@ -28,7 +28,6 @@ public class TileBoundaryCrossingTests
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     private static uint WorldToTileX(float x) => (uint)(CenterGrid - (int)MathF.Floor(x / TileSize));
@@ -43,8 +42,7 @@ public class TileBoundaryCrossingTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Navigate_CrossesTileBoundary_ArrivesSmooth()
     {
-        var bgAccount = _bot.BgAccountName!;
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        var target = await EnsureTileBoundarySettingsAndTargetAsync();
 
         // Start position: west of tile boundary (tile 30)
         // Y=-4373 is Orgrimmar Y where we know terrain exists
@@ -62,18 +60,16 @@ public class TileBoundaryCrossingTests
         _output.WriteLine($"[TILE-CROSS] Start tile X={startTile}, Dest tile X={destTile}");
         Assert.NotEqual(startTile, destTile); // Must actually cross a boundary
 
-        // Teleport to start and wait for settle
-        await _bot.BotTeleportAsync(bgAccount, 1, startX, startY, startZ);
-        await _bot.WaitForTeleportSettledAsync(bgAccount, startX, startY);
+        await StageNavigationStartAsync(target, 1, startX, startY, startZ, "Orgrimmar tile boundary west side");
         await _bot.RefreshSnapshotsAsync();
 
-        var startSnap = await _bot.GetSnapshotAsync(bgAccount);
+        var startSnap = await _bot.GetSnapshotAsync(target.AccountName);
         var startPos = startSnap?.Player?.Unit?.GameObject?.Base?.Position;
         global::Tests.Infrastructure.Skip.If(startPos == null, "Could not get start position snapshot");
         _output.WriteLine($"[TILE-CROSS] Start: ({startPos!.X:F1},{startPos.Y:F1},{startPos.Z:F1}) tile={WorldToTileX(startPos.X)}");
 
         // Send TravelTo across the boundary
-        var result = await _bot.SendActionAsync(bgAccount, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
         {
             ActionType = ActionType.TravelTo,
             Parameters =
@@ -85,6 +81,7 @@ public class TileBoundaryCrossingTests
             }
         });
         _output.WriteLine($"[TILE-CROSS] TravelTo result: {result}");
+        Assert.Equal(ResponseResult.Success, result);
 
         // Monitor movement across boundary
         bool crossedBoundary = false;
@@ -97,7 +94,7 @@ public class TileBoundaryCrossingTests
         {
             await Task.Delay(5000);
             await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(bgAccount);
+            var snap = await _bot.GetSnapshotAsync(target.AccountName);
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
             if (pos == null) continue;
 
@@ -146,8 +143,7 @@ public class TileBoundaryCrossingTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Navigate_OpenTerrain_CrossesBoundarySmooth()
     {
-        var bgAccount = _bot.BgAccountName!;
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        var target = await EnsureTileBoundarySettingsAndTargetAsync();
 
         // Use open terrain south of Orgrimmar
         // Tile (30,41) / (31,41) boundary is at X = (32-30)*533.33 = 1066.67
@@ -161,16 +157,15 @@ public class TileBoundaryCrossingTests
         uint destTile = WorldToTileX(destX);
         _output.WriteLine($"[OPEN-TILE] Start tile X={startTile}, Dest tile X={destTile}");
 
-        await _bot.BotTeleportAsync(bgAccount, 1, startX, startY, 30f);
-        await _bot.WaitForTeleportSettledAsync(bgAccount, startX, startY);
+        await StageNavigationStartAsync(target, 1, startX, startY, 30f, "Durotar open tile boundary");
         await _bot.RefreshSnapshotsAsync();
 
-        var startSnap = await _bot.GetSnapshotAsync(bgAccount);
+        var startSnap = await _bot.GetSnapshotAsync(target.AccountName);
         var startPos = startSnap?.Player?.Unit?.GameObject?.Base?.Position;
         global::Tests.Infrastructure.Skip.If(startPos == null, "Could not get start position");
         _output.WriteLine($"[OPEN-TILE] Start: ({startPos!.X:F1},{startPos.Y:F1},{startPos.Z:F1})");
 
-        await _bot.SendActionAsync(bgAccount, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
         {
             ActionType = ActionType.TravelTo,
             Parameters =
@@ -181,15 +176,15 @@ public class TileBoundaryCrossingTests
                 new RequestParameter { FloatParam = 25f },
             }
         });
+        Assert.Equal(ResponseResult.Success, result);
 
         var tilesVisited = new HashSet<uint>();
-        bool arrived = false;
 
         for (int i = 0; i < 12; i++) // 60s max
         {
             await Task.Delay(5000);
             await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(bgAccount);
+            var snap = await _bot.GetSnapshotAsync(target.AccountName);
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
             if (pos == null) continue;
 
@@ -205,7 +200,6 @@ public class TileBoundaryCrossingTests
 
             if (dist < 15f)
             {
-                arrived = true;
                 break;
             }
         }
@@ -214,5 +208,80 @@ public class TileBoundaryCrossingTests
         Assert.False(tilesVisited.Count == 0, "Bot should have recorded position snapshots");
         // Don't assert arrival — pathfinding in hilly terrain may stall.
         // The key validation is: no fall-through-world during tile transitions.
+    }
+
+    private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureTileBoundarySettingsAndTargetAsync()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Economy.config.json.");
+
+        var target = _bot.ResolveBotRunnerActionTargets(
+                includeForegroundIfActionable: false,
+                foregroundFirst: false)
+            .Single(target => !target.IsForeground);
+
+        _output.WriteLine(
+            $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
+            "BG tile-boundary action target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] FG {_bot.FgAccountName}/{_bot.FgCharacterName}: launched idle for topology parity.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no navigation dispatch.");
+
+        return target;
+    }
+
+    private async Task StageNavigationStartAsync(
+        LiveBotFixture.BotRunnerActionTarget target,
+        int mapId,
+        float x,
+        float y,
+        float z,
+        string locationLabel)
+    {
+        var staged = await _bot.StageBotRunnerAtNavigationPointAsync(
+            target.AccountName,
+            target.RoleLabel,
+            mapId,
+            x,
+            y,
+            z,
+            locationLabel);
+        if (staged)
+        {
+            await _bot.QuiesceAccountsAsync(
+                new[] { target.AccountName },
+                $"{target.RoleLabel} {locationLabel} staged");
+            return;
+        }
+
+        var snapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        var position = snapshot?.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.Fail(
+            $"Expected {target.RoleLabel} {target.AccountName} to reach {locationLabel}. " +
+            $"finalMap={snapshot?.CurrentMapId ?? 0} pos=({position?.X:F1},{position?.Y:F1},{position?.Z:F1})");
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
     }
 }

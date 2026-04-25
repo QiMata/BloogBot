@@ -35,7 +35,8 @@
 - [x] Migrate `MapTransitionTests` to the Shodan shape via `Economy.config.json` + fixture-contained Ironforge/Deeprun Tram transition staging; BG dispatches only a post-bounce `Goto` liveness action while FG stays idle for topology parity.
 - [x] Migrate `MountEnvironmentTests` to the Shodan shape via `Economy.config.json` + fixture-contained riding/mount loadout, unmount cleanup, and indoor/outdoor staging; BG dispatches only `CastSpell` while FG stays idle for topology parity.
 - [x] Migrate `TravelPlannerTests` to the Shodan shape via `Economy.config.json` + fixture-contained street-level Orgrimmar staging; short BG `TravelTo` passes, while long Crossroads probes are explicit tracked skips for the current no-movement gap.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`CornerNavigationTests` / `TileBoundaryCrossingTests`, then remaining movement / navigation, combat / misc).
+- [x] Migrate `CornerNavigationTests` / `TileBoundaryCrossingTests` to the Shodan shape via `Economy.config.json` + fixture-contained navigation point staging; BG dispatches only `TravelTo` for route probes while FG stays idle for topology parity.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`MovementSpeedTests`, then remaining movement / navigation, combat / misc).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -75,6 +76,29 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan Corner/Tile navigation migration slice)
+- Pass result: `CornerNavigationTests and TileBoundaryCrossingTests now follow the Shodan test-director action-target split; live navigation validation passed 6/6`
+- Last delta:
+  - Reused `Economy.config.json` with `ECONBG1` as the BG navigation action target, `ECONFG1` idle for topology parity, and SHODAN as director.
+  - Added `StageBotRunnerAtNavigationPointAsync(...)` so arbitrary navigation staging coordinates are fixture-owned instead of test-body `BotTeleportAsync(...)` calls.
+  - Added post-stage `QuiesceAccountsAsync(...)` in both test classes before BG `ActionType.TravelTo` route dispatch.
+  - Added `CornerNavigationTests.md` and `TileBoundaryCrossingTests.md`, refreshed `TEST_EXECUTION_MODES.md`, and moved both files to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|BgAccountName|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/CornerNavigationTests.cs Tests/BotRunner.Tests/LiveValidation/TileBoundaryCrossingTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CornerNavigationTests|FullyQualifiedName~TileBoundaryCrossingTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=corner_tile_navigation_shodan.trx"` -> `passed (6/6)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/CornerNavigationTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TileBoundaryCrossingTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/CornerNavigationTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TileBoundaryCrossingTests.md`
+  - live-validation docs and task trackers.
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/MovementSpeedTests.cs`
+
 ### 2026-04-25 (Shodan TravelPlanner migration slice)
 - Pass result: `TravelPlannerTests now follows the Shodan test-director action-target split; live travel validation passed overall with 1 executable pass and 3 tracked skips`
 - Last delta:

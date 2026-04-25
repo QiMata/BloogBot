@@ -32,6 +32,21 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-25 (Corner/Tile navigation Shodan migration observation)
+- Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated corner/tile navigation live validation passed 6/6`
+- Last delta:
+  - `CornerNavigationTests` and `TileBoundaryCrossingTests` now dispatch only BG `ActionType.TravelTo` after Shodan-directed navigation point staging.
+  - Route checks cover Orgrimmar bank-to-AH, RFC corridor, Orgrimmar tile-boundary, and Durotar open-terrain tile-boundary movement.
+  - Snapshot-only probes for Orgrimmar obstacles and Undercity tunnel staging remain fixture-owned setup with no BotRunner production action.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CornerNavigationTests|FullyQualifiedName~TileBoundaryCrossingTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=corner_tile_navigation_shodan.trx"` -> `passed (6/6)`.
+- Files changed:
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/MovementSpeedTests.cs`
+
 ### 2026-04-25 (TravelPlanner Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated TravelPlanner live validation passed overall with 1 executable pass and 3 tracked skips`
 - Last delta:

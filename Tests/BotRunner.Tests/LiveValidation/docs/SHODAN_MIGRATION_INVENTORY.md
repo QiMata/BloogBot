@@ -57,6 +57,8 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `MapTransitionTests.cs` | Migrated: `Economy.config.json`; fixture-contained Ironforge tram staging and rejected Deeprun Tram transition; BG dispatches a post-bounce `Goto` liveness action while FG stays idle for topology parity. |
 | `MountEnvironmentTests.cs` | Migrated: `Economy.config.json`; fixture-contained riding/mount loadout, unmount cleanup, and indoor/outdoor staging; BG dispatches `CastSpell` while FG stays idle for topology parity. |
 | `TravelPlannerTests.cs` | Migrated: `Economy.config.json`; fixture-contained street-level Orgrimmar staging and action quiesce; short BG `TravelTo` dispatch passes while long Crossroads probes are tracked skips for the current no-movement gap. |
+| `CornerNavigationTests.cs` | Migrated: `Economy.config.json`; fixture-contained corner/obstacle coordinate staging; BG dispatches `TravelTo` for route checks while FG stays idle for topology parity. |
+| `TileBoundaryCrossingTests.cs` | Migrated: `Economy.config.json`; fixture-contained tile-boundary staging; BG dispatches `TravelTo` across Orgrimmar/open-terrain boundaries while FG stays idle for topology parity. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -79,7 +81,6 @@ Movement / navigation tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `CornerNavigationTests.cs`, `TileBoundaryCrossingTests.cs` | Edge-case staging teleports |
 | `MovementSpeedTests.cs` | Arena teleport, buff prep |
 | `NavigationTests.cs` | Staging teleport + navmesh probe |
 | `AllianceNavigationTests.cs` | Alliance-side staging teleport |
@@ -99,7 +100,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~22 SHODAN-CANDIDATE files (after `TravelPlannerTests.cs` moved to ALREADY-SHODAN).
+Total: ~20 SHODAN-CANDIDATE files (after `CornerNavigationTests.cs` and `TileBoundaryCrossingTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -450,6 +451,20 @@ after 20 seconds. Earlier failure evidence captured delivered `TravelTo` plus
 `GOTO-TASK Update #1` at the street-level Orgrimmar start toward Crossroads, so
 the remaining gap is recorded as a runtime travel/planning issue rather than a
 migration-shape failure.
+
+`CornerNavigationTests.cs` and `TileBoundaryCrossingTests.cs` reuse
+`Economy.config.json` with `ECONBG1` as the BG navigation action target,
+`ECONFG1` launched idle for Shodan topology parity, and SHODAN as director. The
+slice adds the fixture-contained `StageBotRunnerAtNavigationPointAsync(...)`
+helper for arbitrary navigation probe coordinates plus post-stage target
+quiesce. Test bodies no longer issue direct `BotTeleportAsync(...)` setup calls
+and dispatch only `ActionType.TravelTo` for movement route checks.
+
+Migration result on this slice: live artifact
+`corner_tile_navigation_shodan.trx` passed `6/6`, covering Orgrimmar
+bank-to-auction-house corner navigation, RFC corridor travel, static-obstacle
+snapshot staging, Undercity tunnel staging, Orgrimmar tile-boundary crossing,
+and open-terrain tile-boundary crossing.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the
