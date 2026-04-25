@@ -17,6 +17,23 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan PetManagement config slice)
+- Last updated: 2026-04-25
+- Active task: none - this slice only added a new live-validation roster for the Shodan migration.
+- Last delta:
+  - Added `PetManagement.config.json` with `PETBG1` Background Orc Hunter as the action target, `PETFG1` Foreground Orc Rogue as the idle topology participant, and SHODAN as Background Gnome Mage director.
+  - The roster preserves FG+BG+SHODAN launch parity while keeping the hunter-specific pet-management action on BG.
+- Pass result: `PetManagement migration shape green; BG hunter Call/Dismiss Pet live proof passed (1/1)`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~PetManagementTests" --logger "trx;LogFileName=pet_management_shodan.trx"` -> `passed (1/1)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/PetManagement.config.json` (new)
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/AuctionHouseTests.cs Tests/BotRunner.Tests/LiveValidation/AuctionHouseParityTests.cs`
+
 ### 2026-04-25 (Shodan Crafting config slice)
 - Last updated: 2026-04-25
 - Active task: none - this slice only added a new live-validation roster for the Shodan migration.

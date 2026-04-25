@@ -22,7 +22,8 @@
 - [x] Migrate `MageTeleportTests` to the Shodan shape via `MageTeleport.config.json` + `StageBotRunnerAtRazorHillAsync`; FG/BG dispatch only `ActionType.CastSpell` and the test asserts on snapshot position arrival.
 - [x] Migrate `GatheringProfessionTests` to the Shodan shape via `Gathering.config.json`, fixture-contained route/pool staging, and `ActionType.StartGatheringRoute` dispatch only.
 - [x] Migrate `CraftingProfessionTests` to the Shodan shape via `Crafting.config.json` + `StageBotRunnerLoadoutAsync`; BG dispatches only `ActionType.CastSpell` while FG stays idle for topology parity.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`PetManagementTests`, then economy / NPC, then movement / navigation, then combat / quest / misc).
+- [x] Migrate `PetManagementTests` to the Shodan shape via `PetManagement.config.json` + `StageBotRunnerLoadoutAsync`; BG hunter dispatches only `ActionType.CastSpell` while FG stays idle for topology parity.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`AuctionHouseTests` / `AuctionHouseParityTests`, then bank / vendor / economy, then NPC / movement / navigation, then combat / quest / misc).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -62,6 +63,26 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan PetManagement migration slice)
+- Pass result: `PetManagementTests now follows the Shodan test-director action-target split; the live BG hunter Call/Dismiss Pet proof passed (1/1)`
+- Last delta:
+  - `PetManagementTests` now runs against `PetManagement.config.json` with `PETBG1` as the Background Orc Hunter action target, idle `PETFG1` as the foreground topology participant, and SHODAN as director.
+  - SHODAN-directed staging levels `PETBG1` to `10` and teaches Call Pet `883`, Dismiss Pet `2641`, and Tame Animal `1515` through `StageBotRunnerLoadoutAsync`.
+  - Refreshed `PetManagementTests.md` and moved the file to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PetManagementTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=pet_management_shodan.trx"` -> `passed (1/1)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/PetManagementTests.cs` -> no matches.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/PetManagementTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/PetManagementTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/AuctionHouseTests.cs Tests/BotRunner.Tests/LiveValidation/AuctionHouseParityTests.cs`
+
 ### 2026-04-25 (Shodan Crafting migration slice)
 - Pass result: `CraftingProfessionTests now follows the Shodan test-director action-target split; the live First Aid linen-bandage proof passed (1/1)`
 - Last delta:

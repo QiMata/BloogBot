@@ -37,6 +37,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `MageTeleportTests.cs` | Migrated: `MageTeleport.config.json` launches `TRMAF5`/`TRMAB5` mages + SHODAN; `StageBotRunnerLoadoutAsync` learns the city-teleport spell + adds Rune of Teleportation; fixture-contained `StageBotRunnerAtRazorHillAsync`; test body dispatches `CastSpell` only. |
 | `GatheringProfessionTests.cs` | Migrated: `Gathering.config.json` launches `GATHFG1`/`GATHBG1` warriors + SHODAN; fixture-contained loadout, pool refresh, and route staging; test body dispatches `StartGatheringRoute` only. |
 | `CraftingProfessionTests.cs` | Migrated: `Crafting.config.json` launches `CRAFTFG1`/`CRAFTBG1` warriors + SHODAN; `StageBotRunnerLoadoutAsync` stages First Aid recipe/skill/reagent; test body dispatches BG `CastSpell` only. |
+| `PetManagementTests.cs` | Migrated: `PetManagement.config.json` launches idle `PETFG1`, hunter `PETBG1`, and SHODAN; `StageBotRunnerLoadoutAsync` stages hunter level/pet spells; test body dispatches BG `CastSpell` only. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -48,9 +49,8 @@ it exists only because the test is priming world state.
 
 Profession / loadout tests (migrate first - they resemble the Ratchet flow):
 
-| File | Typical per-test setup | Notes |
-|------|------------------------|-------|
-| `PetManagementTests.cs` | Pet spells, taming setup | Hunter-only. |
+None currently. The remaining candidates start with the economy /
+NPC-interaction group.
 
 Economy / NPC-interaction tests:
 
@@ -93,7 +93,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~42 SHODAN-CANDIDATE files (after `CraftingProfessionTests.cs` moved to ALREADY-SHODAN).
+Total: ~41 SHODAN-CANDIDATE files (after `PetManagementTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -245,6 +245,20 @@ foreground spell-id casting is not the validated crafting path.
 Migration result on this slice: `FirstAid_LearnAndCraft_ProducesLinenBandage`
 passes. The live artifact `crafting_shodan.trx` shows the Shodan topology, BG
 loadout staging, and the single BG craft action producing Linen Bandage `1251`.
+
+`PetManagementTests.cs` uses `PetManagement.config.json` with `PETBG1` as the
+Background Orc Hunter action target, `PETFG1` as an idle Foreground Orc Rogue
+topology participant, and SHODAN as the Background Gnome Mage director. The
+foreground account is intentionally class-matched to the existing live
+character because this slice validates BG spell-id pet management; the action
+requirement is carried by the BG hunter. The slice moves hunter level `10`,
+Call Pet (`883`), Dismiss Pet (`2641`), and Tame Animal (`1515`) setup into
+`StageBotRunnerLoadoutAsync`. The test body dispatches only
+`ActionType.CastSpell` to `PETBG1` for Call Pet and Dismiss Pet.
+
+Migration result on this slice: `Pet_SummonAndManage_StanceFeedAbility`
+passes. The live artifact `pet_management_shodan.trx` shows Shodan topology,
+BG hunter staging, and the two BG pet-management casts returning success.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

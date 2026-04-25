@@ -338,6 +338,33 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 6 - PetManagementTests)
+- Completed:
+  - Migrated `PetManagementTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/PetManagement.config.json` launches `PETBG1` Background Orc Hunter as the action target, idle `PETFG1` Foreground Orc Rogue for topology parity, and SHODAN as Background Gnome Mage director.
+  - Moved hunter pet setup into `StageBotRunnerLoadoutAsync`: level `10`, Call Pet `883`, Dismiss Pet `2641`, and Tame Animal `1515`.
+  - Kept the behavior surface BG-only: `PETBG1` receives the `ActionType.CastSpell` dispatches for Call Pet and Dismiss Pet. FG remains launched but idle because foreground spell-id casting is not the validated pet-management path.
+  - Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/PetManagementTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `PetManagementTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~41.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` before and after live validation -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PetManagementTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=pet_management_shodan.trx"` -> `passed (1/1)`.
+  - Reference Ratchet anchor was already run once this session during the Gathering slice: `fishing_shodan_anchor_gathering_slice.trx` -> `passed (1/1)`.
+- Evidence:
+  - `tmp/test-runtime/results-live/pet_management_shodan.trx` shows `PETBG1` staging via `StageBotRunnerLoadoutAsync`, `.learn 883`, `.learn 2641`, `.learn 1515`, and the two under-test dispatches as BG `ActionType.CastSpell`.
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/PetManagement.config.json` (new)
+  - `Tests/BotRunner.Tests/LiveValidation/PetManagementTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/PetManagementTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `docs/TASKS.md`
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/AuctionHouseTests.cs Tests/BotRunner.Tests/LiveValidation/AuctionHouseParityTests.cs`
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 5 - CraftingProfessionTests)
 - Completed:
   - Migrated `CraftingProfessionTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/Crafting.config.json` launches `CRAFTFG1` Foreground Orc Warrior, `CRAFTBG1` Background Orc Warrior, and SHODAN as Background Gnome Mage director.
