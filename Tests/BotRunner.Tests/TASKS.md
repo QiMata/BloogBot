@@ -48,7 +48,7 @@
 - [x] Migrate `DualClientParityTests` / `MovementParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained shared Orgrimmar and route-start staging; FG/BG snapshot and movement parity lanes dispatch only production actions, with runtime staging/quiesce/packet gaps tracked as skips.
 - [x] Migrate `IntegrationValidationTests` to the Shodan shape via `Economy.config.json` + fixture-contained integration staging; dungeoneering, quest snapshot, vendor sell, reward snapshot, and assign-loot lanes pass, while PvP/talent/trainer lanes are explicit tracked skips.
 - [x] Migrate `AckCaptureTests` to the Shodan shape via `Economy.config.json` + fixture-contained foreground capture positioning/command dispatch; worldport probe passes and configured command capture remains env-gated.
-- [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
+- [x] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
 - [x] Remove stale FG coinage stub assumptions from mail/trainer live assertions now that `WoWPlayer.Coinage` is descriptor-backed.
@@ -87,6 +87,27 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan loadout target-selection follow-up)
+- Pass result: `StageBotRunnerLoadoutAsync now stages .learn/.setskill/.additem through Shodan-selected FG/BG targets; deterministic bundles stayed green and UnequipItem live smoke passed 1/1`
+- Last delta:
+  - Added BotRunner's internal `.targetguid <guid>` SendChat command so Shodan can select a live FG/BG player by GUID without sending server chat.
+  - `StageBotRunnerLoadoutAsync(...)` now sends `.learn`, `.setskill`, and `.additem` from SHODAN after `.targetguid`; SOAP remains for actually name-targeted setup such as `.character level`.
+  - Shodan selected-target GM setup is serialized inside the fixture because the MaNGOS selected target is session-scoped and parallel FG/BG staging can otherwise retarget mid-loadout.
+  - The open Shodan migration follow-up is closed; `SHODAN_MIGRATION_INVENTORY.md` still has zero SHODAN-CANDIDATE entries.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceCombatDispatchTests.BuildBehaviorTreeFromActions_SendChatTargetGuid_SelectsGuidWithoutServerChat" --logger "console;verbosity=minimal"` -> `passed (2/2)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UnequipItemTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=loadout_shodan_director_smoke_retry.trx"` -> `passed (1/1)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceCombatDispatchTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - live-validation docs and task trackers.
+- Next command: `rg -n "^- \\[ \\]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Services/WoWStateManager/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-25 (Shodan ACK capture migration slice)
 - Pass result: `AckCaptureTests now follows the Shodan test-director capture-target split; live validation passed overall with 1 pass and 1 env-gated skip`
 - Last delta:

@@ -97,10 +97,9 @@ move the player to the landing coordinates baked into
 
 ## GM Commands in test body
 
-None. `StageBotRunnerLoadoutAsync` still routes the target-specific
-`.learn` / `.additem` commands through the target bot's chat layer because
-MaNGOS resolves those commands against the sender's own character.
-`StageBotRunnerAtRazorHillAsync` keeps the `.go xyz` self-teleport inside
-the fixture for the same reason. Both constraints are tracked by the
-Shodan cross-targeting follow-up in
-[SHODAN_MIGRATION_INVENTORY.md](SHODAN_MIGRATION_INVENTORY.md).
+None. `StageBotRunnerLoadoutAsync` sends the target-specific `.learn` /
+`.additem` commands from SHODAN after selecting the BG player with BotRunner's
+internal `.targetguid <guid>` helper. `StageBotRunnerAtRazorHillAsync` still
+keeps the `.go xyz` self-teleport inside the fixture because this MaNGOS server
+does not provide a SOAP coordinate teleport command for arbitrary online
+characters.

@@ -684,8 +684,11 @@ corpus env vars enabled; the configured-command probe skipped because
 logged a settle retry failure after the assertion path completed, but the
 repo-scoped post-live cleanup found no remaining processes.
 
-Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
-`.setskill`, and `.additem` through the target bot's chat layer because the
-current MaNGOS command forms resolve against the sender's own character. This
-keeps the test body GM-free while preserving behavior. A later helper pass can
-prove and adopt SOAP or Shodan cross-target command variants.
+Final loadout follow-up: `StageBotRunnerLoadoutAsync` now sends `.learn`,
+`.setskill`, and `.additem` from SHODAN after selecting the FG/BG target with
+BotRunner's internal `.targetguid <guid>` command. Source inspection confirmed
+the MaNGOS command forms are selected-target commands rather than
+name-targeted SOAP forms; `.send items` is mailbox delivery, not bag staging.
+The helper serializes Shodan selected-target setup because the selected target
+is session-scoped, which keeps parallel FG/BG loadout staging from retargeting
+mid-command.

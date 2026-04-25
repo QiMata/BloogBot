@@ -32,35 +32,35 @@
 
 ---
 
-## Handoff (2026-04-25, Shodan ACK capture migration slice)
+## Handoff (2026-04-25, Shodan loadout target-selection follow-up)
 
-- Completed: migrated `AckCaptureTests.cs` to the Shodan test-director capture
-  pattern using the existing `Economy.config.json` topology.
+- Completed: closed the final Shodan migration follow-up by moving
+  `StageBotRunnerLoadoutAsync(...)` `.learn`, `.setskill`, and `.additem`
+  staging off the target bot's chat layer and onto SHODAN selected-target
+  dispatch.
 - Last delta:
-  - `ECONFG1` is resolved as the foreground ACK corpus capture source,
-    `ECONBG1` stays idle for topology parity, and SHODAN remains
-    director-only.
-  - Orgrimmar/Ironforge capture positioning moved behind
-    `StageBotRunnerAtNavigationPointAsync(...)`; configured corpus-trigger
-    commands now flow through `StageBotRunnerAckCaptureCommandAsync(...)`.
-  - `SHODAN_MIGRATION_INVENTORY.md` now has zero SHODAN-CANDIDATE files.
-    The configured command capture probe remains env-gated by
-    `WWOW_ACK_CAPTURE_GM_COMMAND`.
+  - BotRunner now supports an internal `.targetguid <guid>` SendChat command
+    that calls `SetTarget(...)` without sending a server chat message.
+  - `StageBotRunnerLoadoutAsync(...)` has SHODAN select each FG/BG target by
+    GUID, then issue selected-target MaNGOS setup commands from the director.
+  - SHODAN selected-target setup is serialized because the selected target is
+    session-scoped; this prevents parallel FG/BG loadout staging from
+    retargeting mid-command.
+  - `SHODAN_MIGRATION_INVENTORY.md` remains at zero SHODAN-CANDIDATE files,
+    and the active `Tests/BotRunner.Tests/TASKS.md` follow-up is closed.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
-  - `rg -n "EnsureCleanSlateAsync|BotTeleportAsync|WaitForTeleportSettledAsync|SendGmChatCommand|BotClearInventoryAsync|BotAddItemAsync|\\.learn|\\.additem|\\.quest|\\.reset|\\.modify|\\.unlearn|\\.pvp|\\.go|\\.tele" Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceCombatDispatchTests.BuildBehaviorTreeFromActions_SendChatTargetGuid_SelectsGuidWithoutServerChat" --logger "console;verbosity=minimal"` -> `passed (2/2)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
-  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=ack_capture_shodan.trx"` -> `passed overall (1 passed, 1 skipped)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~UnequipItemTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=loadout_shodan_director_smoke_retry.trx"` -> `passed (1/1)`.
   - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
 - Files changed:
-  - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceCombatDispatchTests.cs`
   - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/AckCaptureTests.md`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
-  - task trackers.
-- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|\\.learn|\\.additem|\\.setskill" Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - live-validation docs and task trackers.
+- Next command: `rg -n "^- \\[ \\]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Services/WoWStateManager/TASKS.md Exports/BotRunner/TASKS.md`
 
 ---
 

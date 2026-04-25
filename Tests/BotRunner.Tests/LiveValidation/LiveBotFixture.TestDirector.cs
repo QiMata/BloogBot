@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Communication;
 using GameData.Core.Enums;
@@ -12,6 +13,7 @@ namespace BotRunner.Tests.LiveValidation;
 
 public partial class LiveBotFixture
 {
+    private readonly SemaphoreSlim _shodanDirectedCommandSemaphore = new(1, 1);
     private readonly record struct DurotarMobStage(int MapId, float X, float Y, float Z);
 
     private static readonly DurotarMobStage[] DurotarMobStages =
@@ -212,13 +214,12 @@ public partial class LiveBotFixture
     /// <c>ActionType</c> under test and assert on snapshot / task markers. It
     /// should not issue further GM commands.
     ///
-    /// Internally the helper still routes through the existing bot-chat helpers
-    /// for <c>.learn</c> / <c>.setskill</c> / <c>.additem</c>. Those MaNGOS
-    /// commands resolve against the sender's own character, so they have to
-    /// originate from the target bot. A follow-up pass can switch to Shodan
-    /// cross-targeting (<c>.target &lt;char&gt;</c> then <c>.additem</c>) or to
-    /// SOAP name-targeted command variants, but that migration is orthogonal to
-    /// moving the setup out of the test body.
+    /// Internally the helper uses Shodan as the command sender for
+    /// <c>.learn</c> / <c>.setskill</c> / <c>.additem</c>: it first sends the
+    /// BotRunner-only <c>.targetguid</c> command so Shodan's server-side
+    /// selection points at the FG/BG target, then issues the selected-target
+    /// MaNGOS setup command. SOAP is still used only for command forms that are
+    /// actually name-targeted, such as <c>.character level</c>.
     /// </summary>
     /// <param name="targetAccountName">
     /// Account of the BotRunner under test. Must match <see cref="FgAccountName"/>
@@ -296,29 +297,148 @@ public partial class LiveBotFixture
             await Task.Delay(1000);
         }
 
-        if (spellsToLearn is { Count: > 0 })
-        {
-            foreach (var spellId in spellsToLearn)
-                await BotLearnSpellAsync(targetAccountName, spellId);
-        }
+        var hasDirectorSelectedTargetCommands =
+            spellsToLearn is { Count: > 0 }
+            || skillsToSet is { Count: > 0 }
+            || itemsToAdd is { Count: > 0 };
 
-        if (skillsToSet is { Count: > 0 })
+        if (!hasDirectorSelectedTargetCommands)
+            return;
+
+        // Shodan's selected target is session-scoped. Keep target selection and
+        // selected-target GM setup serialized when tests stage FG/BG in parallel.
+        await _shodanDirectedCommandSemaphore.WaitAsync();
+        try
         {
-            foreach (var directive in skillsToSet)
+            if (spellsToLearn is { Count: > 0 })
             {
-                await BotSetSkillAsync(
-                    targetAccountName,
-                    directive.SkillId,
-                    directive.CurrentValue,
-                    directive.MaxValue);
+                foreach (var spellId in spellsToLearn)
+                    await StageBotRunnerSpellViaDirectorAsync(targetAccountName, targetRoleLabel, spellId);
+            }
+
+            if (skillsToSet is { Count: > 0 })
+            {
+                foreach (var directive in skillsToSet)
+                {
+                    await StageBotRunnerSkillViaDirectorAsync(
+                        targetAccountName,
+                        targetRoleLabel,
+                        directive.SkillId,
+                        directive.CurrentValue,
+                        directive.MaxValue);
+                }
+            }
+
+            if (itemsToAdd is { Count: > 0 })
+            {
+                foreach (var directive in itemsToAdd)
+                    await StageBotRunnerItemViaDirectorAsync(targetAccountName, targetRoleLabel, directive.ItemId, directive.Count);
             }
         }
-
-        if (itemsToAdd is { Count: > 0 })
+        finally
         {
-            foreach (var directive in itemsToAdd)
-                await BotAddItemAsync(targetAccountName, directive.ItemId, directive.Count);
+            _shodanDirectedCommandSemaphore.Release();
         }
+    }
+
+    private async Task StageBotRunnerSpellViaDirectorAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint spellId)
+    {
+        await SelectBotRunnerTargetFromDirectorAsync(targetAccountName, targetRoleLabel);
+        await SendShodanDirectedGmCommandAsync(targetRoleLabel, $".learn {spellId}");
+
+        var verified = await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snapshot => snapshot.Player?.SpellList?.Contains(spellId) == true,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} learn {spellId}");
+        if (!verified)
+            _testOutput?.WriteLine($"[WARN] [{targetAccountName}] Spell {spellId} not confirmed in SpellList after Shodan .learn");
+    }
+
+    private async Task StageBotRunnerSkillViaDirectorAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint skillId,
+        int currentValue,
+        int maxValue)
+    {
+        await SelectBotRunnerTargetFromDirectorAsync(targetAccountName, targetRoleLabel);
+        await SendShodanDirectedGmCommandAsync(targetRoleLabel, $".setskill {skillId} {currentValue} {maxValue}");
+
+        var verified = await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snapshot => snapshot.Player?.SkillInfo != null
+                && snapshot.Player.SkillInfo.TryGetValue(skillId, out var skillValue)
+                && skillValue >= currentValue,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} skill {skillId}={currentValue}");
+        if (!verified)
+            _testOutput?.WriteLine($"[WARN] [{targetAccountName}] Skill {skillId} not confirmed at {currentValue}/{maxValue} after Shodan .setskill");
+    }
+
+    private async Task StageBotRunnerItemViaDirectorAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint itemId,
+        int count)
+    {
+        await SelectBotRunnerTargetFromDirectorAsync(targetAccountName, targetRoleLabel);
+        await SendShodanDirectedGmCommandAsync(targetRoleLabel, $".additem {itemId} {count}");
+
+        var verified = await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snapshot => snapshot.Player?.BagContents?.Values.Any(value => value == itemId) == true,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} add item {itemId}");
+        if (!verified)
+            _testOutput?.WriteLine($"[WARN] [{targetAccountName}] Item {itemId} not confirmed in bags after Shodan .additem");
+    }
+
+    private async Task SelectBotRunnerTargetFromDirectorAsync(
+        string targetAccountName,
+        string targetRoleLabel)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        var shodanAccount = RequireShodanDirectorAccount();
+        await RefreshSnapshotsAsync();
+
+        var targetSnapshot = await GetSnapshotAsync(targetAccountName);
+        var targetGuid = targetSnapshot?.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
+        if (targetGuid == 0UL)
+        {
+            throw new InvalidOperationException(
+                $"[SHODAN-STAGE] Cannot select {targetRoleLabel} account '{targetAccountName}': target player GUID is not available.");
+        }
+
+        var selected = await SendGmChatCommandAndAwaitServerAckAsync(
+            shodanAccount,
+            $".targetguid 0x{targetGuid:X}",
+            timeoutMs: 5000,
+            pollIntervalMs: 100);
+        if (!selected)
+        {
+            throw new InvalidOperationException(
+                $"[SHODAN-STAGE] Shodan did not confirm target selection for {targetRoleLabel} account '{targetAccountName}' GUID=0x{targetGuid:X}.");
+        }
+    }
+
+    private async Task SendShodanDirectedGmCommandAsync(string targetRoleLabel, string command)
+    {
+        var shodanAccount = RequireShodanDirectorAccount();
+        var dispatched = await SendGmChatCommandAndAwaitServerAckAsync(
+            shodanAccount,
+            command,
+            timeoutMs: 7000,
+            pollIntervalMs: 100);
+        if (!dispatched)
+            _testOutput?.WriteLine($"[WARN] [SHODAN] {targetRoleLabel} command '{command}' was not confirmed in previousAction/ACK.");
     }
 
     public async Task<GmChatCommandTrace> StageBotRunnerAckCaptureCommandAsync(
@@ -1406,6 +1526,17 @@ public partial class LiveBotFixture
             throw new InvalidOperationException(
                 "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
         }
+    }
+
+    private string RequireShodanDirectorAccount()
+    {
+        if (string.IsNullOrWhiteSpace(ShodanAccountName))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan admin bot not available; use a Shodan-enabled config for directed staging.");
+        }
+
+        return ShodanAccountName;
     }
 
     private static Game.QuestLogEntry? FindQuestEntry(WoWActivitySnapshot? snapshot, uint questId)

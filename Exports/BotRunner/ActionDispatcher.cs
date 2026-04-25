@@ -6,6 +6,7 @@ using GameData.Core.Models;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using Xas.FluentBehaviourTree;
@@ -37,6 +38,39 @@ namespace BotRunner
             return chatMsg.StartsWith(".pool spawns ", StringComparison.OrdinalIgnoreCase)
                 ? 3000
                 : 2000;
+        }
+
+        private static bool TryParseInternalTargetGuidCommand(string chatMsg, out ulong targetGuid, out bool isTargetGuidCommand)
+        {
+            targetGuid = 0UL;
+            isTargetGuidCommand = false;
+
+            if (string.IsNullOrWhiteSpace(chatMsg))
+                return false;
+
+            var parts = chatMsg.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length == 0 || !parts[0].Equals(".targetguid", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            isTargetGuidCommand = true;
+            if (parts.Length != 2)
+                return false;
+
+            var value = parts[1];
+            if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                return ulong.TryParse(
+                    value[2..],
+                    NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture,
+                    out targetGuid);
+            }
+
+            return ulong.TryParse(
+                value,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out targetGuid);
         }
 
         private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
@@ -825,6 +859,34 @@ namespace BotRunner
                                 _objectManager.SetTarget(player.Guid);
                                 Log.Information("[BOT RUNNER] Self-targeted (GUID=0x{Guid:X})", player.Guid);
                                 return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
+
+                        // Internal bot command: .targetguid <guid> sets CMSG_SET_SELECTION to
+                        // another online player by GUID without sending anything to server chat.
+                        // Shodan-directed live fixtures use this before selected-target GM
+                        // commands such as .learn, .setskill, and .additem.
+                        if (TryParseInternalTargetGuidCommand(chatMsg, out var targetGuid, out var isTargetGuidCommand))
+                        {
+                            builder.Do("Target GUID", time =>
+                            {
+                                if (targetGuid == 0UL)
+                                    return BehaviourTreeStatus.Failure;
+
+                                _objectManager.SetTarget(targetGuid);
+                                Log.Information("[BOT RUNNER] Targeted GUID=0x{Guid:X}", targetGuid);
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
+
+                        if (isTargetGuidCommand)
+                        {
+                            builder.Do("Target GUID invalid", time =>
+                            {
+                                Log.Warning("[BOT RUNNER] Invalid internal .targetguid command: {Command}", chatMsg);
+                                return BehaviourTreeStatus.Failure;
                             });
                             break;
                         }

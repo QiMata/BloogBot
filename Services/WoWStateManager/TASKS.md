@@ -17,6 +17,23 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan loadout target-selection observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice did not change WoWStateManager code or config.
+- Last delta:
+  - Shodan-directed loadout staging now targets FG/BG players via BotRunner `.targetguid` before sending selected-target `.learn`, `.setskill`, and `.additem` commands.
+  - WoWStateManager's heartbeat-gated pending-action forwarding stayed unchanged; the fixture serializes Shodan selected-target commands because the MaNGOS selected target is session-scoped.
+- Pass result: `No WoWStateManager runtime/config change; deterministic dispatch coverage stayed green and UnequipItem live smoke passed 1/1`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~BotRunnerServiceCombatDispatchTests.BuildBehaviorTreeFromActions_SendChatTargetGuid_SelectsGuidWithoutServerChat"` -> `passed (2/2)`
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~UnequipItemTests" --logger "trx;LogFileName=loadout_shodan_director_smoke_retry.trx"` -> `passed (1/1)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `rg -n "^- \\[ \\]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Services/WoWStateManager/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-25 (Shodan ACK capture config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.

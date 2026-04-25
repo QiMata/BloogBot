@@ -418,6 +418,24 @@ public class BotRunnerServiceCombatDispatchTests
         talentFrame.Verify(t => t.LearnTalent(16462), Times.Once);
     }
 
+    [Theory]
+    [InlineData(".targetguid 4660", 0x1234UL)]
+    [InlineData(".targetguid 0x1234", 0x1234UL)]
+    public void BuildBehaviorTreeFromActions_SendChatTargetGuid_SelectsGuidWithoutServerChat(
+        string command,
+        ulong expectedGuid)
+    {
+        var service = CreateService(out var objectManager);
+        objectManager.Setup(o => o.SetTarget(expectedGuid));
+
+        var node = BuildActionTree(service, CharacterAction.SendChat, command);
+
+        Assert.Equal(BehaviourTreeStatus.Success, node.Tick(new TimeData(0.1f)));
+        objectManager.Verify(o => o.SetTarget(expectedGuid), Times.Once);
+        objectManager.Verify(o => o.SendChatMessage(It.IsAny<string>()), Times.Never);
+        objectManager.Verify(o => o.SendGmCommandAsync(It.IsAny<string>(), It.IsAny<int>()), Times.Never);
+    }
+
     private static BotRunnerService CreateService(
         out Mock<IObjectManager> objectManager,
         ITalentService? talentService = null,

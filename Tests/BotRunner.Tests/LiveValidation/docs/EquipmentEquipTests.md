@@ -49,8 +49,8 @@ BG path: `CMSG_AUTOEQUIP_ITEM` packet.
 | 54 | Maces skill |
 | 15 | Mainhand snapshot inventory slot |
 
-**GM Commands in test body:** None. `StageBotRunnerLoadoutAsync` currently
-routes `.learn` / `.setskill` / `.additem` through the target bot's chat layer
-because these MaNGOS commands resolve against the sender's own character.
-That constraint is tracked as the Shodan cross-targeting follow-up in
-`SHODAN_MIGRATION_INVENTORY.md`.
+**GM Commands in test body:** None. `StageBotRunnerLoadoutAsync` sends
+`.learn` / `.setskill` / `.additem` from SHODAN after the director selects the
+FG/BG player with BotRunner's internal `.targetguid <guid>` helper. The
+selected-target command sequence is fixture-owned and serialized for parallel
+FG/BG staging.

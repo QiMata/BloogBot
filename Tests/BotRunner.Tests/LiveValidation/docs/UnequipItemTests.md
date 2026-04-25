@@ -52,10 +52,9 @@ The test body issues no GM commands.
 **Key IDs:** Item 36 = Worn Mace. Spell 198 = One-Hand Maces. Skill 54 = Maces.
 
 **GM Commands in test body:** None. All GM staging is encapsulated by
-`StageBotRunnerLoadoutAsync` (Shodan test-director helper). The helper
-internally still routes `.learn` / `.setskill` / `.additem` through the
-target bot's chat layer because MaNGOS resolves those commands against
-the sender's own character; a follow-up pass can switch to Shodan
-cross-targeting or SOAP name-targeted variants.
+`StageBotRunnerLoadoutAsync` (Shodan test-director helper). The helper sends
+`.learn` / `.setskill` / `.additem` from SHODAN after selecting the FG/BG
+player with BotRunner's internal `.targetguid <guid>` helper, and serializes
+those selected-target commands for parallel FG/BG loadout staging.
 
 **Assertions:** Mainhand filled after equip. Mainhand empty after unequip. Mace appears in bags after unequip.

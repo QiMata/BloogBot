@@ -54,9 +54,9 @@ BG path: `CMSG_CAST_SPELL` for Shoot spell `5019`.
 | 228 | Wands skill |
 | 17 | Ranged weapon snapshot inventory slot |
 
-**GM Commands in test body:** None. `StageBotRunnerLoadoutAsync` still routes
-the target-specific `.learn` / `.setskill` / `.additem` commands through the
-target bot's chat layer. `StageBotRunnerAtDurotarMobAreaAsync` also keeps the
-`.go xyz` self-teleport inside the fixture because this MaNGOS server does not
-provide a SOAP coordinate teleport command for arbitrary online characters.
-Both constraints are tracked by the Shodan cross-targeting follow-up.
+**GM Commands in test body:** None. `StageBotRunnerLoadoutAsync` sends the
+target-specific `.learn` / `.setskill` / `.additem` commands from SHODAN after
+selecting the FG/BG player with BotRunner's internal `.targetguid <guid>`
+helper. `StageBotRunnerAtDurotarMobAreaAsync` still keeps the `.go xyz`
+self-teleport inside the fixture because this MaNGOS server does not provide a
+SOAP coordinate teleport command for arbitrary online characters.
