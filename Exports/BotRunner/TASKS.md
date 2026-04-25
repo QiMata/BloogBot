@@ -32,19 +32,19 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-### 2026-04-25 (Integration validation Shodan migration observation)
-- Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated integration live validation passed overall with 5 passes and 3 tracked skips`
+### 2026-04-25 (ACK capture Shodan migration observation)
+- Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated ACK capture live validation passed overall with 1 pass and 1 env-gated skip`
 - Last delta:
-  - `IntegrationValidationTests` now uses Shodan-owned RFC, escort quest, vendor, Orgrimmar reward, and loot-assignment staging before action/snapshot assertions.
-  - Executable integration lanes dispatch only `StartDungeoneering`, `SellItem`, and `AssignLoot`; PvP, talent, and trainer lanes are explicit tracked skips for topology/staging or missing production action-surface gaps.
+  - `AckCaptureTests` now uses Shodan-owned foreground capture positioning before the ACK corpus worldport probe.
+  - The foreground client remains the capture source because the injected client emits corpus fixtures; configured command capture is env-gated and dispatched through a fixture helper.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
-  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~IntegrationValidationTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=integration_validation_shodan.trx"` -> `passed overall (5 passed, 3 skipped)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=ack_capture_shodan.trx"` -> `passed overall (1 passed, 1 skipped)`.
 - Files changed:
   - `Exports/BotRunner/TASKS.md`
-- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|\\.learn|\\.additem|\\.setskill" Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
 
 ### 2026-04-25 (Transport/taxi Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated taxi/transport live validation passed overall with 8 passes and 5 tracked skips`

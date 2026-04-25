@@ -25,6 +25,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | **Shodan BG-action / tracked skip** | FG, BG, and SHODAN launch together; SHODAN stages setup, executable BG actions run, and blocked subcases skip with a documented runtime gap. |
 | **Shodan BG-action / FG gap** | FG, BG, and SHODAN launch together; SHODAN stages setup, executable BG actions run, and foreground-dependent paths are explicit tracked skips until the FG runtime gap is fixed. |
 | **Shodan FG+BG-action / tracked skip** | FG, BG, and SHODAN launch together; SHODAN stages setup, FG/BG receive behavior actions where supported, and blocked subcases skip with a documented runtime gap. |
+| **Shodan FG-capture / opt-in command** | FG, BG, and SHODAN launch together; SHODAN stages setup, FG performs corpus-capture triggers, BG stays idle, and command-driven capture runs only when configured by env vars. |
 | **BG-Only** | Only the BG bot runs. No FG observation. BG bugs have no reference comparison. |
 | **CombatTest-Only** | Dedicated COMBATTEST account with account-level GM access only. No FG/BG parity comparison. |
 
@@ -32,6 +33,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 
 | Test Class | Mode | Account(s) | FG Observation? | Notes |
 |------------|------|-----------|-----------------|-------|
+| AckCaptureTests | Shodan FG-capture / opt-in command | FG + idle BG + SHODAN | Capture source | Shodan-staged foreground ACK corpus probes; configured command path is env-gated |
 | AllianceNavigationTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Human BG Alliance coordinate staging; snapshot assertions after Shodan-owned staging |
 | BasicLoopTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Login/physics health checks |
 | BgInteractionTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged bank/AH/mail/flight-master smoke; AH/mail/flight pass, bank deposit and tram skip |

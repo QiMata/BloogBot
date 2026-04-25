@@ -47,7 +47,7 @@
 - [x] Migrate `TaxiTests` / `TaxiTransportParityTests` / `TransportTests` to the Shodan shape via `Economy.config.json` + fixture-contained taxi readiness and transport-point staging; taxi actions dispatch to BG/FG targets only, with elevator/cross-continent/Alliance placeholders tracked as skips.
 - [x] Migrate `DualClientParityTests` / `MovementParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained shared Orgrimmar and route-start staging; FG/BG snapshot and movement parity lanes dispatch only production actions, with runtime staging/quiesce/packet gaps tracked as skips.
 - [x] Migrate `IntegrationValidationTests` to the Shodan shape via `Economy.config.json` + fixture-contained integration staging; dungeoneering, quest snapshot, vendor sell, reward snapshot, and assign-loot lanes pass, while PvP/talent/trainer lanes are explicit tracked skips.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (ack).
+- [x] Migrate `AckCaptureTests` to the Shodan shape via `Economy.config.json` + fixture-contained foreground capture positioning/command dispatch; worldport probe passes and configured command capture remains env-gated.
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -87,24 +87,25 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-### 2026-04-25 (Shodan integration validation migration slice)
-- Pass result: `IntegrationValidationTests now follows the Shodan test-director subset shape; live validation passed overall with 5 passes and 3 tracked skips`
+### 2026-04-25 (Shodan ACK capture migration slice)
+- Pass result: `AckCaptureTests now follows the Shodan test-director capture-target split; live validation passed overall with 1 pass and 1 env-gated skip`
 - Last delta:
-  - Reused `Economy.config.json` with `ECONBG1` as the integration action target, `ECONFG1` launched for topology/PvP pre-checks, and SHODAN as director.
-  - RFC, escort quest, vendor, Orgrimmar reward, and RFC loot-assignment staging moved into fixture helpers; no inline FG/BG setup commands remain in the test body.
-  - Executable lanes dispatch only `StartDungeoneering`, `SellItem`, and `AssignLoot`; PvP skips for same-faction topology/PvP-flag staging, talent skips for missing production action surface, and trainer skips behind the existing live funding/staging gap.
+  - Reused `Economy.config.json` with `ECONFG1` as the foreground ACK corpus source, `ECONBG1` idle for topology parity, and SHODAN as director.
+  - Orgrimmar/Ironforge capture positioning moved through `StageBotRunnerAtNavigationPointAsync(...)`, and configured corpus-trigger commands now go through `StageBotRunnerAckCaptureCommandAsync(...)`.
+  - `SHODAN_MIGRATION_INVENTORY.md` now has zero SHODAN-CANDIDATE entries. The configured command capture remains skipped unless `WWOW_ACK_CAPTURE_GM_COMMAND` is set.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
-  - `rg -n "EnsureCleanSlateAsync|BotTeleportAsync|WaitForTeleportSettledAsync|SendGmChatCommand|BotClearInventoryAsync|BotAddItemAsync|\\.learn|\\.additem|\\.quest|\\.reset|\\.modify|\\.unlearn|\\.pvp" Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs` -> `no matches`.
+  - `rg -n "EnsureCleanSlateAsync|BotTeleportAsync|WaitForTeleportSettledAsync|SendGmChatCommand|BotClearInventoryAsync|BotAddItemAsync|\\.learn|\\.additem|\\.quest|\\.reset|\\.modify|\\.unlearn|\\.pvp|\\.go|\\.tele" Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs` -> `no matches`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
-  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~IntegrationValidationTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=integration_validation_shodan.trx"` -> `passed overall (5 passed, 3 skipped)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=ack_capture_shodan.trx"` -> `passed overall (1 passed, 1 skipped)`.
   - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
 - Files changed:
-  - `Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/IntegrationValidationTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/AckCaptureTests.md`
   - live-validation docs and task trackers.
-- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|\\.learn|\\.additem|\\.setskill" Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
 
 ### 2026-04-25 (Shodan transport/taxi migration slice)
 - Pass result: `TaxiTests, TaxiTransportParityTests, and TransportTests now follow the Shodan test-director action-target split; live validation passed overall with 8 passes and 5 tracked skips`

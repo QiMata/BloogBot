@@ -75,6 +75,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `DualClientParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained shared Orgrimmar staging; FG/BG snapshot parity runs against resolved action targets while GM-command parity is a tracked skip. |
 | `MovementParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained movement parity route staging; FG/BG dispatch `SetFacing`, recording, and `Goto` actions while unstable route staging/quiesce and redirect packet-edge gaps stay tracked skips. |
 | `IntegrationValidationTests.cs` | Migrated: `Economy.config.json`; fixture-contained integration staging for dungeoneering, quest snapshot, vendor sell, reward snapshot, and assign-loot lanes; PvP/talent/trainer probes are tracked skips. |
+| `AckCaptureTests.cs` | Migrated: `Economy.config.json`; fixture-contained foreground capture positioning and configured-command dispatch; FG remains the corpus source, BG stays idle, and SHODAN is director-only. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -100,11 +101,9 @@ ack-capture work.
 
 Parity / integration / ack capture:
 
-| File | Typical per-test setup |
-|------|------------------------|
-| `AckCaptureTests.cs` | Capture-triggering teleports/actions |
+None currently.
 
-Total: 1 SHODAN-CANDIDATE file (after `IntegrationValidationTests.cs` moved to ALREADY-SHODAN).
+Total: 0 SHODAN-CANDIDATE files (after `AckCaptureTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -668,6 +667,22 @@ are explicit: PvP needs an opposing-faction Shodan topology plus fixture-owned
 PvP-flag staging, the legacy talent probe is not backed by a production
 BotRunner action surface, and trainer learning remains blocked by the existing
 live trainer funding/staging gap documented by `NpcInteractionTests`.
+
+`AckCaptureTests.cs` reuses `Economy.config.json` with `ECONFG1` as the
+foreground ACK corpus source, `ECONBG1` launched idle for topology parity, and
+SHODAN as director. The slice moves Orgrimmar/Ironforge positioning into
+`StageBotRunnerAtNavigationPointAsync(...)` and arbitrary configured capture
+commands into `StageBotRunnerAckCaptureCommandAsync(...)`, so the test body no
+longer issues direct FG setup commands. The foreground client intentionally
+remains the capture target because ACK corpus files are emitted by the injected
+client.
+
+Migration result on this slice: live artifact `ack_capture_shodan.trx` passed
+overall with `1` passed and `1` skipped. The worldport ACK probe passed without
+corpus env vars enabled; the configured-command probe skipped because
+`WWOW_ACK_CAPTURE_GM_COMMAND` was not set. The post-hop Orgrimmar return helper
+logged a settle retry failure after the assertion path completed, but the
+repo-scoped post-live cleanup found no remaining processes.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

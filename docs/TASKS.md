@@ -32,36 +32,35 @@
 
 ---
 
-## Handoff (2026-04-25, Shodan integration validation migration slice)
+## Handoff (2026-04-25, Shodan ACK capture migration slice)
 
-- Completed: migrated `IntegrationValidationTests.cs` to the Shodan
-  test-director subset pattern using the existing `Economy.config.json`
-  topology.
+- Completed: migrated `AckCaptureTests.cs` to the Shodan test-director capture
+  pattern using the existing `Economy.config.json` topology.
 - Last delta:
-  - `ECONBG1` is resolved as the BG integration action target, `ECONFG1`
-    remains launched for topology/PvP pre-checks, and SHODAN remains
+  - `ECONFG1` is resolved as the foreground ACK corpus capture source,
+    `ECONBG1` stays idle for topology parity, and SHODAN remains
     director-only.
-  - RFC, escort quest, Razor Hill vendor, Orgrimmar reward, and RFC
-    loot-assignment setup moved behind fixture helpers; test bodies no longer
-    issue inline FG/BG setup commands.
-  - Executable lanes dispatch only `StartDungeoneering`, `SellItem`, and
-    `AssignLoot`; quest/reward snapshot lanes use fixture-contained state
-    staging. PvP, talent, and trainer lanes are explicit tracked skips with
-    concrete follow-up reasons.
+  - Orgrimmar/Ironforge capture positioning moved behind
+    `StageBotRunnerAtNavigationPointAsync(...)`; configured corpus-trigger
+    commands now flow through `StageBotRunnerAckCaptureCommandAsync(...)`.
+  - `SHODAN_MIGRATION_INVENTORY.md` now has zero SHODAN-CANDIDATE files.
+    The configured command capture probe remains env-gated by
+    `WWOW_ACK_CAPTURE_GM_COMMAND`.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
-  - `rg -n "EnsureCleanSlateAsync|BotTeleportAsync|WaitForTeleportSettledAsync|SendGmChatCommand|BotClearInventoryAsync|BotAddItemAsync|\\.learn|\\.additem|\\.quest|\\.reset|\\.modify|\\.unlearn|\\.pvp" Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs` -> `no matches`.
+  - `rg -n "EnsureCleanSlateAsync|BotTeleportAsync|WaitForTeleportSettledAsync|SendGmChatCommand|BotClearInventoryAsync|BotAddItemAsync|\\.learn|\\.additem|\\.quest|\\.reset|\\.modify|\\.unlearn|\\.pvp|\\.go|\\.tele" Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs` -> `no matches`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
-  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~IntegrationValidationTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=integration_validation_shodan.trx"` -> `passed overall (5 passed, 3 skipped)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckCaptureTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=ack_capture_shodan.trx"` -> `passed overall (1 passed, 1 skipped)`.
   - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
 - Files changed:
-  - `Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/IntegrationValidationTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/AckCaptureTests.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
   - task trackers.
-- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|\\.learn|\\.additem|\\.setskill" Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
 
 ---
 

@@ -5,12 +5,16 @@ using System.Linq;
 using System.Threading.Tasks;
 using Communication;
 using GameData.Core.Enums;
-using Tests.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests.LiveValidation;
 
+/// <summary>
+/// Shodan-directed ACK corpus capture probes. SHODAN owns launch/positioning
+/// setup; the foreground BotRunner target performs the capture-triggering hop
+/// or configured command because the injected client is the corpus source.
+/// </summary>
 [Collection(LiveValidationCollection.Name)]
 public sealed class AckCaptureTests
 {
@@ -32,41 +36,41 @@ public sealed class AckCaptureTests
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
     [Trait("Category", "AckCaptureLive")]
     public async Task Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled()
     {
-        var fgAccount = _bot.FgAccountName!;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot not available");
+        var target = await EnsureAckCaptureForegroundTargetAsync();
+        _output.WriteLine(
+            $"=== FG ACK Capture: worldport hop with {target.AccountName}/{target.CharacterName} ===");
 
-        await _bot.EnsureCleanSlateAsync(fgAccount, "FG");
-
-        await _bot.BotTeleportAsync(fgAccount, KalimdorMapId, OrgX, OrgY, OrgZ);
-        var startSettled = await _bot.WaitForTeleportSettledAsync(
-            fgAccount,
+        var startSettled = await StageForegroundCapturePointAsync(
+            target,
+            KalimdorMapId,
             OrgX,
             OrgY,
-            timeoutMs: 10000,
-            progressLabel: "FG ack-capture-org",
+            OrgZ,
+            "ack-capture Orgrimmar start",
+            cleanSlate: true,
             xyToleranceYards: 10f);
         Assert.True(startSettled, "FG bot should settle in Orgrimmar before the cross-map capture hop.");
 
         try
         {
-            _output.WriteLine("[FG-ACK] Teleporting FG from Kalimdor to Ironforge to force SMSG_NEW_WORLD -> MSG_MOVE_WORLDPORT_ACK.");
+            _output.WriteLine("[FG-ACK] Moving FG from Kalimdor to Ironforge to force SMSG_NEW_WORLD -> MSG_MOVE_WORLDPORT_ACK.");
 
-            await _bot.BotTeleportAsync(fgAccount, EasternKingdomsMapId, IronforgeX, IronforgeY, IronforgeZ);
-            var settled = await _bot.WaitForTeleportSettledAsync(
-                fgAccount,
+            var settled = await StageForegroundCapturePointAsync(
+                target,
+                EasternKingdomsMapId,
                 IronforgeX,
                 IronforgeY,
-                timeoutMs: 15000,
-                progressLabel: "FG ack-capture-ironforge",
+                IronforgeZ,
+                "ack-capture Ironforge hop",
+                cleanSlate: false,
                 xyToleranceYards: 25f);
-            Assert.True(settled, "FG bot should settle in Ironforge after the cross-map teleport.");
+            Assert.True(settled, "FG bot should settle in Ironforge after the cross-map capture hop.");
 
             await _bot.RefreshSnapshotsAsync();
             var fgSnap = _bot.ForegroundBot;
@@ -84,13 +88,14 @@ public sealed class AckCaptureTests
         }
         finally
         {
-            await _bot.BotTeleportAsync(fgAccount, KalimdorMapId, OrgX, OrgY, OrgZ);
-            await _bot.WaitForTeleportSettledAsync(
-                fgAccount,
+            await StageForegroundCapturePointAsync(
+                target,
+                KalimdorMapId,
                 OrgX,
                 OrgY,
-                timeoutMs: 15000,
-                progressLabel: "FG ack-capture-return",
+                OrgZ,
+                "ack-capture Orgrimmar return",
+                cleanSlate: false,
                 xyToleranceYards: 10f);
         }
     }
@@ -101,28 +106,30 @@ public sealed class AckCaptureTests
     {
         var command = Environment.GetEnvironmentVariable("WWOW_ACK_CAPTURE_GM_COMMAND");
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(command), "WWOW_ACK_CAPTURE_GM_COMMAND not set");
+
         var prepCommands = ParseCommands(Environment.GetEnvironmentVariable("WWOW_ACK_CAPTURE_PREP_GM_COMMANDS"));
         var resetCommand = Environment.GetEnvironmentVariable("WWOW_ACK_CAPTURE_RESET_GM_COMMAND");
+        var target = await EnsureAckCaptureForegroundTargetAsync();
 
-        var fgAccount = _bot.FgAccountName!;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount), "FG bot not available");
-
-        await _bot.EnsureCleanSlateAsync(fgAccount, "FG");
-
-        await _bot.BotTeleportAsync(fgAccount, KalimdorMapId, OrgX, OrgY, OrgZ);
-        var settled = await _bot.WaitForTeleportSettledAsync(
-            fgAccount,
+        var settled = await StageForegroundCapturePointAsync(
+            target,
+            KalimdorMapId,
             OrgX,
             OrgY,
-            timeoutMs: 10000,
-            progressLabel: "FG ack-probe-org",
+            OrgZ,
+            "ack-capture command Orgrimmar start",
+            cleanSlate: true,
             xyToleranceYards: 10f);
         Assert.True(settled, "FG bot should settle in Orgrimmar before the ACK probe command.");
 
         foreach (var prepCommand in prepCommands)
         {
-            _output.WriteLine($"[FG-ACK-PROBE] Prep GM command: {prepCommand}");
-            var prepTrace = await _bot.SendGmChatCommandTrackedAsync(fgAccount, prepCommand, captureResponse: true);
+            _output.WriteLine($"[FG-ACK-PROBE] Prep command: {prepCommand}");
+            var prepTrace = await _bot.StageBotRunnerAckCaptureCommandAsync(
+                target.AccountName,
+                target.RoleLabel,
+                prepCommand,
+                captureResponse: true);
             Assert.Equal(ResponseResult.Success, prepTrace.DispatchResult);
         }
 
@@ -133,8 +140,12 @@ public sealed class AckCaptureTests
 
         try
         {
-            _output.WriteLine($"[FG-ACK-PROBE] Sending GM command: {command}");
-            var trace = await _bot.SendGmChatCommandTrackedAsync(fgAccount, command!, captureResponse: true);
+            _output.WriteLine($"[FG-ACK-PROBE] Sending command: {command}");
+            var trace = await _bot.StageBotRunnerAckCaptureCommandAsync(
+                target.AccountName,
+                target.RoleLabel,
+                command!,
+                captureResponse: true);
             Assert.Equal(ResponseResult.Success, trace.DispatchResult);
 
             foreach (var chat in trace.ChatMessages)
@@ -173,11 +184,70 @@ public sealed class AckCaptureTests
         {
             if (!string.IsNullOrWhiteSpace(resetCommand))
             {
-                _output.WriteLine($"[FG-ACK-PROBE] Resetting GM command state via: {resetCommand}");
-                await _bot.SendGmChatCommandTrackedAsync(fgAccount, resetCommand, captureResponse: false);
+                _output.WriteLine($"[FG-ACK-PROBE] Resetting command state via: {resetCommand}");
+                await _bot.StageBotRunnerAckCaptureCommandAsync(
+                    target.AccountName,
+                    target.RoleLabel,
+                    resetCommand,
+                    captureResponse: false);
             }
         }
     }
+
+    private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureAckCaptureForegroundTargetAsync()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Economy.config.json.");
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.FgAccountName),
+            "FG bot not available for ACK corpus capture.");
+        global::Tests.Infrastructure.Skip.IfNot(
+            await _bot.CheckFgActionableAsync(requireTeleportProbe: false),
+            "FG bot not actionable for ACK corpus capture.");
+
+        var targets = _bot.ResolveBotRunnerActionTargets(
+            includeForegroundIfActionable: true,
+            foregroundFirst: true);
+        var target = targets.Single(candidate => candidate.IsForeground);
+
+        _output.WriteLine(
+            $"[ACTION-PLAN] FG {target.AccountName}/{target.CharacterName}: ACK corpus capture target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] BG {_bot.BgAccountName}/{_bot.BgCharacterName}: launched idle for Shodan topology parity.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no ACK capture dispatch.");
+
+        return target;
+    }
+
+    private async Task<bool> StageForegroundCapturePointAsync(
+        LiveBotFixture.BotRunnerActionTarget target,
+        int mapId,
+        float x,
+        float y,
+        float z,
+        string label,
+        bool cleanSlate,
+        float xyToleranceYards)
+        => await _bot.StageBotRunnerAtNavigationPointAsync(
+            target.AccountName,
+            target.RoleLabel,
+            mapId,
+            x,
+            y,
+            z,
+            label,
+            cleanSlate,
+            xyToleranceYards,
+            zStabilizationWaitMs: 1000);
 
     private static string? ResolveCorpusOutputDirectory()
     {
@@ -291,5 +361,21 @@ public sealed class AckCaptureTests
         }
 
         return Directory.Exists(directory) && Directory.EnumerateFiles(directory, "*.json").Any();
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate) || Directory.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new DirectoryNotFoundException(
+            $"Could not resolve repository path for {Path.Combine(segments)} from {AppContext.BaseDirectory}.");
     }
 }

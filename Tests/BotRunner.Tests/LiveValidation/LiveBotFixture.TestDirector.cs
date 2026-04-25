@@ -321,6 +321,31 @@ public partial class LiveBotFixture
         }
     }
 
+    public async Task<GmChatCommandTrace> StageBotRunnerAckCaptureCommandAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        string command,
+        bool captureResponse = true,
+        int delayMs = 1000)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        if (string.IsNullOrWhiteSpace(command))
+            throw new ArgumentException("ACK capture command is required.", nameof(command));
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' ACK capture command: {Command}",
+            targetRoleLabel,
+            targetAccountName,
+            command);
+
+        return await SendGmChatCommandTrackedAsync(
+            targetAccountName,
+            command,
+            captureResponse,
+            delayMs: delayMs);
+    }
+
     public async Task StageBotRunnerConsumableStateAsync(
         string targetAccountName,
         string targetRoleLabel,

@@ -17,21 +17,21 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
-### 2026-04-25 (Shodan integration validation config observation)
+### 2026-04-25 (Shodan ACK capture config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
 - Last delta:
-  - `IntegrationValidationTests` now runs against `Economy.config.json` with `ECONBG1` as the BG integration action target, `ECONFG1` available for topology/PvP pre-checks, and SHODAN as director.
-  - RFC, escort quest, vendor, Orgrimmar reward, and RFC loot-assignment staging moved into live-validation fixture helpers; no WoWStateManager runtime or config change was required.
-- Pass result: `Integration validation migration shape green; live validation passed overall with 5 passes and 3 tracked skips`
+  - `AckCaptureTests` now runs against `Economy.config.json` with `ECONFG1` as the foreground ACK corpus source, `ECONBG1` idle for topology parity, and SHODAN as director.
+  - Foreground capture positioning and configured corpus-trigger dispatch moved into live-validation fixture helpers; no WoWStateManager runtime or config change was required.
+- Pass result: `ACK capture migration shape green; live validation passed overall with 1 pass and 1 env-gated skip`
 - Validation/tests run:
   - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
   - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
-  - `dotnet test ... --filter "FullyQualifiedName~IntegrationValidationTests" --logger "trx;LogFileName=integration_validation_shodan.trx"` -> `passed overall (5 passed, 3 skipped)`
+  - `dotnet test ... --filter "FullyQualifiedName~AckCaptureTests" --logger "trx;LogFileName=ack_capture_shodan.trx"` -> `passed overall (1 passed, 1 skipped)`
   - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
 - Files changed:
   - `Services/WoWStateManager/TASKS.md`
-- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|\\.learn|\\.additem|\\.setskill" Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
 
 ### 2026-04-25 (Shodan transport/taxi config observation)
 - Last updated: 2026-04-25
