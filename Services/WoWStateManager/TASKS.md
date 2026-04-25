@@ -17,6 +17,23 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan MountEnvironment config observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
+- Last delta:
+  - `MountEnvironmentTests` now runs against `Economy.config.json` with `ECONBG1` as the mount action target, `ECONFG1` idle for topology parity, and SHODAN as director.
+  - Riding/mount loadout, unmount cleanup, and indoor/outdoor coordinate setup moved into `LiveBotFixture` helpers; no WoWStateManager runtime change was required.
+- Pass result: `MountEnvironment migration shape green; live mount environment validation passed 4/4`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~MountEnvironmentTests" --logger "trx;LogFileName=mount_environment_shodan.trx"` -> `passed (4/4)`
+  - Session Ratchet anchor `fishing_shodan_anchor.trx` -> `failed in known FG fishing cast/loot instability (loot_window_timeout -> max_casts_reached); not a MountEnvironment regression`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/TravelPlannerTests.cs`
+
 ### 2026-04-25 (Shodan MapTransition config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.

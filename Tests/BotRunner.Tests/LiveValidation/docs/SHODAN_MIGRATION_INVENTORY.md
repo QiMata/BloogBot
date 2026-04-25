@@ -55,6 +55,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `NpcInteractionTests.cs` | Migrated: `NpcInteraction.config.json`; fixture-contained vendor, flight-master, NPC flag, hunter trainer, and loadout staging; vendor/flight/object-manager paths dispatch to FG/BG, while trainer is a documented skip behind the live funding/mailbox staging gap. |
 | `SpiritHealerTests.cs` | Migrated: `Economy.config.json`; fixture-contained corpse/graveyard staging; BG dispatches `ReleaseCorpse`, `Goto`, and `InteractWith` while FG stays idle for topology parity. |
 | `MapTransitionTests.cs` | Migrated: `Economy.config.json`; fixture-contained Ironforge tram staging and rejected Deeprun Tram transition; BG dispatches a post-bounce `Goto` liveness action while FG stays idle for topology parity. |
+| `MountEnvironmentTests.cs` | Migrated: `Economy.config.json`; fixture-contained riding/mount loadout, unmount cleanup, and indoor/outdoor staging; BG dispatches `CastSpell` while FG stays idle for topology parity. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -77,7 +78,6 @@ Movement / navigation tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `MountEnvironmentTests.cs` | Mount spell add, stage teleport |
 | `TravelPlannerTests.cs` | Multi-leg staging teleports |
 | `CornerNavigationTests.cs`, `TileBoundaryCrossingTests.cs` | Edge-case staging teleports |
 | `MovementSpeedTests.cs` | Arena teleport, buff prep |
@@ -99,7 +99,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~24 SHODAN-CANDIDATE files (after `MapTransitionTests.cs` moved to ALREADY-SHODAN).
+Total: ~23 SHODAN-CANDIDATE files (after `MountEnvironmentTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -420,6 +420,18 @@ passed `1/1`. The cross-map `.go xyz` command remains fixture-owned because
 there is no production BotRunner ActionType for forcing a server-rejected
 instance teleport; the behavior assertion stays snapshot-based and the only
 BotRunner action is the post-bounce liveness command.
+
+`MountEnvironmentTests.cs` reuses `Economy.config.json` with `ECONBG1` as the
+BG mount action target, `ECONFG1` launched idle for Shodan topology parity, and
+SHODAN as director. The slice adds fixture-contained riding-skill/mount-spell
+loadout, unmount cleanup, and indoor/outdoor coordinate staging helpers. The
+test body no longer issues `.learn`, `.setskill`, `.dismount`, `.unaura`, or
+`.go xyz` setup commands and dispatches only `ActionType.CastSpell` for the
+mount behavior checks.
+
+Migration result on this slice: live artifact `mount_environment_shodan.trx`
+passed `4/4`, covering outdoor/indoor scene classification and outdoor allow /
+indoor block behavior for mount spell `23509`.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

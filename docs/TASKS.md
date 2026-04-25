@@ -338,6 +338,34 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 17 - MountEnvironmentTests)
+
+- Completed:
+  - Migrated `MountEnvironmentTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG mount-environment action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
+  - Added fixture-contained mount loadout, unmount cleanup, and indoor/outdoor coordinate staging helpers. The test body no longer issues `.learn`, `.setskill`, `.dismount`, `.unaura`, or `.go xyz` setup commands.
+  - The BG target dispatches only `ActionType.CastSpell` for mount behavior checks; snapshot/chat assertions prove outdoor mount success and indoor mount rejection.
+  - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/MountEnvironmentTests.md`, execution-mode index updated, and inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `MountEnvironmentTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~23.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MountEnvironmentTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mount_environment_shodan.trx"` -> `passed (4/4)`.
+  - Session Ratchet anchor: `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_shodan_anchor.trx"` -> `failed in known anchor-instability lane: FG never reached fishing_loot_success within 3m after repeated loot_window_timeout, max_casts_reached, and "cast didn't land in fishable water" evidence; not treated as a MountEnvironment regression`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.dismount|\\.unaura" Tests/BotRunner.Tests/LiveValidation/MountEnvironmentTests.cs` -> `no matches`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/mount_environment_shodan.trx` -> outdoor and indoor scene classification plus outdoor mount allow / indoor mount block all passed.
+  - `tmp/test-runtime/results-live/fishing_shodan_anchor.trx` -> known Ratchet anchor flake on FG fishing cast/loot loop.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/MountEnvironmentTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MountEnvironmentTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - task trackers.
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/TravelPlannerTests.cs`
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 16 - MapTransitionTests)
 
 - Completed:

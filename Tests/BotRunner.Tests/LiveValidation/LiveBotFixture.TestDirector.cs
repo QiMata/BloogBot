@@ -321,6 +321,138 @@ public partial class LiveBotFixture
         }
     }
 
+    public async Task StageBotRunnerMountLoadoutAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint ridingSkillId,
+        int ridingValue,
+        uint apprenticeRidingSpellId,
+        uint mountSpellId,
+        bool cleanSlate = true)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        await StageBotRunnerLoadoutAsync(
+            targetAccountName,
+            targetRoleLabel,
+            spellsToLearn: [apprenticeRidingSpellId, mountSpellId],
+            skillsToSet: [new SkillDirective(ridingSkillId, ridingValue, ridingValue)],
+            itemsToAdd: null,
+            cleanSlate: cleanSlate,
+            clearInventoryFirst: false);
+
+        await StageBotRunnerUnmountedAsync(targetAccountName, targetRoleLabel, mountSpellId);
+    }
+
+    public async Task StageBotRunnerUnmountedAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint mountAuraSpellId)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        await RefreshSnapshotsAsync();
+        var baseline = await GetSnapshotAsync(targetAccountName);
+        if ((baseline?.Player?.Unit?.MountDisplayId ?? 0) == 0)
+            return;
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' clearing mount state aura={SpellId}",
+            targetRoleLabel,
+            targetAccountName,
+            mountAuraSpellId);
+
+        var dismountTrace = await SendGmChatCommandTrackedAsync(
+            targetAccountName,
+            ".dismount",
+            captureResponse: true,
+            delayMs: 750);
+        AssertTraceCommandSucceeded(dismountTrace, targetRoleLabel, ".dismount");
+
+        var unauraTrace = await SendGmChatCommandTrackedAsync(
+            targetAccountName,
+            $".unaura {mountAuraSpellId}",
+            captureResponse: true,
+            delayMs: 750);
+        AssertTraceCommandSucceeded(unauraTrace, targetRoleLabel, ".unaura");
+
+        var unmounted = await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snapshot => (snapshot.Player?.Unit?.MountDisplayId ?? 0) == 0,
+            TimeSpan.FromSeconds(10),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} unmounted");
+
+        if (!unmounted)
+        {
+            await RefreshSnapshotsAsync();
+            var snapshot = await GetSnapshotAsync(targetAccountName);
+            var mountDisplayId = snapshot?.Player?.Unit?.MountDisplayId ?? 0;
+            var position = snapshot?.Player?.Unit?.GameObject?.Base?.Position;
+            throw new InvalidOperationException(
+                $"[SHODAN-STAGE] {targetRoleLabel} remained mounted " +
+                $"mountDisplayId={mountDisplayId} map={snapshot?.CurrentMapId ?? 0} " +
+                $"pos=({position?.X:F1},{position?.Y:F1},{position?.Z:F1}) indoors={snapshot?.IsIndoors}");
+        }
+    }
+
+    public async Task<bool> StageBotRunnerAtMountEnvironmentLocationAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        string locationLabel,
+        int mapId,
+        float x,
+        float y,
+        float z,
+        bool cleanSlate = false)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        const int maxAttempts = 2;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            _logger.LogInformation(
+                "[SHODAN-STAGE] {Role} account='{Account}' mount-env stage {Location} attempt={Attempt} map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+                targetRoleLabel,
+                targetAccountName,
+                locationLabel,
+                attempt,
+                mapId,
+                x,
+                y,
+                z);
+
+            await BotTeleportAsync(targetAccountName, mapId, x, y, z);
+
+            var settled = await WaitForTeleportSettledAsync(
+                targetAccountName,
+                x,
+                y,
+                timeoutMs: 10000,
+                progressLabel: $"{targetRoleLabel} {locationLabel} mount-env stage attempt {attempt}",
+                xyToleranceYards: 60f);
+            if (!settled)
+                continue;
+
+            await WaitForZStabilizationAsync(targetAccountName, waitMs: 2000);
+
+            var remainedSettled = await WaitForTeleportSettledAsync(
+                targetAccountName,
+                x,
+                y,
+                timeoutMs: 4000,
+                progressLabel: $"{targetRoleLabel} {locationLabel} mount-env stage post-z",
+                xyToleranceYards: 60f);
+            if (remainedSettled)
+                return true;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Stage a BotRunner target near the Valley of Trials creature cluster for
     /// action-driven combat tests. The arbitrary-coordinate teleport is kept in
