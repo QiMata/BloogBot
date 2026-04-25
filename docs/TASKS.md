@@ -338,6 +338,34 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 9 - VendorBuySellTests)
+- Completed:
+  - Migrated `VendorBuySellTests.cs` to the Shodan test-director pattern. The slice reuses `Services/WoWStateManager/Settings/Configs/Economy.config.json` with `ECONBG1` as the BG vendor packet action target, `ECONFG1` launched idle for topology parity, and SHODAN as Background Gnome Mage director.
+  - Added `StageBotRunnerAtRazorHillVendorAsync` and `StageBotRunnerCoinageAsync` so Razor Hill vendor staging and money setup are fixture-contained. Test bodies no longer issue `.go` / `.additem` / `.modify money` setup.
+  - `VendorBuySellTests` dispatches only `ActionType.BuyItem`, `ActionType.SellItem`, and post-buy `ActionType.DestroyItem` cleanup from the test body. This remains a BG packet baseline by design; foreground vendor parity is left to a future behavior slice.
+  - Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/VendorBuySellTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `VendorBuySellTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~36.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` before and after live validation -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~VendorBuySellTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=vendor_buy_sell_shodan.trx"` -> `passed (2/2)`.
+  - Reference Ratchet anchor was already run once this session during the Gathering slice: `fishing_shodan_anchor_gathering_slice.trx` -> `passed (1/1)`.
+- Evidence:
+  - `tmp/test-runtime/results-live/vendor_buy_sell_shodan.trx` shows `ECONBG1` staging through `StageBotRunnerAtRazorHillVendorAsync`, copper/item setup through fixture helpers, `BuyItem` adding item `159` while coinage decreases, and `SellItem` removing Linen Cloth while coinage increases.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/VendorBuySellTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/VendorBuySellTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `docs/TASKS.md`
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele|modify money" Tests/BotRunner.Tests/LiveValidation/EconomyInteractionTests.cs`
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 8 - BankInteractionTests/BankParityTests)
 - Completed:
   - Migrated `BankInteractionTests.cs` and `BankParityTests.cs` to the Shodan test-director pattern. The slice reuses `Services/WoWStateManager/Settings/Configs/Economy.config.json` with `ECONFG1` Foreground Orc Warrior, `ECONBG1` Background Orc Warrior, and SHODAN as Background Gnome Mage director.

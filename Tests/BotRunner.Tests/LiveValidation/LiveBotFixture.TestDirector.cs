@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Communication;
+using GameData.Core.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tests.LiveValidation;
@@ -426,6 +427,140 @@ public partial class LiveBotFixture
             timeoutMs: 10000,
             progressLabel: $"{targetRoleLabel} razor-hill stage",
             xyToleranceYards: 60f);
+    }
+
+    /// <summary>
+    /// Stage a BotRunner target beside Grimtak at Razor Hill for vendor
+    /// buy/sell packet baselines. The coordinate teleport stays inside the
+    /// fixture so migrated test bodies do not issue GM movement commands inline.
+    /// </summary>
+    public async Task<bool> StageBotRunnerAtRazorHillVendorAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        const int RazorHillVendorMapId = 1;
+        const float GrimtakX = 305.722f;
+        const float GrimtakY = -4665.87f;
+        const float GrimtakZ = 19.527f;
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' Razor Hill vendor stage map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            RazorHillVendorMapId,
+            GrimtakX,
+            GrimtakY,
+            GrimtakZ);
+
+        await BotTeleportAsync(
+            targetAccountName,
+            RazorHillVendorMapId,
+            GrimtakX,
+            GrimtakY,
+            GrimtakZ);
+
+        var settled = await WaitForTeleportSettledAsync(
+            targetAccountName,
+            GrimtakX,
+            GrimtakY,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} razor-hill vendor stage",
+            xyToleranceYards: 60f);
+
+        var hasUnits = await WaitForNearbyUnitsPopulatedAsync(
+            targetAccountName,
+            timeoutMs: 15000,
+            progressLabel: $"{targetRoleLabel} razor-hill vendor units");
+
+        var vendor = await WaitForNearbyUnitAsync(
+            targetAccountName,
+            (uint)NPCFlags.UNIT_NPC_FLAG_VENDOR,
+            timeoutMs: 5000,
+            progressLabel: $"{targetRoleLabel} razor-hill vendor lookup");
+
+        return settled && hasUnits && vendor != null;
+    }
+
+    /// <summary>
+    /// Ensure a BotRunner target has enough copper for economy action tests.
+    /// The GM money command stays behind the Shodan staging helper boundary so
+    /// migrated test bodies only dispatch the action under test.
+    /// </summary>
+    public async Task<long> StageBotRunnerCoinageAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        long minimumCopper)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        await RefreshSnapshotsAsync();
+        var snapshot = await GetSnapshotAsync(targetAccountName);
+        var currentCopper = snapshot?.Player?.Coinage ?? 0L;
+        if (currentCopper >= minimumCopper)
+        {
+            _logger.LogInformation(
+                "[SHODAN-STAGE] {Role} account='{Account}' coinage already sufficient: {Copper}c >= {Minimum}c",
+                targetRoleLabel,
+                targetAccountName,
+                currentCopper,
+                minimumCopper);
+            return currentCopper;
+        }
+
+        var delta = minimumCopper - currentCopper;
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' adding {Delta} copper for minimum {Minimum}c",
+            targetRoleLabel,
+            targetAccountName,
+            delta,
+            minimumCopper);
+
+        await BotSelectSelfAsync(targetAccountName);
+        await Task.Delay(300);
+        var trace = await SendGmChatCommandTrackedAsync(
+            targetAccountName,
+            $".modify money {delta}",
+            captureResponse: false,
+            delayMs: 500);
+
+        if (trace.DispatchResult != ResponseResult.Success)
+        {
+            throw new InvalidOperationException(
+                $"[SHODAN-STAGE] {targetRoleLabel} money staging dispatch failed: {trace.DispatchResult}");
+        }
+
+        var funded = await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snap => (snap.Player?.Coinage ?? 0L) >= minimumCopper,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} coinage >= {minimumCopper}");
+
+        if (!funded)
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} coinage did not reach {minimumCopper}c.");
+
+        await RefreshSnapshotsAsync();
+        return (await GetSnapshotAsync(targetAccountName))?.Player?.Coinage ?? minimumCopper;
     }
 
     /// <summary>

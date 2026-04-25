@@ -42,6 +42,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `AuctionHouseParityTests.cs` | Migrated: `Economy.config.json`; AH search parity stages FG/BG at auctioneer, while post/buy and cancel are explicit missing-action skips after Shodan staging. |
 | `BankInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained Orgrimmar bank staging; banker detection and `InteractWith` dispatch are Shodan-shaped, while deposit/withdraw is an explicit missing-action skip. |
 | `BankParityTests.cs` | Migrated: `Economy.config.json`; FG/BG bank staging and item setup are Shodan-shaped, while deposit/withdraw and bank-slot purchase are explicit missing-action skips. |
+| `VendorBuySellTests.cs` | Migrated: `Economy.config.json`; fixture-contained Razor Hill vendor and coinage staging; BG dispatches `BuyItem` / `SellItem` only while FG stays idle for topology parity. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -60,7 +61,6 @@ Economy / NPC-interaction tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `VendorBuySellTests.cs` | `.tele` to vendor, gold/item add |
 | `EconomyInteractionTests.cs` | Gold, item prep, location stage |
 | `MailSystemTests.cs`, `MailParityTests.cs` | `.send items`, `.tele` to mailbox |
 | `TradingTests.cs`, `TradeParityTests.cs` | Item add, partner positioning |
@@ -95,7 +95,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~37 SHODAN-CANDIDATE files (after `BankInteractionTests.cs` and `BankParityTests.cs` moved to ALREADY-SHODAN).
+Total: ~36 SHODAN-CANDIDATE files (after `VendorBuySellTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -289,6 +289,18 @@ Migration result on this slice: live artifact `bank_shodan.trx` passed `1`
 test and skipped `3` with tracked missing-action reasons. Deposit/withdraw
 and bank-slot purchase still need BotRunner `ActionType` support before those
 assertions can become behavioral proofs.
+
+`VendorBuySellTests.cs` reuses `Economy.config.json` with `ECONBG1` as the BG
+packet action target, `ECONFG1` launched idle for Shodan topology parity, and
+SHODAN as the Background Gnome Mage director. The slice adds
+`StageBotRunnerAtRazorHillVendorAsync` and `StageBotRunnerCoinageAsync` so
+vendor location, item, and money setup live behind fixture helpers. The test
+body dispatches only `ActionType.BuyItem`, `ActionType.SellItem`, and the
+post-buy cleanup `ActionType.DestroyItem`.
+
+Migration result on this slice: live artifact `vendor_buy_sell_shodan.trx`
+passed `2/2`. This remains a BG packet baseline by design; FG vendor buy/sell
+coverage is left to a future parity-specific slice.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

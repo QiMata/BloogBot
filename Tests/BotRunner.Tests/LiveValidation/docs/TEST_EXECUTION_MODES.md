@@ -20,6 +20,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 |------|-------------|
 | **Dual-Bot Sync** | Both FG and BG run the same scenario simultaneously. FG serves as ground truth for BG behavior. |
 | **Dual-Bot Conditional** | BG always runs. FG runs only when `IsFgActionable` is true. FG observation is best-effort. |
+| **Shodan BG-action** | FG, BG, and SHODAN launch together; SHODAN stages setup, BG receives the behavior action, and FG stays idle for topology parity. |
 | **BG-Only** | Only the BG bot runs. No FG observation. BG bugs have no reference comparison. |
 | **CombatTest-Only** | Dedicated COMBATTEST account with account-level GM access only. No FG/BG parity comparison. |
 
@@ -48,7 +49,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | StarterQuestTests | BG-Only | BG | **No** | Quest accept/turn-in baseline |
 | TalentAllocationTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Learn talent scenarios |
 | UnequipItemTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Mainhand unequip |
-| VendorBuySellTests | BG-Only | BG | **No** | FG excluded (merchant-frame legacy) |
+| VendorBuySellTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | BG packet buy/sell baseline; FG launched for topology parity |
 
 ## Tests Without FG Observation (Priority for Adding FG Parity)
 
@@ -61,4 +62,4 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 5. **MapTransitionTests** — BG-only. FG map transition observation would catch desync.
 6. **NavigationTests** — BG-only. FG position comparison would catch movement divergence.
 7. **StarterQuestTests** — BG-only baseline. Low priority for FG parity.
-8. **VendorBuySellTests** — Blocked on FG merchant-frame implementation.
+8. **VendorBuySellTests** - Shodan topology is in place, but the migrated slice is still a BG packet baseline; add FG behavior parity separately.
