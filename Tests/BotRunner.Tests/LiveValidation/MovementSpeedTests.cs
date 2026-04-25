@@ -1,20 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
-using Tests.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Live movement validation: teleport to Durotar road, path through a winding
-/// terrain route. Exercises horizontal speed and Z tracking through real geometry.
-/// Uses a proven 141y route from MovementParityTests.
-///
-/// Run: dotnet test --filter "FullyQualifiedName~MovementSpeedTests" --configuration Release
+/// Shodan-directed movement-speed validation. SHODAN stages the BG action
+/// target on a proven Durotar road route; the BotRunner target receives only
+/// the Goto action under test.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class MovementSpeedTests
@@ -43,29 +41,13 @@ public class MovementSpeedTests
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
-    }
-
-    /// <summary>
-    /// Teleport FG nearby so the user can watch BG movement in the WoW client.
-    /// Offset +3y X so they don't stack on top of each other.
-    /// </summary>
-    private async Task ShadowFgAsync(float x, float y, float z)
-    {
-        try
-        {
-            var fg = _bot.FgAccountName;
-            if (string.IsNullOrWhiteSpace(fg) || !_bot.IsFgActionable) return;
-            await _bot.BotTeleportAsync(fg, MapId, x + 3f, y, z);
-        }
-        catch { /* observational only */ }
     }
 
     [SkippableFact]
     public async Task BG_Durotar_WindingPathSpeed()
     {
-        var bg = _bot.BgAccountName;
-        await _bot.EnsureCleanSlateAsync(bg!, "BG");
+        var target = await EnsureMovementSpeedSettingsAndTargetAsync();
+
         _output.WriteLine("=== BG Movement: Durotar Winding Path (141y) ===");
         _output.WriteLine($"Start: ({StartX}, {StartY}, {StartZ})");
         _output.WriteLine($"Target: ({TargetX}, {TargetY}, {TargetZ})");
@@ -75,23 +57,17 @@ public class MovementSpeedTests
             (TargetY - StartY) * (TargetY - StartY));
         _output.WriteLine($"Straight-line distance: {straightLineDist:F0}y\n");
 
-        // Teleport BG to start, FG shadows nearby
-        await _bot.BotTeleportAsync(bg!, MapId, StartX, StartY, StartZ);
-        await _bot.WaitForTeleportSettledAsync(bg!, StartX, StartY);
-        await ShadowFgAsync(StartX, StartY, StartZ);
-
-        // Allow physics to snap to ground after teleport
-        await Task.Delay(2000);
+        await StageMovementStartAsync(target);
 
         // Read actual start position
         await _bot.RefreshSnapshotsAsync();
-        var startSnap = await _bot.GetSnapshotAsync(bg!);
+        var startSnap = await _bot.GetSnapshotAsync(target.AccountName);
         var startPos = startSnap?.Player?.Unit?.GameObject?.Base?.Position;
         Assert.NotNull(startPos);
         _output.WriteLine($"Actual start: ({startPos!.X:F1}, {startPos.Y:F1}, {startPos.Z:F1})\n");
 
         // Send GOTO to target
-        await _bot.SendActionAsync(bg!, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
         {
             ActionType = ActionType.Goto,
             Parameters =
@@ -102,6 +78,7 @@ public class MovementSpeedTests
                 new RequestParameter { FloatParam = 5.0f } // arrival tolerance
             }
         });
+        Assert.Equal(ResponseResult.Success, result);
 
         // Poll snapshots — expect ~141y / 7 y/s ≈ 20s, give 45s for pathing overhead
         var samples = new List<(float t, float x, float y, float z, float dist2d, float speed)>();
@@ -115,7 +92,7 @@ public class MovementSpeedTests
         {
             await Task.Delay(500);
             await _bot.RefreshSnapshotsAsync();
-            var snap = await _bot.GetSnapshotAsync(bg!);
+            var snap = await _bot.GetSnapshotAsync(target.AccountName);
             var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
             if (pos == null) continue;
 
@@ -130,10 +107,6 @@ public class MovementSpeedTests
 
             samples.Add((elapsed, pos.X, pos.Y, pos.Z, dist, speed));
             _output.WriteLine($"{elapsed,6:F1}s {pos.X,9:F1} {pos.Y,11:F1} {pos.Z,8:F1} {dist,7:F1} {speed,7:F2} {toGoal,8:F1}");
-
-            // Shadow FG every 3s
-            if (i % 6 == 0)
-                await ShadowFgAsync(pos.X, pos.Y, pos.Z);
 
             if (toGoal < 8.0f)
             {
@@ -163,5 +136,74 @@ public class MovementSpeedTests
         Assert.True(arrived,
             $"Bot did not arrive at target within 45s. Last dist: {samples.Last().dist2d:F1}y, " +
             $"speed: {avgSpeed:F2} y/s");
+    }
+
+    private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureMovementSpeedSettingsAndTargetAsync()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Economy.config.json.");
+
+        var target = _bot.ResolveBotRunnerActionTargets(
+                includeForegroundIfActionable: false,
+                foregroundFirst: false)
+            .Single(target => !target.IsForeground);
+
+        _output.WriteLine(
+            $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
+            "BG movement-speed action target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] FG {_bot.FgAccountName}/{_bot.FgCharacterName}: launched idle for topology parity.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no movement dispatch.");
+
+        return target;
+    }
+
+    private async Task StageMovementStartAsync(LiveBotFixture.BotRunnerActionTarget target)
+    {
+        var staged = await _bot.StageBotRunnerAtNavigationPointAsync(
+            target.AccountName,
+            target.RoleLabel,
+            MapId,
+            StartX,
+            StartY,
+            StartZ,
+            "Durotar winding-path speed start");
+        if (staged)
+        {
+            await _bot.QuiesceAccountsAsync(
+                new[] { target.AccountName },
+                $"{target.RoleLabel} movement-speed staged");
+            return;
+        }
+
+        var snapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        var position = snapshot?.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.Fail(
+            $"Expected {target.RoleLabel} {target.AccountName} to reach movement-speed start. " +
+            $"finalMap={snapshot?.CurrentMapId ?? 0} pos=({position?.X:F1},{position?.Y:F1},{position?.Z:F1})");
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
     }
 }

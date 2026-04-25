@@ -59,6 +59,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `TravelPlannerTests.cs` | Migrated: `Economy.config.json`; fixture-contained street-level Orgrimmar staging and action quiesce; short BG `TravelTo` dispatch passes while long Crossroads probes are tracked skips for the current no-movement gap. |
 | `CornerNavigationTests.cs` | Migrated: `Economy.config.json`; fixture-contained corner/obstacle coordinate staging; BG dispatches `TravelTo` for route checks while FG stays idle for topology parity. |
 | `TileBoundaryCrossingTests.cs` | Migrated: `Economy.config.json`; fixture-contained tile-boundary staging; BG dispatches `TravelTo` across Orgrimmar/open-terrain boundaries while FG stays idle for topology parity. |
+| `MovementSpeedTests.cs` | Migrated: `Economy.config.json`; fixture-contained Durotar road staging; BG dispatches `Goto` for the speed probe while FG stays idle for topology parity. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -81,7 +82,6 @@ Movement / navigation tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `MovementSpeedTests.cs` | Arena teleport, buff prep |
 | `NavigationTests.cs` | Staging teleport + navmesh probe |
 | `AllianceNavigationTests.cs` | Alliance-side staging teleport |
 
@@ -100,7 +100,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~20 SHODAN-CANDIDATE files (after `CornerNavigationTests.cs` and `TileBoundaryCrossingTests.cs` moved to ALREADY-SHODAN).
+Total: ~19 SHODAN-CANDIDATE files (after `MovementSpeedTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -465,6 +465,18 @@ Migration result on this slice: live artifact
 bank-to-auction-house corner navigation, RFC corridor travel, static-obstacle
 snapshot staging, Undercity tunnel staging, Orgrimmar tile-boundary crossing,
 and open-terrain tile-boundary crossing.
+
+`MovementSpeedTests.cs` reuses `Economy.config.json` with `ECONBG1` as the BG
+movement-speed action target, `ECONFG1` launched idle for Shodan topology
+parity, and SHODAN as director. The slice removes the old observational FG
+shadow teleports, stages the Durotar winding-path start through
+`StageBotRunnerAtNavigationPointAsync(...)`, and quiesces the BG target before
+dispatch. The test body no longer issues direct `BotTeleportAsync(...)` setup
+calls and dispatches only `ActionType.Goto`.
+
+Migration result on this slice: live artifact `movement_speed_shodan.trx`
+passed `1/1`, covering the Durotar 141-yard winding path speed, Z-stability,
+and arrival assertions.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the
