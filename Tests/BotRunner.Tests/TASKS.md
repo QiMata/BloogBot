@@ -21,7 +21,8 @@
 - [x] Migrate `EquipmentEquipTests` and `WandAttackTests`; both share the `StageBotRunnerLoadoutAsync` shape (`Equipment.config.json` for the warrior pair, `Wand.config.json` for the troll-mage pair).
 - [x] Migrate `MageTeleportTests` to the Shodan shape via `MageTeleport.config.json` + `StageBotRunnerAtRazorHillAsync`; FG/BG dispatch only `ActionType.CastSpell` and the test asserts on snapshot position arrival.
 - [x] Migrate `GatheringProfessionTests` to the Shodan shape via `Gathering.config.json`, fixture-contained route/pool staging, and `ActionType.StartGatheringRoute` dispatch only.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`CraftingProfessionTests` -> `PetManagementTests`, then economy / NPC, then movement / navigation, then combat / quest / misc).
+- [x] Migrate `CraftingProfessionTests` to the Shodan shape via `Crafting.config.json` + `StageBotRunnerLoadoutAsync`; BG dispatches only `ActionType.CastSpell` while FG stays idle for topology parity.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`PetManagementTests`, then economy / NPC, then movement / navigation, then combat / quest / misc).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -61,6 +62,25 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan Crafting migration slice)
+- Pass result: `CraftingProfessionTests now follows the Shodan test-director action-target split; the live First Aid linen-bandage proof passed (1/1)`
+- Last delta:
+  - `CraftingProfessionTests` now runs against `Crafting.config.json` with `CRAFTFG1`/`CRAFTBG1` Orc Warriors plus SHODAN. SHODAN stages First Aid spells, First Aid skill, and one Linen Cloth through `StageBotRunnerLoadoutAsync`.
+  - The test body dispatches only `ActionType.CastSpell` to BG. FG remains launched but idle because foreground spell-id casting is not the validated crafting path.
+  - Refreshed `CraftingProfessionTests.md` and moved the file to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CraftingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=crafting_shodan.trx"` -> `passed (1/1)`.
+  - Reference anchor already run once this session: `fishing_shodan_anchor_gathering_slice.trx` -> `passed (1/1)`.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/CraftingProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/CraftingProfessionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/PetManagementTests.cs`
+
 ### 2026-04-25 (Shodan Gathering migration slice)
 - Pass result: `GatheringProfessionTests now follows the Shodan test-director action-target split; BG mining and BG herbalism pass, while FG mining is a documented functional gap after correct action delivery`
 - Last delta:

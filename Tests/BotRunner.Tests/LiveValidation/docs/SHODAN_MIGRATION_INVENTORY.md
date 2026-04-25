@@ -36,6 +36,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `WandAttackTests.cs` | Migrated: `Wand.config.json` launches `TRMAF5`/`TRMAB5` mages + SHODAN; `StageBotRunnerLoadoutAsync` for wand loadout; fixture-contained Durotar mob staging; test body dispatches `EquipItem` / `StartWandAttack` / `StopAttack` only. |
 | `MageTeleportTests.cs` | Migrated: `MageTeleport.config.json` launches `TRMAF5`/`TRMAB5` mages + SHODAN; `StageBotRunnerLoadoutAsync` learns the city-teleport spell + adds Rune of Teleportation; fixture-contained `StageBotRunnerAtRazorHillAsync`; test body dispatches `CastSpell` only. |
 | `GatheringProfessionTests.cs` | Migrated: `Gathering.config.json` launches `GATHFG1`/`GATHBG1` warriors + SHODAN; fixture-contained loadout, pool refresh, and route staging; test body dispatches `StartGatheringRoute` only. |
+| `CraftingProfessionTests.cs` | Migrated: `Crafting.config.json` launches `CRAFTFG1`/`CRAFTBG1` warriors + SHODAN; `StageBotRunnerLoadoutAsync` stages First Aid recipe/skill/reagent; test body dispatches BG `CastSpell` only. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -49,7 +50,6 @@ Profession / loadout tests (migrate first - they resemble the Ratchet flow):
 
 | File | Typical per-test setup | Notes |
 |------|------------------------|-------|
-| `CraftingProfessionTests.cs` | Recipe + reagent add, skill set | Crafting task prep. |
 | `PetManagementTests.cs` | Pet spells, taming setup | Hunter-only. |
 
 Economy / NPC-interaction tests:
@@ -93,7 +93,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~43 SHODAN-CANDIDATE files (after `GatheringProfessionTests.cs` moved to ALREADY-SHODAN).
+Total: ~42 SHODAN-CANDIDATE files (after `CraftingProfessionTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -233,6 +233,18 @@ but no gather success, skill delta, or bag delta is observed before timeout.
 The slice also corrects the Valley copper route center from
 `(-800,-4500,31)` to `(-1000,-4500,28.5)` after native `GetGroundZ` proved
 the old point sits on a high terrain layer.
+
+`CraftingProfessionTests.cs` uses `Crafting.config.json` with `CRAFTFG1` and
+`CRAFTBG1` Orc Warrior action targets and SHODAN as the Background Gnome Mage
+director. The slice moves First Aid Apprentice (`3273`), Linen Bandage recipe
+(`3275`), First Aid skill `129=1/75`, and Linen Cloth (`2589`) setup into
+`StageBotRunnerLoadoutAsync`. The test body dispatches only
+`ActionType.CastSpell` to `CRAFTBG1`; `CRAFTFG1` stays idle because
+foreground spell-id casting is not the validated crafting path.
+
+Migration result on this slice: `FirstAid_LearnAndCraft_ProducesLinenBandage`
+passes. The live artifact `crafting_shodan.trx` shows the Shodan topology, BG
+loadout staging, and the single BG craft action producing Linen Bandage `1251`.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

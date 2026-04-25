@@ -1,47 +1,59 @@
 # CraftingProfessionTests
 
-Live BG crafting baseline for Linen Bandage production.
+`CraftingProfessionTests` validates First Aid linen-bandage production through
+an action-dispatched recipe cast. The suite now follows the Shodan
+test-director pattern: BG is the BotRunner action target, FG is launched for
+topology parity, and SHODAN stages recipe, skill, and reagent setup.
 
-## Bot Execution Mode
+## Shodan Shape
 
-**BG-Only** — FG excluded due to legacy Lua/UI crafting dependency. No FG observation. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+1. `Crafting.config.json` launches:
+   - `CRAFTFG1` as a Foreground Orc Warrior target.
+   - `CRAFTBG1` as a Background Orc Warrior target.
+   - `SHODAN` as a Background Gnome Mage director.
+2. `AssertConfiguredCharactersMatchAsync(...)` verifies the live roster.
+3. `StageBotRunnerLoadoutAsync(...)` stages:
+   - First Aid Apprentice spell `3273`.
+   - Linen Bandage recipe spell `3275`.
+   - First Aid skill `129` at `1/75`.
+   - Exactly one Linen Cloth `2589`.
+4. The test dispatches `ActionType.CastSpell` with spell `3275` only to BG.
+5. Assertions come from snapshots: linen cloth is consumed, one Linen Bandage
+   `1251` appears, and occupied bag-slot count stays stable.
 
-This suite currently validates the BackgroundBotRunner spell-cast path through:
-- `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
-- `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
-- `Exports/WoWSharpClient/WoWSharpObjectManager.Combat.cs`
+FG remains idle in this slice. The foreground runner's spell-id cast path is
+not the validated crafting path; keeping FG online preserves the shared
+FG+BG+SHODAN topology without hiding that limitation.
 
 ## Test Methods
 
 ### FirstAid_LearnAndCraft_ProducesLinenBandage
 
-**Bot:** `TESTBOT2` only
+- BotRunner action target: `CRAFTBG1`.
+- Director: `SHODAN`.
+- Idle topology participant: `CRAFTFG1`.
 
-## Test Flow
+## Current Status
 
-1. Reset the bot to the fixture clean slate and clear bags for deterministic inventory state.
-2. Learn `3273` (First Aid Apprentice) and `3275` (Linen Bandage recipe).
-3. Add exactly one `2589` Linen Cloth and assert the bag state is `cloth=1`, `bandage=0`.
-4. Dispatch `ActionType.CastSpell` with spell `3275`.
-5. Poll snapshots until bag state becomes `cloth=0`, `bandage=1`.
+Final slice validation artifact:
+`tmp/test-runtime/results-live/crafting_shodan.trx`.
 
-## Metrics
+- `FirstAid_LearnAndCraft_ProducesLinenBandage`: passed in `2m29s`.
+- The TRX shows `CRAFTBG1` loadout staging through `StageBotRunnerLoadoutAsync`
+  and the only under-test action dispatch as `ActionType.CastSpell`.
 
-The live assertions record:
-- spell-list confirmation for apprentice + recipe
-- pre-craft cloth slot count
-- pre-craft bandage slot count
-- pre-craft total bag item count
-- post-craft cloth slot count
-- post-craft bandage slot count
-- final bag item count
-- craft latency in milliseconds
+## Validation
 
-The bag-count check is intentionally relative rather than fixed to `1`. The live fixture can repopulate unrelated bag slots between cleanup and the cast, so the invariant that matters is that crafting replaces the staged cloth with a bandage without changing the total occupied slot count.
+- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> passed with `0` errors and existing warnings.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> passed `33/33`.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> passed `60/60`.
+- `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CraftingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=crafting_shodan.trx"` -> passed `1/1`.
+- Repo-scoped cleanup before and after live validation reported `No repo-scoped processes to stop.`
 
-`SpellList` confirmation is treated as diagnostic evidence, not the primary pass/fail gate, because BG can craft successfully even when the learned-spell snapshot has not caught up yet.
+## Code Paths
 
-## Overhaul Notes
-
-- FG parity is intentionally removed from this suite.
-- This is still an action-driven baseline; the longer-term replacement remains the planned `CraftItemTask` coverage.
+- Test entry: `Tests/BotRunner.Tests/LiveValidation/CraftingProfessionTests.cs`
+- Shodan loadout helper: `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+- Action dispatch: `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
+- Cast implementation path: `Exports/BotRunner/ActionDispatcher.cs`
+- BG spell cast implementation: `Exports/WoWSharpClient/WoWSharpObjectManager.Combat.cs`

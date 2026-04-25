@@ -1,7 +1,9 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using BotRunner.Combat;
 using Communication;
 using Tests.Infrastructure;
 using Xunit;
@@ -10,17 +12,13 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// BG-first First Aid crafting baseline.
+/// Shodan-directed First Aid crafting baseline.
 ///
-/// Current production path under test:
-/// - Exports/BotRunner/BotRunnerService.ActionDispatch.cs
-/// - Exports/BotRunner/BotRunnerService.Sequences.Combat.cs
-/// - Exports/WoWSharpClient/WoWSharpObjectManager.Combat.cs
-///
-/// FG parity is intentionally excluded here. Foreground crafting still depends on Lua spell-name
-/// resolution and is not the behavior surface we are overhauling first.
+/// FG is launched for topology parity, but ActionType.CastSpell-by-id is the
+/// BG-compatible behavior surface for this suite. SHODAN stages recipe, skill,
+/// and reagent setup; only BG receives the crafting action dispatch.
 /// </summary>
-[Collection(BgOnlyValidationCollection.Name)]
+[Collection(LiveValidationCollection.Name)]
 public class CraftingProfessionTests
 {
     private readonly LiveBotFixture _bot;
@@ -30,21 +28,25 @@ public class CraftingProfessionTests
     private const uint LinenBandageRecipe = 3275;
     private const uint LinenClothItem = LiveBotFixture.TestItems.LinenCloth;
     private const uint LinenBandageItem = 1251;
+    private const int FirstAidSkillValue = 1;
+    private const int FirstAidSkillMax = 75;
     private const int CraftTimeoutMs = 8000;
 
-    public CraftingProfessionTests(BgOnlyBotFixture bot, ITestOutputHelper output)
+    public CraftingProfessionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
     public async Task FirstAid_LearnAndCraft_ProducesLinenBandage()
     {
-        var metrics = await RunCraftingScenarioAsync(_bot.BgAccountName!, "BG");
+        await EnsureCraftingSettingsAsync();
+        var target = ResolveCraftingTarget();
+        var metrics = await RunCraftingScenarioAsync(target);
 
+        Assert.True(metrics.SkillPrepared, "BG: First Aid skill should be staged before the craft cast.");
         Assert.True(metrics.ClothPrepared, "BG: Exactly one Linen Cloth should be staged before the craft cast.");
         Assert.True(metrics.Crafted, "BG: Casting Linen Bandage should yield a Linen Bandage in bag contents.");
         Assert.Equal(1, metrics.ClothSlotsBefore);
@@ -55,44 +57,81 @@ public class CraftingProfessionTests
         Assert.InRange(metrics.CraftLatencyMs, 1, CraftTimeoutMs);
     }
 
-    private async Task<CraftingMetrics> RunCraftingScenarioAsync(string account, string label)
+    private async Task<string> EnsureCraftingSettingsAsync()
     {
-        await _bot.EnsureCleanSlateAsync(account, label);
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Crafting.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Crafting.config.json.");
+
+        return settingsPath;
+    }
+
+    private LiveBotFixture.BotRunnerActionTarget ResolveCraftingTarget()
+    {
+        var targets = _bot.ResolveBotRunnerActionTargets();
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no crafting action dispatch.");
+
+        foreach (var target in targets)
+        {
+            var action = target.IsForeground
+                ? "idle for this test method (FG CastSpell-by-id crafting is not the validated path)"
+                : "stage First Aid loadout + dispatch CastSpell";
+            _output.WriteLine(
+                $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: {action}.");
+        }
+
+        var selected = targets.FirstOrDefault(target => !target.IsForeground);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(selected.AccountName),
+            "BG bot not available.");
+
+        return selected;
+    }
+
+    private async Task<CraftingMetrics> RunCraftingScenarioAsync(LiveBotFixture.BotRunnerActionTarget target)
+    {
+        var account = target.AccountName;
+        var label = target.RoleLabel;
 
         await _bot.RefreshSnapshotsAsync();
-        var baseline = await _bot.GetSnapshotAsync(account);
-        var charName = baseline?.CharacterName ?? string.Empty;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(charName), $"{label}: character name not available for .reset items.");
-
-        _output.WriteLine($"[{label}] Resetting items for deterministic craft verification.");
-        await _bot.ResetItemsAsync(charName);
-        await _bot.WaitForSnapshotConditionAsync(
+        _output.WriteLine($"[{label}] Staging First Aid recipe, skill, and one Linen Cloth through Shodan loadout helper.");
+        await _bot.StageBotRunnerLoadoutAsync(
             account,
-            snapshot => (snapshot.Player?.BagContents?.Count ?? 1) == 0,
-            TimeSpan.FromSeconds(5),
-            pollIntervalMs: 250,
-            progressLabel: $"{label} reset items");
-
-        _output.WriteLine($"[{label}] Teaching First Aid apprentice + Linen Bandage recipe.");
-        await _bot.BotLearnSpellAsync(account, FirstAidApprentice);
-        await _bot.BotLearnSpellAsync(account, LinenBandageRecipe);
+            label,
+            spellsToLearn: new[] { FirstAidApprentice, LinenBandageRecipe },
+            skillsToSet: new[] { new LiveBotFixture.SkillDirective(CraftingData.FirstAidSkillId, FirstAidSkillValue, FirstAidSkillMax) },
+            itemsToAdd: new[] { new LiveBotFixture.ItemDirective(LinenClothItem, 1) });
 
         var spellsKnown = await _bot.WaitForSnapshotConditionAsync(
             account,
             snapshot => snapshot.Player?.SpellList?.Contains(FirstAidApprentice) == true
                 && snapshot.Player?.SpellList?.Contains(LinenBandageRecipe) == true,
-            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(10),
             pollIntervalMs: 250,
             progressLabel: $"{label} first-aid spells");
 
-        _output.WriteLine($"[{label}] Staging exactly one Linen Cloth.");
-        await _bot.BotAddItemAsync(account, LinenClothItem, 1);
+        var skillPrepared = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => snapshot.Player?.SkillInfo.TryGetValue(CraftingData.FirstAidSkillId, out var skill) == true
+                && skill >= FirstAidSkillValue,
+            TimeSpan.FromSeconds(10),
+            pollIntervalMs: 250,
+            progressLabel: $"{label} first-aid skill");
 
         var clothPrepared = await _bot.WaitForSnapshotConditionAsync(
             account,
             snapshot => CountItemSlots(snapshot, LinenClothItem) == 1
                 && CountItemSlots(snapshot, LinenBandageItem) == 0,
-            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(10),
             pollIntervalMs: 250,
             progressLabel: $"{label} linen cloth");
 
@@ -136,6 +175,7 @@ public class CraftingProfessionTests
 
         return new CraftingMetrics(
             spellsKnown,
+            skillPrepared,
             clothPrepared,
             crafted,
             clothSlotsBefore,
@@ -152,6 +192,7 @@ public class CraftingProfessionTests
 
     private sealed record CraftingMetrics(
         bool SpellsKnown,
+        bool SkillPrepared,
         bool ClothPrepared,
         bool Crafted,
         int ClothSlotsBefore,
@@ -161,4 +202,19 @@ public class CraftingProfessionTests
         int BandageSlotsAfter,
         int BagItemCountAfter,
         int CraftLatencyMs);
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
+    }
 }

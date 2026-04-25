@@ -17,6 +17,23 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan Crafting config slice)
+- Last updated: 2026-04-25
+- Active task: none - this slice only added a new live-validation roster for the Shodan migration.
+- Last delta:
+  - Added `Crafting.config.json` with `CRAFTFG1` Foreground Orc Warrior and `CRAFTBG1` Background Orc Warrior as action targets plus SHODAN as Background Gnome Mage director.
+  - The roster keeps FG online for Shodan topology while the test dispatches the BG-only spell-id crafting action.
+- Pass result: `Crafting migration shape green; First Aid linen-bandage live proof passed (1/1)`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~CraftingProfessionTests" --logger "trx;LogFileName=crafting_shodan.trx"` -> `passed (1/1)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/Crafting.config.json` (new)
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/PetManagementTests.cs`
+
 ### 2026-04-25 (Shodan Gathering config slice)
 - Last updated: 2026-04-25
 - Active task: none - this slice only added a new live-validation roster for the Shodan migration.
