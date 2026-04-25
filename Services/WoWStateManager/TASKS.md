@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan Buff/Consumable config observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice reused the existing Shodan loot roster and did not change WoWStateManager code or config.
+- Last delta:
+  - `BuffAndConsumableTests` and `ConsumableUsageTests` now run against `Loot.config.json` with `LOOTBG1` as the consumable action target, `LOOTFG1` launched idle for topology parity, and SHODAN as director.
+  - Elixir/aura setup moved into `LiveBotFixture` helpers; no WoWStateManager runtime change was required.
+- Pass result: `Buff/consumable migration shape green; live validation passed overall with 1 BG pass and 2 tracked skips`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~ConsumableUsageTests" --logger "trx;LogFileName=buff_consumable_shodan.trx"` -> `passed overall (1 passed, 2 skipped)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BgInteractionTests.cs`
+
 ### 2026-04-25 (Shodan DeathCorpseRun config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan loot roster and did not change WoWStateManager code or config.

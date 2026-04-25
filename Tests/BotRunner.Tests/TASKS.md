@@ -40,7 +40,8 @@
 - [x] Migrate `NavigationTests` / `AllianceNavigationTests` to the Shodan shape; `NavigationTests` reuses `Economy.config.json` for Orc BG `Goto` probes, `AllianceNavigationTests` uses `Navigation.config.json` for Human BG Alliance staging, and the Valley long diagonal remains a tracked skip.
 - [x] Migrate `LootCorpseTests` to the Shodan shape via `Loot.config.json` + fixture-contained clean-bag and Durotar mob-area staging; BG dispatches only `StartMeleeAttack`, `StopAttack`, and `LootCorpse` while FG stays idle for topology parity.
 - [x] Migrate `DeathCorpseRunTests` to the Shodan shape via `Loot.config.json` + fixture-contained Razor Hill corpse staging and cleanup; BG dispatches only `ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and `StopPhysicsRecording`, while FG remains opt-in for CRASH-001 regression proof.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`BuffAndConsumableTests` / `ConsumableUsageTests`, then battleground / transport / parity / integration / ack).
+- [x] Migrate `BuffAndConsumableTests` / `ConsumableUsageTests` to the Shodan shape via `Loot.config.json` + fixture-contained elixir/aura staging; BG dispatches only `UseItem` / `DismissBuff`, with stricter aura/dismiss paths tracked as skips.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`BgInteractionTests`, then battleground queue / spell target / transport / parity / integration / ack).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -80,6 +81,30 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan Buff/Consumable migration slice)
+- Pass result: `BuffAndConsumableTests and ConsumableUsageTests now follow the Shodan test-director action-target split; live validation passed overall with 1 BG pass and 2 tracked skips`
+- Last delta:
+  - Reused `Loot.config.json` with `LOOTBG1` as the BG consumable action target, `LOOTFG1` launched idle for topology parity, and SHODAN as director.
+  - Added `StageBotRunnerConsumableStateAsync(...)` and `StageBotRunnerAurasAbsentAsync(...)` so clean slate, bag clear, elixir add, and Lion's Strength aura cleanup live behind fixture helpers.
+  - The test bodies dispatch only `ActionType.UseItem` and `ActionType.DismissBuff`; no inline setup GM commands remain.
+  - `ConsumableUsageTests` passed the legacy BG `UseItem` baseline. `BuffAndConsumableTests` keeps stricter aura/slot and dismiss assertions as tracked skips until the BG consumable aura assertion and `WoWUnit.Buffs` metadata are stable.
+  - Added `ConsumableUsageTests.md`, refreshed `BuffAndConsumableTests.md` / `TEST_EXECUTION_MODES.md`, and moved both files to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs Tests/BotRunner.Tests/LiveValidation/ConsumableUsageTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~ConsumableUsageTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=buff_consumable_shodan.trx"` -> `passed overall (1 passed, 2 skipped)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/ConsumableUsageTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/BuffAndConsumableTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/ConsumableUsageTests.md`
+  - live-validation docs and task trackers.
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BgInteractionTests.cs`
+
 ### 2026-04-25 (Shodan DeathCorpseRun migration slice)
 - Pass result: `DeathCorpseRunTests now follows the Shodan test-director action-target split; live corpse-run validation passed overall with 1 BG pass and 1 FG opt-in skip`
 - Last delta:

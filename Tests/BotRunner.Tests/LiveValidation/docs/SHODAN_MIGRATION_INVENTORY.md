@@ -64,6 +64,8 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `AllianceNavigationTests.cs` | Migrated: `Navigation.config.json`; stable idle `ECONFG1`, Human BG `NAVBG1`, and SHODAN; Alliance-side coordinate staging is fixture-owned with snapshot assertions. |
 | `LootCorpseTests.cs` | Migrated: `Loot.config.json`; fixture-contained clean-bag and Durotar mob-area staging; BG dispatches `StartMeleeAttack`, `StopAttack`, and `LootCorpse` while FG stays idle for topology parity. |
 | `DeathCorpseRunTests.cs` | Migrated: `Loot.config.json`; fixture-contained Razor Hill corpse staging and cleanup; BG dispatches `ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and `StopPhysicsRecording` while FG remains opt-in for CRASH-001 regression proof. |
+| `BuffAndConsumableTests.cs` | Migrated: `Loot.config.json`; fixture-contained elixir and aura cleanup staging; BG dispatches `UseItem` / `DismissBuff` while FG stays idle for topology parity, with unstable aura/dismiss paths tracked as skips. |
+| `ConsumableUsageTests.cs` | Migrated: `Loot.config.json`; fixture-contained Elixir of Lion's Strength staging; BG dispatches `UseItem` while FG stays idle for topology parity. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -91,7 +93,6 @@ Combat / death / buffs / misc:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `BuffAndConsumableTests.cs`, `ConsumableUsageTests.cs` | `.additem` consumable, `.unaura` buff reset |
 | `BgInteractionTests.cs` | BG UI setup, buff prep |
 | `BattlegroundQueueTests.cs` | Queue staging teleport |
 | `SpellCastOnTargetTests.cs` | `.learn` spell, target mob staging |
@@ -100,7 +101,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~15 SHODAN-CANDIDATE files (after `DeathCorpseRunTests.cs` moved to ALREADY-SHODAN).
+Total: 10 SHODAN-CANDIDATE files (after `BuffAndConsumableTests.cs` and `ConsumableUsageTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -535,6 +536,22 @@ ran `RetrieveCorpseTask`, restored strict-alive state, and produced the expected
 corpse-run proof remains opt-in behind `WWOW_RETRY_FG_CRASH001=1` because it is
 the historical WoW.exe crash-regression lane, but it now launches through the
 same Loot/SHODAN topology before skipping by default.
+
+`BuffAndConsumableTests.cs` and `ConsumableUsageTests.cs` reuse
+`Loot.config.json` with `LOOTBG1` as the BG consumable action target,
+`LOOTFG1` launched idle for Shodan topology parity, and SHODAN as director.
+The slice adds fixture-contained consumable staging helpers so clean slate,
+inventory clear, Elixir of Lion's Strength staging, and Lion's Strength aura
+cleanup live outside the test body. The executable paths dispatch only
+`ActionType.UseItem` and `ActionType.DismissBuff` to the resolved BG target.
+
+Migration result on this slice: live artifact `buff_consumable_shodan.trx`
+passed overall with `1` pass and `2` tracked skips. The legacy
+`ConsumableUsageTests` baseline passed a BG `UseItem` dispatch once. The richer
+`BuffAndConsumableTests` assertions remain tracked skips until the BG
+consumable path produces a stable Lion's Strength aura assertion and until
+`WoWSharpClient` exposes enough buff metadata for `DismissBuff` to prove
+removal (`BB-BUFF-001`).
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

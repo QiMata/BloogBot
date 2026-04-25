@@ -1423,6 +1423,30 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `Tests/BotRunner.Tests/TASKS.md`
 - Next command: `rg -n "^- \\[ \\]|Active task:" docs/TASKS.md`
 
+## Handoff (2026-04-25, Shodan Buff/Consumable migration slice)
+
+- Completed: migrated `BuffAndConsumableTests.cs` and `ConsumableUsageTests.cs` to the Shodan test-director pattern using the existing `Loot.config.json` topology.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs Tests/BotRunner.Tests/LiveValidation/ConsumableUsageTests.cs` -> `no matches`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~ConsumableUsageTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=buff_consumable_shodan.trx"` -> `passed overall (1 passed, 2 skipped)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` before and after live validation -> `No repo-scoped processes to stop.`
+- Notes:
+  - `BuffAndConsumableTests` and `ConsumableUsageTests` now reuse `Loot.config.json`; SHODAN performs clean slate, bag clear, elixir staging, and Lion's Strength aura cleanup, while `LOOTBG1` receives only `UseItem` / `DismissBuff`.
+  - `ConsumableUsageTests` passed the legacy BG `UseItem` baseline. The richer buff/slot and dismiss assertions remain tracked skips until the BG consumable aura observation path and `WoWUnit.Buffs` metadata are stable.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/ConsumableUsageTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/BuffAndConsumableTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/ConsumableUsageTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - task trackers
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BgInteractionTests.cs`
+
 ## Handoff (2026-04-25, Shodan DeathCorpseRun migration slice)
 
 - Completed: migrated `DeathCorpseRunTests.cs` to the Shodan test-director pattern using the existing `Loot.config.json` topology.

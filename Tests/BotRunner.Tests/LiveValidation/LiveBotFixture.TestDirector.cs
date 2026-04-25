@@ -321,6 +321,59 @@ public partial class LiveBotFixture
         }
     }
 
+    public async Task StageBotRunnerConsumableStateAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint itemId,
+        int itemCount,
+        IReadOnlyList<uint> auraSpellIds)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        await StageBotRunnerLoadoutAsync(
+            targetAccountName,
+            targetRoleLabel,
+            spellsToLearn: null,
+            skillsToSet: null,
+            itemsToAdd: [new ItemDirective(itemId, itemCount)],
+            cleanSlate: true,
+            clearInventoryFirst: true);
+
+        await StageBotRunnerAurasAbsentAsync(targetAccountName, targetRoleLabel, auraSpellIds);
+    }
+
+    public async Task StageBotRunnerAurasAbsentAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        IReadOnlyList<uint> auraSpellIds)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        foreach (var auraSpellId in auraSpellIds.Distinct())
+        {
+            var trace = await SendGmChatCommandTrackedAsync(
+                targetAccountName,
+                $".unaura {auraSpellId}",
+                captureResponse: true,
+                delayMs: 500);
+            AssertTraceCommandSucceeded(trace, targetRoleLabel, $".unaura {auraSpellId}");
+        }
+
+        var cleared = await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snapshot =>
+            {
+                var auras = snapshot.Player?.Unit?.Auras;
+                return auras == null || auraSpellIds.All(id => !auras.Contains(id));
+            },
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} consumable aura cleanup");
+
+        if (!cleared)
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} consumable aura cleanup failed.");
+    }
+
     public async Task StageBotRunnerMountLoadoutAsync(
         string targetAccountName,
         string targetRoleLabel,

@@ -34,7 +34,8 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 |------------|------|-----------|-----------------|-------|
 | AllianceNavigationTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Human BG Alliance coordinate staging; snapshot assertions after Shodan-owned staging |
 | BasicLoopTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Login/physics health checks |
-| BuffAndConsumableTests | Dual-Bot Conditional | BG + FG | Yes (when available) | FG-first, then BG |
+| BuffAndConsumableTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged elixir/aura cleanup; BG UseItem/DismissBuff dispatch with aura/dismiss gaps tracked |
+| ConsumableUsageTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Elixir of Lion's Strength; BG UseItem legacy baseline |
 | CombatLoopTests | CombatTest-Only | COMBATTEST | **No** | Account-level GM only; avoids runtime GM-mode corruption |
 | CornerNavigationTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged corner/obstacle probes; BG TravelTo route checks |
 | CraftingProfessionTests | BG-Only | BG | **No** | FG excluded (legacy Lua/UI dependency) |
@@ -86,4 +87,5 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 12. **VendorBuySellTests** - Shodan topology is in place, but the migrated slice is still a BG packet baseline; add FG behavior parity separately.
 13. **MailSystemTests / MailParityTests** - Shodan topology is in place, but committed mail actions are BG-only until FG `CheckMail` collection is stable under combined-suite load.
 14. **TradingTests / TradeParityTests** - Shodan topology is in place, but foreground `DeclineTrade`, `OfferItem`, and `AcceptTrade` currently ACK `Failed/behavior_tree_failed`; transfer/parity paths stay explicit skips until the FG trade action surface is stable.
-15. **SpiritHealerTests** - Shodan topology is in place, but the migrated resurrection proof is BG-action-only while FG stays idle for topology parity.
+15. **BuffAndConsumableTests / ConsumableUsageTests** - Shodan topology is in place, but the migrated consumable proofs are BG-action-only; stricter aura/slot and dismiss assertions remain tracked until BG consumable aura observation and `WoWUnit.Buffs` metadata are stable.
+16. **SpiritHealerTests** - Shodan topology is in place, but the migrated resurrection proof is BG-action-only while FG stays idle for topology parity.

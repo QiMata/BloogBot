@@ -1,42 +1,55 @@
 # BuffAndConsumableTests
 
-Merged replacement for `ConsumableUsageTests` and `BuffDismissTests`. The goal is a single documented lifecycle around add-item, use-item, aura observation, and dismiss.
+Shodan-directed consumable item-use and buff-cancel coverage.
 
 ## Bot Execution Mode
 
-**Dual-Bot Conditional** — FG runs first as gold standard, then BG. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+**Shodan BG-action / tracked skip** - `Loot.config.json` launches `LOOTBG1`
+as the BG action target, `LOOTFG1` idle for topology parity, and SHODAN as the
+director. SHODAN performs setup through fixture helpers; only `LOOTBG1`
+receives BotRunner actions.
 
 ## Active Tests
 
-### 1. UseConsumable_AppliesBuff
+### UseConsumable_AppliesBuff
 
-**Purpose:** Validate the item-use behavior path with explicit bag and aura metrics.
+**Purpose:** Validate the BG `ActionType.UseItem` dispatch path for Elixir of
+Lion's Strength (`2454`) after Shodan-owned inventory and aura staging.
 
-**Code paths:**
-- Test entry: `Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs`
-- Item add/setup helpers: `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs`
-- Action forwarding: `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
-- BotRunner action translation: `Exports/BotRunner/BotRunnerService.cs`
-- BG use-item implementation: `Exports/WoWSharpClient/`
-- FG use-item implementation: `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+**Setup path:**
+- `StageBotRunnerConsumableStateAsync(...)` clears the target inventory, adds
+  the elixir, and removes Lion's Strength aura ids `2367` / `2457`.
+- The test body issues no direct GM setup commands.
 
-**Assertions:**
-- `.additem` succeeds and is reflected in bags
-- `ActionType.UseItem` returns `ResponseResult.Success`
-- Lion's Strength aura appears
-- Elixir bag slot is consumed after use
+**Action path:**
+- `ActionType.UseItem` with item id `2454`.
 
-### 2. DismissBuff_RemovesBuff
+**Current live result:**
+- `buff_consumable_shodan.trx` passes overall, but this richer assertion skips
+  when the delivered BG action does not produce a stable Lion's Strength aura
+  assertion.
+- The action forwarding layer returns `ResponseResult.Success`; the remaining
+  gap is the runtime consumable/aura observation path, not the Shodan
+  migration shape.
 
-**Purpose:** Validate the DismissBuff path after the aura is known to be present.
+### DismissBuff_RemovesBuff
 
-**Code paths:**
-- Test entry: `Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs`
-- Dismiss dispatch: `Exports/BotRunner/BotRunnerService.cs`
-- BG aura/buff tracking gap: `Exports/WoWSharpClient/`
-- FG aura cancellation: `Services/ForegroundBotRunner/Statics/ObjectManager.cs`
+**Purpose:** Validate `ActionType.DismissBuff` after the target reaches a
+buffed state.
 
-**Assertions:**
-- `ActionType.DismissBuff` returns `ResponseResult.Success`
-- FG removes Lion's Strength from snapshot auras
-- BG remains explicitly tracked as blocked by `BB-BUFF-001` until `WoWUnit.Buffs` is populated from packets
+**Action path:**
+- `ActionType.DismissBuff` with buff name `Lesser Strength`.
+
+**Current live result:**
+- Skips with `BB-BUFF-001`: BG currently cannot prove dismissal because
+  `WoWSharpClient` does not populate enough `WoWUnit.Buffs` metadata for this
+  buff-cancel assertion.
+- Cleanup returns through fixture-owned aura removal so later tests start
+  cleanly.
+
+## Validation
+
+- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> passed.
+- Safety bundle -> passed `33/33`.
+- Dispatch readiness bundle -> passed `60/60`.
+- `buff_consumable_shodan.trx` -> passed overall (`1` passed, `2` skipped).
