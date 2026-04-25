@@ -1423,6 +1423,28 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `Tests/BotRunner.Tests/TASKS.md`
 - Next command: `rg -n "^- \\[ \\]|Active task:" docs/TASKS.md`
 
+## Handoff (2026-04-25, Shodan DeathCorpseRun migration slice)
+
+- Completed: migrated `DeathCorpseRunTests.cs` to the Shodan test-director pattern using the existing `Loot.config.json` topology.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|EnsureCleanSlateAsync|WaitForTeleportSettledAsync|damage|InduceDeathForTestAsync|RevivePlayerAsync" Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs` -> `no matches`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeathCorpseRunTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=death_corpse_run_shodan.trx"` -> `passed overall (1 passed, 1 skipped)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` before and after live validation -> `No repo-scoped processes to stop.`
+- Notes:
+  - `DeathCorpseRunTests` now reuses `Loot.config.json`; SHODAN performs clean-slate, Razor Hill corpse staging, death induction, revive, and restore staging, while `LOOTBG1` receives only `ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and `StopPhysicsRecording`.
+  - The BG run restored strict-alive state and asserted the `navtrace_<account>.json` sidecar captured `RetrieveCorpseTask` ownership. `LOOTFG1` remains launched through the same topology, but the foreground corpse-run path still skips by default unless `WWOW_RETRY_FG_CRASH001=1` is set for targeted CRASH-001 regression proof.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/DeathCorpseRunTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - task trackers
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs Tests/BotRunner.Tests/LiveValidation/ConsumableUsageTests.cs`
+
 ## Handoff (2026-04-25, Shodan SpiritHealer migration slice)
 
 - Completed: migrated `SpiritHealerTests.cs` to the Shodan test-director pattern and fixed BotRunner dead/ghost spirit-healer `InteractWith` dispatch.

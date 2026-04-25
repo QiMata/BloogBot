@@ -63,6 +63,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `NavigationTests.cs` | Migrated: `Economy.config.json`; fixture-contained Durotar road/winding staging; BG dispatches `Goto` for route probes while FG stays idle for topology parity; Valley long route is a tracked skip. |
 | `AllianceNavigationTests.cs` | Migrated: `Navigation.config.json`; stable idle `ECONFG1`, Human BG `NAVBG1`, and SHODAN; Alliance-side coordinate staging is fixture-owned with snapshot assertions. |
 | `LootCorpseTests.cs` | Migrated: `Loot.config.json`; fixture-contained clean-bag and Durotar mob-area staging; BG dispatches `StartMeleeAttack`, `StopAttack`, and `LootCorpse` while FG stays idle for topology parity. |
+| `DeathCorpseRunTests.cs` | Migrated: `Loot.config.json`; fixture-contained Razor Hill corpse staging and cleanup; BG dispatches `ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and `StopPhysicsRecording` while FG remains opt-in for CRASH-001 regression proof. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -90,7 +91,6 @@ Combat / death / buffs / misc:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `DeathCorpseRunTests.cs` | `.damage` + ghost run stage |
 | `BuffAndConsumableTests.cs`, `ConsumableUsageTests.cs` | `.additem` consumable, `.unaura` buff reset |
 | `BgInteractionTests.cs` | BG UI setup, buff prep |
 | `BattlegroundQueueTests.cs` | Queue staging teleport |
@@ -100,7 +100,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~16 SHODAN-CANDIDATE files (after `LootCorpseTests.cs` moved to ALREADY-SHODAN).
+Total: ~15 SHODAN-CANDIDATE files (after `DeathCorpseRunTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -519,6 +519,22 @@ Migration result on this slice: live artifact `loot_corpse_shodan.trx` passed
 BotRunner melee combat, dispatched `LootCorpse`, and completed the inventory
 observation path; no-loot corpses remain non-fatal because the action dispatch
 path is the behavior under validation.
+
+`DeathCorpseRunTests.cs` reuses `Loot.config.json` with `LOOTBG1` as the BG
+corpse-run action target, `LOOTFG1` launched for Shodan topology parity, and
+SHODAN as director. The slice adds fixture-contained Razor Hill corpse staging
+and cleanup helpers so clean-slate, coordinate staging, death induction, revive,
+and restore movement live outside the test body. The executable path dispatches
+only `ActionType.ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and
+`StopPhysicsRecording` to the resolved BotRunner target.
+
+Migration result on this slice: live artifact `death_corpse_run_shodan.trx`
+passed overall with `1` BG pass and `1` foreground skip. The BG target released,
+ran `RetrieveCorpseTask`, restored strict-alive state, and produced the expected
+`navtrace_<account>.json` with `RetrieveCorpseTask` ownership. The foreground
+corpse-run proof remains opt-in behind `WWOW_RETRY_FG_CRASH001=1` because it is
+the historical WoW.exe crash-regression lane, but it now launches through the
+same Loot/SHODAN topology before skipping by default.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

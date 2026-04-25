@@ -21,6 +21,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | **Dual-Bot Sync** | Both FG and BG run the same scenario simultaneously. FG serves as ground truth for BG behavior. |
 | **Dual-Bot Conditional** | BG always runs. FG runs only when `IsFgActionable` is true. FG observation is best-effort. |
 | **Shodan BG-action** | FG, BG, and SHODAN launch together; SHODAN stages setup, BG receives the behavior action, and FG stays idle for topology parity. |
+| **Shodan BG-action / FG opt-in** | FG, BG, and SHODAN launch together; SHODAN stages setup, executable BG actions run by default, and the foreground behavior path is guarded by an explicit opt-in switch. |
 | **Shodan BG-action / tracked skip** | FG, BG, and SHODAN launch together; SHODAN stages setup, executable BG actions run, and blocked subcases skip with a documented runtime gap. |
 | **Shodan BG-action / FG gap** | FG, BG, and SHODAN launch together; SHODAN stages setup, executable BG actions run, and foreground-dependent paths are explicit tracked skips until the FG runtime gap is fixed. |
 | **Shodan FG+BG-action / tracked skip** | FG, BG, and SHODAN launch together; SHODAN stages setup, FG/BG receive behavior actions where supported, and blocked subcases skip with a documented runtime gap. |
@@ -37,7 +38,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | CombatLoopTests | CombatTest-Only | COMBATTEST | **No** | Account-level GM only; avoids runtime GM-mode corruption |
 | CornerNavigationTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged corner/obstacle probes; BG TravelTo route checks |
 | CraftingProfessionTests | BG-Only | BG | **No** | FG excluded (legacy Lua/UI dependency) |
-| DeathCorpseRunTests | BG default + FG opt-in | BG (+ opt-in FG) | Opt-in only | Historical CRASH-001 not reproduced on 2026-04-15; latest opt-in FG corpse-run passes |
+| DeathCorpseRunTests | Shodan BG-action / FG opt-in | BG + FG + SHODAN | Opt-in only | Shodan-staged Razor Hill corpse run; BG ReleaseCorpse / RetrieveCorpse proof passes, FG remains guarded by `WWOW_RETRY_FG_CRASH001=1` |
 | EconomyInteractionTests | Dual-Bot Conditional | BG + FG + SHODAN | Yes (when available) | Shodan-staged bank/AH/mail interaction |
 | EquipmentEquipTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Parallel equip with IsFgActionable |
 | FishingProfessionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Ratchet fishing task path |
@@ -73,7 +74,7 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 
 1. **CombatLoopTests** — Uses COMBATTEST account. Consider adding FG combat reference.
 2. **CraftingProfessionTests** — Blocked on FG Lua/UI crafting parity.
-3. **DeathCorpseRunTests** - FG is opt-in. Historical CRASH-001 was not reproduced on 2026-04-15; latest opt-in FG corpse-run validation passes and remains available for targeted regression proof.
+3. **DeathCorpseRunTests** - Shodan topology is in place and BG corpse recovery passes; FG remains opt-in behind `WWOW_RETRY_FG_CRASH001=1` for targeted CRASH-001 regression proof.
 4. **LootCorpseTests** - Shodan topology is in place, but the migrated kill/loot proof is BG-action-only while FG stays idle for topology parity.
 5. **MapTransitionTests** - Shodan topology is in place, but the migrated slice is BG-action-only while FG stays idle for topology parity.
 6. **MountEnvironmentTests** - Shodan topology is in place, but the migrated mount proof is BG-action-only while FG stays idle for topology parity.

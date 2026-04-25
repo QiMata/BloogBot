@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan DeathCorpseRun config observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice reused the existing Shodan loot roster and did not change WoWStateManager code or config.
+- Last delta:
+  - `DeathCorpseRunTests` now runs against `Loot.config.json` with `LOOTBG1` as the corpse-run action target, `LOOTFG1` launched for topology parity, and SHODAN as director.
+  - Razor Hill corpse staging and cleanup moved into `LiveBotFixture` helpers; no WoWStateManager runtime change was required.
+- Pass result: `DeathCorpseRun migration shape green; live corpse-run validation passed overall with 1 BG pass and 1 FG opt-in skip`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~DeathCorpseRunTests" --logger "trx;LogFileName=death_corpse_run_shodan.trx"` -> `passed overall (1 passed, 1 skipped)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BuffAndConsumableTests.cs Tests/BotRunner.Tests/LiveValidation/ConsumableUsageTests.cs`
+
 ### 2026-04-25 (Shodan Loot config slice)
 - Last updated: 2026-04-25
 - Active task: none - this slice only added a live-validation roster for the Shodan loot migration.

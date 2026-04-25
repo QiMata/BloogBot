@@ -848,6 +848,52 @@ public partial class LiveBotFixture
         return death;
     }
 
+    public async Task<DeathInductionResult> StageBotRunnerCorpseAtNavigationPointAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        int mapId,
+        float x,
+        float y,
+        float z,
+        string locationLabel,
+        bool cleanSlate = true,
+        float xyToleranceYards = 8f)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel, teleportToSafeZone: false);
+
+        var staged = await StageBotRunnerAtNavigationPointAsync(
+            targetAccountName,
+            targetRoleLabel,
+            mapId,
+            x,
+            y,
+            z,
+            locationLabel,
+            cleanSlate: false,
+            xyToleranceYards: xyToleranceYards);
+        if (!staged)
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} {locationLabel} corpse-run staging failed.");
+
+        await RefreshSnapshotsAsync();
+        var snapshot = await GetSnapshotAsync(targetAccountName);
+        var characterName = snapshot?.CharacterName ?? GetKnownCharacterNameForAccount(targetAccountName);
+        if (string.IsNullOrWhiteSpace(characterName))
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} character name is required for corpse-run staging.");
+
+        var death = await InduceDeathForTestAsync(
+            targetAccountName,
+            characterName,
+            timeoutMs: 15000,
+            requireCorpseTransition: true);
+        if (!death.Succeeded)
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} death staging failed: {death.Details}");
+
+        return death;
+    }
+
     public async Task RestoreBotRunnerAliveAtValleySpiritHealerAsync(
         string targetAccountName,
         string targetRoleLabel)
@@ -869,6 +915,45 @@ public partial class LiveBotFixture
             TimeSpan.FromSeconds(10),
             pollIntervalMs: 500,
             progressLabel: $"{targetRoleLabel} spirit-healer cleanup alive");
+    }
+
+    public async Task RestoreBotRunnerAliveAtNavigationPointAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        int mapId,
+        float x,
+        float y,
+        float z,
+        string locationLabel,
+        float xyToleranceYards = 8f)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        await RefreshSnapshotsAsync();
+        var snapshot = await GetSnapshotAsync(targetAccountName);
+        var characterName = snapshot?.CharacterName ?? GetKnownCharacterNameForAccount(targetAccountName);
+        if (!string.IsNullOrWhiteSpace(characterName) && !IsStrictAlive(snapshot))
+            await RevivePlayerAsync(characterName);
+
+        await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            IsStrictAlive,
+            TimeSpan.FromSeconds(10),
+            pollIntervalMs: 500,
+            progressLabel: $"{targetRoleLabel} {locationLabel} cleanup alive");
+
+        var staged = await StageBotRunnerAtNavigationPointAsync(
+            targetAccountName,
+            targetRoleLabel,
+            mapId,
+            x,
+            y,
+            z,
+            locationLabel,
+            cleanSlate: false,
+            xyToleranceYards: xyToleranceYards);
+        if (!staged)
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} {locationLabel} cleanup staging failed.");
     }
 
     public async Task<bool> StageBotRunnerQuestAbsentAsync(

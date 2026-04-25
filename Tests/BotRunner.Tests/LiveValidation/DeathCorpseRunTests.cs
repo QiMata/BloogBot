@@ -7,16 +7,15 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using BotRunner.Tasks;
 using Communication;
-using Tests.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// FG/BG corpse recovery integration test.
+/// Shodan-directed corpse recovery integration test.
 ///
-/// Flow: teleport to Orgrimmar -> kill -> release -> wait for graveyard relocation ->
+/// Flow: Shodan stages Razor Hill death -> release -> wait for graveyard relocation ->
 /// dispatch RetrieveCorpse once -> let RetrieveCorpseTask own runback, cooldown, and reclaim.
 ///
 /// This is the live baseline for the corpse-recovery path in:
@@ -48,27 +47,24 @@ public class DeathCorpseRunTests
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsPathfindingReady, "PathfindingService not available on port 5001.");
     }
 
     [SkippableFact]
     public async Task Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer()
     {
-        var bgAccount = _bot.BgAccountName;
-        var bgChar = _bot.BgCharacterName;
+        var target = await EnsureDeathSettingsAndTargetAsync();
 
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount) || string.IsNullOrWhiteSpace(bgChar), "No BG bot available.");
-
-        _output.WriteLine($"[BG-ONLY] {bgChar} -> corpse recovery is asserted on the headless bot.");
-        var (bgPass, bgReason) = await RunCorpseRunScenario(bgAccount!, bgChar!, "BG");
-        await CleanupAsync(bgAccount!, bgChar!);
-        Assert.True(bgPass, $"[BG] {bgReason}");
+        _output.WriteLine($"[SHODAN] {target.CharacterName} -> corpse recovery is asserted on the BG BotRunner target.");
+        var (bgPass, bgReason) = await RunCorpseRunScenario(target);
+        await CleanupAsync(target);
+        Assert.True(bgPass, $"[{target.RoleLabel}] {bgReason}");
     }
 
     [SkippableFact]
     public async Task Death_ReleaseAndRetrieve_ResurrectsForegroundPlayer()
     {
+        await EnsureDeathSettingsAsync();
+
         // CRASH-001: WoW.exe historically hit ACCESS_VIOLATION at 0x00619CDF during
         // foreground ghost runback. Keep it guarded by default so regular live runs
         // cannot crash the local client; set WWOW_RETRY_FG_CRASH001=1 to validate a
@@ -79,50 +75,86 @@ public class DeathCorpseRunTests
             $"Set {RetryForegroundCrash001EnvVar}=1 to retry the current mitigation. " +
             "See Tests/BotRunner.Tests/LiveValidation/docs/CRASH_INVESTIGATION.md.");
 
-        var fgAccount = _bot.FgAccountName;
-        var fgChar = _bot.FgCharacterName;
-
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(fgAccount) || string.IsNullOrWhiteSpace(fgChar), "No FG bot available.");
+        var target = ResolveForegroundDeathTarget();
         // Skip teleport probe — this test teleports to Razor Hill immediately after.
         // The probe does 2-3 rapid teleports to Orgrimmar which, combined with the
         // Razor Hill teleport + kill + graveyard, causes MaNGOS to TCP-disconnect.
         global::Tests.Infrastructure.Skip.IfNot(await _bot.CheckFgActionableAsync(requireTeleportProbe: false), "FG bot is not actionable.");
 
-        _output.WriteLine($"[FG] {fgChar} -> corpse recovery is asserted on the injected bot.");
-        var (fgPass, fgReason) = await RunCorpseRunScenario(fgAccount!, fgChar!, "FG");
-        await CleanupAsync(fgAccount!, fgChar!);
-        Assert.True(fgPass, $"[FG] {fgReason}");
+        _output.WriteLine($"[FG-OPT-IN] {target.CharacterName} -> corpse recovery is asserted on the injected BotRunner target.");
+        var (fgPass, fgReason) = await RunCorpseRunScenario(target);
+        await CleanupAsync(target);
+        Assert.True(fgPass, $"[{target.RoleLabel}] {fgReason}");
     }
 
-    private async Task<(bool passed, string reason)> RunCorpseRunScenario(string account, string charName, string label)
+    private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureDeathSettingsAndTargetAsync()
     {
+        await EnsureDeathSettingsAsync();
+
+        var target = _bot.ResolveBotRunnerActionTargets(
+                includeForegroundIfActionable: false,
+                foregroundFirst: false)
+            .Single(target => !target.IsForeground);
+
+        _output.WriteLine(
+            $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
+            "BG corpse-run action target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] FG {_bot.FgAccountName}/{_bot.FgCharacterName}: launched idle for topology parity; " +
+            $"foreground corpse-run remains guarded by {RetryForegroundCrash001EnvVar}.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no corpse-run action dispatch.");
+
+        return target;
+    }
+
+    private async Task EnsureDeathSettingsAsync()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Loot.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsPathfindingReady, "PathfindingService not available on port 5001.");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Loot.config.json.");
+    }
+
+    private LiveBotFixture.BotRunnerActionTarget ResolveForegroundDeathTarget()
+    {
+        var target = _bot.ResolveBotRunnerActionTargets(
+                includeForegroundIfActionable: true,
+                foregroundFirst: true)
+            .FirstOrDefault(target => target.IsForeground);
+
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(target.AccountName),
+            "No foreground BotRunner action target was available under Loot.config.json.");
+
+        return target;
+    }
+
+    private async Task<(bool passed, string reason)> RunCorpseRunScenario(LiveBotFixture.BotRunnerActionTarget target)
+    {
+        var account = target.AccountName;
+        var label = target.RoleLabel;
         Task<(bool passed, string reason)> FailAsync(string reason, global::Game.Position? corpsePos = null)
             => BuildFailureResultAsync(account, label, reason, corpsePos);
 
-        _output.WriteLine($"  [{label}] Step 1: Ensure alive (skip safe-zone — we teleport to Razor Hill next)");
-        await _bot.EnsureCleanSlateAsync(account, label, teleportToSafeZone: false);
-
-        _output.WriteLine($"  [{label}] Step 2: Teleport to Razor Hill (flat terrain, nearby graveyard)");
-        await _bot.BotTeleportAsync(account, MapId, DeathAreaX, DeathAreaY, DeathAreaZ);
-        await _bot.WaitForTeleportSettledAsync(account, DeathAreaX, DeathAreaY);
-
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
-        if (pos == null)
-            return await FailAsync("No position after teleport to Razor Hill");
-
-        _output.WriteLine($"  [{label}] Position after teleport: ({pos.X:F1}, {pos.Y:F1}, {pos.Z:F1})");
-
-        _output.WriteLine($"  [{label}] Step 3: Kill");
-        var deathResult = await _bot.InduceDeathForTestAsync(
+        _output.WriteLine($"  [{label}] Step 1: Shodan stages Razor Hill corpse state");
+        var deathResult = await _bot.StageBotRunnerCorpseAtNavigationPointAsync(
             account,
-            charName,
-            timeoutMs: 15000,
-            requireCorpseTransition: true);
-        _output.WriteLine($"  [{label}] Kill result: {deathResult.Succeeded}, cmd={deathResult.Command}");
-        if (!deathResult.Succeeded)
-            return await FailAsync($"Kill failed: {deathResult.Details}");
+            label,
+            MapId,
+            DeathAreaX,
+            DeathAreaY,
+            DeathAreaZ,
+            "Razor Hill corpse-run start");
+
+        _output.WriteLine($"  [{label}] Death staging result: {deathResult.Succeeded}, cmd={deathResult.Command}");
 
         var corpsePos = deathResult.ObservedCorpsePosition;
         if (corpsePos == null)
@@ -130,7 +162,7 @@ public class DeathCorpseRunTests
 
         _output.WriteLine($"  [{label}] Corpse at: ({corpsePos.X:F1}, {corpsePos.Y:F1}, {corpsePos.Z:F1})");
 
-        _output.WriteLine($"  [{label}] Step 4: Release corpse");
+        _output.WriteLine($"  [{label}] Step 2: Release corpse");
         var releaseResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.ReleaseCorpse });
         if (releaseResult != ResponseResult.Success)
             return await FailAsync($"ReleaseCorpse failed: {releaseResult}", corpsePos);
@@ -145,7 +177,7 @@ public class DeathCorpseRunTests
 
         _output.WriteLine($"  [{label}] Ghost confirmed");
 
-        _output.WriteLine($"  [{label}] Step 5: Wait for graveyard relocation");
+        _output.WriteLine($"  [{label}] Step 3: Wait for graveyard relocation");
         var (graveyardSettled, graveyardDistanceToCorpse, initialReclaimDelay) =
             await WaitForGraveyardTransitionAsync(account, label, corpsePos);
         if (!graveyardSettled)
@@ -154,7 +186,7 @@ public class DeathCorpseRunTests
         var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
         RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, account, "physics", "transform", "navtrace");
 
-        _output.WriteLine($"  [{label}] Step 6: Start diagnostic recording and queue RetrieveCorpse from {graveyardDistanceToCorpse:F0}y away");
+        _output.WriteLine($"  [{label}] Step 4: Start diagnostic recording and queue RetrieveCorpse from {graveyardDistanceToCorpse:F0}y away");
         var startRecordingResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.StartPhysicsRecording });
         if (startRecordingResult != ResponseResult.Success)
             return await FailAsync($"StartPhysicsRecording failed: {startRecordingResult}", corpsePos);
@@ -166,7 +198,7 @@ public class DeathCorpseRunTests
             if (retrieveResult != ResponseResult.Success)
                 return await FailAsync($"RetrieveCorpse failed: {retrieveResult}", corpsePos);
 
-            _output.WriteLine($"  [{label}] Step 7: Observe RetrieveCorpseTask runback/cooldown/reclaim");
+            _output.WriteLine($"  [{label}] Step 5: Observe RetrieveCorpseTask runback/cooldown/reclaim");
             recoveryResult = await WaitForCorpseRecoveryAsync(account, label, corpsePos, graveyardDistanceToCorpse, initialReclaimDelay);
         }
         finally
@@ -401,15 +433,28 @@ public class DeathCorpseRunTests
         return (false, bestDistanceToCorpse, bestReclaimDelay, reachedCorpseRange);
     }
 
-    private async Task CleanupAsync(string account, string charName)
+    private static string ResolveRepoPath(params string[] segments)
     {
-        await _bot.RevivePlayerAsync(charName);
-        await _bot.WaitForSnapshotConditionAsync(
-            account, LiveBotFixture.IsStrictAlive,
-            TimeSpan.FromSeconds(5),
-            progressLabel: "cleanup-revive");
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
 
-        await _bot.BotTeleportAsync(account, MapId, DeathAreaX, DeathAreaY, DeathAreaZ);
-        await _bot.WaitForTeleportSettledAsync(account, DeathAreaX, DeathAreaY);
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
     }
+
+    private Task CleanupAsync(LiveBotFixture.BotRunnerActionTarget target)
+        => _bot.RestoreBotRunnerAliveAtNavigationPointAsync(
+            target.AccountName,
+            target.RoleLabel,
+            MapId,
+            DeathAreaX,
+            DeathAreaY,
+            DeathAreaZ,
+            "Razor Hill corpse-run start");
 }
