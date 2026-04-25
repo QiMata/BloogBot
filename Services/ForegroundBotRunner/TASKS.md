@@ -29,6 +29,7 @@
 - [x] Restore non-null FG `CraftFrame` / `TrainerFrame` / `TalentFrame` surfaces so the legacy craft/train/talent BotRunner paths no longer hit null/default-interface fallbacks on the injected client.
 - [x] Finish the remaining FG runtime parity surfaces that still inherited defaults: `QuestGreetingFrame`, `TradeFrame`, and the task-owned bank/AH/craft helper methods.
 - [ ] Stabilize foreground `CollectAllMailAsync(...)` under combined-suite Shodan mail validation. `MailParityTests` can pass a focused FG gold-mail rerun, but the full mail suite timed out on FG item/gold snapshot deltas after `CheckMail` delivery, so the committed mail migration keeps actions BG-only.
+- [ ] Stabilize foreground trade action dispatch under Shodan trade validation. `TradingTests` / `TradeParityTests` are Shodan-launched, but foreground `DeclineTrade`, `OfferItem`, and `AcceptTrade` ACK `Failed/behavior_tree_failed` in `trading_shodan_final.trx` / `trade_parity_fg_transfer_after_ack_wait.trx`, so foreground-dependent transfer/parity paths are explicit skips.
 
 3. Packet capture/runtime safety
 - [x] `FG-PKT-001` Send hook for `NetClient::Send`.
@@ -38,6 +39,23 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
+### 2026-04-25 (Trading Shodan foreground follow-up)
+- Pass result: `BG trade cancel passes under Shodan; foreground trade action failures are now tracked`
+- Last delta:
+  - Added foreground trade action plumbing (`InitiateTradeAsync`, `SetTradeGoldAsync`, `SetTradeItemAsync`, `AcceptTradeAsync`, `CancelTradeAsync`) and adjusted `FgTradeFrame.OfferItem(...)` / inventory slot normalization for logical backpack coordinates.
+  - Deterministic Lua routing coverage now proves the trade frame emits `SplitContainerItem(0, ...)`, `ClickTradeButton(...)`, `AcceptTrade()`, and `CloseTrade()`.
+  - Live Shodan validation still found foreground action ACK failures (`DeclineTrade`, `OfferItem`, `AcceptTrade` -> `Failed/behavior_tree_failed`), so the committed live tests keep those foreground-dependent paths skipped and track this runtime gap here.
+- Validation/tests run:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.TradeFrame_UsesLuaVisibilityAndRoutesTradeActionsThroughExpectedLua" --logger "console;verbosity=minimal"` -> `passed (1/1)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TradingTests|FullyQualifiedName~TradeParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=trading_shodan_final.trx"` -> `1 passed, 3 skipped`.
+- Files changed:
+  - `Services/ForegroundBotRunner/Frames/FgTradeFrame.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+- Next command: `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.TradeFrame_UsesLuaVisibilityAndRoutesTradeActionsThroughExpectedLua" --logger "console;verbosity=minimal"`
+
 ### 2026-04-25 (Mail Shodan foreground follow-up)
 - Pass result: `Mail migration committed as BG-action-only; FG CheckMail instability is now tracked`
 - Last delta:

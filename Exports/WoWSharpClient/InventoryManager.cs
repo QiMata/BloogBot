@@ -611,7 +611,10 @@ namespace WoWSharpClient
         {
             var factory = AgentFactory?.Invoke();
             if (factory == null) return;
-            await factory.TradeAgent.OfferItemAsync(tradeSlot, bagId, slotId, ct);
+
+            byte packetBag = bagId == 0 ? (byte)0xFF : (byte)(18 + bagId);
+            byte packetSlot = bagId == 0 ? (byte)(23 + slotId) : slotId;
+            await factory.TradeAgent.OfferItemAsync(tradeSlot, packetBag, packetSlot, ct);
         }
 
         public async Task AcceptTradeAsync(CancellationToken ct = default)

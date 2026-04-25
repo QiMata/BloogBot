@@ -46,6 +46,8 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `EconomyInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained bank/AH/mailbox/mail-money staging; FG/BG dispatch only `InteractWith` or `CheckMail`. |
 | `MailSystemTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; BG dispatches `CheckMail` only while FG stays idle for topology parity. |
 | `MailParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; BG dispatches `CheckMail` only while FG stays idle for topology parity due to the tracked FG mail collection stability gap. |
+| `TradingTests.cs` | Migrated: `Economy.config.json`; fixture-contained trade-spot/loadout/coinage staging; BG offer/decline cancel executes, while BG transfer is a tracked skip because FG `AcceptTrade` ACKs `Failed/behavior_tree_failed`. |
+| `TradeParityTests.cs` | Migrated: `Economy.config.json`; SHODAN launches the parity topology and resolves foreground/BG participants, while foreground trade cancel and transfer are tracked skips due FG `DeclineTrade` / `OfferItem` / `AcceptTrade` ACK failures. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -64,7 +66,6 @@ Economy / NPC-interaction tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `TradingTests.cs`, `TradeParityTests.cs` | Item add, partner positioning |
 | `GossipQuestTests.cs`, `QuestObjectiveTests.cs`, `QuestInteractionTests.cs`, `StarterQuestTests.cs` | `.tele` to NPC, item add |
 | `NpcInteractionTests.cs` | `.tele` to NPC, loadout prep |
 | `SpiritHealerTests.cs` | `.die` + `.tele` to graveyard |
@@ -96,7 +97,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~33 SHODAN-CANDIDATE files (after `MailSystemTests.cs` and `MailParityTests.cs` moved to ALREADY-SHODAN).
+Total: ~31 SHODAN-CANDIDATE files (after `TradingTests.cs` and `TradeParityTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -330,6 +331,27 @@ suite; a focused FG gold rerun passed once (`mail_gold_rerun.trx`). The
 migration therefore documents the foreground mail collection stability gap and
 keeps the committed mail parity shape BG-action-only until that runtime issue
 is fixed.
+
+`TradingTests.cs` and `TradeParityTests.cs` reuse `Economy.config.json` with
+`ECONFG1` / `ECONBG1` as the real BotRunner participants and SHODAN as
+director. The slice adds `StageBotRunnerAtOrgrimmarTradeSpotAsync` plus shared
+`TradeTestSupport` so loadout, coinage, partner positioning, visible-partner
+resolution, and action ACK checks live outside the test body. The test body no
+longer issues GM setup commands; executable paths dispatch only
+`ActionType.OfferTrade` / `DeclineTrade` and the staged but skipped transfer
+paths stay behind explicit skip reasons.
+
+Migration result on this slice: live artifact `trading_shodan_final.trx`
+passed `1` test and skipped `3` with tracked foreground trade action reasons.
+`Trade_InitiateAndCancel_BothBotsSeeCancellation` passes for BG offer/decline.
+`Trade_GoldAndItem_TransferSuccessful` is Shodan-launched but skipped because
+the transfer still depends on FG `AcceptTrade`, which ACKs
+`Failed/behavior_tree_failed`. `TradeParityTests` are Shodan-launched but
+skipped because foreground `DeclineTrade`, `OfferItem`, and `AcceptTrade`
+produce the same failed ACK shape. This slice also fixes the BG item-offer
+packet mapping in `InventoryManager.SetTradeItemAsync` (`bag 0` -> `0xFF`,
+slot `0` -> `23`) and adds FG trade Lua coverage, but the remaining FG runtime
+gap is documented rather than hidden.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

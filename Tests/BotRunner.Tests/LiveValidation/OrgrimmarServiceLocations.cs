@@ -18,6 +18,10 @@ internal static class OrgrimmarServiceLocations
     public const float MailboxY = -4391.60f;
     public const float MailboxZ = 16.11f;
 
+    public const float TradeX = 1629.00f;
+    public const float TradeY = -4373.00f;
+    public const float TradeZ = 34.00f;
+
     public const float FlightMasterX = 1676.25f;
     public const float FlightMasterY = -4313.45f;
     public const float FlightMasterZ = 67.72f;

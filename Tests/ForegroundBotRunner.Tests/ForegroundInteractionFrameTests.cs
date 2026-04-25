@@ -354,7 +354,7 @@ public sealed class ForegroundInteractionFrameTests
         Assert.Empty(frame.OtherPlayerItems);
 
         frame.OfferMoney(12345);
-        frame.OfferItem(0, 2, 3, 1);
+        frame.OfferItem(0xFF, 2, 3, 1);
         frame.AcceptTrade();
         frame.DeclineTrade();
         frame.OfferEnchant(7411);

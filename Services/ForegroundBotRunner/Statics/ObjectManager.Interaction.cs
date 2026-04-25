@@ -1248,6 +1248,50 @@ namespace ForegroundBotRunner.Statics
             MainThreadLuaCall(VendorInteractionHelper.CloseMerchantLua);
         }
 
+        public async Task InitiateTradeAsync(ulong playerGuid, CancellationToken ct = default)
+        {
+            if (playerGuid == 0)
+            {
+                Log.Warning("[FG-TRADE] Cannot initiate trade with empty player GUID.");
+                return;
+            }
+
+            var player = Players.FirstOrDefault(p => p.Guid == playerGuid);
+            if (player == null)
+            {
+                Log.Warning("[FG-TRADE] Player GUID 0x{Guid:X} not found in object manager.", playerGuid);
+                return;
+            }
+
+            SetTarget(playerGuid);
+            MainThreadLuaCall("if UnitExists('target') and UnitIsPlayer('target') then InitiateTrade('target') end");
+            await Task.Delay(150, ct);
+        }
+
+        public async Task SetTradeGoldAsync(uint copper, CancellationToken ct = default)
+        {
+            _fgTradeFrame.OfferMoney((int)Math.Min(copper, int.MaxValue));
+            await Task.Delay(150, ct);
+        }
+
+        public async Task SetTradeItemAsync(byte tradeSlot, byte bagId, byte slotId, CancellationToken ct = default)
+        {
+            _fgTradeFrame.OfferItem(bagId, slotId, quantity: 1, tradeWindowSlot: tradeSlot);
+            await Task.Delay(150, ct);
+        }
+
+        public async Task AcceptTradeAsync(CancellationToken ct = default)
+        {
+            _fgTradeFrame.AcceptTrade();
+            await Task.Delay(150, ct);
+        }
+
+        public async Task CancelTradeAsync(CancellationToken ct = default)
+        {
+            _fgTradeFrame.DeclineTrade();
+            await Task.Delay(150, ct);
+        }
+
         private async Task<bool> WaitForMerchantWindowAsync(CancellationToken ct)
         {
             for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)

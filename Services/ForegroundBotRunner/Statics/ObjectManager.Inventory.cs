@@ -296,6 +296,9 @@ namespace ForegroundBotRunner.Statics
 
         public IWoWItem GetItem(int parBag, int parSlot)
         {
+            if (parBag == 0xFF)
+                parBag = 0;
+
             parBag += 1;
             switch (parBag)
             {

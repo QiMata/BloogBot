@@ -731,6 +731,56 @@ public partial class LiveBotFixture
     }
 
     /// <summary>
+    /// Stage a BotRunner target in the Orgrimmar safe-zone trade spot. The
+    /// coordinate teleport stays inside the fixture so trade tests can keep
+    /// their bodies focused on OfferTrade / OfferGold / OfferItem / AcceptTrade
+    /// dispatches.
+    /// </summary>
+    public async Task<bool> StageBotRunnerAtOrgrimmarTradeSpotAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        float xOffset = 0f,
+        bool cleanSlate = true)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        var tradeX = OrgrimmarServiceLocations.TradeX + xOffset;
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' Orgrimmar trade stage map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            OrgrimmarServiceLocations.MapId,
+            tradeX,
+            OrgrimmarServiceLocations.TradeY,
+            OrgrimmarServiceLocations.TradeZ);
+
+        await BotTeleportAsync(
+            targetAccountName,
+            OrgrimmarServiceLocations.MapId,
+            tradeX,
+            OrgrimmarServiceLocations.TradeY,
+            OrgrimmarServiceLocations.TradeZ);
+
+        return await WaitForTeleportSettledAsync(
+            targetAccountName,
+            tradeX,
+            OrgrimmarServiceLocations.TradeY,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} org-trade stage",
+            xyToleranceYards: 20f);
+    }
+
+    /// <summary>
     /// Send copper to a BotRunner target mailbox via SOAP. This keeps mail
     /// staging out of the migrated test body while still using a named target,
     /// server-side GM command.

@@ -20,6 +20,19 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-07` BG stop/use/cast packet trigger parity is part of the deterministic movement bundle: `ForceStopImmediate()` synchronously records `MSG_MOVE_STOP` before game-object use/cast packets, and server `0x7A` cast failure is named `TRY_AGAIN` (2026-04-15).
 
 ## Session Handoff
+### 2026-04-25 (BG trade item packet mapping)
+- Pass result: `BG trade cancel passes under Shodan; BG item-offer packet coordinates corrected for future transfer proof`
+- Last delta:
+  - `InventoryManager.SetTradeItemAsync(...)` now maps logical backpack coordinates to the vanilla packet form used by trade item offers (`bag 0` -> `0xFF`, `slot 0` -> `23`).
+  - This fixed the BG packet-side item offer seen in trading probes; the committed live trading slice still skips item/gold transfer because the foreground responder ACKs `AcceptTrade` as `Failed/behavior_tree_failed`.
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TradingTests|FullyQualifiedName~TradeParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=trading_shodan_final.trx"` -> `1 passed, 3 skipped`.
+  - Earlier BG transfer probe after the packet-map fix reached the BG item/gold transfer path before the foreground `AcceptTrade` ACK gap was isolated.
+- Files changed:
+  - `Exports/WoWSharpClient/InventoryManager.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+- Next command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpObjectManagerCombatTests" --logger "console;verbosity=minimal"`
+
 ### 2026-04-24 (BG wand Shoot dispatch)
 - Pass result: `WoWSharpClient wand Shoot packet coverage green`
 - Last delta:

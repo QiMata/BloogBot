@@ -31,7 +31,7 @@ public sealed class FgTradeFrame(
 
     public void OfferItem(int bagId, int slotId, int quantity, int tradeWindowSlot)
     {
-        int safeBag = Math.Max(0, bagId);
+        int safeBag = bagId == 0xFF ? 0 : Math.Max(0, bagId);
         int safeSlot = Math.Max(0, slotId) + 1;
         int safeTradeSlot = Math.Max(0, tradeWindowSlot) + 1;
         int safeQuantity = Math.Max(1, quantity);

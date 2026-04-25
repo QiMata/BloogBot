@@ -338,6 +338,38 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 12 - TradingTests/TradeParityTests)
+
+- Completed:
+  - Migrated `TradingTests.cs` and `TradeParityTests.cs` to the Shodan test-director pattern. The slice reuses `Services/WoWStateManager/Settings/Configs/Economy.config.json` with `ECONFG1` / `ECONBG1` as real BotRunner participants plus SHODAN as Background Gnome Mage director.
+  - Added `StageBotRunnerAtOrgrimmarTradeSpotAsync` and shared `TradeTestSupport` so loadout, coinage, Orgrimmar trade positioning, visible-partner resolution, and structured ACK checks live outside the test bodies.
+  - Fixed BG trade item packet coordinates in `Exports/WoWSharpClient/InventoryManager.cs` by mapping logical backpack `bag 0, slot 0` to packet `bag 0xFF, slot 23`. Added foreground trade Lua routing coverage while documenting the remaining foreground trade runtime gap.
+  - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/TradingTests.md` and `Tests/BotRunner.Tests/LiveValidation/docs/TradeParityTests.md`, execution-mode index updated, and inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: both files moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~31.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TradingTests|FullyQualifiedName~TradeParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=trading_shodan_final.trx"` -> `passed 1, skipped 3`.
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.TradeFrame_UsesLuaVisibilityAndRoutesTradeActionsThroughExpectedLua" --logger "console;verbosity=minimal"` -> `passed (1/1)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/trading_shodan_final.trx` -> `TradingTests` passed BG offer/decline cancel and skipped transfer/parity paths with explicit foreground trade ACK reasons.
+  - `tmp/test-runtime/results-live/trade_parity_fg_transfer_after_ack_wait.trx` -> foreground `OfferItem`/transfer path ACK failure (`Failed/behavior_tree_failed`).
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/TradingTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TradeParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TradeTestSupport.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/OrgrimmarServiceLocations.cs`
+  - `Exports/WoWSharpClient/InventoryManager.cs`
+  - `Services/ForegroundBotRunner/Frames/FgTradeFrame.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Inventory.cs`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+  - task trackers and live-validation docs.
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money" Tests/BotRunner.Tests/LiveValidation/GossipQuestTests.cs Tests/BotRunner.Tests/LiveValidation/QuestObjectiveTests.cs Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 11 - MailSystemTests/MailParityTests)
 
 - Completed:
