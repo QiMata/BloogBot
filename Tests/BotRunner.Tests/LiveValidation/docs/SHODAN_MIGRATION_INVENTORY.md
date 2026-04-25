@@ -62,6 +62,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `MovementSpeedTests.cs` | Migrated: `Economy.config.json`; fixture-contained Durotar road staging; BG dispatches `Goto` for the speed probe while FG stays idle for topology parity. |
 | `NavigationTests.cs` | Migrated: `Economy.config.json`; fixture-contained Durotar road/winding staging; BG dispatches `Goto` for route probes while FG stays idle for topology parity; Valley long route is a tracked skip. |
 | `AllianceNavigationTests.cs` | Migrated: `Navigation.config.json`; stable idle `ECONFG1`, Human BG `NAVBG1`, and SHODAN; Alliance-side coordinate staging is fixture-owned with snapshot assertions. |
+| `LootCorpseTests.cs` | Migrated: `Loot.config.json`; fixture-contained clean-bag and Durotar mob-area staging; BG dispatches `StartMeleeAttack`, `StopAttack`, and `LootCorpse` while FG stays idle for topology parity. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -89,7 +90,6 @@ Combat / death / buffs / misc:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `LootCorpseTests.cs` | `.tele` to boar area, pre-kill stage |
 | `DeathCorpseRunTests.cs` | `.damage` + ghost run stage |
 | `BuffAndConsumableTests.cs`, `ConsumableUsageTests.cs` | `.additem` consumable, `.unaura` buff reset |
 | `BgInteractionTests.cs` | BG UI setup, buff prep |
@@ -100,7 +100,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~17 SHODAN-CANDIDATE files (after `NavigationTests.cs` and `AllianceNavigationTests.cs` moved to ALREADY-SHODAN).
+Total: ~16 SHODAN-CANDIDATE files (after `LootCorpseTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -504,6 +504,21 @@ the trace writes `durotar_winding_trace_*.json`. The skipped
 pops `GoToTask` with `no_path_timeout` on the Valley of Trials long diagonal,
 so it remains documented as a navigation runtime gap rather than a
 migration-shape failure.
+
+`LootCorpseTests.cs` uses `Loot.config.json` with `LOOTBG1` as the BG loot
+action target, `LOOTFG1` launched idle for Shodan topology parity, and SHODAN
+as director. The slice moves clean-slate / bag cleanup into
+`StageBotRunnerLoadoutAsync(...)` and Valley of Trials creature-cluster staging
+into `StageBotRunnerAtDurotarMobAreaAsync(...)`. The test body no longer uses
+the dedicated `CombatBgArenaFixture`, no longer issues setup GM commands
+inline, and dispatches only `ActionType.StartMeleeAttack`,
+`ActionType.StopAttack`, and `ActionType.LootCorpse` to the BG target.
+
+Migration result on this slice: live artifact `loot_corpse_shodan.trx` passed
+`1/1`. The BG target killed a Shodan-staged low-level Durotar mob through
+BotRunner melee combat, dispatched `LootCorpse`, and completed the inventory
+observation path; no-loot corpses remain non-fatal because the action dispatch
+path is the behavior under validation.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

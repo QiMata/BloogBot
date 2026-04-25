@@ -1,131 +1,93 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
-using Tests.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Loot corpse integration test — validates the core kill → loot → inventory loop.
+/// Shodan-directed loot corpse integration test.
 ///
-/// Uses the dedicated COMBATTEST account without runtime GM-mode toggles so mobs
-/// interact normally. Account-level GM access still covers setup commands.
-///
-/// Flow:
-/// 1) Ensure strict-alive setup state.
-/// 2) Clear inventory.
-/// 3) Teleport to Valley of Trials boar area.
-/// 4) Wait for a living mob in snapshot.
-/// 5) Teleport bot to within melee range of the mob.
-/// 6) Kill the mob via StartMeleeAttack (natural auto-attack combat).
-/// 7) Send LootCorpse action with the dead mob's GUID.
-/// 8) Assert inventory changed (bag contents increased).
-///
-/// NOTE: This test validates the full kill → loot loop using natural combat.
-/// No GM shortcuts (.damage) — the game engine handles combat correctly.
+/// SHODAN stages the BG BotRunner target with clean bags and a Durotar mob
+/// area. The test body dispatches only StartMeleeAttack / StopAttack /
+/// LootCorpse actions and observes snapshots for kill and bag evidence.
 ///
 /// Run: dotnet test --filter "FullyQualifiedName~LootCorpseTests" --configuration Release
 /// </summary>
-[Collection(CombatBgArenaCollection.Name)]
+[Collection(LiveValidationCollection.Name)]
 public class LootCorpseTests
 {
-    private readonly CombatBgArenaFixture _bot;
+    private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int MapId = 1;
-    private const float MobAreaX = -620f;
-    private const float MobAreaY = -4385f;
-    // Z+3 offset applied to spawn table Z to avoid UNDERMAP detection
-    private const float MobAreaZ = 47f;
     private const uint MottledBoarEntry = 3098;
     private const uint ScorpidWorkerEntry = 3124;
     private const uint VileFamiliarEntry = 3101;
-    private const float MeleeRange = 5f;
 
-    public LootCorpseTests(CombatBgArenaFixture bot, ITestOutputHelper output)
+    public LootCorpseTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
     public async Task Loot_KillAndLootMob_InventoryChanges()
     {
-        var combatAccount = _bot.PrimaryBgAccount;
-        await _bot.RefreshSnapshotsAsync();
-        var combatSnapshot = await _bot.GetSnapshotAsync(combatAccount);
+        var target = await EnsureLootSettingsAndTargetAsync();
 
-        _output.WriteLine($"=== Combat Test Bot: {combatSnapshot?.CharacterName ?? "(unknown)"} ({combatAccount}) ===");
-        _output.WriteLine("Using the primary fresh BG combat account with account-level GM access only.");
+        _output.WriteLine($"=== Loot BotRunner target: {target.CharacterName} ({target.AccountName}) ===");
+        _output.WriteLine("Using Shodan-directed setup with BG behavior actions only.");
 
-        var passed = await RunLootScenario(combatAccount, "LOOT");
-        Assert.True(passed, "COMBATTEST bot: Loot scenario failed — see test output for details.");
+        var passed = await RunLootScenario(target);
+        Assert.True(passed, $"{target.RoleLabel} bot: Loot scenario failed - see test output for details.");
     }
 
-    private async Task<bool> RunLootScenario(string account, string label)
+    private async Task<bool> RunLootScenario(LiveBotFixture.BotRunnerActionTarget target)
     {
-        // Step 1: Ensure clean slate (revive + safe zone) (BT-SETUP-001)
-        _output.WriteLine($"  [{label}] Step 1: Ensure clean slate");
-        await _bot.EnsureCleanSlateAsync(account, label);
-        await _bot.RefreshSnapshotsAsync();
+        var account = target.AccountName;
+        var label = target.RoleLabel;
 
-        // Step 2: Clear bag contents (preserves equipped gear — BT-VERIFY-002)
-        _output.WriteLine($"  [{label}] Step 2: Clear inventory");
-        await _bot.BotClearInventoryAsync(account);
+        _output.WriteLine($"  [{label}] Step 1: Shodan stages clean bags");
+        await _bot.StageBotRunnerLoadoutAsync(
+            account,
+            label,
+            cleanSlate: true,
+            clearInventoryFirst: true);
 
-        // Record baseline bag count
+        await _bot.QuiesceAccountsAsync(
+            new[] { account },
+            $"{label} loot loadout staged",
+            timeout: TimeSpan.FromSeconds(20));
+
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
         var baselineBagCount = snap?.Player?.BagContents?.Count ?? 0;
         _output.WriteLine($"  [{label}] Baseline bag item count: {baselineBagCount}");
 
-        // Step 3: Teleport to mob area
-        _output.WriteLine($"  [{label}] Step 3: Teleport to Valley of Trials boar area");
-        await _bot.BotTeleportAsync(account, MapId, MobAreaX, MobAreaY, MobAreaZ);
-        await _bot.WaitForTeleportSettledAsync(account, MobAreaX, MobAreaY);
-
-        // Step 4: Find a living mob (boar, scorpid, or vile familiar)
-        _output.WriteLine($"  [{label}] Step 4: Find a living mob");
-        var mob = await WaitForLivingMobAsync(account, label, TimeSpan.FromSeconds(20));
-
-        if (mob == null)
-        {
-            _output.WriteLine($"  [{label}] FAIL: No living mob found in area.");
-            Assert.Fail($"[{label}] No living mob found in mob area after 20s search. " +
-                "Mobs should always be present in a controlled test environment — this is a mob detection or ObjectManager bug.");
-            return false;
-        }
+        _output.WriteLine($"  [{label}] Step 2: Shodan stages Durotar mob area");
+        var mob = await StageAndFindLivingMobAsync(target);
 
         var mobGuid = mob.GameObject?.Base?.Guid ?? 0;
         var mobPos = mob.GameObject?.Base?.Position;
-        _output.WriteLine($"  [{label}] Found: {mob.GameObject?.Name} GUID=0x{mobGuid:X} at ({mobPos?.X:F1}, {mobPos?.Y:F1}, {mobPos?.Z:F1}) HP={mob.Health}/{mob.MaxHealth}");
+        _output.WriteLine(
+            $"  [{label}] Found: {mob.GameObject?.Name} GUID=0x{mobGuid:X} " +
+            $"at ({mobPos?.X:F1}, {mobPos?.Y:F1}, {mobPos?.Z:F1}) HP={mob.Health}/{mob.MaxHealth}");
 
-        // Step 5: Teleport bot near the mob
-        _output.WriteLine($"  [{label}] Step 5: Teleport to within melee range of mob");
-        if (mobPos != null)
-        {
-            await _bot.BotTeleportAsync(account, MapId, mobPos.X + 2f, mobPos.Y, mobPos.Z + 3f);
-            await _bot.WaitForTeleportSettledAsync(account, mobPos.X + 2f, mobPos.Y);
-        }
-
-        // Step 6: Kill the mob with StartMeleeAttack (natural combat, no GM shortcuts)
-        _output.WriteLine($"  [{label}] Step 6: Kill mob with StartMeleeAttack (natural auto-attack)");
+        _output.WriteLine($"  [{label}] Step 3: Kill mob with StartMeleeAttack");
         var attackResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.StartMeleeAttack,
             Parameters = { new RequestParameter { LongParam = (long)mobGuid } }
         });
         _output.WriteLine($"  [{label}] StartMeleeAttack result: {attackResult}");
+        Assert.Equal(ResponseResult.Success, attackResult);
 
-        // Wait for the mob to die from natural auto-attack combat.
-        // Valley of Trials mobs have ~100 HP, level 1 warrior does ~15-30 per hit.
-        // Should die in ~10-15s. 45s timeout gives ample margin.
         var killSw = Stopwatch.StartNew();
         var mobDead = false;
         while (killSw.Elapsed < TimeSpan.FromSeconds(45))
@@ -146,17 +108,15 @@ public class LootCorpseTests
             await Task.Delay(1000);
         }
 
-        // Stop attack
         await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.StopAttack });
 
         if (!mobDead)
         {
-            _output.WriteLine($"  [{label}] FAILED: Could not kill mob within 20s.");
+            _output.WriteLine($"  [{label}] FAILED: Could not kill mob within 45s.");
             return false;
         }
 
-        // Step 7: Loot the corpse
-        _output.WriteLine($"  [{label}] Step 7: Loot corpse via ActionType.LootCorpse");
+        _output.WriteLine($"  [{label}] Step 4: Loot corpse via ActionType.LootCorpse");
         var lootResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.LootCorpse,
@@ -165,8 +125,7 @@ public class LootCorpseTests
         _output.WriteLine($"  [{label}] LootCorpse dispatch result: {lootResult}");
         Assert.Equal(ResponseResult.Success, lootResult);
 
-        // Step 8: Verify inventory changed
-        _output.WriteLine($"  [{label}] Step 8: Verify inventory changed");
+        _output.WriteLine($"  [{label}] Step 5: Verify inventory changed when corpse has loot");
         var verifySw = Stopwatch.StartNew();
         var lootReceived = false;
         while (verifySw.Elapsed < TimeSpan.FromSeconds(10))
@@ -186,20 +145,54 @@ public class LootCorpseTests
                 _output.WriteLine($"  [{label}] Loot received! New items: [{string.Join(", ", newItems)}]");
                 break;
             }
+
             await Task.Delay(1000);
         }
 
         if (!lootReceived)
         {
-            // Mob may have had no loot — this is possible for low-level mobs.
-            // Log it as a skip rather than a failure.
-            _output.WriteLine($"  [{label}] WARNING: No loot received after killing mob. Mob may have dropped no items (level-based loot table).");
-            // Don't fail — the loot dispatch succeeded, the mob just had no loot.
-            // The test validates the ActionType dispatch works, not that loot always drops.
+            _output.WriteLine(
+                $"  [{label}] WARNING: No loot received after killing mob. " +
+                "Mob may have dropped no items from the low-level loot table.");
         }
 
         _output.WriteLine($"  [{label}] Loot scenario complete (dispatch={lootResult}, looted={lootReceived}).");
         return true;
+    }
+
+    private async Task<Game.WoWUnit> StageAndFindLivingMobAsync(LiveBotFixture.BotRunnerActionTarget target)
+    {
+        for (var stageIndex = 0; stageIndex < 3; stageIndex++)
+        {
+            var staged = await _bot.StageBotRunnerAtDurotarMobAreaAsync(
+                target.AccountName,
+                target.RoleLabel,
+                stageIndex,
+                nearbyUnitTimeoutMs: 15000);
+            if (!staged)
+            {
+                _output.WriteLine(
+                    $"  [{target.RoleLabel}] Durotar mob-area stage {stageIndex} did not settle with nearby units.");
+                continue;
+            }
+
+            var mob = await WaitForLivingMobAsync(
+                target.AccountName,
+                target.RoleLabel,
+                TimeSpan.FromSeconds(10));
+            if (mob != null)
+                return mob;
+
+            _output.WriteLine(
+                $"  [{target.RoleLabel}] No living loot target found at stage {stageIndex}; trying next stage.");
+        }
+
+        var snap = await _bot.GetSnapshotAsync(target.AccountName);
+        _bot.DumpSnapshotDiagnostics(snap, target.RoleLabel);
+        Assert.Fail(
+            $"[{target.RoleLabel}] No living loot target found after all Shodan Durotar mob stages. " +
+            "This indicates a mob detection, spawn, or ObjectManager visibility issue.");
+        throw new InvalidOperationException("Unreachable after Assert.Fail.");
     }
 
     private Game.WoWUnit? FindLivingMob(WoWActivitySnapshot? snap, string label)
@@ -244,5 +237,49 @@ public class LootCorpseTests
         }
 
         return null;
+    }
+
+    private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureLootSettingsAndTargetAsync()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Loot.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Loot.config.json.");
+
+        var target = _bot.ResolveBotRunnerActionTargets(
+                includeForegroundIfActionable: false,
+                foregroundFirst: false)
+            .Single(target => !target.IsForeground);
+
+        _output.WriteLine(
+            $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
+            "BG loot action target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] FG {_bot.FgAccountName}/{_bot.FgCharacterName}: launched idle for topology parity.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no loot dispatch.");
+
+        return target;
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
     }
 }

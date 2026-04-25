@@ -1,34 +1,34 @@
 # LootCorpseTests
 
-Validates kill-to-loot flow using natural auto-attack combat.
+Validates the kill-to-loot flow using natural BotRunner melee combat and corpse
+loot dispatch.
 
-## Bot Execution Mode
+## Shodan Shape
 
-**CombatTest-Only** — Uses dedicated `COMBATTEST` account with account-level GM access only. No FG observation or parity comparison. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+- Uses `Services/WoWStateManager/Settings/Configs/Loot.config.json`.
+- `LOOTBG1` is the only BotRunner action target for the live proof.
+- `LOOTFG1` launches idle for topology parity.
+- SHODAN is director-only and owns setup through fixture helpers.
 
 ## Test Method
 
 ### Loot_KillAndLootMob_InventoryChanges
 
-**Bot:** COMBATTEST only
+Flow:
 
-**Flow:**
-1. `EnsureCleanSlateAsync()`
-2. Clear bags and record baseline item count.
-3. Teleport to the Valley of Trials boar area.
-4. Wait for a living boar in snapshot data. If none appears, the test fails (not skips).
-5. Dispatch `StartMeleeAttack` — natural auto-attack combat with 45s timeout.
-6. Dispatch `LootCorpse`.
-7. Assert the dispatch succeeds and log whether bag contents increased.
+1. `StageBotRunnerLoadoutAsync(...)` revives/repairs the BG target and clears bags.
+2. `StageBotRunnerAtDurotarMobAreaAsync(...)` stages the BG target near low-level Durotar mobs.
+3. The test finds a living boar/scorpid/familiar in snapshot data.
+4. The BG target receives `ActionType.StartMeleeAttack` and the test waits for the mob to die or disappear from snapshots.
+5. The BG target receives `ActionType.StopAttack`, then `ActionType.LootCorpse`.
+6. The test asserts the loot dispatch succeeds and logs whether bag contents increased.
 
-**Code paths:**
-- Test entry: `Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs`
-- Loot action forwarding: `Exports/BotRunner/BotRunnerService.cs`
-- Loot handling: `Exports/BotRunner/Tasks/`
-- Snapshot inventory view: `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Snapshots.cs`
+No-loot corpses remain non-fatal because the dispatch path is the behavior under
+validation.
 
-**Assertions:**
-- A living target can be claimed from snapshot data without forced respawn
-- `ActionType.LootCorpse` dispatch succeeds
-- Inventory change is observed when the corpse actually drops loot
-- No-loot corpses are logged as non-fatal because the dispatch path is the primary target
+## Validation
+
+- Direct GM/setup grep over `LootCorpseTests.cs` -> no matches.
+- Deterministic safety bundle -> passed `33/33`.
+- Dispatch readiness coverage -> passed `60/60`.
+- `loot_corpse_shodan.trx` -> passed `1/1`.

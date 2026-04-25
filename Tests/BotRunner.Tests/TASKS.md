@@ -38,7 +38,8 @@
 - [x] Migrate `CornerNavigationTests` / `TileBoundaryCrossingTests` to the Shodan shape via `Economy.config.json` + fixture-contained navigation point staging; BG dispatches only `TravelTo` for route probes while FG stays idle for topology parity.
 - [x] Migrate `MovementSpeedTests` to the Shodan shape via `Economy.config.json` + fixture-contained Durotar road staging; BG dispatches only `Goto` for the speed probe while FG stays idle for topology parity.
 - [x] Migrate `NavigationTests` / `AllianceNavigationTests` to the Shodan shape; `NavigationTests` reuses `Economy.config.json` for Orc BG `Goto` probes, `AllianceNavigationTests` uses `Navigation.config.json` for Human BG Alliance staging, and the Valley long diagonal remains a tracked skip.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`LootCorpseTests` / `DeathCorpseRunTests`, then buffs / battleground / transport / parity / integration / ack).
+- [x] Migrate `LootCorpseTests` to the Shodan shape via `Loot.config.json` + fixture-contained clean-bag and Durotar mob-area staging; BG dispatches only `StartMeleeAttack`, `StopAttack`, and `LootCorpse` while FG stays idle for topology parity.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`DeathCorpseRunTests`, then buffs / battleground / transport / parity / integration / ack).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -78,6 +79,28 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan LootCorpse migration slice)
+- Pass result: `LootCorpseTests now follows the Shodan test-director action-target split; live loot validation passed 1/1`
+- Last delta:
+  - Added `Loot.config.json` with `LOOTBG1` as the BG loot action target, `LOOTFG1` idle for topology parity, and SHODAN as director.
+  - Replaced the dedicated `CombatBgArenaFixture` path with `LiveBotFixture` plus Shodan settings validation.
+  - Clean-slate and bag cleanup moved into `StageBotRunnerLoadoutAsync(...)`; Durotar mob-area staging moved behind `StageBotRunnerAtDurotarMobAreaAsync(...)`.
+  - The BG target dispatches only `ActionType.StartMeleeAttack`, `StopAttack`, and `LootCorpse`; no inline setup GM commands remain in the test body.
+  - Refreshed `LootCorpseTests.md`, `TEST_EXECUTION_MODES.md`, and moved `LootCorpseTests.cs` to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|EnsureCleanSlateAsync|WaitForTeleportSettledAsync|damage" Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LootCorpseTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=loot_corpse_shodan.trx"` -> `passed (1/1)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs`
+  - `Services/WoWStateManager/Settings/Configs/Loot.config.json`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/LootCorpseTests.md`
+  - live-validation docs and task trackers.
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|EnsureCleanSlateAsync|WaitForTeleportSettledAsync|damage" Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+
 ### 2026-04-25 (Shodan Navigation/Alliance migration slice)
 - Pass result: `NavigationTests and AllianceNavigationTests now follow the Shodan test-director action-target split; live navigation/alliance validation passed 7/8 with one tracked skip`
 - Last delta:

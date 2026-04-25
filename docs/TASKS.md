@@ -338,6 +338,35 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 22 - LootCorpseTests)
+
+- Completed:
+  - Migrated `LootCorpseTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Loot.config.json`. `LOOTBG1` is the BG loot action target, `LOOTFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
+  - Replaced the old dedicated `CombatBgArenaFixture` execution mode with `LiveBotFixture` plus Shodan settings validation and action-target resolution.
+  - Moved clean-slate and bag cleanup into `StageBotRunnerLoadoutAsync(...)`; moved Durotar mob-area setup into `StageBotRunnerAtDurotarMobAreaAsync(...)`. The migrated test body no longer issues direct GM setup calls.
+  - The BG target dispatches only `ActionType.StartMeleeAttack`, `StopAttack`, and `LootCorpse`, then verifies the loot dispatch and inventory observation path.
+  - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/LootCorpseTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `LootCorpseTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~16.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|EnsureCleanSlateAsync|WaitForTeleportSettledAsync|damage" Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LootCorpseTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=loot_corpse_shodan.trx"` -> `passed (1/1)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/loot_corpse_shodan.trx` -> `Loot_KillAndLootMob_InventoryChanges` passed through Shodan clean-bag staging, Durotar mob-area staging, BG melee kill, `LootCorpse` dispatch, and inventory observation.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs`
+  - `Services/WoWStateManager/Settings/Configs/Loot.config.json`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/LootCorpseTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - task trackers.
+- Next command:
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|EnsureCleanSlateAsync|WaitForTeleportSettledAsync|damage" Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+
+---
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 21 - NavigationTests / AllianceNavigationTests)
 
 - Completed:

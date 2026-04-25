@@ -17,6 +17,23 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan Loot config slice)
+- Last updated: 2026-04-25
+- Active task: none - this slice only added a live-validation roster for the Shodan loot migration.
+- Last delta:
+  - Added `Loot.config.json` with `LOOTBG1` Background Orc Warrior as the loot action target, `LOOTFG1` Foreground Orc Warrior idle for topology parity, and SHODAN as Background Gnome Mage director.
+  - `LootCorpseTests` uses this roster for clean-bag staging, Durotar mob-area staging, BG melee kill, and corpse-loot dispatch.
+- Pass result: `LootCorpse migration shape green; live loot validation passed 1/1`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~LootCorpseTests" --logger "trx;LogFileName=loot_corpse_shodan.trx"` -> `passed (1/1)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/Loot.config.json`
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|EnsureCleanSlateAsync|WaitForTeleportSettledAsync|damage" Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+
 ### 2026-04-25 (Shodan Navigation config slice)
 - Last updated: 2026-04-25
 - Active task: none - this slice only added a live-validation roster for the Shodan Alliance navigation migration.

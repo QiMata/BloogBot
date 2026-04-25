@@ -49,7 +49,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | MailParityTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | BG CheckMail baseline; FG mail collection tracked separately |
 | TradingTests | Shodan BG-action / FG gap | BG + FG + SHODAN | BG cancel only | BG offer/decline passes; transfer skip tracks FG AcceptTrade ACK failure |
 | TradeParityTests | Shodan BG-action / FG gap | BG + FG + SHODAN | **No behavior parity** | FG trade cancel/transfer paths skip after Shodan launch due foreground action ACK failures |
-| LootCorpseTests | CombatTest-Only | COMBATTEST | **No** | Kill→loot with dedicated combat account |
+| LootCorpseTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged clean bags and Durotar mob area; BG StartMeleeAttack / LootCorpse proof |
 | MapTransitionTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Deeprun Tram bounce; BG post-bounce action liveness |
 | MountEnvironmentTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged riding loadout and indoor/outdoor mount scene checks |
 | MovementSpeedTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Durotar road start; BG Goto speed probe |
@@ -74,7 +74,7 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 1. **CombatLoopTests** — Uses COMBATTEST account. Consider adding FG combat reference.
 2. **CraftingProfessionTests** — Blocked on FG Lua/UI crafting parity.
 3. **DeathCorpseRunTests** - FG is opt-in. Historical CRASH-001 was not reproduced on 2026-04-15; latest opt-in FG corpse-run validation passes and remains available for targeted regression proof.
-4. **LootCorpseTests** — Uses COMBATTEST account. Consider adding FG loot reference.
+4. **LootCorpseTests** - Shodan topology is in place, but the migrated kill/loot proof is BG-action-only while FG stays idle for topology parity.
 5. **MapTransitionTests** - Shodan topology is in place, but the migrated slice is BG-action-only while FG stays idle for topology parity.
 6. **MountEnvironmentTests** - Shodan topology is in place, but the migrated mount proof is BG-action-only while FG stays idle for topology parity.
 7. **TravelPlannerTests** - Shodan topology is in place, but the migrated travel proof is BG-action-only; long Crossroads probes remain tracked skips until the no-movement `TravelTo` gap is fixed.
