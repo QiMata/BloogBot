@@ -79,6 +79,80 @@ public sealed class FgCharacterSelectScreenTests
     }
 
     [Fact]
+    public void CreateCharacter_WhenSelectingMage_ClicksClassButtonByClassId()
+    {
+        var originalThrottle = FgCharacterSelectScreen.CreateStepThrottle;
+        var originalTransitionTimeout = FgCharacterSelectScreen.CharacterCreateTransitionTimeout;
+
+        try
+        {
+            FgCharacterSelectScreen.CreateStepThrottle = TimeSpan.Zero;
+            FgCharacterSelectScreen.CharacterCreateTransitionTimeout = TimeSpan.FromSeconds(5);
+
+            var screenState = WoWScreenState.CharacterSelect;
+            var luaCalls = new List<string>();
+            var screen = new FgCharacterSelectScreen(
+                () => screenState,
+                () => 0,
+                lua => luaCalls.Add(lua));
+
+            InvokeCreate(screen, race: Race.Troll, gender: Gender.Male, @class: Class.Mage); // step 0
+            InvokeCreate(screen, race: Race.Troll, gender: Gender.Male, @class: Class.Mage); // step 1
+
+            screenState = WoWScreenState.CharacterCreate;
+            InvokeCreate(screen, race: Race.Troll, gender: Gender.Male, @class: Class.Mage); // step 2
+            InvokeCreate(screen, race: Race.Troll, gender: Gender.Male, @class: Class.Mage); // step 3
+
+            var classSelection = Assert.Single(
+                luaCalls.Where(lua => lua.Contains("wantedClassId=8", StringComparison.Ordinal)));
+            Assert.Contains("wantedClassFile=\"MAGE\"", classSelection);
+            Assert.Contains("fallbackClassSlot=6", classSelection);
+            Assert.Contains("GetClassesForRace(selectedRace,i)", classSelection);
+            Assert.Contains("SetSelectedClass(i)", classSelection);
+            Assert.Contains("getglobal(\"CharacterCreateClassButton\"..i)", classSelection);
+            Assert.Contains("button:GetID()", classSelection);
+            Assert.Contains("wantedClassName=\"Mage\"", classSelection);
+        }
+        finally
+        {
+            FgCharacterSelectScreen.CreateStepThrottle = originalThrottle;
+            FgCharacterSelectScreen.CharacterCreateTransitionTimeout = originalTransitionTimeout;
+        }
+    }
+
+    [Fact]
+    public void CharacterSelects_WhenConfiguredClassEnvIsSet_ReportsConfiguredClass()
+    {
+        var originalClass = Environment.GetEnvironmentVariable("WWOW_CHARACTER_CLASS");
+        var originalRace = Environment.GetEnvironmentVariable("WWOW_CHARACTER_RACE");
+        var originalGender = Environment.GetEnvironmentVariable("WWOW_CHARACTER_GENDER");
+
+        try
+        {
+            Environment.SetEnvironmentVariable("WWOW_CHARACTER_CLASS", "Mage");
+            Environment.SetEnvironmentVariable("WWOW_CHARACTER_RACE", "Troll");
+            Environment.SetEnvironmentVariable("WWOW_CHARACTER_GENDER", "Male");
+
+            var screen = new FgCharacterSelectScreen(
+                () => WoWScreenState.Unknown,
+                () => 1,
+                _ => { });
+
+            Assert.True(screen.HasReceivedCharacterList);
+            var character = Assert.Single(screen.CharacterSelects);
+            Assert.Equal(Class.Mage, character.Class);
+            Assert.Equal(Race.Troll, character.Race);
+            Assert.Equal(Gender.Male, character.Gender);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("WWOW_CHARACTER_CLASS", originalClass);
+            Environment.SetEnvironmentVariable("WWOW_CHARACTER_RACE", originalRace);
+            Environment.SetEnvironmentVariable("WWOW_CHARACTER_GENDER", originalGender);
+        }
+    }
+
+    [Fact]
     public void CreateCharacter_WhenLuaStepExecutes_InvokesLuaErrorCaptureCallback()
     {
         var originalThrottle = FgCharacterSelectScreen.CreateStepThrottle;

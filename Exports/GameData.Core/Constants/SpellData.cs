@@ -238,6 +238,9 @@ namespace GameData.Core.Constants
             // ── Forms ──
             ["Human Form"] = [2457], // Same as Battle Stance for druids leaving form
 
+            // General combat abilities
+            ["Shoot"] = [5019],
+
             // ── Consumable Buffs ──
             ["Lion's Strength"] = [2367],
 

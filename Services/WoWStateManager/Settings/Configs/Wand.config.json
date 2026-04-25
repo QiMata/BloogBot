@@ -1,8 +1,8 @@
 [
   {
-    "AccountName": "EQUIPFG1",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Orc",
+    "AccountName": "TRMAF5",
+    "CharacterClass": "Mage",
+    "CharacterRace": "Troll",
     "CharacterGender": "Male",
     "GmLevel": 6,
     "Openness": 1.0,
@@ -15,9 +15,9 @@
     "UseGmCommands": true
   },
   {
-    "AccountName": "EQUIPBG1",
-    "CharacterClass": "Warrior",
-    "CharacterRace": "Orc",
+    "AccountName": "TRMAB5",
+    "CharacterClass": "Mage",
+    "CharacterRace": "Troll",
     "CharacterGender": "Male",
     "GmLevel": 6,
     "Openness": 1.0,

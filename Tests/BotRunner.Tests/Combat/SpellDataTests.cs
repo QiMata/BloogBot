@@ -334,6 +334,13 @@ namespace BotRunner.Tests.Combat
         }
 
         [Fact]
+        public void GetHighestKnownRank_Shoot_KnowsWandAutoAttack()
+        {
+            var known = new HashSet<uint> { 5019 };
+            Assert.Equal(5019u, SpellData.GetHighestKnownRank("Shoot", known));
+        }
+
+        [Fact]
         public void GetHighestKnownRank_SingleRankSpell_DoesntKnowIt()
         {
             var known = new HashSet<uint> { 999 };

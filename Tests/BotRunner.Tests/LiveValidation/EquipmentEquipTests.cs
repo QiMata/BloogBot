@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -10,16 +11,13 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Equipment equip integration test - dual-client validation.
+/// Equipment equip integration test.
 ///
-/// Scenario (per bot):
-///   1) Read current snapshot state.
-///   2) Apply only missing setup deltas (alive/proficiency/item-in-bag).
-///   3) Equip Worn Mace (item 36) with ActionType.EquipItem.
-///   4) Verify the mace moved from bag snapshot entries to mainhand equipment.
-///
-/// Run:
-///   dotnet test --filter "FullyQualifiedName~EquipmentEquipTests" --configuration Release -v n
+/// Migrated to the Shodan test-director shape:
+///   1) launch EQUIPFG1 + EQUIPBG1 + SHODAN with Equipment.config.json,
+///   2) stage each BotRunner target through StageBotRunnerLoadoutAsync,
+///   3) dispatch only ActionType.EquipItem from the test body,
+///   4) assert on snapshot inventory/equipment changes.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class EquipmentEquipTests
@@ -27,211 +25,161 @@ public class EquipmentEquipTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
+    private const uint WornMace = LiveBotFixture.TestItems.WornMace;
     private const uint MainhandSlot = 15;
     private const uint OneHandMaceSpell = 198;
+    private const uint MacesSkillId = 54;
 
     public EquipmentEquipTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
     public async Task EquipItem_AddWeaponAndEquip_AppearsInEquipmentSlot()
     {
-        var bgAccount = _bot.BgAccountName!;
-        Assert.NotNull(bgAccount);
-        _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
+        var equipmentSettingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Equipment.config.json");
 
-        bool bgPassed, fgPassed = false;
-        var hasFg = _bot.IsFgActionable;
-        if (hasFg)
+        await _bot.EnsureSettingsAsync(equipmentSettingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(equipmentSettingsPath);
+
+        var targets = _bot.ResolveBotRunnerActionTargets();
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no EquipItem dispatch.");
+        foreach (var target in targets)
+            _output.WriteLine(
+                $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
+                $"stage Worn Mace, dispatch EquipItem({WornMace}).");
+
+        _output.WriteLine("[PARITY] Running configured equip scenarios in parallel.");
+
+        var results = await Task.WhenAll(targets.Select(async target => (
+            Target: target,
+            Passed: await RunEquipScenario(target.AccountName, target.RoleLabel))));
+
+        foreach (var result in results)
         {
-            var fgAccount = _bot.FgAccountName!;
-            Assert.NotNull(fgAccount);
-            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
-            _output.WriteLine("[PARITY] Running BG and FG equip scenarios in parallel.");
-
-            var bgTask = RunEquipScenario(bgAccount, "BG");
-            var fgTask = RunEquipScenario(fgAccount, "FG");
-            await Task.WhenAll(bgTask, fgTask);
-            bgPassed = await bgTask;
-            fgPassed = await fgTask;
+            Assert.True(
+                result.Passed,
+                $"{result.Target.RoleLabel} bot ({result.Target.AccountName}/{result.Target.CharacterName}): " +
+                "Worn Mace should move from bag snapshot to MAINHAND slot.");
         }
-        else
-        {
-            bgPassed = await RunEquipScenario(bgAccount, "BG");
-            _output.WriteLine("\nFG Bot: NOT AVAILABLE");
-        }
-
-        Assert.True(bgPassed, "BG bot: Worn Mace should move from bag snapshot to MAINHAND slot.");
-        if (hasFg)
-            Assert.True(fgPassed, "FG bot: Worn Mace should move from bag snapshot to MAINHAND slot.");
     }
 
     private async Task<bool> RunEquipScenario(string account, string label)
     {
-        // Standardized setup (BT-SETUP-001): revive + safe zone + GM on
-        await _bot.EnsureCleanSlateAsync(account, label);
+        await _bot.StageBotRunnerLoadoutAsync(
+            account,
+            label,
+            spellsToLearn: new[] { OneHandMaceSpell },
+            skillsToSet: new[] { new LiveBotFixture.SkillDirective(MacesSkillId, 1, 300) },
+            itemsToAdd: new[] { new LiveBotFixture.ItemDirective(WornMace, 1) });
+
+        if (!await WaitForBagItemAsync(account, WornMace, TimeSpan.FromSeconds(8)))
+        {
+            _output.WriteLine($"  [{label}] Worn Mace never observed in bags after staging; aborting.");
+            return false;
+        }
 
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        if (snap?.Player == null)
+        var before = await _bot.GetSnapshotAsync(account);
+        if (before?.Player == null)
             return false;
 
-        var playerBefore = snap.Player;
-        bool mainhandBeforeEquipped = playerBefore.Inventory.TryGetValue(MainhandSlot, out ulong mainhandBeforeGuid) && mainhandBeforeGuid != 0;
-        int maceCountBeforeSetup = CountBagItem(playerBefore, LiveBotFixture.TestItems.WornMace);
+        var mainhandBeforeGuid = GetMainhandGuid(before);
+        var maceCountBeforeEquip = CountBagItem(before, WornMace);
+        _output.WriteLine(
+            $"  [{label}] Before equip: mainhand=0x{mainhandBeforeGuid:X}, maces in bags={maceCountBeforeEquip}");
 
-        _output.WriteLine($"  [{label}] Mainhand before: {(mainhandBeforeEquipped ? $"GUID=0x{mainhandBeforeGuid:X}" : "EMPTY")}");
-        _output.WriteLine($"  [{label}] Worn Mace count in bags before setup: {maceCountBeforeSetup}");
-
-        // Clear mainhand if occupied — other tests may have equipped items.
-        if (mainhandBeforeEquipped)
-        {
-            _output.WriteLine($"  [{label}] Clearing mainhand via .reset items before equip test.");
-            await _bot.ExecuteGMCommandAsync($".reset items {snap.CharacterName}");
-            // Poll for mainhand to clear instead of fixed delay
-            await _bot.WaitForSnapshotConditionAsync(
-                account,
-                s => !(s?.Player?.Inventory.TryGetValue(MainhandSlot, out ulong g) == true && g != 0),
-                TimeSpan.FromSeconds(5),
-                pollIntervalMs: 300,
-                progressLabel: $"{label} reset-items");
-            await _bot.RefreshSnapshotsAsync();
-            snap = await _bot.GetSnapshotAsync(account) ?? snap;
-            playerBefore = snap.Player!;
-            mainhandBeforeEquipped = playerBefore.Inventory.TryGetValue(MainhandSlot, out mainhandBeforeGuid) && mainhandBeforeGuid != 0;
-            maceCountBeforeSetup = CountBagItem(playerBefore, LiveBotFixture.TestItems.WornMace);
-            _output.WriteLine($"  [{label}] Mainhand after reset: {(mainhandBeforeEquipped ? $"GUID=0x{mainhandBeforeGuid:X}" : "EMPTY")}");
-        }
-
-        // Grant mace proficiency: .learn adds the spell, .setskill adds the weapon skill.
-        // .setskill requires a selected target, so BotSetSkillAsync auto-selects self first.
-        bool hasMaceProficiency = playerBefore.SpellList.Contains(OneHandMaceSpell);
-        if (!hasMaceProficiency)
-        {
-            _output.WriteLine($"  [{label}] Learning missing 1H mace proficiency (spell {OneHandMaceSpell}).");
-            await _bot.BotLearnSpellAsync(account, OneHandMaceSpell);
-            await _bot.BotSetSkillAsync(account, 54, 1, 300); // skill 54 = Maces
-            var learnSw = Stopwatch.StartNew();
-            while (learnSw.Elapsed < TimeSpan.FromSeconds(5))
-            {
-                await Task.Delay(200);
-                await _bot.RefreshSnapshotsAsync();
-                snap = await _bot.GetSnapshotAsync(account) ?? snap;
-                if (snap.Player?.SpellList.Contains(OneHandMaceSpell) == true)
-                    break;
-            }
-            if (snap.Player == null)
-                return false;
-            playerBefore = snap.Player;
-        }
-
-        // Ensure at least one Worn Mace is present in bags.
-        int maceCountBeforeEquip = CountBagItem(playerBefore, LiveBotFixture.TestItems.WornMace);
-        if (maceCountBeforeEquip == 0)
-        {
-            var bagItemCount = playerBefore.BagContents.Count;
-            if (bagItemCount >= 15)
-            {
-                _output.WriteLine($"  [{label}] Bag nearly full ({bagItemCount}); clearing inventory before additem.");
-                await _bot.BotClearInventoryAsync(account, includeExtraBags: false);
-                var clearSw = Stopwatch.StartNew();
-                while (clearSw.Elapsed < TimeSpan.FromSeconds(5))
-                {
-                    await Task.Delay(200);
-                    await _bot.RefreshSnapshotsAsync();
-                    var clearSnap = await _bot.GetSnapshotAsync(account);
-                    if (clearSnap?.Player?.BagContents.Count < bagItemCount)
-                        break;
-                }
-            }
-
-            _output.WriteLine($"  [{label}] Adding Worn Mace (item {LiveBotFixture.TestItems.WornMace}).");
-            await _bot.BotAddItemAsync(account, LiveBotFixture.TestItems.WornMace);
-            var addItemSw = Stopwatch.StartNew();
-            // SOAP .additem can take 10+ seconds to propagate through the
-            // server → SMSG_UPDATE_OBJECT → BG client pipeline.
-            while (addItemSw.Elapsed < TimeSpan.FromSeconds(15))
-            {
-                await Task.Delay(200);
-                await _bot.RefreshSnapshotsAsync();
-                snap = await _bot.GetSnapshotAsync(account) ?? snap;
-                if (snap.Player != null && CountBagItem(snap.Player, LiveBotFixture.TestItems.WornMace) > 0)
-                    break;
-            }
-            if (snap.Player == null)
-                return false;
-            playerBefore = snap.Player;
-            maceCountBeforeEquip = CountBagItem(playerBefore, LiveBotFixture.TestItems.WornMace);
-        }
-
-        if (maceCountBeforeEquip == 0)
-        {
-            _output.WriteLine($"  [{label}] Worn Mace was not present after setup; cannot validate equip.");
-            _bot.DumpSnapshotDiagnostics(snap, label);
-            return false;
-        }
-
-        // GM mode stays ON — equip actions work with GM mode enabled.
-        // Previous .gm off here corrupted GM state for downstream tests and risked BG disconnect.
-
-        // Equip and verify transition — poll for mainhand slot change instead of fixed delay.
-        _output.WriteLine($"  [{label}] Equipping Worn Mace.");
+        _output.WriteLine($"  [{label}] Dispatching EquipItem for Worn Mace ({WornMace}).");
         var equipResult = await _bot.SendActionAsync(account, new ActionMessage
         {
             ActionType = ActionType.EquipItem,
-            Parameters = { new RequestParameter { IntParam = (int)LiveBotFixture.TestItems.WornMace } }
+            Parameters = { new RequestParameter { IntParam = (int)WornMace } }
         });
         Assert.Equal(ResponseResult.Success, equipResult);
 
         WoWActivitySnapshot? after = null;
-        Game.WoWPlayer? playerAfter = null;
+        var equipped = false;
         var equipSw = Stopwatch.StartNew();
         while (equipSw.Elapsed < TimeSpan.FromSeconds(8))
         {
             await _bot.RefreshSnapshotsAsync();
             after = await _bot.GetSnapshotAsync(account);
-            playerAfter = after?.Player;
-            if (playerAfter != null)
+            if (after?.Player != null)
             {
-                bool slotFilled = playerAfter.Inventory.TryGetValue(MainhandSlot, out ulong mhGuid) && mhGuid != 0;
-                bool guidDiffers = mhGuid != mainhandBeforeGuid;
-                bool bagCountDropped = CountBagItem(playerAfter, LiveBotFixture.TestItems.WornMace) < maceCountBeforeEquip;
-                if (slotFilled && (guidDiffers || bagCountDropped))
+                var mainhandAfterGuid = GetMainhandGuid(after);
+                var maceCountAfterEquip = CountBagItem(after, WornMace);
+                var mainhandEquipped = mainhandAfterGuid != 0;
+                var mainhandGuidChanged = mainhandAfterGuid != mainhandBeforeGuid;
+                var maceMovedFromBags = maceCountAfterEquip < maceCountBeforeEquip;
+
+                if (mainhandEquipped && (mainhandGuidChanged || maceMovedFromBags))
                 {
-                    _output.WriteLine($"  [{label}] Equip detected after {equipSw.ElapsedMilliseconds}ms");
+                    _output.WriteLine(
+                        $"  [{label}] Equip detected after {equipSw.ElapsedMilliseconds}ms: " +
+                        $"mainhand=0x{mainhandAfterGuid:X}, maces in bags={maceCountAfterEquip}");
+                    equipped = true;
                     break;
                 }
             }
+
             await Task.Delay(200);
         }
 
-        if (playerAfter == null)
-            return false;
-
-        bool mainhandEquipped = playerAfter.Inventory.TryGetValue(MainhandSlot, out ulong mainhandAfterGuid) && mainhandAfterGuid != 0;
-        int maceCountAfterEquip = CountBagItem(playerAfter, LiveBotFixture.TestItems.WornMace);
-        bool maceMovedFromBags = maceCountAfterEquip < maceCountBeforeEquip;
-        // If mainhand already had a Worn Mace (item 36), equipping another one swaps them —
-        // bag count stays the same but mainhand GUID changes. Accept this as a pass.
-        bool mainhandGuidChanged = mainhandAfterGuid != mainhandBeforeGuid;
-
-        _output.WriteLine($"  [{label}] Mainhand after: {(mainhandEquipped ? $"GUID=0x{mainhandAfterGuid:X}" : "EMPTY")}");
-        _output.WriteLine($"  [{label}] Worn Mace in bags before/after equip: {maceCountBeforeEquip} -> {maceCountAfterEquip}");
-        _output.WriteLine($"  [{label}] Transition checks: mainhandEquipped={mainhandEquipped}, movedFromBags={maceMovedFromBags}, guidChanged={mainhandGuidChanged}");
-
-        bool passed = mainhandEquipped && (maceMovedFromBags || mainhandGuidChanged);
-        if (!passed)
+        if (!equipped)
+        {
+            _output.WriteLine($"  [{label}] Equip transition not observed within timeout.");
             _bot.DumpSnapshotDiagnostics(after, label);
+        }
 
-        return passed;
+        return equipped;
     }
 
-    private static int CountBagItem(Game.WoWPlayer player, uint itemId)
-        => player.BagContents.Values.Count(id => id == itemId);
+    private static ulong GetMainhandGuid(WoWActivitySnapshot? snap)
+    {
+        if (snap?.Player?.Inventory.TryGetValue(MainhandSlot, out var guid) == true)
+            return guid;
 
+        return 0;
+    }
+
+    private static int CountBagItem(WoWActivitySnapshot? snap, uint itemId)
+        => snap?.Player?.BagContents?.Values.Count(id => id == itemId) ?? 0;
+
+    private async Task<bool> WaitForBagItemAsync(string account, uint itemId, TimeSpan timeout)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var snap = await _bot.GetSnapshotAsync(account);
+            if (CountBagItem(snap, itemId) > 0)
+                return true;
+
+            await Task.Delay(200);
+        }
+
+        return false;
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
+    }
 }

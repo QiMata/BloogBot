@@ -31,6 +31,9 @@ Counts reflect the first-pass audit of 70 top-level files under
 | File | Notes |
 |------|-------|
 | `FishingProfessionTests.cs` | Single-launch FG+BG+Shodan; Shodan stages pool; FG/BG dispatch `ActionType.StartFishing` only. |
+| `UnequipItemTests.cs` | Migrated pilot: shared `Equipment.config.json`; `StageBotRunnerLoadoutAsync`; test body dispatches `EquipItem` / `UnequipItem` only. |
+| `EquipmentEquipTests.cs` | Migrated: `Equipment.config.json` launches `EQUIPFG1`/`EQUIPBG1` warriors + SHODAN; `StageBotRunnerLoadoutAsync`; test body dispatches `EquipItem` only. |
+| `WandAttackTests.cs` | Migrated: `Wand.config.json` launches `TRMAF5`/`TRMAB5` mages + SHODAN; `StageBotRunnerLoadoutAsync` for wand loadout; fixture-contained Durotar mob staging; test body dispatches `EquipItem` / `StartWandAttack` / `StopAttack` only. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -44,9 +47,6 @@ Profession / loadout tests (migrate first - they resemble the Ratchet flow):
 
 | File | Typical per-test setup | Notes |
 |------|------------------------|-------|
-| `UnequipItemTests.cs` | `.learn 198` (mace spell), `.setskill 54`, `.additem 36` | Pilot migration slice. |
-| `EquipmentEquipTests.cs` | `.learn`, `.additem`, equip action | Pair with UnequipItemTests. |
-| `WandAttackTests.cs` | `.additem` wand, aim + attack test | Equipment + combat. |
 | `MageTeleportTests.cs` | `.learn Teleport: Orgrimmar`, staging teleport | Class-specific. |
 | `GatheringProfessionTests.cs` | `.learn mining/herb`, `.additem pick`, Valley stage | Task-owned gathering + GM prep. |
 | `CraftingProfessionTests.cs` | Recipe + reagent add, skill set | Crafting task prep. |
@@ -171,11 +171,26 @@ a standalone slice.
 5. Restage with Shodan between roles if the action mutates world state
    (as Ratchet does between FG and BG fishing).
 
-## First migration slice
+## Migration slices
 
-`UnequipItemTests.cs` is the pilot (smallest representative). Its current
-setup (`BotLearnSpellAsync` + `BotSetSkillAsync` + `BotAddItemAsync` +
-`BotClearInventoryAsync` + `EnsureCleanSlateAsync`) is the canonical
-shape for a per-test loadout helper. Once the pilot helper lands,
-`EquipmentEquipTests.cs` and `WandAttackTests.cs` can consume it with no
-new helper work.
+`UnequipItemTests.cs` was the pilot (smallest representative). Its old setup
+(`BotLearnSpellAsync` + `BotSetSkillAsync` + `BotAddItemAsync` +
+`BotClearInventoryAsync` + `EnsureCleanSlateAsync`) is now represented by
+`StageBotRunnerLoadoutAsync`.
+
+`EquipmentEquipTests.cs` now uses `Equipment.config.json`: SHODAN is the
+director, while `EQUIPFG1` and `EQUIPBG1` are the only BotRunner action
+targets. Both targets receive Worn Mace staging and only `ActionType.EquipItem`
+dispatches from the test body.
+
+`WandAttackTests.cs` uses the separate `Wand.config.json` because wand actions
+must run on mage characters. SHODAN is the director, while `TRMAF5` and
+`TRMAB5` are the only BotRunner action targets. The slice also adds a
+fixture-contained `StageBotRunnerAtDurotarMobAreaAsync` helper for the
+target-bot `.go xyz` constraint; the test body remains GM-free.
+
+Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
+`.setskill`, and `.additem` through the target bot's chat layer because the
+current MaNGOS command forms resolve against the sender's own character. This
+keeps the test body GM-free while preserving behavior. A later helper pass can
+prove and adopt SOAP or Shodan cross-target command variants.

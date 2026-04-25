@@ -793,8 +793,20 @@ public partial class LiveBotFixture : IAsyncLifetime
         _logger.LogInformation("[FIXTURE] Waiting for bots to enter world after restart...");
         var sw = Stopwatch.StartNew();
         var everSeenInWorld = new Dictionary<string, WoWActivitySnapshot>();
-        while (sw.Elapsed < InitialWorldEntryTimeout)
+        var restartWorldEntryTimeout = InitialWorldEntryTimeout + TimeSpan.FromSeconds(60);
+        var lastCharacterNameReseedAt = TimeSpan.Zero;
+
+        while (sw.Elapsed < restartWorldEntryTimeout)
         {
+            // Custom category configs often create fresh accounts. Their first
+            // InWorld snapshot can precede the in-bot player name, so mirror
+            // InitializeAsync's DB reseed loop during restarts too.
+            if (sw.Elapsed - lastCharacterNameReseedAt >= TimeSpan.FromSeconds(6))
+            {
+                await SeedExpectedCharacterNamesFromDatabaseAsync();
+                lastCharacterNameReseedAt = sw.Elapsed;
+            }
+
             var snapshots = await _stateManagerClient.QuerySnapshotsAsync(null, CancellationToken.None);
             foreach (var snap in snapshots)
             {
@@ -803,15 +815,24 @@ public partial class LiveBotFixture : IAsyncLifetime
                     everSeenInWorld[snap.AccountName] = snap;
             }
 
-            if (everSeenInWorld.Count >= 1)
-            {
-                AllBots = everSeenInWorld.Values.ToList();
-                IdentifyBots(AllBots);
-                if (HasRequiredRoleCoverage(everSeenInWorld))
-                    break;
-                if (sw.Elapsed > TimeSpan.FromSeconds(45))
-                    break;
-            }
+                if (everSeenInWorld.Count >= 1)
+                {
+                    AllBots = everSeenInWorld.Values.ToList();
+                    IdentifyBots(AllBots);
+
+                    // EnsureSettingsAsync callers use category configs that may add
+                    // director/admin bots (for example SHODAN). Do not let old FG/BG
+                    // snapshots satisfy readiness before the full configured roster
+                    // has entered world.
+                    if (everSeenInWorld.Count >= ExpectedBotCount && HasRequiredRoleCoverage(everSeenInWorld))
+                        break;
+
+                    if ((int)sw.Elapsed.TotalSeconds % 15 == 0 && sw.Elapsed.TotalSeconds > 0)
+                    {
+                        _logger.LogInformation("[FIXTURE] {Count}/{Expected} bots in-world after restart so far... ({Elapsed:F0}s)",
+                            everSeenInWorld.Count, ExpectedBotCount, sw.Elapsed.TotalSeconds);
+                    }
+                }
 
             await Task.Delay(500);
         }
@@ -820,6 +841,16 @@ public partial class LiveBotFixture : IAsyncLifetime
         {
             FailureReason = "No bots entered world after restart.";
             _logger.LogError("[FIXTURE] {Reason}", FailureReason);
+            return;
+        }
+
+        if (AllBots.Count < ExpectedBotCount || !HasRequiredRoleCoverage(everSeenInWorld))
+        {
+            FailureReason =
+                $"Restart saw only {AllBots.Count}/{ExpectedBotCount} configured bots in-world. " +
+                $"Missing={string.Join(", ", GetMissingRequiredRoles(everSeenInWorld))}";
+            _logger.LogError("[FIXTURE] {Reason}",
+                FailureReason);
             return;
         }
 
@@ -1015,15 +1046,19 @@ public partial class LiveBotFixture : IAsyncLifetime
             || everSeenInWorld.ContainsKey(BgAccountName);
         var fgReady = string.IsNullOrWhiteSpace(FgAccountName)
             || everSeenInWorld.ContainsKey(FgAccountName);
+        var shodanReady = string.IsNullOrWhiteSpace(ShodanAccountName)
+            || everSeenInWorld.ContainsKey(ShodanAccountName);
+        var combatReady = string.IsNullOrWhiteSpace(CombatTestAccountName)
+            || everSeenInWorld.ContainsKey(CombatTestAccountName);
 
         if (BgAccountName != null || FgAccountName != null)
-            return bgReady && fgReady;
+            return bgReady && fgReady && shodanReady && combatReady;
 
         if (!string.IsNullOrWhiteSpace(CombatTestAccountName))
-            return everSeenInWorld.ContainsKey(CombatTestAccountName);
+            return combatReady;
 
         if (!string.IsNullOrWhiteSpace(ShodanAccountName))
-            return everSeenInWorld.ContainsKey(ShodanAccountName);
+            return shodanReady;
 
         return everSeenInWorld.Count >= Math.Max(1, ExpectedBotCount);
     }
@@ -1035,6 +1070,12 @@ public partial class LiveBotFixture : IAsyncLifetime
             missing.Add($"BG:{BgAccountName}");
         if (!string.IsNullOrWhiteSpace(FgAccountName) && !everSeenInWorld.ContainsKey(FgAccountName))
             missing.Add($"FG:{FgAccountName}");
+        if (!string.IsNullOrWhiteSpace(ShodanAccountName) && !everSeenInWorld.ContainsKey(ShodanAccountName))
+            missing.Add($"SHODAN:{ShodanAccountName}");
+        if (!string.IsNullOrWhiteSpace(CombatTestAccountName) && !everSeenInWorld.ContainsKey(CombatTestAccountName))
+            missing.Add($"Combat:{CombatTestAccountName}");
+        if (missing.Count == 0 && everSeenInWorld.Count < ExpectedBotCount)
+            missing.Add($"configured-count:{everSeenInWorld.Count}/{ExpectedBotCount}");
         return missing;
     }
 

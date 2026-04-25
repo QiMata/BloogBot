@@ -57,6 +57,21 @@
 3. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-24 (Shoot spell catalog entry)
+- Current focus: `Support Shodan WandAttackTests BG wand dispatch.`
+- Last delta:
+  - Added `Shoot` -> `5019` to `SpellData.SpellNameToIds` so shared spell-name resolution knows the wand auto-attack spell.
+  - Added `SpellDataTests.GetHighestKnownRank_Shoot_KnowsWandAutoAttack`.
+- Pass result: `delta shipped`
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpellDataTests|FullyQualifiedName~BotRunnerServiceCombatDispatchTests" --logger "console;verbosity=minimal"` -> `passed (118/118)`.
+- Files changed:
+  - `Exports/GameData.Core/Constants/SpellData.cs`
+  - `Tests/BotRunner.Tests/Combat/SpellDataTests.cs`
+  - `Exports/GameData.Core/TASKS.md`
+- Next queue file: `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/MageTeleportTests.cs`
+
 ### 2026-04-21
 - Current focus: `Shared P4.1 event contract is shipped; P4.3 consumption starts next session in BotRunner.`
 - Last delta:

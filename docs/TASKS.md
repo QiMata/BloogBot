@@ -338,12 +338,47 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-24, Shodan test-director overhaul slice 2 - EquipmentEquipTests + WandAttackTests)
+- Completed:
+  - Migrated `EquipmentEquipTests.cs` to the Shodan test-director pattern. `Equipment.config.json` now launches `EQUIPFG1`/`EQUIPBG1` Orc Warriors plus SHODAN; Shodan stages loadout, and only the FG/BG action targets receive `ActionType.EquipItem`.
+  - Migrated `WandAttackTests.cs` to a separate `Wand.config.json` with `TRMAF5`/`TRMAB5` Troll Mages plus SHODAN. This keeps wand loadout/actions on mage characters; Shodan remains director-only.
+  - Added action-target guardrails in `LiveBotFixture.TestDirector`: `ResolveBotRunnerActionTargets(...)` logs the director/target split and refuses to treat SHODAN as an action target; `AssertConfiguredCharactersMatchAsync(...)` verifies the live account character class/race/gender against the selected config before actions run.
+  - Fixed foreground character creation class selection so configured mage accounts are created as mages, not warriors, by resolving the race-local `SetSelectedClass` slot from `GetClassesForRace(...)`.
+  - Fixed BG wand dispatch: `StartWandAttack` now casts Shoot spell `5019`, and `SpellData` includes `Shoot` for name-based resolution. BotRunner wand dispatch now stops, faces the target, then starts Shoot.
+- Validation:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FgCharacterSelectScreenTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpObjectManagerCombatTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpellDataTests|FullyQualifiedName~BotRunnerServiceCombatDispatchTests" --logger "console;verbosity=minimal"` -> `passed (118/118)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"` -> confirmed `mangosd`, `realmd`, `maria-db`, `pathfinding-service`, and `scene-data-service` were already live.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~WandAttackTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=equipment_wand_action_plan_fresh8.trx" *> "tmp/test-runtime/results-live/equipment_wand_action_plan_fresh8.console.txt"` -> `passed (2/2)`.
+  - Reference anchor attempted twice: `fishing_shodan_anchor.trx` and `fishing_shodan_anchor_retry.trx` both failed in FG after repeated `loot_window_timeout` and `max_casts_reached` without `fishing_loot_success`. This is recorded as an anchor failure, not an Equipment/Wand regression; the migrated live slice passed.
+- Evidence:
+  - `tmp/test-runtime/results-live/equipment_wand_action_plan_fresh8.console.txt` shows `director=SHODAN targets=BG:EQUIPBG1..., FG:EQUIPFG1...` for Equipment and `director=SHODAN targets=FG:TRMAF5..., BG:TRMAB5...` for Wand, then `Test Run Successful` with `Passed: 2`.
+  - `tmp/test-runtime/results-live/fishing_shodan_anchor_retry.console.txt` captures the repeated anchor failure: `[FG] FishingTask never reached fishing_loot_success within 3m` with recent chat ending in `retry reason=loot_window_timeout` and `pop reason=max_casts_reached`.
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/Equipment.config.json`
+  - `Services/WoWStateManager/Settings/Configs/Wand.config.json`
+  - `Tests/BotRunner.Tests/LiveValidation/EquipmentEquipTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/WandAttackTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/UnequipItemTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
+  - `Services/ForegroundBotRunner/Frames/FgCharacterSelectScreen.cs`
+  - `Exports/BotRunner/SequenceBuilders/CombatSequenceBuilder.cs`
+  - `Exports/WoWSharpClient/SpellcastingManager.cs`
+  - `Exports/GameData.Core/Constants/SpellData.cs`
+  - unit/live docs and task trackers.
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/MageTeleportTests.cs`
+
 ## Handoff (2026-04-24, Shodan test-director overhaul slice 1 - inventory + UnequipItemTests pilot)
 - Completed:
   - Audited the 70 top-level `Tests/BotRunner.Tests/LiveValidation/*.cs` files for direct FG/BG GM-command usage and grouped them by migration category. ~45 are SHODAN-CANDIDATE (test-body GM setup that should move to Shodan), the others are ACTIVITY-OWNED, NO-GM-USAGE, ALREADY-SHODAN, or FIXTURE-INFRASTRUCTURE. Inventory landed at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`.
   - Added the first Shodan test-director helper: `LiveBotFixture.StageBotRunnerLoadoutAsync(targetAccount, label, spellsToLearn?, skillsToSet?, itemsToAdd?, cleanSlate, clearInventoryFirst)` with declarative `SkillDirective` / `ItemDirective` records (`Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`). The helper refuses to be called against Shodan herself and rejects empty target accounts.
-  - Migrated `UnequipItemTests.cs` as the pilot. It now launches `Equipment.config.json` (TESTBOT1 + TESTBOT2 + SHODAN, no `AssignedActivity`), stages each role via `StageBotRunnerLoadoutAsync`, then dispatches only `ActionType.EquipItem` and `ActionType.UnequipItem`. The test body issues no GM commands. Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/UnequipItemTests.md`.
-  - Created `Services/WoWStateManager/Settings/Configs/Equipment.config.json` to back the new pilot launch (and any subsequent Equipment / Wand / generic-loadout migrations).
+  - Migrated `UnequipItemTests.cs` as the pilot. It now launches `Equipment.config.json` (`EQUIPFG1` + `EQUIPBG1` + SHODAN, no `AssignedActivity`), stages each role via `StageBotRunnerLoadoutAsync`, then dispatches only `ActionType.EquipItem` and `ActionType.UnequipItem`. The test body issues no GM commands. Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/UnequipItemTests.md`.
+  - Created `Services/WoWStateManager/Settings/Configs/Equipment.config.json` to back the new pilot launch and subsequent equipment/generic-loadout migrations. Wand-specific action tests now use `Wand.config.json`.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors` (1066 warnings, unchanged).
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.

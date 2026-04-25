@@ -82,6 +82,46 @@ public class BotRunnerServiceCombatDispatchTests
     }
 
     [Fact]
+    public void BuildBehaviorTreeFromActions_StartWandAttack_FacesTargetBeforeShoot()
+    {
+        var service = CreateService(out var objectManager);
+        const ulong targetGuid = 0x5678;
+
+        var player = new WoWLocalPlayer(new HighGuid(0x11))
+        {
+            Position = new Position(0f, 0f, 0f),
+            Facing = MathF.PI,
+            TargetGuid = 0,
+        };
+
+        var target = new WoWUnit(new HighGuid(targetGuid))
+        {
+            Position = new Position(2f, 0f, 0f),
+            Health = 100,
+        };
+
+        objectManager.SetupGet(o => o.Player).Returns(player);
+        objectManager.SetupGet(o => o.Units).Returns([target]);
+        objectManager.SetupGet(o => o.Objects).Returns([target]);
+        objectManager.Setup(o => o.SetTarget(targetGuid))
+            .Callback<ulong>(guid => player.TargetGuid = guid);
+        objectManager.Setup(o => o.Face(It.IsAny<Position>()))
+            .Callback<Position>(position => player.Facing = CalculateFacing(player.Position, position));
+
+        var node = BuildActionTree(service, CharacterAction.StartWandAttack, targetGuid);
+
+        Assert.Equal(BehaviourTreeStatus.Running, node.Tick(new TimeData(0.1f)));
+        objectManager.Verify(o => o.SetTarget(targetGuid), Times.Exactly(2));
+        objectManager.Verify(o => o.StopAllMovement(), Times.Once);
+        objectManager.Verify(o => o.Face(It.Is<Position>(p => p.X == 2f && p.Y == 0f && p.Z == 0f)), Times.Once);
+        objectManager.Verify(o => o.StartWandAttack(), Times.Never);
+
+        Assert.Equal(BehaviourTreeStatus.Success, node.Tick(new TimeData(0.1f)));
+        objectManager.Verify(o => o.StartWandAttack(), Times.Once);
+        objectManager.Verify(o => o.Face(It.IsAny<Position>()), Times.Exactly(2));
+    }
+
+    [Fact]
     public void BuildBehaviorTreeFromActions_InteractWithMissingGuid_ReturnsFailureWithoutInteraction()
     {
         var service = CreateService(out var objectManager);

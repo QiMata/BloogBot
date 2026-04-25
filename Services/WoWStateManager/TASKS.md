@@ -17,6 +17,24 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-24 (Shodan equipment/wand config slice)
+- Last updated: 2026-04-24
+- Active task: none - this slice only updated live-validation config rosters for the Shodan migration.
+- Last delta:
+  - `Equipment.config.json` now uses dedicated equipment action accounts: `EQUIPFG1` Foreground Orc Warrior and `EQUIPBG1` Background Orc Warrior, with SHODAN as Background Gnome Mage director.
+  - Added `Wand.config.json` for wand-specific action ownership: `TRMAF5` Foreground Troll Mage and `TRMAB5` Background Troll Mage receive wand actions, while SHODAN remains director-only.
+  - The new fixture guard `AssertConfiguredCharactersMatchAsync(...)` reads the selected config and verifies the live DB account/character class, race, and gender before the test dispatches BotRunner actions.
+- Pass result: `Equipment/Wand shared-launch configs validated by passing live slice (2/2)`
+- Validation/tests run:
+  - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"` -> confirmed MaNGOS and split services were already running.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.` before and after live runs.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~WandAttackTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=equipment_wand_action_plan_fresh8.trx" *> "tmp/test-runtime/results-live/equipment_wand_action_plan_fresh8.console.txt"` -> `passed (2/2)`.
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/Equipment.config.json`
+  - `Services/WoWStateManager/Settings/Configs/Wand.config.json`
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/MageTeleportTests.cs`
+
 ### 2026-04-24 (Pending action heartbeat readiness)
 - Last updated: 2026-04-24
 - Active task: none - the simplified Ratchet `StartFishing` regression is fixed and covered.

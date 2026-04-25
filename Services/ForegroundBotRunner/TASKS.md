@@ -37,6 +37,20 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
+### 2026-04-24 (Configured class creation for Wand Shodan slice)
+- Pass result: `Foreground character-select class override coverage green`
+- Last delta:
+  - `FgCharacterSelectScreen` now honors `WWOW_CHARACTER_CLASS` during character selection/creation. Class creation resolves the race-local `SetSelectedClass` slot via `GetClassesForRace(...)`, fixing the Troll Mage foreground account used by `Wand.config.json`.
+  - Added focused `FgCharacterSelectScreenTests` coverage for configured class reporting and Mage class-button selection.
+- Validation/tests run:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FgCharacterSelectScreenTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~WandAttackTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=equipment_wand_action_plan_fresh8.trx" *> "tmp/test-runtime/results-live/equipment_wand_action_plan_fresh8.console.txt"` -> `passed (2/2)`.
+- Files changed:
+  - `Services/ForegroundBotRunner/Frames/FgCharacterSelectScreen.cs`
+  - `Tests/ForegroundBotRunner.Tests/FgCharacterSelectScreenTests.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/MageTeleportTests.cs`
+
 ### 2026-04-21
 - Pass result: `FG now emits the shared P4.1 spell/skill/item event surface`
 - Last delta:

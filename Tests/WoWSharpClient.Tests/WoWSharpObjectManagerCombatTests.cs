@@ -74,6 +74,31 @@ public class WoWSharpObjectManagerCombatTests
     }
 
     [Fact]
+    public async Task StartWandAttack_WithSelectedTarget_SendsShootSpellAtUnit()
+    {
+        const ulong targetGuid = 0x1122334455667788ul;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        ResetObjectManager();
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+        SetCurrentTargetGuid(objectManager, targetGuid);
+
+        objectManager.StartWandAttack();
+        await Task.Delay(25);
+
+        var packet = Assert.Single(sentPackets);
+        Assert.Equal(Opcode.CMSG_CAST_SPELL, packet.opcode);
+
+        using var expectedMs = new MemoryStream();
+        using var expectedWriter = new BinaryWriter(expectedMs);
+        expectedWriter.Write(5019u);
+        expectedWriter.Write((ushort)0x0002);
+        ReaderUtils.WritePackedGuid(expectedWriter, targetGuid);
+
+        Assert.Equal(expectedMs.ToArray(), packet.payload);
+    }
+
+    [Fact]
     public async Task StartMeleeAttack_ConfirmedSameTarget_DoesNotResendAttackSwing()
     {
         const ulong playerGuid = 0x10;

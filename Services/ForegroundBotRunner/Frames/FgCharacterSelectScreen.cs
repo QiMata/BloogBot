@@ -104,16 +104,20 @@ public class FgCharacterSelectScreen(
 
             // FG doesn't have detailed character data from memory - return a minimal entry
             // so BotRunnerService sees at least one character and proceeds to EnterWorld.
-            // Populate race/gender from env vars so the mismatch check doesn't block entry.
+            // Populate configured identity from env vars so the mismatch check doesn't block entry.
             var race = Race.None;
+            var @class = Class.Warrior;
             var gender = Gender.Male;
             var raceEnv = Environment.GetEnvironmentVariable("WWOW_CHARACTER_RACE");
+            var classEnv = Environment.GetEnvironmentVariable("WWOW_CHARACTER_CLASS");
             var genderEnv = Environment.GetEnvironmentVariable("WWOW_CHARACTER_GENDER");
             if (!string.IsNullOrEmpty(raceEnv))
                 Enum.TryParse(raceEnv, ignoreCase: true, out race);
+            if (!string.IsNullOrEmpty(classEnv))
+                Enum.TryParse(classEnv, ignoreCase: true, out @class);
             if (!string.IsNullOrEmpty(genderEnv))
                 Enum.TryParse(genderEnv, ignoreCase: true, out gender);
-            return [new CharacterSelect { Guid = 1, Name = "FG-Character", Level = 1, Race = race, Gender = gender }];
+            return [new CharacterSelect { Guid = 1, Name = "FG-Character", Level = 1, Race = race, Class = @class, Gender = gender }];
         }
     }
 
@@ -229,7 +233,9 @@ public class FgCharacterSelectScreen(
                 }
                 var raceIndex = GetCharCreateRaceIndex(race);
                 Log.Information("[FG-CHARSEL] Step 2: Set race={Race} (index {Index})", race, raceIndex);
-                ExecuteLua($"if CharacterCreateRaceButton{raceIndex} then CharacterCreateRaceButton{raceIndex}:Click() end",
+                ExecuteLua(
+                    $"if SetSelectedRace then SetSelectedRace({raceIndex}); " +
+                    $"elseif CharacterCreateRaceButton{raceIndex} then CharacterCreateRaceButton{raceIndex}:Click(); end",
                     "charselect.create.step2.select-race");
                 AdvanceCreateStep(3);
                 break;
@@ -251,9 +257,9 @@ public class FgCharacterSelectScreen(
                     Log.Warning("[FG-CHARSEL] Step 3: Not on CharacterCreate screen (state={State}), waiting", state);
                     break;
                 }
-                var classIndex = GetCharCreateClassIndex(@class);
-                Log.Information("[FG-CHARSEL] Step 3: Set class={Class} (index {Index})", @class, classIndex);
-                ExecuteLua($"if CharacterCreateClassButton{classIndex} then CharacterCreateClassButton{classIndex}:Click() end",
+                var classId = GetCharCreateClassId(@class);
+                Log.Information("[FG-CHARSEL] Step 3: Set class={Class} (id {Id})", @class, classId);
+                ExecuteLua(BuildClassSelectionLua(race, @class),
                     "charselect.create.step3.select-class");
                 AdvanceCreateStep(4);
                 break;
@@ -369,8 +375,8 @@ public class FgCharacterSelectScreen(
         _ => 5, // Default to Orc
     };
 
-    /// <summary>Maps Class enum to WoW character creation button index (1-based).</summary>
-    private static int GetCharCreateClassIndex(Class @class) => @class switch
+    /// <summary>Maps Class enum to the WoW class id used by CharacterCreate class buttons.</summary>
+    private static int GetCharCreateClassId(Class @class) => @class switch
     {
         Class.Warrior => 1,
         Class.Paladin => 2,
@@ -382,6 +388,137 @@ public class FgCharacterSelectScreen(
         Class.Warlock => 9,
         Class.Druid => 11,
         _ => 1, // Default to Warrior
+    };
+
+    private static string BuildClassSelectionLua(Race race, Class @class)
+    {
+        var classId = GetCharCreateClassId(@class);
+        var className = @class.ToString();
+        var classFileString = GetCharCreateClassFileString(@class);
+        var fallbackClassSlot = GetCharCreateClassSlot(race, @class);
+        return
+            $"local wantedClassId={classId}; " +
+            $"local wantedClassFile=\"{classFileString}\"; " +
+            $"local wantedClassName=\"{className}\"; " +
+            $"local fallbackClassSlot={fallbackClassSlot}; " +
+            "local selected=false; " +
+            "if GetClassesForRace and GetSelectedRace and SetSelectedClass then " +
+            "local selectedRace=GetSelectedRace(); " +
+            "for i=1,12 do " +
+            "local name,file,classId=GetClassesForRace(selectedRace,i); " +
+            "if name==wantedClassName or file==wantedClassFile or classId==wantedClassId then SetSelectedClass(i); selected=true; break; end " +
+            "end " +
+            "end " +
+            "if not selected then " +
+            "for i=1,12 do " +
+            "local button=getglobal(\"CharacterCreateClassButton\"..i); " +
+            "if button and button:IsVisible() then " +
+            "local id=button:GetID(); " +
+            "local text=button:GetText(); " +
+            "local name=button.name or text; " +
+            "local file=button.fileString; " +
+            "if id==wantedClassId or file==wantedClassFile or name==wantedClassName then button:Click(); selected=true; break; end " +
+            "end " +
+            "end " +
+            "end " +
+            "if not selected and SetSelectedClass then SetSelectedClass(fallbackClassSlot); selected=true; end " +
+            "if not selected then local button=getglobal(\"CharacterCreateClassButton\"..fallbackClassSlot); if button then button:Click(); end end";
+    }
+
+    private static string GetCharCreateClassFileString(Class @class) => @class switch
+    {
+        Class.Warrior => "WARRIOR",
+        Class.Paladin => "PALADIN",
+        Class.Hunter => "HUNTER",
+        Class.Rogue => "ROGUE",
+        Class.Priest => "PRIEST",
+        Class.Shaman => "SHAMAN",
+        Class.Mage => "MAGE",
+        Class.Warlock => "WARLOCK",
+        Class.Druid => "DRUID",
+        _ => "WARRIOR",
+    };
+
+    /// <summary>
+    /// Maps a race/class pair to the character-create class slot used by SetSelectedClass.
+    /// This is intentionally race-local; the class id (for example Mage=8) is not the
+    /// same value the vanilla glue UI passes to SetSelectedClass.
+    /// </summary>
+    private static int GetCharCreateClassSlot(Race race, Class @class) => race switch
+    {
+        Race.Human => @class switch
+        {
+            Class.Warrior => 1,
+            Class.Paladin => 2,
+            Class.Rogue => 3,
+            Class.Priest => 4,
+            Class.Mage => 5,
+            Class.Warlock => 6,
+            _ => 1,
+        },
+        Race.Dwarf => @class switch
+        {
+            Class.Warrior => 1,
+            Class.Paladin => 2,
+            Class.Hunter => 3,
+            Class.Rogue => 4,
+            Class.Priest => 5,
+            _ => 1,
+        },
+        Race.NightElf => @class switch
+        {
+            Class.Warrior => 1,
+            Class.Hunter => 2,
+            Class.Rogue => 3,
+            Class.Priest => 4,
+            Class.Druid => 5,
+            _ => 1,
+        },
+        Race.Gnome => @class switch
+        {
+            Class.Warrior => 1,
+            Class.Rogue => 2,
+            Class.Mage => 3,
+            Class.Warlock => 4,
+            _ => 1,
+        },
+        Race.Orc => @class switch
+        {
+            Class.Warrior => 1,
+            Class.Hunter => 2,
+            Class.Rogue => 3,
+            Class.Shaman => 4,
+            Class.Warlock => 5,
+            _ => 1,
+        },
+        Race.Undead => @class switch
+        {
+            Class.Warrior => 1,
+            Class.Rogue => 2,
+            Class.Priest => 3,
+            Class.Mage => 4,
+            Class.Warlock => 5,
+            _ => 1,
+        },
+        Race.Tauren => @class switch
+        {
+            Class.Warrior => 1,
+            Class.Hunter => 2,
+            Class.Shaman => 3,
+            Class.Druid => 4,
+            _ => 1,
+        },
+        Race.Troll => @class switch
+        {
+            Class.Warrior => 1,
+            Class.Hunter => 2,
+            Class.Rogue => 3,
+            Class.Priest => 4,
+            Class.Shaman => 5,
+            Class.Mage => 6,
+            _ => 1,
+        },
+        _ => @class == Class.Mage ? 6 : 1,
     };
 
     public void DeleteCharacter(ulong characterGuid)

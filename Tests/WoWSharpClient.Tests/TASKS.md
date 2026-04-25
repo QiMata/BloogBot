@@ -12,6 +12,17 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-04-24 (Wand Shoot protocol coverage)
+- Pass result: `WoWSharpObjectManagerCombatTests green after BG wand Shoot fix`
+- Last delta:
+  - Added `StartWandAttack_WithSelectedTarget_SendsShootSpellAtUnit` to prove BG wand start emits `CMSG_CAST_SPELL` for Shoot (`5019`) with unit target flags and the selected target GUID.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpObjectManagerCombatTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/WoWSharpObjectManagerCombatTests.cs`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/MageTeleportTests.cs`
+
 ### 2026-04-21
 - Pass result: `P4.1 deterministic handler/event coverage is green`
 - Last delta:

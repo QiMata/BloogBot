@@ -8,7 +8,7 @@ Tests unequipping a weapon from mainhand slot — verifies it moves back to bags
 
 This is the first migrated slice of the Shodan test-director overhaul (see
 [SHODAN_MIGRATION_INVENTORY.md](SHODAN_MIGRATION_INVENTORY.md)). The test
-launches `Equipment.config.json` (TESTBOT1 + TESTBOT2 + SHODAN), stages
+launches `Equipment.config.json` (`EQUIPFG1` + `EQUIPBG1` + SHODAN), stages
 the BotRunner under test through `StageBotRunnerLoadoutAsync`, and then
 dispatches only `ActionType.EquipItem` and `ActionType.UnequipItem`.
 The test body issues no GM commands.
@@ -17,7 +17,7 @@ The test body issues no GM commands.
 
 ### UnequipItem_MainhandWeapon_MovesToBags
 
-**Bots:** BG (TESTBOT2) + FG (TESTBOT1) + SHODAN (test director)
+**Bots:** BG (`EQUIPBG1`) + FG (`EQUIPFG1`) + SHODAN (test director)
 
 **Fixture Setup:** `EnsureSettingsAsync(Equipment.config.json)`.
 

@@ -237,24 +237,53 @@ namespace BotRunner
         /// Sequence to start wand auto-attack (Shoot) on a target.
         /// FG: CastSpellByName('Shoot'), BG: CMSG_CAST_SPELL with Shoot spell ID.
         /// </summary>
-        private IBehaviourTreeNode BuildStartWandAttackSequence(ulong targetGuid) => new BehaviourTreeBuilder()
-            .Sequence("Start Wand Attack Sequence")
-                .Splice(CheckForTarget(targetGuid))
-                .Do("Start Wand Attack", time =>
-                {
-                    if (targetGuid == 0)
-                    {
-                        Log.Warning("[BOT RUNNER] StartWandAttack requested with targetGuid=0; ignoring.");
-                        return BehaviourTreeStatus.Failure;
-                    }
+        private IBehaviourTreeNode BuildStartWandAttackSequence(ulong targetGuid)
+        {
+            bool facingPrimed = false;
 
-                    _objectManager.SetTarget(targetGuid);
-                    _objectManager.StartWandAttack();
-                    Log.Information("[BOT RUNNER] Started wand attack on target {Guid:X}", targetGuid);
-                    return BehaviourTreeStatus.Success;
-                })
-            .End()
-            .Build();
+            return new BehaviourTreeBuilder()
+                .Sequence("Start Wand Attack Sequence")
+                    .Splice(CheckForTarget(targetGuid))
+                    .Do("Start Wand Attack", time =>
+                    {
+                        if (targetGuid == 0)
+                        {
+                            Log.Warning("[BOT RUNNER] StartWandAttack requested with targetGuid=0; ignoring.");
+                            return BehaviourTreeStatus.Failure;
+                        }
+
+                        var player = _objectManager.Player;
+                        if (player?.Position == null)
+                            return BehaviourTreeStatus.Running;
+
+                        var target = _objectManager.Units.FirstOrDefault(u => u.Guid == targetGuid);
+                        if (target == null || target.Health == 0)
+                        {
+                            Log.Information("[BOT RUNNER] Wand target 0x{Guid:X} dead or gone before Shoot.", targetGuid);
+                            return BehaviourTreeStatus.Success;
+                        }
+
+                        if (target.Position == null)
+                            return BehaviourTreeStatus.Running;
+
+                        if (!facingPrimed)
+                        {
+                            _objectManager.SetTarget(targetGuid);
+                            _objectManager.StopAllMovement();
+                            _objectManager.Face(target.Position);
+                            facingPrimed = true;
+                            Log.Information("[BOT RUNNER] Facing wand target 0x{Guid:X} before Shoot.", targetGuid);
+                            return BehaviourTreeStatus.Running;
+                        }
+
+                        _objectManager.Face(target.Position);
+                        _objectManager.StartWandAttack();
+                        Log.Information("[BOT RUNNER] Started wand attack on target {Guid:X}", targetGuid);
+                        return BehaviourTreeStatus.Success;
+                    })
+                .End()
+                .Build();
+        }
 
         private IBehaviourTreeNode StopAttackSequence => new BehaviourTreeBuilder()
             .Sequence("Stop Attack Sequence")

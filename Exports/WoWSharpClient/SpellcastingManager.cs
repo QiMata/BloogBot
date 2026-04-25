@@ -26,6 +26,7 @@ namespace WoWSharpClient
 
         // Fishing spell IDs — vanilla fishing casts do not carry an explicit unit or destination payload.
         private static readonly HashSet<int> _fishingSpellIds = [7620, 7731, 7732, 18248, 33095];
+        private const int ShootSpellId = 5019;
 
         // Melee rejection tracking
         private const long RecentMeleeRejectWindowTicks = TimeSpan.TicksPerMillisecond * 1200;
@@ -297,7 +298,7 @@ namespace WoWSharpClient
 
         // ---- Wand ----
 
-        public void StartWandAttack() => CastSpell("Shoot");
+        public void StartWandAttack() => CastSpell(ShootSpellId);
 
         public void StopWandAttack() => StopCasting();
 

@@ -20,6 +20,20 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-07` BG stop/use/cast packet trigger parity is part of the deterministic movement bundle: `ForceStopImmediate()` synchronously records `MSG_MOVE_STOP` before game-object use/cast packets, and server `0x7A` cast failure is named `TRY_AGAIN` (2026-04-15).
 
 ## Session Handoff
+### 2026-04-24 (BG wand Shoot dispatch)
+- Pass result: `WoWSharpClient wand Shoot packet coverage green`
+- Last delta:
+  - `SpellcastingManager.StartWandAttack()` now dispatches Shoot spell id `5019` directly instead of relying on a missing spell-name lookup. This fixed the background wand path where StateManager action forwarding returned Success but the client logged `Spell 'Shoot' not found in known spells or SpellData lookup`.
+  - Added `WoWSharpObjectManagerCombatTests.StartWandAttack_WithSelectedTarget_SendsShootSpellAtUnit` to pin `CMSG_CAST_SPELL` with target flags `0x0002` and the selected target GUID.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WoWSharpObjectManagerCombatTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~WandAttackTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=equipment_wand_action_plan_fresh8.trx" *> "tmp/test-runtime/results-live/equipment_wand_action_plan_fresh8.console.txt"` -> `passed (2/2)`.
+- Files changed:
+  - `Exports/WoWSharpClient/SpellcastingManager.cs`
+  - `Tests/WoWSharpClient.Tests/WoWSharpObjectManagerCombatTests.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/MageTeleportTests.cs`
+
 ### 2026-04-21
 - Pass result: `P4.1 BG SMSG-to-event parity is green`
 - Last delta:

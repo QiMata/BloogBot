@@ -17,8 +17,8 @@ namespace BotRunner.Tests.LiveValidation;
 /// (see LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md).
 ///
 /// Shape:
-///   1) <see cref="LiveBotFixture.EnsureSettingsAsync"/> launches TESTBOT1 +
-///      TESTBOT2 + SHODAN together via <c>Equipment.config.json</c>.
+///   1) <see cref="LiveBotFixture.EnsureSettingsAsync"/> launches EQUIPFG1 +
+///      EQUIPBG1 + SHODAN together via <c>Equipment.config.json</c>.
 ///   2) <see cref="LiveBotFixture.StageBotRunnerLoadoutAsync"/> stages the
 ///      target with mace proficiency, Maces skill, and a Worn Mace in bags.
 ///      The test body issues no GM commands of its own.
@@ -59,40 +59,29 @@ public class UnequipItemTests
         await _bot.EnsureSettingsAsync(equipmentSettingsPath);
         _bot.SetOutput(_output);
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(equipmentSettingsPath);
 
-        var bgAccount = _bot.BgAccountName;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgAccount), "BG bot account not available.");
-        _output.WriteLine($"=== BG Bot: {_bot.BgCharacterName} ({bgAccount}) ===");
+        var targets = _bot.ResolveBotRunnerActionTargets();
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no item action dispatch.");
+        foreach (var target in targets)
+            _output.WriteLine(
+                $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
+                $"stage Worn Mace, dispatch EquipItem({WornMace}) then UnequipItem({MainhandEquipSlot}).");
 
-        var hasFg = _bot.IsFgActionable;
-        string? fgAccount = null;
-        if (hasFg)
+        _output.WriteLine("[PARITY] Running configured unequip scenarios in parallel.");
+
+        var results = await Task.WhenAll(targets.Select(async target => (
+            Target: target,
+            Passed: await RunUnequipScenario(target.AccountName, target.RoleLabel))));
+
+        foreach (var result in results)
         {
-            fgAccount = _bot.FgAccountName;
-            Assert.False(string.IsNullOrWhiteSpace(fgAccount), "FG actionable but FgAccountName is null.");
-            _output.WriteLine($"=== FG Bot: {_bot.FgCharacterName} ({fgAccount}) ===");
+            Assert.True(
+                result.Passed,
+                $"{result.Target.RoleLabel} bot ({result.Target.AccountName}/{result.Target.CharacterName}): " +
+                "Mainhand should be empty after UnequipItem.");
         }
-
-        bool bgPassed, fgPassed = false;
-        if (hasFg)
-        {
-            _output.WriteLine("[PARITY] Running BG and FG unequip scenarios in parallel.");
-
-            var bgTask = RunUnequipScenario(bgAccount!, "BG");
-            var fgTask = RunUnequipScenario(fgAccount!, "FG");
-            await Task.WhenAll(bgTask, fgTask);
-            bgPassed = await bgTask;
-            fgPassed = await fgTask;
-        }
-        else
-        {
-            bgPassed = await RunUnequipScenario(bgAccount!, "BG");
-            _output.WriteLine("\nFG Bot: NOT AVAILABLE");
-        }
-
-        Assert.True(bgPassed, "BG bot: Mainhand should be empty after UnequipItem.");
-        if (hasFg)
-            Assert.True(fgPassed, "FG bot: Mainhand should be empty after UnequipItem.");
     }
 
     private async Task<bool> RunUnequipScenario(string account, string label)

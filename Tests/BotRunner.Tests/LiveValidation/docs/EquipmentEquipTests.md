@@ -1,44 +1,56 @@
 # EquipmentEquipTests
 
-Tests equipping a weapon from inventory to the mainhand equipment slot.
+Tests equipping a staged weapon from bags to the mainhand equipment slot.
 
 ## Bot Execution Mode
 
-**Dual-Bot Conditional** — Both bots run equip scenarios in parallel. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+**Dual-Bot Conditional** - Both bots run equip scenarios in parallel. FG is
+gated on `IsFgActionable`. The launch roster is `Equipment.config.json`:
+`EQUIPFG1` Foreground Orc Warrior, `EQUIPBG1` Background Orc Warrior, and
+`SHODAN` Background Gnome Mage test director.
+
+This test follows the Shodan migration shape. The test body issues no GM
+commands. Per-role loadout setup is encapsulated in
+`StageBotRunnerLoadoutAsync`.
 
 ## Test Methods (1)
 
 ### EquipItem_AddWeaponAndEquip_AppearsInEquipmentSlot
 
-**Bots:** BG (TESTBOT2) + FG (TESTBOT1)
+**Bots:** BG (`EQUIPBG1`) + FG (`EQUIPFG1`, when actionable) + SHODAN (test director)
 
-**Fixture Setup:** `EnsureCleanSlateAsync()` (revive + safe zone + GM on).
+**Fixture Setup:** `EnsureSettingsAsync(Equipment.config.json)`.
 
-**Test Flow:**
+**Test Flow (per bot):**
 
 | Step | Action | Details |
 |------|--------|---------|
-| 0 | Check mainhand | Read slot 15 from snapshot. If occupied: `.reset items {charName}`, wait 1.5s |
-| 1 | Learn mace skill | Check SpellList for 198 (One-Hand Maces). If missing: `BotLearnSpellAsync(198)` + `BotSetSkillAsync(54, 1, 300)`. Poll 5s. |
-| 2 | Ensure weapon in bags | Count item 36 in BagContents. If none + bags >= 15: `BotClearInventoryAsync()`. If still none: `BotAddItemAsync(36)`, poll 5s. |
-| 3 | Equip weapon | **Dispatch `ActionType.EquipItem`** with `IntParam = 36` |
-| 4 | Verify equip | Poll 3s: mainhand slot GUID changed or bag count dropped |
+| 0 | Stage loadout | `StageBotRunnerLoadoutAsync(account, label, spells=[198], skills=[(54,1,300)], items=[(36,1)])` - clean slate, clear bag 0, learn mace proficiency, set Maces skill, add Worn Mace. |
+| 1 | Wait for bag | Poll for Worn Mace (`36`) in bag snapshot contents. |
+| 2 | Record baseline | Snapshot mainhand slot (`15`) and Worn Mace count in bags. |
+| 3 | Equip weapon | Dispatch `ActionType.EquipItem` with `IntParam = 36`. |
+| 4 | Verify equip | Poll until mainhand is filled and either the mainhand GUID changed or the Worn Mace bag count dropped. |
 
 **StateManager/BotRunner Action Flow:**
 
-**EquipItem dispatch chain:**
-1. ActionMessage with `ActionType.EquipItem`, `IntParam=36`
-2. `BuildEquipItemByIdSequence(36)` in BotRunnerService
-3. Sequence: scan BagContents for itemId 36 → resolve (bag, slot) → `_objectManager.EquipItem(bag, slot)`
-4. FG: Lua `PickupContainerItem(bag, slot)` then `AutoEquipCursorItem()` via ThreadSynchronizer main thread calls
-5. BG: CMSG_AUTOEQUIP_ITEM packet with bag=0xFF, slot=absolute slot index
+`ActionType.EquipItem` -> `BuildEquipItemByIdSequence(36)` -> find item 36 in
+bags -> `_objectManager.EquipItem(bag, slot)`.
+
+FG path: Lua `PickupContainerItem(bag, slot)` + `AutoEquipCursorItem()`.
+
+BG path: `CMSG_AUTOEQUIP_ITEM` packet.
 
 **Key IDs:**
-- Item 36 = Worn Mace
-- Spell 198 = One-Hand Maces proficiency
-- Skill 54 = Maces
-- Mainhand equipment slot = 15 (snapshot BagContents key)
 
-**GM Commands:** `.reset items {charName}` (clear equipment if mainhand occupied).
+| ID | Meaning |
+|----|---------|
+| 36 | Worn Mace |
+| 198 | One-Handed Maces spell |
+| 54 | Maces skill |
+| 15 | Mainhand snapshot inventory slot |
 
-**Assertions:** Mainhand slot filled after equip. Dispatch returns Success.
+**GM Commands in test body:** None. `StageBotRunnerLoadoutAsync` currently
+routes `.learn` / `.setskill` / `.additem` through the target bot's chat layer
+because these MaNGOS commands resolve against the sender's own character.
+That constraint is tracked as the Shodan cross-targeting follow-up in
+`SHODAN_MIGRATION_INVENTORY.md`.
