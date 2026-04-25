@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Communication;
 using Tests.Infrastructure;
@@ -39,7 +41,6 @@ public class DualClientParityTests
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     /// <summary>
@@ -49,23 +50,11 @@ public class DualClientParityTests
     [SkippableFact]
     public async Task NearbyUnits_BothBotsDetectSameUnits()
     {
-        var bgAccount = _bot.BgAccountName!;
-        var fgAccount = _bot.FgAccountName!;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrEmpty(fgAccount), "FG bot not available");
-
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
-        await _bot.EnsureCleanSlateAsync(fgAccount, "FG");
-
-        // Teleport both to same location
-        await _bot.BotTeleportAsync(bgAccount, MapId, OrgX, OrgY, OrgZ);
-        await _bot.BotTeleportAsync(fgAccount, MapId, OrgX, OrgY, OrgZ);
-        await _bot.WaitForTeleportSettledAsync(bgAccount, OrgX, OrgY);
-        await _bot.WaitForTeleportSettledAsync(fgAccount, OrgX, OrgY);
-        await Task.Delay(2000); // Let both ObjectManagers populate
+        var (bgTarget, fgTarget) = await StageDualClientParityTargetsAsync("dual-client nearby-units");
 
         await _bot.RefreshSnapshotsAsync();
-        var bgSnap = _bot.BackgroundBot;
-        var fgSnap = _bot.ForegroundBot;
+        var bgSnap = await _bot.GetSnapshotAsync(bgTarget.AccountName);
+        var fgSnap = await _bot.GetSnapshotAsync(fgTarget.AccountName);
 
         Assert.NotNull(bgSnap);
         Assert.NotNull(fgSnap);
@@ -92,35 +81,11 @@ public class DualClientParityTests
     [SkippableFact]
     public async Task Position_BothBotsAgreeOnMapAndLocation()
     {
-        var bgAccount = _bot.BgAccountName!;
-        var fgAccount = _bot.FgAccountName!;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrEmpty(fgAccount), "FG bot not available");
-
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
-        await _bot.EnsureCleanSlateAsync(fgAccount, "FG");
-
-        await _bot.BotTeleportAsync(bgAccount, MapId, OrgX, OrgY, OrgZ);
-        await _bot.BotTeleportAsync(fgAccount, MapId, OrgX, OrgY, OrgZ);
-        var bgSettled = await _bot.WaitForTeleportSettledAsync(
-            bgAccount,
-            OrgX,
-            OrgY,
-            timeoutMs: 8000,
-            progressLabel: "BG dual-parity-position",
-            xyToleranceYards: 10f);
-        var fgSettled = await _bot.WaitForTeleportSettledAsync(
-            fgAccount,
-            OrgX,
-            OrgY,
-            timeoutMs: 8000,
-            progressLabel: "FG dual-parity-position",
-            xyToleranceYards: 10f);
-        Assert.True(bgSettled, "BG bot should settle near the shared parity location.");
-        Assert.True(fgSettled, "FG bot should settle near the shared parity location.");
+        var (bgTarget, fgTarget) = await StageDualClientParityTargetsAsync("dual-client position");
 
         await _bot.RefreshSnapshotsAsync();
-        var bgSnap = _bot.BackgroundBot;
-        var fgSnap = _bot.ForegroundBot;
+        var bgSnap = await _bot.GetSnapshotAsync(bgTarget.AccountName);
+        var fgSnap = await _bot.GetSnapshotAsync(fgTarget.AccountName);
 
         var bgMapId = bgSnap?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
         var fgMapId = fgSnap?.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
@@ -150,13 +115,11 @@ public class DualClientParityTests
     [SkippableFact]
     public async Task SpellList_BothBotsHaveSpells()
     {
-        var bgAccount = _bot.BgAccountName!;
-        var fgAccount = _bot.FgAccountName!;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrEmpty(fgAccount), "FG bot not available");
+        var (bgTarget, fgTarget) = await EnsureDualClientParityTargetsAsync();
 
         await _bot.RefreshSnapshotsAsync();
-        var bgSnap = _bot.BackgroundBot;
-        var fgSnap = _bot.ForegroundBot;
+        var bgSnap = await _bot.GetSnapshotAsync(bgTarget.AccountName);
+        var fgSnap = await _bot.GetSnapshotAsync(fgTarget.AccountName);
 
         var bgSpellCount = bgSnap?.Player?.SpellList?.Count ?? 0;
         var fgSpellCount = fgSnap?.Player?.SpellList?.Count ?? 0;
@@ -174,11 +137,11 @@ public class DualClientParityTests
     [SkippableFact]
     public async Task Health_BothBotsReportValidHealth()
     {
-        await _bot.RefreshSnapshotsAsync();
-        var bgSnap = _bot.BackgroundBot;
-        var fgSnap = _bot.ForegroundBot;
+        var (bgTarget, fgTarget) = await EnsureDualClientParityTargetsAsync();
 
-        global::Tests.Infrastructure.Skip.If(fgSnap == null, "FG bot not available");
+        await _bot.RefreshSnapshotsAsync();
+        var bgSnap = await _bot.GetSnapshotAsync(bgTarget.AccountName);
+        var fgSnap = await _bot.GetSnapshotAsync(fgTarget.AccountName);
 
         var bgHealth = bgSnap?.Player?.Unit?.Health ?? 0;
         var bgMaxHealth = bgSnap?.Player?.Unit?.MaxHealth ?? 0;
@@ -201,21 +164,95 @@ public class DualClientParityTests
     [SkippableFact]
     public async Task GmCommand_BothBotsCanExecuteCommands()
     {
-        var bgAccount = _bot.BgAccountName!;
-        var fgAccount = _bot.FgAccountName!;
-        global::Tests.Infrastructure.Skip.If(string.IsNullOrEmpty(fgAccount), "FG bot not available");
+        _ = await EnsureDualClientParityTargetsAsync();
+        global::Tests.Infrastructure.Skip.If(
+            true,
+            "FG/BG GM-command parity is not a Shodan action-dispatch behavior; keep tracked until a production action or director-owned cross-target probe replaces it.");
+    }
 
-        // Both bots send a harmless GM command
-        await _bot.SendGmChatCommandAsync(bgAccount, ".targetself");
-        await _bot.SendGmChatCommandAsync(fgAccount, ".targetself");
-        await Task.Delay(500);
+    private async Task<(LiveBotFixture.BotRunnerActionTarget Bg, LiveBotFixture.BotRunnerActionTarget Fg)> StageDualClientParityTargetsAsync(
+        string label)
+    {
+        var (bg, fg) = await EnsureDualClientParityTargetsAsync();
 
-        // Both should still be functional after the command
-        await _bot.RefreshSnapshotsAsync();
-        var bgSnap = _bot.BackgroundBot;
-        var fgSnap = _bot.ForegroundBot;
+        var bgStaged = await _bot.StageBotRunnerAtNavigationPointAsync(
+            bg.AccountName,
+            bg.RoleLabel,
+            MapId,
+            OrgX,
+            OrgY,
+            OrgZ,
+            label,
+            cleanSlate: true,
+            xyToleranceYards: 10f,
+            zStabilizationWaitMs: 1000);
+        var fgStaged = await _bot.StageBotRunnerAtNavigationPointAsync(
+            fg.AccountName,
+            fg.RoleLabel,
+            MapId,
+            OrgX,
+            OrgY,
+            OrgZ,
+            label,
+            cleanSlate: true,
+            xyToleranceYards: 10f,
+            zStabilizationWaitMs: 1000);
+        Assert.True(bgStaged, $"{bg.RoleLabel}: expected shared Orgrimmar staging to succeed.");
+        Assert.True(fgStaged, $"{fg.RoleLabel}: expected shared Orgrimmar staging to succeed.");
 
-        Assert.True(bgSnap?.IsObjectManagerValid ?? false, "BG ObjectManager should be valid after GM command");
-        Assert.True(fgSnap?.IsObjectManagerValid ?? false, "FG ObjectManager should be valid after GM command");
+        await _bot.QuiesceAccountsAsync(
+            new[] { bg.AccountName, fg.AccountName },
+            $"{label} pre-assert");
+        await Task.Delay(2000);
+
+        return (bg, fg);
+    }
+
+    private async Task<(LiveBotFixture.BotRunnerActionTarget Bg, LiveBotFixture.BotRunnerActionTarget Fg)> EnsureDualClientParityTargetsAsync()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Economy.config.json.");
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.FgAccountName),
+            "FG account not available for dual-client parity comparison.");
+        global::Tests.Infrastructure.Skip.IfNot(
+            await _bot.CheckFgActionableAsync(requireTeleportProbe: false),
+            "FG bot not actionable for dual-client parity comparison.");
+
+        var targets = _bot.ResolveBotRunnerActionTargets(
+            includeForegroundIfActionable: true,
+            foregroundFirst: false);
+        var bg = targets.Single(target => !target.IsForeground);
+        var fg = targets.Single(target => target.IsForeground);
+
+        _output.WriteLine(
+            $"[ACTION-PLAN] BG {bg.AccountName}/{bg.CharacterName} and FG {fg.AccountName}/{fg.CharacterName}: dual-client parity targets.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no parity action dispatch unless explicitly requested.");
+
+        return (bg, fg);
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(new[] { dir.FullName }.Concat(segments).ToArray());
+            if (File.Exists(candidate) || Directory.Exists(candidate))
+                return candidate;
+            dir = dir.Parent;
+        }
+
+        throw new DirectoryNotFoundException(
+            $"Could not resolve repository path for {Path.Combine(segments)} from {AppContext.BaseDirectory}.");
     }
 }

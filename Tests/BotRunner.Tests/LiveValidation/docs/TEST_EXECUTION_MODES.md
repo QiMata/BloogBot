@@ -42,6 +42,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | CornerNavigationTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged corner/obstacle probes; BG TravelTo route checks |
 | CraftingProfessionTests | BG-Only | BG | **No** | FG excluded (legacy Lua/UI dependency) |
 | DeathCorpseRunTests | Shodan BG-action / FG opt-in | BG + FG + SHODAN | Opt-in only | Shodan-staged Razor Hill corpse run; BG ReleaseCorpse / RetrieveCorpse proof passes, FG remains guarded by `WWOW_RETRY_FG_CRASH001=1` |
+| DualClientParityTests | Shodan FG+BG-action / tracked skip | BG + FG + SHODAN | Snapshot parity yes | Shodan-staged Orgrimmar snapshot parity; GM-command parity skips as non-production action surface |
 | EconomyInteractionTests | Dual-Bot Conditional | BG + FG + SHODAN | Yes (when available) | Shodan-staged bank/AH/mail interaction |
 | EquipmentEquipTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Parallel equip with IsFgActionable |
 | FishingProfessionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Ratchet fishing task path |
@@ -56,6 +57,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | LootCorpseTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged clean bags and Durotar mob area; BG StartMeleeAttack / LootCorpse proof |
 | MapTransitionTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Deeprun Tram bounce; BG post-bounce action liveness |
 | MountEnvironmentTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged riding loadout and indoor/outdoor mount scene checks |
+| MovementParityTests | Shodan FG+BG-action / tracked skip | BG + FG + SHODAN | Movement parity yes where staged | Shodan-staged route parity; FG/BG recording, facing, and Goto actions with staging/quiesce/packet-edge skips |
 | MovementSpeedTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Durotar road start; BG Goto speed probe |
 | NavigationTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Durotar road/winding probes; BG Goto route checks; Valley long diagonal tracked skip |
 | NpcInteractionTests | Shodan FG+BG-action / tracked skip | BG + FG + SHODAN | Vendor/flight/object-manager yes | Shodan-staged NPC interactions; trainer subcase skips due live funding/mailbox staging gap |

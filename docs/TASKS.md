@@ -32,45 +32,37 @@
 
 ---
 
-## Handoff (2026-04-25, Shodan transport/taxi migration slice)
+## Handoff (2026-04-25, Shodan dual-client/movement parity migration slice)
 
-- Completed: migrated `TaxiTests.cs`, `TaxiTransportParityTests.cs`, and
-  `TransportTests.cs` to the Shodan test-director pattern using the existing
+- Completed: migrated `DualClientParityTests.cs` and `MovementParityTests.cs`
+  to the Shodan test-director pattern using the existing
   `Economy.config.json` topology.
 - Last delta:
-  - Added fixture-contained taxi readiness and transport-coordinate staging
-    helpers. `ECONBG1` receives BG taxi/transport actions, `ECONFG1` is idle or
-    parity-active depending on the test, and SHODAN remains director-only.
-  - Test bodies now dispatch only `VisitFlightMaster`, `SelectTaxiNode`,
-    recording actions, or transport `Goto`; direct `.tele`, money, taxi-node,
-    and transport setup calls moved behind fixture helpers.
-  - Documented current tracked gaps: Alliance taxi/Menethil/Deeprun need an
-    Alliance/tram/dock config, Undercity elevator boarding does not reliably
-    expose `TransportGuid`, and cross-continent transport parity still lacks a
-    stable action-driven boarding/disembark assertion.
-  - Fixed taxi-cheat confirmation polling so a final refreshed snapshot can
-    satisfy `EnsureTaxiNodesEnabledAsync(...)` when MaNGOS reports taxi-node
-    access after the delta window.
+  - `ECONBG1` and `ECONFG1` are resolved as the parity action targets while
+    SHODAN remains director-only.
+  - Dual-client snapshot parity now stages both targets at a shared Orgrimmar
+    point through fixture helpers; the legacy GM-command parity probe is a
+    tracked skip because it is not a production BotRunner action surface.
+  - Movement parity route starts are fixture-staged and the executable lanes
+    dispatch only recording, facing, and `Goto` actions to BG/FG. Live
+    staging/quiesce instability, redirect packet-recording gaps, and one
+    insufficient-travel route are explicit tracked skips.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
-  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync|EnsureTaxiNodesEnabledAsync" Tests/BotRunner.Tests/LiveValidation/TaxiTests.cs Tests/BotRunner.Tests/LiveValidation/TaxiTransportParityTests.cs Tests/BotRunner.Tests/LiveValidation/TransportTests.cs` -> `no matches`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/DualClientParityTests.cs Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs` -> `no matches`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
-  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TaxiTests|FullyQualifiedName~TaxiTransportParityTests|FullyQualifiedName~TransportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=transport_taxi_shodan_final.trx"` -> `passed overall (8 passed, 5 skipped)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DualClientParityTests|FullyQualifiedName~MovementParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=dual_movement_parity_shodan_final2.trx"` -> `passed overall (10 passed, 7 skipped)`.
   - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
 - Files changed:
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/TaxiTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/TaxiTransportParityTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/TransportTests.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/TaxiTests.md`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/TaxiTransportParityTests.md`
-  - `Tests/BotRunner.Tests/LiveValidation/docs/TransportTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/DualClientParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/DualClientParityTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MovementParityTests.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
   - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
   - task trackers.
-- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/DualClientParityTests.cs Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs`
 
 ---
 
