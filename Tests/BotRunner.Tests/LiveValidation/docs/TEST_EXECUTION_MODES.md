@@ -50,6 +50,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | GatheringRouteSelectionTests | N/A (unit test) | None | N/A | Pure unit test, no live bots |
 | GossipQuestTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged gossip/quest-giver interaction |
 | GroupFormationTests | Dual-Bot Sync | BG + FG | **Required** | Both bots must be available (invite/accept) |
+| IntegrationValidationTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged V3 integration subset; dungeoneering/vendor/assign-loot actions pass, PvP/talent/trainer skip |
 | MailSystemTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged mailbox plus SOAP money/item mail |
 | MailParityTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | BG CheckMail baseline; FG mail collection tracked separately |
 | TradingTests | Shodan BG-action / FG gap | BG + FG + SHODAN | BG cancel only | BG offer/decline passes; transfer skip tracks FG AcceptTrade ACK failure |
@@ -100,3 +101,4 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 18. **BattlegroundQueueTests** - Shodan topology is in place, but the migrated WSG queue smoke is BG-action-only while FG stays idle for topology parity.
 19. **SpellCastOnTargetTests** - Shodan topology is in place, but the migrated Battle Shout proof is BG-action-only while FG stays idle for topology parity.
 20. **TaxiTests / TransportTests** - Shodan topology is in place, but the migrated taxi and transport-location proofs are BG-action or snapshot-only; `TaxiTransportParityTests` covers taxi FG/BG parity separately while elevator/cross-continent boarding gaps remain tracked skips.
+21. **IntegrationValidationTests** - Shodan topology is in place, but the migrated V3 subset is BG-action/snapshot-only; PvP needs an opposing-faction topology plus PvP-flag staging, talent needs a production action surface, and trainer waits on the existing live funding/staging gap.

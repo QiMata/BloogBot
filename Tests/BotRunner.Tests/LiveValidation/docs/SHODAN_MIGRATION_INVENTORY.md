@@ -74,6 +74,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `TransportTests.cs` | Migrated: `Economy.config.json`; fixture-contained zeppelin, Ratchet dock, Undercity elevator, and Thunder Bluff elevator staging; Horde-side snapshot checks pass while Alliance/tram/Menethil placeholders skip explicitly. |
 | `DualClientParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained shared Orgrimmar staging; FG/BG snapshot parity runs against resolved action targets while GM-command parity is a tracked skip. |
 | `MovementParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained movement parity route staging; FG/BG dispatch `SetFacing`, recording, and `Goto` actions while unstable route staging/quiesce and redirect packet-edge gaps stay tracked skips. |
+| `IntegrationValidationTests.cs` | Migrated: `Economy.config.json`; fixture-contained integration staging for dungeoneering, quest snapshot, vendor sell, reward snapshot, and assign-loot lanes; PvP/talent/trainer probes are tracked skips. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -101,10 +102,9 @@ Parity / integration / ack capture:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: 2 SHODAN-CANDIDATE files (after the dual-client/movement parity group moved to ALREADY-SHODAN).
+Total: 1 SHODAN-CANDIDATE file (after `IntegrationValidationTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -648,6 +648,26 @@ redirect packet recording missing `START_FORWARD` on FG, and one route where a
 Shodan-dispatched `Goto` produced insufficient live travel. The migration shape
 is correct and the remaining gaps are runtime parity/staging issues rather than
 test-body setup ownership.
+
+`IntegrationValidationTests.cs` reuses `Economy.config.json` with `ECONBG1` as
+the integration action target, `ECONFG1` available only for the PvP comparison
+pre-check, and SHODAN as director. The slice moves RFC, escort-quest, vendor,
+Orgrimmar reward, and RFC loot-assignment staging behind fixture helpers. The
+executable action lanes dispatch only `StartDungeoneering`, `SellItem`, and
+`AssignLoot`; quest and reward snapshot lanes use fixture-contained state
+staging and snapshot assertions.
+
+Migration result on this slice: live artifact `integration_validation_shodan.trx`
+passed overall with `5` passed and `3` tracked skips. Passed lanes:
+`V3_1_EncounterMechanics_StartDungeoneering_SnapshotsUpdate`,
+`V3_3_EscortQuest_AddQuest_AppearsInQuestLog`,
+`V3_6_AuctionPostingService_BuySell_InventoryChanges`,
+`V3_7_BgRewardCollection_HonorMarks_VisibleInSnapshot`, and
+`V3_8_MasterLootDistribution_AssignLoot_ActionDispatches`. The skipped lanes
+are explicit: PvP needs an opposing-faction Shodan topology plus fixture-owned
+PvP-flag staging, the legacy talent probe is not backed by a production
+BotRunner action surface, and trainer learning remains blocked by the existing
+live trainer funding/staging gap documented by `NpcInteractionTests`.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the
