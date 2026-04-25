@@ -1225,6 +1225,30 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `Tests/BotRunner.Tests/TASKS.md`
 - Next command: `rg -n "^- \\[ \\]|Active task:" docs/TASKS.md`
 
+## Handoff (2026-04-25, Shodan SpiritHealer migration slice)
+
+- Completed: migrated `SpiritHealerTests.cs` to the Shodan test-director pattern and fixed BotRunner dead/ghost spirit-healer `InteractWith` dispatch.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceCombatDispatchTests" --logger "console;verbosity=minimal"` -> `passed (15/15)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpiritHealerTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=spirit_healer_shodan_deadactor_order.trx"` -> `passed (1/1)`
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` before and after live validation -> `No repo-scoped processes to stop.`
+- Notes:
+  - `SpiritHealerTests` now reuses `Economy.config.json`; SHODAN performs corpse/graveyard staging and cleanup, `ECONBG1` receives only `ReleaseCorpse`, `Goto`, and `InteractWith`, and `ECONFG1` stays idle for topology parity.
+  - `ActionDispatcher` now checks the ghost spirit-healer activation branch before generic gameobject interaction so `DeadActorAgent.ResurrectWithSpiritHealerAsync(...)` is used even when the runtime object collections expose the GUID outside the typed unit list.
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceCombatDispatchTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/SpiritHealerTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SpiritHealerTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - task trackers
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/MapTransitionTests.cs`
+
 ## Handoff (2026-04-21, P4.4)
 
 - Completed: shipped `P4.4` only. `P4.5` was intentionally not started.

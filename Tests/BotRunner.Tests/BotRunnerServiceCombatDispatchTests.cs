@@ -12,7 +12,9 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
+using System.Threading.Tasks;
 using WoWSharpClient.Models;
+using WoWSharpClient.Networking.ClientComponents.I;
 using Xas.FluentBehaviourTree;
 
 namespace BotRunner.Tests;
@@ -156,6 +158,130 @@ public class BotRunnerServiceCombatDispatchTests
     }
 
     [Fact]
+    public void BuildBehaviorTreeFromActions_InteractWithSpiritHealer_WhenGhost_UsesDeadActorAgent()
+    {
+        const ulong healerGuid = 0x6491UL;
+        var deadActor = new Mock<IDeadActorNetworkClientComponent>(MockBehavior.Strict);
+        deadActor
+            .Setup(agent => agent.ResurrectWithSpiritHealerAsync(healerGuid, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var agentFactory = new Mock<IAgentFactory>(MockBehavior.Strict);
+        agentFactory.SetupGet(factory => factory.DeadActorAgent).Returns(deadActor.Object);
+
+        var service = CreateService(
+            out var objectManager,
+            agentFactoryAccessor: () => agentFactory.Object);
+        var player = new Mock<IWoWLocalPlayer>(MockBehavior.Loose);
+        player.SetupGet(p => p.Health).Returns(0);
+        player.SetupGet(p => p.InGhostForm).Returns(true);
+        player.SetupGet(p => p.PlayerFlags).Returns(PlayerFlags.PLAYER_FLAGS_GHOST);
+        player.SetupGet(p => p.Bytes1).Returns([0u]);
+
+        var healer = new WoWUnit(new HighGuid(healerGuid))
+        {
+            Name = "Spirit Healer",
+            NpcFlags = (NPCFlags)0x20,
+        };
+
+        objectManager.SetupGet(o => o.Player).Returns(player.Object);
+        objectManager.SetupGet(o => o.GameObjects).Returns(Array.Empty<IWoWGameObject>());
+        objectManager.SetupGet(o => o.Units).Returns([healer]);
+        objectManager.SetupGet(o => o.Objects).Returns([healer]);
+        objectManager
+            .Setup(o => o.InteractWithNpcAsync(healerGuid, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var node = BuildActionTree(service, CharacterAction.InteractWith, healerGuid);
+
+        Assert.Equal(BehaviourTreeStatus.Success, node.Tick(new TimeData(0.1f)));
+        objectManager.Verify(o => o.InteractWithNpcAsync(healerGuid, It.IsAny<CancellationToken>()), Times.Once);
+        deadActor.Verify(
+            agent => agent.ResurrectWithSpiritHealerAsync(healerGuid, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public void BuildBehaviorTreeFromActions_InteractWithNpc_WhenGhostAndUnitMissing_UsesDeadActorAgent()
+    {
+        const ulong npcGuid = 0xF13000195B009E7CUL;
+        var deadActor = new Mock<IDeadActorNetworkClientComponent>(MockBehavior.Strict);
+        deadActor
+            .Setup(agent => agent.ResurrectWithSpiritHealerAsync(npcGuid, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var agentFactory = new Mock<IAgentFactory>(MockBehavior.Strict);
+        agentFactory.SetupGet(factory => factory.DeadActorAgent).Returns(deadActor.Object);
+
+        var service = CreateService(
+            out var objectManager,
+            agentFactoryAccessor: () => agentFactory.Object);
+        var player = new Mock<IWoWLocalPlayer>(MockBehavior.Loose);
+        player.SetupGet(p => p.Health).Returns(0);
+        player.SetupGet(p => p.InGhostForm).Returns(true);
+        player.SetupGet(p => p.PlayerFlags).Returns(PlayerFlags.PLAYER_FLAGS_GHOST);
+        player.SetupGet(p => p.Bytes1).Returns([0u]);
+
+        objectManager.SetupGet(o => o.Player).Returns(player.Object);
+        objectManager.SetupGet(o => o.GameObjects).Returns(Array.Empty<IWoWGameObject>());
+        objectManager.SetupGet(o => o.Units).Returns(Array.Empty<IWoWUnit>());
+        objectManager.SetupGet(o => o.Objects).Returns(Array.Empty<IWoWGameObject>());
+        objectManager
+            .Setup(o => o.InteractWithNpcAsync(npcGuid, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var node = BuildActionTree(service, CharacterAction.InteractWith, npcGuid);
+
+        Assert.Equal(BehaviourTreeStatus.Success, node.Tick(new TimeData(0.1f)));
+        objectManager.Verify(o => o.InteractWithNpcAsync(npcGuid, It.IsAny<CancellationToken>()), Times.Once);
+        deadActor.Verify(
+            agent => agent.ResurrectWithSpiritHealerAsync(npcGuid, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public void BuildBehaviorTreeFromActions_InteractWithGuidInGameObjects_WhenGhost_UsesDeadActorAgent()
+    {
+        const ulong npcGuid = 0xF13000195B009E7CUL;
+        var deadActor = new Mock<IDeadActorNetworkClientComponent>(MockBehavior.Strict);
+        deadActor
+            .Setup(agent => agent.ResurrectWithSpiritHealerAsync(npcGuid, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var agentFactory = new Mock<IAgentFactory>(MockBehavior.Strict);
+        agentFactory.SetupGet(factory => factory.DeadActorAgent).Returns(deadActor.Object);
+
+        var service = CreateService(
+            out var objectManager,
+            agentFactoryAccessor: () => agentFactory.Object);
+        var player = new Mock<IWoWLocalPlayer>(MockBehavior.Loose);
+        player.SetupGet(p => p.Health).Returns(0);
+        player.SetupGet(p => p.InGhostForm).Returns(true);
+        player.SetupGet(p => p.PlayerFlags).Returns(PlayerFlags.PLAYER_FLAGS_GHOST);
+        player.SetupGet(p => p.Bytes1).Returns([0u]);
+
+        var gameObject = new Mock<IWoWGameObject>(MockBehavior.Strict);
+        gameObject.SetupGet(go => go.Guid).Returns(npcGuid);
+
+        objectManager.SetupGet(o => o.Player).Returns(player.Object);
+        objectManager.SetupGet(o => o.GameObjects).Returns([gameObject.Object]);
+        objectManager.SetupGet(o => o.Units).Returns(Array.Empty<IWoWUnit>());
+        objectManager.SetupGet(o => o.Objects).Returns([gameObject.Object]);
+        objectManager
+            .Setup(o => o.InteractWithNpcAsync(npcGuid, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var node = BuildActionTree(service, CharacterAction.InteractWith, npcGuid);
+
+        Assert.Equal(BehaviourTreeStatus.Success, node.Tick(new TimeData(0.1f)));
+        objectManager.Verify(o => o.InteractWithNpcAsync(npcGuid, It.IsAny<CancellationToken>()), Times.Once);
+        gameObject.Verify(go => go.Interact(), Times.Never);
+        deadActor.Verify(
+            agent => agent.ResurrectWithSpiritHealerAsync(npcGuid, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public void BuildBehaviorTreeFromActions_CheckMailMissingGuid_ReturnsFailureWithoutMailCollection()
     {
         var service = CreateService(out var objectManager);
@@ -294,7 +420,8 @@ public class BotRunnerServiceCombatDispatchTests
 
     private static BotRunnerService CreateService(
         out Mock<IObjectManager> objectManager,
-        ITalentService? talentService = null)
+        ITalentService? talentService = null,
+        Func<IAgentFactory?>? agentFactoryAccessor = null)
     {
         objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
         objectManager.SetupGet(o => o.EventHandler).Returns(new Mock<IWoWEventHandler>(MockBehavior.Loose).Object);
@@ -308,6 +435,7 @@ public class BotRunnerServiceCombatDispatchTests
             objectManager.Object,
             updateClient,
             dependencies.Object,
+            agentFactoryAccessor,
             talentService: talentService);
     }
 

@@ -87,9 +87,36 @@ namespace BotRunner
                         }
 
                         var interactGuid = UnboxGuid(actionEntry.Item2[0]);
-                        // Try GameObjects first; fall back to NPC interaction via AgentFactory
+                        // Ghosts interact with spirit healers through a dedicated packet path.
+                        // Check this before GameObjects because runtime object collections can
+                        // include the target GUID outside the typed Units view.
                         var isGameObject = _objectManager.GameObjects.Any(x => x.Guid == interactGuid);
-                        if (isGameObject)
+                        if (ShouldUseSpiritHealerActivationPath(_objectManager, interactGuid))
+                        {
+                            builder.Do($"Activate Spirit Healer {interactGuid:X}", time =>
+                            {
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                if (factory == null)
+                                {
+                                    Log.Warning("[BOT RUNNER] AgentFactory unavailable for spirit healer activation");
+                                    return BehaviourTreeStatus.Failure;
+                                }
+
+                                DiagLog($"[SPIRIT_HEALER] activating guid=0x{interactGuid:X}");
+                                Log.Information("[BOT RUNNER] Greeting spirit healer {Guid:X} before activation.", interactGuid);
+                                _objectManager.InteractWithNpcAsync(interactGuid, CancellationToken.None)
+                                    .GetAwaiter()
+                                    .GetResult();
+                                Thread.Sleep(500);
+
+                                Log.Information("[BOT RUNNER] Activating spirit healer {Guid:X}.", interactGuid);
+                                factory.DeadActorAgent.ResurrectWithSpiritHealerAsync(interactGuid, CancellationToken.None)
+                                    .GetAwaiter()
+                                    .GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                        }
+                        else if (isGameObject)
                         {
                             builder.Splice(BuildInteractWithSequence(interactGuid));
                         }
@@ -1287,6 +1314,23 @@ namespace BotRunner
                 positions.Add(new Position(floats[index], floats[index + 1], floats[index + 2]));
 
             return positions;
+        }
+
+        private const uint SpiritHealerNpcFlag = 0x20;
+
+        private static bool ShouldUseSpiritHealerActivationPath(IObjectManager objectManager, ulong interactGuid)
+        {
+            var player = objectManager.Player;
+            if (player == null || !DeathStateDetection.IsDeadOrGhostBroad(player))
+                return false;
+
+            var unit = objectManager.Units.FirstOrDefault(candidate => candidate.Guid == interactGuid);
+            if (unit == null)
+                return true;
+
+            var npcFlags = (uint)unit.NpcFlags;
+            return (npcFlags & SpiritHealerNpcFlag) != 0
+                || (unit.Name?.Contains("Spirit Healer", StringComparison.OrdinalIgnoreCase) ?? false);
         }
     }
 }

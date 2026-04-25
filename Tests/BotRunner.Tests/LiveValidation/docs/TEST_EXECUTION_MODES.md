@@ -54,6 +54,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | QuestInteractionTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged add/complete/remove quest snapshot plumbing |
 | QuestObjectiveTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged quest objective combat action |
 | SpellCastOnTargetTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Battle Shout parallel cast |
+| SpiritHealerTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged corpse/release/recover flow |
 | StarterQuestTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged quest accept/turn-in baseline |
 | TalentAllocationTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Learn talent scenarios |
 | UnequipItemTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Mainhand unequip |
@@ -73,3 +74,4 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 8. **VendorBuySellTests** - Shodan topology is in place, but the migrated slice is still a BG packet baseline; add FG behavior parity separately.
 9. **MailSystemTests / MailParityTests** - Shodan topology is in place, but committed mail actions are BG-only until FG `CheckMail` collection is stable under combined-suite load.
 10. **TradingTests / TradeParityTests** - Shodan topology is in place, but foreground `DeclineTrade`, `OfferItem`, and `AcceptTrade` currently ACK `Failed/behavior_tree_failed`; transfer/parity paths stay explicit skips until the FG trade action surface is stable.
+11. **SpiritHealerTests** - Shodan topology is in place, but the migrated resurrection proof is BG-action-only while FG stays idle for topology parity.

@@ -53,6 +53,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `QuestInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained quest add/complete/remove staging keeps the test body GM-free while it asserts snapshot quest-state projection. |
 | `StarterQuestTests.cs` | Migrated: `Economy.config.json`; fixture-contained Kaltunk/Gornek staging; BG dispatches `AcceptQuest` / `CompleteQuest` only while FG stays idle for topology parity. |
 | `NpcInteractionTests.cs` | Migrated: `NpcInteraction.config.json`; fixture-contained vendor, flight-master, NPC flag, hunter trainer, and loadout staging; vendor/flight/object-manager paths dispatch to FG/BG, while trainer is a documented skip behind the live funding/mailbox staging gap. |
+| `SpiritHealerTests.cs` | Migrated: `Economy.config.json`; fixture-contained corpse/graveyard staging; BG dispatches `ReleaseCorpse`, `Goto`, and `InteractWith` while FG stays idle for topology parity. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -69,9 +70,7 @@ NPC-interaction group.
 
 Economy / NPC-interaction tests:
 
-| File | Typical per-test setup |
-|------|------------------------|
-| `SpiritHealerTests.cs` | `.die` + `.tele` to graveyard |
+None currently. The remaining candidates start with movement / navigation.
 
 Movement / navigation tests:
 
@@ -100,7 +99,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~26 SHODAN-CANDIDATE files (after `NpcInteractionTests.cs` moved to ALREADY-SHODAN).
+Total: ~25 SHODAN-CANDIDATE files (after `SpiritHealerTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -391,6 +390,22 @@ SOAP `.send money` creates mail that remains uncollectable during Orgrimmar
 mailbox staging. The pre-skip failure artifact
 `npc_interaction_shodan_final.trx` captured `[SHODAN-STAGE] BG mailbox staging
 failed` after strict mailbox staging could not enable GM mode.
+
+`SpiritHealerTests.cs` reuses `Economy.config.json` with `ECONBG1` as the BG
+death/recovery action target, `ECONFG1` launched idle for Shodan topology
+parity, and SHODAN as director. The slice adds fixture-contained Valley spirit
+healer staging and cleanup helpers; the test body no longer issues `.go`,
+`.tele`, or `.die` setup commands and dispatches only `ActionType.ReleaseCorpse`,
+`ActionType.Goto`, and `ActionType.InteractWith` to the BG target.
+
+Migration result on this slice: live artifact
+`spirit_healer_shodan_deadactor_order.trx` passed `1/1`. The slice also fixes
+BotRunner dead/ghost `InteractWith` routing so spirit-healer activation uses the
+BG `DeadActorAgent.ResurrectWithSpiritHealerAsync(...)` packet path before the
+generic gameobject interaction fallback. Pre-fix artifacts captured two useful
+failure modes: ordinary NPC gossip did not resurrect the ghost, and strict
+2-yard approach tolerance could stall on a valid 5-yard interaction-range
+arrival.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

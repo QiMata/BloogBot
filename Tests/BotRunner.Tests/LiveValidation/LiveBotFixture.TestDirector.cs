@@ -513,6 +513,74 @@ public partial class LiveBotFixture
             z: 64.72f,
             cleanSlate);
 
+    public Task<bool> StageBotRunnerAtValleySpiritHealerAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+        => StageBotRunnerAtQuestLocationAsync(
+            targetAccountName,
+            targetRoleLabel,
+            "Valley spirit healer",
+            mapId: 1,
+            x: -637.768f,
+            y: -4300.84f,
+            z: 43.909f,
+            cleanSlate);
+
+    public async Task<DeathInductionResult> StageBotRunnerCorpseAtValleySpiritHealerAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        var staged = await StageBotRunnerAtValleySpiritHealerAsync(
+            targetAccountName,
+            targetRoleLabel,
+            cleanSlate);
+        if (!staged)
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} Valley spirit healer staging failed.");
+
+        await RefreshSnapshotsAsync();
+        var snapshot = await GetSnapshotAsync(targetAccountName);
+        var characterName = snapshot?.CharacterName ?? GetKnownCharacterNameForAccount(targetAccountName);
+        if (string.IsNullOrWhiteSpace(characterName))
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} character name is required for death staging.");
+
+        var death = await InduceDeathForTestAsync(
+            targetAccountName,
+            characterName,
+            timeoutMs: 15000,
+            requireCorpseTransition: true);
+        if (!death.Succeeded)
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} death staging failed: {death.Details}");
+
+        return death;
+    }
+
+    public async Task RestoreBotRunnerAliveAtValleySpiritHealerAsync(
+        string targetAccountName,
+        string targetRoleLabel)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        await RefreshSnapshotsAsync();
+        var snapshot = await GetSnapshotAsync(targetAccountName);
+        var characterName = snapshot?.CharacterName ?? GetKnownCharacterNameForAccount(targetAccountName);
+        if (string.IsNullOrWhiteSpace(characterName))
+            return;
+
+        if (!IsStrictAlive(snapshot))
+            await RevivePlayerAsync(characterName);
+
+        await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            IsStrictAlive,
+            TimeSpan.FromSeconds(10),
+            pollIntervalMs: 500,
+            progressLabel: $"{targetRoleLabel} spirit-healer cleanup alive");
+    }
+
     public async Task<bool> StageBotRunnerQuestAbsentAsync(
         string targetAccountName,
         string targetRoleLabel,

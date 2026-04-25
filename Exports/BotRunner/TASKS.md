@@ -32,6 +32,24 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-25 (SpiritHealer Shodan migration dispatch fix)
+- Pass result: `BotRunner spirit-healer InteractWith dispatch now uses the BG dead-actor packet path; migrated SpiritHealer live validation passed 1/1`
+- Last delta:
+  - `ActionDispatcher` now routes dead/ghost `InteractWith` to the spirit-healer activation branch before the generic gameobject fallback, because runtime object collections can expose the healer GUID outside the typed `Units` view.
+  - The branch greets the target NPC and calls `DeadActorAgent.ResurrectWithSpiritHealerAsync(...)`, matching the MaNGOS `CMSG_SPIRIT_HEALER_ACTIVATE` path.
+  - `BotRunnerServiceCombatDispatchTests` covers spirit-healer routing when the unit is present, when the unit is missing, and when the GUID also appears in `GameObjects`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceCombatDispatchTests" --logger "console;verbosity=minimal"` -> `passed (15/15)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpiritHealerTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=spirit_healer_shodan_deadactor_order.trx"` -> `passed (1/1)`.
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceCombatDispatchTests.cs`
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/MapTransitionTests.cs`
+
 ### 2026-04-25 (NPC Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated NPC live validation passed 3 with 1 tracked trainer funding/mailbox skip`
 - Last delta:

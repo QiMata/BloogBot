@@ -31,7 +31,8 @@
 - [x] Migrate `TradingTests` / `TradeParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained trade-spot/loadout/coinage staging; BG offer/decline passes, while foreground-dependent transfer/parity paths are explicit tracked skips due FG trade ACK failures.
 - [x] Migrate `GossipQuestTests` / `QuestObjectiveTests` / `QuestInteractionTests` / `StarterQuestTests` to the Shodan shape via `Economy.config.json` + fixture-contained quest location/state staging; BG dispatches only `InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or `CompleteQuest` while FG stays idle for topology parity.
 - [x] Migrate `NpcInteractionTests` to the Shodan shape via `NpcInteraction.config.json` + fixture-contained NPC location/loadout staging; vendor, flight-master, and object-manager checks dispatch to FG/BG, while trainer is an explicit tracked skip behind the live funding/mailbox staging gap.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`SpiritHealerTests`, then movement / navigation, combat / misc).
+- [x] Migrate `SpiritHealerTests` to the Shodan shape via `Economy.config.json` + fixture-contained corpse/graveyard staging; BG dispatches only `ReleaseCorpse`, `Goto`, and `InteractWith` while FG stays idle for topology parity.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`MapTransitionTests`, then movement / navigation, combat / misc).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -71,6 +72,29 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan SpiritHealer migration slice)
+- Pass result: `SpiritHealerTests now follows the Shodan test-director action-target split; live spirit-healer recovery passed 1/1`
+- Last delta:
+  - Reused `Economy.config.json` with `ECONBG1` as the BG death/recovery action target, `ECONFG1` idle for topology parity, and SHODAN as director.
+  - Added fixture-contained Valley spirit healer staging/cleanup helpers; the test body dispatches only `ActionType.ReleaseCorpse`, `Goto`, and `InteractWith`.
+  - Added BG dispatch coverage for dead/ghost spirit-healer `InteractWith`, including the runtime case where the target GUID is present in `GameObjects` before `Units`.
+  - Added `SpiritHealerTests.md`, refreshed `TEST_EXECUTION_MODES.md`, and moved `SpiritHealerTests.cs` to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceCombatDispatchTests" --logger "console;verbosity=minimal"` -> `passed (15/15)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpiritHealerTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=spirit_healer_shodan_deadactor_order.trx"` -> `passed (1/1)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceCombatDispatchTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/SpiritHealerTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SpiritHealerTests.md`
+  - live-validation docs and task trackers.
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/MapTransitionTests.cs`
+
 ### 2026-04-25 (Shodan NPC interaction migration slice)
 - Pass result: `NpcInteractionTests now follows the Shodan test-director action-target split; live NPC validation passed 3 and skipped 1 tracked trainer funding/mailbox gap`
 - Last delta:
