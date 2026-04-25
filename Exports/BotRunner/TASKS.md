@@ -32,6 +32,19 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-25 (Gathering Shodan migration observation)
+- Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and the migrated Gathering live slice documents a foreground mining gap`
+- Last delta:
+  - `GatheringProfessionTests` now dispatches `ActionType.StartGatheringRoute` only after Shodan-directed staging. BG mining and herbalism pass on the corrected route center.
+  - FG mining receives the action and moves around active copper candidates, but never reports gather success, bag delta, or skill delta before timeout. This is documented in the slice doc and inventory as a foreground gathering functional gap, not a BotRunner code delta in this slice.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=gathering_shodan_level20.trx"` -> `2 passed, 1 skipped, 1 failed`; FG mining failure documented.
+- Files changed:
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/CraftingProfessionTests.cs`
+
 ### 2026-04-24 (Wand action dispatch support for Shodan migration)
 - Pass result: `BotRunner wand dispatch coverage green; Equipment/Wand migrated live slice passed (2/2)`
 - Last delta:

@@ -14,10 +14,12 @@ internal static class GatheringRouteSelection
 
     public const int DurotarMap = 1;
 
-    // Valley of Trials route staging for the copper-vein pathing probe.
-    public const float ValleyCopperRouteStartX = -800f;
+    // Valley of Trials route staging for the copper-vein pathing probe. Keep
+    // this centered on a real copper-row ground surface; (-800,-4500) is on a
+    // high terrain layer and `.go xyz` there causes vertical recovery noise.
+    public const float ValleyCopperRouteStartX = -1000f;
     public const float ValleyCopperRouteStartY = -4500f;
-    public const float ValleyCopperRouteStartZ = 31f;
+    public const float ValleyCopperRouteStartZ = 28.5f;
     public const float ValleyCopperSearchRadius = 500f;
     public const int ValleyCopperQueryLimit = 64;
 

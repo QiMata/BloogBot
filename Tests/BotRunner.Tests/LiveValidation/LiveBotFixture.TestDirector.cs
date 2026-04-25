@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Communication;
 using Microsoft.Extensions.Logging;
 
 namespace BotRunner.Tests.LiveValidation;
@@ -426,4 +427,300 @@ public partial class LiveBotFixture
             progressLabel: $"{targetRoleLabel} razor-hill stage",
             xyToleranceYards: 60f);
     }
+
+    /// <summary>
+    /// Stage a BotRunner target at the Valley of Trials copper route start for
+    /// action-driven gathering tests. The teleport stays in the fixture so
+    /// Shodan-migrated test bodies do not issue GM movement commands inline.
+    /// </summary>
+    public async Task<bool> StageBotRunnerAtValleyCopperRouteStartAsync(
+        string targetAccountName,
+        string targetRoleLabel)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        await RefreshSnapshotsAsync();
+        var snap = await GetSnapshotAsync(targetAccountName);
+        var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+        if (pos != null)
+        {
+            var distanceToRoute = Distance2D(
+                pos.X,
+                pos.Y,
+                GatheringRouteSelection.ValleyCopperRouteStartX,
+                GatheringRouteSelection.ValleyCopperRouteStartY);
+            _logger.LogInformation(
+                "[SHODAN-STAGE] {Role} current pos=({X:F0},{Y:F0},{Z:F0}) distToValleyCopper={Distance:F0}y",
+                targetRoleLabel,
+                pos.X,
+                pos.Y,
+                pos.Z,
+                distanceToRoute);
+
+            if (distanceToRoute <= 80f)
+                return true;
+        }
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' coordinate teleport Valley copper start map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            GatheringRouteSelection.DurotarMap,
+            GatheringRouteSelection.ValleyCopperRouteStartX,
+            GatheringRouteSelection.ValleyCopperRouteStartY,
+            GatheringRouteSelection.ValleyCopperRouteStartZ);
+        await BotTeleportAsync(
+            targetAccountName,
+            GatheringRouteSelection.DurotarMap,
+            GatheringRouteSelection.ValleyCopperRouteStartX,
+            GatheringRouteSelection.ValleyCopperRouteStartY,
+            GatheringRouteSelection.ValleyCopperRouteStartZ);
+
+        var nearRoute = await WaitForTeleportSettledAsync(
+            targetAccountName,
+            GatheringRouteSelection.ValleyCopperRouteStartX,
+            GatheringRouteSelection.ValleyCopperRouteStartY,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} valley-copper stage",
+            xyToleranceYards: 80f);
+
+        if (nearRoute)
+            await WaitForZStabilizationAsync(targetAccountName, waitMs: 2000);
+
+        return nearRoute;
+    }
+
+    /// <summary>
+    /// Stage a BotRunner target at the Durotar herb route start for
+    /// action-driven herbalism tests.
+    /// </summary>
+    public async Task<bool> StageBotRunnerAtDurotarHerbRouteStartAsync(
+        string targetAccountName,
+        string targetRoleLabel)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' Durotar herb stage map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            GatheringRouteSelection.DurotarMap,
+            GatheringRouteSelection.DurotarHerbRouteStartX,
+            GatheringRouteSelection.DurotarHerbRouteStartY,
+            GatheringRouteSelection.DurotarHerbRouteStartZ);
+
+        await BotTeleportAsync(
+            targetAccountName,
+            GatheringRouteSelection.DurotarMap,
+            GatheringRouteSelection.DurotarHerbRouteStartX,
+            GatheringRouteSelection.DurotarHerbRouteStartY,
+            GatheringRouteSelection.DurotarHerbRouteStartZ);
+
+        return await WaitForTeleportSettledAsync(
+            targetAccountName,
+            GatheringRouteSelection.DurotarHerbRouteStartX,
+            GatheringRouteSelection.DurotarHerbRouteStartY,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} durotar-herb stage",
+            xyToleranceYards: 80f);
+    }
+
+    /// <summary>
+    /// Best-effort cleanup helper for migrated gathering tests. This preserves
+    /// the old "return to Orgrimmar" behavior while keeping GM movement
+    /// commands out of the test body.
+    /// </summary>
+    public async Task ReturnBotRunnerToOrgrimmarSafeZoneAsync(
+        string targetAccountName,
+        string targetRoleLabel)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            return;
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        try
+        {
+            await RefreshSnapshotsAsync();
+            var snap = await GetSnapshotAsync(targetAccountName);
+            var pos = snap?.Player?.Unit?.GameObject?.Base?.Position;
+            if (pos == null)
+                return;
+
+            var distanceToSafeZone = Distance3D(pos.X, pos.Y, pos.Z, SafeZoneX, SafeZoneY, SafeZoneZ);
+            if (distanceToSafeZone <= 80f)
+                return;
+
+            _logger.LogInformation(
+                "[SHODAN-STAGE] {Role} cleanup returning to Orgrimmar safe zone (dist={Distance:F0}y)",
+                targetRoleLabel,
+                distanceToSafeZone);
+            await BotTeleportAsync(targetAccountName, SafeZoneMap, SafeZoneX, SafeZoneY, SafeZoneZ);
+            await WaitForTeleportSettledAsync(
+                targetAccountName,
+                SafeZoneX,
+                SafeZoneY,
+                timeoutMs: 10000,
+                progressLabel: $"{targetRoleLabel} safe-zone cleanup",
+                xyToleranceYards: 80f);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[SHODAN-STAGE] {Role} safe-zone cleanup failed", targetRoleLabel);
+        }
+    }
+
+    /// <summary>
+    /// Shodan-owned pool refresh and active-spawn prioritization for gathering
+    /// route tests. The returned route candidates prefer active `.pool spawns`
+    /// coordinates when MaNGOS reports them, otherwise they preserve the static
+    /// DB route order.
+    /// </summary>
+    public async Task<IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)>> RefreshAndPrioritizeGatheringPoolsWithShodanAsync(
+        string shodanAccountName,
+        string label,
+        IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> routeCandidates,
+        float originX,
+        float originY,
+        float searchRadius,
+        int maxPoolUpdates = 8)
+    {
+        if (string.IsNullOrWhiteSpace(shodanAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Shodan account name is required for gathering pool refresh.");
+
+        if (!string.Equals(shodanAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Gathering pool refresh must be issued by the Shodan director.");
+        }
+
+        var refreshPlan = routeCandidates
+            .Where(candidate => candidate.poolEntry.HasValue)
+            .OrderBy(candidate => candidate.distance2D)
+            .Select(candidate => candidate.poolEntry!.Value)
+            .Distinct()
+            .Take(maxPoolUpdates)
+            .ToArray();
+
+        if (refreshPlan.Length == 0)
+            return routeCandidates;
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Label} gathering pool refresh plan: {Pools}",
+            label,
+            string.Join(", ", refreshPlan));
+
+        var spawnedPools = new HashSet<uint>();
+        var activeSpawnCandidates = new List<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)>();
+
+        foreach (var poolEntry in refreshPlan)
+        {
+            var updateTrace = await SendGmChatCommandTrackedAsync(
+                shodanAccountName,
+                $".pool update {poolEntry}",
+                captureResponse: true,
+                delayMs: 750);
+            var updateResponses = updateTrace.ChatMessages.Concat(updateTrace.ErrorMessages).ToArray();
+            _logger.LogInformation(
+                "[SHODAN-STAGE] {Label} .pool update {Pool}: {Evidence}",
+                label,
+                poolEntry,
+                FormatCommandEvidence(updateTrace.DispatchResult, updateResponses));
+
+            var spawnTrace = await SendGmChatCommandTrackedAsync(
+                shodanAccountName,
+                $".pool spawns {poolEntry}",
+                captureResponse: true,
+                delayMs: 750);
+            var spawnResponses = spawnTrace.ChatMessages.Concat(spawnTrace.ErrorMessages).ToArray();
+            var evidence = updateResponses.Concat(spawnResponses).ToArray();
+            var state = FishingPoolActivationAnalyzer.ClassifyPoolSpawnStateResponses(poolEntry, evidence);
+
+            activeSpawnCandidates.AddRange(GatheringRouteSelection.SelectActivePoolSpawnCandidates(
+                spawnResponses,
+                originX,
+                originY,
+                searchRadius));
+
+            _logger.LogInformation(
+                "[SHODAN-STAGE] {Label} .pool spawns {Pool}: {Evidence} => {State}",
+                label,
+                poolEntry,
+                FormatCommandEvidence(spawnTrace.DispatchResult, spawnResponses, "no active spawns reported"),
+                state);
+
+            if (state == FishingPoolActivationState.Spawned)
+                spawnedPools.Add(poolEntry);
+        }
+
+        var activeRouteCandidates = activeSpawnCandidates
+            .DistinctBy(candidate => $"{candidate.map}:{candidate.x:F1}:{candidate.y:F1}:{candidate.z:F1}:{candidate.poolEntry?.ToString() ?? "none"}")
+            .OrderBy(candidate => candidate.distance2D)
+            .Take(Math.Min(24, Math.Max(1, routeCandidates.Count)))
+            .ToList();
+
+        if (activeRouteCandidates.Count > 0)
+        {
+            _logger.LogInformation(
+                "[SHODAN-STAGE] {Label} using active gathering pool coordinates: {Candidates}",
+                label,
+                string.Join(" | ", activeRouteCandidates.Take(8).Select(candidate =>
+                    $"pool={candidate.poolEntry?.ToString() ?? "none"} dist={candidate.distance2D:F1} pos=({candidate.x:F1},{candidate.y:F1},{candidate.z:F1})")));
+            return activeRouteCandidates;
+        }
+
+        if (spawnedPools.Count == 0)
+        {
+            _logger.LogInformation(
+                "[SHODAN-STAGE] {Label} no refreshed gathering pools reported active spawns; preserving DB-distance route order.",
+                label);
+            return routeCandidates;
+        }
+
+        var prioritized = GatheringRouteSelection.PrioritizeSpawnedPools(routeCandidates, spawnedPools);
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Label} prioritized gathering candidates from spawned pools [{Pools}]: {Candidates}",
+            label,
+            string.Join(", ", spawnedPools.OrderBy(pool => pool)),
+            string.Join(" | ", prioritized.Take(6).Select(candidate =>
+                $"pool={candidate.poolEntry?.ToString() ?? "none"} dist={candidate.distance2D:F1} pos=({candidate.x:F1},{candidate.y:F1},{candidate.z:F1})")));
+        return prioritized;
+    }
+
+    private static string FormatCommandEvidence(
+        ResponseResult dispatchResult,
+        IReadOnlyCollection<string> responses,
+        string emptyDetail = "")
+    {
+        if (responses.Count == 0)
+            return string.IsNullOrWhiteSpace(emptyDetail)
+                ? dispatchResult.ToString()
+                : $"{dispatchResult} ({emptyDetail})";
+
+        const int maxResponses = 4;
+        var formatted = responses
+            .Take(maxResponses)
+            .Select(CollapseResponse)
+            .ToArray();
+        var suffix = responses.Count > maxResponses ? $" || ... ({responses.Count - maxResponses} more)" : "";
+        return string.Join(" || ", formatted) + suffix;
+    }
+
+    private static string CollapseResponse(string response)
+        => string.Join(" ", response.Split(['\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 }

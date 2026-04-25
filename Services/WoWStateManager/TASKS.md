@@ -17,6 +17,23 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan Gathering config slice)
+- Last updated: 2026-04-25
+- Active task: none - this slice only added a new live-validation roster for the Shodan migration.
+- Last delta:
+  - Added `Gathering.config.json` with `GATHFG1` Foreground Orc Warrior and `GATHBG1` Background Orc Warrior as action targets plus SHODAN as Background Gnome Mage director.
+  - The roster keeps both action targets on a class that can run the existing mining/herbalism gathering routes while preserving the director-only SHODAN topology.
+- Pass result: `Gathering migration shape green; BG mining/herbalism pass and FG mining is documented as a foreground gathering functional gap`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~GatheringProfessionTests" --logger "trx;LogFileName=gathering_shodan_level20.trx"` -> `2 passed, 1 skipped, 1 failed (FG mining documented after correct action delivery)`
+  - Ratchet anchor: `dotnet test ... --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool"` -> `passed (1/1)`
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/Gathering.config.json` (new)
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/CraftingProfessionTests.cs`
+
 ### 2026-04-24 (Shodan MageTeleport config slice)
 - Last updated: 2026-04-24
 - Active task: none - this slice only added a new live-validation roster for the Shodan migration.

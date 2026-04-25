@@ -35,6 +35,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `EquipmentEquipTests.cs` | Migrated: `Equipment.config.json` launches `EQUIPFG1`/`EQUIPBG1` warriors + SHODAN; `StageBotRunnerLoadoutAsync`; test body dispatches `EquipItem` only. |
 | `WandAttackTests.cs` | Migrated: `Wand.config.json` launches `TRMAF5`/`TRMAB5` mages + SHODAN; `StageBotRunnerLoadoutAsync` for wand loadout; fixture-contained Durotar mob staging; test body dispatches `EquipItem` / `StartWandAttack` / `StopAttack` only. |
 | `MageTeleportTests.cs` | Migrated: `MageTeleport.config.json` launches `TRMAF5`/`TRMAB5` mages + SHODAN; `StageBotRunnerLoadoutAsync` learns the city-teleport spell + adds Rune of Teleportation; fixture-contained `StageBotRunnerAtRazorHillAsync`; test body dispatches `CastSpell` only. |
+| `GatheringProfessionTests.cs` | Migrated: `Gathering.config.json` launches `GATHFG1`/`GATHBG1` warriors + SHODAN; fixture-contained loadout, pool refresh, and route staging; test body dispatches `StartGatheringRoute` only. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -48,7 +49,6 @@ Profession / loadout tests (migrate first - they resemble the Ratchet flow):
 
 | File | Typical per-test setup | Notes |
 |------|------------------------|-------|
-| `GatheringProfessionTests.cs` | `.learn mining/herb`, `.additem pick`, Valley stage | Task-owned gathering + GM prep. |
 | `CraftingProfessionTests.cs` | Recipe + reagent add, skill set | Crafting task prep. |
 | `PetManagementTests.cs` | Pet spells, taming setup | Hunter-only. |
 
@@ -93,7 +93,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~44 SHODAN-CANDIDATE files (after `MageTeleportTests.cs` moved to ALREADY-SHODAN).
+Total: ~43 SHODAN-CANDIDATE files (after `GatheringProfessionTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -213,6 +213,26 @@ the bot is leveled to 20 with the Rune of Teleportation reagent staged.
 The Shodan/FG/BG shape is correct; the underlying cast rejection
 (initially `NO_POWER`, then a short-payload failure after the level bump)
 is tracked as a follow-up rather than reverted in this slice.
+
+`GatheringProfessionTests.cs` uses `Gathering.config.json` with
+`GATHFG1`/`GATHBG1` Orc Warrior action targets and SHODAN as the
+Background Gnome Mage director. The slice moves profession spell/skill/item
+staging into `StageBotRunnerLoadoutAsync`, route staging into
+`StageBotRunnerAtValleyCopperRouteStartAsync` /
+`StageBotRunnerAtDurotarHerbRouteStartAsync`, and pool refresh/selection
+into `RefreshAndPrioritizeGatheringPoolsWithShodanAsync`. The test body
+dispatches only `ActionType.StartGatheringRoute`.
+
+Migration result on this slice: `Mining_BG_GatherCopperVein` and
+`Herbalism_BG_GatherHerb` pass. `Herbalism_FG_GatherHerb` skipped because
+the foreground bot was no longer actionable after the preceding foreground
+mining failure. `Mining_FG_GatherCopperVein` remains a documented functional
+gap: the FG action target is level 20, has Mining, has a Mining Pick, receives
+the `StartGatheringRoute` action, and moves around active copper candidates,
+but no gather success, skill delta, or bag delta is observed before timeout.
+The slice also corrects the Valley copper route center from
+`(-800,-4500,31)` to `(-1000,-4500,28.5)` after native `GetGroundZ` proved
+the old point sits on a high terrain layer.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

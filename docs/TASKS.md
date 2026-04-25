@@ -338,6 +338,37 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 4 - GatheringProfessionTests)
+- Completed:
+  - Migrated `GatheringProfessionTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/Gathering.config.json` launches `GATHFG1` Foreground Orc Warrior, `GATHBG1` Background Orc Warrior, and SHODAN as Background Gnome Mage director.
+  - Added fixture-contained gathering staging helpers: Shodan refreshes/prioritizes pool candidates, target bots receive profession loadout through `StageBotRunnerLoadoutAsync`, and route teleport staging lives in `StageBotRunnerAtValleyCopperRouteStartAsync` / `StageBotRunnerAtDurotarHerbRouteStartAsync`.
+  - Corrected the Valley copper route center to `(-1000,-4500,28.5)` after native `GetGroundZ` showed the old `(-800,-4500,31)` center sits on a high terrain layer. The test body now dispatches only `ActionType.StartGatheringRoute`.
+  - Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/GatheringProfessionTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `GatheringProfessionTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~43.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` before and after live validation -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=gathering_shodan_level20.trx"` -> `2 passed, 1 skipped, 1 failed`. Pass: `Mining_BG_GatherCopperVein`, `Herbalism_BG_GatherHerb`. Skip: `Herbalism_FG_GatherHerb` because FG was no longer actionable after the preceding FG mining failure. Fail: `Mining_FG_GatherCopperVein` after correct Shodan staging/action delivery; documented as a foreground gathering functional gap.
+  - Reference anchor: `dotnet test ... --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "trx;LogFileName=fishing_shodan_anchor_gathering_slice.trx"` -> `passed (1/1)`.
+- Evidence:
+  - `tmp/test-runtime/results-live/gathering_shodan_level20.trx` shows BG mining skill `1 -> 2`, BG herbalism success, and FG mining receiving `StartGatheringRoute` while moving around active copper candidates before timeout.
+  - `tmp/test-runtime/results-live/fishing_shodan_anchor_gathering_slice.trx` is the once-per-session Ratchet anchor pass.
+  - `D:\World of Warcraft\logs\botrunner_GATHFG1.diag.log` and `Bot/Release/net8.0/logs/botrunner_GATHBG1.diag.log` contain the FG/BG action delivery and gathering task traces.
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/Gathering.config.json` (new)
+  - `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelection.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/GatheringProfessionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `docs/TASKS.md`
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/CraftingProfessionTests.cs`
+
 ## Handoff (2026-04-24, Shodan test-director overhaul slice 3 - MageTeleportTests)
 - Completed:
   - Migrated `MageTeleportTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/MageTeleport.config.json` launches `TRMAF5` Foreground Troll Mage, `TRMAB5` Background Troll Mage, and SHODAN as Background Gnome Mage director. `TRMAB5` is the only BotRunner action target for spell-casting tests because `ActionType.CastSpell` resolves to `_objectManager.CastSpell(int)`, which is a documented no-op on the Foreground runner; FG is launched for Shodan-topology parity but stays idle.

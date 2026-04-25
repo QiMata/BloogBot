@@ -1,120 +1,91 @@
 # GatheringProfessionTests
 
-Tests mining and herbalism gathering on naturally spawned nodes with account-level GM setup only.
+`GatheringProfessionTests` validates mining and herbalism through
+`ActionType.StartGatheringRoute`. The suite now follows the Shodan
+test-director pattern: FG and BG are BotRunner action targets, and SHODAN is
+the director for loadout, pool refresh, and location staging.
 
-## Bot Execution Mode
+## Shodan Shape
 
-**Dual-Bot Conditional** — Both bots run mining/herbalism routes. FG gated on IsFgActionable. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
-
-FG remains a packet/interaction reference path, but BG is the authoritative assertion path for this suite.
+1. `Gathering.config.json` launches:
+   - `GATHFG1` as a Foreground Orc Warrior target.
+   - `GATHBG1` as a Background Orc Warrior target.
+   - `SHODAN` as a Background Gnome Mage director.
+2. `AssertConfiguredCharactersMatchAsync(...)` verifies the live roster before
+   actions run.
+3. `StageBotRunnerLoadoutAsync(...)` stages profession spells, skills, mining
+   pick, clean inventory, and level 20 where needed.
+4. `RefreshAndPrioritizeGatheringPoolsWithShodanAsync(...)` issues Shodan-owned
+   `.pool update` / `.pool spawns` commands and returns active route candidates.
+5. `StageBotRunnerAtValleyCopperRouteStartAsync(...)` and
+   `StageBotRunnerAtDurotarHerbRouteStartAsync(...)` keep movement staging in
+   the fixture.
+6. Test bodies dispatch only `ActionType.StartGatheringRoute` to the selected
+   BotRunner target.
 
 ## Active Coverage
 
-### 1. Mining_GatherCopperVein_SkillIncreases
+### Mining
 
-**Flow summary:**
-1. Query Copper Vein spawns near the Valley of Trials route start from the world DB.
-2. Prepare FG first, then BG:
-   - revive / return to setup location
-   - clear bags when needed
-   - self-target
-   - learn mining spells
-   - set skill
-   - add Mining Pick
-3. Explicitly stage this test at `ValleyOfTrials` with `.tele name {character} ValleyOfTrials`.
-4. Dispatch `ActionType.StartGatheringRoute` with the natural copper candidate coordinates.
-5. Let `GatheringRouteTask` optimize the route, path candidate-to-candidate, scan visible nodes, and gather the first valid node.
-6. Assert gather success via task diagnostics, bag delta, or skill delta.
-   - FG failures now log diagnostic evidence and return to the safe zone.
-   - BG remains the hard assertion path for live-suite pass/fail.
-   - The route now loops up to 2 times (`maxRouteLoops=2`) so if all nodes are on respawn during the first pass, the bot walks the route again and catches respawns (~5 min respawn timer).
-   - Search radii widened: `ValleyCopperSearchRadius=500`, `ValleyCopperQueryLimit=64`.
-   - `VisibleNodeDistance` widened from 45y to 80y; `NodeSearchTimeoutMs` from 4s to 8s.
-   - Timeout increased from 2 min to 5 min to accommodate wider route + 2nd loop.
-   - **No-skip policy:** If DB confirms candidates exist but the bot fails to gather, that is an Assert.Fail (detection/pathfinding/interaction bug), not a skip.
-   - The nearby-node query includes `pool_gameobject` / `pool_template` metadata so the Valley route loads the full pooled candidate set instead of truncating pooled spawns silently.
+- Query natural Copper Vein rows around the Valley copper route center.
+- Stage Mining, skill 1/300, Mining Pick, clean bags, and level 20.
+- Refresh pool 1024 through SHODAN and prefer active `.pool spawns` coordinates.
+- Dispatch `StartGatheringRoute` with the mining spell, node entry 1731, and
+  route coordinates.
+- Assert success through skill/bag deltas or `GatheringRouteTask`
+  diagnostics.
 
-### 2. Herbalism_GatherHerb_SkillIncreases
+The copper route center is now `(-1000, -4500, 28.5)`. The previous
+`(-800, -4500, 31)` center is a bad staging point: native `GetGroundZ` reports
+about `107` there, so `.go xyz` put the bots into vertical recovery before the
+route could run.
 
-**Flow summary:**
-1. Query Peacebloom (1617), Silverleaf (1618), and Earthroot (1619) spawns near the Durotar herb route start from the world DB, including pool metadata.
-2. Prepare FG first, then BG:
-   - revive / return to setup location
-   - clear bags when needed
-   - self-target
-   - learn herbalism spells
-   - set skill
-3. Stage at the Durotar herb route start (`-500, -4800, 38`).
-4. Dispatch `ActionType.StartGatheringRoute` with the natural herb candidate coordinates and all three herb entry IDs.
-5. Let `GatheringRouteTask` optimize the route, path candidate-to-candidate, scan visible nodes, and gather the first valid node.
-6. Assert gather success via task diagnostics, bag delta, or skill delta.
-   - FG failures log diagnostic evidence and return to the safe zone.
-   - BG remains the hard assertion path for live-suite pass/fail.
-   - The route now loops up to 2 times (`maxRouteLoops=2`) so if all nodes are on respawn during the first pass, the bot walks the route again and catches respawns.
-   - Search radii widened: `DurotarHerbSearchRadius=600`, `DurotarHerbQueryLimit=64`.
-   - **No-skip policy:** Same as mining — DB-confirmed candidates that fail to gather are Assert.Fail, not skips.
-   - The nearby-node query includes `pool_gameobject` / `pool_template` metadata so the Durotar route loads the full pooled candidate set.
+### Herbalism
+
+- Query natural Peacebloom, Silverleaf, and Earthroot rows near the Durotar
+  herb route.
+- Stage Herbalism, skill 15/300, clean bags, and level 20.
+- Refresh herb pools through SHODAN and prefer active `.pool spawns`
+  coordinates.
+- Dispatch `StartGatheringRoute` with herb entries 1617/1618/1619.
+- Assert success through skill/bag deltas or `GatheringRouteTask`
+  diagnostics.
+
+## Current Status
+
+Final slice validation artifact:
+`tmp/test-runtime/results-live/gathering_shodan_level20.trx`.
+
+- `Mining_BG_GatherCopperVein`: passed in `2m49s`; mining skill advanced
+  `1 -> 2`.
+- `Herbalism_BG_GatherHerb`: passed in `1m12s`.
+- `Herbalism_FG_GatherHerb`: skipped because FG was no longer actionable after
+  the preceding FG mining failure.
+- `Mining_FG_GatherCopperVein`: failed after `6m14s`. The Shodan migration
+  shape is correct: FG was level 20, Mining/pick were staged, active copper
+  coordinates were selected, and `StartGatheringRoute` was delivered. The FG
+  runner pathing/interaction still did not produce `gather_success` or a
+  bag/skill delta before timeout.
+
+The FG mining failure is a documented pre-existing functional gap, not a
+reason to revert the Shodan migration. The failure stays visible so the next
+gathering-task pass can diagnose FG interaction/pathing parity against the now
+green BG path.
+
+## Validation
+
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> passed `33/33`.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> passed `60/60`.
+- `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=gathering_shodan_level20.trx"` -> `2 passed, 1 skipped, 1 failed` as documented above.
+- Reference anchor:
+  `FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool` with
+  `fishing_shodan_anchor_gathering_slice.trx` -> passed `1/1`.
 
 ## Code Paths
 
 - Test entry: `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
-- Mining route selection: `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelection.cs`
-- Setup helpers: `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs`
+- Route selection: `Tests/BotRunner.Tests/LiveValidation/GatheringRouteSelection.cs`
+- Director helpers: `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+- Config: `Services/WoWStateManager/Settings/Configs/Gathering.config.json`
 - Action dispatch: `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
-- Action dispatch: `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`
-- Gather route task: `Exports/BotRunner/Tasks/GatheringRouteTask.cs`
-- BG node detection and interaction: `Exports/WoWSharpClient/`
-- FG node interaction reference: `Services/ForegroundBotRunner/`
-
-## Assertions
-
-- Spawn exists in DB — `Assert.True(candidateCount > 0)` (never skip for empty DB results).
-- Only the test itself stages `ValleyOfTrials`; fixture/login cleanup remains on the Orgrimmar safe zone.
-- Teleport actually lands near the requested location.
-- `StartGatheringRoute` is forwarded successfully.
-- `GatheringRouteTask` reports `gather_success` or the bags / skill snapshot changes.
-- If DB confirms candidates exist but bot fails to gather after route walk + loop, the test **fails** (not skips) — this is a detection/pathfinding/interaction bug.
-- Skill deltas are logged, but lack of skill-up is informational because Vanilla skill gain is RNG-based.
-- FG instability during remote teleports/gathers is logged as reference-only evidence and does not fail the BG-authoritative suite.
-
-## Current Status
-
-- No active live test in this repo currently uses `.gobject add` or any other game-object spawn command.
-- `GatheringProfessionTests` only queries natural rows from `mangos.gameobject` via `QueryGameObjectSpawnsNearAsync(...)`.
-- `2026-03-11` investigation on the failing herbalism run confirmed the reported Silverleaf is the natural DB row:
-  - `gameobject.guid = 1641`
-  - `gameobject.id = 1618`
-  - `position = (590.793, -4870.73, 24.6471)` on map `1`
-  - `gameobject_template.faction = 0`
-- That means the Mangos error is not evidence that the test spawned a new herb node.
-- `2026-03-11` follow-up hardening moved gathering to a BG-authoritative pass/fail model. FG mining/herbalism now run as best-effort reference coverage, log `XunitException` crash/teleport fallout, and return to Orgrimmar in `finally` so the broad suite stays stable while the root FG teleport issue remains tracked under `FG-CRASH-TELE`.
-- `2026-03-12` mining was moved onto the task-owned route contract:
-  - `communication.proto` now carries `ActionType.StartGatheringRoute`
-  - `CharacterAction.StartGatheringRoute` maps through BotRunner
-  - `GatheringRouteTask` owns route optimization, candidate movement, visible-node discovery, and gather interaction
-  - the old inline mining fallback path was removed from the live test
-- `2026-03-12` Valley copper discovery was widened again so the mining test loads pool metadata and all nearby pooled candidates in the Valley radius. The latest DB + live rerun confirmed:
-  - `7` natural Valley copper candidates inside the route radius
-  - all `7` belong to `pool_entry=1024` (`Copper Veins - Durotar (Master Pool)`)
-  - the previous `6`-candidate cap was removed
-- `2026-03-12` fixture/login scan confirmed there is no fixture-level or post-login `.tele name {name} ValleyOfTrials` path. The only active Valley teleport in the mining flow is the test's explicit staging helper.
-- `2026-03-13` herbalism was moved onto the same task-owned route contract as mining:
-  - `GatheringRouteSelection.SelectDurotarHerbCandidates(...)` queries Peacebloom, Silverleaf, and Earthroot near `(-500, -4800)` with `300y` radius and pool metadata
-  - `ActionType.StartGatheringRoute` dispatches all three herb entry IDs with the candidate coordinates
-  - `GatheringRouteTask` owns route optimization, candidate movement, visible-node discovery, and gather interaction — identical to the mining contract
-  - the old inline `TryGatherAtSpawns` herbalism path was replaced
-  - the latest live rerun found `24` Durotar herb-route candidates across pools `1020`, `1021`, `1022` and skipped because all natural herbs were on respawn
-- Validation after the route-task mining pass:
-  - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
-  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~GatheringRouteSelectionTests" --logger "console;verbosity=minimal"` -> `16 passed`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`No Copper Vein nodes currently spawned on any of the 6 Valley copper-route candidates`)
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> `17 passed`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`No Copper Vein nodes currently spawned on any of the 7 Valley copper-route candidates`)
-- Validation after the herbalism route-task migration:
-  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> `20 passed`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Herbalism_GatherHerb_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> `1 skipped` (`No herb nodes currently spawned on any of the 24 Durotar herb-route candidates`)
-- Validation after the hardening pass:
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `2 passed, 1 skipped`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> `33 passed, 0 failed, 2 skipped`
+- Route task: `Exports/BotRunner/Tasks/GatheringRouteTask.cs`
