@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan Bank config observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
+- Last delta:
+  - `BankInteractionTests` / `BankParityTests` now run against `Economy.config.json` with `ECONFG1` Foreground Orc Warrior and `ECONBG1` Background Orc Warrior as action targets plus SHODAN as Background Gnome Mage director.
+  - The roster remains suitable for the next vendor/economy Shodan slices when class requirements still match.
+- Pass result: `Bank migration shape green; live bank validation passed 1 and skipped 3 tracked missing-action placeholders`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~BankInteractionTests|FullyQualifiedName~BankParityTests" --logger "trx;LogFileName=bank_shodan.trx"` -> `1 passed, 3 skipped`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/VendorBuySellTests.cs`
+
 ### 2026-04-25 (Shodan Economy config slice)
 - Last updated: 2026-04-25
 - Active task: none - this slice only added a reusable live-validation roster for Shodan economy migrations.

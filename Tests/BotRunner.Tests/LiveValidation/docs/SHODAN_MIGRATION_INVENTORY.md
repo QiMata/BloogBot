@@ -40,6 +40,8 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `PetManagementTests.cs` | Migrated: `PetManagement.config.json` launches idle `PETFG1`, hunter `PETBG1`, and SHODAN; `StageBotRunnerLoadoutAsync` stages hunter level/pet spells; test body dispatches BG `CastSpell` only. |
 | `AuctionHouseTests.cs` | Migrated: `Economy.config.json` launches `ECONFG1`/`ECONBG1` warriors + SHODAN; fixture-contained AH staging; test body dispatches `InteractWith` only. |
 | `AuctionHouseParityTests.cs` | Migrated: `Economy.config.json`; AH search parity stages FG/BG at auctioneer, while post/buy and cancel are explicit missing-action skips after Shodan staging. |
+| `BankInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained Orgrimmar bank staging; banker detection and `InteractWith` dispatch are Shodan-shaped, while deposit/withdraw is an explicit missing-action skip. |
+| `BankParityTests.cs` | Migrated: `Economy.config.json`; FG/BG bank staging and item setup are Shodan-shaped, while deposit/withdraw and bank-slot purchase are explicit missing-action skips. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -58,7 +60,6 @@ Economy / NPC-interaction tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `BankInteractionTests.cs`, `BankParityTests.cs` | `.tele` to bank, item add |
 | `VendorBuySellTests.cs` | `.tele` to vendor, gold/item add |
 | `EconomyInteractionTests.cs` | Gold, item prep, location stage |
 | `MailSystemTests.cs`, `MailParityTests.cs` | `.send items`, `.tele` to mailbox |
@@ -94,7 +95,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~39 SHODAN-CANDIDATE files (after `AuctionHouseTests.cs` and `AuctionHouseParityTests.cs` moved to ALREADY-SHODAN).
+Total: ~37 SHODAN-CANDIDATE files (after `BankInteractionTests.cs` and `BankParityTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -273,6 +274,21 @@ yet.
 
 Migration result on this slice: live artifact `auction_house_shodan.trx`
 passed `3` tests and skipped `2` with tracked missing-action reasons.
+
+`BankInteractionTests.cs` and `BankParityTests.cs` reuse
+`Economy.config.json` with `ECONFG1` / `ECONBG1` Orc Warrior action targets
+and SHODAN as the Background Gnome Mage director. The slice adds
+`StageBotRunnerAtOrgrimmarBankAsync` so bank coordinate staging lives in the
+fixture. `BankInteractionTests` now validates FG/BG banker detection and
+dispatches only `ActionType.InteractWith` against detected banker GUIDs.
+`BankParityTests` stages Linen Cloth through `StageBotRunnerLoadoutAsync` and
+verifies FG/BG bank/item setup before skipping the unimplemented action
+surfaces.
+
+Migration result on this slice: live artifact `bank_shodan.trx` passed `1`
+test and skipped `3` with tracked missing-action reasons. Deposit/withdraw
+and bank-slot purchase still need BotRunner `ActionType` support before those
+assertions can become behavioral proofs.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

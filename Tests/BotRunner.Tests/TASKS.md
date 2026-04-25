@@ -24,7 +24,8 @@
 - [x] Migrate `CraftingProfessionTests` to the Shodan shape via `Crafting.config.json` + `StageBotRunnerLoadoutAsync`; BG dispatches only `ActionType.CastSpell` while FG stays idle for topology parity.
 - [x] Migrate `PetManagementTests` to the Shodan shape via `PetManagement.config.json` + `StageBotRunnerLoadoutAsync`; BG hunter dispatches only `ActionType.CastSpell` while FG stays idle for topology parity.
 - [x] Migrate `AuctionHouseTests` / `AuctionHouseParityTests` to the Shodan shape via `Economy.config.json` + `StageBotRunnerAtOrgrimmarAuctionHouseAsync`; implemented paths dispatch only `ActionType.InteractWith`, and missing post/buy/cancel action surfaces skip explicitly.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`BankInteractionTests` / `BankParityTests`, then vendor / economy, then mail / trade / NPC, then movement / navigation, then combat / quest / misc).
+- [x] Migrate `BankInteractionTests` / `BankParityTests` to the Shodan shape via `Economy.config.json` + `StageBotRunnerAtOrgrimmarBankAsync`; implemented paths dispatch only `ActionType.InteractWith`, and missing deposit/withdraw/slot-purchase action surfaces skip explicitly.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`VendorBuySellTests`, then economy, then mail / trade / NPC, then movement / navigation, then combat / quest / misc).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -64,6 +65,30 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan Bank migration slice)
+- Pass result: `BankInteractionTests and BankParityTests now follow the Shodan test-director action-target split; live bank validation passed 1 and skipped 3 tracked missing-action placeholders`
+- Last delta:
+  - Reused `Economy.config.json` with `ECONFG1`/`ECONBG1` Orc Warriors plus SHODAN.
+  - Added `StageBotRunnerAtOrgrimmarBankAsync` and migrated bank location staging out of the test bodies.
+  - `BankInteractionTests` stages/detects bankers for FG/BG and dispatches only `ActionType.InteractWith`. `BankParityTests` stages Linen Cloth through `StageBotRunnerLoadoutAsync`; deposit/withdraw and slot purchase now skip with explicit missing-action reasons.
+  - Added `BankInteractionTests.md`, `BankParityTests.md`, and moved both files to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BankInteractionTests|FullyQualifiedName~BankParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=bank_shodan.trx"` -> `passed 1, skipped 3`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/BankInteractionTests.cs Tests/BotRunner.Tests/LiveValidation/BankParityTests.cs` -> no matches.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/BankInteractionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/BankParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/BankInteractionTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/BankParityTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/VendorBuySellTests.cs`
+
 ### 2026-04-25 (Shodan AuctionHouse migration slice)
 - Pass result: `AuctionHouseTests and AuctionHouseParityTests now follow the Shodan test-director action-target split; live AH validation passed 3 and skipped 2 tracked missing-action placeholders`
 - Last delta:

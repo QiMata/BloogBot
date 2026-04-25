@@ -484,6 +484,60 @@ public partial class LiveBotFixture
     }
 
     /// <summary>
+    /// Stage a BotRunner target at the Orgrimmar bank for economy-interaction
+    /// tests. The coordinate teleport stays inside the fixture so migrated
+    /// test bodies do not issue GM movement commands inline.
+    /// </summary>
+    public async Task<bool> StageBotRunnerAtOrgrimmarBankAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' Orgrimmar bank stage map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.BankX,
+            OrgrimmarServiceLocations.BankY,
+            OrgrimmarServiceLocations.BankZ);
+
+        await BotTeleportAsync(
+            targetAccountName,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.BankX,
+            OrgrimmarServiceLocations.BankY,
+            OrgrimmarServiceLocations.BankZ);
+
+        var settled = await WaitForTeleportSettledAsync(
+            targetAccountName,
+            OrgrimmarServiceLocations.BankX,
+            OrgrimmarServiceLocations.BankY,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} org-bank stage",
+            xyToleranceYards: 60f);
+
+        var hasUnits = await WaitForNearbyUnitsPopulatedAsync(
+            targetAccountName,
+            timeoutMs: 15000,
+            progressLabel: $"{targetRoleLabel} org-bank units");
+
+        return settled && hasUnits;
+    }
+
+    /// <summary>
     /// Stage a BotRunner target at the Valley of Trials copper route start for
     /// action-driven gathering tests. The teleport stays in the fixture so
     /// Shodan-migrated test bodies do not issue GM movement commands inline.
