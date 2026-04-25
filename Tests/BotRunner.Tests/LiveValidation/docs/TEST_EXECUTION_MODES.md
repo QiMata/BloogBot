@@ -33,7 +33,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | CombatLoopTests | CombatTest-Only | COMBATTEST | **No** | Account-level GM only; avoids runtime GM-mode corruption |
 | CraftingProfessionTests | BG-Only | BG | **No** | FG excluded (legacy Lua/UI dependency) |
 | DeathCorpseRunTests | BG default + FG opt-in | BG (+ opt-in FG) | Opt-in only | Historical CRASH-001 not reproduced on 2026-04-15; latest opt-in FG corpse-run passes |
-| EconomyInteractionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Bank/AH parallel validation |
+| EconomyInteractionTests | Dual-Bot Conditional | BG + FG + SHODAN | Yes (when available) | Shodan-staged bank/AH/mail interaction |
 | EquipmentEquipTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Parallel equip with IsFgActionable |
 | FishingProfessionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Ratchet fishing task path |
 | GatheringProfessionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Mining + Herbalism routes |

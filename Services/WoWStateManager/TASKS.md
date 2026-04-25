@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan EconomyInteraction config observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
+- Last delta:
+  - `EconomyInteractionTests` now runs against `Economy.config.json` with `ECONFG1`/`ECONBG1` as action targets plus SHODAN.
+  - Mailbox and SOAP mail-money setup moved into `LiveBotFixture` helpers; no WoWStateManager runtime change was required.
+- Pass result: `EconomyInteraction migration shape green; live economy validation passed 3/3`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~EconomyInteractionTests" --logger "trx;LogFileName=economy_interaction_shodan.trx"` -> `passed (3/3)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money" Tests/BotRunner.Tests/LiveValidation/MailSystemTests.cs Tests/BotRunner.Tests/LiveValidation/MailParityTests.cs`
+
 ### 2026-04-25 (Shodan VendorBuySell config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.

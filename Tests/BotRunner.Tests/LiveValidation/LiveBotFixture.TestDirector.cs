@@ -673,6 +673,113 @@ public partial class LiveBotFixture
     }
 
     /// <summary>
+    /// Stage a BotRunner target at the Orgrimmar mailbox used by economy and
+    /// mail interaction tests. The teleport stays in the fixture so test bodies
+    /// do not issue GM movement commands inline.
+    /// </summary>
+    public async Task<bool> StageBotRunnerAtOrgrimmarMailboxAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' Orgrimmar mailbox stage map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.MailboxX,
+            OrgrimmarServiceLocations.MailboxY,
+            OrgrimmarServiceLocations.MailboxZ);
+
+        await BotTeleportAsync(
+            targetAccountName,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.MailboxX,
+            OrgrimmarServiceLocations.MailboxY,
+            OrgrimmarServiceLocations.MailboxZ);
+
+        var settled = await WaitForTeleportSettledAsync(
+            targetAccountName,
+            OrgrimmarServiceLocations.MailboxX,
+            OrgrimmarServiceLocations.MailboxY,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} org-mailbox stage",
+            xyToleranceYards: 60f);
+
+        await RefreshSnapshotsAsync();
+        var objectsVisible = await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snap => snap.NearbyObjects.Any(go => go.GameObjectType == 19
+                || (go.Name ?? string.Empty).Contains("mail", StringComparison.OrdinalIgnoreCase)),
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 300,
+            progressLabel: $"{targetRoleLabel} org-mailbox object");
+
+        return settled && objectsVisible;
+    }
+
+    /// <summary>
+    /// Send copper to a BotRunner target mailbox via SOAP. This keeps mail
+    /// staging out of the migrated test body while still using a named target,
+    /// server-side GM command.
+    /// </summary>
+    public async Task StageBotRunnerMailboxMoneyAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint copper,
+        string subject = "Test Gold",
+        string body = "Mail collection test")
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        var characterName = GetKnownCharacterNameForAccount(targetAccountName);
+        if (string.IsNullOrWhiteSpace(characterName))
+        {
+            await WaitForSnapshotConditionAsync(
+                targetAccountName,
+                snap => !string.IsNullOrWhiteSpace(snap.CharacterName),
+                TimeSpan.FromSeconds(5),
+                pollIntervalMs: 250,
+                progressLabel: $"{targetRoleLabel} mail-character");
+
+            characterName = (await GetSnapshotAsync(targetAccountName))?.CharacterName;
+        }
+
+        if (string.IsNullOrWhiteSpace(characterName))
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} character name is required for mail staging.");
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' sending {Copper} copper to {Character} via SOAP mail",
+            targetRoleLabel,
+            targetAccountName,
+            copper,
+            characterName);
+
+        var result = await ExecuteGMCommandAsync($".send money {characterName} \"{subject}\" \"{body}\" {copper}");
+        _logger.LogInformation("[SHODAN-STAGE] {Role} SOAP mail result: {Result}", targetRoleLabel, result);
+        await Task.Delay(2000);
+    }
+
+    /// <summary>
     /// Stage a BotRunner target at the Valley of Trials copper route start for
     /// action-driven gathering tests. The teleport stays in the fixture so
     /// Shodan-migrated test bodies do not issue GM movement commands inline.

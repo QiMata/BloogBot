@@ -43,6 +43,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `BankInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained Orgrimmar bank staging; banker detection and `InteractWith` dispatch are Shodan-shaped, while deposit/withdraw is an explicit missing-action skip. |
 | `BankParityTests.cs` | Migrated: `Economy.config.json`; FG/BG bank staging and item setup are Shodan-shaped, while deposit/withdraw and bank-slot purchase are explicit missing-action skips. |
 | `VendorBuySellTests.cs` | Migrated: `Economy.config.json`; fixture-contained Razor Hill vendor and coinage staging; BG dispatches `BuyItem` / `SellItem` only while FG stays idle for topology parity. |
+| `EconomyInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained bank/AH/mailbox/mail-money staging; FG/BG dispatch only `InteractWith` or `CheckMail`. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -61,7 +62,6 @@ Economy / NPC-interaction tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `EconomyInteractionTests.cs` | Gold, item prep, location stage |
 | `MailSystemTests.cs`, `MailParityTests.cs` | `.send items`, `.tele` to mailbox |
 | `TradingTests.cs`, `TradeParityTests.cs` | Item add, partner positioning |
 | `GossipQuestTests.cs`, `QuestObjectiveTests.cs`, `QuestInteractionTests.cs`, `StarterQuestTests.cs` | `.tele` to NPC, item add |
@@ -95,7 +95,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~36 SHODAN-CANDIDATE files (after `VendorBuySellTests.cs` moved to ALREADY-SHODAN).
+Total: ~35 SHODAN-CANDIDATE files (after `EconomyInteractionTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -301,6 +301,19 @@ post-buy cleanup `ActionType.DestroyItem`.
 Migration result on this slice: live artifact `vendor_buy_sell_shodan.trx`
 passed `2/2`. This remains a BG packet baseline by design; FG vendor buy/sell
 coverage is left to a future parity-specific slice.
+
+`EconomyInteractionTests.cs` reuses `Economy.config.json` with `ECONFG1` and
+`ECONBG1` action targets plus SHODAN as director. The slice moves bank, AH,
+mailbox, and SOAP mail-money setup into fixture helpers
+(`StageBotRunnerAtOrgrimmarBankAsync`,
+`StageBotRunnerAtOrgrimmarAuctionHouseAsync`,
+`StageBotRunnerAtOrgrimmarMailboxAsync`, and
+`StageBotRunnerMailboxMoneyAsync`). The test body dispatches only
+`ActionType.InteractWith` for banker/auctioneer and `ActionType.CheckMail` for
+mailbox collection.
+
+Migration result on this slice: live artifact `economy_interaction_shodan.trx`
+passed `3/3` across FG and BG.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

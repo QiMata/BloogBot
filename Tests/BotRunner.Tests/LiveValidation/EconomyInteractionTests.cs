@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -11,11 +13,9 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Economy interaction tests — dual-client validation.
-/// Validates: banking (deposit), auction house (post), mail (collect).
-/// Uses Horde locations in Orgrimmar (bank, AH, mailbox).
-///
-/// Run: dotnet test --filter "FullyQualifiedName~EconomyInteractionTests" --configuration Release
+/// Shodan-directed economy interaction baselines for banker, auctioneer, and
+/// mailbox access. SHODAN owns world/mail staging; FG/BG receive only
+/// InteractWith or CheckMail action dispatches from the test body.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class EconomyInteractionTests
@@ -23,386 +23,226 @@ public class EconomyInteractionTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int MapId = OrgrimmarServiceLocations.MapId; // Kalimdor
-    private const float SetupArrivalDistance = 8f;
-    private const float OrgBankX = OrgrimmarServiceLocations.BankX, OrgBankY = OrgrimmarServiceLocations.BankY, OrgBankZ = OrgrimmarServiceLocations.BankZ;
-    private const float OrgAhX = OrgrimmarServiceLocations.AuctionHouseX, OrgAhY = OrgrimmarServiceLocations.AuctionHouseY, OrgAhZ = OrgrimmarServiceLocations.AuctionHouseZ;
-    private const float OrgMailboxX = OrgrimmarServiceLocations.MailboxX, OrgMailboxY = OrgrimmarServiceLocations.MailboxY, OrgMailboxZ = OrgrimmarServiceLocations.MailboxZ;
-
-
     public EconomyInteractionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
     public async Task Bank_OpenAndDeposit()
     {
-        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
-        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
-            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
-        var hasFg = _bot.IsFgActionable;
+        await EnsureEconomySettingsAsync();
+        var targets = ResolveEconomyTargets();
 
-        // Setup both bots in parallel (items + location).
-        var setupTasks = new System.Collections.Generic.List<Task>
+        foreach (var target in targets)
         {
-            SetupBankAsync(_bot.BgAccountName!, "BG")
-        };
-        if (hasFg)
-            setupTasks.Add(SetupBankAsync(_bot.FgAccountName!, "FG"));
-        await Task.WhenAll(setupTasks);
+            var staged = await _bot.StageBotRunnerAtOrgrimmarBankAsync(
+                target.AccountName,
+                target.RoleLabel);
+            Assert.True(staged, $"{target.RoleLabel}: expected bank staging with visible nearby units.");
 
-        if (hasFg)
-        {
-            _output.WriteLine("[PARITY] Running BG and FG bank interactions in parallel.");
-            var bgTask = InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
-                (uint)NPCFlags.UNIT_NPC_FLAG_BANKER, "Banker", "BG");
-            var fgTask = InteractWithNpcType(_bot.FgAccountName!, () => _bot.ForegroundBot,
-                (uint)NPCFlags.UNIT_NPC_FLAG_BANKER, "Banker", "FG");
-            await Task.WhenAll(bgTask, fgTask);
-
-            Assert.True(await bgTask, "BG should find/interact with a banker.");
-            Assert.True(await fgTask, "FG should find/interact with a banker.");
+            var ok = await InteractWithNpcTypeAsync(
+                target,
+                (uint)NPCFlags.UNIT_NPC_FLAG_BANKER,
+                "Banker");
+            Assert.True(ok, $"{target.RoleLabel} should find/interact with a banker.");
         }
-        else
-        {
-            var bgOk = await InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
-                (uint)NPCFlags.UNIT_NPC_FLAG_BANKER, "Banker", "BG");
-            Assert.True(bgOk, "BG should find/interact with a banker.");
-        }
-    }
-
-    private async Task SetupBankAsync(string account, string label)
-    {
-        // Only ensure location — test validates NPC detection + interaction, not deposit flow.
-        await EnsureReadyAtLocationAsync(account, label, MapId, OrgBankX, OrgBankY, OrgBankZ);
     }
 
     [SkippableFact]
     public async Task AuctionHouse_OpenAndList()
     {
-        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
-        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
-            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
-        var hasFg = _bot.IsFgActionable;
+        await EnsureEconomySettingsAsync();
+        var targets = ResolveEconomyTargets();
 
-        // Setup both bots at AH location in parallel.
-        var setupTasks = new System.Collections.Generic.List<Task>
+        foreach (var target in targets)
         {
-            EnsureReadyAtLocationAsync(_bot.BgAccountName!, "BG", MapId, OrgAhX, OrgAhY, OrgAhZ)
-        };
-        if (hasFg)
-            setupTasks.Add(EnsureReadyAtLocationAsync(_bot.FgAccountName!, "FG", MapId, OrgAhX, OrgAhY, OrgAhZ));
-        await Task.WhenAll(setupTasks);
+            var staged = await _bot.StageBotRunnerAtOrgrimmarAuctionHouseAsync(
+                target.AccountName,
+                target.RoleLabel);
+            Assert.True(staged, $"{target.RoleLabel}: expected auction-house staging with visible nearby units.");
 
-        if (hasFg)
-        {
-            _output.WriteLine("[PARITY] Running BG and FG auctioneer interactions in parallel.");
-            var bgTask = InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
-                (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER, "Auctioneer", "BG");
-            var fgTask = InteractWithNpcType(_bot.FgAccountName!, () => _bot.ForegroundBot,
-                (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER, "Auctioneer", "FG");
-            await Task.WhenAll(bgTask, fgTask);
-
-            Assert.True(await bgTask, "BG should find/interact with an auctioneer.");
-            Assert.True(await fgTask, "FG should find/interact with an auctioneer.");
-        }
-        else
-        {
-            var bgOk = await InteractWithNpcType(_bot.BgAccountName!, () => _bot.BackgroundBot,
-                (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER, "Auctioneer", "BG");
-            Assert.True(bgOk, "BG should find/interact with an auctioneer.");
+            var ok = await InteractWithNpcTypeAsync(
+                target,
+                (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER,
+                "Auctioneer");
+            Assert.True(ok, $"{target.RoleLabel} should find/interact with an auctioneer.");
         }
     }
 
     [SkippableFact]
     public async Task Mail_OpenMailbox()
     {
-        await _bot.EnsureCleanSlateAsync(_bot.BgAccountName!, "BG");
-        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
-            await _bot.EnsureCleanSlateAsync(_bot.FgAccountName!, "FG");
-        var hasFg = _bot.IsFgActionable;
+        await EnsureEconomySettingsAsync();
+        var targets = ResolveEconomyTargets();
 
-        // Send gold via SOAP and setup location in parallel for both bots.
-        var setupTasks = new System.Collections.Generic.List<Task>
+        foreach (var target in targets)
         {
-            SetupMailAsync(_bot.BgAccountName!, "BG")
-        };
-        if (hasFg)
-            setupTasks.Add(SetupMailAsync(_bot.FgAccountName!, "FG"));
-        await Task.WhenAll(setupTasks);
+            var staged = await _bot.StageBotRunnerAtOrgrimmarMailboxAsync(
+                target.AccountName,
+                target.RoleLabel);
+            Assert.True(staged, $"{target.RoleLabel}: expected mailbox staging with visible mailbox object.");
 
-        // Record coinage before mail collection
-        await _bot.RefreshSnapshotsAsync();
-        var bgSnapBefore = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
-        var bgCoinageBefore = bgSnapBefore?.Player?.Coinage ?? 0;
-        _output.WriteLine($"  [BG] Coinage before: {bgCoinageBefore}");
+            await _bot.RefreshSnapshotsAsync();
+            var before = await _bot.GetSnapshotAsync(target.AccountName);
+            var coinageBefore = before?.Player?.Coinage ?? 0;
+            _output.WriteLine($"  [{target.RoleLabel}] Coinage before mail collection: {coinageBefore}");
 
-        uint fgCoinageBefore = 0;
-        if (hasFg)
-        {
-            var fgSnapBefore = await _bot.GetSnapshotAsync(_bot.FgAccountName!);
-            fgCoinageBefore = fgSnapBefore?.Player?.Coinage ?? 0;
-            _output.WriteLine($"  [FG] Coinage before: {fgCoinageBefore}");
-        }
+            await _bot.StageBotRunnerMailboxMoneyAsync(target.AccountName, target.RoleLabel, copper: 10000);
 
-        // Find mailbox and dispatch CHECK_MAIL action
-        if (hasFg)
-        {
-            _output.WriteLine("[PARITY] Running BG and FG mail collection in parallel.");
-            var bgTask = CollectMailFromMailbox(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");
-            var fgTask = CollectMailFromMailbox(_bot.FgAccountName!, () => _bot.ForegroundBot, "FG");
-            await Task.WhenAll(bgTask, fgTask);
+            var ok = await CollectMailFromMailboxAsync(target);
+            Assert.True(ok, $"{target.RoleLabel} should find/interact with a mailbox and collect mail.");
 
-            Assert.True(await bgTask, "BG should find/interact with a mailbox and collect mail.");
-            Assert.True(await fgTask, "FG should find/interact with a mailbox and collect mail.");
-        }
-        else
-        {
-            var bgOk = await CollectMailFromMailbox(_bot.BgAccountName!, () => _bot.BackgroundBot, "BG");
-            Assert.True(bgOk, "BG should find/interact with a mailbox and collect mail.");
-        }
-
-        // Verify coinage increased — poll for the mail to be processed
-        await _bot.WaitForSnapshotConditionAsync(
-            _bot.BgAccountName!,
-            snap => (snap?.Player?.Coinage ?? 0) > bgCoinageBefore,
-            TimeSpan.FromSeconds(8),
-            pollIntervalMs: 300,
-            progressLabel: "BG mail-coinage-increase");
-        await _bot.RefreshSnapshotsAsync();
-        var bgSnapAfter = await _bot.GetSnapshotAsync(_bot.BgAccountName!);
-        var bgCoinageAfter = bgSnapAfter?.Player?.Coinage ?? 0;
-        _output.WriteLine($"  [BG] Coinage after: {bgCoinageAfter} (delta={bgCoinageAfter - bgCoinageBefore})");
-        Assert.True(bgCoinageAfter > bgCoinageBefore, $"BG coinage should increase after collecting mail (before={bgCoinageBefore}, after={bgCoinageAfter})");
-
-        if (hasFg)
-        {
-            await _bot.WaitForSnapshotConditionAsync(
-                _bot.FgAccountName!,
-                snap => (snap?.Player?.Coinage ?? 0) > fgCoinageBefore,
-                TimeSpan.FromSeconds(12),
+            var coinageIncreased = await _bot.WaitForSnapshotConditionAsync(
+                target.AccountName,
+                snap => (snap.Player?.Coinage ?? 0) > coinageBefore,
+                TimeSpan.FromSeconds(target.IsForeground ? 12 : 8),
                 pollIntervalMs: 300,
-                progressLabel: "FG mail-coinage-increase");
+                progressLabel: $"{target.RoleLabel} mail-coinage-increase");
+            Assert.True(coinageIncreased, $"{target.RoleLabel}: coinage should increase after collecting staged mail.");
 
-            var fgSnapAfter = await _bot.GetSnapshotAsync(_bot.FgAccountName!);
-            var fgCoinageAfter = fgSnapAfter?.Player?.Coinage ?? 0;
-            _output.WriteLine($"  [FG] Coinage after: {fgCoinageAfter} (delta={fgCoinageAfter - fgCoinageBefore})");
-            Assert.True(fgCoinageAfter > fgCoinageBefore, $"FG coinage should increase after collecting mail (before={fgCoinageBefore}, after={fgCoinageAfter})");
+            await _bot.RefreshSnapshotsAsync();
+            var after = await _bot.GetSnapshotAsync(target.AccountName);
+            var coinageAfter = after?.Player?.Coinage ?? 0;
+            _output.WriteLine($"  [{target.RoleLabel}] Coinage after mail collection: {coinageAfter} (delta={coinageAfter - coinageBefore})");
         }
     }
 
-    private async Task SetupMailAsync(string account, string label)
+    private async Task<bool> CollectMailFromMailboxAsync(LiveBotFixture.BotRunnerActionTarget target)
     {
-        var nameReady = await _bot.WaitForSnapshotConditionAsync(
-            account,
-            s => !string.IsNullOrWhiteSpace(s.CharacterName),
-            TimeSpan.FromSeconds(5),
-            pollIntervalMs: 250,
-            progressLabel: $"{label} mail-character");
-        Assert.True(nameReady, $"[{label}] Character name should be available before SOAP mail staging.");
+        var mailbox = await FindMailboxAsync(target);
+        if (mailbox == null)
+            return false;
 
-        // Send gold to the bot via SOAP before teleporting to mailbox
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        var charName = snap?.CharacterName
-            ?? (string.Equals(account, _bot.BgAccountName, StringComparison.OrdinalIgnoreCase) ? _bot.BgCharacterName : _bot.FgCharacterName)
-            ?? string.Empty;
-        Assert.False(string.IsNullOrWhiteSpace(charName), $"[{label}] Character name must resolve before sending mail.");
+        var guid = mailbox.Base?.Guid ?? 0UL;
+        if (guid == 0)
+        {
+            _output.WriteLine($"  [{target.RoleLabel}] Mailbox had no valid GUID.");
+            return false;
+        }
 
-        _output.WriteLine($"  [{label}] Sending 10000 copper to {charName} via SOAP .send money");
-        await _bot.ExecuteGMCommandAsync($".send money {charName} \"Test Gold\" \"Mail collection test\" 10000");
-        await Task.Delay(2000);
+        _output.WriteLine(
+            $"  [{target.RoleLabel}] Mailbox found: type={mailbox.GameObjectType} name='{mailbox.Name}' GUID={guid:X}");
 
-        await EnsureReadyAtLocationAsync(account, label, MapId, OrgMailboxX, OrgMailboxY, OrgMailboxZ);
+        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        {
+            ActionType = ActionType.CheckMail,
+            Parameters = { new RequestParameter { LongParam = (long)guid } }
+        });
+        _output.WriteLine($"  [{target.RoleLabel}] CheckMail sent (result={result})");
+        return result == ResponseResult.Success;
     }
 
-    private async Task<bool> CollectMailFromMailbox(string account, Func<WoWActivitySnapshot?> getSnap, string label)
+    private async Task<Game.WoWGameObject?> FindMailboxAsync(LiveBotFixture.BotRunnerActionTarget target)
     {
-        // Find the mailbox game object
-        WoWActivitySnapshot? snap = null;
-        var objects = Enumerable.Empty<Game.WoWGameObject>().ToList();
+        Game.WoWGameObject? mailbox = null;
         var discoverSw = Stopwatch.StartNew();
         while (discoverSw.Elapsed < TimeSpan.FromSeconds(5))
         {
             await _bot.RefreshSnapshotsAsync();
-            snap = getSnap();
-            objects = snap?.NearbyObjects?.ToList() ?? [];
-            if (objects.Count > 0)
+            var snap = await _bot.GetSnapshotAsync(target.AccountName);
+            var objects = snap?.NearbyObjects?.ToList() ?? [];
+
+            const uint MailboxGoType = 19;
+            mailbox = objects.FirstOrDefault(go => go.GameObjectType == MailboxGoType)
+                ?? objects.FirstOrDefault(go => (go.Name ?? string.Empty).Contains("mail", StringComparison.OrdinalIgnoreCase));
+
+            if (mailbox != null)
                 break;
+
             await Task.Delay(200);
         }
 
-        if (objects.Count == 0)
-        {
-            _output.WriteLine($"  [{label}] No nearby game objects to evaluate for mailbox.");
-            return false;
-        }
-
-        // Primary: find by GameObjectType = Mailbox (19)
-        const uint MailboxGoType = 19;
-        var mailbox = objects.FirstOrDefault(go => go.GameObjectType == MailboxGoType);
-
-        // Fallback: name-based search
-        mailbox ??= objects.FirstOrDefault(go => (go.Name ?? string.Empty)
-            .Contains("mail", StringComparison.OrdinalIgnoreCase));
-
         if (mailbox == null)
         {
-            _output.WriteLine($"  [{label}] No mailbox found (type=19 or name). Nearby objects:");
+            await _bot.RefreshSnapshotsAsync();
+            var snap = await _bot.GetSnapshotAsync(target.AccountName);
+            var objects = snap?.NearbyObjects?.ToList() ?? [];
+            _output.WriteLine($"  [{target.RoleLabel}] No mailbox found (type=19 or name). Nearby objects:");
             foreach (var go in objects.Take(10))
             {
                 var goGuid = go.Base?.Guid ?? 0;
                 var pos = go.Base?.Position;
                 _output.WriteLine($"    [{goGuid:X8}] type={go.GameObjectType} name='{go.Name}' ({pos?.X:F1}, {pos?.Y:F1}, {pos?.Z:F1})");
             }
-            return false;
         }
 
-        var guid = mailbox.Base?.Guid ?? 0UL;
-        if (guid == 0)
-        {
-            _output.WriteLine($"  [{label}] Mailbox had no valid GUID.");
-            return false;
-        }
-
-        _output.WriteLine($"  [{label}] Mailbox found: type={mailbox.GameObjectType} name='{mailbox.Name}' GUID={guid:X}");
-
-        // Send CHECK_MAIL action with the mailbox GUID
-        var result = await _bot.SendActionAsync(account, new ActionMessage
-        {
-            ActionType = ActionType.CheckMail,
-            Parameters = { new RequestParameter { LongParam = (long)guid } }
-        });
-        _output.WriteLine($"  [{label}] CheckMail sent (result={result})");
-        return result == ResponseResult.Success;
+        return mailbox;
     }
 
-    private async Task<bool> InteractWithNpcType(string account, Func<WoWActivitySnapshot?> getSnap, uint npcFlag, string npcType, string label)
+    private async Task<bool> InteractWithNpcTypeAsync(
+        LiveBotFixture.BotRunnerActionTarget target,
+        uint npcFlag,
+        string npcType)
     {
-        // After teleport, NPC objects may not be streamed in yet — poll for up to 5s.
-        Game.WoWUnit? npc = null;
-        var sw = Stopwatch.StartNew();
-        while (sw.Elapsed < TimeSpan.FromSeconds(5))
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snap = getSnap();
-            npc = snap?.NearbyUnits?.FirstOrDefault(u => (u.NpcFlags & npcFlag) != 0);
-            if (npc != null) break;
-            await Task.Delay(500);
-        }
+        var npc = await _bot.WaitForNearbyUnitAsync(
+            target.AccountName,
+            npcFlag,
+            timeoutMs: 15000,
+            progressLabel: $"{target.RoleLabel} {npcType}");
 
         if (npc == null)
         {
-            _output.WriteLine($"  [{label}] No {npcType} found nearby after {sw.ElapsedMilliseconds}ms");
+            _output.WriteLine($"  [{target.RoleLabel}] No {npcType} found nearby.");
             return false;
         }
 
         var npcGuid = npc.GameObject?.Base?.Guid ?? 0;
-        _output.WriteLine($"  [{label}] Found {npcType}: {npc.GameObject?.Name} GUID={npcGuid:X}");
+        _output.WriteLine($"  [{target.RoleLabel}] Found {npcType}: {npc.GameObject?.Name} GUID={npcGuid:X}");
 
-        var result = await _bot.SendActionAsync(account, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
         {
             ActionType = ActionType.InteractWith,
             Parameters = { new RequestParameter { LongParam = (long)npcGuid } }
         });
-        _output.WriteLine($"  [{label}] Interaction sent (result={result})");
+        _output.WriteLine($"  [{target.RoleLabel}] Interaction sent (result={result})");
         return result == ResponseResult.Success;
     }
 
-    private async Task EnsureReadyAtLocationAsync(string account, string label, int mapId, float x, float y, float z)
+    private async Task EnsureEconomySettingsAsync()
     {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        if (snap == null)
-            return;
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
 
-        if (!LiveBotFixture.IsStrictAlive(snap))
-        {
-            _output.WriteLine($"  [{label}] Not strict-alive; reviving before economy setup.");
-            await _bot.RevivePlayerAsync(snap.CharacterName);
-            // Poll for alive state instead of fixed 1200ms delay.
-            var reviveSw = Stopwatch.StartNew();
-            while (reviveSw.Elapsed < TimeSpan.FromSeconds(3))
-            {
-                await Task.Delay(200);
-                await _bot.RefreshSnapshotsAsync();
-                snap = await _bot.GetSnapshotAsync(account) ?? snap;
-                if (LiveBotFixture.IsStrictAlive(snap))
-                {
-                    _output.WriteLine($"  [{label}] Revive confirmed after {reviveSw.ElapsedMilliseconds}ms");
-                    break;
-                }
-            }
-        }
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
 
-        var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
-        var dist = pos == null ? float.MaxValue : LiveBotFixture.Distance3D(pos.X, pos.Y, pos.Z, x, y, z);
-        if (dist <= SetupArrivalDistance)
-        {
-            _output.WriteLine($"  [{label}] Already near setup location (dist={dist:F1}y); skipping teleport.");
-            return;
-        }
-
-        _output.WriteLine($"  [{label}] Teleporting to setup location (dist={dist:F1}y).");
-        await _bot.BotTeleportAsync(account, mapId, x, y, z);
-        // Poll for position to arrive near target instead of fixed 1500ms delay.
-        var teleSw = Stopwatch.StartNew();
-        while (teleSw.Elapsed < TimeSpan.FromSeconds(3))
-        {
-            await Task.Delay(200);
-            await _bot.RefreshSnapshotsAsync();
-            var teleSnap = await _bot.GetSnapshotAsync(account);
-            var telePos = teleSnap?.Player?.Unit?.GameObject?.Base?.Position;
-            if (telePos != null && LiveBotFixture.Distance3D(telePos.X, telePos.Y, telePos.Z, x, y, z) <= SetupArrivalDistance)
-            {
-                _output.WriteLine($"  [{label}] Teleport confirmed after {teleSw.ElapsedMilliseconds}ms");
-                break;
-            }
-        }
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Economy.config.json.");
     }
 
-    private async Task EnsureBagHasItemAsync(string account, string label, uint itemId, int addCount)
+    private IReadOnlyList<LiveBotFixture.BotRunnerActionTarget> ResolveEconomyTargets()
     {
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        var hasItem = snap?.Player?.BagContents?.Values.Any(v => v == itemId) == true;
-        if (hasItem)
+        var targets = _bot.ResolveBotRunnerActionTargets();
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no economy action dispatch.");
+
+        foreach (var target in targets)
         {
-            _output.WriteLine($"  [{label}] Item {itemId} already present; skipping additem.");
-            return;
+            _output.WriteLine(
+                $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: stage economy service location and dispatch InteractWith/CheckMail.");
         }
 
-        _output.WriteLine($"  [{label}] Adding item {itemId} x{addCount}.");
-        await _bot.BotAddItemAsync(account, itemId, addCount);
-        // Poll for item to appear in bags instead of fixed 1000ms delay.
-        var addSw = Stopwatch.StartNew();
-        while (addSw.Elapsed < TimeSpan.FromSeconds(3))
-        {
-            await Task.Delay(200);
-            await _bot.RefreshSnapshotsAsync();
-            var addSnap = await _bot.GetSnapshotAsync(account);
-            if (addSnap?.Player?.BagContents?.Values.Any(v => v == itemId) == true)
-            {
-                _output.WriteLine($"  [{label}] Item {itemId} confirmed in bags after {addSw.ElapsedMilliseconds}ms");
-                break;
-            }
-        }
+        return targets;
     }
 
-    private void LogNearbyGameObjects(WoWActivitySnapshot? snap, string label)
+    private static string ResolveRepoPath(params string[] segments)
     {
-        var objects = snap?.NearbyObjects?.ToList() ?? [];
-        _output.WriteLine($"  [{label}] Nearby game objects: {objects.Count}");
-        foreach (var go in objects.Take(10))
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
         {
-            var goGuid = go.Base?.Guid ?? 0;
-            var pos = go.Base?.Position;
-            _output.WriteLine($"    [{goGuid:X8}] {go.Name} ({pos?.X:F1}, {pos?.Y:F1}, {pos?.Z:F1})");
-        }
-    }
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
 
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
+    }
 }
