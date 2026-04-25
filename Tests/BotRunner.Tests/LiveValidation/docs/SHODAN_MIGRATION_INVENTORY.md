@@ -60,6 +60,8 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `CornerNavigationTests.cs` | Migrated: `Economy.config.json`; fixture-contained corner/obstacle coordinate staging; BG dispatches `TravelTo` for route checks while FG stays idle for topology parity. |
 | `TileBoundaryCrossingTests.cs` | Migrated: `Economy.config.json`; fixture-contained tile-boundary staging; BG dispatches `TravelTo` across Orgrimmar/open-terrain boundaries while FG stays idle for topology parity. |
 | `MovementSpeedTests.cs` | Migrated: `Economy.config.json`; fixture-contained Durotar road staging; BG dispatches `Goto` for the speed probe while FG stays idle for topology parity. |
+| `NavigationTests.cs` | Migrated: `Economy.config.json`; fixture-contained Durotar road/winding staging; BG dispatches `Goto` for route probes while FG stays idle for topology parity; Valley long route is a tracked skip. |
+| `AllianceNavigationTests.cs` | Migrated: `Navigation.config.json`; stable idle `ECONFG1`, Human BG `NAVBG1`, and SHODAN; Alliance-side coordinate staging is fixture-owned with snapshot assertions. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -80,10 +82,8 @@ None currently. The remaining candidates start with movement / navigation.
 
 Movement / navigation tests:
 
-| File | Typical per-test setup |
-|------|------------------------|
-| `NavigationTests.cs` | Staging teleport + navmesh probe |
-| `AllianceNavigationTests.cs` | Alliance-side staging teleport |
+None currently. The remaining candidates start with combat / death / buffs /
+misc.
 
 Combat / death / buffs / misc:
 
@@ -100,7 +100,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~19 SHODAN-CANDIDATE files (after `MovementSpeedTests.cs` moved to ALREADY-SHODAN).
+Total: ~17 SHODAN-CANDIDATE files (after `NavigationTests.cs` and `AllianceNavigationTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -477,6 +477,33 @@ calls and dispatches only `ActionType.Goto`.
 Migration result on this slice: live artifact `movement_speed_shodan.trx`
 passed `1/1`, covering the Durotar 141-yard winding path speed, Z-stability,
 and arrival assertions.
+
+`NavigationTests.cs` reuses `Economy.config.json` with `ECONBG1` as the BG
+navigation action target, `ECONFG1` launched idle for Shodan topology parity,
+and SHODAN as director. The slice moves Durotar road and winding-road start
+staging into `StageBotRunnerAtNavigationPointAsync(...)`; the test body no
+longer issues direct `BotTeleportAsync(...)` setup calls and dispatches only
+BG `ActionType.Goto` for the executable route probes. The short Durotar road
+route stages at z=`42` so the setup command stays distinct from the preceding
+trace route while the server still ground-snaps to the same road surface.
+
+`AllianceNavigationTests.cs` uses `Navigation.config.json` with stable idle
+foreground `ECONFG1`, Human Warrior BG target `NAVBG1`, and SHODAN as the
+director. The slice avoids the initial all-Human foreground configuration
+because that FG runner crashed during the first live attempt. Alliance-side
+Goldshire, Stormwind, Westfall, Stockade, and Gnomeregan staging is
+fixture-contained and asserted through snapshots; SHODAN never resolves as an
+action target.
+
+Migration result on this slice: live artifact
+`navigation_alliance_shodan_final4.trx` passed overall with `7` passed and
+`1` tracked skip. `Navigation_ShortPath_ArrivesAtDestination` and
+`Navigation_LongPath_ZTrace_FGvsBG` pass after Shodan-owned Durotar staging;
+the trace writes `durotar_winding_trace_*.json`. The skipped
+`Navigation_LongPath_ArrivesAtDestination` is Shodan-launched but currently
+pops `GoToTask` with `no_path_timeout` on the Valley of Trials long diagonal,
+so it remains documented as a navigation runtime gap rather than a
+migration-shape failure.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

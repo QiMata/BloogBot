@@ -1,45 +1,28 @@
 # NavigationTests
 
-BG-only navigation baseline for the headless botrunner.
+## Shodan Shape
 
-## Bot Execution Mode
+- Uses `Services/WoWStateManager/Settings/Configs/Economy.config.json`.
+- `ECONBG1` is the only BotRunner action target for navigation actions.
+- `ECONFG1` launches idle for topology parity.
+- SHODAN is director-only and owns route-start staging through `StageBotRunnerAtNavigationPointAsync(...)`.
+- Test bodies dispatch only `ActionType.Goto` and assert snapshots / task outcome.
 
-**BG-Only** — BG-only pathfinding baseline. Some Z-trace diagnostics probe both bots. No FG parity comparison. See [TEST_EXECUTION_MODES.md](TEST_EXECUTION_MODES.md).
+## Coverage
 
-This suite validates the live `Goto` path through:
-- `Exports/BotRunner/BotRunnerService.Sequences.Combat.cs`
-- `Exports/WoWSharpClient/Movement/MovementController.cs`
-- `Services/PathfindingService`
+- `Navigation_ShortPath_ArrivesAtDestination` stages the BG target on a Durotar road start at `(-500, -4800, 42)`, dispatches `Goto` to `(-460, -4760, 38)`, asserts arrival, and quiesces the target.
+- `Navigation_LongPath_ZTrace_FGvsBG` keeps the legacy name but now captures BG-only movement from `(-500, -4800, 41)` to `(-400, -4700, 45)` while FG stays idle for Shodan topology parity. The trace artifact is written as `durotar_winding_trace_*.json`.
+- `Navigation_LongPath_ArrivesAtDestination` is a tracked skip: the Valley of Trials long diagonal currently pops `GoToTask` with `no_path_timeout` before arrival under Shodan staging.
 
-## Test Methods
+## Runtime Notes
 
-### Navigation_ShortPath_ArrivesAtDestination
+- Earlier live attempts showed the Valley long route failing after valid action delivery, so the skip records a navigation/runtime gap rather than a migration exception.
+- Reusing the exact same staging command for the short route after the Z-trace route could silently no-op in the live server. The committed short route uses z=`42` to keep the command distinct while MaNGOS ground-snaps to the same Durotar road surface.
 
-**Bot:** BG only (`TESTBOT2`)
+## Validation
 
-**Scenario:** Razor Hill short path (~30y)
-- Start: `(340, -4686, 16.5)`
-- End: `(310, -4720, 11)`
-- Timeout: `20s`
-- Arrival radius: `8y`
-
-### Navigation_CityPath_ArrivesAtDestination
-
-**Bot:** BG only (`TESTBOT2`)
-
-**Scenario:** Orgrimmar city path (~50y)
-- Start: `(1629, -4373, 34)`
-- End: `(1660, -4420, 34)`
-- Timeout: `45s`
-- Arrival radius: `8y`
-
-## Metrics
-
-Each run asserts or logs:
-- `Goto` dispatch succeeds
-- best distance to destination decreases over time
-- step distance shows real travel instead of packet noise only
-- total travel is recorded for timeout diagnosis
-- arrival occurs inside the `8y` acceptance radius
-
-FG remains useful for packet capture, but arrival assertions here are BG-only because the botrunner movement logic lives in the headless client.
+- `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> passed with existing warnings.
+- Direct GM/setup grep over `NavigationTests.cs` and `AllianceNavigationTests.cs` -> no matches.
+- Deterministic safety bundle -> passed `33/33`.
+- Dispatch readiness coverage -> passed `60/60`.
+- `navigation_alliance_shodan_final4.trx` -> overall live run passed `7/8` with one tracked skip.

@@ -31,6 +31,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 
 | Test Class | Mode | Account(s) | FG Observation? | Notes |
 |------------|------|-----------|-----------------|-------|
+| AllianceNavigationTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Human BG Alliance coordinate staging; snapshot assertions after Shodan-owned staging |
 | BasicLoopTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Login/physics health checks |
 | BuffAndConsumableTests | Dual-Bot Conditional | BG + FG | Yes (when available) | FG-first, then BG |
 | CombatLoopTests | CombatTest-Only | COMBATTEST | **No** | Account-level GM only; avoids runtime GM-mode corruption |
@@ -52,7 +53,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | MapTransitionTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Deeprun Tram bounce; BG post-bounce action liveness |
 | MountEnvironmentTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged riding loadout and indoor/outdoor mount scene checks |
 | MovementSpeedTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Durotar road start; BG Goto speed probe |
-| NavigationTests | BG-Only | BG | **No** | Pathfinding + Z-trace (some runs probe both) |
+| NavigationTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Durotar road/winding probes; BG Goto route checks; Valley long diagonal tracked skip |
 | NpcInteractionTests | Shodan FG+BG-action / tracked skip | BG + FG + SHODAN | Vendor/flight/object-manager yes | Shodan-staged NPC interactions; trainer subcase skips due live funding/mailbox staging gap |
 | OrgrimmarGroundZAnalysisTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Post-teleport ground Z |
 | QuestInteractionTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged add/complete/remove quest snapshot plumbing |
@@ -79,7 +80,7 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 7. **TravelPlannerTests** - Shodan topology is in place, but the migrated travel proof is BG-action-only; long Crossroads probes remain tracked skips until the no-movement `TravelTo` gap is fixed.
 8. **CornerNavigationTests / TileBoundaryCrossingTests** - Shodan topology is in place, but the migrated movement probes are BG-action-only while FG stays idle for topology parity.
 9. **MovementSpeedTests** - Shodan topology is in place, but the migrated speed probe is BG-action-only while FG stays idle for topology parity.
-10. **NavigationTests** - BG-only. FG position comparison would catch movement divergence.
+10. **NavigationTests / AllianceNavigationTests** - Shodan topology is in place, but the migrated navigation proofs are BG-action/snapshot-only while FG stays idle; the Valley long diagonal remains a tracked skip until the `GoToTask` `no_path_timeout` gap is fixed.
 11. **StarterQuestTests / GossipQuestTests / QuestObjectiveTests / QuestInteractionTests** - Shodan topology is in place, but the migrated quest group is BG-action-only while FG stays idle for topology parity.
 12. **VendorBuySellTests** - Shodan topology is in place, but the migrated slice is still a BG packet baseline; add FG behavior parity separately.
 13. **MailSystemTests / MailParityTests** - Shodan topology is in place, but committed mail actions are BG-only until FG `CheckMail` collection is stable under combined-suite load.

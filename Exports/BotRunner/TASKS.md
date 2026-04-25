@@ -32,6 +32,21 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-25 (Navigation/Alliance Shodan migration observation)
+- Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated navigation/alliance live validation passed 7/8 with one tracked skip`
+- Last delta:
+  - `NavigationTests` now dispatches only BG `ActionType.Goto` after Shodan-directed Durotar road and winding-road staging.
+  - `AllianceNavigationTests` uses Shodan-directed Human Alliance coordinate staging and snapshot assertions; no production BotRunner action is dispatched in that class.
+  - The Valley of Trials long diagonal remains a tracked skip because delivered `Goto` currently pops `GoToTask` with `no_path_timeout` before arrival under Shodan staging.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LiveValidation.NavigationTests|FullyQualifiedName~LiveValidation.AllianceNavigationTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=navigation_alliance_shodan_final4.trx"` -> `passed overall (7 passed, 1 skipped)`.
+- Files changed:
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+
 ### 2026-04-25 (MovementSpeed Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated movement-speed live validation passed 1/1`
 - Last delta:

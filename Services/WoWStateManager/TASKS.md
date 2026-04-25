@@ -17,6 +17,23 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan Navigation config slice)
+- Last updated: 2026-04-25
+- Active task: none - this slice only added a live-validation roster for the Shodan Alliance navigation migration.
+- Last delta:
+  - Added `Navigation.config.json` with stable idle `ECONFG1` Foreground Orc Warrior, `NAVBG1` Background Human Warrior as the Alliance staging target, and SHODAN as Background Gnome Mage director.
+  - `AllianceNavigationTests` uses this roster for Human Alliance coordinate staging. `NavigationTests` intentionally reuses `Economy.config.json` for the proven Orc BG Durotar `Goto` probes.
+- Pass result: `Navigation/Alliance migration shape green; combined live validation passed 7/8 with one tracked Valley long-route skip`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~LiveValidation.NavigationTests|FullyQualifiedName~LiveValidation.AllianceNavigationTests" --logger "trx;LogFileName=navigation_alliance_shodan_final4.trx"` -> `passed overall (7 passed, 1 skipped)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/Navigation.config.json`
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/LootCorpseTests.cs Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs`
+
 ### 2026-04-25 (Shodan MovementSpeed config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
