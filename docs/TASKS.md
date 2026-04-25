@@ -338,6 +338,32 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-24, Shodan test-director overhaul slice 3 - MageTeleportTests)
+- Completed:
+  - Migrated `MageTeleportTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/MageTeleport.config.json` launches `TRMAF5` Foreground Troll Mage, `TRMAB5` Background Troll Mage, and SHODAN as Background Gnome Mage director. `TRMAB5` is the only BotRunner action target for spell-casting tests because `ActionType.CastSpell` resolves to `_objectManager.CastSpell(int)`, which is a documented no-op on the Foreground runner; FG is launched for Shodan-topology parity but stays idle.
+  - Added a fixture-contained `StageBotRunnerAtRazorHillAsync` helper for the Razor Hill staging teleport (Durotar) so the Org arrival delta is unambiguous, and an optional `levelTo` parameter on `StageBotRunnerLoadoutAsync` so spell-casting tests can seed sufficient level via SOAP `.character level`.
+  - Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/MageTeleportTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `MageTeleportTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~44.
+- Validation:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `docker ps` -> confirmed `mangosd`, `realmd`, `maria-db`, `pathfinding-service`, and `scene-data-service` already live.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test ... --filter "FullyQualifiedName~MageTeleportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mage_teleport_shodan_levelup.trx"` -> `2 passed, 1 skipped (Alliance), 1 failed`. Pass: `MagePortal_PartyTeleported`, `MageAllCityTeleports`. Skip: `MageTeleport_Alliance_StormwindArrival` (Horde-only roster). Fail: `MageTeleport_Horde_OrgrimmarArrival` — pre-existing `SMSG_SPELL_FAILURE` for spell 3567 (initially `NO_POWER`, then a short-payload generic failure even after the bot was leveled to 20 and Rune of Teleportation was staged). Tracked as a follow-up; the Shodan/FG/BG migration shape is correct.
+  - Reference anchor: `dotnet test ... --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "trx;LogFileName=fishing_shodan_anchor.trx"` -> `failed (1/1)` after FG hit `fishing_loot_success` then BG hit `loot_window_timeout` + `max_casts_reached` (BG-side anchor flake; the prior session saw the same failure on FG). Not a regression from this slice.
+- Evidence:
+  - `tmp/test-runtime/results-live/mage_teleport_shodan_levelup.console.txt` shows `[ACTION-PLAN] BG TRMAB5/Jinmarbobhs: ... dispatch CastSpell.` and `[ACTION-PLAN] FG TRMAF5/Taldakurnqe: ... idle (FG ActionType.CastSpell-by-id is a no-op).`, then `Spell error for 3567: Cast failed for spell 3567` after the level-up to 20, ending in `Failed: 1, Passed: 2, Skipped: 1`.
+  - `tmp/test-runtime/results-live/fishing_shodan_anchor.console.txt` captures `[FG:CHAT] [TASK] FishingTask fishing_loot_success` followed by `[BG] FishingTask never reached fishing_loot_success within 3m`.
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/MageTeleport.config.json` (new)
+  - `Tests/BotRunner.Tests/LiveValidation/MageTeleportTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MageTeleportTests.md` (new)
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `docs/TASKS.md`
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
+
 ## Handoff (2026-04-24, Shodan test-director overhaul slice 2 - EquipmentEquipTests + WandAttackTests)
 - Completed:
   - Migrated `EquipmentEquipTests.cs` to the Shodan test-director pattern. `Equipment.config.json` now launches `EQUIPFG1`/`EQUIPBG1` Orc Warriors plus SHODAN; Shodan stages loadout, and only the FG/BG action targets receive `ActionType.EquipItem`.

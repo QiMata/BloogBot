@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-24 (Shodan MageTeleport config slice)
+- Last updated: 2026-04-24
+- Active task: none - this slice only added a new live-validation roster for the Shodan migration.
+- Last delta:
+  - Added `MageTeleport.config.json` with the same `TRMAF5`/`TRMAB5` Troll-mage roster as `Wand.config.json` plus SHODAN as Background Gnome Mage director, kept as a distinct file so each Shodan slice is independently revertable.
+- Pass result: `MageTeleport live slice migration shape green; Horde Orgrimmar arrival is a documented pre-existing cast failure (SMSG_SPELL_FAILURE for spell 3567)`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~MageTeleportTests"` -> `2 passed, 1 skipped (Alliance), 1 failed (Horde Orgrimmar arrival - documented pre-existing cast rejection)`
+  - Ratchet anchor: `dotnet test ... --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool"` -> `failed (1/1)` after FG `fishing_loot_success` then BG `loot_window_timeout` + `max_casts_reached`. Same intermittent failure documented in the prior session; not a regression from this slice.
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/MageTeleport.config.json` (new)
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs`
+
 ### 2026-04-24 (Shodan equipment/wand config slice)
 - Last updated: 2026-04-24
 - Active task: none - this slice only updated live-validation config rosters for the Shodan migration.

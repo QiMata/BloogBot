@@ -34,6 +34,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `UnequipItemTests.cs` | Migrated pilot: shared `Equipment.config.json`; `StageBotRunnerLoadoutAsync`; test body dispatches `EquipItem` / `UnequipItem` only. |
 | `EquipmentEquipTests.cs` | Migrated: `Equipment.config.json` launches `EQUIPFG1`/`EQUIPBG1` warriors + SHODAN; `StageBotRunnerLoadoutAsync`; test body dispatches `EquipItem` only. |
 | `WandAttackTests.cs` | Migrated: `Wand.config.json` launches `TRMAF5`/`TRMAB5` mages + SHODAN; `StageBotRunnerLoadoutAsync` for wand loadout; fixture-contained Durotar mob staging; test body dispatches `EquipItem` / `StartWandAttack` / `StopAttack` only. |
+| `MageTeleportTests.cs` | Migrated: `MageTeleport.config.json` launches `TRMAF5`/`TRMAB5` mages + SHODAN; `StageBotRunnerLoadoutAsync` learns the city-teleport spell + adds Rune of Teleportation; fixture-contained `StageBotRunnerAtRazorHillAsync`; test body dispatches `CastSpell` only. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -47,7 +48,6 @@ Profession / loadout tests (migrate first - they resemble the Ratchet flow):
 
 | File | Typical per-test setup | Notes |
 |------|------------------------|-------|
-| `MageTeleportTests.cs` | `.learn Teleport: Orgrimmar`, staging teleport | Class-specific. |
 | `GatheringProfessionTests.cs` | `.learn mining/herb`, `.additem pick`, Valley stage | Task-owned gathering + GM prep. |
 | `CraftingProfessionTests.cs` | Recipe + reagent add, skill set | Crafting task prep. |
 | `PetManagementTests.cs` | Pet spells, taming setup | Hunter-only. |
@@ -93,7 +93,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~45 SHODAN-CANDIDATE files.
+Total: ~44 SHODAN-CANDIDATE files (after `MageTeleportTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -188,6 +188,31 @@ must run on mage characters. SHODAN is the director, while `TRMAF5` and
 `TRMAB5` are the only BotRunner action targets. The slice also adds a
 fixture-contained `StageBotRunnerAtDurotarMobAreaAsync` helper for the
 target-bot `.go xyz` constraint; the test body remains GM-free.
+
+`MageTeleportTests.cs` uses `MageTeleport.config.json` (same
+`TRMAF5`/`TRMAB5` mage roster as `Wand.config.json`, but kept as a
+distinct file so each Shodan slice is independently revertable). SHODAN
+is the director. `TRMAB5` is the only BotRunner action target for
+spell-casting tests because `ActionType.CastSpell` resolves to
+`_objectManager.CastSpell(int)`, which is a documented no-op on the
+Foreground runner (only the `CastSpellByName(string)` Lua overload casts
+there). FG is launched for Shodan-topology parity but stays idle in
+this slice. The slice adds a fixture-contained
+`StageBotRunnerAtRazorHillAsync` helper for the same `.go xyz`
+constraint as the wand staging helper, and an optional `levelTo`
+parameter on `StageBotRunnerLoadoutAsync` so spell-casting tests can
+seed a sufficient level via SOAP `.character level`. The test body
+dispatches only `ActionType.CastSpell`.
+
+Migration result on this slice: `MagePortal_PartyTeleported` and
+`MageAllCityTeleports` pass. `MageTeleport_Alliance_StormwindArrival`
+correctly skips against the Horde-only roster.
+`MageTeleport_Horde_OrgrimmarArrival` is a documented pre-existing
+failure: MaNGOS returns `SMSG_SPELL_FAILURE` for spell 3567 even after
+the bot is leveled to 20 with the Rune of Teleportation reagent staged.
+The Shodan/FG/BG shape is correct; the underlying cast rejection
+(initially `NO_POWER`, then a short-payload failure after the level bump)
+is tracked as a follow-up rather than reverted in this slice.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

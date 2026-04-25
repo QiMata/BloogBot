@@ -242,7 +242,8 @@ public partial class LiveBotFixture
         IReadOnlyList<SkillDirective>? skillsToSet = null,
         IReadOnlyList<ItemDirective>? itemsToAdd = null,
         bool cleanSlate = true,
-        bool clearInventoryFirst = true)
+        bool clearInventoryFirst = true,
+        int? levelTo = null)
     {
         if (string.IsNullOrWhiteSpace(targetAccountName))
             throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
@@ -256,17 +257,36 @@ public partial class LiveBotFixture
 
         _logger.LogInformation(
             "[SHODAN-STAGE] {Role} account='{Account}' cleanSlate={Clean} clearBags={ClearBags} " +
-            "spells={Spells} skills={Skills} items={Items}",
+            "spells={Spells} skills={Skills} items={Items} levelTo={Level}",
             targetRoleLabel,
             targetAccountName,
             cleanSlate,
             clearInventoryFirst,
             spellsToLearn?.Count ?? 0,
             skillsToSet?.Count ?? 0,
-            itemsToAdd?.Count ?? 0);
+            itemsToAdd?.Count ?? 0,
+            levelTo?.ToString() ?? "(unchanged)");
 
         if (cleanSlate)
             await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        if (levelTo is int targetLevel)
+        {
+            var characterName = GetKnownCharacterNameForAccount(targetAccountName);
+            if (string.IsNullOrWhiteSpace(characterName))
+            {
+                throw new InvalidOperationException(
+                    $"[SHODAN-STAGE] Cannot set level for '{targetAccountName}': character name not yet observed.");
+            }
+
+            await SetLevelAsync(characterName, targetLevel);
+            await WaitForSnapshotConditionAsync(
+                targetAccountName,
+                snap => (snap.Player?.Unit?.GameObject?.Level ?? 0) >= targetLevel,
+                TimeSpan.FromSeconds(8),
+                pollIntervalMs: 300,
+                progressLabel: $"{targetRoleLabel} level={targetLevel}");
+        }
 
         if (clearInventoryFirst)
         {
@@ -354,5 +374,56 @@ public partial class LiveBotFixture
             progressLabel: $"{targetRoleLabel} mob-area units");
 
         return settled && hasUnits;
+    }
+
+    /// <summary>
+    /// Stage a BotRunner target at Razor Hill (Durotar) for mage city-teleport
+    /// validation. Razor Hill is far enough from Orgrimmar that
+    /// <c>Teleport: Orgrimmar</c> produces a clear position delta. Like
+    /// <see cref="StageBotRunnerAtDurotarMobAreaAsync"/>, the
+    /// <c>.go xyz</c> teleport stays inside the fixture so the test body
+    /// remains GM-free.
+    /// </summary>
+    public async Task<bool> StageBotRunnerAtRazorHillAsync(
+        string targetAccountName,
+        string targetRoleLabel)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        const int RazorHillMapId = 1;
+        const float RazorHillX = 315.0f;
+        const float RazorHillY = -4743.0f;
+        const float RazorHillZ = 12.0f;
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' Razor Hill stage map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            RazorHillMapId,
+            RazorHillX,
+            RazorHillY,
+            RazorHillZ);
+
+        await BotTeleportAsync(
+            targetAccountName,
+            RazorHillMapId,
+            RazorHillX,
+            RazorHillY,
+            RazorHillZ);
+
+        return await WaitForTeleportSettledAsync(
+            targetAccountName,
+            RazorHillX,
+            RazorHillY,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} razor-hill stage",
+            xyToleranceYards: 60f);
     }
 }

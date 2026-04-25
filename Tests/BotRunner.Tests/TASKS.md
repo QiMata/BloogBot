@@ -18,8 +18,9 @@
 - [x] Audit top-level `LiveValidation/*.cs` for FG/BG GM-command usage and group by category. Inventory at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`.
 - [x] Add `LiveBotFixture.StageBotRunnerLoadoutAsync(...)` test-director helper plus `Equipment.config.json` for migrated equipment-loadout tests.
 - [x] Pilot migration: `UnequipItemTests` now stages via Shodan-director helper and dispatches only `ActionType.EquipItem` / `UnequipItem` from the test body.
-- [ ] Migrate `EquipmentEquipTests` and `WandAttackTests` next; they share the `Equipment.config.json` launch and the same `StageBotRunnerLoadoutAsync` shape.
-- [ ] Promote remaining SHODAN-CANDIDATE tests in priority order (professions / loadout, then economy / NPC, then movement / navigation, then combat / quest / misc).
+- [x] Migrate `EquipmentEquipTests` and `WandAttackTests`; both share the `StageBotRunnerLoadoutAsync` shape (`Equipment.config.json` for the warrior pair, `Wand.config.json` for the troll-mage pair).
+- [x] Migrate `MageTeleportTests` to the Shodan shape via `MageTeleport.config.json` + `StageBotRunnerAtRazorHillAsync`; FG/BG dispatch only `ActionType.CastSpell` and the test asserts on snapshot position arrival.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`GatheringProfessionTests` → `CraftingProfessionTests` → `PetManagementTests`, then economy / NPC, then movement / navigation, then combat / quest / misc).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
