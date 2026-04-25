@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan Mail config observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
+- Last delta:
+  - `MailSystemTests` and `MailParityTests` now run against `Economy.config.json` with `ECONBG1` as the mail action target, `ECONFG1` idle for topology parity, and SHODAN as director.
+  - Mailbox and SOAP mail-money/item setup moved into `LiveBotFixture` helpers; no WoWStateManager runtime change was required.
+- Pass result: `Mail migration shape green; live mail validation passed 4/4 with BG mail actions`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "trx;LogFileName=mail_shodan_bgonly.trx"` -> `passed (4/4)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money" Tests/BotRunner.Tests/LiveValidation/TradingTests.cs Tests/BotRunner.Tests/LiveValidation/TradeParityTests.cs`
+
 ### 2026-04-25 (Shodan EconomyInteraction config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.

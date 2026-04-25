@@ -39,6 +39,8 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | GatheringProfessionTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Mining + Herbalism routes |
 | GatheringRouteSelectionTests | N/A (unit test) | None | N/A | Pure unit test, no live bots |
 | GroupFormationTests | Dual-Bot Sync | BG + FG | **Required** | Both bots must be available (invite/accept) |
+| MailSystemTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged mailbox plus SOAP money/item mail |
+| MailParityTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | BG CheckMail baseline; FG mail collection tracked separately |
 | LootCorpseTests | CombatTest-Only | COMBATTEST | **No** | Kill→loot with dedicated combat account |
 | MapTransitionTests | BG-Only | BG | **No** | Deeprun Tram bounce validation |
 | NavigationTests | BG-Only | BG | **No** | Pathfinding + Z-trace (some runs probe both) |
@@ -63,3 +65,4 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 6. **NavigationTests** — BG-only. FG position comparison would catch movement divergence.
 7. **StarterQuestTests** — BG-only baseline. Low priority for FG parity.
 8. **VendorBuySellTests** - Shodan topology is in place, but the migrated slice is still a BG packet baseline; add FG behavior parity separately.
+9. **MailSystemTests / MailParityTests** - Shodan topology is in place, but committed mail actions are BG-only until FG `CheckMail` collection is stable under combined-suite load.

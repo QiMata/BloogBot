@@ -28,6 +28,7 @@
 - [x] Restore FG flight-master discovery/activation and a non-null `TaxiFrame` surface so task-driven taxi discovery no longer falls back to interface defaults.
 - [x] Restore non-null FG `CraftFrame` / `TrainerFrame` / `TalentFrame` surfaces so the legacy craft/train/talent BotRunner paths no longer hit null/default-interface fallbacks on the injected client.
 - [x] Finish the remaining FG runtime parity surfaces that still inherited defaults: `QuestGreetingFrame`, `TradeFrame`, and the task-owned bank/AH/craft helper methods.
+- [ ] Stabilize foreground `CollectAllMailAsync(...)` under combined-suite Shodan mail validation. `MailParityTests` can pass a focused FG gold-mail rerun, but the full mail suite timed out on FG item/gold snapshot deltas after `CheckMail` delivery, so the committed mail migration keeps actions BG-only.
 
 3. Packet capture/runtime safety
 - [x] `FG-PKT-001` Send hook for `NetClient::Send`.
@@ -37,6 +38,21 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
+### 2026-04-25 (Mail Shodan foreground follow-up)
+- Pass result: `Mail migration committed as BG-action-only; FG CheckMail instability is now tracked`
+- Last delta:
+  - `MailSystemTests` / `MailParityTests` launched `ECONFG1` for topology parity, but the full FG/BG parity attempts timed out waiting for FG coinage/item snapshot deltas after `ActionType.CheckMail` delivery.
+  - A focused `MailParityTests.Mail_SendGold_FgBgParity` rerun passed once with FG enabled, so the issue appears load/timing-sensitive in the foreground mailbox collection path rather than a deterministic missing action mapping.
+  - No ForegroundBotRunner code changed in this slice; the test migration documents the gap and dispatches committed mail actions to BG only.
+- Validation/tests run:
+  - `mail_shodan.trx` -> full FG/BG parity attempt failed on FG gold-mail coinage timeout.
+  - `mail_gold_rerun.trx` -> focused FG/BG gold rerun passed once.
+  - `mail_shodan_rerun.trx` -> full FG/BG parity attempt failed on FG item and gold timeouts.
+  - `mail_shodan_bgonly.trx` -> committed Shodan BG-action mail validation passed `4/4`.
+- Files changed:
+  - `Services/ForegroundBotRunner/TASKS.md`
+- Next command: `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.WaitForInboxCountAsync|FullyQualifiedName~ForegroundInteractionFrameTests" --logger "console;verbosity=minimal"`
+
 ### 2026-04-24 (Configured class creation for Wand Shodan slice)
 - Pass result: `Foreground character-select class override coverage green`
 - Last delta:

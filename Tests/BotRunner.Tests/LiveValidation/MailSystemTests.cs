@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -8,10 +9,8 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// P20.4: Mail system tests — Bot sends mail with item + gold to alt. Alt collects.
-/// Assert delivery via SMSG_SEND_MAIL_RESULT and SMSG_MAIL_LIST_RESULT.
-///
-/// Run: dotnet test --filter "FullyQualifiedName~MailSystemTests" --configuration Release
+/// Shodan-directed mail system baselines. SHODAN stages mailbox location and
+/// SOAP mail payloads; the BG action target dispatches only CheckMail.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class MailSystemTests
@@ -19,150 +18,155 @@ public class MailSystemTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
+    private const uint LinenClothItemId = LiveBotFixture.TestItems.LinenCloth;
+
     public MailSystemTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Mail_SendGold_RecipientReceives()
     {
-        var bgAccount = _bot.BgAccountName!;
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        await EnsureEconomySettingsAsync();
+        var target = ResolveMailActionTarget();
 
-        // Setup: teleport to Orgrimmar mailbox
-        await _bot.BotTeleportAsync(
-            bgAccount,
-            OrgrimmarServiceLocations.MapId,
-            OrgrimmarServiceLocations.MailboxX,
-            OrgrimmarServiceLocations.MailboxY,
-            OrgrimmarServiceLocations.MailboxZ);
-        await _bot.WaitForTeleportSettledAsync(
-            bgAccount,
-            OrgrimmarServiceLocations.MailboxX,
-            OrgrimmarServiceLocations.MailboxY);
-
-        // Verify position after teleport
+        var mailboxGuid = await StageMailboxAndFindGuidAsync(target);
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(bgAccount);
-        Assert.NotNull(snap);
-        var pos = snap!.MovementData?.Position;
-        _output.WriteLine($"[MAIL] Bot at ({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
+        var before = await _bot.GetSnapshotAsync(target.AccountName);
+        var coinageBefore = before?.Player?.Coinage ?? 0;
 
-        // Send gold via GM mail command to the bot's own character
-        var charName = snap.CharacterName;
-        Assert.False(string.IsNullOrWhiteSpace(charName), "Character name not available in snapshot");
-        _output.WriteLine($"[MAIL] Sending 10 copper via GM mail to {charName}");
-        await _bot.SendGmChatCommandAsync(bgAccount, ".additem 2589 1");
-        await Task.Delay(1000);
-        await _bot.ExecuteGMCommandAsync($".send money {charName} \"Gold Test\" \"Testing mail gold\" 10");
-        await Task.Delay(2000);
+        await _bot.StageBotRunnerMailboxMoneyAsync(
+            target.AccountName,
+            target.RoleLabel,
+            copper: 10,
+            subject: "Gold Test",
+            body: "Testing mail gold");
 
-        var mailboxGuid = await WaitForMailboxGuidAsync(bgAccount, "MAIL");
-        Assert.NotEqual(0UL, mailboxGuid);
+        var checkResult = await SendCheckMailAsync(target, mailboxGuid);
+        Assert.Equal(ResponseResult.Success, checkResult);
 
-        // Check mail via CHECK_MAIL action
-        var checkResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
-        {
-            ActionType = ActionType.CheckMail,
-            Parameters = { new RequestParameter { LongParam = (long)mailboxGuid } }
-        });
-        _output.WriteLine($"[MAIL] CheckMail result: {checkResult}");
+        var coinageIncreased = await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snap => (snap.Player?.Coinage ?? 0) > coinageBefore,
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 300,
+            progressLabel: $"{target.RoleLabel} mail-gold-coinage");
+        Assert.True(coinageIncreased, $"{target.RoleLabel}: coinage should increase after collecting mail gold.");
 
-        // Wait for server to process and refresh snapshot
-        await Task.Delay(3000);
         await _bot.RefreshSnapshotsAsync();
-        snap = await _bot.GetSnapshotAsync(bgAccount);
-        Assert.NotNull(snap);
-
-        // Verify bot is still connected and functional after mail check
-        Assert.True(snap!.IsObjectManagerValid, "ObjectManager should be valid after mail check");
-        _output.WriteLine($"[MAIL] Mail gold check completed. Bot connected={snap.IsObjectManagerValid}, Screen={snap.ScreenState}");
-
-        // Check chat messages for mail-related responses
-        foreach (var msg in snap.RecentChatMessages)
-        {
-            if (msg.Contains("mail", System.StringComparison.OrdinalIgnoreCase))
-                _output.WriteLine($"[MAIL] Chat: {msg}");
-        }
+        var after = await _bot.GetSnapshotAsync(target.AccountName);
+        Assert.NotNull(after);
+        Assert.True(after!.IsObjectManagerValid, "ObjectManager should be valid after mail gold check.");
+        _output.WriteLine($"[MAIL] {target.RoleLabel} coinage {coinageBefore}->{after.Player?.Coinage ?? 0}");
     }
 
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Mail_SendItem_RecipientReceivesItem()
     {
-        var bgAccount = _bot.BgAccountName!;
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        await EnsureEconomySettingsAsync();
+        var target = ResolveMailActionTarget();
 
-        // Setup: teleport to Orgrimmar mailbox
-        await _bot.BotTeleportAsync(
-            bgAccount,
-            OrgrimmarServiceLocations.MapId,
-            OrgrimmarServiceLocations.MailboxX,
-            OrgrimmarServiceLocations.MailboxY,
-            OrgrimmarServiceLocations.MailboxZ);
-        await _bot.WaitForTeleportSettledAsync(
-            bgAccount,
-            OrgrimmarServiceLocations.MailboxX,
-            OrgrimmarServiceLocations.MailboxY);
+        await _bot.StageBotRunnerLoadoutAsync(
+            target.AccountName,
+            target.RoleLabel,
+            cleanSlate: true,
+            clearInventoryFirst: true);
 
-        // Verify position
+        var mailboxGuid = await StageMailboxAndFindGuidAsync(target, cleanSlate: false);
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(bgAccount);
-        Assert.NotNull(snap);
-        var charName = snap!.CharacterName;
-        Assert.False(string.IsNullOrWhiteSpace(charName), "Character name not available in snapshot");
-        var pos2 = snap.MovementData?.Position;
-        _output.WriteLine($"[MAIL] Bot at ({pos2?.X:F0},{pos2?.Y:F0},{pos2?.Z:F0}), char={charName}");
+        var before = await _bot.GetSnapshotAsync(target.AccountName);
+        var itemCountBefore = CountItemSlots(before, LinenClothItemId);
 
-        // Give bot a Linen Cloth (2589) to have in inventory
-        await _bot.SendGmChatCommandAsync(bgAccount, ".additem 2589 1");
-        await Task.Delay(1000);
+        await _bot.StageBotRunnerMailboxItemAsync(
+            target.AccountName,
+            target.RoleLabel,
+            LinenClothItemId,
+            count: 1,
+            subject: "Item Test",
+            body: "Testing mail item");
 
-        // Record inventory state before mail
+        var checkResult = await SendCheckMailAsync(target, mailboxGuid);
+        Assert.Equal(ResponseResult.Success, checkResult);
+
+        var itemReceived = await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snap => CountItemSlots(snap, LinenClothItemId) >= itemCountBefore + 1,
+            TimeSpan.FromSeconds(8),
+            pollIntervalMs: 300,
+            progressLabel: $"{target.RoleLabel} mail-item-received");
+        Assert.True(itemReceived, $"{target.RoleLabel}: Linen Cloth should appear after collecting item mail.");
+
         await _bot.RefreshSnapshotsAsync();
-        snap = await _bot.GetSnapshotAsync(bgAccount);
-        Assert.NotNull(snap);
-        var bagCountBefore = snap!.Player?.BagContents?.Count ?? 0;
-        _output.WriteLine($"[MAIL] Bag item count before: {bagCountBefore}");
+        var after = await _bot.GetSnapshotAsync(target.AccountName);
+        Assert.NotNull(after);
+        Assert.True(after!.IsObjectManagerValid, "ObjectManager should be valid after mail item check.");
+        _output.WriteLine($"[MAIL] {target.RoleLabel} Linen Cloth {itemCountBefore}->{CountItemSlots(after, LinenClothItemId)}");
+    }
 
-        // Send an item via GM mail to the bot
-        await _bot.ExecuteGMCommandAsync($".send items {charName} \"Item Test\" \"Testing mail item\" 2589:1");
-        await Task.Delay(2000);
+    private async Task<ulong> StageMailboxAndFindGuidAsync(
+        LiveBotFixture.BotRunnerActionTarget target,
+        bool cleanSlate = true)
+    {
+        var staged = await _bot.StageBotRunnerAtOrgrimmarMailboxAsync(
+            target.AccountName,
+            target.RoleLabel,
+            cleanSlate);
+        Assert.True(staged, $"{target.RoleLabel}: expected mailbox staging with visible mailbox object.");
 
-        var mailboxGuid = await WaitForMailboxGuidAsync(bgAccount, "MAIL");
+        var mailboxGuid = await WaitForMailboxGuidAsync(target.AccountName, target.RoleLabel);
         Assert.NotEqual(0UL, mailboxGuid);
+        return mailboxGuid;
+    }
 
-        // Check mail
-        var checkResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
+    private async Task<ResponseResult> SendCheckMailAsync(
+        LiveBotFixture.BotRunnerActionTarget target,
+        ulong mailboxGuid)
+    {
+        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
         {
             ActionType = ActionType.CheckMail,
             Parameters = { new RequestParameter { LongParam = (long)mailboxGuid } }
         });
-        _output.WriteLine($"[MAIL] CheckMail result: {checkResult}");
+        _output.WriteLine($"[MAIL] {target.RoleLabel} CheckMail result: {result}");
+        return result;
+    }
 
-        // Wait and verify
-        await Task.Delay(3000);
-        await _bot.RefreshSnapshotsAsync();
-        snap = await _bot.GetSnapshotAsync(bgAccount);
-        Assert.NotNull(snap);
-        Assert.True(snap!.IsObjectManagerValid, "ObjectManager should be valid after mail item check");
+    private async Task EnsureEconomySettingsAsync()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
 
-        var bagCountAfter = snap.Player?.BagContents?.Count ?? 0;
-        _output.WriteLine($"[MAIL] Bag item count after: {bagCountAfter}");
-        _output.WriteLine($"[MAIL] Mail item check completed. Screen={snap.ScreenState}");
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
 
-        // Log any relevant chat messages
-        foreach (var msg in snap.RecentChatMessages)
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Economy.config.json.");
+    }
+
+    private LiveBotFixture.BotRunnerActionTarget ResolveMailActionTarget()
+    {
+        var target = _bot.ResolveBotRunnerActionTargets(includeForegroundIfActionable: false)
+            .Single(target => !target.IsForeground);
+
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no mail action dispatch.");
+        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
         {
-            if (msg.Contains("mail", System.StringComparison.OrdinalIgnoreCase) ||
-                msg.Contains("item", System.StringComparison.OrdinalIgnoreCase))
-                _output.WriteLine($"[MAIL] Chat: {msg}");
+            _output.WriteLine(
+                $"[ACTION-PLAN] FG {_bot.FgAccountName}/{_bot.FgCharacterName}: launched for Shodan topology parity; MailSystem baseline remains BG-only.");
         }
+        _output.WriteLine(
+            $"[ACTION-PLAN] BG {target.AccountName}/{target.CharacterName}: stage mailbox and dispatch CheckMail.");
+
+        return target;
     }
 
     private async Task<ulong> WaitForMailboxGuidAsync(string account, string label)
@@ -188,5 +192,23 @@ public class MailSystemTests
 
         _output.WriteLine($"[{label}] Mailbox GUID not found after 5s.");
         return 0;
+    }
+
+    private static int CountItemSlots(WoWActivitySnapshot? snapshot, uint itemId)
+        => snapshot?.Player?.BagContents?.Values.Count(value => value == itemId) ?? 0;
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
     }
 }

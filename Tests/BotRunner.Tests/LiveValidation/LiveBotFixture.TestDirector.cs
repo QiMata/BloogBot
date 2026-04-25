@@ -780,6 +780,56 @@ public partial class LiveBotFixture
     }
 
     /// <summary>
+    /// Send an item to a BotRunner target mailbox via SOAP. This mirrors the
+    /// money-mail helper for item-delivery tests.
+    /// </summary>
+    public async Task StageBotRunnerMailboxItemAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        uint itemId,
+        uint count,
+        string subject = "Item Test",
+        string body = "Mail item test")
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        var characterName = GetKnownCharacterNameForAccount(targetAccountName);
+        if (string.IsNullOrWhiteSpace(characterName))
+        {
+            await WaitForSnapshotConditionAsync(
+                targetAccountName,
+                snap => !string.IsNullOrWhiteSpace(snap.CharacterName),
+                TimeSpan.FromSeconds(5),
+                pollIntervalMs: 250,
+                progressLabel: $"{targetRoleLabel} mail-character");
+
+            characterName = (await GetSnapshotAsync(targetAccountName))?.CharacterName;
+        }
+
+        if (string.IsNullOrWhiteSpace(characterName))
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} character name is required for item mail staging.");
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' sending item {ItemId} x{Count} to {Character} via SOAP mail",
+            targetRoleLabel,
+            targetAccountName,
+            itemId,
+            count,
+            characterName);
+
+        var result = await ExecuteGMCommandAsync($".send items {characterName} \"{subject}\" \"{body}\" {itemId}:{count}");
+        _logger.LogInformation("[SHODAN-STAGE] {Role} SOAP item-mail result: {Result}", targetRoleLabel, result);
+        await Task.Delay(2000);
+    }
+
+    /// <summary>
     /// Stage a BotRunner target at the Valley of Trials copper route start for
     /// action-driven gathering tests. The teleport stays in the fixture so
     /// Shodan-migrated test bodies do not issue GM movement commands inline.

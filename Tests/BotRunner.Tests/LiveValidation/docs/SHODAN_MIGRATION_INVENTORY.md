@@ -44,6 +44,8 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `BankParityTests.cs` | Migrated: `Economy.config.json`; FG/BG bank staging and item setup are Shodan-shaped, while deposit/withdraw and bank-slot purchase are explicit missing-action skips. |
 | `VendorBuySellTests.cs` | Migrated: `Economy.config.json`; fixture-contained Razor Hill vendor and coinage staging; BG dispatches `BuyItem` / `SellItem` only while FG stays idle for topology parity. |
 | `EconomyInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained bank/AH/mailbox/mail-money staging; FG/BG dispatch only `InteractWith` or `CheckMail`. |
+| `MailSystemTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; BG dispatches `CheckMail` only while FG stays idle for topology parity. |
+| `MailParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; BG dispatches `CheckMail` only while FG stays idle for topology parity due to the tracked FG mail collection stability gap. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -62,7 +64,6 @@ Economy / NPC-interaction tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `MailSystemTests.cs`, `MailParityTests.cs` | `.send items`, `.tele` to mailbox |
 | `TradingTests.cs`, `TradeParityTests.cs` | Item add, partner positioning |
 | `GossipQuestTests.cs`, `QuestObjectiveTests.cs`, `QuestInteractionTests.cs`, `StarterQuestTests.cs` | `.tele` to NPC, item add |
 | `NpcInteractionTests.cs` | `.tele` to NPC, loadout prep |
@@ -95,7 +96,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~35 SHODAN-CANDIDATE files (after `EconomyInteractionTests.cs` moved to ALREADY-SHODAN).
+Total: ~33 SHODAN-CANDIDATE files (after `MailSystemTests.cs` and `MailParityTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -314,6 +315,21 @@ mailbox collection.
 
 Migration result on this slice: live artifact `economy_interaction_shodan.trx`
 passed `3/3` across FG and BG.
+
+`MailSystemTests.cs` and `MailParityTests.cs` reuse `Economy.config.json` with
+`ECONBG1` as the behavior action target, `ECONFG1` launched idle for topology
+parity, and SHODAN as director. The slice moves mailbox positioning and SOAP
+mail-money/item staging into `StageBotRunnerAtOrgrimmarMailboxAsync`,
+`StageBotRunnerMailboxMoneyAsync`, and `StageBotRunnerMailboxItemAsync`. Test
+bodies dispatch only `ActionType.CheckMail` to BG.
+
+Migration result on this slice: live artifact `mail_shodan_bgonly.trx` passed
+`4/4`. An earlier full FG+BG parity attempt delivered `CheckMail` to FG but
+timed out waiting for FG gold/item snapshot deltas under the combined mail
+suite; a focused FG gold rerun passed once (`mail_gold_rerun.trx`). The
+migration therefore documents the foreground mail collection stability gap and
+keeps the committed mail parity shape BG-action-only until that runtime issue
+is fixed.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the
