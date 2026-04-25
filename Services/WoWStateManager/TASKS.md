@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan TravelPlanner config observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
+- Last delta:
+  - `TravelPlannerTests` now runs against `Economy.config.json` with `ECONBG1` as the travel action target, `ECONFG1` idle for topology parity, and SHODAN as director.
+  - Street-level Orgrimmar staging and post-stage action quiesce moved into `LiveBotFixture` helpers; no WoWStateManager runtime change was required.
+- Pass result: `TravelPlanner migration shape green; live travel validation passed overall with 1 executable pass and 3 tracked skips`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~TravelPlannerTests" --logger "trx;LogFileName=travel_planner_shodan.trx"` -> `passed overall (1 passed, 3 skipped)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/CornerNavigationTests.cs Tests/BotRunner.Tests/LiveValidation/TileBoundaryCrossingTests.cs`
+
 ### 2026-04-25 (Shodan MountEnvironment config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.

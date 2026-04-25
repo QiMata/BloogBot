@@ -338,6 +338,35 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 18 - TravelPlannerTests)
+
+- Completed:
+  - Migrated `TravelPlannerTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG travel action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
+  - Added fixture-contained street-level Orgrimmar staging through `StageBotRunnerAtTravelPlannerStartAsync(...)` plus targeted BG quiesce after staging. The test body no longer issues `.tele` setup commands.
+  - The executable short-walk case dispatches only `ActionType.TravelTo` toward the Orgrimmar auction-house service location and asserts snapshot movement.
+  - The long Orgrimmar-to-Crossroads probes launch through the Shodan topology but are tracked skips because delivered `TravelTo` starts `GoToTask` with no position delta after 20s and leaves BG `CurrentAction=TravelTo`.
+  - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/TravelPlannerTests.md`, execution-mode index updated, and inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `TravelPlannerTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~22.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/TravelPlannerTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TravelPlannerTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=travel_planner_shodan.trx"` -> `passed overall (1 passed, 3 skipped)`.
+  - Session Ratchet anchor: `tmp/test-runtime/results-live/fishing_shodan_anchor.trx` remains the once-per-session anchor evidence and failed in the known anchor-instability lane; not treated as a TravelPlanner regression.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/travel_planner_shodan.trx` -> `TravelTo_ShortWalk_WithinOrgrimmar` passed; three Crossroads probes skipped with the tracked no-movement reason.
+  - Earlier failure evidence captured delivered `TravelTo` plus `GOTO-TASK Update #1` at the street-level Orgrimmar start toward Crossroads and no position delta after 20s.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/TravelPlannerTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TravelPlannerTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - task trackers.
+- Next command:
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/CornerNavigationTests.cs Tests/BotRunner.Tests/LiveValidation/TileBoundaryCrossingTests.cs`
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 17 - MountEnvironmentTests)
 
 - Completed:

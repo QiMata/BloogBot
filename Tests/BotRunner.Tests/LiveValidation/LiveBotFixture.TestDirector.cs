@@ -453,6 +453,49 @@ public partial class LiveBotFixture
         return false;
     }
 
+    public async Task<bool> StageBotRunnerAtTravelPlannerStartAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        const int kalimdorMapId = 1;
+        // Street-level Orgrimmar approach also used by CornerNavigationTests.
+        // The flight-master perch above the city can resolve to a different
+        // collision layer and prevents TravelTo from producing movement.
+        const float orgrimmarX = 1614.1f;
+        const float orgrimmarY = -4382.4f;
+        const float orgrimmarZ = 14.8f;
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' travel-planner start map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            kalimdorMapId,
+            orgrimmarX,
+            orgrimmarY,
+            orgrimmarZ);
+
+        await BotTeleportAsync(targetAccountName, kalimdorMapId, orgrimmarX, orgrimmarY, orgrimmarZ);
+
+        var settled = await WaitForTeleportSettledAsync(
+            targetAccountName,
+            orgrimmarX,
+            orgrimmarY,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} travel-planner start",
+            xyToleranceYards: 8f);
+
+        if (settled)
+            await WaitForZStabilizationAsync(targetAccountName, waitMs: 1000);
+
+        return settled;
+    }
+
     /// <summary>
     /// Stage a BotRunner target near the Valley of Trials creature cluster for
     /// action-driven combat tests. The arbitrary-coordinate teleport is kept in

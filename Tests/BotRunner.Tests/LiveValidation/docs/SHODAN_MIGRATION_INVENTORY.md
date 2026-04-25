@@ -56,6 +56,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `SpiritHealerTests.cs` | Migrated: `Economy.config.json`; fixture-contained corpse/graveyard staging; BG dispatches `ReleaseCorpse`, `Goto`, and `InteractWith` while FG stays idle for topology parity. |
 | `MapTransitionTests.cs` | Migrated: `Economy.config.json`; fixture-contained Ironforge tram staging and rejected Deeprun Tram transition; BG dispatches a post-bounce `Goto` liveness action while FG stays idle for topology parity. |
 | `MountEnvironmentTests.cs` | Migrated: `Economy.config.json`; fixture-contained riding/mount loadout, unmount cleanup, and indoor/outdoor staging; BG dispatches `CastSpell` while FG stays idle for topology parity. |
+| `TravelPlannerTests.cs` | Migrated: `Economy.config.json`; fixture-contained street-level Orgrimmar staging and action quiesce; short BG `TravelTo` dispatch passes while long Crossroads probes are tracked skips for the current no-movement gap. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -78,7 +79,6 @@ Movement / navigation tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `TravelPlannerTests.cs` | Multi-leg staging teleports |
 | `CornerNavigationTests.cs`, `TileBoundaryCrossingTests.cs` | Edge-case staging teleports |
 | `MovementSpeedTests.cs` | Arena teleport, buff prep |
 | `NavigationTests.cs` | Staging teleport + navmesh probe |
@@ -99,7 +99,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~23 SHODAN-CANDIDATE files (after `MountEnvironmentTests.cs` moved to ALREADY-SHODAN).
+Total: ~22 SHODAN-CANDIDATE files (after `TravelPlannerTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -432,6 +432,24 @@ mount behavior checks.
 Migration result on this slice: live artifact `mount_environment_shodan.trx`
 passed `4/4`, covering outdoor/indoor scene classification and outdoor allow /
 indoor block behavior for mount spell `23509`.
+
+`TravelPlannerTests.cs` reuses `Economy.config.json` with `ECONBG1` as the BG
+travel action target, `ECONFG1` launched idle for Shodan topology parity, and
+SHODAN as director. The slice adds fixture-contained street-level Orgrimmar
+staging through `StageBotRunnerAtTravelPlannerStartAsync(...)` plus a targeted
+quiesce after staging so leftover setup actions do not poison the first
+`TravelTo` dispatch. The test body no longer issues `.tele` setup commands and
+dispatches only `ActionType.TravelTo` to the BG target.
+
+Migration result on this slice: live artifact `travel_planner_shodan.trx`
+passed overall with `1/1` executable short-walk case and `3` tracked skips for
+the long Orgrimmar-to-Crossroads probes. The skipped long-route probes are
+Shodan-launched, but current evidence shows the BG action remains
+`CurrentAction=TravelTo` after `GoToTask` starts and produces no position delta
+after 20 seconds. Earlier failure evidence captured delivered `TravelTo` plus
+`GOTO-TASK Update #1` at the street-level Orgrimmar start toward Crossroads, so
+the remaining gap is recorded as a runtime travel/planning issue rather than a
+migration-shape failure.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the
