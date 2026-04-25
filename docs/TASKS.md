@@ -338,6 +338,30 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan BattlegroundQueue migration slice)
+
+- Completed:
+  - Migrated `BattlegroundQueueTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG WSG queue action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
+  - Added `StageBotRunnerAtOrgrimmarWarsongBattlemasterAsync(...)` so WSG battlemaster coordinate staging lives in the fixture. Level setup uses `StageBotRunnerLoadoutAsync(...)`.
+  - The BG target dispatches only `ActionType.JoinBattleground` with WSG type/map parameters and cleanup `ActionType.LeaveBattleground`.
+  - Docs added at `Tests/BotRunner.Tests/LiveValidation/docs/BattlegroundQueueTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `BattlegroundQueueTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now `8`.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/BattlegroundQueueTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundQueueTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=battleground_queue_shodan.trx"` -> `passed (1/1)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/battleground_queue_shodan.trx` -> `BG_QueueForWSG_ReceivesQueuedStatus` passed after Shodan level/staging, WSG battlemaster snapshot detection, `JoinBattleground` dispatch, queue evidence observation, and `LeaveBattleground` cleanup.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/BattlegroundQueueTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/BattlegroundQueueTests.md`
+  - live-validation docs and task trackers.
+- Next command:
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/SpellCastOnTargetTests.cs`
+
 ## Handoff (2026-04-25, Shodan BgInteraction migration slice)
 
 - Completed:

@@ -67,6 +67,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `BuffAndConsumableTests.cs` | Migrated: `Loot.config.json`; fixture-contained elixir and aura cleanup staging; BG dispatches `UseItem` / `DismissBuff` while FG stays idle for topology parity, with unstable aura/dismiss paths tracked as skips. |
 | `ConsumableUsageTests.cs` | Migrated: `Loot.config.json`; fixture-contained Elixir of Lion's Strength staging; BG dispatches `UseItem` while FG stays idle for topology parity. |
 | `BgInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained bank/AH/mail/flight-master staging; BG dispatches `InteractWith`, `CheckMail`, and `VisitFlightMaster` while bank deposit and Deeprun Tram remain tracked skips. |
+| `BattlegroundQueueTests.cs` | Migrated: `Economy.config.json`; fixture-contained WSG battlemaster staging and level setup; BG dispatches `JoinBattleground` and cleanup `LeaveBattleground` only. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -94,14 +95,13 @@ Combat / death / buffs / misc:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `BattlegroundQueueTests.cs` | Queue staging teleport |
 | `SpellCastOnTargetTests.cs` | `.learn` spell, target mob staging |
 | `TaxiTests.cs`, `TaxiTransportParityTests.cs`, `TransportTests.cs` | `.tele` to taxi/transport, gold add |
 | `DualClientParityTests.cs`, `MovementParityTests.cs` | Dual-client position/gear staging |
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: 9 SHODAN-CANDIDATE files (after `BgInteractionTests.cs` moved to ALREADY-SHODAN).
+Total: 8 SHODAN-CANDIDATE files (after `BattlegroundQueueTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -569,6 +569,20 @@ and `FlightMaster_DiscoverAndTakeFlight` passed.
 yet. `DeeprunTram_RideTransport_ArrivesAtDestination` skips because this smoke
 suite uses the Horde economy roster; the dedicated transport slice owns
 Deeprun Tram validation.
+
+`BattlegroundQueueTests.cs` reuses `Economy.config.json` with `ECONBG1` as the
+BG queue action target, `ECONFG1` launched idle for Shodan topology parity, and
+SHODAN as director. The slice adds fixture-contained Orgrimmar Warsong Gulch
+battlemaster staging plus WSG minimum-level setup through
+`StageBotRunnerLoadoutAsync(...)`. The test body dispatches only
+`ActionType.JoinBattleground` with Warsong Gulch type/map parameters and a
+cleanup `ActionType.LeaveBattleground`.
+
+Migration result on this slice: live artifact `battleground_queue_shodan.trx`
+passed `1/1`. The test staged `ECONBG1` at Brakgul Deathbringer, proved the
+WSG battlemaster was visible in the snapshot, dispatched `JoinBattleground`,
+observed queue action evidence through snapshot action/ACK/chat markers, and
+issued `LeaveBattleground` cleanup.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

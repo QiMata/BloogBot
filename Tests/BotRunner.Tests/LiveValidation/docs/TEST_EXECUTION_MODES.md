@@ -35,6 +35,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | AllianceNavigationTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Human BG Alliance coordinate staging; snapshot assertions after Shodan-owned staging |
 | BasicLoopTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Login/physics health checks |
 | BgInteractionTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged bank/AH/mail/flight-master smoke; AH/mail/flight pass, bank deposit and tram skip |
+| BattlegroundQueueTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Orgrimmar WSG battlemaster queue smoke; BG JoinBattleground dispatch |
 | BuffAndConsumableTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged elixir/aura cleanup; BG UseItem/DismissBuff dispatch with aura/dismiss gaps tracked |
 | ConsumableUsageTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Elixir of Lion's Strength; BG UseItem legacy baseline |
 | CombatLoopTests | CombatTest-Only | COMBATTEST | **No** | Account-level GM only; avoids runtime GM-mode corruption |
@@ -91,3 +92,4 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 15. **BuffAndConsumableTests / ConsumableUsageTests** - Shodan topology is in place, but the migrated consumable proofs are BG-action-only; stricter aura/slot and dismiss assertions remain tracked until BG consumable aura observation and `WoWUnit.Buffs` metadata are stable.
 16. **SpiritHealerTests** - Shodan topology is in place, but the migrated resurrection proof is BG-action-only while FG stays idle for topology parity.
 17. **BgInteractionTests** - Shodan topology is in place, but the migrated smoke proof is BG-action-only; bank deposit waits for a BotRunner action surface and Deeprun Tram remains in the dedicated transport slice.
+18. **BattlegroundQueueTests** - Shodan topology is in place, but the migrated WSG queue smoke is BG-action-only while FG stays idle for topology parity.

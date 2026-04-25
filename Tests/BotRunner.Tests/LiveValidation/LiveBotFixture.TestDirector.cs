@@ -784,6 +784,23 @@ public partial class LiveBotFixture
             z: 64.72f,
             cleanSlate);
 
+    public Task<bool> StageBotRunnerAtOrgrimmarWarsongBattlemasterAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        var battlemaster = global::BotRunner.Travel.BattlemasterData.OrgrimmarWsg;
+        return StageBotRunnerAtQuestLocationAsync(
+            targetAccountName,
+            targetRoleLabel,
+            "Orgrimmar Warsong Gulch battlemaster",
+            mapId: (int)battlemaster.MapId,
+            x: battlemaster.Position.X,
+            y: battlemaster.Position.Y,
+            z: battlemaster.Position.Z,
+            cleanSlate);
+    }
+
     public Task<bool> StageBotRunnerAtValleySpiritHealerAsync(
         string targetAccountName,
         string targetRoleLabel,
