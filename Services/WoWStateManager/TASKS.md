@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan transport/taxi config observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
+- Last delta:
+  - `TaxiTests`, `TaxiTransportParityTests`, and `TransportTests` now run against `Economy.config.json` with `ECONBG1` as the BG taxi/transport action target, `ECONFG1` idle or parity-active by test, and SHODAN as director.
+  - Taxi readiness and transport coordinate staging moved into `LiveBotFixture` helpers; no WoWStateManager runtime or config change was required.
+- Pass result: `Transport/taxi migration shape green; live validation passed overall with 8 passes and 5 tracked skips`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~TaxiTests|FullyQualifiedName~TaxiTransportParityTests|FullyQualifiedName~TransportTests" --logger "trx;LogFileName=transport_taxi_shodan_final.trx"` -> `passed overall (8 passed, 5 skipped)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/DualClientParityTests.cs Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+
 ### 2026-04-25 (Shodan SpellCastOnTarget config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.

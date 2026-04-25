@@ -816,6 +816,145 @@ public partial class LiveBotFixture
             z: 64.72f,
             cleanSlate);
 
+    public async Task<ulong> StageBotRunnerTaxiReadinessAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true,
+        bool enableAllTaxiNodes = true,
+        long minimumCopper = 50000)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        await QuiesceAccountsAsync(
+            new[] { targetAccountName },
+            $"{targetRoleLabel} taxi-readiness pre-stage");
+
+        if (minimumCopper > 0)
+            await StageBotRunnerCoinageAsync(targetAccountName, targetRoleLabel, minimumCopper);
+
+        if (enableAllTaxiNodes)
+            await EnsureTaxiNodesEnabledAsync(targetAccountName, targetRoleLabel);
+
+        var staged = await StageBotRunnerAtOrgrimmarFlightMasterAsync(
+            targetAccountName,
+            targetRoleLabel,
+            cleanSlate: false);
+        if (!staged)
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} Orgrimmar flight-master staging failed.");
+
+        var fmUnit = await WaitForNearbyUnitAsync(
+            targetAccountName,
+            (uint)NPCFlags.UNIT_NPC_FLAG_FLIGHTMASTER,
+            timeoutMs: 15000,
+            progressLabel: $"{targetRoleLabel} flight-master lookup");
+        if (fmUnit == null)
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} did not see an Orgrimmar flight master.");
+
+        var fmGuid = fmUnit.GameObject?.Base?.Guid ?? 0UL;
+        if (fmGuid == 0)
+            throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} flight master had no guid.");
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' flight master ready guid=0x{Guid:X} name='{Name}'",
+            targetRoleLabel,
+            targetAccountName,
+            fmGuid,
+            fmUnit.GameObject?.Name);
+
+        return fmGuid;
+    }
+
+    public async Task<bool> StageBotRunnerAtOrgrimmarZeppelinTowerAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        await QuiesceAccountsAsync(
+            new[] { targetAccountName },
+            $"{targetRoleLabel} Orgrimmar zeppelin pre-stage");
+
+        return await StageBotRunnerAtNavigationPointAsync(
+            targetAccountName,
+            targetRoleLabel,
+            mapId: 1,
+            x: 1320.0f,
+            y: -4653.0f,
+            z: 53.0f,
+            locationLabel: "Orgrimmar zeppelin tower",
+            cleanSlate,
+            xyToleranceYards: 20f,
+            zStabilizationWaitMs: 1000);
+    }
+
+    public async Task<bool> StageBotRunnerAtRatchetDockAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        await QuiesceAccountsAsync(
+            new[] { targetAccountName },
+            $"{targetRoleLabel} Ratchet dock pre-stage");
+
+        return await StageBotRunnerAtNavigationPointAsync(
+            targetAccountName,
+            targetRoleLabel,
+            mapId: 1,
+            x: -996.0f,
+            y: -3827.0f,
+            z: 8.0f,
+            locationLabel: "Ratchet dock",
+            cleanSlate,
+            xyToleranceYards: 20f,
+            zStabilizationWaitMs: 1000);
+    }
+
+    public async Task<bool> StageBotRunnerAtUndercityElevatorUpperAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        await QuiesceAccountsAsync(
+            new[] { targetAccountName },
+            $"{targetRoleLabel} Undercity elevator pre-stage");
+
+        return await StageBotRunnerAtNavigationPointAsync(
+            targetAccountName,
+            targetRoleLabel,
+            mapId: 0,
+            x: 1544.24f,
+            y: 240.77f,
+            z: 55.40f,
+            locationLabel: "Undercity elevator upper",
+            cleanSlate,
+            xyToleranceYards: 20f,
+            zStabilizationWaitMs: 1000);
+    }
+
+    public async Task<bool> StageBotRunnerAtThunderBluffElevatorAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        await QuiesceAccountsAsync(
+            new[] { targetAccountName },
+            $"{targetRoleLabel} Thunder Bluff elevator pre-stage");
+
+        return await StageBotRunnerAtNavigationPointAsync(
+            targetAccountName,
+            targetRoleLabel,
+            mapId: 1,
+            x: -1898.0f,
+            y: -287.0f,
+            z: 92.0f,
+            locationLabel: "Thunder Bluff elevator",
+            cleanSlate,
+            xyToleranceYards: 30f,
+            zStabilizationWaitMs: 1000);
+    }
+
     public Task<bool> StageBotRunnerAtOrgrimmarWarsongBattlemasterAsync(
         string targetAccountName,
         string targetRoleLabel,

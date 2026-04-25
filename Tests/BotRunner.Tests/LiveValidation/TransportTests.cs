@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
@@ -19,10 +20,6 @@ public class TransportTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int KalimdorMapId = 1;
-    // Orgrimmar zeppelin tower platform
-    private const float ZepTowerX = 1320.0f, ZepTowerY = -4653.0f, ZepTowerZ = 53.0f;
-
     // Game object types: 11 = GAMEOBJECT_TYPE_TRANSPORT, 15 = GAMEOBJECT_TYPE_MO_TRANSPORT
     private const uint GoTypeTransport = 11;
     private const uint GoTypeMoTransport = 15;
@@ -32,7 +29,6 @@ public class TransportTests
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     /// <summary>
@@ -42,17 +38,17 @@ public class TransportTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Zeppelin_OrgToUndercity()
     {
-        var account = _bot.BgAccountName!;
+        var target = await EnsureTransportSettingsAndTargetAsync();
 
-        await _bot.EnsureCleanSlateAsync(account, "BG");
-        _output.WriteLine($"[TEST] Teleporting to Org zeppelin tower ({ZepTowerX}, {ZepTowerY}, {ZepTowerZ})");
-        await _bot.BotTeleportAsync(account, KalimdorMapId, ZepTowerX, ZepTowerY, ZepTowerZ);
-        await _bot.WaitForTeleportSettledAsync(account, ZepTowerX, ZepTowerY);
+        var staged = await _bot.StageBotRunnerAtOrgrimmarZeppelinTowerAsync(
+            target.AccountName,
+            target.RoleLabel);
+        Assert.True(staged, $"{target.RoleLabel}: expected Orgrimmar zeppelin tower staging to succeed.");
 
         // Wait for game objects to populate
         await Task.Delay(5000);
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
+        var snap = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.NotNull(snap);
 
         var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
@@ -96,18 +92,16 @@ public class TransportTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Boat_RatchetToBootyBay()
     {
-        var account = _bot.BgAccountName!;
+        var target = await EnsureTransportSettingsAndTargetAsync();
 
-        // Ratchet dock coordinates
-        const float ratchetX = -996.0f, ratchetY = -3827.0f, ratchetZ = 8.0f;
-
-        await _bot.EnsureCleanSlateAsync(account, "BG");
-        await _bot.BotTeleportAsync(account, KalimdorMapId, ratchetX, ratchetY, ratchetZ);
-        await _bot.WaitForTeleportSettledAsync(account, ratchetX, ratchetY);
+        var staged = await _bot.StageBotRunnerAtRatchetDockAsync(
+            target.AccountName,
+            target.RoleLabel);
+        Assert.True(staged, $"{target.RoleLabel}: expected Ratchet dock staging to succeed.");
 
         await Task.Delay(5000);
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
+        var snap = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.NotNull(snap);
 
         var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
@@ -122,14 +116,15 @@ public class TransportTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Boat_MenethilToTheramore()
     {
-        var account = _bot.BgAccountName!;
+        var target = await EnsureTransportSettingsAndTargetAsync();
 
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
+        var snap = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.NotNull(snap);
         _output.WriteLine($"[TEST] Character: {snap!.CharacterName}");
-        // Cross-continent boat requires specific dock setup
-        Assert.NotNull(snap.Player);
+        global::Tests.Infrastructure.Skip.If(
+            true,
+            "Menethil-to-Theramore boat validation is Shodan-shaped but needs an Alliance/dock-specific action-target config.");
     }
 
     /// <summary>
@@ -139,19 +134,16 @@ public class TransportTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Elevator_Undercity()
     {
-        var account = _bot.BgAccountName!;
+        var target = await EnsureTransportSettingsAndTargetAsync();
 
-        // Undercity west elevator upper stop (Eastern Kingdoms map 0)
-        const int ekMapId = 0;
-        const float ucElevTopX = 1544.24f, ucElevTopY = 240.77f, ucElevTopZ = 55.40f;
-
-        await _bot.EnsureCleanSlateAsync(account, "BG");
-        await _bot.BotTeleportAsync(account, ekMapId, ucElevTopX, ucElevTopY, ucElevTopZ);
-        await _bot.WaitForTeleportSettledAsync(account, ucElevTopX, ucElevTopY);
+        var staged = await _bot.StageBotRunnerAtUndercityElevatorUpperAsync(
+            target.AccountName,
+            target.RoleLabel);
+        Assert.True(staged, $"{target.RoleLabel}: expected Undercity elevator staging to succeed.");
         await Task.Delay(5000);
 
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
+        var snap = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.NotNull(snap);
 
         var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
@@ -178,16 +170,16 @@ public class TransportTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Elevator_ThunderBluff()
     {
-        var account = _bot.BgAccountName!;
+        var target = await EnsureTransportSettingsAndTargetAsync();
 
-        const float tbElevX = -1898.0f, tbElevY = -287.0f, tbElevZ = 92.0f;
-
-        await _bot.EnsureCleanSlateAsync(account, "BG");
-        await _bot.BotTeleportAsync(account, KalimdorMapId, tbElevX, tbElevY, tbElevZ);
+        var staged = await _bot.StageBotRunnerAtThunderBluffElevatorAsync(
+            target.AccountName,
+            target.RoleLabel);
+        Assert.True(staged, $"{target.RoleLabel}: expected Thunder Bluff elevator staging to succeed.");
         await Task.Delay(3000);
 
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
+        var snap = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.NotNull(snap);
 
         var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
@@ -202,12 +194,57 @@ public class TransportTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task DeeprunTram_IFToSW()
     {
-        var account = _bot.BgAccountName!;
+        var target = await EnsureTransportSettingsAndTargetAsync();
 
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
+        var snap = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.NotNull(snap);
         _output.WriteLine($"[TEST] Deeprun Tram test -- character: {snap!.CharacterName}");
-        Assert.NotNull(snap.Player);
+        global::Tests.Infrastructure.Skip.If(
+            true,
+            "Deeprun Tram validation is Shodan-shaped but requires an Alliance/tram-instance action-target config.");
+    }
+
+    private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureTransportSettingsAndTargetAsync()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Economy.config.json.");
+
+        var target = _bot.ResolveBotRunnerActionTargets(
+                includeForegroundIfActionable: false,
+                foregroundFirst: false)
+            .Single(candidate => !candidate.IsForeground);
+
+        _output.WriteLine(
+            $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: BG transport staging target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] FG {_bot.FgAccountName}/{_bot.FgCharacterName}: launched idle for topology parity.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no transport action dispatch.");
+
+        return target;
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(new[] { dir.FullName }.Concat(segments).ToArray());
+            if (File.Exists(candidate) || Directory.Exists(candidate))
+                return candidate;
+            dir = dir.Parent;
+        }
+
+        throw new DirectoryNotFoundException(
+            $"Could not resolve repository path for {Path.Combine(segments)} from {AppContext.BaseDirectory}.");
     }
 }

@@ -225,6 +225,11 @@ public partial class LiveBotFixture
 
             await RefreshSnapshotsAsync();
             var current = await GetSnapshotAsync(accountName);
+            var currentMessages = (current?.RecentChatMessages?.AsEnumerable() ?? Enumerable.Empty<string>())
+                .Concat(current?.RecentErrors?.AsEnumerable() ?? Enumerable.Empty<string>());
+            if (currentMessages.Any(ContainsTaxiNodesGrantedMessage))
+                return;
+
             baselineChats = current?.RecentChatMessages.ToArray() ?? baselineChats;
             baselineErrors = current?.RecentErrors.ToArray() ?? baselineErrors;
             _testOutput?.WriteLine($"[{label}] taxicheat confirmation not seen on attempt {attempt}/{maxAttempts}; retrying.");

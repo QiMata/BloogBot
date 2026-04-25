@@ -44,7 +44,8 @@
 - [x] Migrate `BgInteractionTests` to the Shodan shape via `Economy.config.json` + fixture-contained bank/AH/mail/flight-master staging; BG dispatches only `InteractWith`, `CheckMail`, and `VisitFlightMaster`, with bank deposit and Deeprun Tram tracked as skips.
 - [x] Migrate `BattlegroundQueueTests` to the Shodan shape via `Economy.config.json` + fixture-contained WSG battlemaster/level staging; BG dispatches only `JoinBattleground` and cleanup `LeaveBattleground`.
 - [x] Migrate `SpellCastOnTargetTests` to the Shodan shape via `Economy.config.json` + fixture-contained Battle Shout spell/rage/aura staging; BG dispatches only `CastSpell` while FG stays idle for topology parity.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (transport group, then parity / integration / ack).
+- [x] Migrate `TaxiTests` / `TaxiTransportParityTests` / `TransportTests` to the Shodan shape via `Economy.config.json` + fixture-contained taxi readiness and transport-point staging; taxi actions dispatch to BG/FG targets only, with elevator/cross-continent/Alliance placeholders tracked as skips.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (dual-client/movement parity, then integration / ack).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -84,6 +85,32 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan transport/taxi migration slice)
+- Pass result: `TaxiTests, TaxiTransportParityTests, and TransportTests now follow the Shodan test-director action-target split; live validation passed overall with 8 passes and 5 tracked skips`
+- Last delta:
+  - Reused `Economy.config.json` with `ECONBG1` as the BG taxi/transport action target, `ECONFG1` idle or parity-active by test, and SHODAN as director.
+  - Added fixture-owned taxi readiness plus Orgrimmar zeppelin, Ratchet dock, Undercity elevator, and Thunder Bluff elevator staging helpers; test bodies no longer issue direct setup GM commands.
+  - BG/FG action paths dispatch only `VisitFlightMaster`, `SelectTaxiNode`, recording actions, or transport `Goto`; SHODAN remains director-only.
+  - Documented current gaps: Horde-only roster skips Alliance taxi/Menethil/Deeprun cases, elevator boarding does not reliably expose `TransportGuid`, and cross-continent transport parity needs a stable action-driven boarding assertion.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync|EnsureTaxiNodesEnabledAsync" Tests/BotRunner.Tests/LiveValidation/TaxiTests.cs Tests/BotRunner.Tests/LiveValidation/TaxiTransportParityTests.cs Tests/BotRunner.Tests/LiveValidation/TransportTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TaxiTests|FullyQualifiedName~TaxiTransportParityTests|FullyQualifiedName~TransportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=transport_taxi_shodan_final.trx"` -> `passed overall (8 passed, 5 skipped)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.BotChat.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TaxiTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TaxiTransportParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TransportTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TaxiTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TaxiTransportParityTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TransportTests.md`
+  - live-validation docs and task trackers.
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/DualClientParityTests.cs Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+
 ### 2026-04-25 (Shodan SpellCastOnTarget migration slice)
 - Pass result: `SpellCastOnTargetTests now follows the Shodan test-director action-target split; live Battle Shout validation passed 1/1`
 - Last delta:
