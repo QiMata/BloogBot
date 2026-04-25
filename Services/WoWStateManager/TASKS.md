@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan MapTransition config observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
+- Last delta:
+  - `MapTransitionTests` now runs against `Economy.config.json` with `ECONBG1` as the Deeprun Tram bounce action target, `ECONFG1` idle for topology parity, and SHODAN as director.
+  - Ironforge tram staging, rejected Deeprun Tram transition setup, and cleanup moved into `LiveBotFixture` helpers; no WoWStateManager runtime change was required.
+- Pass result: `MapTransition migration shape green; live Deeprun Tram bounce validation passed 1/1`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~MapTransitionTests" --logger "trx;LogFileName=map_transition_shodan.trx"` -> `passed (1/1)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/MountEnvironmentTests.cs`
+
 ### 2026-04-25 (Shodan SpiritHealer config observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.

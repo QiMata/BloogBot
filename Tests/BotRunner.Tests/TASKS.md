@@ -32,7 +32,8 @@
 - [x] Migrate `GossipQuestTests` / `QuestObjectiveTests` / `QuestInteractionTests` / `StarterQuestTests` to the Shodan shape via `Economy.config.json` + fixture-contained quest location/state staging; BG dispatches only `InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or `CompleteQuest` while FG stays idle for topology parity.
 - [x] Migrate `NpcInteractionTests` to the Shodan shape via `NpcInteraction.config.json` + fixture-contained NPC location/loadout staging; vendor, flight-master, and object-manager checks dispatch to FG/BG, while trainer is an explicit tracked skip behind the live funding/mailbox staging gap.
 - [x] Migrate `SpiritHealerTests` to the Shodan shape via `Economy.config.json` + fixture-contained corpse/graveyard staging; BG dispatches only `ReleaseCorpse`, `Goto`, and `InteractWith` while FG stays idle for topology parity.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`MapTransitionTests`, then movement / navigation, combat / misc).
+- [x] Migrate `MapTransitionTests` to the Shodan shape via `Economy.config.json` + fixture-contained Ironforge/Deeprun Tram transition staging; BG dispatches only a post-bounce `Goto` liveness action while FG stays idle for topology parity.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`MountEnvironmentTests`, then remaining movement / navigation, combat / misc).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -72,6 +73,26 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan MapTransition migration slice)
+- Pass result: `MapTransitionTests now follows the Shodan test-director action-target split; live Deeprun Tram bounce validation passed 1/1`
+- Last delta:
+  - Reused `Economy.config.json` with `ECONBG1` as the BG map-transition action target, `ECONFG1` idle for topology parity, and SHODAN as director.
+  - Added fixture-contained Ironforge tram staging and rejected Deeprun Tram transition helpers; the test body no longer issues `.go xyz` commands.
+  - The BG target dispatches only a correlated `ActionType.Goto` at the current post-bounce snapshot position to prove BotRunner remains responsive after the map transition settles.
+  - Added `MapTransitionTests.md`, refreshed `TEST_EXECUTION_MODES.md`, and moved `MapTransitionTests.cs` to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MapTransitionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=map_transition_shodan.trx"` -> `passed (1/1)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/MapTransitionTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MapTransitionTests.md`
+  - live-validation docs and task trackers.
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die" Tests/BotRunner.Tests/LiveValidation/MountEnvironmentTests.cs`
+
 ### 2026-04-25 (Shodan SpiritHealer migration slice)
 - Pass result: `SpiritHealerTests now follows the Shodan test-director action-target split; live spirit-healer recovery passed 1/1`
 - Last delta:

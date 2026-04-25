@@ -47,7 +47,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | TradingTests | Shodan BG-action / FG gap | BG + FG + SHODAN | BG cancel only | BG offer/decline passes; transfer skip tracks FG AcceptTrade ACK failure |
 | TradeParityTests | Shodan BG-action / FG gap | BG + FG + SHODAN | **No behavior parity** | FG trade cancel/transfer paths skip after Shodan launch due foreground action ACK failures |
 | LootCorpseTests | CombatTest-Only | COMBATTEST | **No** | Kill→loot with dedicated combat account |
-| MapTransitionTests | BG-Only | BG | **No** | Deeprun Tram bounce validation |
+| MapTransitionTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Deeprun Tram bounce; BG post-bounce action liveness |
 | NavigationTests | BG-Only | BG | **No** | Pathfinding + Z-trace (some runs probe both) |
 | NpcInteractionTests | Shodan FG+BG-action / tracked skip | BG + FG + SHODAN | Vendor/flight/object-manager yes | Shodan-staged NPC interactions; trainer subcase skips due live funding/mailbox staging gap |
 | OrgrimmarGroundZAnalysisTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Post-teleport ground Z |
@@ -68,7 +68,7 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 2. **CraftingProfessionTests** — Blocked on FG Lua/UI crafting parity.
 3. **DeathCorpseRunTests** - FG is opt-in. Historical CRASH-001 was not reproduced on 2026-04-15; latest opt-in FG corpse-run validation passes and remains available for targeted regression proof.
 4. **LootCorpseTests** — Uses COMBATTEST account. Consider adding FG loot reference.
-5. **MapTransitionTests** — BG-only. FG map transition observation would catch desync.
+5. **MapTransitionTests** - Shodan topology is in place, but the migrated slice is BG-action-only while FG stays idle for topology parity.
 6. **NavigationTests** — BG-only. FG position comparison would catch movement divergence.
 7. **StarterQuestTests / GossipQuestTests / QuestObjectiveTests / QuestInteractionTests** - Shodan topology is in place, but the migrated quest group is BG-action-only while FG stays idle for topology parity.
 8. **VendorBuySellTests** - Shodan topology is in place, but the migrated slice is still a BG packet baseline; add FG behavior parity separately.

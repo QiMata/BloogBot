@@ -1,121 +1,225 @@
 using System;
+using System.IO;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using Tests.Infrastructure;
+using Communication;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Map transition hardening tests — validates client survives cross-map teleports
-/// and server-rejected map transitions without crashing.
-///
-/// TEST-TRAM-001: Deeprun Tram (map 369) map transition.
-/// MaNGOS bounces Horde players out of the Deeprun Tram instance back to their
-/// hearthstone. This behavior test stays BG-only per the overhaul plan: FG packet
-/// capture remains diagnostic, but the asserted behavior lives in the headless bot.
-///
-/// Setup: teleport the BG bot to Ironforge (map 0), then teleport near the
-/// Deeprun Tram entrance. The server rejects the transition and sends the player back.
-///
-/// Run: dotnet test --filter "FullyQualifiedName~MapTransitionTests" --configuration Release
+/// Shodan-directed map transition hardening. SHODAN stages the BG action
+/// target at the Ironforge tram entrance and triggers the rejected Deeprun
+/// Tram transition; the BotRunner target receives only a post-bounce action
+/// to prove it stayed responsive.
 /// </summary>
-[Collection(BgOnlyValidationCollection.Name)]
+[Collection(LiveValidationCollection.Name)]
 public class MapTransitionTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    // Ironforge — Tinker Town, near Deeprun Tram entrance
-    // Map 0 (Eastern Kingdoms), safe position inside Ironforge
     private const float IfTramX = -4838f;
     private const float IfTramY = -1317f;
-    private const float IfTramZ = 505f;
-    private const int EasternKingdomsMap = 0;
+    private static int s_mapTransitionCorrelationSequence;
 
-    public MapTransitionTests(BgOnlyBotFixture bot, ITestOutputHelper output)
+    public MapTransitionTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
     public async Task MapTransition_DeeprunTramBounce_ClientSurvives()
     {
-        _output.WriteLine("=== TEST-TRAM-001: Deeprun Tram Map Transition Bounce ===");
+        _output.WriteLine("=== Deeprun Tram Map Transition Bounce: Shodan-staged BG action target ===");
 
-        var bgAccount = _bot.BgAccountName!;
+        var target = await EnsureMapTransitionSettingsAndTargetAsync();
+        var cleanupRequired = false;
 
-        _output.WriteLine("[BG-ONLY] Running Deeprun Tram bounce validation on the headless bot.");
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
-        await RunSingleMapTransitionTest(bgAccount, "BG");
+        try
+        {
+            var staged = await _bot.StageBotRunnerAtIronforgeTramEntranceAsync(
+                target.AccountName,
+                target.RoleLabel);
+            cleanupRequired = true;
+            Assert.True(staged, $"{target.RoleLabel}: failed to stage at Ironforge tram entrance.");
 
-        _output.WriteLine("[PASS] BG client survived Deeprun Tram bounce.");
+            await _bot.RefreshSnapshotsAsync();
+            var ironforgeSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+            Assert.NotNull(ironforgeSnapshot);
+            var ironforgePosition = ironforgeSnapshot!.Player?.Unit?.GameObject?.Base?.Position;
+            Assert.NotNull(ironforgePosition);
+            var distFromIronforge = LiveBotFixture.Distance2D(
+                ironforgePosition!.X,
+                ironforgePosition.Y,
+                IfTramX,
+                IfTramY);
+            _output.WriteLine(
+                $"[{target.RoleLabel}] staged position: ({ironforgePosition.X:F1}, {ironforgePosition.Y:F1}, {ironforgePosition.Z:F1}); " +
+                $"distance from IF target={distFromIronforge:F1}y");
+            Assert.True(distFromIronforge <= 80f, $"{target.RoleLabel}: target did not reach Ironforge tram staging area.");
+
+            var bounced = await _bot.TriggerBotRunnerRejectedDeeprunTramTransitionAsync(
+                target.AccountName,
+                target.RoleLabel);
+            Assert.True(bounced, $"{target.RoleLabel}: Deeprun Tram rejected transition did not settle back to InWorld.");
+
+            await _bot.RefreshSnapshotsAsync();
+            var bounceSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+            Assert.NotNull(bounceSnapshot);
+            Assert.Equal("InWorld", bounceSnapshot!.ScreenState);
+            Assert.Equal(BotConnectionState.BotInWorld, bounceSnapshot.ConnectionState);
+            Assert.False(bounceSnapshot.IsMapTransition, $"{target.RoleLabel}: map transition flag remained set after bounce.");
+
+            var bouncePosition = bounceSnapshot.Player?.Unit?.GameObject?.Base?.Position;
+            Assert.NotNull(bouncePosition);
+            _output.WriteLine(
+                $"[{target.RoleLabel}] position after bounce: ({bouncePosition!.X:F1}, {bouncePosition.Y:F1}, {bouncePosition.Z:F1}); " +
+                $"currentMap={bounceSnapshot.CurrentMapId}");
+
+            Assert.True(
+                MathF.Abs(bouncePosition.X) > 10 || MathF.Abs(bouncePosition.Y) > 10,
+                $"{target.RoleLabel}: position after bounce is suspiciously close to origin.");
+
+            await SendMapTransitionActionAsync(
+                target,
+                new ActionMessage
+                {
+                    ActionType = ActionType.Goto,
+                    Parameters =
+                    {
+                        new RequestParameter { FloatParam = bouncePosition.X },
+                        new RequestParameter { FloatParam = bouncePosition.Y },
+                        new RequestParameter { FloatParam = bouncePosition.Z },
+                        new RequestParameter { FloatParam = 8.0f }
+                    }
+                },
+                "PostBounceGoto",
+                timeoutSeconds: 12);
+
+            _output.WriteLine($"[PASS] {target.RoleLabel} client survived Deeprun Tram bounce and accepted a BotRunner action.");
+        }
+        finally
+        {
+            if (cleanupRequired)
+                await _bot.ReturnBotRunnerToOrgrimmarSafeZoneAsync(target.AccountName, target.RoleLabel);
+        }
     }
 
-    private async Task RunSingleMapTransitionTest(string account, string label)
+    private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureMapTransitionSettingsAndTargetAsync()
     {
-        _output.WriteLine($"[{label}] Teleporting to Ironforge (near Deeprun Tram entrance)...");
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
 
-        // Teleport to Ironforge Tinker Town
-        await _bot.SendGmChatCommandAsync(account, $".go xyz {IfTramX} {IfTramY} {IfTramZ} {EasternKingdomsMap}");
-        await _bot.WaitForTeleportSettledAsync(account, IfTramX, IfTramY, timeoutMs: 5000);
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Economy.config.json.");
 
-        // Verify bot arrived in Ironforge
+        var target = _bot.ResolveBotRunnerActionTargets(
+                includeForegroundIfActionable: false,
+                foregroundFirst: false)
+            .Single(target => !target.IsForeground);
+
+        _output.WriteLine(
+            $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
+            "BG map-transition action target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] FG {_bot.FgAccountName}/{_bot.FgCharacterName}: launched idle for topology parity.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no action dispatch.");
+
+        return target;
+    }
+
+    private async Task<ResponseResult> SendMapTransitionActionAsync(
+        LiveBotFixture.BotRunnerActionTarget target,
+        ActionMessage action,
+        string stepName,
+        int timeoutSeconds)
+    {
+        var correlationId =
+            $"maptransition:{target.AccountName}:{Interlocked.Increment(ref s_mapTransitionCorrelationSequence)}";
+        action.CorrelationId = correlationId;
+
+        var result = await _bot.SendActionAsync(target.AccountName, action);
+        _output.WriteLine($"[MAP-TRANSITION] {target.RoleLabel} {stepName} dispatch result: {result}");
+        Assert.Equal(ResponseResult.Success, result);
+
+        var completed = await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snapshot => HasCompletedAction(snapshot, correlationId),
+            TimeSpan.FromSeconds(timeoutSeconds),
+            pollIntervalMs: 250,
+            progressLabel: $"{target.RoleLabel} {stepName} action");
+
         await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(account);
-        global::Tests.Infrastructure.Skip.If(snap == null, $"{label} bot snapshot not available after teleport");
-
-        var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
-        var posX = pos?.X ?? 0;
-        var posY = pos?.Y ?? 0;
-        _output.WriteLine($"[{label}] Position after IF teleport: ({posX:F1}, {posY:F1})");
-
-        // Verify we're near Ironforge (not still in Orgrimmar)
-        var distFromIF = MathF.Sqrt(
-            MathF.Pow(posX - IfTramX, 2) + MathF.Pow(posY - IfTramY, 2));
-        _output.WriteLine($"[{label}] Distance from IF target: {distFromIF:F1}y");
-
-        // Now teleport INTO the Deeprun Tram instance (map 369)
-        // MaNGOS should bounce us back to hearthstone (Orgrimmar for Horde chars)
-        _output.WriteLine($"[{label}] Teleporting into Deeprun Tram (map 369) — expecting server bounce...");
-        await _bot.SendGmChatCommandAsync(account, ".go xyz -4838 -1317 502 369");
-        // Cross-map bounce — poll for InWorld state (server may bounce us to hearthstone)
-        await _bot.WaitForSnapshotConditionAsync(account,
-            s => s.ScreenState == "InWorld" && s.Player?.Unit?.GameObject?.Base?.Position != null,
-            TimeSpan.FromSeconds(10),
-            progressLabel: $"{label} tram-bounce-InWorld");
-
-        // Verify client is still alive and in-world after the bounce
-        await _bot.RefreshSnapshotsAsync();
-        snap = await _bot.GetSnapshotAsync(account);
-
-        if (snap == null)
+        var latest = await _bot.GetSnapshotAsync(target.AccountName);
+        var ack = FindLatestMatchingAck(latest, correlationId);
+        if (ack?.Status is CommandAckEvent.Types.AckStatus.Failed or CommandAckEvent.Types.AckStatus.TimedOut)
         {
-            Assert.Fail($"[{label}] Bot snapshot is null after Deeprun Tram bounce — client may have crashed or disconnected");
+            Assert.Fail(
+                $"{target.RoleLabel} {stepName} reported ACK {ack.Status} " +
+                $"(reason={ack.FailureReason ?? "(none)"}, corr={correlationId}).");
         }
 
-        var screenState = snap.ScreenState;
-        _output.WriteLine($"[{label}] ScreenState after bounce: {screenState}");
-        Assert.Equal("InWorld", screenState);
+        Assert.True(completed, $"{target.RoleLabel} {stepName} did not complete within {timeoutSeconds}s.");
+        return result;
+    }
 
-        // Verify position changed (bounced back to hearthstone or stayed in IF)
-        var bouncePos = snap.Player?.Unit?.GameObject?.Base?.Position;
-        var bounceX = bouncePos?.X ?? 0;
-        var bounceY = bouncePos?.Y ?? 0;
-        _output.WriteLine($"[{label}] Position after bounce: ({bounceX:F1}, {bounceY:F1})");
+    private static bool HasCompletedAction(WoWActivitySnapshot snapshot, string correlationId)
+    {
+        var ack = FindLatestMatchingAck(snapshot, correlationId);
+        if (ack != null && ack.Status != CommandAckEvent.Types.AckStatus.Pending)
+            return true;
 
-        // The bot should either be back near Orgrimmar (hearthstone) or still in IF
-        // Either way, NOT at 0,0 (which would indicate a broken state)
-        Assert.True(MathF.Abs(bounceX) > 10 || MathF.Abs(bounceY) > 10,
-            $"[{label}] Position after bounce is suspiciously close to origin — possible broken state");
+        return string.Equals(
+            snapshot.PreviousAction?.CorrelationId,
+            correlationId,
+            StringComparison.Ordinal);
+    }
 
-        _output.WriteLine($"[{label}] Client survived Deeprun Tram map transition bounce.");
+    private static CommandAckEvent? FindLatestMatchingAck(WoWActivitySnapshot? snapshot, string correlationId)
+    {
+        if (snapshot == null)
+            return null;
 
-        // Return to Orgrimmar for subsequent tests
-        await _bot.SendGmChatCommandAsync(account, ".go xyz 1629 -4373 18 1");
-        await _bot.WaitForTeleportSettledAsync(account, 1629f, -4373f);
+        CommandAckEvent? pendingMatch = null;
+        for (var i = snapshot.RecentCommandAcks.Count - 1; i >= 0; i--)
+        {
+            var ack = snapshot.RecentCommandAcks[i];
+            if (!string.Equals(ack.CorrelationId, correlationId, StringComparison.Ordinal))
+                continue;
+
+            if (ack.Status != CommandAckEvent.Types.AckStatus.Pending)
+                return ack;
+
+            pendingMatch ??= ack;
+        }
+
+        return pendingMatch;
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
+
+            dir = dir.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
     }
 }

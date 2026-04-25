@@ -54,6 +54,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `StarterQuestTests.cs` | Migrated: `Economy.config.json`; fixture-contained Kaltunk/Gornek staging; BG dispatches `AcceptQuest` / `CompleteQuest` only while FG stays idle for topology parity. |
 | `NpcInteractionTests.cs` | Migrated: `NpcInteraction.config.json`; fixture-contained vendor, flight-master, NPC flag, hunter trainer, and loadout staging; vendor/flight/object-manager paths dispatch to FG/BG, while trainer is a documented skip behind the live funding/mailbox staging gap. |
 | `SpiritHealerTests.cs` | Migrated: `Economy.config.json`; fixture-contained corpse/graveyard staging; BG dispatches `ReleaseCorpse`, `Goto`, and `InteractWith` while FG stays idle for topology parity. |
+| `MapTransitionTests.cs` | Migrated: `Economy.config.json`; fixture-contained Ironforge tram staging and rejected Deeprun Tram transition; BG dispatches a post-bounce `Goto` liveness action while FG stays idle for topology parity. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -76,7 +77,6 @@ Movement / navigation tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `MapTransitionTests.cs` | Inter-map `.go xyz`, loadout prep |
 | `MountEnvironmentTests.cs` | Mount spell add, stage teleport |
 | `TravelPlannerTests.cs` | Multi-leg staging teleports |
 | `CornerNavigationTests.cs`, `TileBoundaryCrossingTests.cs` | Edge-case staging teleports |
@@ -99,7 +99,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~25 SHODAN-CANDIDATE files (after `SpiritHealerTests.cs` moved to ALREADY-SHODAN).
+Total: ~24 SHODAN-CANDIDATE files (after `MapTransitionTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -406,6 +406,20 @@ generic gameobject interaction fallback. Pre-fix artifacts captured two useful
 failure modes: ordinary NPC gossip did not resurrect the ghost, and strict
 2-yard approach tolerance could stall on a valid 5-yard interaction-range
 arrival.
+
+`MapTransitionTests.cs` reuses `Economy.config.json` with `ECONBG1` as the BG
+map-transition action target, `ECONFG1` launched idle for Shodan topology
+parity, and SHODAN as director. The slice adds fixture-contained Ironforge tram
+staging and rejected Deeprun Tram transition helpers; the test body no longer
+issues `.go xyz` commands and dispatches only a correlated post-bounce
+`ActionType.Goto` at the current snapshot position to prove BotRunner remains
+action-responsive after the map transition settles.
+
+Migration result on this slice: live artifact `map_transition_shodan.trx`
+passed `1/1`. The cross-map `.go xyz` command remains fixture-owned because
+there is no production BotRunner ActionType for forcing a server-rejected
+instance teleport; the behavior assertion stays snapshot-based and the only
+BotRunner action is the post-bounce liveness command.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

@@ -527,6 +527,78 @@ public partial class LiveBotFixture
             z: 43.909f,
             cleanSlate);
 
+    public async Task<bool> StageBotRunnerAtIronforgeTramEntranceAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        const int easternKingdomsMapId = 0;
+        const float ironforgeTramX = -4838f;
+        const float ironforgeTramY = -1317f;
+        const float ironforgeTramZ = 505f;
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' Ironforge tram stage map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            easternKingdomsMapId,
+            ironforgeTramX,
+            ironforgeTramY,
+            ironforgeTramZ);
+
+        await BotTeleportAsync(
+            targetAccountName,
+            easternKingdomsMapId,
+            ironforgeTramX,
+            ironforgeTramY,
+            ironforgeTramZ);
+
+        return await WaitForTeleportSettledAsync(
+            targetAccountName,
+            ironforgeTramX,
+            ironforgeTramY,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} Ironforge tram stage",
+            xyToleranceYards: 60f);
+    }
+
+    public async Task<bool> TriggerBotRunnerRejectedDeeprunTramTransitionAsync(
+        string targetAccountName,
+        string targetRoleLabel)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        const string deeprunTramCommand = ".go xyz -4838 -1317 502 369";
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' Deeprun Tram rejected-transition command={Command}",
+            targetRoleLabel,
+            targetAccountName,
+            deeprunTramCommand);
+
+        var trace = await SendGmChatCommandTrackedAsync(
+            targetAccountName,
+            deeprunTramCommand,
+            captureResponse: true,
+            delayMs: 1000,
+            allowWhenDead: true);
+        AssertTraceCommandSucceeded(trace, targetRoleLabel, "Deeprun Tram transition");
+
+        return await WaitForSnapshotConditionAsync(
+            targetAccountName,
+            snapshot => string.Equals(snapshot.ScreenState, "InWorld", StringComparison.OrdinalIgnoreCase)
+                && snapshot.ConnectionState == BotConnectionState.BotInWorld
+                && !snapshot.IsMapTransition
+                && snapshot.Player?.Unit?.GameObject?.Base?.Position != null,
+            TimeSpan.FromSeconds(12),
+            pollIntervalMs: 500,
+            progressLabel: $"{targetRoleLabel} Deeprun Tram bounce");
+    }
+
     public async Task<DeathInductionResult> StageBotRunnerCorpseAtValleySpiritHealerAsync(
         string targetAccountName,
         string targetRoleLabel,
