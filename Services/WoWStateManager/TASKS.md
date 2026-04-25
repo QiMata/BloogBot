@@ -17,6 +17,23 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan Economy config slice)
+- Last updated: 2026-04-25
+- Active task: none - this slice only added a reusable live-validation roster for Shodan economy migrations.
+- Last delta:
+  - Added `Economy.config.json` with `ECONFG1` Foreground Orc Warrior and `ECONBG1` Background Orc Warrior as action targets plus SHODAN as Background Gnome Mage director.
+  - The roster is used by `AuctionHouseTests` / `AuctionHouseParityTests` and is the next intended base for bank/vendor/economy Shodan slices when the roster still matches.
+- Pass result: `AuctionHouse migration shape green; live AH validation passed 3 and skipped 2 tracked missing-action placeholders`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~AuctionHouseTests|FullyQualifiedName~AuctionHouseParityTests" --logger "trx;LogFileName=auction_house_shodan.trx"` -> `3 passed, 2 skipped`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/Economy.config.json` (new)
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/BankInteractionTests.cs Tests/BotRunner.Tests/LiveValidation/BankParityTests.cs`
+
 ### 2026-04-25 (Shodan PetManagement config slice)
 - Last updated: 2026-04-25
 - Active task: none - this slice only added a new live-validation roster for the Shodan migration.

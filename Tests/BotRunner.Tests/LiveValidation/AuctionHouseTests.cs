@@ -1,5 +1,6 @@
 using System;
-using System.Linq;
+using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using Communication;
 using GameData.Core.Enums;
@@ -9,126 +10,148 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// P20.2 / V2.2: Auction house tests — Bot posts item, second bot buys it.
-/// Assert gold transfer and item delivery via mail.
-///
-/// Flow: Teleport to Org AH → interact with auctioneer → post/search/buy.
-///
-/// Run: dotnet test --filter "FullyQualifiedName~AuctionHouseTests" --configuration Release
+/// Shodan-directed auction house interaction baseline.
+/// SHODAN stages BotRunner targets at the Orgrimmar auction house; FG/BG
+/// receive only InteractWith actions from the test body.
 /// </summary>
-[Collection(BgOnlyValidationCollection.Name)]
+[Collection(LiveValidationCollection.Name)]
 public class AuctionHouseTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    public AuctionHouseTests(BgOnlyBotFixture bot, ITestOutputHelper output)
+    private const float AuctioneerMaxDistance = 30f;
+
+    public AuctionHouseTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task AH_NavigateToAuctioneer_SnapshotShowsNearbyNpc()
     {
-        var bgAccount = _bot.BgAccountName!;
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        await EnsureEconomySettingsAsync();
+        var targets = ResolveAuctionHouseTargets();
 
-        // Teleport to Org AH area
-        await _bot.BotTeleportAsync(
-            bgAccount,
-            OrgrimmarServiceLocations.MapId,
-            OrgrimmarServiceLocations.AuctionHouseX,
-            OrgrimmarServiceLocations.AuctionHouseY,
-            OrgrimmarServiceLocations.AuctionHouseZ);
-        await _bot.WaitForTeleportSettledAsync(
-            bgAccount,
-            OrgrimmarServiceLocations.AuctionHouseX,
-            OrgrimmarServiceLocations.AuctionHouseY);
-
-        // Wait for nearby units to populate (auctioneer NPCs)
-        var hasNearbyUnits = await _bot.WaitForNearbyUnitsPopulatedAsync(bgAccount, timeoutMs: 15000);
-        _output.WriteLine($"[AH] Nearby units populated: {hasNearbyUnits}");
-
-        // Verify snapshot shows bot at AH location
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(bgAccount);
-        Assert.NotNull(snap);
-        var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
-        _output.WriteLine($"[AH] Bot position: ({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0})");
-
-        var auctioneer = await _bot.WaitForNearbyUnitAsync(
-            bgAccount,
-            (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER,
-            timeoutMs: 15000,
-            progressLabel: "auctioneer");
-
-        // Assert auctioneer was found — if not, detection or teleport position is wrong
-        Assert.NotNull(auctioneer);
-        var auctPos = auctioneer!.GameObject?.Base?.Position;
-        _output.WriteLine($"[AH] Found auctioneer at ({auctPos?.X:F0},{auctPos?.Y:F0})");
-
-        var auctDist = pos != null && auctPos != null
-            ? MathF.Sqrt(MathF.Pow(pos.X - auctPos.X, 2) + MathF.Pow(pos.Y - auctPos.Y, 2))
-            : float.MaxValue;
-        Assert.True(auctDist < 30f, $"Auctioneer should be within 30y, was {auctDist:F1}y");
+        foreach (var target in targets)
+        {
+            await StageAtAuctionHouseAsync(target);
+            var auctioneerGuid = await AssertAuctioneerNearbyAsync(target, "auctioneer");
+            Assert.NotEqual(0UL, auctioneerGuid);
+        }
     }
 
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
     public async Task AH_InteractWithAuctioneer_OpensAhFrame()
     {
-        var bgAccount = _bot.BgAccountName!;
-        await _bot.EnsureCleanSlateAsync(bgAccount, "BG");
+        await EnsureEconomySettingsAsync();
+        var targets = ResolveAuctionHouseTargets();
 
-        // Setup at AH
-        await _bot.BotTeleportAsync(
-            bgAccount,
-            OrgrimmarServiceLocations.MapId,
-            OrgrimmarServiceLocations.AuctionHouseX,
-            OrgrimmarServiceLocations.AuctionHouseY,
-            OrgrimmarServiceLocations.AuctionHouseZ);
-        await _bot.WaitForTeleportSettledAsync(
-            bgAccount,
-            OrgrimmarServiceLocations.AuctionHouseX,
-            OrgrimmarServiceLocations.AuctionHouseY);
+        foreach (var target in targets)
+        {
+            await StageAtAuctionHouseAsync(target);
+            var auctioneerGuid = await AssertAuctioneerNearbyAsync(target, $"{target.RoleLabel} auctioneer-interact");
+
+            var interactResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+            {
+                ActionType = ActionType.InteractWith,
+                Parameters = { new RequestParameter { LongParam = (long)auctioneerGuid } }
+            });
+            _output.WriteLine($"[AH] {target.RoleLabel} InteractWith result: {interactResult}");
+            Assert.Equal(ResponseResult.Success, interactResult);
+
+            await Task.Delay(2000);
+            var verifyGuid = await AssertAuctioneerNearbyAsync(target, $"{target.RoleLabel} auctioneer-verify");
+            Assert.NotEqual(0UL, verifyGuid);
+        }
+    }
+
+    private async Task EnsureEconomySettingsAsync()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
+            "Shodan director was not launched by Economy.config.json.");
+    }
+
+    private IReadOnlyList<LiveBotFixture.BotRunnerActionTarget> ResolveAuctionHouseTargets()
+    {
+        var targets = _bot.ResolveBotRunnerActionTargets();
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no auction-house action dispatch.");
+
+        foreach (var target in targets)
+        {
+            _output.WriteLine(
+                $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: stage at Orgrimmar AH and dispatch InteractWith where required.");
+        }
+
+        return targets;
+    }
+
+    private async Task StageAtAuctionHouseAsync(LiveBotFixture.BotRunnerActionTarget target)
+    {
+        var staged = await _bot.StageBotRunnerAtOrgrimmarAuctionHouseAsync(
+            target.AccountName,
+            target.RoleLabel);
+
+        Assert.True(staged, $"{target.RoleLabel}: expected to stage at Orgrimmar auction house with nearby units.");
+    }
+
+    private async Task<ulong> AssertAuctioneerNearbyAsync(
+        LiveBotFixture.BotRunnerActionTarget target,
+        string progressLabel)
+    {
+        await _bot.RefreshSnapshotsAsync();
+        var snap = await _bot.GetSnapshotAsync(target.AccountName);
+        Assert.NotNull(snap);
+        var pos = snap!.Player?.Unit?.GameObject?.Base?.Position;
+        Assert.NotNull(pos);
+        _output.WriteLine($"[AH] {target.RoleLabel} position: ({pos!.X:F0},{pos.Y:F0},{pos.Z:F0})");
 
         var auctioneer = await _bot.WaitForNearbyUnitAsync(
-            bgAccount,
+            target.AccountName,
             (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER,
             timeoutMs: 15000,
-            progressLabel: "auctioneer-interact");
+            progressLabel: progressLabel);
+
         Assert.NotNull(auctioneer);
+        var auctPos = auctioneer!.GameObject?.Base?.Position;
+        _output.WriteLine($"[AH] {target.RoleLabel} found auctioneer at ({auctPos?.X:F0},{auctPos?.Y:F0})");
 
-        var auctioneerGuid = auctioneer!.GameObject?.Base?.Guid ?? 0;
-        Assert.NotEqual(0UL, auctioneerGuid);
+        var auctDist = pos != null && auctPos != null
+            ? MathF.Sqrt(MathF.Pow(pos.X - auctPos.X, 2) + MathF.Pow(pos.Y - auctPos.Y, 2))
+            : float.MaxValue;
+        Assert.True(
+            auctDist < AuctioneerMaxDistance,
+            $"{target.RoleLabel}: auctioneer should be within {AuctioneerMaxDistance:F0}y, was {auctDist:F1}y");
 
-        // Interact with the detected auctioneer instead of relying on an implicit nearest-target contract.
-        var interactResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
+        return auctioneer.GameObject?.Base?.Guid ?? 0;
+    }
+
+    private static string ResolveRepoPath(params string[] segments)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
         {
-            ActionType = ActionType.InteractWith,
-            Parameters = { new RequestParameter { LongParam = (long)auctioneerGuid } }
-        });
-        _output.WriteLine($"[AH] Interact result: {interactResult}");
+            var candidate = Path.Combine([dir.FullName, .. segments]);
+            if (File.Exists(candidate))
+                return candidate;
 
-        // Verify action was accepted
-        Assert.Equal(ResponseResult.Success, interactResult);
+            dir = dir.Parent;
+        }
 
-        await Task.Delay(2000);
-        await _bot.RefreshSnapshotsAsync();
-        var snap = await _bot.GetSnapshotAsync(bgAccount);
-        Assert.NotNull(snap);
-        _output.WriteLine("[AH] AH interaction completed, verifying NPC nearby");
-
-        // Verify an auctioneer is nearby (interaction implies proximity)
-        var verifyAuctioneer = await _bot.WaitForNearbyUnitAsync(
-            bgAccount,
-            (uint)NPCFlags.UNIT_NPC_FLAG_AUCTIONEER,
-            timeoutMs: 15000,
-            progressLabel: "auctioneer-verify");
-        Assert.NotNull(verifyAuctioneer);
+        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
     }
 }

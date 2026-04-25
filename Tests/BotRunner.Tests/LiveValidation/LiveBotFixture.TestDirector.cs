@@ -429,6 +429,61 @@ public partial class LiveBotFixture
     }
 
     /// <summary>
+    /// Stage a BotRunner target at the Orgrimmar auction house for
+    /// economy-interaction tests. The coordinate teleport stays inside the
+    /// fixture so Shodan-migrated test bodies do not issue GM movement
+    /// commands inline.
+    /// </summary>
+    public async Task<bool> StageBotRunnerAtOrgrimmarAuctionHouseAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        bool cleanSlate = true)
+    {
+        if (string.IsNullOrWhiteSpace(targetAccountName))
+            throw new InvalidOperationException("[SHODAN-STAGE] Target account name is required.");
+
+        if (string.Equals(targetAccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "[SHODAN-STAGE] Shodan is the test director, not a BotRunner target.");
+        }
+
+        if (cleanSlate)
+            await EnsureCleanSlateAsync(targetAccountName, targetRoleLabel);
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' Orgrimmar AH stage map={Map} pos=({X:F1},{Y:F1},{Z:F1})",
+            targetRoleLabel,
+            targetAccountName,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.AuctionHouseX,
+            OrgrimmarServiceLocations.AuctionHouseY,
+            OrgrimmarServiceLocations.AuctionHouseZ);
+
+        await BotTeleportAsync(
+            targetAccountName,
+            OrgrimmarServiceLocations.MapId,
+            OrgrimmarServiceLocations.AuctionHouseX,
+            OrgrimmarServiceLocations.AuctionHouseY,
+            OrgrimmarServiceLocations.AuctionHouseZ);
+
+        var settled = await WaitForTeleportSettledAsync(
+            targetAccountName,
+            OrgrimmarServiceLocations.AuctionHouseX,
+            OrgrimmarServiceLocations.AuctionHouseY,
+            timeoutMs: 10000,
+            progressLabel: $"{targetRoleLabel} org-ah stage",
+            xyToleranceYards: 60f);
+
+        var hasUnits = await WaitForNearbyUnitsPopulatedAsync(
+            targetAccountName,
+            timeoutMs: 15000,
+            progressLabel: $"{targetRoleLabel} org-ah units");
+
+        return settled && hasUnits;
+    }
+
+    /// <summary>
     /// Stage a BotRunner target at the Valley of Trials copper route start for
     /// action-driven gathering tests. The teleport stays in the fixture so
     /// Shodan-migrated test bodies do not issue GM movement commands inline.

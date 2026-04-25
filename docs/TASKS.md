@@ -338,6 +338,36 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan test-director overhaul slice 7 - AuctionHouseTests/AuctionHouseParityTests)
+- Completed:
+  - Migrated `AuctionHouseTests.cs` and `AuctionHouseParityTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/Economy.config.json` launches `ECONFG1` Foreground Orc Warrior, `ECONBG1` Background Orc Warrior, and SHODAN as Background Gnome Mage director.
+  - Added `StageBotRunnerAtOrgrimmarAuctionHouseAsync` so AH coordinate staging is fixture-contained. Test bodies no longer issue `.tele` / `.go` / `.additem` setup.
+  - `AuctionHouseTests` dispatches only `ActionType.InteractWith` to FG/BG auctioneer GUIDs. `AuctionHouseParityTests` validates FG/BG AH staging/search detection; post/buy and cancel are explicit skips because no auction post/buy/cancel action surface exists yet.
+  - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/AuctionHouseTests.md` and `Tests/BotRunner.Tests/LiveValidation/docs/AuctionHouseParityTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: both files moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~39.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` before and after live validation -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AuctionHouseTests|FullyQualifiedName~AuctionHouseParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=auction_house_shodan.trx"` -> `3 passed, 2 skipped`.
+  - Reference Ratchet anchor was already run once this session during the Gathering slice: `fishing_shodan_anchor_gathering_slice.trx` -> `passed (1/1)`.
+- Evidence:
+  - `tmp/test-runtime/results-live/auction_house_shodan.trx` shows `ECONFG1`/`ECONBG1` staging through `StageBotRunnerAtOrgrimmarAuctionHouseAsync`, AH search/detection passing on both roles, `ActionType.InteractWith` succeeding on both roles, and the post/buy/cancel placeholders skipping with explicit missing-action reasons.
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/Economy.config.json` (new)
+  - `Tests/BotRunner.Tests/LiveValidation/AuctionHouseTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/AuctionHouseParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/AuctionHouseTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/AuctionHouseParityTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Services/WoWStateManager/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `docs/TASKS.md`
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|\\.learn|\\.additem|\\.setskill|\\.tele" Tests/BotRunner.Tests/LiveValidation/BankInteractionTests.cs Tests/BotRunner.Tests/LiveValidation/BankParityTests.cs`
+
 ## Handoff (2026-04-25, Shodan test-director overhaul slice 6 - PetManagementTests)
 - Completed:
   - Migrated `PetManagementTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/PetManagement.config.json` launches `PETBG1` Background Orc Hunter as the action target, idle `PETFG1` Foreground Orc Rogue for topology parity, and SHODAN as Background Gnome Mage director.

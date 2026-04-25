@@ -38,6 +38,8 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `GatheringProfessionTests.cs` | Migrated: `Gathering.config.json` launches `GATHFG1`/`GATHBG1` warriors + SHODAN; fixture-contained loadout, pool refresh, and route staging; test body dispatches `StartGatheringRoute` only. |
 | `CraftingProfessionTests.cs` | Migrated: `Crafting.config.json` launches `CRAFTFG1`/`CRAFTBG1` warriors + SHODAN; `StageBotRunnerLoadoutAsync` stages First Aid recipe/skill/reagent; test body dispatches BG `CastSpell` only. |
 | `PetManagementTests.cs` | Migrated: `PetManagement.config.json` launches idle `PETFG1`, hunter `PETBG1`, and SHODAN; `StageBotRunnerLoadoutAsync` stages hunter level/pet spells; test body dispatches BG `CastSpell` only. |
+| `AuctionHouseTests.cs` | Migrated: `Economy.config.json` launches `ECONFG1`/`ECONBG1` warriors + SHODAN; fixture-contained AH staging; test body dispatches `InteractWith` only. |
+| `AuctionHouseParityTests.cs` | Migrated: `Economy.config.json`; AH search parity stages FG/BG at auctioneer, while post/buy and cancel are explicit missing-action skips after Shodan staging. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -56,7 +58,6 @@ Economy / NPC-interaction tests:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `AuctionHouseTests.cs`, `AuctionHouseParityTests.cs` | `.tele` to AH, item add |
 | `BankInteractionTests.cs`, `BankParityTests.cs` | `.tele` to bank, item add |
 | `VendorBuySellTests.cs` | `.tele` to vendor, gold/item add |
 | `EconomyInteractionTests.cs` | Gold, item prep, location stage |
@@ -93,7 +94,7 @@ Combat / death / buffs / misc:
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: ~41 SHODAN-CANDIDATE files (after `PetManagementTests.cs` moved to ALREADY-SHODAN).
+Total: ~39 SHODAN-CANDIDATE files (after `AuctionHouseTests.cs` and `AuctionHouseParityTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -259,6 +260,19 @@ Call Pet (`883`), Dismiss Pet (`2641`), and Tame Animal (`1515`) setup into
 Migration result on this slice: `Pet_SummonAndManage_StanceFeedAbility`
 passes. The live artifact `pet_management_shodan.trx` shows Shodan topology,
 BG hunter staging, and the two BG pet-management casts returning success.
+
+`AuctionHouseTests.cs` and `AuctionHouseParityTests.cs` use
+`Economy.config.json` with `ECONFG1` / `ECONBG1` Orc Warrior action targets
+and SHODAN as the Background Gnome Mage director. The slice adds
+`StageBotRunnerAtOrgrimmarAuctionHouseAsync` so AH coordinate staging lives in
+the fixture. `AuctionHouseTests` dispatches only `ActionType.InteractWith`
+against detected auctioneer GUIDs. `AuctionHouseParityTests` verifies FG/BG
+auctioneer staging/detection; post/buy and cancel remain explicit skips after
+Shodan setup because no auction post/buy/cancel `ActionType` surface exists
+yet.
+
+Migration result on this slice: live artifact `auction_house_shodan.trx`
+passed `3` tests and skipped `2` with tracked missing-action reasons.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the
