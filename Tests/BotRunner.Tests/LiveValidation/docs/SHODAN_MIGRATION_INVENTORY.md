@@ -68,6 +68,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `ConsumableUsageTests.cs` | Migrated: `Loot.config.json`; fixture-contained Elixir of Lion's Strength staging; BG dispatches `UseItem` while FG stays idle for topology parity. |
 | `BgInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained bank/AH/mail/flight-master staging; BG dispatches `InteractWith`, `CheckMail`, and `VisitFlightMaster` while bank deposit and Deeprun Tram remain tracked skips. |
 | `BattlegroundQueueTests.cs` | Migrated: `Economy.config.json`; fixture-contained WSG battlemaster staging and level setup; BG dispatches `JoinBattleground` and cleanup `LeaveBattleground` only. |
+| `SpellCastOnTargetTests.cs` | Migrated: `Economy.config.json`; fixture-contained Battle Shout spell/rage/aura staging; BG dispatches `CastSpell` while FG stays idle for topology parity. |
 
 ## SHODAN-CANDIDATE (migrate setup to Shodan)
 
@@ -95,13 +96,12 @@ Combat / death / buffs / misc:
 
 | File | Typical per-test setup |
 |------|------------------------|
-| `SpellCastOnTargetTests.cs` | `.learn` spell, target mob staging |
 | `TaxiTests.cs`, `TaxiTransportParityTests.cs`, `TransportTests.cs` | `.tele` to taxi/transport, gold add |
 | `DualClientParityTests.cs`, `MovementParityTests.cs` | Dual-client position/gear staging |
 | `IntegrationValidationTests.cs` | Cross-cutting GM validation (subset) |
 | `AckCaptureTests.cs` | Capture-triggering teleports/actions |
 
-Total: 8 SHODAN-CANDIDATE files (after `BattlegroundQueueTests.cs` moved to ALREADY-SHODAN).
+Total: 7 SHODAN-CANDIDATE files (after `SpellCastOnTargetTests.cs` moved to ALREADY-SHODAN).
 
 ## ACTIVITY-OWNED (keep as-is; part of the activity under test)
 
@@ -583,6 +583,20 @@ passed `1/1`. The test staged `ECONBG1` at Brakgul Deathbringer, proved the
 WSG battlemaster was visible in the snapshot, dispatched `JoinBattleground`,
 observed queue action evidence through snapshot action/ACK/chat markers, and
 issued `LeaveBattleground` cleanup.
+
+`SpellCastOnTargetTests.cs` reuses `Economy.config.json` with `ECONBG1` as the
+BG Battle Shout action target, `ECONFG1` launched idle for Shodan topology
+parity, and SHODAN as director. The slice adds fixture-contained rage staging
+through `StageBotRunnerRageAsync(...)` and uses existing loadout/aura helpers
+for Battle Shout spell and cleanup setup. The test body dispatches only
+correlated `ActionType.CastSpell` with spell id `6673`.
+
+Migration result on this slice: live artifact
+`spell_cast_on_target_shodan.trx` passed `1/1`. The BG target learned Battle
+Shout, received staged rage, had stale auras cleared, dispatched `CastSpell`,
+observed aura `6673`, and removed the aura in fixture cleanup. FG remains idle
+because prior Shodan spell-id slices documented foreground `ActionType.CastSpell`
+by-id behavior separately.
 
 Known migration constraint: `StageBotRunnerLoadoutAsync` still routes `.learn`,
 `.setskill`, and `.additem` through the target bot's chat layer because the

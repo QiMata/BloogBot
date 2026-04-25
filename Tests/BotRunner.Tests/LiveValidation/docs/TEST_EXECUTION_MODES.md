@@ -62,7 +62,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | OrgrimmarGroundZAnalysisTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Post-teleport ground Z |
 | QuestInteractionTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged add/complete/remove quest snapshot plumbing |
 | QuestObjectiveTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged quest objective combat action |
-| SpellCastOnTargetTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Battle Shout parallel cast |
+| SpellCastOnTargetTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Battle Shout spell/rage/aura cleanup; BG CastSpell self-buff baseline |
 | SpiritHealerTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged corpse/release/recover flow |
 | StarterQuestTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged quest accept/turn-in baseline |
 | TalentAllocationTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Learn talent scenarios |
@@ -93,3 +93,4 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 16. **SpiritHealerTests** - Shodan topology is in place, but the migrated resurrection proof is BG-action-only while FG stays idle for topology parity.
 17. **BgInteractionTests** - Shodan topology is in place, but the migrated smoke proof is BG-action-only; bank deposit waits for a BotRunner action surface and Deeprun Tram remains in the dedicated transport slice.
 18. **BattlegroundQueueTests** - Shodan topology is in place, but the migrated WSG queue smoke is BG-action-only while FG stays idle for topology parity.
+19. **SpellCastOnTargetTests** - Shodan topology is in place, but the migrated Battle Shout proof is BG-action-only while FG stays idle for topology parity.

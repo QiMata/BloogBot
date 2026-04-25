@@ -338,6 +338,30 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ---
 
+## Handoff (2026-04-25, Shodan SpellCastOnTarget migration slice)
+
+- Completed:
+  - Migrated `SpellCastOnTargetTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG Battle Shout action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
+  - Added `StageBotRunnerRageAsync(...)` so the rage setup for Battle Shout lives behind the fixture boundary alongside `StageBotRunnerLoadoutAsync(...)` and `StageBotRunnerAurasAbsentAsync(...)`.
+  - The BG target dispatches only correlated `ActionType.CastSpell` with spell id `6673`; the test body has no inline setup GM commands.
+  - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/SpellCastOnTargetTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `SpellCastOnTargetTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now `7`.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/SpellCastOnTargetTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpellCastOnTargetTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=spell_cast_on_target_shodan.trx"` -> `passed (1/1)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/spell_cast_on_target_shodan.trx` -> `CastSpell_BattleShout_AuraApplied` passed after Shodan-shaped spell/rage/aura staging, BG `CastSpell` dispatch, aura `6673` observation, and fixture cleanup.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/SpellCastOnTargetTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SpellCastOnTargetTests.md`
+  - live-validation docs and task trackers.
+- Next command:
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/TaxiTests.cs Tests/BotRunner.Tests/LiveValidation/TaxiTransportParityTests.cs Tests/BotRunner.Tests/LiveValidation/TransportTests.cs`
+
 ## Handoff (2026-04-25, Shodan BattlegroundQueue migration slice)
 
 - Completed:

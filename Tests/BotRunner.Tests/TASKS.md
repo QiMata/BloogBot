@@ -43,7 +43,8 @@
 - [x] Migrate `BuffAndConsumableTests` / `ConsumableUsageTests` to the Shodan shape via `Loot.config.json` + fixture-contained elixir/aura staging; BG dispatches only `UseItem` / `DismissBuff`, with stricter aura/dismiss paths tracked as skips.
 - [x] Migrate `BgInteractionTests` to the Shodan shape via `Economy.config.json` + fixture-contained bank/AH/mail/flight-master staging; BG dispatches only `InteractWith`, `CheckMail`, and `VisitFlightMaster`, with bank deposit and Deeprun Tram tracked as skips.
 - [x] Migrate `BattlegroundQueueTests` to the Shodan shape via `Economy.config.json` + fixture-contained WSG battlemaster/level staging; BG dispatches only `JoinBattleground` and cleanup `LeaveBattleground`.
-- [ ] Continue the SHODAN-CANDIDATE migration in priority order (`SpellCastOnTargetTests`, then transport / parity / integration / ack).
+- [x] Migrate `SpellCastOnTargetTests` to the Shodan shape via `Economy.config.json` + fixture-contained Battle Shout spell/rage/aura staging; BG dispatches only `CastSpell` while FG stays idle for topology parity.
+- [ ] Continue the SHODAN-CANDIDATE migration in priority order (transport group, then parity / integration / ack).
 - [ ] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
 
 1. Live-validation expectation cleanup
@@ -83,6 +84,27 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan SpellCastOnTarget migration slice)
+- Pass result: `SpellCastOnTargetTests now follows the Shodan test-director action-target split; live Battle Shout validation passed 1/1`
+- Last delta:
+  - Reused `Economy.config.json` with `ECONBG1` as the BG Battle Shout action target, `ECONFG1` launched idle for topology parity, and SHODAN as director.
+  - Added `StageBotRunnerRageAsync(...)` so Battle Shout rage setup lives behind the fixture boundary with the rest of the Shodan staging helpers.
+  - The test body dispatches only correlated `ActionType.CastSpell` with spell id `6673`; no inline setup GM commands remain.
+  - Refreshed `SpellCastOnTargetTests.md`, `TEST_EXECUTION_MODES.md`, and moved `SpellCastOnTargetTests.cs` to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
+  - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/SpellCastOnTargetTests.cs` -> `no matches`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SpellCastOnTargetTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=spell_cast_on_target_shodan.trx"` -> `passed (1/1)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/SpellCastOnTargetTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SpellCastOnTargetTests.md`
+  - live-validation docs and task trackers.
+- Next command: `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|BotClearInventoryAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money|\\.die|\\.unaura|\\.modify|EnsureCleanSlateAsync|WaitForTeleportSettledAsync" Tests/BotRunner.Tests/LiveValidation/TaxiTests.cs Tests/BotRunner.Tests/LiveValidation/TaxiTransportParityTests.cs Tests/BotRunner.Tests/LiveValidation/TransportTests.cs`
+
 ### 2026-04-25 (Shodan BattlegroundQueue migration slice)
 - Pass result: `BattlegroundQueueTests now follows the Shodan test-director action-target split; live WSG queue validation passed 1/1`
 - Last delta:

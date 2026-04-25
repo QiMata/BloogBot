@@ -374,6 +374,38 @@ public partial class LiveBotFixture
             throw new InvalidOperationException($"[SHODAN-STAGE] {targetRoleLabel} consumable aura cleanup failed.");
     }
 
+    /// <summary>
+    /// Stage warrior rage for self-buff spell-cast tests. The command stays
+    /// behind the fixture boundary so migrated test bodies only dispatch the
+    /// BotRunner action under test.
+    /// </summary>
+    public async Task StageBotRunnerRageAsync(
+        string targetAccountName,
+        string targetRoleLabel,
+        int rageInternalUnits)
+    {
+        ValidateBotRunnerStageTarget(targetAccountName);
+
+        if (rageInternalUnits < 0)
+            throw new ArgumentOutOfRangeException(nameof(rageInternalUnits), "Rage must be non-negative.");
+
+        _logger.LogInformation(
+            "[SHODAN-STAGE] {Role} account='{Account}' setting rage={RageInternalUnits}",
+            targetRoleLabel,
+            targetAccountName,
+            rageInternalUnits);
+
+        await BotSelectSelfAsync(targetAccountName);
+        await Task.Delay(300);
+
+        var trace = await SendGmChatCommandTrackedAsync(
+            targetAccountName,
+            $".modify rage {rageInternalUnits}",
+            captureResponse: false,
+            delayMs: 500);
+        AssertTraceCommandSucceeded(trace, targetRoleLabel, $".modify rage {rageInternalUnits}");
+    }
+
     public async Task StageBotRunnerMountLoadoutAsync(
         string targetAccountName,
         string targetRoleLabel,
