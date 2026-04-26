@@ -743,7 +743,14 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
                 await Task.Delay(250);
             }
 
-            await Task.Delay(1200);
+            await WaitForConditionAsync(
+                async () =>
+                {
+                    await RefreshSnapshotsAsync();
+                    return orderedAccounts.All(account => (FindSnapshot(account)?.PartyLeaderGuid ?? 0) == 0);
+                },
+                TimeSpan.FromMilliseconds(1200),
+                TimeSpan.FromMilliseconds(150));
         }
 
         await RefreshSnapshotsAsync();
