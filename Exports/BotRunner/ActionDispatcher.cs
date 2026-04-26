@@ -424,72 +424,40 @@ namespace BotRunner
                         });
                         break;
                     case CharacterAction.OfferGold:
-                        // BG: CMSG_SET_TRADE_GOLD, FG: TradeFrame
-                        if (_objectManager.TradeFrame == null)
+                        var goldCopper = (uint)(int)actionEntry.Item2[0];
+                        builder.Do($"Set Trade Gold {goldCopper}c", time =>
                         {
-                            var goldCopper = (uint)(int)actionEntry.Item2[0];
-                            builder.Do($"Set Trade Gold {goldCopper}c (packet)", time =>
-                            {
-                                _objectManager.SetTradeGoldAsync(goldCopper, CancellationToken.None)
-                                    .GetAwaiter().GetResult();
-                                return BehaviourTreeStatus.Success;
-                            });
-                        }
-                        else
-                        {
-                            builder.Splice(_interactionSequences.BuildOfferMoneySequence((int)actionEntry.Item2[0]));
-                        }
+                            _objectManager.SetTradeGoldAsync(goldCopper, CancellationToken.None)
+                                .GetAwaiter().GetResult();
+                            return BehaviourTreeStatus.Success;
+                        });
                         break;
                     case CharacterAction.OfferItem:
-                        // BG: CMSG_SET_TRADE_ITEM, FG: TradeFrame
-                        if (_objectManager.TradeFrame == null)
+                        var tradeSlot = (byte)(int)actionEntry.Item2[3];
+                        var bagId = (byte)(int)actionEntry.Item2[0];
+                        var slotId = (byte)(int)actionEntry.Item2[1];
+                        builder.Do($"Set Trade Item bag={bagId} slot={slotId}", time =>
                         {
-                            var tradeSlot = (byte)(int)actionEntry.Item2[3];
-                            var bagId = (byte)(int)actionEntry.Item2[0];
-                            var slotId = (byte)(int)actionEntry.Item2[1];
-                            builder.Do($"Set Trade Item bag={bagId} slot={slotId} (packet)", time =>
-                            {
-                                _objectManager.SetTradeItemAsync(tradeSlot, bagId, slotId, CancellationToken.None)
-                                    .GetAwaiter().GetResult();
-                                return BehaviourTreeStatus.Success;
-                            });
-                        }
-                        else
-                        {
-                            builder.Splice(_interactionSequences.BuildOfferItemSequence((int)actionEntry.Item2[0], (int)actionEntry.Item2[1], (int)actionEntry.Item2[2], (int)actionEntry.Item2[3]));
-                        }
+                            _objectManager.SetTradeItemAsync(tradeSlot, bagId, slotId, CancellationToken.None)
+                                .GetAwaiter().GetResult();
+                            return BehaviourTreeStatus.Success;
+                        });
                         break;
                     case CharacterAction.AcceptTrade:
-                        // BG: CMSG_ACCEPT_TRADE, FG: TradeFrame
-                        if (_objectManager.TradeFrame == null)
+                        builder.Do("Accept Trade", time =>
                         {
-                            builder.Do("Accept Trade (packet)", time =>
-                            {
-                                _objectManager.AcceptTradeAsync(CancellationToken.None)
-                                    .GetAwaiter().GetResult();
-                                return BehaviourTreeStatus.Success;
-                            });
-                        }
-                        else
-                        {
-                            builder.Splice(_interactionSequences.AcceptTradeSequence);
-                        }
+                            _objectManager.AcceptTradeAsync(CancellationToken.None)
+                                .GetAwaiter().GetResult();
+                            return BehaviourTreeStatus.Success;
+                        });
                         break;
                     case CharacterAction.DeclineTrade:
-                        // BG: CMSG_CANCEL_TRADE, FG: TradeFrame
-                        if (_objectManager.TradeFrame == null)
+                        builder.Do("Cancel Trade", time =>
                         {
-                            builder.Do("Cancel Trade (packet)", time =>
-                            {
-                                _objectManager.CancelTradeAsync(CancellationToken.None)
-                                    .GetAwaiter().GetResult();
-                                return BehaviourTreeStatus.Success;
-                            });
-                        }
-                        else
-                        {
-                            builder.Splice(_interactionSequences.DeclineTradeSequence);
-                        }
+                            _objectManager.CancelTradeAsync(CancellationToken.None)
+                                .GetAwaiter().GetResult();
+                            return BehaviourTreeStatus.Success;
+                        });
                         break;
                     case CharacterAction.EnchantTrade:
                         builder.Splice(_interactionSequences.BuildOfferEnchantSequence((int)actionEntry.Item2[0]));

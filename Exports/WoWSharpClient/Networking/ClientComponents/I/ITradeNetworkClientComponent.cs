@@ -27,6 +27,10 @@ namespace WoWSharpClient.Networking.ClientComponents.I
 
         // Operations
         Task InitiateTradeAsync(ulong playerGuid, CancellationToken cancellationToken = default);
+        /// <summary>
+        /// Accepts the pending trade invitation when the trade window is not open yet,
+        /// otherwise accepts the open trade for completion.
+        /// </summary>
         Task AcceptTradeAsync(CancellationToken cancellationToken = default);
         Task UnacceptTradeAsync(CancellationToken cancellationToken = default);
         Task CancelTradeAsync(CancellationToken cancellationToken = default);

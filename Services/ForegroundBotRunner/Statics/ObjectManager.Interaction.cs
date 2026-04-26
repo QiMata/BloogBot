@@ -22,6 +22,11 @@ namespace ForegroundBotRunner.Statics
         private DateTime _lastFishingBobberInteractAt = DateTime.MinValue;
         private ulong _lastFishingBobberGuid;
         private ulong _lastNpcInteractionGuid;
+        private const string TradeUiVisibleProbeLua =
+            "local which = StaticPopup1 and StaticPopup1.which or ''; " +
+            "local text = StaticPopup1Text and StaticPopup1Text:GetText() or ''; " +
+            "local tradePopup = StaticPopup1 and StaticPopup1:IsVisible() and (which == 'TRADE' or string.find(string.lower(text), 'trade')); " +
+            "if tradePopup or (TradeFrame and TradeFrame:IsVisible()) then {0} = '1' else {0} = '0' end";
 
         public IWoWEventHandler EventHandler { get; }
 
@@ -1388,26 +1393,131 @@ namespace ForegroundBotRunner.Statics
 
         public async Task SetTradeGoldAsync(uint copper, CancellationToken ct = default)
         {
-            _fgTradeFrame.OfferMoney((int)Math.Min(copper, int.MaxValue));
-            await Task.Delay(150, ct);
+            if (!await WaitForTradeFrameAsync(ct))
+            {
+                Log.Warning("[FG-TRADE] Trade frame did not open before offering {Copper} copper.", copper);
+                return;
+            }
+
+            for (var attempt = 1; attempt <= 3; attempt++)
+            {
+                _fgTradeFrame.OfferMoney((int)Math.Min(copper, int.MaxValue));
+                if (await WaitForOwnTradeMoneyAsync(copper, ct))
+                    return;
+
+                await Task.Delay(200, ct);
+            }
+
+            Log.Warning("[FG-TRADE] Trade money offer was not confirmed by the foreground trade frame ({Copper}c).", copper);
         }
 
         public async Task SetTradeItemAsync(byte tradeSlot, byte bagId, byte slotId, CancellationToken ct = default)
         {
-            _fgTradeFrame.OfferItem(bagId, slotId, quantity: 1, tradeWindowSlot: tradeSlot);
-            await Task.Delay(150, ct);
+            if (!await WaitForTradeFrameAsync(ct))
+            {
+                Log.Warning(
+                    "[FG-TRADE] Trade frame did not open before offering item bag={BagId} slot={SlotId}.",
+                    bagId,
+                    slotId);
+                return;
+            }
+
+            var luaTradeSlot = tradeSlot + 1;
+            for (var attempt = 1; attempt <= 3; attempt++)
+            {
+                _fgTradeFrame.OfferItem(bagId, slotId, quantity: 1, tradeWindowSlot: tradeSlot);
+                if (await WaitForOwnTradeItemAsync(luaTradeSlot, ct))
+                    return;
+
+                await Task.Delay(200, ct);
+            }
+
+            Log.Warning(
+                "[FG-TRADE] Trade item offer was not confirmed by the foreground trade frame bag={BagId} slot={SlotId} tradeSlot={TradeSlot}.",
+                bagId,
+                slotId,
+                tradeSlot);
         }
 
         public async Task AcceptTradeAsync(CancellationToken ct = default)
         {
+            if (!await WaitForTradeUiAsync(ct))
+            {
+                Log.Warning("[FG-TRADE] Trade UI did not open before accept.");
+                return;
+            }
+
             _fgTradeFrame.AcceptTrade();
             await Task.Delay(150, ct);
         }
 
         public async Task CancelTradeAsync(CancellationToken ct = default)
         {
+            if (!await WaitForTradeUiAsync(ct))
+            {
+                Log.Warning("[FG-TRADE] Trade UI did not open before cancel.");
+                return;
+            }
+
             _fgTradeFrame.DeclineTrade();
             await Task.Delay(150, ct);
+        }
+
+        private async Task<bool> WaitForTradeFrameAsync(CancellationToken ct)
+        {
+            for (int i = 0; i < 30 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                if (_fgTradeFrame.IsOpen)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static Task<bool> WaitForTradeUiAsync(CancellationToken ct)
+            => WaitForLuaFrameAsync(TradeUiVisibleProbeLua, ct);
+
+        private static async Task<bool> WaitForOwnTradeItemAsync(int luaTradeSlot, CancellationToken ct)
+        {
+            var probeLua =
+                $"local name = GetTradePlayerItemInfo and GetTradePlayerItemInfo({luaTradeSlot}); " +
+                "{0} = name and '1' or '0'";
+
+            for (var i = 0; i < 8 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                var result = MainThreadLuaCallWithResult(probeLua);
+                if (result.Length > 0 && result[0] == "1")
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static async Task<bool> WaitForOwnTradeMoneyAsync(uint copper, CancellationToken ct)
+        {
+            var probeLua =
+                "{0} = tostring(GetPlayerTradeMoney and GetPlayerTradeMoney() or -1)";
+
+            for (var i = 0; i < 8 && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(150, ct);
+                var result = MainThreadLuaCallWithResult(probeLua);
+                if (result.Length == 0)
+                    continue;
+
+                if (long.TryParse(result[0], out var offeredCopper))
+                {
+                    if (offeredCopper < 0)
+                        return true;
+
+                    if (offeredCopper >= copper)
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         private async Task<bool> WaitForMerchantWindowAsync(CancellationToken ct)

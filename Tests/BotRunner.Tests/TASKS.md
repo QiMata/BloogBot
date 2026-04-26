@@ -28,7 +28,7 @@
 - [x] Migrate `VendorBuySellTests` to the Shodan shape via `Economy.config.json` + fixture-contained Razor Hill vendor/coinage staging; BG dispatches only `ActionType.BuyItem` / `SellItem` while FG stays idle for topology parity.
 - [x] Migrate `EconomyInteractionTests` to the Shodan shape via `Economy.config.json` + fixture-contained bank/AH/mail staging; FG/BG dispatch only `ActionType.InteractWith` or `CheckMail`.
 - [x] Migrate `MailSystemTests` / `MailParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained mailbox and SOAP mail-money/item staging; FG/BG dispatch only `ActionType.CheckMail`.
-- [x] Migrate `TradingTests` / `TradeParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained trade-spot/loadout/coinage staging; BG offer/decline passes, while foreground-dependent transfer/parity paths are explicit tracked skips due FG trade ACK failures.
+- [x] Migrate `TradingTests` / `TradeParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained trade-spot/loadout/coinage staging; BG and FG cancel plus foreground-initiated item/gold transfer pass, while BG-to-FG transfer is an explicit tracked skip because the server leaves item/copper with the initiator despite successful ACKs.
 - [x] Migrate `GossipQuestTests` / `QuestObjectiveTests` / `QuestInteractionTests` / `StarterQuestTests` to the Shodan shape via `Economy.config.json` + fixture-contained quest location/state staging; BG dispatches only `InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or `CompleteQuest` while FG stays idle for topology parity.
 - [x] Migrate `NpcInteractionTests` to the Shodan shape via `NpcInteraction.config.json` + fixture-contained NPC location/loadout staging; vendor, flight-master, and object-manager checks dispatch to FG/BG, while trainer is an explicit tracked skip behind the live funding/mailbox staging gap.
 - [x] Migrate `SpiritHealerTests` to the Shodan shape via `Economy.config.json` + fixture-contained corpse/graveyard staging; BG dispatches only `ReleaseCorpse`, `Goto`, and `InteractWith` while FG stays idle for topology parity.
@@ -87,6 +87,30 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-26 (Trading Shodan foreground follow-up)
+- Pass result: `TradeParityTests foreground cancel and FG-to-BG transfer pass under Shodan; TradingTests keeps only the BG-to-FG transfer server-completion gap skipped`
+- Last delta:
+  - `TradingTests.Trade_GoldAndItem_TransferSuccessful` is now an explicit skip with the actual post-fix evidence: attempts `5` through `7` ACKed every trade action as `Success`, but item/copper stayed with the BG initiator.
+  - `TradeParityTests` no longer skips foreground trade paths; foreground cancel and item/gold transfer passed in `trading_fg_shodan_final.trx`.
+  - `TradeTestSupport` opens the receiver trade window explicitly before item/gold offers, records the receiver-open ACK, and emits transfer metrics for the docs.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TradeNetworkClientComponentTests" --logger "console;verbosity=minimal"` -> `passed (48/48)`.
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.TradeFrame_UsesLuaVisibilityAndRoutesTradeActionsThroughExpectedLua" --logger "console;verbosity=minimal"` -> `passed (1/1)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TradingTests|FullyQualifiedName~TradeParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=trading_fg_shodan_final.trx"` -> `passed (3), skipped (1)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_shodan_anchor.trx"` -> `failed with known Ratchet anchor instability: FG loot_window_timeout / max_casts_reached`.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/TradingTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TradeParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TradeTestSupport.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TradingTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TradeParityTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "^- \\[ \\]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Services/WoWStateManager/TASKS.md Exports/BotRunner/TASKS.md Services/ForegroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md`
+
 ### 2026-04-25 (Shodan mail foreground action follow-up)
 - Pass result: `MailSystemTests and MailParityTests now dispatch CheckMail to FG and BG; live mail validation passed 4/4`
 - Last delta:

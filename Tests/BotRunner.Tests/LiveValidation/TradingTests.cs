@@ -41,13 +41,26 @@ public class TradingTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task Trade_GoldAndItem_TransferSuccessful()
     {
+        global::Tests.Infrastructure.Skip.If(
+            true,
+            "BG-initiated trade transfer remains a tracked protocol/server completion gap: Shodan attempts 5-7 ACKed OfferTrade, AcceptTradeRequest, OfferItem, OfferGold, and both final AcceptTrade actions as Success, but item/copper stayed with the initiator. Foreground-initiated transfer is covered by TradeParityTests.");
+
         await TradeTestSupport.EnsureTradingSettingsAsync(_bot, _output);
         var pair = TradeTestSupport.ResolvePair(_bot, _output, foregroundInitiates: false);
-        _ = pair;
 
-        const string reason =
-            "BG-initiated item/gold transfer is Shodan-launched but currently depends on FG AcceptTrade, which ACKs Failed/behavior_tree_failed.";
-        _output.WriteLine($"[TRADE] {reason}");
-        global::Tests.Infrastructure.Skip.If(true, reason);
+        var metrics = await TradeTestSupport.RunGoldAndItemTransferScenarioAsync(_bot, _output, pair);
+
+        Assert.Equal(ResponseResult.Success, metrics.OfferTradeResult);
+        Assert.Equal(ResponseResult.Success, metrics.ReceiverOpenResult);
+        Assert.Equal(ResponseResult.Success, metrics.OfferItemResult);
+        Assert.Equal(ResponseResult.Success, metrics.OfferGoldResult);
+        Assert.Equal(ResponseResult.Success, metrics.ReceiverAcceptResult);
+        Assert.Equal(ResponseResult.Success, metrics.InitiatorAcceptResult);
+        Assert.True(metrics.TransferObserved, "Receiver should observe Linen Cloth and copper after trade completion.");
+        Assert.True(metrics.ReceiverItemCountAfter >= metrics.ReceiverItemCountBefore + 1,
+            "Receiver should gain the staged Linen Cloth item.");
+        Assert.True(metrics.ReceiverCoinageAfter >= metrics.ReceiverCoinageBefore + TradeTestSupport.TradeCopper,
+            "Receiver should gain the offered copper.");
+        Assert.False(metrics.SawTradeError, "No trade-related runtime error should be reported during transfer.");
     }
 }

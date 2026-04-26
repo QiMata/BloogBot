@@ -34,6 +34,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly ILogger<TradeNetworkClientComponent> _logger;
 
         private bool _isTradeWindowOpen;
+        private bool _hasPendingTradeRequest;
         private ulong? _tradePartnerGuid;
         private uint _ourMoneyOffer;
         private bool _disposed;
@@ -68,6 +69,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 .Select(g => g!.Value)
                 .Do(guid =>
                 {
+                    _hasPendingTradeRequest = true;
                     _tradePartnerGuid = guid;
                     TradeRequested?.Invoke(guid);
                     _logger.LogDebug("Trade requested by player: {TraderGuid:X}", guid);
@@ -308,13 +310,24 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        /// <summary>CMSG_ACCEPT_TRADE: uint32 unknown (4 bytes, skipped by server).</summary>
+        /// <summary>
+        /// Accepts a pending trade invitation (CMSG_BEGIN_TRADE) or, when the trade
+        /// window is already open, accepts the final trade (CMSG_ACCEPT_TRADE).
+        /// </summary>
         public async Task AcceptTradeAsync(CancellationToken cancellationToken = default)
         {
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Accepting trade");
+                if (!_isTradeWindowOpen && _hasPendingTradeRequest && _tradePartnerGuid.HasValue)
+                {
+                    _logger.LogDebug("Accepting trade request from player: {TraderGuid:X}", _tradePartnerGuid.Value);
+                    await _worldClient.SendOpcodeAsync(Opcode.CMSG_BEGIN_TRADE, Array.Empty<byte>(), cancellationToken);
+                    _hasPendingTradeRequest = false;
+                    return;
+                }
+
+                _logger.LogDebug("Accepting open trade");
 
                 // MaNGOS reads and skips a uint32 field
                 var payload = new byte[4]; // zeros
@@ -540,6 +553,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
         public void HandleTradeRequested(ulong traderGuid)
         {
+            _hasPendingTradeRequest = true;
             _tradePartnerGuid = traderGuid;
             TradeRequested?.Invoke(traderGuid);
             _logger.LogDebug("Trade requested by player: {TraderGuid:X}", traderGuid);
@@ -548,6 +562,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         public void HandleTradeOpened()
         {
             _isTradeWindowOpen = true;
+            _hasPendingTradeRequest = false;
             TradeOpened?.Invoke();
             _logger.LogDebug("Trade window opened");
         }
@@ -562,6 +577,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private void ResetTradeState()
         {
             _isTradeWindowOpen = false;
+            _hasPendingTradeRequest = false;
             _tradePartnerGuid = null;
             _ourMoneyOffer = 0;
             _traderWindowData = null;

@@ -2,6 +2,21 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-26) - Foreground Trade Shodan Stabilization
+
+- [x] Stabilize foreground trade action dispatch under Shodan trade validation.
+- Completion notes:
+  - Foreground trade actions now route through object-manager async helpers and a popup-aware `FgTradeFrame`, closing the earlier `DeclineTrade`, `OfferItem`, and `AcceptTrade` foreground ACK failures.
+  - `TradeParityTests` now keeps foreground cancel and foreground-initiated item/gold transfer active under Shodan.
+  - `TradingTests.Trade_GoldAndItem_TransferSuccessful` remains an explicit tracked skip because BG-initiated transfer actions all ACK `Success`, but the server leaves item/copper with the BG initiator.
+- Validation:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TradeNetworkClientComponentTests" --logger "console;verbosity=minimal"` -> `passed (48/48)`
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.TradeFrame_UsesLuaVisibilityAndRoutesTradeActionsThroughExpectedLua" --logger "console;verbosity=minimal"` -> `passed (1/1)`
+  - Safety bundle -> `passed (33/33)`
+  - Dispatch/readiness bundle -> `passed (60/60)`
+  - `trading_fg_shodan_final.trx` -> `passed (3), skipped (1)`
+  - `fishing_shodan_anchor.trx` -> known Ratchet anchor failure on FG `loot_window_timeout` / `max_casts_reached`
+
 ## Archived Snapshot (2026-04-25) - Foreground Mail Shodan Stabilization
 
 - [x] Stabilize foreground `CollectAllMailAsync(...)` under combined-suite Shodan mail validation.

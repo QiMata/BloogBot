@@ -46,8 +46,8 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `EconomyInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained bank/AH/mailbox/mail-money staging; FG/BG dispatch only `InteractWith` or `CheckMail`. |
 | `MailSystemTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; FG/BG dispatch `CheckMail` only while SHODAN stays director-only. |
 | `MailParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; FG/BG dispatch `CheckMail` only while SHODAN stays director-only. |
-| `TradingTests.cs` | Migrated: `Economy.config.json`; fixture-contained trade-spot/loadout/coinage staging; BG offer/decline cancel executes, while BG transfer is a tracked skip because FG `AcceptTrade` ACKs `Failed/behavior_tree_failed`. |
-| `TradeParityTests.cs` | Migrated: `Economy.config.json`; SHODAN launches the parity topology and resolves foreground/BG participants, while foreground trade cancel and transfer are tracked skips due FG `DeclineTrade` / `OfferItem` / `AcceptTrade` ACK failures. |
+| `TradingTests.cs` | Migrated: `Economy.config.json`; fixture-contained trade-spot/loadout/coinage staging; BG offer/decline cancel executes, while BG transfer is a tracked skip because all trade actions ACK `Success` but the server leaves item/copper with the initiator. |
+| `TradeParityTests.cs` | Migrated: `Economy.config.json`; SHODAN launches the parity topology and resolves foreground/BG participants; foreground cancel and FG-to-BG item/gold transfer execute under production trade actions. |
 | `GossipQuestTests.cs` | Migrated: `Economy.config.json`; fixture-contained Razor Hill NPC staging; BG dispatches `InteractWith` only while FG stays idle for topology parity. |
 | `QuestObjectiveTests.cs` | Migrated: `Economy.config.json`; fixture-contained quest/objective-area staging; BG dispatches `StartMeleeAttack` only after quest state is staged. |
 | `QuestInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained quest add/complete/remove staging keeps the test body GM-free while it asserts snapshot quest-state projection. |
@@ -345,17 +345,21 @@ longer issues GM setup commands; executable paths dispatch only
 `ActionType.OfferTrade` / `DeclineTrade` and the staged but skipped transfer
 paths stay behind explicit skip reasons.
 
-Migration result on this slice: live artifact `trading_shodan_final.trx`
+Migration result on the original slice: live artifact `trading_shodan_final.trx`
 passed `1` test and skipped `3` with tracked foreground trade action reasons.
-`Trade_InitiateAndCancel_BothBotsSeeCancellation` passes for BG offer/decline.
-`Trade_GoldAndItem_TransferSuccessful` is Shodan-launched but skipped because
-the transfer still depends on FG `AcceptTrade`, which ACKs
-`Failed/behavior_tree_failed`. `TradeParityTests` are Shodan-launched but
-skipped because foreground `DeclineTrade`, `OfferItem`, and `AcceptTrade`
-produce the same failed ACK shape. This slice also fixes the BG item-offer
-packet mapping in `InventoryManager.SetTradeItemAsync` (`bag 0` -> `0xFF`,
-slot `0` -> `23`) and adds FG trade Lua coverage, but the remaining FG runtime
-gap is documented rather than hidden.
+The foreground follow-up stabilized action dispatch by routing trade actions
+through foreground object-manager methods and by teaching BG `AcceptTradeAsync`
+to distinguish pending invitations from final trade acceptance. Subsequent
+artifacts `trading_fg_shodan_attempt5.trx` and `trading_fg_shodan_attempt6.trx`
+proved foreground cancel and FG-to-BG item/gold transfer under Shodan. BG-to-FG
+transfer remains an explicit skip in `TradingTests`: attempts `5` through `7`
+ACKed `OfferTrade`, receiver-open `AcceptTrade`, `OfferItem`, `OfferGold`, and
+both final `AcceptTrade` actions as `Success`, but the server left item/copper
+with the BG initiator. Final follow-up artifact `trading_fg_shodan_final.trx`
+passed `3` and skipped `1`. The once-per-session Ratchet anchor
+`fishing_shodan_anchor.trx` failed with the known foreground
+`loot_window_timeout` / `max_casts_reached` instability, not a trade slice
+regression.
 
 `GossipQuestTests.cs`, `QuestObjectiveTests.cs`, `QuestInteractionTests.cs`,
 and `StarterQuestTests.cs` reuse `Economy.config.json` with `ECONBG1` as the

@@ -25,7 +25,8 @@ public sealed class FgTradeFrame(
         int safeCopper = Math.Max(0, copperCount);
         luaCall(
             "if TradeFrame and TradeFrame:IsVisible() and TradePlayerInputMoneyFrame then " +
-            $"MoneyInputFrame_SetCopper(TradePlayerInputMoneyFrame, {safeCopper}) " +
+            $"MoneyInputFrame_SetCopper(TradePlayerInputMoneyFrame, {safeCopper}); " +
+            "SetTradeMoney() " +
             "end");
     }
 
@@ -42,14 +43,34 @@ public sealed class FgTradeFrame(
 
         luaCall(
             "if TradeFrame and TradeFrame:IsVisible() then " +
+            "if CursorHasItem and CursorHasItem() then ClearCursor() end; " +
             $"{pickupLua}; " +
-            $"ClickTradeButton({safeTradeSlot}) " +
+            $"if not CursorHasItem or CursorHasItem() then ClickTradeButton({safeTradeSlot}) end; " +
+            "if CursorHasItem and CursorHasItem() then ClearCursor() end " +
             "end");
     }
 
-    public void AcceptTrade() => luaCall("if TradeFrame and TradeFrame:IsVisible() then AcceptTrade() end");
+    public void AcceptTrade()
+        => luaCall(
+            "local which = StaticPopup1 and StaticPopup1.which or ''; " +
+            "local text = StaticPopup1Text and StaticPopup1Text:GetText() or ''; " +
+            "local tradePopup = StaticPopup1 and StaticPopup1:IsVisible() and (which == 'TRADE' or string.find(string.lower(text), 'trade')); " +
+            "if tradePopup then " +
+            "StaticPopup1Button1:Click() " +
+            "elseif TradeFrame and TradeFrame:IsVisible() then " +
+            "AcceptTrade() " +
+            "end");
 
-    public void DeclineTrade() => luaCall("if TradeFrame and TradeFrame:IsVisible() then CloseTrade() end");
+    public void DeclineTrade()
+        => luaCall(
+            "local which = StaticPopup1 and StaticPopup1.which or ''; " +
+            "local text = StaticPopup1Text and StaticPopup1Text:GetText() or ''; " +
+            "local tradePopup = StaticPopup1 and StaticPopup1:IsVisible() and (which == 'TRADE' or string.find(string.lower(text), 'trade')); " +
+            "if tradePopup then " +
+            "StaticPopup1Button2:Click() " +
+            "elseif TradeFrame and TradeFrame:IsVisible() then " +
+            "CloseTrade() " +
+            "end");
 
     public void OfferLockpick()
         => luaCall("if TradeFrame and TradeFrame:IsVisible() and TradeSkill then TradeSkill() end");

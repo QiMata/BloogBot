@@ -29,7 +29,6 @@
 - [x] Restore non-null FG `CraftFrame` / `TrainerFrame` / `TalentFrame` surfaces so the legacy craft/train/talent BotRunner paths no longer hit null/default-interface fallbacks on the injected client.
 - [x] Finish the remaining FG runtime parity surfaces that still inherited defaults: `QuestGreetingFrame`, `TradeFrame`, and the task-owned bank/AH/craft helper methods.
 - [x] Stabilize foreground `CollectAllMailAsync(...)` under combined-suite Shodan mail validation. `MailSystemTests` / `MailParityTests` now dispatch `CheckMail` to both FG and BG under Shodan; the full mail suite passed `4/4`.
-- [ ] Stabilize foreground trade action dispatch under Shodan trade validation. `TradingTests` / `TradeParityTests` are Shodan-launched, but foreground `DeclineTrade`, `OfferItem`, and `AcceptTrade` ACK `Failed/behavior_tree_failed` in `trading_shodan_final.trx` / `trade_parity_fg_transfer_after_ack_wait.trx`, so foreground-dependent transfer/parity paths are explicit skips.
 
 3. Packet capture/runtime safety
 - [x] `FG-PKT-001` Send hook for `NetClient::Send`.
@@ -39,6 +38,31 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
+### 2026-04-26 (Trading Shodan foreground stabilization)
+- Pass result: `TradeParityTests foreground cancel and FG-to-BG transfer now pass under Shodan; BG-to-FG transfer remains a documented server/protocol completion gap`
+- Last delta:
+  - Foreground trade actions now route through object-manager async helpers instead of behavior-tree-only frame snippets, so `OfferTrade`, `DeclineTrade`, `OfferItem`, `OfferGold`, and `AcceptTrade` can run against the live trade UI/popups.
+  - The foreground trade frame now handles popup accept/decline, trade-money entry, cursor cleanup, and own-offer confirmation polling.
+  - The remaining skipped path is `TradingTests.Trade_GoldAndItem_TransferSuccessful`: attempts `5` through `7` ACKed every trade action as `Success`, but the server left item/copper with the BG initiator. Foreground-initiated transfer is covered by `TradeParityTests`.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TradeNetworkClientComponentTests" --logger "console;verbosity=minimal"` -> `passed (48/48)`.
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.TradeFrame_UsesLuaVisibilityAndRoutesTradeActionsThroughExpectedLua" --logger "console;verbosity=minimal"` -> `passed (1/1)`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TradingTests|FullyQualifiedName~TradeParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=trading_fg_shodan_final.trx"` -> `passed (3), skipped (1)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fishing_shodan_anchor.trx"` -> `failed with known anchor instability: FG never reached fishing_loot_success; repeated loot_window_timeout and max_casts_reached`.
+  - Repo-scoped cleanup before and after live validation and anchor -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Exports/WoWSharpClient/Networking/ClientComponents/I/ITradeNetworkClientComponent.cs`
+  - `Exports/WoWSharpClient/Networking/ClientComponents/TradeNetworkClientComponent.cs`
+  - `Services/ForegroundBotRunner/Frames/FgTradeFrame.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+  - live trading tests/docs/task trackers.
+- Next command: `rg -n "^- \\[ \\]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Services/WoWStateManager/TASKS.md Exports/BotRunner/TASKS.md Services/ForegroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md`
+
 ### 2026-04-25 (Mail Shodan foreground stabilization)
 - Pass result: `Foreground CheckMail is stable under the combined Shodan mail suite; live mail validation passed 4/4 with FG and BG actions`
 - Last delta:

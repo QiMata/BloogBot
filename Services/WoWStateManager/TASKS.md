@@ -17,6 +17,24 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-26 (Shodan trade foreground action observation)
+- Last updated: 2026-04-26
+- Active task: none - this slice did not change WoWStateManager code or config.
+- Last delta:
+  - `TradingTests` and `TradeParityTests` still reuse `Economy.config.json` with `ECONFG1`, `ECONBG1`, and SHODAN.
+  - WoWStateManager pending-action delivery stayed heartbeat-gated and unchanged; foreground trade stabilization landed in ForegroundBotRunner and shared BotRunner dispatch.
+  - The live trade suite now passes foreground cancel and FG-to-BG transfer while keeping BG-to-FG transfer as a documented skip.
+- Pass result: `No WoWStateManager runtime/config change; live trade validation passed 3 and skipped 1 under the existing Economy/Shodan topology`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~TradingTests|FullyQualifiedName~TradeParityTests" --logger "trx;LogFileName=trading_fg_shodan_final.trx"` -> `passed (3), skipped (1)`
+  - `dotnet test ... --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "trx;LogFileName=fishing_shodan_anchor.trx"` -> `failed with known Ratchet anchor instability: FG loot_window_timeout / max_casts_reached`
+  - Repo-scoped cleanup before/after live validation and anchor -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `rg -n "^- \\[ \\]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Services/WoWStateManager/TASKS.md Exports/BotRunner/TASKS.md Services/ForegroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md`
+
 ### 2026-04-25 (Shodan mail foreground action observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice did not change WoWStateManager code or config.

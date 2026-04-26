@@ -121,7 +121,16 @@ internal static class TradeTestSupport
         var offer = await SendTradeActionAsync(bot, output, pair.Initiator, MakeOfferTrade(partnerGuid), "OfferTrade");
         output.WriteLine($"[TRADE] {pair.Initiator.RoleLabel} OfferTrade to 0x{partnerGuid:X}: {offer}");
 
-        await Task.Delay(2000);
+        await Task.Delay(1500);
+        var receiverOpen = await SendTradeActionAsync(
+            bot,
+            output,
+            pair.Receiver,
+            new ActionMessage { ActionType = ActionType.AcceptTrade },
+            "AcceptTradeRequest");
+        output.WriteLine($"[TRADE] {pair.Receiver.RoleLabel} AcceptTradeRequest: {receiverOpen}");
+
+        await Task.Delay(1500);
         var itemOffer = await SendTradeActionAsync(bot, output, pair.Initiator, MakeOfferItem(bagId, slotId), "OfferItem");
         output.WriteLine($"[TRADE] {pair.Initiator.RoleLabel} OfferItem bag={bagId} slot={slotId}: {itemOffer}");
 
@@ -163,21 +172,33 @@ internal static class TradeTestSupport
         Assert.NotNull(initiatorAfter);
         Assert.NotNull(receiverAfter);
 
+        var initiatorItemCountAfter = CountItemSlots(initiatorAfter, LinenClothItemId);
+        var receiverItemCountAfter = CountItemSlots(receiverAfter, LinenClothItemId);
+        var initiatorCoinageAfter = initiatorAfter!.Player?.Coinage ?? initiatorCoinageBefore;
+        var receiverCoinageAfter = receiverAfter!.Player?.Coinage ?? receiverCoinageBefore;
+
+        output.WriteLine(
+            $"[TRADE] {pair.Initiator.RoleLabel}->{pair.Receiver.RoleLabel} transfer metrics: " +
+            $"item {initiatorItemCountBefore}->{initiatorItemCountAfter} / {receiverItemCountBefore}->{receiverItemCountAfter}, " +
+            $"coinage {initiatorCoinageBefore}->{initiatorCoinageAfter} / {receiverCoinageBefore}->{receiverCoinageAfter}, " +
+            $"latencyMs={(int)timer.ElapsedMilliseconds}, observed={transferred}");
+
         return new TradeTransferMetrics(
             offer,
+            receiverOpen,
             itemOffer,
             goldOffer,
             receiverAccept,
             initiatorAccept,
             transferred,
             initiatorItemCountBefore,
-            CountItemSlots(initiatorAfter, LinenClothItemId),
+            initiatorItemCountAfter,
             receiverItemCountBefore,
-            CountItemSlots(receiverAfter, LinenClothItemId),
+            receiverItemCountAfter,
             initiatorCoinageBefore,
-            initiatorAfter!.Player?.Coinage ?? initiatorCoinageBefore,
+            initiatorCoinageAfter,
             receiverCoinageBefore,
-            receiverAfter!.Player?.Coinage ?? receiverCoinageBefore,
+            receiverCoinageAfter,
             (int)timer.ElapsedMilliseconds,
             HasTradeError(initiatorAfter) || HasTradeError(receiverAfter));
     }
@@ -196,9 +217,7 @@ internal static class TradeTestSupport
         await bot.StageBotRunnerLoadoutAsync(
             pair.Initiator.AccountName,
             pair.Initiator.RoleLabel,
-            itemsToAdd: initiatorHasItem
-                ? new[] { new LiveBotFixture.ItemDirective(LinenClothItemId, 1) }
-                : null,
+            itemsToAdd: null,
             cleanSlate: true,
             clearInventoryFirst: true);
 
@@ -229,6 +248,25 @@ internal static class TradeTestSupport
             xOffset: 1.0f,
             cleanSlate: false);
         Assert.True(receiverStaged, $"{pair.Receiver.RoleLabel}: expected to stage at the Orgrimmar trade spot.");
+
+        if (initiatorHasItem)
+        {
+            await bot.StageBotRunnerLoadoutAsync(
+                pair.Initiator.AccountName,
+                pair.Initiator.RoleLabel,
+                itemsToAdd: [new LiveBotFixture.ItemDirective(LinenClothItemId, 1)],
+                cleanSlate: false,
+                clearInventoryFirst: false);
+
+            var itemReady = await bot.WaitForSnapshotConditionAsync(
+                pair.Initiator.AccountName,
+                snapshot => CountItemSlots(snapshot, LinenClothItemId) >= 1,
+                TimeSpan.FromSeconds(8),
+                pollIntervalMs: 300,
+                progressLabel: $"{pair.Initiator.RoleLabel} trade linen");
+
+            Assert.True(itemReady, $"{pair.Initiator.RoleLabel}: staged Linen Cloth should remain in bags after cleanup settles.");
+        }
     }
 
     private static async Task<ulong> WaitForVisiblePartnerGuidAsync(
@@ -421,6 +459,7 @@ internal static class TradeTestSupport
 
     internal sealed record TradeTransferMetrics(
         ResponseResult OfferTradeResult,
+        ResponseResult ReceiverOpenResult,
         ResponseResult OfferItemResult,
         ResponseResult OfferGoldResult,
         ResponseResult ReceiverAcceptResult,

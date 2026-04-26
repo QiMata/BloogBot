@@ -49,6 +49,39 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Fact]
+        public async Task AcceptTrade_WithPendingRequest_SendsBeginTrade()
+        {
+            var (agent, mock) = CreateAgent();
+            agent.HandleServerResponse(Opcode.SMSG_TRADE_STATUS,
+                BuildTradeStatusWithGuid(TradeStatus.BeginTrade, 0x1122334455667788UL));
+
+            await agent.AcceptTradeAsync();
+
+            mock.Verify(x => x.SendOpcodeAsync(Opcode.CMSG_BEGIN_TRADE,
+                It.Is<byte[]>(p => p.Length == 0),
+                It.IsAny<CancellationToken>()), Times.Once);
+            mock.Verify(x => x.SendOpcodeAsync(Opcode.CMSG_ACCEPT_TRADE,
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task AcceptTrade_AfterInitiatingTrade_SendsFinalAccept()
+        {
+            var (agent, mock) = CreateAgent();
+            await agent.InitiateTradeAsync(0x1122334455667788UL);
+
+            await agent.AcceptTradeAsync();
+
+            mock.Verify(x => x.SendOpcodeAsync(Opcode.CMSG_BEGIN_TRADE,
+                It.IsAny<byte[]>(),
+                It.IsAny<CancellationToken>()), Times.Never);
+            mock.Verify(x => x.SendOpcodeAsync(Opcode.CMSG_ACCEPT_TRADE,
+                It.Is<byte[]>(p => p.Length == 4 && BitConverter.ToUInt32(p, 0) == 0),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
         public async Task UnacceptTrade_SendsEmpty()
         {
             var (agent, mock) = CreateAgent();

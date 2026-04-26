@@ -500,10 +500,13 @@ public sealed class ForegroundInteractionFrameTests
         frame.OfferLockpick();
 
         Assert.Contains(calls, call => call.Contains("MoneyInputFrame_SetCopper(TradePlayerInputMoneyFrame, 12345)"));
+        Assert.Contains(calls, call => call.Contains("SetTradeMoney()"));
         Assert.Contains(calls, call => call.Contains("SplitContainerItem(0, 3, 3)"));
         Assert.Contains(calls, call => call.Contains("ClickTradeButton(2)"));
         Assert.Contains(calls, call => call.Contains("AcceptTrade()"));
         Assert.Contains(calls, call => call.Contains("CloseTrade()"));
+        Assert.Contains(calls, call => call.Contains("StaticPopup1Button1:Click()"));
+        Assert.Contains(calls, call => call.Contains("StaticPopup1Button2:Click()"));
         Assert.Contains(calls, call => call.Contains("GetSpellInfo(7411)"));
         Assert.Contains(calls, call => call.Contains("TradeSkill()"));
     }
