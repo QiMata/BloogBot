@@ -75,7 +75,13 @@ public static class DeathStateDetection
         if (IsStandStateDead(player))
             return true;
 
-        try { return player.Health == 0; }
+        // The Health==0 fallback covers the brief window where the corpse state has
+        // landed but UNIT_STAND_STATE_DEAD hasn't propagated yet. It must not fire
+        // for an uninitialized snapshot — a freshly-hydrating BG bot reports
+        // Health==0 alongside MaxHealth==0 before the server's UPDATE_OBJECT
+        // packet arrives, and a corpse-recovery push at that point traps the bot
+        // in CharacterSelect because the player object is still half-loaded.
+        try { return player.Health == 0 && player.MaxHealth > 0; }
         catch { return false; }
     }
 
