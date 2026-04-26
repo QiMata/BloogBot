@@ -4,6 +4,23 @@
 
 The FG (Foreground/injected) bot is our **gold standard** — it runs inside the real WoW client with native memory access. The BG (Background/headless) bot emulates the protocol in pure C#. Running both synchronously lets us compare BG behavior against FG as a reference. **Tests that only run BG have no FG observation window** — bugs in packet handling, movement, or state tracking have no ground truth to compare against.
 
+## What Shodan Is (and What It Isn't)
+
+**Shodan is the production GM-admin character**, the in-game liaison that
+gives human players on the live server a way to communicate with
+WoWStateManager and request on-demand activities (pool refreshes,
+gobject/NPC spawns, scenario kicks, gathering-node resets, etc.) for
+themselves to interact with. The same character is reused by the
+LiveValidation suite for setup tasks that require GM targeting — and
+*only* for setup. Shodan is not a behavior-test subject. Every Shodan
+mode below uses Shodan to stage world/loadout state, then dispatches the
+behavior `ActionType.*` against a dedicated test account (TESTBOT1/TESTBOT2
+or a category-specific sibling). Behavior assertions read snapshots from
+those accounts — never from Shodan. The fixture layer enforces this:
+`ResolveBotRunnerActionTargets()` throws if Shodan ever resolves as an
+action target, and every `StageBotRunner*Async` helper throws if asked to
+stage Shodan as a target.
+
 ## BG Bot Log Observability
 
 BG bot logs are written to `WWoWLogs/bg_{accountName}.log` (e.g., `bg_TESTBOT2.log`). Tail this file in a separate terminal during test runs:

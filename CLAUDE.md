@@ -195,6 +195,36 @@ Update `docs/TASKS.md` Session Handoff section with:
 - If a task was partially completed, describe what's done and what remains
 - Reference `docs/TASKS.md` for the overall task list
 
+## Shodan: Production GM Liaison, Test Director — CRITICAL
+
+**Shodan is a production GM character, not just a test fixture.** Its primary
+job is to give human players on the live server a way to communicate with
+WoWStateManager and request on-demand activities (fishing-pool refreshes,
+gobject/NPC spawns, gathering-node resets, scenario kicks). It is the only
+character with account-level GM access in normal operation.
+
+The LiveValidation suite reuses Shodan as a **test director** for setup
+operations that need GM targeting (`.gobject respawn`, `.tele`, `.additem`,
+`.learn`, `.setskill`). It is *never* the subject of a behavior test.
+Behavior tests dispatch `ActionType.*` against dedicated test accounts
+(TESTBOT1/TESTBOT2 for the default roster, plus category-specific siblings
+like GATHFG1/BG1, EQUIPFG1/BG1, TRMAF5/B5, ECONFG1/BG1, LOOTFG1/BG1, etc.)
+and assert against those accounts' snapshots — never Shodan's.
+
+This separation is enforced at the fixture layer:
+- `LiveBotFixture.ResolveBotRunnerActionTargets()` throws if Shodan ever
+  resolves as an action target.
+- All `StageBotRunner*Async` helpers throw if asked to stage Shodan as a
+  subject.
+- Every Shodan-shaped test logs `[ACTION-PLAN] SHODAN ...: director only,
+  no <feature> dispatch.`
+
+If you find yourself writing `await _bot.SendActionAsync(shodanAccount, ...)`
+in a test body, **stop**. Use `ResolveBotRunnerActionTargets()` and dispatch
+to the resolved FG/BG accounts instead. See
+[Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md](Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md)
+and [Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md](Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md).
+
 ## Test Skip Policy — CRITICAL
 
 **Tests must NEVER skip for "resource not found."** If a fishing pool, gathering node, mob, or NPC exists in the game world (DB spawns) but the bot can't find it, that is a REAL FAILURE — a detection, pathfinding, or ObjectManager bug.

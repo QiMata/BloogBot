@@ -1,5 +1,40 @@
 # Shodan Test-Director Migration Inventory (2026-04-24)
 
+## Why Shodan exists (production purpose)
+
+Shodan is **not a test fixture first**. Shodan is a production GM character that
+exists so human players on the live server can communicate with the
+WoWStateManager and trigger on-demand activities (fishing-pool refreshes,
+node resets, gobject respawns, scenario kicks, mob spawns, etc.) that human
+players can then interact with. Shodan owns the GM admin surface — it is the
+*only* character with account-level GM access in normal operation. The
+LiveValidation suite leverages this same character for the same setup
+operations (teleport, `.gobject respawn`, `.additem`, `.learn`, `.tele`)
+because those operations require GM targeting and would otherwise have to
+be smeared across the bots-under-test, corrupting their state and breaking
+parity with what a human player would experience.
+
+**Shodan is never the subject of a behavior test.** It is a director: it
+stages world/loadout state, then steps back. Behavior tests dispatch
+`ActionType.*` against the dedicated test accounts (TESTBOT1 / TESTBOT2 and
+their per-category siblings: GATHFG1/BG1, EQUIPFG1/BG1, TRMAF5/B5, ECONFG1/BG1,
+LOOTFG1/BG1, NPCFG1/BG1, PETFG1/BG1, CRAFTFG1/BG1, NAVBG1, COMBATTEST, etc.)
+and assert against those accounts' snapshots — never Shodan's.
+
+This separation is enforced at the fixture layer:
+
+- `ResolveBotRunnerActionTargets()` throws `InvalidOperationException` if
+  Shodan ever resolves as a behavior-action target.
+- Every staging helper (`StageBotRunnerLoadoutAsync`,
+  `StageBotRunnerAtOrgrimmarMailboxAsync`, `StageBotRunnerAtRazorHillAsync`,
+  etc.) throws if asked to stage *Shodan* as the target — Shodan is the
+  director, not a director-able subject.
+- The `[ACTION-PLAN]` log line every Shodan-shaped test emits records
+  exactly which roles dispatch actions and explicitly states "SHODAN ...:
+  director only, no <feature> dispatch."
+
+## Scope of this inventory
+
 Scope: top-level `Tests/BotRunner.Tests/LiveValidation/*.cs` test classes.
 Goal: move per-test GM setup out of FG/BG bot bodies and onto the Shodan
 test-director role. FG (TESTBOT1) and BG (TESTBOT2) stay idle until the test

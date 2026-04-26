@@ -36,8 +36,13 @@ public partial class LiveBotFixture
     public readonly record struct ItemDirective(uint ItemId, int Count);
 
     /// <summary>
-    /// Explicit action target for Shodan-migrated tests. Shodan is deliberately
-    /// excluded; these are the BotRunner accounts that receive ActionType dispatches.
+    /// Explicit action target for Shodan-shaped tests. Shodan is the production
+    /// GM-admin liaison (it lets human players on the live server request
+    /// on-demand activities from the WoWStateManager), and the LiveValidation
+    /// suite reuses it for setup tasks that require GM targeting — *only* for
+    /// setup. ActionType.* dispatches must go to a dedicated test account
+    /// (TESTBOT1/TESTBOT2 or a category-specific sibling), never to Shodan.
+    /// <see cref="ResolveBotRunnerActionTargets"/> enforces that invariant.
     /// </summary>
     public readonly record struct BotRunnerActionTarget(
         string RoleLabel,
