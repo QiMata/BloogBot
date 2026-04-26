@@ -87,7 +87,18 @@ public class QuestObjectiveTests
                 timeoutSeconds: 12);
             Assert.Equal(ResponseResult.Success, attackResult);
 
-            await Task.Delay(12000);
+            await _bot.WaitForSnapshotConditionAsync(
+                target.AccountName,
+                snapshot =>
+                {
+                    var stillAlive = snapshot.NearbyUnits.FirstOrDefault(u =>
+                        (u.GameObject?.Base?.Guid ?? 0UL) == mobGuid && u.Health > 0);
+                    return stillAlive == null;
+                },
+                TimeSpan.FromSeconds(15),
+                pollIntervalMs: 500,
+                progressLabel: $"{target.RoleLabel} mob-killed");
+
             await _bot.RefreshSnapshotsAsync();
             var afterSnap = await _bot.GetSnapshotAsync(target.AccountName);
             Assert.NotNull(afterSnap);
