@@ -203,7 +203,6 @@ public class DualClientParityTests
         await _bot.QuiesceAccountsAsync(
             new[] { bg.AccountName, fg.AccountName },
             $"{label} pre-assert");
-        await Task.Delay(2000);
 
         return (bg, fg);
     }
