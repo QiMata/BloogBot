@@ -137,8 +137,7 @@ public class MountEnvironmentTests
         Assert.NotNull(rejectionEvidence);
         _output.WriteLine($"[MOUNT-ENV:IndoorBlock] {rejectionEvidence}");
 
-        await Task.Delay(1500);
-
+        await _bot.RefreshSnapshotsAsync();
         var snapshot = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.NotNull(snapshot);
         Assert.True(snapshot!.IsIndoors, "Indoor mount check should stay indoors.");

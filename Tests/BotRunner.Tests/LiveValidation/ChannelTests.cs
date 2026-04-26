@@ -54,8 +54,14 @@ public class ChannelTests
         _output.WriteLine($"[TEST] SEND_CHAT result: {sendResult}");
         Assert.Equal(ResponseResult.Success, sendResult);
 
-        // Wait for message to propagate
-        await Task.Delay(3000);
+        // Wait for message to propagate to either snapshot's chat log.
+        await _bot.WaitForSnapshotConditionAsync(
+            fgAccount!,
+            snapshot => snapshot.RecentChatMessages.Any(m =>
+                m.Contains(testMessage, StringComparison.OrdinalIgnoreCase)),
+            TimeSpan.FromSeconds(3),
+            pollIntervalMs: 200,
+            progressLabel: "FG chat-propagation");
 
         // Check FG snapshot for received chat messages
         await _bot.RefreshSnapshotsAsync();

@@ -48,6 +48,9 @@ public class GossipQuestTests
             NpcFlagGossip,
             "gossip-npc-search");
 
+        var preInteractSnap = await _bot.GetSnapshotAsync(target.AccountName);
+        var preChatCount = preInteractSnap?.RecentChatMessages?.Count ?? 0;
+
         var interactResult = await QuestTestSupport.SendQuestActionAsync(
             _bot,
             _output,
@@ -56,7 +59,13 @@ public class GossipQuestTests
             "InteractWith gossip NPC");
         Assert.Equal(ResponseResult.Success, interactResult);
 
-        await Task.Delay(1500);
+        await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snapshot => snapshot.RecentChatMessages.Count > preChatCount,
+            TimeSpan.FromMilliseconds(1500),
+            pollIntervalMs: 150,
+            progressLabel: $"{target.RoleLabel} gossip-response");
+
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.NotNull(snap);
@@ -85,6 +94,10 @@ public class GossipQuestTests
             NpcFlagQuestGiver,
             "questgiver-search");
 
+        var preInteractSnap = await _bot.GetSnapshotAsync(target.AccountName);
+        var preChatCount = preInteractSnap?.RecentChatMessages?.Count ?? 0;
+        var preQuestCount = preInteractSnap?.Player?.QuestLogEntries?.Count ?? 0;
+
         var interactResult = await QuestTestSupport.SendQuestActionAsync(
             _bot,
             _output,
@@ -93,7 +106,15 @@ public class GossipQuestTests
             "InteractWith quest giver");
         Assert.Equal(ResponseResult.Success, interactResult);
 
-        await Task.Delay(1500);
+        await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snapshot =>
+                snapshot.RecentChatMessages.Count > preChatCount
+                || (snapshot.Player?.QuestLogEntries?.Count ?? 0) > preQuestCount,
+            TimeSpan.FromMilliseconds(1500),
+            pollIntervalMs: 150,
+            progressLabel: $"{target.RoleLabel} questgiver-response");
+
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.NotNull(snap);
