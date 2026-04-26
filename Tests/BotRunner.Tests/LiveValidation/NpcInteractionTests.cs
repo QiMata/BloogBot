@@ -187,8 +187,15 @@ public class NpcInteractionTests
             $"[{target.RoleLabel}] vendor target: guid=0x{vendorGuid:X}, " +
             $"name={vendorUnit?.GameObject?.Name}, flags={vendorUnit?.NpcFlags}, distance={vendorDistance:F1}y");
 
+        var coinageBefore = before?.Player?.Coinage ?? 0;
         await SendNpcActionAsync(target, ActionType.VisitVendor, "VisitVendor");
-        await Task.Delay(2500);
+        await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snapshot => (snapshot.Player?.Coinage ?? coinageBefore) != coinageBefore
+                || snapshot.RecentChatMessages.Count != (before?.RecentChatMessages?.Count ?? 0),
+            TimeSpan.FromMilliseconds(2500),
+            pollIntervalMs: 200,
+            progressLabel: $"{target.RoleLabel} vendor-response");
         await _bot.RefreshSnapshotsAsync();
         var after = await _bot.GetSnapshotAsync(target.AccountName);
 
@@ -310,8 +317,15 @@ public class NpcInteractionTests
             $"[{target.RoleLabel}] flight master: guid=0x{fmGuid:X}, " +
             $"name={fmUnit?.GameObject?.Name}, flags={fmUnit?.NpcFlags}, distance={fmDistance:F1}y");
 
+        var preFmSnap = await _bot.GetSnapshotAsync(target.AccountName);
+        var preChatCount = preFmSnap?.RecentChatMessages?.Count ?? 0;
         await SendNpcActionAsync(target, ActionType.VisitFlightMaster, "VisitFlightMaster");
-        await Task.Delay(2500);
+        await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snapshot => snapshot.RecentChatMessages.Count > preChatCount,
+            TimeSpan.FromMilliseconds(2500),
+            pollIntervalMs: 200,
+            progressLabel: $"{target.RoleLabel} flightmaster-response");
 
         return new FlightMasterVisitMetrics(fmGuid != 0, fmDistance, true);
     }

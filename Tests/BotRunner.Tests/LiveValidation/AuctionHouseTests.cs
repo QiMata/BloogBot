@@ -64,7 +64,6 @@ public class AuctionHouseTests
             _output.WriteLine($"[AH] {target.RoleLabel} InteractWith result: {interactResult}");
             Assert.Equal(ResponseResult.Success, interactResult);
 
-            await Task.Delay(2000);
             var verifyGuid = await AssertAuctioneerNearbyAsync(target, $"{target.RoleLabel} auctioneer-verify");
             Assert.NotEqual(0UL, verifyGuid);
         }
