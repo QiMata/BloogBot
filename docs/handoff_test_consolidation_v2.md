@@ -36,8 +36,17 @@ lack of a first-class `Automated` mode** — see v1 for the full framing.
 | `678b0cc7` | test(live): drop redundant 2s tail after Quiesce in `DualClientParityTests` |
 | `b6348d4e` | test(live): replace 6 hard delays in `GuildOperationTests` with predicates (-9.5s) |
 | `046ecc78` | docs(statemanager): F-1 mode dispatch design — `docs/statemanager_modes_design.md` |
+| `854ecdce` | docs: handoff v2 for live-test consolidation work (this file) |
+| `43fe3e05` | test(live): replace 3 hard delays in `SummoningStoneTests` with predicates (-8s) |
+| `1c530f36` | **feat(statemanager): F-1 step 1 — mode enum + backward-compat loader.** No behavior change; foundation for F-1 step 2. |
 
-**Net wall-clock saving so far (estimated): ~25–35s per full live-suite run.**
+**Net wall-clock saving so far (estimated): ~33–43s per full live-suite run.**
+
+**F-1 step 1 is DONE.** The next session starts at F-1 step 2:
+`IStateManagerModeHandler` interface + `TestModeHandler` (no-op
+wrapper) + `StateManagerWorker` wiring. See
+`docs/statemanager_modes_design.md` § "Mode handler interface" and
+"Wiring into `StateManagerWorker`".
 
 Confirm at session start:
 
@@ -129,12 +138,12 @@ User wants:
 
 **Where to start:** the existing `TransportTests.cs` and `TaxiTests.cs` already have Shodan staging in place; the action dispatch is the gap. Look for `MOVEFLAG_ONTRANSPORT` in the snapshot proto. The transport-arrival timer table likely lives in BotRunner gameobject data — grep `transport.*schedule` or look at `FgTaxiFrame.cs` (in `Services/ForegroundBotRunner/Frames/`).
 
-### Phase F-1 — StateManager Automated mode (PENDING)
+### Phase F-1 — StateManager Automated mode (in progress)
 
 **Read `docs/statemanager_modes_design.md` first.** Implementation order locked there:
 
-1. F-1 step 1: schema enum + backward-compatible loader. No behavior change.
-2. F-1 step 2: `IStateManagerModeHandler` + `TestModeHandler` (no-op wrapper). Wire into `StateManagerWorker`.
+1. ~~F-1 step 1: schema enum + backward-compatible loader.~~ **DONE** at `1c530f36`. No behavior change yet.
+2. F-1 step 2 (NEXT): `IStateManagerModeHandler` + `TestModeHandler` (no-op wrapper). Wire into `StateManagerWorker`.
 3. F-1 step 3: `AutomatedModeHandler`. Add `Onboarding.config.json`. Verify with one live test.
 
 The design doc covers each step. The work is ~3 commits, mostly mechanical.
