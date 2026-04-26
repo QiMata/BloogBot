@@ -62,7 +62,12 @@ public class SummoningStoneTests
         const uint ritualOfSummoning = 698;
         _output.WriteLine($"[SETUP] Teaching Ritual of Summoning ({ritualOfSummoning})");
         await _bot.SendGmChatCommandAsync(account, $".learn {ritualOfSummoning}");
-        await Task.Delay(1000);
+        await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => snapshot.Player?.SpellList?.Contains(ritualOfSummoning) == true,
+            TimeSpan.FromSeconds(2),
+            pollIntervalMs: 150,
+            progressLabel: "BG ritual-summoning-learned");
 
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
@@ -86,8 +91,13 @@ public class SummoningStoneTests
         await _bot.BotTeleportAsync(bgAccount, KalimdorMapId, WcMeetingStoneX, WcMeetingStoneY, WcMeetingStoneZ);
         await _bot.WaitForTeleportSettledAsync(bgAccount, WcMeetingStoneX, WcMeetingStoneY);
 
-        // Wait for game objects to populate
-        await Task.Delay(5000);
+        // Wait for game objects to populate near the meeting stone.
+        await _bot.WaitForSnapshotConditionAsync(
+            bgAccount,
+            snapshot => (snapshot.MovementData?.NearbyGameObjects?.Count ?? 0) > 0,
+            TimeSpan.FromSeconds(5),
+            pollIntervalMs: 250,
+            progressLabel: "BG nearby-go-populate");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(bgAccount);
         Assert.NotNull(snap);
@@ -114,7 +124,13 @@ public class SummoningStoneTests
             });
             _output.WriteLine($"[TEST] INTERACT_WITH meeting stone result: {interactResult}");
 
-            await Task.Delay(2000);
+            var preInteractChatCount = snap.RecentChatMessages.Count;
+            await _bot.WaitForSnapshotConditionAsync(
+                bgAccount,
+                snapshot => snapshot.RecentChatMessages.Count > preInteractChatCount,
+                TimeSpan.FromSeconds(2),
+                pollIntervalMs: 200,
+                progressLabel: "BG meeting-stone-response");
             await _bot.RefreshSnapshotsAsync();
             var afterSnap = await _bot.GetSnapshotAsync(bgAccount);
             Assert.NotNull(afterSnap);
