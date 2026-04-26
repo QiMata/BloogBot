@@ -11,6 +11,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
+using WoWStateManager.Modes;
+using WoWStateManager.Settings;
 
 namespace WoWStateManager
 {
@@ -364,6 +366,22 @@ namespace WoWStateManager
                     // MaNGOS server auto-launch (MySQL, realmd, mangosd)
                     services.Configure<MangosServerOptions>(hostContext.Configuration.GetSection("MangosServer"));
                     services.AddHostedService<MangosServerBootstrapper>();
+
+                    services.AddSingleton<IStateManagerModeHandler>(sp =>
+                    {
+                        var mode = StateManagerSettings.Instance.Mode;
+                        return mode switch
+                        {
+                            StateManagerMode.Test => new TestModeHandler(
+                                sp.GetRequiredService<ILogger<TestModeHandler>>()),
+                            // Automated and OnDemandActivities handlers land in F-1 step 3 / F-2.
+                            // Until then, fall back to TestModeHandler so configs that opt into
+                            // those modes don't crash StateManager — the wiring is in place but
+                            // remains a no-op.
+                            _ => new TestModeHandler(
+                                sp.GetRequiredService<ILogger<TestModeHandler>>()),
+                        };
+                    });
 
                     services.AddHostedService<StateManagerWorker>();
                     services.AddHostedService<DecisionEngineWorker>();

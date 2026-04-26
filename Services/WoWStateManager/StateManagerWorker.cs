@@ -2,6 +2,7 @@ using Communication;
 using WoWStateManager.Clients;
 using WoWStateManager.Listeners;
 using WoWStateManager.Logging;
+using WoWStateManager.Modes;
 using WoWStateManager.Repository;
 using WoWStateManager.Settings;
 using System.Diagnostics;
@@ -40,6 +41,8 @@ namespace WoWStateManager
 
         private readonly IServiceProvider _serviceProvider;
 
+        private readonly IStateManagerModeHandler _modeHandler;
+
 
         private readonly CharacterStateSocketListener _activityMemberSocketListener;
 
@@ -70,12 +73,19 @@ namespace WoWStateManager
             ILogger<StateManagerWorker> logger,
             ILoggerFactory loggerFactory,
             IServiceProvider serviceProvider,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IStateManagerModeHandler modeHandler)
         {
             _logger = logger;
             _loggerFactory = loggerFactory;
             _serviceProvider = serviceProvider;
             _configuration = configuration;
+            _modeHandler = modeHandler;
+
+            _logger.LogInformation(
+                "[MODE] StateManager dispatch handler resolved as {HandlerType} for Mode={Mode}",
+                _modeHandler.GetType().Name,
+                _modeHandler.Mode);
 
             _mangosSOAPClient = new MangosSOAPClient(
                 configuration["MangosSOAP:IpAddress"],
