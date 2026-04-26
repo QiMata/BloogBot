@@ -143,7 +143,29 @@ public partial class LiveBotFixture
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(settingsPath));
         var mismatches = new List<string>();
 
-        foreach (var element in document.RootElement.EnumerateArray())
+        // F-1: configs may be either the legacy bare-array shape or the new
+        // { "Mode": ..., "Characters": [...] } wrapper. Mirror the loader in
+        // SeedExpectedAccountsFromStateManagerSettings so migrated tests can
+        // still call this guard.
+        JsonElement charactersElement;
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            charactersElement = document.RootElement;
+        }
+        else if (document.RootElement.ValueKind == JsonValueKind.Object
+            && document.RootElement.TryGetProperty("Characters", out var wrappedCharacters)
+            && wrappedCharacters.ValueKind == JsonValueKind.Array)
+        {
+            charactersElement = wrappedCharacters;
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"[SHODAN-ACTION-PLAN] Unexpected settings shape ({document.RootElement.ValueKind}); " +
+                "expected JSON array or { Mode, Characters }.");
+        }
+
+        foreach (var element in charactersElement.EnumerateArray())
         {
             if (element.TryGetProperty("ShouldRun", out var shouldRun)
                 && shouldRun.ValueKind == JsonValueKind.False)
