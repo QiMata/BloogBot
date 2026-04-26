@@ -42,14 +42,29 @@ lack of a first-class `Automated` mode** — see v1 for the full framing.
 | `4d36a6f4` | test(live): replace 3 blind sleeps in `CoordinatorFixtureBase.ReviveAndLevelBotsAsync` (`.revive` / `.reset level` / `.levelup` post-sleeps → snapshot polls on Health/Level). Up to ~4s saved per BG-coordinator prep. |
 | `06f11710` | test(live): replace 1.5s blind sleep in `ResetBattlegroundStateAsync` (poll `DescribeAccountsOnBattlegroundMaps`). 2-pass × 2-call structure preserved. ~4s saved per `StageBattlegroundTeamsAsync`. |
 | `27d27ed5` | test(live): replace 1.2s post-batch sleep in `EnsureAccountsNotGroupedAsync` (poll `PartyLeaderGuid == 0`). Up to ~5s saved across 5 attempts. |
+| `a4758d66` | docs(handoff): record CoordinatorFixtureBase wins + correct BG-3s false-positive |
+| `78bbbb36` | **feat(statemanager): F-1 step 2 — mode handler interface + `TestModeHandler` + DI wiring.** Zero behavior change. Automated/OnDemand fall back to no-op `TestModeHandler` until F-1 step 3 / F-2. |
 
 **Net wall-clock saving so far (estimated): ~40–55s per full live-suite run, plus ~7–13s per BG-coordinator test setup.**
 
-**F-1 step 1 is DONE.** The next session starts at F-1 step 2:
-`IStateManagerModeHandler` interface + `TestModeHandler` (no-op
-wrapper) + `StateManagerWorker` wiring. See
-`docs/statemanager_modes_design.md` § "Mode handler interface" and
-"Wiring into `StateManagerWorker`".
+**F-1 steps 1 + 2 are DONE.** The next session starts at F-1 step 3:
+`AutomatedModeHandler` + `Onboarding.config.json` + a single live test
+to verify end-to-end. The DI registration in
+[Services/WoWStateManager/Program.cs](Services/WoWStateManager/Program.cs)
+already routes `Mode=Test` to `TestModeHandler`; replace the
+fall-through `_ => new TestModeHandler(...)` with a real
+`AutomatedModeHandler` registration once that handler exists. See
+`docs/statemanager_modes_design.md` § "AutomatedModeHandler".
+
+**Important — design-doc correction discovered while wiring step 2:**
+the design doc says "wire into `StateManagerWorker.SnapshotProcessing.cs`",
+but that file processes external API queries on port 8088, **not** bot
+snapshots. Bot snapshots arrive at
+[Services/WoWStateManager/Listeners/CharacterStateSocketListener.cs](Services/WoWStateManager/Listeners/CharacterStateSocketListener.cs)
+`HandleRequest` around line 173 — that's where `OnSnapshotAsync` and
+the per-account "first world-ready" trigger for `OnWorldEntryAsync`
+need to slot in. Step 2 deliberately deferred those call sites so
+step 3 can add them alongside the real handler.
 
 Confirm at session start:
 
@@ -146,9 +161,9 @@ User wants:
 
 **Read `docs/statemanager_modes_design.md` first.** Implementation order locked there:
 
-1. ~~F-1 step 1: schema enum + backward-compatible loader.~~ **DONE** at `1c530f36`. No behavior change yet.
-2. F-1 step 2 (NEXT): `IStateManagerModeHandler` + `TestModeHandler` (no-op wrapper). Wire into `StateManagerWorker`.
-3. F-1 step 3: `AutomatedModeHandler`. Add `Onboarding.config.json`. Verify with one live test.
+1. ~~F-1 step 1: schema enum + backward-compatible loader.~~ **DONE** at `1c530f36`. No behavior change.
+2. ~~F-1 step 2: `IStateManagerModeHandler` + `TestModeHandler` (no-op).~~ **DONE** at `78bbbb36`. Zero behavior change. Note: live call-site wiring deferred to step 3 alongside real handler — see correction note above.
+3. F-1 step 3 (NEXT): `AutomatedModeHandler`. Add `Onboarding.config.json`. Wire `OnSnapshotAsync` + `OnWorldEntryAsync` call sites in `CharacterStateSocketListener.HandleRequest`. Verify end-to-end with one live test.
 
 The design doc covers each step. The work is ~3 commits, mostly mechanical.
 
