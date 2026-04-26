@@ -39,8 +39,11 @@ lack of a first-class `Automated` mode** — see v1 for the full framing.
 | `854ecdce` | docs: handoff v2 for live-test consolidation work (this file) |
 | `43fe3e05` | test(live): replace 3 hard delays in `SummoningStoneTests` with predicates (-8s) |
 | `1c530f36` | **feat(statemanager): F-1 step 1 — mode enum + backward-compat loader.** No behavior change; foundation for F-1 step 2. |
+| `4d36a6f4` | test(live): replace 3 blind sleeps in `CoordinatorFixtureBase.ReviveAndLevelBotsAsync` (`.revive` / `.reset level` / `.levelup` post-sleeps → snapshot polls on Health/Level). Up to ~4s saved per BG-coordinator prep. |
+| `06f11710` | test(live): replace 1.5s blind sleep in `ResetBattlegroundStateAsync` (poll `DescribeAccountsOnBattlegroundMaps`). 2-pass × 2-call structure preserved. ~4s saved per `StageBattlegroundTeamsAsync`. |
+| `27d27ed5` | test(live): replace 1.2s post-batch sleep in `EnsureAccountsNotGroupedAsync` (poll `PartyLeaderGuid == 0`). Up to ~5s saved across 5 attempts. |
 
-**Net wall-clock saving so far (estimated): ~33–43s per full live-suite run.**
+**Net wall-clock saving so far (estimated): ~40–55s per full live-suite run, plus ~7–13s per BG-coordinator test setup.**
 
 **F-1 step 1 is DONE.** The next session starts at F-1 step 2:
 `IStateManagerModeHandler` interface + `TestModeHandler` (no-op
@@ -106,17 +109,18 @@ StateManager handles loadout/activity automatically.
 | 5s × 2 | `CornerNavigationTests.cs:75,127` | **Pending — but these are valid 5s poll intervals inside a 60s arrival loop. Lower ROI. Migrate to `WaitForSnapshotConditionAsync` for consistency, not speed.** |
 | 5s × 2 | `TileBoundaryCrossingTests.cs:95,185` | Same as above. |
 | 5s | `Dungeons/SummoningStoneTests.cs:90` | **Pending.** Replace with `WaitForSummonCompleteAsync` predicate. |
-| 3s × 7 | `Battlegrounds/BattlegroundEntryTests.cs:267, 629, 957, 1018, 749, 826, 871, 1137` | **Pending.** Per-marker poll. |
+| 3s × 7 | `Battlegrounds/BattlegroundEntryTests.cs:267, 629, 957, 1018, 749, 826, 871, 1137` | **Skip — false positive.** Inspected this session: every site is the poll-pacing tail of an outer `while` loop that already checks the success condition (`count == expected`, `onBg >= expectedOnMap`, etc.). On 80-bot BG fixtures, tightening to 500ms would multiply `QueryAllSnapshotsAsync` load without saving wall time. Not a real blind sleep. |
 | 3s × 2 | `TaxiTests.cs:60`, etc | **Skip — Phase D rewrites this.** |
 | 1.5s × 5 | `Raids/RaidCoordinationTests.cs:160,186,193,201,207`; `RaidFormationTests.cs:61,70,88,102,116` | **Pending.** Replace with `WaitForRaidMembershipAsync`-style predicates. Activity-owned, so handle carefully. |
 | Mid-tier (200–1500ms) | `EquipmentEquipTests`, `UnequipItemTests`, `BgInteraction`, `MailParity`, `MailSystem`, `EconomyInteraction`, `BuffAndConsumable`, `ConsumableUsage`, `SpellCastOnTarget`, `WandAttack` | **Pending. Lower ROI — these are intra-poll inside ad-hoc `while` loops. Migrate the loops to `WaitForSnapshotConditionAsync` for consistency.** |
-| Fixture-side | `CoordinatorFixtureBase.cs` (23 hits) | **Pending — biggest single ROI in fixture layer. ~8–15s saving per coordinator test.** |
+| Fixture-side | `CoordinatorFixtureBase.cs` (23 hits → 18 remaining) | **In progress.** 5 sleeps replaced this session (`4d36a6f4`, `06f11710`, `27d27ed5`). Remaining 18 are mostly intra-loop poll-pacing or retry backoffs; the only obvious blind sleep left is the 900ms post-`SendGroupInvite` at line 817 (no `HasPendingGroupInvite` snapshot signal — needs proto plumbing). The 1s post-`.gm off` at line 1140 has no clean signal either. |
 
 #### Phase B remaining tasks (concrete, do these next)
-1. Pick off `Dungeons/SummoningStoneTests.cs:90` (single 5s, well-scoped).
-2. Tackle `Battlegrounds/BattlegroundEntryTests.cs` 3s delays (seven of them, batched).
-3. Migrate `CoordinatorFixtureBase.cs` 23 hits to `WaitForSnapshotConditionAsync` — small commits, one cluster at a time.
-4. **B5:** Make `StageBotRunner*Async` helpers' internal `EnsureCleanSlateAsync` opt-in (`bool ensureClean = false`). Estimated +6–10s per dual-target test. **Defer until after F-1 lands** because F-1's snapshot-ready signal is the cleaner replacement.
+1. ~~Pick off `Dungeons/SummoningStoneTests.cs:90`~~ DONE in `43fe3e05`.
+2. ~~Tackle `Battlegrounds/BattlegroundEntryTests.cs` 3s delays~~ **No — false positive (see table above).** Skip.
+3. ~~Migrate `CoordinatorFixtureBase.cs` 23 hits~~ — 5 done this session, 18 remaining are not blind sleeps. Move on.
+4. **NEXT:** Move to F-1 step 2 (`IStateManagerModeHandler` + `TestModeHandler`) per `docs/statemanager_modes_design.md`. The remaining bare-delay census (Raids 1.5s × 5, Mid-tier 200–1500ms, etc.) has lower ROI than F-1 unblocking Phase E.
+5. **B5:** Make `StageBotRunner*Async` helpers' internal `EnsureCleanSlateAsync` opt-in (`bool ensureClean = false`). Estimated +6–10s per dual-target test. **Defer until after F-1 lands** because F-1's snapshot-ready signal is the cleaner replacement.
 
 ### Phase C — Concurrent FG/BG (PENDING)
 
