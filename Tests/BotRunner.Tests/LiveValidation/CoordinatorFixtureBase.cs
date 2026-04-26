@@ -1080,7 +1080,16 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             Console.WriteLine($"[PREP] .revive {snapshot.CharacterName}");
             await ExecuteGMCommandAsync($".revive {snapshot.CharacterName}");
         }
-        await Task.Delay(1000);
+        var revived = await WaitForConditionAsync(
+            async () =>
+            {
+                await RefreshSnapshotsAsync();
+                return AllBots.All(s => (s.Player?.Unit?.Health ?? 0) > 0);
+            },
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromMilliseconds(200));
+        if (!revived)
+            Console.WriteLine($"[PREP] .revive: not all bots show Health>0 after 2s — proceeding");
 
         // Use bot chat .levelup instead of SOAP .character level.
         // SOAP .character level only updates DB; for online characters the
@@ -1104,9 +1113,16 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
         if (overLeveledCount > 0)
         {
-            // Wait for reset level to take effect on server + refresh snapshots
-            await Task.Delay(2000);
-            await RefreshSnapshotsAsync();
+            var resetComplete = await WaitForConditionAsync(
+                async () =>
+                {
+                    await RefreshSnapshotsAsync();
+                    return AllBots.All(s => (int)(s.Player?.Unit?.GameObject?.Level ?? 0) <= targetLevel);
+                },
+                TimeSpan.FromSeconds(3),
+                TimeSpan.FromMilliseconds(200));
+            if (!resetComplete)
+                Console.WriteLine($"[PREP] .reset level: not all bots show Level<={targetLevel} after 3s — proceeding");
         }
 
         foreach (var snapshot in AllBots)
@@ -1121,7 +1137,16 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             Console.WriteLine($"[PREP] .levelup {levelsToAdd} for {account} (current={currentLevel}, target={targetLevel})");
             await SendGmChatCommandAsync(account, $".levelup {levelsToAdd}");
         }
-        await Task.Delay(2000);
+        var leveled = await WaitForConditionAsync(
+            async () =>
+            {
+                await RefreshSnapshotsAsync();
+                return AllBots.All(s => (int)(s.Player?.Unit?.GameObject?.Level ?? 0) >= targetLevel);
+            },
+            TimeSpan.FromSeconds(3),
+            TimeSpan.FromMilliseconds(200));
+        if (!leveled)
+            Console.WriteLine($"[PREP] .levelup: not all bots reached level {targetLevel} after 3s — proceeding");
     }
 
     protected async Task StageBattlegroundTeamsAsync(
