@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Communication;
 using Xunit;
@@ -43,7 +45,28 @@ public class GuildOperationTests
         // Teleport both bots to Orgrimmar
         await _bot.BotTeleportAsync(bgAccount, MapId, OrgX, OrgY, OrgZ);
         await _bot.BotTeleportAsync(fgAccount!, MapId, OrgX + 2, OrgY, OrgZ);
-        await Task.Delay(3000);
+
+        // Poll until both bots report a position close to the target.
+        await _bot.WaitForSnapshotConditionAsync(
+            bgAccount,
+            snapshot =>
+            {
+                var pos = snapshot.MovementData?.Position;
+                return pos != null && Math.Abs(pos.X - OrgX) < 25f && Math.Abs(pos.Y - OrgY) < 25f;
+            },
+            TimeSpan.FromSeconds(3),
+            pollIntervalMs: 200,
+            progressLabel: "BG teleport-arrived");
+        await _bot.WaitForSnapshotConditionAsync(
+            fgAccount!,
+            snapshot =>
+            {
+                var pos = snapshot.MovementData?.Position;
+                return pos != null && Math.Abs(pos.X - OrgX) < 25f && Math.Abs(pos.Y - OrgY) < 25f;
+            },
+            TimeSpan.FromSeconds(3),
+            pollIntervalMs: 200,
+            progressLabel: "FG teleport-arrived");
 
         // Verify both bots are positioned and get character names
         await _bot.RefreshSnapshotsAsync();
@@ -60,17 +83,24 @@ public class GuildOperationTests
         var fgPos = fgSnap.MovementData?.Position;
         _output.WriteLine($"[GUILD] BG={bgChar} at ({bgPos?.X:F0},{bgPos?.Y:F0}), FG={fgChar} at ({fgPos?.X:F0},{fgPos?.Y:F0})");
 
-        // Teardown: remove from existing guilds first (ignore errors if not in guild)
+        // Teardown: remove from existing guilds first. Fire-and-forget — both
+        // calls are idempotent ("ignore errors if not in guild") and the guild
+        // create that follows is what we actually wait on.
         await _bot.SendGmChatCommandAsync(bgAccount, ".guild uninvite " + bgChar);
-        await Task.Delay(500);
         await _bot.SendGmChatCommandAsync(fgAccount!, ".guild uninvite " + fgChar);
-        await Task.Delay(1000);
 
         // Create guild with BG bot as guild master
         var guildName = "TestGuild";
         _output.WriteLine($"[GUILD] Creating guild '{guildName}' with leader {bgChar}");
+        var preCreateChatCount = bgSnap.RecentChatMessages.Count;
         await _bot.SendGmChatCommandAsync(bgAccount, $".guild create {bgChar} {guildName}");
-        await Task.Delay(2000);
+        await _bot.WaitForSnapshotConditionAsync(
+            bgAccount,
+            snapshot => snapshot.RecentChatMessages.Skip(preCreateChatCount)
+                .Any(m => m.Contains("guild", StringComparison.OrdinalIgnoreCase)),
+            TimeSpan.FromSeconds(2),
+            pollIntervalMs: 150,
+            progressLabel: "BG guild-create-response");
 
         // Check chat for guild creation response
         await _bot.RefreshSnapshotsAsync();
@@ -84,8 +114,17 @@ public class GuildOperationTests
 
         // Invite FG bot to the guild
         _output.WriteLine($"[GUILD] Inviting {fgChar} to guild");
+        await _bot.RefreshSnapshotsAsync();
+        var preInviteSnap = await _bot.GetSnapshotAsync(fgAccount!);
+        var preInviteChatCount = preInviteSnap?.RecentChatMessages?.Count ?? 0;
         await _bot.SendGmChatCommandAsync(bgAccount, $".guild invite {fgChar} {guildName}");
-        await Task.Delay(2000);
+        await _bot.WaitForSnapshotConditionAsync(
+            fgAccount!,
+            snapshot => snapshot.RecentChatMessages.Skip(preInviteChatCount)
+                .Any(m => m.Contains("guild", StringComparison.OrdinalIgnoreCase)),
+            TimeSpan.FromSeconds(2),
+            pollIntervalMs: 150,
+            progressLabel: "FG guild-invite-response");
 
         // Refresh and check both snapshots
         await _bot.RefreshSnapshotsAsync();
@@ -112,9 +151,8 @@ public class GuildOperationTests
                 _output.WriteLine($"[GUILD] FG Chat: {msg}");
         }
 
-        // Cleanup: disband the guild
+        // Cleanup: disband the guild — fire-and-forget; the test ends here.
         _output.WriteLine("[GUILD] Cleanup: disbanding test guild");
         await _bot.SendGmChatCommandAsync(bgAccount, $".guild delete {guildName}");
-        await Task.Delay(1000);
     }
 }
