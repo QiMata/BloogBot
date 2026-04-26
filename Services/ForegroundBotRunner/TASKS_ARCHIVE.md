@@ -2,6 +2,20 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-25) - Foreground Mail Shodan Stabilization
+
+- [x] Stabilize foreground `CollectAllMailAsync(...)` under combined-suite Shodan mail validation.
+- Completion notes:
+  - Foreground mailbox collection now waits through the delayed client mailbox refresh window instead of ending after visible stale inbox rows expose no ready money/items.
+  - Unread empty-looking rows are not deleted, SOAP money/item mail staging has a delivery-settle delay, and BotRunner emits `[MAIL-COLLECT]` diagnostic markers backed by `MailCollectionResult`.
+  - `MailSystemTests` and `MailParityTests` now dispatch `ActionType.CheckMail` to both FG and BG in the Shodan topology and passed the full mail suite.
+- Validation:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.CollectInboxAttachmentsLua|FullyQualifiedName~ForegroundInteractionFrameTests.DeleteEmptyInboxItemsLua|FullyQualifiedName~ForegroundInteractionFrameTests.WaitForInboxPendingAttachmentsAsync" --logger "console;verbosity=minimal"` -> `passed (3/3)`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mail_fg_shodan_director_extendedpoll.trx"` -> `passed (4/4)`
+  - Safety bundle -> `passed (33/33)`
+  - Dispatch/readiness bundle -> `passed (60/60)`
+
 ## Archived Snapshot (2026-04-09) - Realm Wizard No-Sweep Stabilization
 
 - [x] Replaced realm-wizard Lua fallback sweeps with state-based, named-control actions for English selection, realm suggestion, and suggestion confirmation.

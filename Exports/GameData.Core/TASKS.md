@@ -57,6 +57,23 @@
 3. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-25 (Mail collection result contract)
+- Current focus: `Shared foreground/BotRunner mail collection diagnostics shipped.`
+- Last delta:
+  - Added `MailCollectionResult` as a shared model for mailbox-opened, inbox, collected, money, deletion, coinage, and subject diagnostics.
+  - `IObjectManager` now exposes `CollectAllMailWithResultAsync(...)` with a default bridge over `CollectAllMailAsync(...)`, preserving existing implementations while allowing the foreground runtime to return structured evidence.
+- Pass result: `delta shipped`
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+- Files changed:
+  - `Exports/GameData.Core/Interfaces/IObjectManager.cs`
+  - `Exports/GameData.Core/Models/MailCollectionResult.cs`
+  - `Exports/GameData.Core/TASKS.md`
+- Next queue file: `Services/ForegroundBotRunner/TASKS.md`
+- Next command: `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.TradeFrame_UsesLuaVisibilityAndRoutesTradeActionsThroughExpectedLua" --logger "console;verbosity=minimal"`
+
 ### 2026-04-24 (Shoot spell catalog entry)
 - Current focus: `Support Shodan WandAttackTests BG wand dispatch.`
 - Last delta:

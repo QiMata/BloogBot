@@ -235,7 +235,33 @@ namespace ForegroundBotRunner.Objects
 
         public bool TastyCorpsesNearby => false;
 
-        public uint Copper => Coinage;
+        public uint Copper
+        {
+            get
+            {
+                try
+                {
+                    return ResolveCopper(Coinage, Functions.LuaCallWithResult);
+                }
+                catch
+                {
+                    return Coinage;
+                }
+            }
+        }
+
+        internal static uint ResolveCopper(uint descriptorCoinage, Func<string, string[]> luaCallWithResult)
+        {
+            var result = luaCallWithResult("{0} = GetMoney() or ''");
+            if (result.Length > 0
+                && long.TryParse(result[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var luaCopper)
+                && luaCopper >= 0)
+            {
+                return luaCopper > uint.MaxValue ? uint.MaxValue : (uint)luaCopper;
+            }
+
+            return descriptorCoinage;
+        }
 
         // Track auto-attack state to avoid spamming CastSpellByName('Attack') every tick.
         // Set true when StartMeleeAttack() fires the Lua, cleared on StopAllMovement/target death.

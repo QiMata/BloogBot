@@ -24,6 +24,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | **Shodan BG-action / FG opt-in** | FG, BG, and SHODAN launch together; SHODAN stages setup, executable BG actions run by default, and the foreground behavior path is guarded by an explicit opt-in switch. |
 | **Shodan BG-action / tracked skip** | FG, BG, and SHODAN launch together; SHODAN stages setup, executable BG actions run, and blocked subcases skip with a documented runtime gap. |
 | **Shodan BG-action / FG gap** | FG, BG, and SHODAN launch together; SHODAN stages setup, executable BG actions run, and foreground-dependent paths are explicit tracked skips until the FG runtime gap is fixed. |
+| **Shodan FG+BG-action** | FG, BG, and SHODAN launch together; SHODAN stages setup, and both FG and BG receive the behavior action. |
 | **Shodan FG+BG-action / tracked skip** | FG, BG, and SHODAN launch together; SHODAN stages setup, FG/BG receive behavior actions where supported, and blocked subcases skip with a documented runtime gap. |
 | **Shodan FG-capture / opt-in command** | FG, BG, and SHODAN launch together; SHODAN stages setup, FG performs corpus-capture triggers, BG stays idle, and command-driven capture runs only when configured by env vars. |
 | **BG-Only** | Only the BG bot runs. No FG observation. BG bugs have no reference comparison. |
@@ -53,8 +54,8 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | GossipQuestTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged gossip/quest-giver interaction |
 | GroupFormationTests | Dual-Bot Sync | BG + FG | **Required** | Both bots must be available (invite/accept) |
 | IntegrationValidationTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged V3 integration subset; dungeoneering/vendor/assign-loot actions pass, PvP/talent/trainer skip |
-| MailSystemTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged mailbox plus SOAP money/item mail |
-| MailParityTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | BG CheckMail baseline; FG mail collection tracked separately |
+| MailSystemTests | Shodan FG+BG-action | BG + FG + SHODAN | Mail action parity yes | Shodan-staged mailbox plus SOAP money/item mail; BG and FG dispatch `CheckMail` |
+| MailParityTests | Shodan FG+BG-action | BG + FG + SHODAN | Mail action parity yes | FG/BG `CheckMail` baseline with `[MAIL-COLLECT]` foreground completion markers |
 | TradingTests | Shodan BG-action / FG gap | BG + FG + SHODAN | BG cancel only | BG offer/decline passes; transfer skip tracks FG AcceptTrade ACK failure |
 | TradeParityTests | Shodan BG-action / FG gap | BG + FG + SHODAN | **No behavior parity** | FG trade cancel/transfer paths skip after Shodan launch due foreground action ACK failures |
 | LootCorpseTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged clean bags and Durotar mob area; BG StartMeleeAttack / LootCorpse proof |
@@ -95,12 +96,11 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 10. **NavigationTests / AllianceNavigationTests** - Shodan topology is in place, but the migrated navigation proofs are BG-action/snapshot-only while FG stays idle; the Valley long diagonal remains a tracked skip until the `GoToTask` `no_path_timeout` gap is fixed.
 11. **StarterQuestTests / GossipQuestTests / QuestObjectiveTests / QuestInteractionTests** - Shodan topology is in place, but the migrated quest group is BG-action-only while FG stays idle for topology parity.
 12. **VendorBuySellTests** - Shodan topology is in place, but the migrated slice is still a BG packet baseline; add FG behavior parity separately.
-13. **MailSystemTests / MailParityTests** - Shodan topology is in place, but committed mail actions are BG-only until FG `CheckMail` collection is stable under combined-suite load.
-14. **TradingTests / TradeParityTests** - Shodan topology is in place, but foreground `DeclineTrade`, `OfferItem`, and `AcceptTrade` currently ACK `Failed/behavior_tree_failed`; transfer/parity paths stay explicit skips until the FG trade action surface is stable.
-15. **BuffAndConsumableTests / ConsumableUsageTests** - Shodan topology is in place, but the migrated consumable proofs are BG-action-only; stricter aura/slot and dismiss assertions remain tracked until BG consumable aura observation and `WoWUnit.Buffs` metadata are stable.
-16. **SpiritHealerTests** - Shodan topology is in place, but the migrated resurrection proof is BG-action-only while FG stays idle for topology parity.
-17. **BgInteractionTests** - Shodan topology is in place, but the migrated smoke proof is BG-action-only; bank deposit waits for a BotRunner action surface and Deeprun Tram remains in the dedicated transport slice.
-18. **BattlegroundQueueTests** - Shodan topology is in place, but the migrated WSG queue smoke is BG-action-only while FG stays idle for topology parity.
-19. **SpellCastOnTargetTests** - Shodan topology is in place, but the migrated Battle Shout proof is BG-action-only while FG stays idle for topology parity.
-20. **TaxiTests / TransportTests** - Shodan topology is in place, but the migrated taxi and transport-location proofs are BG-action or snapshot-only; `TaxiTransportParityTests` covers taxi FG/BG parity separately while elevator/cross-continent boarding gaps remain tracked skips.
-21. **IntegrationValidationTests** - Shodan topology is in place, but the migrated V3 subset is BG-action/snapshot-only; PvP needs an opposing-faction topology plus PvP-flag staging, talent needs a production action surface, and trainer waits on the existing live funding/staging gap.
+13. **TradingTests / TradeParityTests** - Shodan topology is in place, but foreground `DeclineTrade`, `OfferItem`, and `AcceptTrade` currently ACK `Failed/behavior_tree_failed`; transfer/parity paths stay explicit skips until the FG trade action surface is stable.
+14. **BuffAndConsumableTests / ConsumableUsageTests** - Shodan topology is in place, but the migrated consumable proofs are BG-action-only; stricter aura/slot and dismiss assertions remain tracked until BG consumable aura observation and `WoWUnit.Buffs` metadata are stable.
+15. **SpiritHealerTests** - Shodan topology is in place, but the migrated resurrection proof is BG-action-only while FG stays idle for topology parity.
+16. **BgInteractionTests** - Shodan topology is in place, but the migrated smoke proof is BG-action-only; bank deposit waits for a BotRunner action surface and Deeprun Tram remains in the dedicated transport slice.
+17. **BattlegroundQueueTests** - Shodan topology is in place, but the migrated WSG queue smoke is BG-action-only while FG stays idle for topology parity.
+18. **SpellCastOnTargetTests** - Shodan topology is in place, but the migrated Battle Shout proof is BG-action-only while FG stays idle for topology parity.
+19. **TaxiTests / TransportTests** - Shodan topology is in place, but the migrated taxi and transport-location proofs are BG-action or snapshot-only; `TaxiTransportParityTests` covers taxi FG/BG parity separately while elevator/cross-continent boarding gaps remain tracked skips.
+20. **IntegrationValidationTests** - Shodan topology is in place, but the migrated V3 subset is BG-action/snapshot-only; PvP needs an opposing-faction topology plus PvP-flag staging, talent needs a production action surface, and trainer waits on the existing live funding/staging gap.

@@ -27,7 +27,7 @@
 - [x] Migrate `BankInteractionTests` / `BankParityTests` to the Shodan shape via `Economy.config.json` + `StageBotRunnerAtOrgrimmarBankAsync`; implemented paths dispatch only `ActionType.InteractWith`, and missing deposit/withdraw/slot-purchase action surfaces skip explicitly.
 - [x] Migrate `VendorBuySellTests` to the Shodan shape via `Economy.config.json` + fixture-contained Razor Hill vendor/coinage staging; BG dispatches only `ActionType.BuyItem` / `SellItem` while FG stays idle for topology parity.
 - [x] Migrate `EconomyInteractionTests` to the Shodan shape via `Economy.config.json` + fixture-contained bank/AH/mail staging; FG/BG dispatch only `ActionType.InteractWith` or `CheckMail`.
-- [x] Migrate `MailSystemTests` / `MailParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained mailbox and SOAP mail-money/item staging; BG dispatches only `ActionType.CheckMail` while FG stays idle for topology parity.
+- [x] Migrate `MailSystemTests` / `MailParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained mailbox and SOAP mail-money/item staging; FG/BG dispatch only `ActionType.CheckMail`.
 - [x] Migrate `TradingTests` / `TradeParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained trade-spot/loadout/coinage staging; BG offer/decline passes, while foreground-dependent transfer/parity paths are explicit tracked skips due FG trade ACK failures.
 - [x] Migrate `GossipQuestTests` / `QuestObjectiveTests` / `QuestInteractionTests` / `StarterQuestTests` to the Shodan shape via `Economy.config.json` + fixture-contained quest location/state staging; BG dispatches only `InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or `CompleteQuest` while FG stays idle for topology parity.
 - [x] Migrate `NpcInteractionTests` to the Shodan shape via `NpcInteraction.config.json` + fixture-contained NPC location/loadout staging; vendor, flight-master, and object-manager checks dispatch to FG/BG, while trainer is an explicit tracked skip behind the live funding/mailbox staging gap.
@@ -87,6 +87,27 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-25 (Shodan mail foreground action follow-up)
+- Pass result: `MailSystemTests and MailParityTests now dispatch CheckMail to FG and BG; live mail validation passed 4/4`
+- Last delta:
+  - `MailSystemTests` / `MailParityTests` resolve both BotRunner action targets and keep SHODAN director-only.
+  - Foreground assertions now wait for snapshot deltas or fresh `[MAIL-COLLECT]` markers, covering the foreground mailbox action under combined-suite load.
+  - The mail docs and execution-mode inventory were refreshed from BG-only to FG/BG-action status.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mail_fg_shodan_director_extendedpoll.trx"` -> `passed (4/4)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MailSystemTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MailParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MailSystemTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MailParityTests.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "^- \\[ \\]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Services/WoWStateManager/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-25 (Shodan loadout target-selection follow-up)
 - Pass result: `StageBotRunnerLoadoutAsync now stages .learn/.setskill/.additem through Shodan-selected FG/BG targets; deterministic bundles stayed green and UnequipItem live smoke passed 1/1`
 - Last delta:
@@ -513,18 +534,18 @@ Known remaining work in this owner: `0` items.
 - Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money" Tests/BotRunner.Tests/LiveValidation/GossipQuestTests.cs Tests/BotRunner.Tests/LiveValidation/QuestObjectiveTests.cs Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`
 
 ### 2026-04-25 (Shodan Mail migration slice)
-- Pass result: `MailSystemTests and MailParityTests now follow the Shodan test-director action-target split; live mail validation passed 4/4 with BG mail actions`
+- Pass result: `MailSystemTests and MailParityTests now follow the Shodan test-director action-target split; live mail validation passed 4/4 with FG and BG mail actions`
 - Last delta:
-  - Reused `Economy.config.json` with `ECONFG1`/`ECONBG1` as BotRunner topology participants plus SHODAN as director.
+  - Reused `Economy.config.json` with `ECONFG1`/`ECONBG1` as BotRunner action targets plus SHODAN as director.
   - Added `StageBotRunnerMailboxItemAsync`; mailbox positioning and SOAP money/item mail setup now live behind fixture helpers.
-  - `MailSystemTests` and `MailParityTests` dispatch only `ActionType.CheckMail` from the test body. FG remains launched for topology parity but is not an action target until foreground mail collection is stable under combined-suite load.
+  - `MailSystemTests` and `MailParityTests` dispatch only `ActionType.CheckMail` from the test body. Foreground stabilization now keeps the mailbox loop alive through delayed inbox metadata and accepts `[MAIL-COLLECT]` markers as fresh action evidence.
   - Added `MailSystemTests.md`, `MailParityTests.md`, updated `TEST_EXECUTION_MODES.md`, and moved both files to ALREADY-SHODAN in `SHODAN_MIGRATION_INVENTORY.md`.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
-  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mail_shodan_bgonly.trx"` -> `passed (4/4)`.
-  - Initial full FG/BG parity attempts `mail_shodan.trx` and `mail_shodan_rerun.trx` timed out on FG mail collection after `CheckMail` delivery; focused `mail_gold_rerun.trx` passed once. This foreground runtime gap is documented in the slice docs.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mail_fg_shodan_director_extendedpoll.trx"` -> `passed (4/4)`.
+  - Initial full FG/BG parity attempts `mail_shodan.trx` and `mail_shodan_rerun.trx` timed out on FG mail collection after `CheckMail` delivery; the foreground runtime gap is now closed by the extended mailbox metadata poll and structured collection marker.
   - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
   - `rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money" Tests/BotRunner.Tests/LiveValidation/MailSystemTests.cs Tests/BotRunner.Tests/LiveValidation/MailParityTests.cs` -> no matches.
 - Files changed:

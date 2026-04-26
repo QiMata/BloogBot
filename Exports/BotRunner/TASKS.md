@@ -32,6 +32,21 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-25 (Mail collection diagnostic dispatch)
+- Pass result: `CheckMail action diagnostics now report structured mail collection results; deterministic bundles and FG/BG live mail validation passed`
+- Last delta:
+  - `ActionDispatcher` now uses `CollectAllMailWithResultAsync(...)` for `CharacterAction.CheckMail` and emits a `[MAIL-COLLECT]` diagnostic marker with mailbox, inbox, collected, money, deletion, coinage, and subject fields.
+  - This keeps Shodan-directed mail tests action-only while allowing foreground assertions to observe action completion when snapshot coinage or bag propagation lags.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mail_fg_shodan_director_extendedpoll.trx"` -> `passed (4/4)`.
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `rg -n "^- \\[ \\]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Services/WoWStateManager/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-25 (Shodan loadout target-selection support)
 - Pass result: `BotRunner .targetguid dispatch coverage passed and the Shodan-directed loadout smoke test passed 1/1`
 - Last delta:
@@ -311,14 +326,14 @@ Known remaining work in this owner: `0` items.
 - Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money" Tests/BotRunner.Tests/LiveValidation/GossipQuestTests.cs Tests/BotRunner.Tests/LiveValidation/QuestObjectiveTests.cs Tests/BotRunner.Tests/LiveValidation/QuestInteractionTests.cs Tests/BotRunner.Tests/LiveValidation/StarterQuestTests.cs`
 
 ### 2026-04-25 (Mail Shodan migration observation)
-- Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated MailSystem/MailParity live validation passed 4/4`
+- Pass result: `BotRunner now emits structured mail collection diagnostics; deterministic dispatch coverage stayed green and migrated MailSystem/MailParity live validation passed 4/4 with FG and BG actions`
 - Last delta:
   - `MailSystemTests` and `MailParityTests` now dispatch only `ActionType.CheckMail` after Shodan-directed mailbox and SOAP mail staging.
-  - The committed mail parity shape is BG-action-only: FG launches for topology parity, but foreground `CheckMail` collection under combined-suite load is tracked as a ForegroundBotRunner follow-up.
+  - `ActionDispatcher` records `[MAIL-COLLECT]` markers from `CollectAllMailWithResultAsync(...)`, giving FG and BG mail tests structured completion evidence when snapshot deltas lag.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
-  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mail_shodan_bgonly.trx"` -> `passed (4/4)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mail_fg_shodan_director_extendedpoll.trx"` -> `passed (4/4)`.
 - Files changed:
   - `Exports/BotRunner/TASKS.md`
 - Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; rg -n "BotLearnSpellAsync|BotSetSkillAsync|BotAddItemAsync|BotTeleportAsync|SendGmChatCommand|ExecuteGMCommand|\\.learn|\\.additem|\\.setskill|\\.tele|\\.go|\\.send|modify money" Tests/BotRunner.Tests/LiveValidation/TradingTests.cs Tests/BotRunner.Tests/LiveValidation/TradeParityTests.cs`

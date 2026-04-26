@@ -1059,8 +1059,13 @@ namespace BotRunner
                         builder.Do($"Check Mail at mailbox {mailboxGuid:X}", time =>
                         {
                             Log.Information("[BOT RUNNER] Collecting mail from mailbox {Guid:X}", mailboxGuid);
-                            _objectManager.CollectAllMailAsync(mailboxGuid, CancellationToken.None)
+                            var result = _objectManager.CollectAllMailWithResultAsync(mailboxGuid, CancellationToken.None)
                                 .GetAwaiter().GetResult();
+                            EnqueueDiagnosticMessage(
+                                $"[MAIL-COLLECT] mailbox=0x{mailboxGuid:X} opened={result.MailboxOpened} " +
+                                $"inbox={result.InboxCount} collected={result.CollectedCount} money={result.MoneyRequestedCopper} " +
+                                $"deleted={result.DeletedEmptyMessages} coinageObserved={result.CoinageIncreaseObserved} " +
+                                $"subjects={result.CollectedSubjects} deletedSubjects={result.DeletedSubjects}");
                             return BehaviourTreeStatus.Success;
                         });
                         break;

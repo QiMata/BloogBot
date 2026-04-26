@@ -1943,7 +1943,7 @@ public partial class LiveBotFixture
 
         var result = await ExecuteGMCommandAsync($".send money {characterName} \"{subject}\" \"{body}\" {copper}");
         _logger.LogInformation("[SHODAN-STAGE] {Role} SOAP mail result: {Result}", targetRoleLabel, result);
-        await Task.Delay(2000);
+        await Task.Delay(5000);
     }
 
     /// <summary>
@@ -1993,7 +1993,7 @@ public partial class LiveBotFixture
 
         var result = await ExecuteGMCommandAsync($".send items {characterName} \"{subject}\" \"{body}\" {itemId}:{count}");
         _logger.LogInformation("[SHODAN-STAGE] {Role} SOAP item-mail result: {Result}", targetRoleLabel, result);
-        await Task.Delay(2000);
+        await Task.Delay(5000);
     }
 
     /// <summary>

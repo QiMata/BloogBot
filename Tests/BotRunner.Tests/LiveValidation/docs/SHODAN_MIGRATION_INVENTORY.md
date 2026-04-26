@@ -44,8 +44,8 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `BankParityTests.cs` | Migrated: `Economy.config.json`; FG/BG bank staging and item setup are Shodan-shaped, while deposit/withdraw and bank-slot purchase are explicit missing-action skips. |
 | `VendorBuySellTests.cs` | Migrated: `Economy.config.json`; fixture-contained Razor Hill vendor and coinage staging; BG dispatches `BuyItem` / `SellItem` only while FG stays idle for topology parity. |
 | `EconomyInteractionTests.cs` | Migrated: `Economy.config.json`; fixture-contained bank/AH/mailbox/mail-money staging; FG/BG dispatch only `InteractWith` or `CheckMail`. |
-| `MailSystemTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; BG dispatches `CheckMail` only while FG stays idle for topology parity. |
-| `MailParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; BG dispatches `CheckMail` only while FG stays idle for topology parity due to the tracked FG mail collection stability gap. |
+| `MailSystemTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; FG/BG dispatch `CheckMail` only while SHODAN stays director-only. |
+| `MailParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained mailbox and SOAP mail-money/item staging; FG/BG dispatch `CheckMail` only while SHODAN stays director-only. |
 | `TradingTests.cs` | Migrated: `Economy.config.json`; fixture-contained trade-spot/loadout/coinage staging; BG offer/decline cancel executes, while BG transfer is a tracked skip because FG `AcceptTrade` ACKs `Failed/behavior_tree_failed`. |
 | `TradeParityTests.cs` | Migrated: `Economy.config.json`; SHODAN launches the parity topology and resolves foreground/BG participants, while foreground trade cancel and transfer are tracked skips due FG `DeclineTrade` / `OfferItem` / `AcceptTrade` ACK failures. |
 | `GossipQuestTests.cs` | Migrated: `Economy.config.json`; fixture-contained Razor Hill NPC staging; BG dispatches `InteractWith` only while FG stays idle for topology parity. |
@@ -324,19 +324,17 @@ Migration result on this slice: live artifact `economy_interaction_shodan.trx`
 passed `3/3` across FG and BG.
 
 `MailSystemTests.cs` and `MailParityTests.cs` reuse `Economy.config.json` with
-`ECONBG1` as the behavior action target, `ECONFG1` launched idle for topology
-parity, and SHODAN as director. The slice moves mailbox positioning and SOAP
-mail-money/item staging into `StageBotRunnerAtOrgrimmarMailboxAsync`,
-`StageBotRunnerMailboxMoneyAsync`, and `StageBotRunnerMailboxItemAsync`. Test
-bodies dispatch only `ActionType.CheckMail` to BG.
+`ECONFG1` and `ECONBG1` as behavior action targets and SHODAN as director. The
+slice moves mailbox positioning and SOAP mail-money/item staging into
+`StageBotRunnerAtOrgrimmarMailboxAsync`, `StageBotRunnerMailboxMoneyAsync`, and
+`StageBotRunnerMailboxItemAsync`. Test bodies dispatch only
+`ActionType.CheckMail` to FG/BG targets.
 
-Migration result on this slice: live artifact `mail_shodan_bgonly.trx` passed
-`4/4`. An earlier full FG+BG parity attempt delivered `CheckMail` to FG but
-timed out waiting for FG gold/item snapshot deltas under the combined mail
-suite; a focused FG gold rerun passed once (`mail_gold_rerun.trx`). The
-migration therefore documents the foreground mail collection stability gap and
-keeps the committed mail parity shape BG-action-only until that runtime issue
-is fixed.
+Migration result on this slice: live artifact
+`mail_fg_shodan_director_extendedpoll.trx` passed `4/4`. The foreground
+follow-up stabilized `CollectAllMailWithResultAsync(...)` under combined-suite
+load by waiting through delayed mailbox metadata refreshes and exposing
+structured `[MAIL-COLLECT]` diagnostics for assertions.
 
 `TradingTests.cs` and `TradeParityTests.cs` reuse `Economy.config.json` with
 `ECONFG1` / `ECONBG1` as the real BotRunner participants and SHODAN as

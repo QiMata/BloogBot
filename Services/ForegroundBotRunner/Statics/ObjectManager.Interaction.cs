@@ -769,13 +769,46 @@ namespace ForegroundBotRunner.Statics
         /// TakeInboxMoney(index), TakeInboxItem(index), DeleteInboxItem(index).
         /// </summary>
         public async Task CollectAllMailAsync(ulong mailboxGuid, CancellationToken ct = default)
+            => await CollectAllMailWithResultAsync(mailboxGuid, ct);
+
+        public async Task<MailCollectionResult> CollectAllMailWithResultAsync(ulong mailboxGuid, CancellationToken ct = default)
         {
+            var inboxCountHighWater = 0;
+            var collectedCount = 0;
+            var deletedEmptyMessages = 0;
+            uint moneyRequestedCopper = 0;
+            var coinageIncreaseObserved = false;
+            var collectedSubjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var deletedSubjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            static void AddSubjects(HashSet<string> destination, string? value)
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    return;
+
+                foreach (var subject in value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    if (!string.IsNullOrWhiteSpace(subject))
+                        destination.Add(subject);
+                }
+            }
+
+            MailCollectionResult BuildResult(bool mailboxOpened) => new(
+                MailboxOpened: mailboxOpened,
+                InboxCount: inboxCountHighWater,
+                CollectedCount: collectedCount,
+                MoneyRequestedCopper: moneyRequestedCopper,
+                DeletedEmptyMessages: deletedEmptyMessages,
+                CoinageIncreaseObserved: coinageIncreaseObserved,
+                CollectedSubjects: string.Join('|', collectedSubjects.OrderBy(subject => subject, StringComparer.OrdinalIgnoreCase)),
+                DeletedSubjects: string.Join('|', deletedSubjects.OrderBy(subject => subject, StringComparer.OrdinalIgnoreCase)));
+
             // Step 1: Find and right-click the mailbox game object
             var obj = Objects.FirstOrDefault(o => o.Guid == mailboxGuid);
             if (obj is not Objects.WoWObject wowObj)
             {
                 Log.Warning("[FG-MAIL] Mailbox GUID 0x{Guid:X} not found in object manager.", mailboxGuid);
-                return;
+                return BuildResult(mailboxOpened: false);
             }
 
             Log.Information("[FG-MAIL] Opening mailbox (right-click on 0x{Guid:X})...", mailboxGuid);
@@ -787,43 +820,128 @@ namespace ForegroundBotRunner.Statics
             if (!await WaitForLuaFrameAsync("if MailFrame and MailFrame:IsVisible() then {0} = 1 else {0} = 0 end", ct))
             {
                 Log.Warning("[FG-MAIL] Mail window did not open after 4.5s.");
-                return;
+                return BuildResult(mailboxOpened: false);
             }
 
-            // Step 3: Force an inbox refresh and give the server time to populate the list.
-            var inboxCount = await WaitForInboxCountAsync(MainThreadLuaCallWithResult, MainThreadLuaCall, ct);
-            Log.Information("[FG-MAIL] Inbox count after refresh: {Count}", inboxCount);
-
-            if (inboxCount <= 0)
+            // Step 3: Take all money and items from each mail. Keep the mail UI
+            // open until the client reports that pending attachments/money are
+            // gone; closing too quickly can make combined live suites observe a
+            // successful action ACK before the foreground snapshot changes. The
+            // client mailbox can retain emptied test mails across runs, so each
+            // pass also deletes empty rows and refreshes the inbox to expose any
+            // newly delivered SOAP mail behind them.
+            var coinageBeforeCollection = Player?.Copper ?? 0;
+            var emptyAttachmentPasses = 0;
+            var collectionStartedAt = DateTime.UtcNow;
+            var noReadyMailMaxWait = TimeSpan.FromSeconds(75);
+            for (var pass = 0; pass < 40; pass++)
             {
-                MainThreadLuaCall("CloseMail()");
-                Log.Information("[FG-MAIL] Mailbox opened but no inbox entries were available to collect.");
-                return;
+                var inboxCount = await WaitForInboxCountAsync(
+                    MainThreadLuaCallWithResult,
+                    MainThreadLuaCall,
+                    ct,
+                    maxPolls: pass == 0 ? 30 : 20,
+                    pollIntervalMs: 200,
+                    stableZeroReadsBeforeEmpty: pass == 0 ? 30 : 8,
+                    stablePositiveReadsBeforeLoaded: pass == 0 ? 15 : 3);
+                inboxCountHighWater = Math.Max(inboxCountHighWater, inboxCount);
+                Log.Information("[FG-MAIL] Inbox count after refresh pass {Pass}: {Count}", pass + 1, inboxCount);
+
+                if (inboxCount <= 0)
+                    break;
+
+                var result = MainThreadLuaCallWithResult(CollectInboxAttachmentsLua);
+                var passCollected = 0;
+                if (result.Length > 0 && int.TryParse(result[0], out passCollected))
+                    collectedCount += passCollected;
+
+                uint passMoney = 0;
+                if (result.Length > 1 && uint.TryParse(result[1], out var parsedPassMoney) && parsedPassMoney > 0)
+                {
+                    passMoney = parsedPassMoney;
+                    moneyRequestedCopper += passMoney;
+                    var coinageChanged = await WaitForCoinageIncreaseAsync(
+                        () => Player?.Copper ?? coinageBeforeCollection,
+                        coinageBeforeCollection,
+                        ct);
+                    if (coinageChanged)
+                    {
+                        coinageIncreaseObserved = true;
+                        coinageBeforeCollection = Player?.Copper ?? coinageBeforeCollection;
+                    }
+                    else
+                    {
+                        Log.Warning(
+                            "[FG-MAIL] Timed out waiting for coinage to increase after requesting {Copper} copper from mailbox.",
+                            passMoney);
+                    }
+                }
+
+                if (result.Length > 2)
+                    AddSubjects(collectedSubjects, result[2]);
+
+                if (passCollected > 0 || passMoney > 0)
+                    emptyAttachmentPasses = 0;
+
+                if (passCollected > 0)
+                    await Task.Delay(750, ct);
+
+                var pendingAttachments = await WaitForInboxPendingAttachmentsAsync(
+                    MainThreadLuaCallWithResult,
+                    MainThreadLuaCall,
+                    ct);
+                if (pendingAttachments > 0)
+                {
+                    Log.Information(
+                        "[FG-MAIL] Inbox still reports {Count} pending attachment/money entries after collection pass {Pass}.",
+                        pendingAttachments,
+                        pass + 1);
+                    continue;
+                }
+
+                if (passCollected == 0
+                    && passMoney == 0
+                    && (emptyAttachmentPasses < 6 || DateTime.UtcNow - collectionStartedAt < noReadyMailMaxWait))
+                {
+                    emptyAttachmentPasses++;
+                    var elapsed = DateTime.UtcNow - collectionStartedAt;
+                    Log.Information(
+                        "[FG-MAIL] Inbox pass {Pass} had visible rows but no ready money/items; waiting for mailbox metadata to settle ({EmptyPasses}, elapsed {ElapsedSeconds:F1}s).",
+                        pass + 1,
+                        emptyAttachmentPasses,
+                        elapsed.TotalSeconds);
+                    await Task.Delay(1500, ct);
+                    continue;
+                }
+
+                var deleteResult = MainThreadLuaCallWithResult(DeleteEmptyInboxItemsLua);
+                if (deleteResult.Length > 0 && int.TryParse(deleteResult[0], out var passDeleted))
+                {
+                    deletedEmptyMessages += passDeleted;
+                    if (passDeleted > 0)
+                    {
+                        if (deleteResult.Length > 1)
+                            AddSubjects(deletedSubjects, deleteResult[1]);
+
+                        await Task.Delay(750, ct);
+                        continue;
+                    }
+                }
+
+                if (passCollected == 0)
+                    break;
             }
-
-            // Step 3: Take all money and items from each mail
-            // Iterate in reverse so index removal doesn't shift remaining indices
-            var result = MainThreadLuaCallWithResult(
-                "local n = GetInboxNumItems() or 0; " +
-                "local collected = 0; " +
-                "for i = n, 1, -1 do " +
-                "  local _, _, _, _, money, _, _, hasItem = GetInboxHeaderInfo(i); " +
-                "  if money and money > 0 then TakeInboxMoney(i); collected = collected + 1; end; " +
-                "  if hasItem then TakeInboxItem(i); collected = collected + 1; end; " +
-                "end; " +
-                "{0} = collected");
-
-            int collectedCount = 0;
-            if (result.Length > 0)
-                int.TryParse(result[0], out collectedCount);
-
-            if (collectedCount > 0)
-                await Task.Delay(750, ct);
 
             // Step 4: Close mail window after collection settles.
             MainThreadLuaCall("CloseMail()");
 
-            Log.Information("[FG-MAIL] Collected {Count} mail items/money from mailbox.", collectedCount);
+            Log.Information(
+                "[FG-MAIL] Collected {Count} mail items/money from mailbox. MoneyRequested={MoneyRequested} DeletedEmpty={DeletedEmptyMessages}",
+                collectedCount,
+                moneyRequestedCopper,
+                deletedEmptyMessages);
+
+            return BuildResult(mailboxOpened: true);
         }
 
         public async Task DepositExcessItemsAsync(ulong bankerGuid, CancellationToken ct = default)
@@ -1342,24 +1460,114 @@ namespace ForegroundBotRunner.Statics
         internal static Task<int> WaitForInboxCountAsync(
             Func<string, string[]> luaQuery,
             Action<string> luaCall,
-            CancellationToken ct)
+            CancellationToken ct,
+            int maxPolls = 30,
+            int pollIntervalMs = 200,
+            int stableZeroReadsBeforeEmpty = 30,
+            int stablePositiveReadsBeforeLoaded = 15)
         {
             ArgumentNullException.ThrowIfNull(luaQuery);
             ArgumentNullException.ThrowIfNull(luaCall);
-            return WaitForInboxCountCoreAsync(luaQuery, luaCall, ct);
+            return WaitForInboxCountCoreAsync(
+                luaQuery,
+                luaCall,
+                ct,
+                maxPolls,
+                pollIntervalMs,
+                stableZeroReadsBeforeEmpty,
+                stablePositiveReadsBeforeLoaded);
         }
 
-        private static async Task<int> WaitForInboxCountCoreAsync(
+        internal static Task<int> WaitForInboxPendingAttachmentsAsync(
             Func<string, string[]> luaQuery,
             Action<string> luaCall,
             CancellationToken ct)
         {
-            int stableZeroReads = 0;
+            ArgumentNullException.ThrowIfNull(luaQuery);
+            ArgumentNullException.ThrowIfNull(luaCall);
+            return WaitForInboxPendingAttachmentsCoreAsync(luaQuery, luaCall, ct);
+        }
 
-            for (int i = 0; i < 15 && !ct.IsCancellationRequested; i++)
+        internal static async Task<bool> WaitForCoinageIncreaseAsync(
+            Func<uint> readCoinage,
+            uint baselineCoinage,
+            CancellationToken ct,
+            int maxPolls = 40,
+            int pollIntervalMs = 250)
+        {
+            ArgumentNullException.ThrowIfNull(readCoinage);
+
+            for (int i = 0; i < maxPolls && !ct.IsCancellationRequested; i++)
+            {
+                await Task.Delay(pollIntervalMs, ct);
+                if (readCoinage() > baselineCoinage)
+                    return true;
+            }
+
+            return false;
+        }
+
+        internal const string CollectInboxAttachmentsLua =
+            "local n = GetInboxNumItems() or 0; " +
+            "local collected = 0; " +
+            "local moneyTotal = 0; " +
+            "local subjects = {}; " +
+            "for i = n, 1, -1 do " +
+            "  local packageIcon, _, _, subject, money, _, _, itemCountValue = GetInboxHeaderInfo(i); " +
+            "  local itemCount = tonumber(itemCountValue) or (itemCountValue and 1 or 0); " +
+            "  local hasItem = itemCount > 0 or (packageIcon and packageIcon ~= ''); " +
+            "  if money and money > 0 then moneyTotal = moneyTotal + money; table.insert(subjects, tostring(subject or '')); TakeInboxMoney(i); collected = collected + 1; end; " +
+            "  if hasItem then " +
+            "    table.insert(subjects, tostring(subject or '')); " +
+            "    TakeInboxItem(i); collected = collected + 1; " +
+            "  end; " +
+            "end; " +
+            "{0} = collected; {1} = moneyTotal; {2} = table.concat(subjects, '|')";
+
+        internal const string DeleteEmptyInboxItemsLua =
+            "local n = GetInboxNumItems() or 0; " +
+            "local deleted = 0; " +
+            "local subjects = {}; " +
+            "for i = n, 1, -1 do " +
+            "  local packageIcon, _, _, subject, money, _, _, itemCountValue, wasRead = GetInboxHeaderInfo(i); " +
+            "  local itemCount = tonumber(itemCountValue) or (itemCountValue and 1 or 0); " +
+            "  local hasItem = itemCount > 0 or (packageIcon and packageIcon ~= ''); " +
+            "  if wasRead and (not money or money <= 0) and not hasItem then " +
+            "    table.insert(subjects, tostring(subject or '')); " +
+            "    DeleteInboxItem(i); deleted = deleted + 1; " +
+            "  end; " +
+            "end; " +
+            "{0} = deleted; {1} = table.concat(subjects, '|')";
+
+        internal const string CountPendingInboxAttachmentsLua =
+            "local n = GetInboxNumItems() or 0; " +
+            "local pending = 0; " +
+            "for i = 1, n do " +
+            "  local packageIcon, _, _, _, money, _, _, itemCountValue = GetInboxHeaderInfo(i); " +
+            "  local itemCount = tonumber(itemCountValue) or (itemCountValue and 1 or 0); " +
+            "  local hasItem = itemCount > 0 or (packageIcon and packageIcon ~= ''); " +
+            "  if money and money > 0 then pending = pending + 1; end; " +
+            "  if hasItem then pending = pending + 1; end; " +
+            "end; " +
+            "{0} = pending";
+
+        private static async Task<int> WaitForInboxCountCoreAsync(
+            Func<string, string[]> luaQuery,
+            Action<string> luaCall,
+            CancellationToken ct,
+            int maxPolls,
+            int pollIntervalMs,
+            int stableZeroReadsBeforeEmpty,
+            int stablePositiveReadsBeforeLoaded)
+        {
+            int stableZeroReads = 0;
+            int stablePositiveReads = 0;
+            int lastPositiveCount = 0;
+
+            for (int i = 0; i < maxPolls && !ct.IsCancellationRequested; i++)
             {
                 luaCall("CheckInbox()");
-                await Task.Delay(200, ct);
+                await Task.Delay(pollIntervalMs, ct);
 
                 var result = luaQuery(
                     "local n = GetInboxNumItems(); if n == nil then {0} = '' else {0} = n end");
@@ -1367,14 +1575,60 @@ namespace ForegroundBotRunner.Statics
                     continue;
 
                 if (inboxCount > 0)
-                    return inboxCount;
+                {
+                    stableZeroReads = 0;
+                    stablePositiveReads = inboxCount == lastPositiveCount
+                        ? stablePositiveReads + 1
+                        : 1;
+                    lastPositiveCount = inboxCount;
 
+                    if (stablePositiveReads >= stablePositiveReadsBeforeLoaded)
+                        return inboxCount;
+
+                    continue;
+                }
+
+                stablePositiveReads = 0;
+                lastPositiveCount = 0;
                 stableZeroReads++;
-                if (stableZeroReads >= 3)
+                if (stableZeroReads >= stableZeroReadsBeforeEmpty)
                     return 0;
             }
 
-            return 0;
+            return lastPositiveCount;
+        }
+
+        private static async Task<int> WaitForInboxPendingAttachmentsCoreAsync(
+            Func<string, string[]> luaQuery,
+            Action<string> luaCall,
+            CancellationToken ct)
+        {
+            var lastPendingCount = 0;
+            var stableZeroReads = 0;
+
+            for (int i = 0; i < 20 && !ct.IsCancellationRequested; i++)
+            {
+                luaCall("CheckInbox()");
+                await Task.Delay(250, ct);
+
+                var result = luaQuery(CountPendingInboxAttachmentsLua);
+                if (result.Length == 0 || !int.TryParse(result[0], out var pendingCount))
+                    continue;
+
+                lastPendingCount = pendingCount;
+                if (pendingCount <= 0)
+                {
+                    stableZeroReads++;
+                    if (stableZeroReads >= 2)
+                        return 0;
+                }
+                else
+                {
+                    stableZeroReads = 0;
+                }
+            }
+
+            return lastPendingCount;
         }
     }
 }

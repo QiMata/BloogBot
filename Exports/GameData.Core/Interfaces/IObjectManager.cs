@@ -261,8 +261,14 @@ namespace GameData.Core.Interfaces
         // Mail collection — FG: Lua mailbox interaction, BG: packet-based via AgentFactory
 #if NET8_0_OR_GREATER
         public Task CollectAllMailAsync(ulong mailboxGuid, CancellationToken ct = default) => Task.CompletedTask;
+        public async Task<MailCollectionResult> CollectAllMailWithResultAsync(ulong mailboxGuid, CancellationToken ct = default)
+        {
+            await CollectAllMailAsync(mailboxGuid, ct);
+            return MailCollectionResult.UnknownSuccess;
+        }
 #else
         Task CollectAllMailAsync(ulong mailboxGuid, CancellationToken ct = default);
+        Task<MailCollectionResult> CollectAllMailWithResultAsync(ulong mailboxGuid, CancellationToken ct = default);
 #endif
 
         // Trainer — FG: Lua trainer interaction, BG: packet-based via AgentFactory

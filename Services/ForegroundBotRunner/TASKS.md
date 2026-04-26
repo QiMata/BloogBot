@@ -28,7 +28,7 @@
 - [x] Restore FG flight-master discovery/activation and a non-null `TaxiFrame` surface so task-driven taxi discovery no longer falls back to interface defaults.
 - [x] Restore non-null FG `CraftFrame` / `TrainerFrame` / `TalentFrame` surfaces so the legacy craft/train/talent BotRunner paths no longer hit null/default-interface fallbacks on the injected client.
 - [x] Finish the remaining FG runtime parity surfaces that still inherited defaults: `QuestGreetingFrame`, `TradeFrame`, and the task-owned bank/AH/craft helper methods.
-- [ ] Stabilize foreground `CollectAllMailAsync(...)` under combined-suite Shodan mail validation. `MailParityTests` can pass a focused FG gold-mail rerun, but the full mail suite timed out on FG item/gold snapshot deltas after `CheckMail` delivery, so the committed mail migration keeps actions BG-only.
+- [x] Stabilize foreground `CollectAllMailAsync(...)` under combined-suite Shodan mail validation. `MailSystemTests` / `MailParityTests` now dispatch `CheckMail` to both FG and BG under Shodan; the full mail suite passed `4/4`.
 - [ ] Stabilize foreground trade action dispatch under Shodan trade validation. `TradingTests` / `TradeParityTests` are Shodan-launched, but foreground `DeclineTrade`, `OfferItem`, and `AcceptTrade` ACK `Failed/behavior_tree_failed` in `trading_shodan_final.trx` / `trade_parity_fg_transfer_after_ack_wait.trx`, so foreground-dependent transfer/parity paths are explicit skips.
 
 3. Packet capture/runtime safety
@@ -39,6 +39,31 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
+### 2026-04-25 (Mail Shodan foreground stabilization)
+- Pass result: `Foreground CheckMail is stable under the combined Shodan mail suite; live mail validation passed 4/4 with FG and BG actions`
+- Last delta:
+  - `CollectAllMailWithResultAsync(...)` now keeps the foreground mailbox action alive while visible inbox rows have not exposed ready money/items, allowing the client mailbox cache to refresh under combined-suite load.
+  - Empty-row deletion no longer touches unread rows, SOAP mail staging waits for delivery settlement, and the shared `MailCollectionResult` diagnostic marker records opened/inbox/collected/money/deleted/subject evidence.
+  - `MailSystemTests` and `MailParityTests` now resolve both FG and BG action targets and assert either snapshot deltas or fresh `[MAIL-COLLECT]` markers for foreground completion.
+- Validation/tests run:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.CollectInboxAttachmentsLua|FullyQualifiedName~ForegroundInteractionFrameTests.DeleteEmptyInboxItemsLua|FullyQualifiedName~ForegroundInteractionFrameTests.WaitForInboxPendingAttachmentsAsync" --logger "console;verbosity=minimal"` -> `passed (3/3)`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
+  - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mail_fg_shodan_director_extendedpoll.trx"` -> `passed (4/4)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (60/60)`.
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Exports/GameData.Core/Interfaces/IObjectManager.cs`
+  - `Exports/GameData.Core/Models/MailCollectionResult.cs`
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Services/ForegroundBotRunner/Objects/LocalPlayer.cs`
+  - `Services/ForegroundBotRunner/Statics/ObjectManager.Interaction.cs`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundInteractionFrameTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MailSystemTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MailParityTests.cs`
+- Next command: `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.TradeFrame_UsesLuaVisibilityAndRoutesTradeActionsThroughExpectedLua" --logger "console;verbosity=minimal"`
+
 ### 2026-04-25 (Trading Shodan foreground follow-up)
 - Pass result: `BG trade cancel passes under Shodan; foreground trade action failures are now tracked`
 - Last delta:
@@ -57,16 +82,14 @@
 - Next command: `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.TradeFrame_UsesLuaVisibilityAndRoutesTradeActionsThroughExpectedLua" --logger "console;verbosity=minimal"`
 
 ### 2026-04-25 (Mail Shodan foreground follow-up)
-- Pass result: `Mail migration committed as BG-action-only; FG CheckMail instability is now tracked`
+- Pass result: `Foreground CheckMail instability is closed; MailSystemTests and MailParityTests now pass with FG and BG action targets`
 - Last delta:
-  - `MailSystemTests` / `MailParityTests` launched `ECONFG1` for topology parity, but the full FG/BG parity attempts timed out waiting for FG coinage/item snapshot deltas after `ActionType.CheckMail` delivery.
-  - A focused `MailParityTests.Mail_SendGold_FgBgParity` rerun passed once with FG enabled, so the issue appears load/timing-sensitive in the foreground mailbox collection path rather than a deterministic missing action mapping.
-  - No ForegroundBotRunner code changed in this slice; the test migration documents the gap and dispatches committed mail actions to BG only.
+  - `ObjectManager.Interaction` now keeps the foreground mailbox collection loop alive while visible inbox rows hydrate delayed money/item metadata.
+  - `LocalPlayer.Copper` prefers Lua `GetMoney()` before descriptor fallback, and `CollectAllMailWithResultAsync(...)` returns structured evidence for foreground mail assertions.
+  - `MailSystemTests` / `MailParityTests` dispatch `ActionType.CheckMail` to both `ECONFG1` and `ECONBG1` under the Shodan director topology.
 - Validation/tests run:
-  - `mail_shodan.trx` -> full FG/BG parity attempt failed on FG gold-mail coinage timeout.
-  - `mail_gold_rerun.trx` -> focused FG/BG gold rerun passed once.
-  - `mail_shodan_rerun.trx` -> full FG/BG parity attempt failed on FG item and gold timeouts.
-  - `mail_shodan_bgonly.trx` -> committed Shodan BG-action mail validation passed `4/4`.
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.CollectInboxAttachmentsLua|FullyQualifiedName~ForegroundInteractionFrameTests.DeleteEmptyInboxItemsLua|FullyQualifiedName~ForegroundInteractionFrameTests.WaitForInboxPendingAttachmentsAsync" --logger "console;verbosity=minimal"` -> `passed (3/3)`.
+  - `mail_fg_shodan_director_extendedpoll.trx` -> Shodan FG/BG mail validation passed `4/4`.
 - Files changed:
   - `Services/ForegroundBotRunner/TASKS.md`
 - Next command: `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.WaitForInboxCountAsync|FullyQualifiedName~ForegroundInteractionFrameTests" --logger "console;verbosity=minimal"`

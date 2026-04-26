@@ -17,6 +17,22 @@
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-25 (Shodan mail foreground action observation)
+- Last updated: 2026-04-25
+- Active task: none - this slice did not change WoWStateManager code or config.
+- Last delta:
+  - `MailSystemTests` and `MailParityTests` still reuse `Economy.config.json`, but the mail action now runs against both `ECONFG1` and `ECONBG1` while SHODAN remains director-only.
+  - WoWStateManager pending-action delivery stayed heartbeat-gated and unchanged; foreground stabilization landed in ForegroundBotRunner and shared BotRunner diagnostics.
+- Pass result: `No WoWStateManager runtime/config change; live mail validation passed 4/4 with FG and BG CheckMail actions`
+- Validation/tests run:
+  - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
+  - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
+  - `dotnet test ... --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "trx;LogFileName=mail_fg_shodan_director_extendedpoll.trx"` -> `passed (4/4)`
+  - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/WoWStateManager/TASKS.md`
+- Next command: `rg -n "^- \\[ \\]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Services/WoWStateManager/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-25 (Shodan loadout target-selection observation)
 - Last updated: 2026-04-25
 - Active task: none - this slice did not change WoWStateManager code or config.
@@ -331,13 +347,13 @@ Known remaining work in this owner: `0` items.
 - Last updated: 2026-04-25
 - Active task: none - this slice reused the existing Shodan economy roster and did not change WoWStateManager code or config.
 - Last delta:
-  - `MailSystemTests` and `MailParityTests` now run against `Economy.config.json` with `ECONBG1` as the mail action target, `ECONFG1` idle for topology parity, and SHODAN as director.
+  - `MailSystemTests` and `MailParityTests` now run against `Economy.config.json` with `ECONFG1` and `ECONBG1` as mail action targets and SHODAN as director.
   - Mailbox and SOAP mail-money/item setup moved into `LiveBotFixture` helpers; no WoWStateManager runtime change was required.
-- Pass result: `Mail migration shape green; live mail validation passed 4/4 with BG mail actions`
+- Pass result: `Mail migration shape green; live mail validation passed 4/4 with FG and BG mail actions`
 - Validation/tests run:
   - `dotnet test ... --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (33/33)`
   - `dotnet test ... --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests"` -> `passed (60/60)`
-  - `dotnet test ... --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "trx;LogFileName=mail_shodan_bgonly.trx"` -> `passed (4/4)`
+  - `dotnet test ... --filter "FullyQualifiedName~MailSystemTests|FullyQualifiedName~MailParityTests" --logger "trx;LogFileName=mail_fg_shodan_director_extendedpoll.trx"` -> `passed (4/4)`
   - Repo-scoped cleanup before and after live validation -> `No repo-scoped processes to stop.`
 - Files changed:
   - `Services/WoWStateManager/TASKS.md`

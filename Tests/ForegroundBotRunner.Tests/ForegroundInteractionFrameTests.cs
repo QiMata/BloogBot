@@ -1,4 +1,5 @@
 using ForegroundBotRunner.Frames;
+using ForegroundBotRunner.Objects;
 using ForegroundBotRunner.Statics;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
@@ -26,7 +27,11 @@ public sealed class ForegroundInteractionFrameTests
         var inboxCount = await ObjectManager.WaitForInboxCountAsync(
             _ => queryResponses.Count > 0 ? queryResponses.Dequeue() : ["2"],
             lua => luaCalls.Add(lua),
-            CancellationToken.None);
+            CancellationToken.None,
+            maxPolls: 4,
+            pollIntervalMs: 1,
+            stableZeroReadsBeforeEmpty: 4,
+            stablePositiveReadsBeforeLoaded: 1);
 
         Assert.Equal(2, inboxCount);
         Assert.Equal(4, luaCalls.Count(call => call == "CheckInbox()"));
@@ -47,10 +52,144 @@ public sealed class ForegroundInteractionFrameTests
         var inboxCount = await ObjectManager.WaitForInboxCountAsync(
             _ => queryResponses.Count > 0 ? queryResponses.Dequeue() : ["5"],
             lua => luaCalls.Add(lua),
-            CancellationToken.None);
+            CancellationToken.None,
+            maxPolls: 3,
+            pollIntervalMs: 1,
+            stableZeroReadsBeforeEmpty: 3,
+            stablePositiveReadsBeforeLoaded: 1);
 
         Assert.Equal(0, inboxCount);
         Assert.Equal(3, luaCalls.Count(call => call == "CheckInbox()"));
+    }
+
+    [Fact]
+    public async Task WaitForInboxCountAsync_WaitsForStablePositiveReads()
+    {
+        var queryResponses = new Queue<string[]>(new[]
+        {
+            new[] { "4" },
+            new[] { "4" },
+            new[] { "5" },
+            new[] { "5" },
+            new[] { "5" },
+        });
+        var luaCalls = new List<string>();
+
+        var inboxCount = await ObjectManager.WaitForInboxCountAsync(
+            _ => queryResponses.Count > 0 ? queryResponses.Dequeue() : ["5"],
+            lua => luaCalls.Add(lua),
+            CancellationToken.None,
+            maxPolls: 5,
+            pollIntervalMs: 1,
+            stableZeroReadsBeforeEmpty: 5,
+            stablePositiveReadsBeforeLoaded: 3);
+
+        Assert.Equal(5, inboxCount);
+        Assert.Equal(5, luaCalls.Count(call => call == "CheckInbox()"));
+    }
+
+    [Fact]
+    public void CollectInboxAttachmentsLua_UsesNumericAttachmentCountAndAttachmentIndex()
+    {
+        var lua = ObjectManager.CollectInboxAttachmentsLua;
+
+        Assert.Contains("tonumber(itemCountValue)", lua);
+        Assert.Contains("moneyTotal = moneyTotal + money", lua);
+        Assert.Contains("{1} = moneyTotal", lua);
+        Assert.Contains("{2} = table.concat(subjects, '|')", lua);
+        Assert.Contains("table.insert(subjects", lua);
+        Assert.Contains("local hasItem = itemCount > 0 or (packageIcon and packageIcon ~= '')", lua);
+        Assert.Contains("if hasItem then", lua);
+        Assert.Contains("TakeInboxItem(i)", lua);
+        Assert.DoesNotContain("subjects[#subjects", lua);
+        Assert.DoesNotContain("TakeInboxItem(i, a)", lua);
+        Assert.DoesNotContain("if hasItem then TakeInboxItem(i)", lua);
+    }
+
+    [Fact]
+    public void DeleteEmptyInboxItemsLua_RemovesRowsWithoutMoneyOrAttachments()
+    {
+        var lua = ObjectManager.DeleteEmptyInboxItemsLua;
+
+        Assert.Contains("DeleteInboxItem(i)", lua);
+        Assert.Contains("wasRead and", lua);
+        Assert.Contains("(not money or money <= 0) and not hasItem", lua);
+        Assert.Contains("{0} = deleted", lua);
+        Assert.Contains("{1} = table.concat(subjects, '|')", lua);
+        Assert.Contains("table.insert(subjects", lua);
+        Assert.DoesNotContain("subjects[#subjects", lua);
+    }
+
+    [Fact]
+    public async Task WaitForInboxPendingAttachmentsAsync_WaitsForTwoStableZeroReads()
+    {
+        var queryResponses = new Queue<string[]>(new[]
+        {
+            new[] { "2" },
+            new[] { "0" },
+            new[] { "1" },
+            new[] { "0" },
+            new[] { "0" },
+        });
+        var luaCalls = new List<string>();
+        var luaQueries = new List<string>();
+
+        var pendingCount = await ObjectManager.WaitForInboxPendingAttachmentsAsync(
+            lua =>
+            {
+                luaQueries.Add(lua);
+                return queryResponses.Count > 0 ? queryResponses.Dequeue() : ["0"];
+            },
+            lua => luaCalls.Add(lua),
+            CancellationToken.None);
+
+        Assert.Equal(0, pendingCount);
+        Assert.Equal(5, luaCalls.Count(call => call == "CheckInbox()"));
+        Assert.All(luaQueries, query => Assert.Equal(ObjectManager.CountPendingInboxAttachmentsLua, query));
+    }
+
+    [Fact]
+    public async Task WaitForCoinageIncreaseAsync_WaitsUntilCoinageChanges()
+    {
+        var reads = new Queue<uint>(new[] { 100u, 100u, 110u });
+
+        var changed = await ObjectManager.WaitForCoinageIncreaseAsync(
+            () => reads.Count > 0 ? reads.Dequeue() : 110u,
+            baselineCoinage: 100u,
+            CancellationToken.None,
+            maxPolls: 3,
+            pollIntervalMs: 1);
+
+        Assert.True(changed);
+    }
+
+    [Fact]
+    public async Task WaitForCoinageIncreaseAsync_ReturnsFalseWhenCoinageStaysFlat()
+    {
+        var changed = await ObjectManager.WaitForCoinageIncreaseAsync(
+            () => 100u,
+            baselineCoinage: 100u,
+            CancellationToken.None,
+            maxPolls: 2,
+            pollIntervalMs: 1);
+
+        Assert.False(changed);
+    }
+
+    [Fact]
+    public void LocalPlayerResolveCopper_PrefersLuaMoneyWhenAvailable()
+    {
+        var copper = LocalPlayer.ResolveCopper(100u, _ => ["125"]);
+
+        Assert.Equal(125u, copper);
+    }
+
+    [Fact]
+    public void LocalPlayerResolveCopper_FallsBackToDescriptorWhenLuaMoneyMissing()
+    {
+        var copper = LocalPlayer.ResolveCopper(100u, _ => [""]);
+
+        Assert.Equal(100u, copper);
     }
 
     [Fact]

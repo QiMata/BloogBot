@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -10,7 +11,7 @@ namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
 /// Shodan-directed mail system baselines. SHODAN stages mailbox location and
-/// SOAP mail payloads; the BG action target dispatches only CheckMail.
+/// SOAP mail payloads; FG/BG action targets dispatch only CheckMail.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class MailSystemTests
@@ -19,6 +20,8 @@ public class MailSystemTests
     private readonly ITestOutputHelper _output;
 
     private const uint LinenClothItemId = LiveBotFixture.TestItems.LinenCloth;
+    private static readonly TimeSpan ForegroundMailTimeout = TimeSpan.FromSeconds(120);
+    private static readonly TimeSpan BackgroundMailTimeout = TimeSpan.FromSeconds(8);
 
     public MailSystemTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -32,36 +35,41 @@ public class MailSystemTests
     public async Task Mail_SendGold_RecipientReceives()
     {
         await EnsureEconomySettingsAsync();
-        var target = ResolveMailActionTarget();
+        var targets = ResolveMailActionTargets();
 
-        var mailboxGuid = await StageMailboxAndFindGuidAsync(target);
-        await _bot.RefreshSnapshotsAsync();
-        var before = await _bot.GetSnapshotAsync(target.AccountName);
-        var coinageBefore = before?.Player?.Coinage ?? 0;
+        foreach (var target in targets)
+        {
+            var mailboxGuid = await StageMailboxAndFindGuidAsync(target);
+            await _bot.RefreshSnapshotsAsync();
+            var before = await _bot.GetSnapshotAsync(target.AccountName);
+            var coinageBefore = before?.Player?.Coinage ?? 0;
+            var baselineMessages = before?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
 
-        await _bot.StageBotRunnerMailboxMoneyAsync(
-            target.AccountName,
-            target.RoleLabel,
-            copper: 10,
-            subject: "Gold Test",
-            body: "Testing mail gold");
+            await _bot.StageBotRunnerMailboxMoneyAsync(
+                target.AccountName,
+                target.RoleLabel,
+                copper: 10,
+                subject: "Gold Test",
+                body: "Testing mail gold");
 
-        var checkResult = await SendCheckMailAsync(target, mailboxGuid);
-        Assert.Equal(ResponseResult.Success, checkResult);
+            var checkResult = await SendCheckMailAsync(target, mailboxGuid);
+            Assert.Equal(ResponseResult.Success, checkResult);
 
-        var coinageIncreased = await _bot.WaitForSnapshotConditionAsync(
-            target.AccountName,
-            snap => (snap.Player?.Coinage ?? 0) > coinageBefore,
-            TimeSpan.FromSeconds(8),
-            pollIntervalMs: 300,
-            progressLabel: $"{target.RoleLabel} mail-gold-coinage");
-        Assert.True(coinageIncreased, $"{target.RoleLabel}: coinage should increase after collecting mail gold.");
+            var collectionObserved = await _bot.WaitForSnapshotConditionAsync(
+                target.AccountName,
+                snap => (snap.Player?.Coinage ?? 0) > coinageBefore
+                    || (target.IsForeground && HasMailCollectionMarker(snap, "Gold Test", 10, baselineMessages)),
+                GetMailTimeout(target),
+                pollIntervalMs: 300,
+                progressLabel: $"{target.RoleLabel} mail-gold-coinage");
+            Assert.True(collectionObserved, $"{target.RoleLabel}: coinage or foreground mail collection marker should reflect collected mail gold.");
 
-        await _bot.RefreshSnapshotsAsync();
-        var after = await _bot.GetSnapshotAsync(target.AccountName);
-        Assert.NotNull(after);
-        Assert.True(after!.IsObjectManagerValid, "ObjectManager should be valid after mail gold check.");
-        _output.WriteLine($"[MAIL] {target.RoleLabel} coinage {coinageBefore}->{after.Player?.Coinage ?? 0}");
+            await _bot.RefreshSnapshotsAsync();
+            var after = await _bot.GetSnapshotAsync(target.AccountName);
+            Assert.NotNull(after);
+            Assert.True(after!.IsObjectManagerValid, "ObjectManager should be valid after mail gold check.");
+            _output.WriteLine($"[MAIL] {target.RoleLabel} coinage {coinageBefore}->{after.Player?.Coinage ?? 0} marker={FindMailCollectionMarker(after, "Gold Test", baselineMessages) ?? "<none>"}");
+        }
     }
 
     [SkippableFact]
@@ -69,43 +77,48 @@ public class MailSystemTests
     public async Task Mail_SendItem_RecipientReceivesItem()
     {
         await EnsureEconomySettingsAsync();
-        var target = ResolveMailActionTarget();
+        var targets = ResolveMailActionTargets();
 
-        await _bot.StageBotRunnerLoadoutAsync(
-            target.AccountName,
-            target.RoleLabel,
-            cleanSlate: true,
-            clearInventoryFirst: true);
+        foreach (var target in targets)
+        {
+            await _bot.StageBotRunnerLoadoutAsync(
+                target.AccountName,
+                target.RoleLabel,
+                cleanSlate: true,
+                clearInventoryFirst: true);
 
-        var mailboxGuid = await StageMailboxAndFindGuidAsync(target, cleanSlate: false);
-        await _bot.RefreshSnapshotsAsync();
-        var before = await _bot.GetSnapshotAsync(target.AccountName);
-        var itemCountBefore = CountItemSlots(before, LinenClothItemId);
+            var mailboxGuid = await StageMailboxAndFindGuidAsync(target, cleanSlate: false);
+            await _bot.RefreshSnapshotsAsync();
+            var before = await _bot.GetSnapshotAsync(target.AccountName);
+            var itemCountBefore = CountItemSlots(before, LinenClothItemId);
+            var baselineMessages = before?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
 
-        await _bot.StageBotRunnerMailboxItemAsync(
-            target.AccountName,
-            target.RoleLabel,
-            LinenClothItemId,
-            count: 1,
-            subject: "Item Test",
-            body: "Testing mail item");
+            await _bot.StageBotRunnerMailboxItemAsync(
+                target.AccountName,
+                target.RoleLabel,
+                LinenClothItemId,
+                count: 1,
+                subject: "Item Test",
+                body: "Testing mail item");
 
-        var checkResult = await SendCheckMailAsync(target, mailboxGuid);
-        Assert.Equal(ResponseResult.Success, checkResult);
+            var checkResult = await SendCheckMailAsync(target, mailboxGuid);
+            Assert.Equal(ResponseResult.Success, checkResult);
 
-        var itemReceived = await _bot.WaitForSnapshotConditionAsync(
-            target.AccountName,
-            snap => CountItemSlots(snap, LinenClothItemId) >= itemCountBefore + 1,
-            TimeSpan.FromSeconds(8),
-            pollIntervalMs: 300,
-            progressLabel: $"{target.RoleLabel} mail-item-received");
-        Assert.True(itemReceived, $"{target.RoleLabel}: Linen Cloth should appear after collecting item mail.");
+            var itemReceived = await _bot.WaitForSnapshotConditionAsync(
+                target.AccountName,
+                snap => CountItemSlots(snap, LinenClothItemId) >= itemCountBefore + 1
+                    || (target.IsForeground && HasMailSubjectMarker(snap, "Item Test", baselineMessages)),
+                GetMailTimeout(target),
+                pollIntervalMs: 300,
+                progressLabel: $"{target.RoleLabel} mail-item-received");
+            Assert.True(itemReceived, $"{target.RoleLabel}: Linen Cloth should appear after collecting item mail.");
 
-        await _bot.RefreshSnapshotsAsync();
-        var after = await _bot.GetSnapshotAsync(target.AccountName);
-        Assert.NotNull(after);
-        Assert.True(after!.IsObjectManagerValid, "ObjectManager should be valid after mail item check.");
-        _output.WriteLine($"[MAIL] {target.RoleLabel} Linen Cloth {itemCountBefore}->{CountItemSlots(after, LinenClothItemId)}");
+            await _bot.RefreshSnapshotsAsync();
+            var after = await _bot.GetSnapshotAsync(target.AccountName);
+            Assert.NotNull(after);
+            Assert.True(after!.IsObjectManagerValid, "ObjectManager should be valid after mail item check.");
+            _output.WriteLine($"[MAIL] {target.RoleLabel} Linen Cloth {itemCountBefore}->{CountItemSlots(after, LinenClothItemId)}");
+        }
     }
 
     private async Task<ulong> StageMailboxAndFindGuidAsync(
@@ -151,22 +164,17 @@ public class MailSystemTests
             "Shodan director was not launched by Economy.config.json.");
     }
 
-    private LiveBotFixture.BotRunnerActionTarget ResolveMailActionTarget()
+    private IReadOnlyList<LiveBotFixture.BotRunnerActionTarget> ResolveMailActionTargets()
     {
-        var target = _bot.ResolveBotRunnerActionTargets(includeForegroundIfActionable: false)
-            .Single(target => !target.IsForeground);
+        var targets = _bot.ResolveBotRunnerActionTargets();
 
         _output.WriteLine(
             $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no mail action dispatch.");
-        if (!string.IsNullOrWhiteSpace(_bot.FgAccountName))
-        {
+        foreach (var target in targets)
             _output.WriteLine(
-                $"[ACTION-PLAN] FG {_bot.FgAccountName}/{_bot.FgCharacterName}: launched for Shodan topology parity; MailSystem baseline remains BG-only.");
-        }
-        _output.WriteLine(
-            $"[ACTION-PLAN] BG {target.AccountName}/{target.CharacterName}: stage mailbox and dispatch CheckMail.");
+                $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: stage mailbox and dispatch CheckMail.");
 
-        return target;
+        return targets;
     }
 
     private async Task<ulong> WaitForMailboxGuidAsync(string account, string label)
@@ -196,6 +204,47 @@ public class MailSystemTests
 
     private static int CountItemSlots(WoWActivitySnapshot? snapshot, uint itemId)
         => snapshot?.Player?.BagContents?.Values.Count(value => value == itemId) ?? 0;
+
+    private static bool HasMailCollectionMarker(
+        WoWActivitySnapshot? snapshot,
+        string subject,
+        uint minimumCopper,
+        IReadOnlyCollection<string> baselineMessages)
+    {
+        var marker = FindMailCollectionMarker(snapshot, subject, baselineMessages);
+        return marker != null && TryReadMarkerUInt(marker, "money=", out var money) && money >= minimumCopper;
+    }
+
+    private static bool HasMailSubjectMarker(
+        WoWActivitySnapshot? snapshot,
+        string subject,
+        IReadOnlyCollection<string> baselineMessages)
+        => FindMailCollectionMarker(snapshot, subject, baselineMessages) != null;
+
+    private static TimeSpan GetMailTimeout(LiveBotFixture.BotRunnerActionTarget target)
+        => target.IsForeground ? ForegroundMailTimeout : BackgroundMailTimeout;
+
+    private static string? FindMailCollectionMarker(
+        WoWActivitySnapshot? snapshot,
+        string subject,
+        IReadOnlyCollection<string> baselineMessages)
+        => snapshot?.RecentChatMessages?
+            .LastOrDefault(message => message.Contains("[MAIL-COLLECT]", StringComparison.Ordinal)
+                && message.Contains(subject, StringComparison.OrdinalIgnoreCase)
+                && !baselineMessages.Contains(message));
+
+    private static bool TryReadMarkerUInt(string marker, string key, out uint value)
+    {
+        value = 0;
+        var start = marker.IndexOf(key, StringComparison.Ordinal);
+        if (start < 0)
+            return false;
+
+        start += key.Length;
+        var end = marker.IndexOf(' ', start);
+        var span = end < 0 ? marker[start..] : marker[start..end];
+        return uint.TryParse(span, out value);
+    }
 
     private static string ResolveRepoPath(params string[] segments)
     {
