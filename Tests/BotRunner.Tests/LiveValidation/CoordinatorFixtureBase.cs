@@ -942,7 +942,14 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
                 await Task.Delay(150);
             }
 
-            await Task.Delay(1500);
+            await WaitForConditionAsync(
+                async () =>
+                {
+                    await RefreshSnapshotsAsync();
+                    return DescribeAccountsOnBattlegroundMaps(orderedAccounts, AllBots).Count == 0;
+                },
+                TimeSpan.FromMilliseconds(1500),
+                TimeSpan.FromMilliseconds(200));
         }
 
         await RefreshSnapshotsAsync();
