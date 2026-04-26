@@ -25,16 +25,19 @@ namespace WoWStateManager.Modes
 
         public Task OnWorldEntryAsync(
             CharacterSettings character,
+            Func<string, ActionMessage, bool> enqueueAction,
             CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task OnSnapshotAsync(
             CharacterSettings character,
             WoWActivitySnapshot snapshot,
+            Func<string, ActionMessage, bool> enqueueAction,
             CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task OnExternalActivityRequestAsync(
             string requestingPlayer,
             string activityDescriptor,
+            Func<string, ActionMessage, bool> enqueueAction,
             CancellationToken cancellationToken)
         {
             _logger.LogWarning(

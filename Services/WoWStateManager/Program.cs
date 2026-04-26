@@ -374,10 +374,10 @@ namespace WoWStateManager
                         {
                             StateManagerMode.Test => new TestModeHandler(
                                 sp.GetRequiredService<ILogger<TestModeHandler>>()),
-                            // Automated and OnDemandActivities handlers land in F-1 step 3 / F-2.
-                            // Until then, fall back to TestModeHandler so configs that opt into
-                            // those modes don't crash StateManager — the wiring is in place but
-                            // remains a no-op.
+                            StateManagerMode.Automated => new AutomatedModeHandler(
+                                sp.GetRequiredService<ILogger<AutomatedModeHandler>>()),
+                            // OnDemandActivities lands in F-2; until then it falls back to
+                            // TestModeHandler so configs that opt into it don't crash StateManager.
                             _ => new TestModeHandler(
                                 sp.GetRequiredService<ILogger<TestModeHandler>>()),
                         };
