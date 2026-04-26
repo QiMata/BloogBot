@@ -9,6 +9,7 @@ using Game;
 using Google.Protobuf;
 using WoWStateManager.Listeners;
 using WoWStateManager.Coordination;
+using WoWStateManager.Modes;
 using WoWStateManager.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -424,12 +425,14 @@ public class ActionForwardingContractTests
     {
         var plannerLogger = NullLoggerFactory.Instance.CreateLogger<WoWStateManager.Progression.ProgressionPlanner>();
         var planner = new WoWStateManager.Progression.ProgressionPlanner(plannerLogger);
+        var modeHandler = new TestModeHandler(NullLoggerFactory.Instance.CreateLogger<TestModeHandler>());
         return new CharacterStateSocketListener(
             settings.ToList(),
             "127.0.0.1",
             0,
             null,
             planner,
+            modeHandler,
             logger ?? NullLoggerFactory.Instance.CreateLogger<CharacterStateSocketListener>());
     }
 

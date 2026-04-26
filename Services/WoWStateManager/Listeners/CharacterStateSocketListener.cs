@@ -13,6 +13,7 @@ using System.Threading;
 using WoWStateManager.Clients;
 using MangosSOAPClient = WoWStateManager.Clients.MangosSOAPClient;
 using WoWStateManager.Coordination;
+using WoWStateManager.Modes;
 using WoWStateManager.Progression;
 using WoWStateManager.Settings;
 
@@ -54,18 +55,34 @@ namespace WoWStateManager.Listeners
         private readonly List<CharacterSettings> _characterSettings;
         private readonly MangosSOAPClient? _soapClient;
         private readonly ProgressionPlanner _progressionPlanner;
+        private readonly IStateManagerModeHandler _modeHandler;
         private CombatCoordinator? _combatCoordinator;
         private DungeoneeringCoordinator? _dungeoneeringCoordinator;
         private BattlegroundCoordinator? _battlegroundCoordinator;
 
+        /// <summary>
+        /// One-shot per-account latch: the matching <see cref="IStateManagerModeHandler.OnWorldEntryAsync"/>
+        /// fires the first time a snapshot reports <c>IsObjectManagerValid == true</c>.
+        /// Re-set to false on relaunch (a fresh listener is created per StateManager start).
+        /// </summary>
+        private readonly ConcurrentDictionary<string, byte> _worldEntryDispatched = new(StringComparer.OrdinalIgnoreCase);
+
         private readonly object _coordinatorStateLock = new();
         private bool _coordinatorEnabled;
 
-        public CharacterStateSocketListener(List<CharacterSettings> characterSettings, string ipAddress, int port, MangosSOAPClient? soapClient, ProgressionPlanner progressionPlanner, ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
+        public CharacterStateSocketListener(
+            List<CharacterSettings> characterSettings,
+            string ipAddress,
+            int port,
+            MangosSOAPClient? soapClient,
+            ProgressionPlanner progressionPlanner,
+            IStateManagerModeHandler modeHandler,
+            ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
         {
             _characterSettings = characterSettings;
             _soapClient = soapClient;
             _progressionPlanner = progressionPlanner;
+            _modeHandler = modeHandler;
             _coordinatorSuppressionSeconds = GetCoordinatorSuppressionSeconds();
             _coordinatorEnabled = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") != "1";
             if (!_coordinatorEnabled)
@@ -171,6 +188,7 @@ namespace WoWStateManager.Listeners
             if (!request.IsHeartbeatOnly)
             {
                 CurrentActivityMemberList[accountName] = request;
+                InvokeModeHandler(accountName, request);
             }
             // Build the response from the stored snapshot (post-write for full, cached for heartbeat)
             var response = CurrentActivityMemberList[accountName];
@@ -247,6 +265,49 @@ namespace WoWStateManager.Listeners
             }
 
             return response;
+        }
+
+        /// <summary>
+        /// Dispatch the per-mode handler hooks after a fresh snapshot is recorded.
+        /// World-entry fires once per account (gated on first <c>IsObjectManagerValid == true</c>);
+        /// snapshot fires every full update. Errors are logged but never bubble — the listener
+        /// pipeline must not be brought down by a faulty handler.
+        /// </summary>
+        private void InvokeModeHandler(string accountName, WoWActivitySnapshot request)
+        {
+            var charSettings = _characterSettings.Find(
+                cs => string.Equals(cs.AccountName, accountName, StringComparison.OrdinalIgnoreCase));
+            if (charSettings == null)
+                return;
+
+            if (request.IsObjectManagerValid && _worldEntryDispatched.TryAdd(accountName, 0))
+            {
+                try
+                {
+                    _modeHandler.OnWorldEntryAsync(charSettings, EnqueueAction, CancellationToken.None)
+                        .GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "[MODE] OnWorldEntryAsync threw for '{Account}' (handler={Handler})",
+                        accountName,
+                        _modeHandler.GetType().Name);
+                }
+            }
+
+            try
+            {
+                _modeHandler.OnSnapshotAsync(charSettings, request, EnqueueAction, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "[MODE] OnSnapshotAsync threw for '{Account}' (handler={Handler})",
+                    accountName,
+                    _modeHandler.GetType().Name);
+            }
         }
 
         private static bool IsPendingActionDeliveryReady(WoWActivitySnapshot request, WoWActivitySnapshot response)

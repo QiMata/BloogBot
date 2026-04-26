@@ -100,6 +100,7 @@ namespace WoWStateManager
                 int.Parse(configuration["CharacterStateListener:Port"]),
                 _mangosSOAPClient,
                 progressionPlanner,
+                _modeHandler,
                 _loggerFactory.CreateLogger<CharacterStateSocketListener>()
             );
 

@@ -961,9 +961,31 @@ public partial class LiveBotFixture : IAsyncLifetime
 
             using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
 
+            // F-1: configs may be either the legacy bare-array shape or the new
+            // { "Mode": ..., "Characters": [...] } wrapper. Treat both as a flat
+            // list of CharacterSettings here — the runtime loader does the same.
+            JsonElement charactersElement;
+            if (document.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                charactersElement = document.RootElement;
+            }
+            else if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("Characters", out var wrappedCharacters)
+                && wrappedCharacters.ValueKind == JsonValueKind.Array)
+            {
+                charactersElement = wrappedCharacters;
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "[FIXTURE] StateManagerSettings root has unexpected shape ({Kind}); expected JSON array or {{ Mode, Characters }}.",
+                    document.RootElement.ValueKind);
+                return;
+            }
+
             // Count all bots that should run (ShouldRun != false)
             int configuredBotCount = 0;
-            foreach (var element in document.RootElement.EnumerateArray())
+            foreach (var element in charactersElement.EnumerateArray())
             {
                 if (element.TryGetProperty("ShouldRun", out var sr) && sr.ValueKind == JsonValueKind.False)
                     continue;
@@ -973,7 +995,7 @@ public partial class LiveBotFixture : IAsyncLifetime
             ExpectedBotCount = configuredBotCount;
             _logger.LogInformation("[FIXTURE] Settings specify {Count} bot(s).", configuredBotCount);
 
-            foreach (var element in document.RootElement.EnumerateArray())
+            foreach (var element in charactersElement.EnumerateArray())
             {
                 if (element.TryGetProperty("ShouldRun", out var shouldRunProperty)
                     && shouldRunProperty.ValueKind == JsonValueKind.False)
