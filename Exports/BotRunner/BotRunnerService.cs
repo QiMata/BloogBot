@@ -949,12 +949,19 @@ namespace BotRunner
 
                 var attemptOffset = ResolveCharacterNameAttemptOffset();
 
+                // When CharacterSettings.CharacterName is configured, StateManager forwards
+                // it via WWOW_CHARACTER_NAME and we use that exact name (used by the Shodan
+                // GM-liaison so humans can address it directly). Otherwise fall back to the
+                // syllable-based generator for randomized accounts.
+                var explicitName = WoWNameGenerator.ResolveCharacterName();
+                var characterName = explicitName ?? WoWNameGenerator.GenerateName(
+                    race,
+                    gender,
+                    BuildCharacterUniquenessSeed(_activitySnapshot.AccountName, createAttempts, attemptOffset));
+
                 _behaviorTree = _interactionSequences.BuildCreateCharacterSequence(
                     [
-                        WoWNameGenerator.GenerateName(
-                            race,
-                            gender,
-                            BuildCharacterUniquenessSeed(_activitySnapshot.AccountName, createAttempts, attemptOffset)),
+                        characterName,
                         race,
                         gender,
                         @class,

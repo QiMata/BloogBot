@@ -45,6 +45,7 @@
     },
     {
       "AccountName": "SHODAN",
+      "CharacterName": "Shodan",
       "CharacterClass": "Mage",
       "CharacterRace": "Gnome",
       "CharacterGender": "Female",

@@ -244,6 +244,14 @@ public partial class LiveBotFixture : IAsyncLifetime
     /// <summary>Character name of the Shodan GM admin bot.</summary>
     public string? ShodanCharacterName { get; private set; }
 
+    /// <summary>
+    /// CharacterName configured for the SHODAN account in StateManagerSettings/Configs.
+    /// When non-null, the fixture asserts the bot's reported name matches this exactly
+    /// before flipping <see cref="IsReady"/> to true. Lets human players reliably
+    /// address the GM-liaison by its pinned name (e.g. "Shodan").
+    /// </summary>
+    public string? ShodanExpectedCharacterName { get; private set; }
+
     // ---- Backward-compatible adapter properties (for test migration) ----
     // These expose the BG bot state through the old API surface so tests compile.
     // Tests should be migrated to use snapshot-based queries with dual-client assertions.
@@ -609,6 +617,10 @@ public partial class LiveBotFixture : IAsyncLifetime
                 FgAccountName ?? "N/A",
                 CombatTestCharacterName ?? "N/A",
                 CombatTestAccountName ?? "N/A");
+
+            if (!VerifyShodanCharacterNameMatchesConfigured())
+                return;
+
             IsReady = true;
 
             // Track active settings so EnsureSettingsAsync can skip redundant restarts
@@ -756,6 +768,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         FgCharacterName = null;
         CombatTestCharacterName = null;
         ShodanCharacterName = null;
+        ShodanExpectedCharacterName = null;
         AllBots = [];
         _fgResponsive = true;
         _stateManagerClient = null;
@@ -858,11 +871,47 @@ public partial class LiveBotFixture : IAsyncLifetime
             BgCharacterName ?? "N/A", BgAccountName ?? "N/A",
             FgCharacterName ?? "N/A", FgAccountName ?? "N/A",
             CombatTestCharacterName ?? "N/A", CombatTestAccountName ?? "N/A");
+
+        if (!VerifyShodanCharacterNameMatchesConfigured())
+            return;
+
         IsReady = true;
 
         // Track active settings so EnsureSettingsAsync can skip redundant restarts
         _activeSettingsPath = Path.GetFullPath(settingsPath);
         _activeCoordinatorFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
+    }
+
+    /// <summary>
+    /// When the SHODAN account config pins a <c>CharacterName</c>, verify the bot
+    /// actually came up with that name. Mismatches usually mean the existing
+    /// character row needs to be erased so the bot recreates with the pinned
+    /// name (see Task A in handoff_session_bg_movement_parity.md). Sets
+    /// <see cref="FailureReason"/> and returns false on mismatch so callers can
+    /// skip flipping <see cref="IsReady"/> to true.
+    /// </summary>
+    private bool VerifyShodanCharacterNameMatchesConfigured()
+    {
+        if (string.IsNullOrWhiteSpace(ShodanExpectedCharacterName))
+            return true;
+
+        if (string.IsNullOrWhiteSpace(ShodanAccountName))
+            return true; // SHODAN not in the configured roster for this run.
+
+        if (string.IsNullOrWhiteSpace(ShodanCharacterName))
+            return true; // Shodan hasn't reported a name yet; HasRequiredRoleCoverage covers this.
+
+        if (!string.Equals(ShodanCharacterName, ShodanExpectedCharacterName, StringComparison.Ordinal))
+        {
+            FailureReason =
+                $"SHODAN character name mismatch: configured='{ShodanExpectedCharacterName}' but " +
+                $"bot reports '{ShodanCharacterName}'. Erase the existing character via SOAP " +
+                $"`.character erase {ShodanCharacterName}` so the bot recreates with the pinned name.";
+            _logger.LogError("[FIXTURE] {Reason}", FailureReason);
+            return false;
+        }
+
+        return true;
     }
 
     private void IdentifyBots(List<WoWActivitySnapshot> inWorldBots)
@@ -1017,6 +1066,13 @@ public partial class LiveBotFixture : IAsyncLifetime
                 if (string.Equals(accountName, ShodanAccount, StringComparison.OrdinalIgnoreCase))
                 {
                     ShodanAccountName ??= accountName;
+                    if (element.TryGetProperty("CharacterName", out var shodanCharNameProp)
+                        && shodanCharNameProp.ValueKind == JsonValueKind.String)
+                    {
+                        var shodanCharName = shodanCharNameProp.GetString();
+                        if (!string.IsNullOrWhiteSpace(shodanCharName))
+                            ShodanExpectedCharacterName ??= shodanCharName.Trim();
+                    }
                     continue; // Shodan is GM-admin only; do not assign FG/BG.
                 }
 

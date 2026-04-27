@@ -130,6 +130,16 @@ namespace WoWStateManager.Settings
         public int? CharacterNameAttemptOffset { get; set; }
 
         /// <summary>
+        /// Optional explicit character name. When set, the bot uses this exact name
+        /// during character creation instead of the syllable-based generator. Required
+        /// for characters that must be addressable by humans (e.g. the Shodan GM
+        /// liaison). Falls back to <see cref="WoWNameGenerator.GenerateName"/> when
+        /// null/empty so randomized accounts keep their existing behaviour.
+        /// </summary>
+        [JsonProperty("CharacterName", NullValueHandling = NullValueHandling.Ignore)]
+        public string? CharacterName { get; set; }
+
+        /// <summary>
         /// Optional build configuration: spec selection, talent build, gold target, professions, quests.
         /// If null/omitted, uses default spec for the character's class.
         /// </summary>

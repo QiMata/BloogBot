@@ -41,6 +41,18 @@ namespace BotRunner
             return stem + accountSuffix;
         }
 
+        /// <summary>
+        /// Resolves an explicit character name from the WWOW_CHARACTER_NAME env var.
+        /// Returns null when the env var is unset/blank, signalling that callers should
+        /// fall back to <see cref="GenerateName(Race, Gender, string?)"/>. Set from
+        /// <c>CharacterSettings.CharacterName</c> by StateManagerWorker.
+        /// </summary>
+        public static string? ResolveCharacterName()
+        {
+            var envName = Environment.GetEnvironmentVariable("WWOW_CHARACTER_NAME");
+            return string.IsNullOrWhiteSpace(envName) ? null : envName.Trim();
+        }
+
         public static Race ParseRaceCode(string code)
         {
             foreach (var kvp in RaceCodeMap)
