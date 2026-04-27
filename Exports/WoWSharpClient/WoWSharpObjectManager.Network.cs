@@ -755,7 +755,15 @@ namespace WoWSharpClient
                 return;
             }
 
-            if (_isInControl && !_isBeingTeleported)
+            // FG parity: WoW.exe does NOT re-affirm SET_ACTIVE_MOVER on same-map
+            // teleport (server retains us as the active mover). _isBeingTeleported
+            // alone must not trigger a re-affirm — only true control-loss
+            // (spline lockout, world session reset) should. Per the BG live
+            // post-teleport baseline (background_durotar_vertical_drop_baseline.json
+            // pre-fix) this method was firing a spurious 8-byte CMSG_SET_ACTIVE_MOVER
+            // ~13ms after every inbound MSG_MOVE_TELEPORT_ACK, which the FG live
+            // capture (foreground_durotar_vertical_drop_baseline.json) never emits.
+            if (_isInControl)
             {
                 return;
             }
