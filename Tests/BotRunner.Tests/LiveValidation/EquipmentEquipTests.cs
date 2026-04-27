@@ -13,11 +13,15 @@ namespace BotRunner.Tests.LiveValidation;
 /// <summary>
 /// Equipment equip integration test.
 ///
-/// Migrated to the Shodan test-director shape:
-///   1) launch EQUIPFG1 + EQUIPBG1 + SHODAN with Equipment.config.json,
-///   2) stage each BotRunner target through StageBotRunnerLoadoutAsync,
-///   3) dispatch only ActionType.EquipItem from the test body,
-///   4) assert on snapshot inventory/equipment changes.
+/// Two shapes:
+///   * <see cref="EquipItem_AddWeaponAndEquip_AppearsInEquipmentSlot"/> — the
+///     legacy Shodan test-director shape (load Equipment.config.json + each
+///     target staged via StageBotRunnerLoadoutAsync).
+///   * <see cref="EquipItem_AutomatedMode_LoadoutAppliesAndEquips"/> — the
+///     F-1 Automated-mode shape (load Equipment.Automated.config.json; the
+///     bot's CharacterSettings.Loadout block is dispatched as APPLY_LOADOUT
+///     by AutomatedModeHandler.OnWorldEntryAsync at first IsObjectManagerValid;
+///     the test body dispatches only ActionType.EquipItem and asserts).
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class EquipmentEquipTests
@@ -71,6 +75,93 @@ public class EquipmentEquipTests
         }
     }
 
+    /// <summary>
+    /// Phase E broader migration: same shape as the Onboarding pilot — load a
+    /// wrapped-schema config with <c>Mode=Automated</c> and a per-character
+    /// <c>Loadout</c> block, then assert the bot's <c>LoadoutStatus</c>
+    /// transitions to <c>LoadoutReady</c> at world entry and the dispatched
+    /// <c>EquipItem</c> moves the loadout-supplied Worn Mace into the mainhand
+    /// slot. No fixture-side <c>StageBotRunnerLoadoutAsync</c> call.
+    ///
+    /// BG-only for now: the FG bot's LoadoutTask gets stuck in
+    /// <see cref="LoadoutStatus.LoadoutInProgress"/> on the chat-driven
+    /// <c>.additem</c> step (same pattern as the Onboarding pilot, which is
+    /// also BG-only). The legacy
+    /// <see cref="EquipItem_AddWeaponAndEquip_AppearsInEquipmentSlot"/> covers
+    /// FG/BG parity via Shodan-staging until FG Automated parity lands.
+    /// </summary>
+    [SkippableFact]
+    public async Task EquipItem_AutomatedMode_LoadoutAppliesAndEquips()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Equipment.Automated.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+
+        var targets = _bot.ResolveBotRunnerActionTargets(includeForegroundIfActionable: false);
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no EquipItem dispatch.");
+        _output.WriteLine(
+            "[ACTION-PLAN] FG: skipped (Automated-mode FG LoadoutTask gap — covered by legacy " +
+            "EquipItem_AddWeaponAndEquip_AppearsInEquipmentSlot until FG parity lands).");
+        foreach (var target in targets)
+            _output.WriteLine(
+                $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
+                $"Automated mode applies loadout, then dispatch EquipItem({WornMace}).");
+
+        _output.WriteLine("[PARITY] Running Automated-mode equip scenario.");
+
+        var results = await Task.WhenAll(targets.Select(async target => (
+            Target: target,
+            Passed: await RunAutomatedEquipScenario(target.AccountName, target.RoleLabel))));
+
+        foreach (var result in results)
+        {
+            Assert.True(
+                result.Passed,
+                $"{result.Target.RoleLabel} bot ({result.Target.AccountName}/{result.Target.CharacterName}): " +
+                "Automated-mode loadout should apply Worn Mace, then EquipItem should move it to MAINHAND.");
+        }
+    }
+
+    private async Task<bool> RunAutomatedEquipScenario(string account, string label)
+    {
+        // AutomatedModeHandler.OnWorldEntryAsync fires once per account at the
+        // first IsObjectManagerValid=true and dispatches APPLY_LOADOUT off
+        // CharacterSettings.Loadout. The bot's LoadoutTask then walks the plan
+        // (SpellIdsToLearn=[198], Skills=[54/1/300], SupplementalItemIds=[36
+        // Worn Mace]) and reports LoadoutReady on completion. No fixture-side
+        // StageBotRunnerLoadoutAsync call is needed — this is the whole point.
+        var loadoutLanded = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snap => snap.LoadoutStatus == LoadoutStatus.LoadoutReady
+                || snap.Player?.BagContents?.Values.Any(itemId => itemId == WornMace) == true,
+            TimeSpan.FromSeconds(90),
+            pollIntervalMs: 500,
+            progressLabel: $"automated-loadout {account}");
+
+        if (!loadoutLanded)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var diag = await _bot.GetSnapshotAsync(account);
+            _output.WriteLine(
+                $"  [{label}] Automated loadout never delivered Worn Mace within 90s. " +
+                $"LoadoutStatus='{diag?.LoadoutStatus}', failureReason='{diag?.LoadoutFailureReason}'.");
+            return false;
+        }
+
+        if (!await WaitForBagItemAsync(account, WornMace, TimeSpan.FromSeconds(8)))
+        {
+            _output.WriteLine($"  [{label}] LoadoutReady but Worn Mace not visible in bags; aborting.");
+            return false;
+        }
+
+        return await DispatchEquipAndAssertAsync(account, label);
+    }
+
     private async Task<bool> RunEquipScenario(string account, string label)
     {
         await _bot.StageBotRunnerLoadoutAsync(
@@ -86,6 +177,11 @@ public class EquipmentEquipTests
             return false;
         }
 
+        return await DispatchEquipAndAssertAsync(account, label);
+    }
+
+    private async Task<bool> DispatchEquipAndAssertAsync(string account, string label)
+    {
         await _bot.RefreshSnapshotsAsync();
         var before = await _bot.GetSnapshotAsync(account);
         if (before?.Player == null)
