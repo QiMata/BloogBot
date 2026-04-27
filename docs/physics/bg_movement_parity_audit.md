@@ -174,22 +174,26 @@ and the recorded-trace replay harness).
    | 991 | Send | `MSG_MOVE_HEARTBEAT` (48 B) | same FALLING flags, ~500ms cadence |
    | 1271 | Send | `MSG_MOVE_FALL_LAND` (32 B) | landing |
 
-   BG's current
-   [`MovementController.cs:379`](../../Exports/WoWSharpClient/Movement/MovementController.cs)
-   suppresses **all** outbound packets while `_needsGroundSnap` is set
-   (introduced commit `49915f62`). That suppression is more conservative
-   than the binary and is the second contributing piece to the
-   third-party-observer double-fall symptom: BG is silent for ~1.3s
-   after teleport while the binary is broadcasting heartbeats and
-   landing. Pinned by:
+   Stream 2B closed two of the three contributing parity bugs:
+
+   - **`472170e3`** — dropped the `!_needsGroundSnap` suppression at
+     [`MovementController.cs:379`](../../Exports/WoWSharpClient/Movement/MovementController.cs)
+     (originally introduced by commit `49915f62`). BG now broadcasts
+     heartbeats and `MSG_MOVE_FALL_LAND` during the snap window.
+   - **`4771d931`** — reordered `DetermineOpcode` so the
+     `FALLINGFAR/JUMPING → grounded` landing rules fire before the
+     `current==NONE && previous!=NONE → MSG_MOVE_STOP` rule. Pre-fix,
+     the snap-completion `SendStopPacket` call emitted `MSG_MOVE_STOP`
+     instead of the `MSG_MOVE_FALL_LAND` that WoW.exe emits.
+
+   Pinned by:
 
    - `PostTeleportPacketWindowParityTests.ForegroundBaseline_ReportsExpectedTeleportPacketSequence`
      — locks the FG fixture's expected shape so it can't drift unnoticed.
    - `PostTeleportPacketWindowParityTests.Background_AfterTeleportTrigger_EmitsOutboundTeleportAckMatchingForegroundShape`
      — confirms the immediate 16-byte client ACK is byte-equivalent.
    - `PostTeleportPacketWindowParityTests.Background_AfterTeleportTrigger_OutboundStream_StructurallyMatchesForegroundBaseline`
-     — `[Skip]` until Stream 2B narrows the suppression; converts to
-     a passing assertion as the exit criterion.
+     — now passing; pins the BG-today outbound stream.
 
    The recording infrastructure (`ForegroundPostTeleportWindowRecorder`,
    gated on `WWOW_CAPTURE_POST_TELEPORT_WINDOW=1`) is reusable for any
@@ -198,7 +202,16 @@ and the recorded-trace replay harness).
    `Foreground_VerticalDropTeleport_*` test against different
    coordinates and renaming the resulting `foreground_*` fixture.
 
-   **Status: divergence pinned, fix pending Stream 2B.**
+   **Status: Stream 2B closed; one parity gap remains (Stream 2C).**
+
+   FG outbound: `[TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND]`
+   BG outbound: `[TELEPORT_ACK, HEARTBEAT, HEARTBEAT, HEARTBEAT, FALL_LAND]`
+
+   The +1 heartbeat at the start of the fall is because
+   `ShouldSendPacket` fires immediately on `NONE → FALLINGFAR`, while
+   WoW.exe cadence-gates the first heartbeat ~`PACKET_INTERVAL_MS`
+   (≈500ms) after the outbound ACK. Stream 2C plan:
+   [`docs/handoff_session_bg_movement_parity_followup_v7.md`](../handoff_session_bg_movement_parity_followup_v7.md).
 
 ## What's *not* in scope of this audit
 
