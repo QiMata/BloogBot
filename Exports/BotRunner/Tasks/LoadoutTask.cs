@@ -484,13 +484,33 @@ public class LoadoutTask : BotTask, IBotTask
 
         protected override Action? OnAttachExpectedAck(IWoWEventHandler events)
         {
-            EventHandler<SpellChangedArgs> handler = (_, args) =>
+            EventHandler<SpellChangedArgs> learnedHandler = (_, args) =>
             {
                 if (args.SpellId == _spellId)
                     MarkAckFired();
             };
-            events.OnLearnedSpell += handler;
-            return () => events.OnLearnedSpell -= handler;
+            // The server replies via SMSG_MESSAGECHAT with "You already know this spell."
+            // (or a localized equivalent) when '.learn <id>' is dispatched for a spell
+            // that's already in the character's server-side spellbook. No
+            // SMSG_LEARNED_SPELL fires in that case (no state change), and FG's
+            // local KnownSpellIds may legitimately not reflect the spell yet
+            // (e.g. spellbook hydration race). Treat the system message as
+            // satisfaction so the step doesn't burn 20 retries chasing a no-op.
+            EventHandler<OnUiMessageArgs> systemHandler = (_, args) =>
+            {
+                if (args.Message != null
+                    && args.Message.IndexOf("already know", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    MarkAckFired();
+                }
+            };
+            events.OnLearnedSpell += learnedHandler;
+            events.OnSystemMessage += systemHandler;
+            return () =>
+            {
+                events.OnLearnedSpell -= learnedHandler;
+                events.OnSystemMessage -= systemHandler;
+            };
         }
     }
 

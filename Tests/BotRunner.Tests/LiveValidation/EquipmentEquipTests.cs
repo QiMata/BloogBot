@@ -150,6 +150,22 @@ public class EquipmentEquipTests
             _output.WriteLine(
                 $"  [{label}] Automated loadout never delivered Worn Mace within 90s. " +
                 $"LoadoutStatus='{diag?.LoadoutStatus}', failureReason='{diag?.LoadoutFailureReason}'.");
+            // Dump server-side system messages — '.learn'/'.additem'/'.setskill'
+            // failures (e.g. "You already know this spell.", "There is no such command",
+            // permission errors) flow back through the snapshot's RecentChatMessages
+            // and are the single most useful signal on a stuck loadout step.
+            if (diag?.RecentChatMessages?.Count > 0)
+            {
+                _output.WriteLine($"  [{label}] RecentChatMessages ({diag.RecentChatMessages.Count}):");
+                foreach (var msg in diag.RecentChatMessages.TakeLast(20))
+                    _output.WriteLine($"    {msg}");
+            }
+            if (diag?.RecentErrors?.Count > 0)
+            {
+                _output.WriteLine($"  [{label}] RecentErrors ({diag.RecentErrors.Count}):");
+                foreach (var err in diag.RecentErrors.TakeLast(20))
+                    _output.WriteLine($"    {err}");
+            }
             return false;
         }
 
