@@ -2157,8 +2157,16 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(MovementFlags.MOVEFLAG_NONE, player.MovementFlags);
     }
 
+    // Pins the binary-parity behaviour from docs/physics/state_teleport.md:
+    // WoW.exe gates MSG_MOVE_TELEPORT_ACK on its internal 0x468570 readiness
+    // function (HasEnteredWorld, _isInControl, queued updates drained,
+    // teleport target resolved). It does NOT additionally wait for a physics
+    // ground-snap. Holding the ACK on the snap is what produced the
+    // third-party-client double-fall animation; this test now asserts the
+    // ACK fires once the proven-readiness gates pass, regardless of
+    // _needsGroundSnap.
     [Fact]
-    public void TryFlushPendingTeleportAck_WaitsForUpdatesAndGroundSnap_ButNotSceneData()
+    public void TryFlushPendingTeleportAck_WaitsForUpdates_ButNotGroundSnapNorSceneData()
     {
         _fixture._woWClient.Reset();
         SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
@@ -2211,12 +2219,86 @@ public class ObjectManagerWorldSessionTests
                 },
                 new Dictionary<uint, object?>()));
 
+            // Pre-drain: queued update still pending => ACK must not fire yet.
             Assert.False(InvokePrivateMethod<bool>(objectManager, "TryFlushPendingTeleportAck"));
             Assert.Empty(sentPackets);
 
             UpdateProcessingHelper.DrainPendingUpdates();
-            Assert.False(InvokePrivateMethod<bool>(objectManager, "TryFlushPendingTeleportAck"));
-            Assert.Empty(sentPackets);
+
+            // Post-drain WITHOUT touching _needsGroundSnap: per binary parity, the
+            // ACK should now fire even though the physics ground-snap is still active.
+            var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
+            Assert.True(controller.NeedsGroundSnap);
+
+            Assert.True(InvokePrivateMethod<bool>(objectManager, "TryFlushPendingTeleportAck"));
+            Assert.Single(sentPackets);
+            Assert.Equal(Opcode.MSG_MOVE_TELEPORT_ACK, sentPackets[0].opcode);
+            Assert.False(GetPrivateFieldValue<bool>(objectManager, "_isBeingTeleported"));
+        }
+        finally
+        {
+            SceneDataClient.TestEnsureSceneDataAroundOverride = originalSceneOverride;
+        }
+    }
+
+    // Companion test: even when _needsGroundSnap is explicitly cleared, the
+    // ACK still fires (sanity check that the gate removal didn't introduce
+    // a different regression in the snap-cleared path).
+    [Fact]
+    public void TryFlushPendingTeleportAck_FiresWhenGroundSnapCleared()
+    {
+        _fixture._woWClient.Reset();
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+
+        var originalSceneOverride = SceneDataClient.TestEnsureSceneDataAroundOverride;
+        var sceneReady = false;
+        SceneDataClient.TestEnsureSceneDataAroundOverride = (_, _, _) => sceneReady;
+
+        try
+        {
+            var objectManager = WoWSharpObjectManager.Instance;
+            var sceneDataClient = new SceneDataClient(NullLogger<SceneDataClient>.Instance);
+            objectManager.Initialize(
+                _fixture._woWClient.Object,
+                _fixture._pathfindingClient.Object,
+                NullLogger<WoWSharpObjectManager>.Instance,
+                sceneDataClient: sceneDataClient,
+                useLocalPhysics: true);
+
+            const ulong playerGuid = 0x12E1;
+            objectManager.EnterWorld(playerGuid);
+            InvokePrivateMethod(objectManager, "ClearPendingWorldEntry");
+
+            SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+            SetPrivateField(objectManager, "_isInControl", true);
+            SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+            var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+            player.MapId = 389;
+            player.Position = new Position(3f, -11f, -18f);
+            player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+            objectManager.NotifyTeleportIncoming(-18f);
+            player.Position = new Position(3f, -11f, -18f);
+
+            InvokePrivateMethod(objectManager, "EventEmitter_OnTeleport", null, new RequiresAcknowledgementArgs(playerGuid, 43));
+
+            objectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(
+                playerGuid,
+                WoWSharpObjectManager.ObjectUpdateOperation.Update,
+                WoWObjectType.Player,
+                new MovementInfoUpdate
+                {
+                    Guid = playerGuid,
+                    X = 3f,
+                    Y = -11f,
+                    Z = -18f,
+                    Facing = 1.5f,
+                    MovementFlags = MovementFlags.MOVEFLAG_NONE,
+                },
+                new Dictionary<uint, object?>()));
+
+            UpdateProcessingHelper.DrainPendingUpdates();
 
             var controller = GetPrivateField<MovementController>(objectManager, "_movementController");
             SetPrivateField(controller, "_needsGroundSnap", false);

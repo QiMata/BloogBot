@@ -47,9 +47,13 @@ public sealed class StateMachineParityTests
         Assert.Single(trace.Events.Where(e => e.Kind == "outbound" && e.Opcode == Opcode.MSG_MOVE_WORLDPORT_ACK));
     }
 
+    // Pins binary-parity ACK gating per docs/physics/state_teleport.md.
+    // WoW.exe gates MSG_MOVE_TELEPORT_ACK on its 0x468570 readiness function,
+    // NOT on a physics ground-snap. Once the player has client control and the
+    // teleport target is resolved, the ACK fires regardless of _needsGroundSnap.
     [Fact]
     [Trait("Category", "StateMachineParity")]
-    public void MoveTeleport_AckWaitsForGroundSnap_ButNotSceneData()
+    public void MoveTeleport_AckFiresAfterControlGrant_RegardlessOfGroundSnapOrSceneData()
     {
         var originalSceneOverride = SceneDataClient.TestEnsureSceneDataAroundOverride;
         SceneDataClient.TestEnsureSceneDataAroundOverride = (_, _, _) => false;
@@ -72,8 +76,9 @@ public sealed class StateMachineParityTests
                     clientTimeMs: 1600u));
 
             trace.Dispatch(Opcode.SMSG_CLIENT_CONTROL_UPDATE, BuildClientControlPacket(playerGuid, canControl: true));
-            Assert.False(trace.FlushTeleportAck());
-            trace.MarkTeleportGroundSnapResolved();
+
+            // Binary parity: ACK fires now even though scene data is unresolved
+            // and the physics ground-snap is still pending.
             Assert.True(trace.FlushTeleportAck());
             Assert.Single(trace.Events.Where(e => e.Kind == "outbound" && e.Opcode == Opcode.MSG_MOVE_TELEPORT_ACK));
         }

@@ -731,13 +731,17 @@ namespace WoWSharpClient
                 return false;
             }
 
+            // WHY: WoW.exe gates the outbound MSG_MOVE_TELEPORT_ACK on its internal
+            // 0x468570 readiness function, NOT on a physics ground snap — see
+            // docs/physics/state_teleport.md. Holding the ACK until the snap finishes
+            // strands the server in "teleport pending" for 30–60 frames, producing the
+            // observed third-party-client double-fall animation.
             if (player.Guid != pendingAck.Guid
                 || !HasEnteredWorld
                 || HasPendingWorldEntry
                 || !_isInControl
                 || PendingUpdateCount > 0
                 || _updateSemaphore.CurrentCount == 0
-                || _movementController.NeedsGroundSnap
                 || !IsTeleportTargetResolved(player, pendingAck))
             {
                 return false;

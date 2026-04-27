@@ -201,7 +201,8 @@ public sealed class PacketFlowParityTests
         Assert.Empty(trace.Events.Where(e => e.Kind == "outbound"));
 
         var teleportEvent = Assert.Single(trace.Events.Where(e => e.Kind == "event" && e.Label == "OnTeleport"));
-        trace.MarkTeleportGroundSnapResolved();
+        // Binary parity (docs/physics/state_teleport.md): no need to wait for the
+        // physics ground-snap; the ACK fires once the readiness gates pass.
         Assert.True(trace.FlushTeleportAck());
 
         var outbound = Assert.Single(Outbound(trace, Opcode.MSG_MOVE_TELEPORT_ACK));
