@@ -30,6 +30,7 @@ namespace WoWSharpClient.Tests.Parity;
 public sealed class PostTeleportPacketWindowParityTests
 {
     private const string BaselineFileName = "foreground_durotar_vertical_drop_baseline.json";
+    private const string BackgroundBaselineFileName = "background_durotar_vertical_drop_baseline.json";
     private const ulong CapturedPlayerGuid = 366ul; // matches captured ACK fixture
 
     [Fact]
@@ -249,9 +250,89 @@ public sealed class PostTeleportPacketWindowParityTests
             bgOpcodeSet);
     }
 
-    private static PostTeleportWindowFixture LoadBaseline()
+    [Fact]
+    [Trait("Category", "PacketFlowParity")]
+    public void BackgroundBaseline_ReportsLiveCapturedTeleportPacketSequence()
     {
-        var path = ResolveBaselinePath();
+        // Stream 2D oracle: the BG-side counterpart to ForegroundBaseline_*.
+        // Captured by BackgroundPostTeleportWindowRecorder during a live
+        // BG bot vertical-drop teleport on Durotar (Z=38 → Z=48). Pins the
+        // BG-today live shape so any future BG drift fails this test.
+        //
+        // NOTE: live BG and live FG diverge at the live-capture level — the
+        // FG fixture was captured by hooking WoW.exe NetClient::Send, the BG
+        // fixture by subscribing to WoWClient.PacketSent. Live BG emits
+        // CMSG_SET_ACTIVE_MOVER and a delayed-but-cadence-gated heartbeat
+        // sequence that the synthetic
+        // Background_AfterTeleportTrigger_OutboundStream_StructurallyMatchesForegroundBaseline
+        // does not exercise (its physics override forces a continuous fall).
+        // This is a known FG/BG live drift to investigate as Stream 2E in a
+        // follow-up; for now we pin BG-today as the BG regression oracle.
+        var fixture = LoadBackgroundBaseline();
+
+        Assert.Equal(1, fixture.SchemaVersion);
+        Assert.Equal("post_teleport_packet_window", fixture.CaptureScenario);
+        Assert.Contains("BackgroundBotRunner", fixture.Source);
+
+        // Trigger: inbound MSG_MOVE_TELEPORT_ACK at deltaMs=0 with the
+        // server-side payload (35 bytes incl. SMSG opcode prefix).
+        Assert.NotNull(fixture.Trigger);
+        Assert.Equal("Recv", fixture.Trigger!.Direction);
+        Assert.Equal("MSG_MOVE_TELEPORT_ACK", fixture.Trigger.OpcodeName);
+        Assert.Equal(0, fixture.Trigger.DeltaMs);
+
+        var packets = fixture.Packets;
+        Assert.NotNull(packets);
+        Assert.True(packets!.Count > 0, "Captured BG window must contain at least the trigger.");
+        Assert.Equal("MSG_MOVE_TELEPORT_ACK", packets[0].OpcodeName);
+        Assert.Equal("Recv", packets[0].Direction);
+
+        // BG-live outbound stream we observe today:
+        //   1. CMSG_SET_ACTIVE_MOVER (~13ms after trigger) — sent by BG on
+        //      every teleport to re-affirm active mover, even same-map.
+        //      Not present in the FG fixture; FG's outbound stream is just
+        //      [TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND].
+        //   2. MSG_MOVE_HEARTBEAT (~60ms after trigger) — the post-teleport
+        //      first-frame heartbeat. The Stream 2C cadence-gate keeps
+        //      synthetic tests at zero pre-ACK heartbeats; live BG still
+        //      emits one because the physics-tick HB and TryFlushPendingTeleportAck
+        //      land within the same poll cycle.
+        //   3. MSG_MOVE_TELEPORT_ACK (~60ms after trigger) — the outbound
+        //      ACK matches FG structurally (16 bytes: guid+counter+clientTimeMs).
+        //   No FALL_LAND in the 2.5s window — live BG NativeLocalPhysics +
+        //   server-pushed SMSG_MONSTER_MOVE updates absorb the small
+        //   10-yard drop without going through FALLINGFAR -> grounded.
+        var bgOutbound = packets.Where(p => p.Direction == "Send").ToArray();
+        Assert.True(bgOutbound.Length >= 3,
+            $"BG live baseline must record >=3 outbound packets in the snap window; got {bgOutbound.Length}.");
+
+        var setActiveMover = bgOutbound.FirstOrDefault(p => p.OpcodeName == "CMSG_SET_ACTIVE_MOVER");
+        Assert.NotNull(setActiveMover);
+        Assert.True(setActiveMover!.DeltaMs <= 100,
+            $"BG CMSG_SET_ACTIVE_MOVER must fire within 100ms of the inbound trigger; got {setActiveMover.DeltaMs}ms.");
+        Assert.Equal(8, setActiveMover.Size);
+
+        var outboundAck = bgOutbound.FirstOrDefault(p => p.OpcodeName == "MSG_MOVE_TELEPORT_ACK");
+        Assert.NotNull(outboundAck);
+        Assert.Equal(16, outboundAck!.Size);
+
+        var firstHeartbeat = bgOutbound.FirstOrDefault(p => p.OpcodeName == "MSG_MOVE_HEARTBEAT");
+        Assert.NotNull(firstHeartbeat);
+        Assert.Equal(28, firstHeartbeat!.Size);
+
+        // CMSG_SET_ACTIVE_MOVER fires before the outbound TELEPORT_ACK; the
+        // ack and heartbeat then land essentially together.
+        Assert.True(setActiveMover.DeltaMs < outboundAck.DeltaMs,
+            $"CMSG_SET_ACTIVE_MOVER (deltaMs={setActiveMover.DeltaMs}) must precede outbound TELEPORT_ACK (deltaMs={outboundAck.DeltaMs}).");
+    }
+
+    private static PostTeleportWindowFixture LoadBaseline() => LoadFixture(BaselineFileName);
+
+    private static PostTeleportWindowFixture LoadBackgroundBaseline() => LoadFixture(BackgroundBaselineFileName);
+
+    private static PostTeleportWindowFixture LoadFixture(string fileName)
+    {
+        var path = ResolveFixturePath(fileName);
         var json = File.ReadAllText(path);
         var fixture = JsonSerializer.Deserialize<PostTeleportWindowFixture>(
             json,
@@ -260,7 +341,7 @@ public sealed class PostTeleportPacketWindowParityTests
         return fixture!;
     }
 
-    private static string ResolveBaselinePath()
+    private static string ResolveFixturePath(string fileName)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
@@ -271,7 +352,7 @@ public sealed class PostTeleportPacketWindowParityTests
                 "WoWSharpClient.Tests",
                 "Fixtures",
                 "post_teleport_packet_window",
-                BaselineFileName);
+                fileName);
             if (File.Exists(candidate))
                 return candidate;
 
@@ -279,7 +360,7 @@ public sealed class PostTeleportPacketWindowParityTests
         }
 
         throw new FileNotFoundException(
-            $"Could not resolve {BaselineFileName} starting from {AppContext.BaseDirectory}.");
+            $"Could not resolve {fileName} starting from {AppContext.BaseDirectory}.");
     }
 
     private static byte[] HexToBytes(string hex)

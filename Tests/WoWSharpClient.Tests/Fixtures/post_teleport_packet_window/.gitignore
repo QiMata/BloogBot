@@ -1,5 +1,7 @@
-# Raw timestamped captures from ForegroundPostTeleportWindowRecorder. Each test
-# run that sets WWOW_CAPTURE_POST_TELEPORT_WINDOW=1 emits one of these per
-# teleport observed; only the curated *_baseline.json files belong in source
-# control.
+# Raw timestamped captures from ForegroundPostTeleportWindowRecorder /
+# BackgroundPostTeleportWindowRecorder. Each test run that sets
+# WWOW_CAPTURE_POST_TELEPORT_WINDOW=1 or WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW=1
+# emits one of these per teleport observed; only the curated *_baseline.json
+# files belong in source control.
 foreground_20*.json
+background_20*.json
