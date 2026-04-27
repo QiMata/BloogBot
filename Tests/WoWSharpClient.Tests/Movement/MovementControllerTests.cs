@@ -804,7 +804,12 @@ namespace WoWSharpClient.Tests.Movement
             _controller.Update(0.05f, 1050);
 
             Assert.Single(_sentPackets);
-            Assert.Equal(Opcode.MSG_MOVE_STOP, _sentPackets[0].opcode);
+            // Per FG packet capture
+            // (Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/foreground_durotar_vertical_drop_baseline.json)
+            // a FALLINGFAR -> grounded transition emits MSG_MOVE_FALL_LAND, even when
+            // the directional intent is also cleared in the same frame. Landing wins
+            // over stop because it is the more specific event (the falling state ended).
+            Assert.Equal(Opcode.MSG_MOVE_FALL_LAND, _sentPackets[0].opcode);
             Assert.Equal(MovementFlags.MOVEFLAG_NONE, _player.MovementFlags);
         }
 

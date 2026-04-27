@@ -1200,6 +1200,17 @@ namespace WoWSharpClient.Movement
         {
             bool isAirborne = (current & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
 
+            // Landed (FALLINGFAR/JUMPING -> grounded). Must come BEFORE the MOVE_STOP
+            // rule, because previous=FALLINGFAR with current=NONE satisfies both — the
+            // FG fixture
+            // (Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/foreground_durotar_vertical_drop_baseline.json)
+            // proves WoW.exe emits MSG_MOVE_FALL_LAND for that transition, not MSG_MOVE_STOP.
+            if (!current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
+                return Opcode.MSG_MOVE_FALL_LAND;
+            if (!current.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR) && previous.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR)
+                && !current.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
+                return Opcode.MSG_MOVE_FALL_LAND;
+
             // Stopped moving entirely
             if (current == MovementFlags.MOVEFLAG_NONE && previous != MovementFlags.MOVEFLAG_NONE)
                 return Opcode.MSG_MOVE_STOP;
@@ -1207,13 +1218,6 @@ namespace WoWSharpClient.Movement
             // Started jumping
             if (current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && !previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
                 return Opcode.MSG_MOVE_JUMP;
-
-            // Landed (FALLINGFAR→grounded also counts as landing)
-            if (!current.HasFlag(MovementFlags.MOVEFLAG_JUMPING) && previous.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
-                return Opcode.MSG_MOVE_FALL_LAND;
-            if (!current.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR) && previous.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR)
-                && !current.HasFlag(MovementFlags.MOVEFLAG_JUMPING))
-                return Opcode.MSG_MOVE_FALL_LAND;
 
             // Started/stopped swimming
             if (current.HasFlag(MovementFlags.MOVEFLAG_SWIMMING) && !previous.HasFlag(MovementFlags.MOVEFLAG_SWIMMING))
