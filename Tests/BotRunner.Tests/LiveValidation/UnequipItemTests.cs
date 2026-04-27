@@ -84,6 +84,111 @@ public class UnequipItemTests
         }
     }
 
+    /// <summary>
+    /// Phase E broader migration: same Automated-mode shape as
+    /// EquipmentEquipTests.EquipItem_AutomatedMode_LoadoutAppliesAndEquips.
+    /// Loads Equipment.Automated.config.json; AutomatedModeHandler dispatches
+    /// APPLY_LOADOUT at world entry; the loadout's Worn Mace ends up in bags
+    /// (or already equipped if a prior Automated test in the same session
+    /// equipped it). The test body equips when needed, then asserts the
+    /// UnequipItem dispatch moves the mainhand item back to bags.
+    ///
+    /// BG-only — same FG LoadoutTask gap as the EquipmentEquipTests Automated
+    /// pilot. Legacy <see cref="UnequipItem_MainhandWeapon_MovesToBags"/>
+    /// covers FG/BG parity via Shodan-staging.
+    /// </summary>
+    [SkippableFact]
+    public async Task UnequipItem_AutomatedMode_LoadoutAppliesAndUnequips()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Equipment.Automated.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+
+        var targets = _bot.ResolveBotRunnerActionTargets(includeForegroundIfActionable: false);
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no item action dispatch.");
+        _output.WriteLine(
+            "[ACTION-PLAN] FG: skipped (Automated-mode FG LoadoutTask gap — covered by legacy " +
+            "UnequipItem_MainhandWeapon_MovesToBags until FG parity lands).");
+        foreach (var target in targets)
+            _output.WriteLine(
+                $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
+                $"Automated mode applies loadout, equip-if-needed, then dispatch UnequipItem({MainhandEquipSlot}).");
+
+        _output.WriteLine("[PARITY] Running Automated-mode unequip scenario.");
+
+        var results = await Task.WhenAll(targets.Select(async target => (
+            Target: target,
+            Passed: await RunAutomatedUnequipScenario(target.AccountName, target.RoleLabel))));
+
+        foreach (var result in results)
+        {
+            Assert.True(
+                result.Passed,
+                $"{result.Target.RoleLabel} bot ({result.Target.AccountName}/{result.Target.CharacterName}): " +
+                "Mainhand should be empty after UnequipItem.");
+        }
+    }
+
+    private async Task<bool> RunAutomatedUnequipScenario(string account, string label)
+    {
+        // AutomatedModeHandler.OnWorldEntryAsync dispatches APPLY_LOADOUT.
+        // The loadout puts a Worn Mace in bags (first run) OR the previous
+        // EquipmentEquip Automated test in the same session has already
+        // equipped it (re-run). Either way the bag-or-mainhand check is the
+        // same signal: the loadout has landed.
+        var loadoutLanded = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snap => snap.LoadoutStatus == LoadoutStatus.LoadoutReady
+                || snap.Player?.BagContents?.Values.Any(itemId => itemId == WornMace) == true
+                || GetMainhandGuid(snap) != 0,
+            TimeSpan.FromSeconds(90),
+            pollIntervalMs: 500,
+            progressLabel: $"automated-loadout {account}");
+
+        if (!loadoutLanded)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var diag = await _bot.GetSnapshotAsync(account);
+            _output.WriteLine(
+                $"  [{label}] Automated loadout never delivered Worn Mace within 90s. " +
+                $"LoadoutStatus='{diag?.LoadoutStatus}', failureReason='{diag?.LoadoutFailureReason}'.");
+            return false;
+        }
+
+        await _bot.RefreshSnapshotsAsync();
+        var snapAfterLoadout = await _bot.GetSnapshotAsync(account);
+        var mainhandAfterLoadout = GetMainhandGuid(snapAfterLoadout);
+
+        if (mainhandAfterLoadout == 0)
+        {
+            // Mace is in bags (fresh session) — equip it as the precondition.
+            _output.WriteLine($"  [{label}] Mainhand empty post-loadout; dispatching EquipItem({WornMace}) precondition.");
+            var equipResult = await _bot.SendActionAsync(account, new ActionMessage
+            {
+                ActionType = ActionType.EquipItem,
+                Parameters = { new RequestParameter { IntParam = (int)WornMace } }
+            });
+            Assert.Equal(ResponseResult.Success, equipResult);
+
+            if (!await WaitForMainhandEquippedAsync(account, TimeSpan.FromSeconds(5)))
+            {
+                _output.WriteLine($"  [{label}] Mainhand still empty after EquipItem precondition; aborting.");
+                return false;
+            }
+        }
+        else
+        {
+            _output.WriteLine($"  [{label}] Mainhand already equipped (0x{mainhandAfterLoadout:X}) — skipping EquipItem precondition.");
+        }
+
+        return await DispatchUnequipAndAssertAsync(account, label);
+    }
+
     private async Task<bool> RunUnequipScenario(string account, string label)
     {
         // Shodan-directed staging: one call replaces the previous mix of
@@ -118,6 +223,11 @@ public class UnequipItemTests
             return false;
         }
 
+        return await DispatchUnequipAndAssertAsync(account, label);
+    }
+
+    private async Task<bool> DispatchUnequipAndAssertAsync(string account, string label)
+    {
         await _bot.RefreshSnapshotsAsync();
         var snapBefore = await _bot.GetSnapshotAsync(account);
         var maceCountBefore = CountBagItem(snapBefore, WornMace);
