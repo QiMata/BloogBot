@@ -259,15 +259,26 @@ public sealed class PostTeleportPacketWindowParityTests
         // BG bot vertical-drop teleport on Durotar (Z=38 → Z=48). Pins the
         // BG-today live shape so any future BG drift fails this test.
         //
-        // NOTE: live BG and live FG diverge at the live-capture level — the
-        // FG fixture was captured by hooking WoW.exe NetClient::Send, the BG
-        // fixture by subscribing to WoWClient.PacketSent. Live BG emits
-        // CMSG_SET_ACTIVE_MOVER and a delayed-but-cadence-gated heartbeat
-        // sequence that the synthetic
-        // Background_AfterTeleportTrigger_OutboundStream_StructurallyMatchesForegroundBaseline
-        // does not exercise (its physics override forces a continuous fall).
-        // This is a known FG/BG live drift to investigate as Stream 2E in a
-        // follow-up; for now we pin BG-today as the BG regression oracle.
+        // Stream 2E.1 closed: the spurious CMSG_SET_ACTIVE_MOVER that the
+        // initial Stream 2D capture pinned was a side-effect of
+        // RestoreLocalPlayerControlFromHydratedUpdate firing on every
+        // teleport (the early-return condition gated on `!_isBeingTeleported`).
+        // After the fix at WoWSharpObjectManager.Network.cs:758, the early
+        // return triggers on `_isInControl` alone — same-map teleport leaves
+        // control intact and skips the spurious SET_ACTIVE_MOVER. The
+        // recapture (this baseline) confirms BG's outbound stream now begins
+        // with the cadence-gated heartbeat + outbound TELEPORT_ACK, in line
+        // with FG's [TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND] shape.
+        //
+        // KNOWN remaining FG/BG live divergence (Stream 2E.2/2E.3 in
+        // follow-up): live BG still does not emit MSG_MOVE_FALL_LAND in
+        // the 2.5s window for a 10-yard drop. Server-pushed SMSG_MONSTER_MOVE
+        // updates and NativeLocalPhysics ground-snap absorb the small drop
+        // without going through FALLINGFAR -> grounded. Higher-Z (e.g.
+        // Z+100) capture is needed to determine whether BG ever emits
+        // FALL_LAND live, or whether the synthetic parity test (which
+        // forces a 38-frame free-fall) is testing a code path the live
+        // BG never exercises.
         var fixture = LoadBackgroundBaseline();
 
         Assert.Equal(1, fixture.SchemaVersion);
@@ -287,30 +298,29 @@ public sealed class PostTeleportPacketWindowParityTests
         Assert.Equal("MSG_MOVE_TELEPORT_ACK", packets[0].OpcodeName);
         Assert.Equal("Recv", packets[0].Direction);
 
-        // BG-live outbound stream we observe today:
-        //   1. CMSG_SET_ACTIVE_MOVER (~13ms after trigger) — sent by BG on
-        //      every teleport to re-affirm active mover, even same-map.
-        //      Not present in the FG fixture; FG's outbound stream is just
-        //      [TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND].
-        //   2. MSG_MOVE_HEARTBEAT (~60ms after trigger) — the post-teleport
+        // BG-live outbound stream we observe today (post-Stream-2E.1):
+        //   1. MSG_MOVE_HEARTBEAT (~60ms after trigger) — the post-teleport
         //      first-frame heartbeat. The Stream 2C cadence-gate keeps
         //      synthetic tests at zero pre-ACK heartbeats; live BG still
         //      emits one because the physics-tick HB and TryFlushPendingTeleportAck
         //      land within the same poll cycle.
-        //   3. MSG_MOVE_TELEPORT_ACK (~60ms after trigger) — the outbound
+        //   2. MSG_MOVE_TELEPORT_ACK (~60ms after trigger) — the outbound
         //      ACK matches FG structurally (16 bytes: guid+counter+clientTimeMs).
-        //   No FALL_LAND in the 2.5s window — live BG NativeLocalPhysics +
-        //   server-pushed SMSG_MONSTER_MOVE updates absorb the small
-        //   10-yard drop without going through FALLINGFAR -> grounded.
+        //   No FALL_LAND in the 2.5s window — see comment block above for
+        //   the open Stream 2E.2/2E.3 follow-up.
+        //
+        // Regression guard: explicitly assert NO CMSG_SET_ACTIVE_MOVER in
+        // the outbound stream. The Stream 2E.1 fix removed the spurious
+        // emission; if a future change re-introduces it (e.g., re-adding
+        // `!_isBeingTeleported` to the early-return condition), this test
+        // fails loudly.
         var bgOutbound = packets.Where(p => p.Direction == "Send").ToArray();
-        Assert.True(bgOutbound.Length >= 3,
-            $"BG live baseline must record >=3 outbound packets in the snap window; got {bgOutbound.Length}.");
+        Assert.True(bgOutbound.Length >= 2,
+            $"BG live baseline must record >=2 outbound packets in the snap window; got {bgOutbound.Length}.");
 
-        var setActiveMover = bgOutbound.FirstOrDefault(p => p.OpcodeName == "CMSG_SET_ACTIVE_MOVER");
-        Assert.NotNull(setActiveMover);
-        Assert.True(setActiveMover!.DeltaMs <= 100,
-            $"BG CMSG_SET_ACTIVE_MOVER must fire within 100ms of the inbound trigger; got {setActiveMover.DeltaMs}ms.");
-        Assert.Equal(8, setActiveMover.Size);
+        Assert.DoesNotContain(
+            bgOutbound,
+            p => p.OpcodeName == "CMSG_SET_ACTIVE_MOVER");
 
         var outboundAck = bgOutbound.FirstOrDefault(p => p.OpcodeName == "MSG_MOVE_TELEPORT_ACK");
         Assert.NotNull(outboundAck);
@@ -320,10 +330,12 @@ public sealed class PostTeleportPacketWindowParityTests
         Assert.NotNull(firstHeartbeat);
         Assert.Equal(28, firstHeartbeat!.Size);
 
-        // CMSG_SET_ACTIVE_MOVER fires before the outbound TELEPORT_ACK; the
-        // ack and heartbeat then land essentially together.
-        Assert.True(setActiveMover.DeltaMs < outboundAck.DeltaMs,
-            $"CMSG_SET_ACTIVE_MOVER (deltaMs={setActiveMover.DeltaMs}) must precede outbound TELEPORT_ACK (deltaMs={outboundAck.DeltaMs}).");
+        // The first outbound packet must fire within ~150ms of the inbound
+        // trigger (BG's same-poll-cycle TryFlushPendingTeleportAck + first
+        // physics-tick heartbeat).
+        var firstOutbound = bgOutbound[0];
+        Assert.True(firstOutbound.DeltaMs <= 150,
+            $"BG first outbound packet must fire within 150ms of trigger; got {firstOutbound.DeltaMs}ms.");
     }
 
     private static PostTeleportWindowFixture LoadBaseline() => LoadFixture(BaselineFileName);
