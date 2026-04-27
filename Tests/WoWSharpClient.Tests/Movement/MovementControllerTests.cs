@@ -1390,7 +1390,15 @@ namespace WoWSharpClient.Tests.Movement
             Assert.Equal(122.39f, _player.Position.Z, 2);
             Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
             Assert.True(_controller.NeedsGroundSnap);
-            Assert.Empty(_sentPackets);
+
+            // Per FG packet capture
+            // (Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/foreground_durotar_vertical_drop_baseline.json)
+            // WoW.exe broadcasts MSG_MOVE_HEARTBEAT during the post-teleport fall with
+            // FALLINGFAR/JUMPING flags, so the BG MovementController must not suppress
+            // packets while _needsGroundSnap is true. DetermineOpcode returns
+            // MSG_MOVE_HEARTBEAT for the airborne flag transition.
+            Assert.Single(_sentPackets);
+            Assert.Equal(Opcode.MSG_MOVE_HEARTBEAT, _sentPackets[0].opcode);
         }
 
         [Fact]
