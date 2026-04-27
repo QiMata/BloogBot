@@ -31,6 +31,7 @@ public sealed class PostTeleportPacketWindowParityTests
 {
     private const string BaselineFileName = "foreground_durotar_vertical_drop_baseline.json";
     private const string BackgroundBaselineFileName = "background_durotar_vertical_drop_baseline.json";
+    private const string BackgroundHighDropBaselineFileName = "background_durotar_high_drop_baseline.json";
     private const ulong CapturedPlayerGuid = 366ul; // matches captured ACK fixture
 
     [Fact]
@@ -338,9 +339,73 @@ public sealed class PostTeleportPacketWindowParityTests
             $"BG first outbound packet must fire within 150ms of trigger; got {firstOutbound.DeltaMs}ms.");
     }
 
+    [Fact]
+    [Trait("Category", "PacketFlowParity")]
+    public void BackgroundHighDropBaseline_DoesNotEmitFallLand_PinsBgPhysicsEmissionGap()
+    {
+        // Stream 2E.2 oracle: a 100-yard vertical-drop teleport (Z=38 -> Z=138)
+        // captured live from BG. Even at 10x the standard vertical-drop test
+        // height, BG still does NOT emit MSG_MOVE_FALL_LAND in the 2.5s
+        // window. Outbound stream: [MSG_MOVE_HEARTBEAT, MSG_MOVE_TELEPORT_ACK]
+        // — the same shape as the 10y baseline. Server-pushed
+        // SMSG_MONSTER_MOVE updates absorb the entire fall.
+        //
+        // This pins a CURRENT-BUG state: WoW.exe (FG) emits MSG_MOVE_FALL_LAND
+        // on every fall regardless of server-side intervention. BG's
+        // NativeLocalPhysics + MovementController.DetermineOpcode path is
+        // either:
+        //   - Never going through the FALLINGFAR -> grounded transition
+        //     locally (server position updates short-circuit the local fall).
+        //   - Going through the transition but suppressing the FALL_LAND
+        //     packet because some gate (e.g. _isBeingTeleported, ground-snap)
+        //     is still active when the transition fires.
+        //
+        // When Stream 2E.3 fixes the gap, this test will FAIL because
+        // FALL_LAND will appear in the outbound stream. At that point,
+        // update the assertion to require the FALL_LAND (and update this
+        // comment block to reflect the resolved state).
+        var fixture = LoadBackgroundHighDropBaseline();
+
+        Assert.Equal(1, fixture.SchemaVersion);
+        Assert.Equal("post_teleport_packet_window", fixture.CaptureScenario);
+        Assert.Contains("BackgroundBotRunner", fixture.Source);
+
+        Assert.NotNull(fixture.Trigger);
+        Assert.Equal("Recv", fixture.Trigger!.Direction);
+        Assert.Equal("MSG_MOVE_TELEPORT_ACK", fixture.Trigger.OpcodeName);
+        Assert.Equal(0, fixture.Trigger.DeltaMs);
+
+        var packets = fixture.Packets;
+        Assert.NotNull(packets);
+
+        var bgOutbound = packets!.Where(p => p.Direction == "Send").ToArray();
+        Assert.True(bgOutbound.Length >= 2,
+            $"BG high-drop baseline must record >=2 outbound packets; got {bgOutbound.Length}.");
+
+        // Stream 2E.1 regression guard: no spurious SET_ACTIVE_MOVER even
+        // for high-drop teleports.
+        Assert.DoesNotContain(
+            bgOutbound,
+            p => p.OpcodeName == "CMSG_SET_ACTIVE_MOVER");
+
+        // The Stream 2E.2 finding: NO FALL_LAND in the 2.5s window even
+        // for a 100y drop. Pin this so any future change that emits
+        // FALL_LAND on a long drop trips the assertion and forces the
+        // test author to update Stream 2E.3 docs.
+        Assert.DoesNotContain(
+            bgOutbound,
+            p => p.OpcodeName == "MSG_MOVE_FALL_LAND");
+
+        var outboundAck = bgOutbound.FirstOrDefault(p => p.OpcodeName == "MSG_MOVE_TELEPORT_ACK");
+        Assert.NotNull(outboundAck);
+        Assert.Equal(16, outboundAck!.Size);
+    }
+
     private static PostTeleportWindowFixture LoadBaseline() => LoadFixture(BaselineFileName);
 
     private static PostTeleportWindowFixture LoadBackgroundBaseline() => LoadFixture(BackgroundBaselineFileName);
+
+    private static PostTeleportWindowFixture LoadBackgroundHighDropBaseline() => LoadFixture(BackgroundHighDropBaselineFileName);
 
     private static PostTeleportWindowFixture LoadFixture(string fileName)
     {
