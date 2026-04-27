@@ -765,17 +765,38 @@ namespace WoWSharpClient
             // sequence does not spam repeated CMSG_PLAYER_LOGIN packets while
             // we wait for SMSG_LOGIN_VERIFY_WORLD / object hydration.
             //
-            // Diagnostic: log every EnterWorld so the BG-bot Automated-mode flap
-            // (handoff v6/v7) can attribute resets to their callers. Player.MapId
-            // is the key signal — if it was non-zero before this call, we're
-            // resetting a hydrated player.
             var prevMapId = (Player as WoWLocalPlayer)?.MapId ?? 0u;
-            Log.Information(
-                "[WorldSession] EnterWorld(guid=0x{Guid:X}) called. prevHasEnteredWorld={Prev}, prevMapId={MapId}, pendingGuid=0x{Pending:X}",
+
+            // Defensive guard: BuildEnterWorldSequence (the bot's login-flow
+            // behavior tree) can fire while HasEnteredWorld=true if its gating
+            // is racy with the snapshot pipeline. Re-entering world for the
+            // SAME character resets PlayerGuid (which recreates Player → MapId
+            // and Position drop to 0) and re-arms the retry timer. The bot's
+            // snapshot then flaps to screen=CharacterSelect and the Automated-
+            // mode pilot test (handoff v6/v7) sees LoadoutTask pinned with
+            // playerWorldReady=false. Idempotent no-op when we're already in
+            // this session.
+            if (HasEnteredWorld
+                && _playerGuid.FullGuid == characterGuid
+                && characterGuid != 0
+                && prevMapId != 0)
+            {
+                Log.Warning(
+                    "[WorldSession] Suppressing redundant EnterWorld(guid=0x{Guid:X}) — already in world (mapId={MapId}). " +
+                    "Caller chain: {Caller}",
+                    characterGuid,
+                    prevMapId,
+                    GetShortStackTrace());
+                return;
+            }
+
+            Log.Warning(
+                "[WorldSession] EnterWorld(guid=0x{Guid:X}) called. prevHasEnteredWorld={Prev}, prevMapId={MapId}, pendingGuid=0x{Pending:X}; caller={Caller}",
                 characterGuid,
                 HasEnteredWorld,
                 prevMapId,
-                unchecked((ulong)Interlocked.Read(ref _pendingWorldEntryGuid)));
+                unchecked((ulong)Interlocked.Read(ref _pendingWorldEntryGuid)),
+                GetShortStackTrace());
 
             PlayerGuid = new HighGuid(characterGuid);
             HasEnteredWorld = true;
@@ -888,6 +909,18 @@ namespace WoWSharpClient
         {
             Interlocked.Exchange(ref _pendingWorldEntryGuid, 0);
             Interlocked.Increment(ref _pendingWorldEntryAttemptId);
+        }
+
+        private static string GetShortStackTrace()
+        {
+            var st = new System.Diagnostics.StackTrace(skipFrames: 2, fNeedFileInfo: false);
+            var frames = st.GetFrames();
+            return string.Join(" <- ",
+                frames.Take(6).Select(f =>
+                {
+                    var m = f.GetMethod();
+                    return m == null ? "?" : $"{m.DeclaringType?.Name}.{m.Name}";
+                }));
         }
 
 
