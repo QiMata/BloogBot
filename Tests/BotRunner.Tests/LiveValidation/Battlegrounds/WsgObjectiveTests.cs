@@ -138,8 +138,10 @@ public abstract class WsgObjectiveTestBase
         await _bot.ReprepareAsync();
         await BgTestHelper.WaitForBgEntryAsync(_bot, _output, WarsongGulchFixture.WsgMapId, WarsongGulchFixture.TotalBotCount, "WSG");
 
-        _output.WriteLine("[WSG:PrepWindow] waiting 95s for gates to open before scripted flag captures");
-        await Task.Delay(TimeSpan.FromSeconds(95));
+        // Phase B: poll for the "battle has begun" chat broadcast instead of
+        // blind-waiting 95s; fall back to the original wall-clock if the
+        // marker is missed.
+        await BgTestHelper.WaitForBattlegroundStartAsync(_bot, _output, "WSG", TimeSpan.FromSeconds(95));
         Assert.Equal(ResponseResult.Success, await _bot.SetRuntimeCoordinatorEnabledAsync(false));
         await _bot.QuiesceAccountsAsync(AllTrackedAccounts, "WSG:QuiesceAfterPrep");
     }

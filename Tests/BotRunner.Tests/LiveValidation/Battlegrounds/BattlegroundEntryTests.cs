@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Communication;
 using Xunit;
@@ -119,8 +120,9 @@ public class AlteracValleyTests
 
         // Vanilla AV keeps both teams in preparation caves before the gates open.
         // Dispatching long objective routes before that often burns movement tasks on cave gates.
-        _output.WriteLine("[AV:PrepWindow] waiting 130s for AV gates to open before objective dispatch");
-        await Task.Delay(TimeSpan.FromSeconds(130));
+        // Phase B: poll for the "battle has begun" chat broadcast instead of blind-waiting 130s;
+        // fall back to the original wall-clock if the marker is missed (queue mid-window etc).
+        await BgTestHelper.WaitForBattlegroundStartAsync(_bot, _output, "AV", TimeSpan.FromSeconds(130));
         Assert.Equal(ResponseResult.Success, await _bot.SetCoordinatorEnabledForObjectivePushAsync(false));
         await Task.Delay(TimeSpan.FromSeconds(2));
 
@@ -268,6 +270,67 @@ internal static class BgTestHelper
         }
 
         Assert.Fail($"[{bgName}:Enter] TIMEOUT — only hydrated={lastCount}/{expected}, raw={lastRawCount}");
+    }
+
+    /// <summary>
+    /// Phase B: replace blind prep-window sleeps with a chat-driven signal.
+    /// MaNGOS broadcasts "The battle for X has begun!" (or just "begun" /
+    /// "has begun") via CHAT_MSG_BG_SYSTEM_NEUTRAL when the cave/start gates
+    /// open. Polls all bot snapshots' RecentChatMessages for any line whose
+    /// text contains the marker, falling back to <paramref name="maxWait"/>
+    /// if the broadcast is missed. Saves up to (maxWait - actualOpen) per
+    /// run; on AV that's typically 0-30s but can be 60-90s if the queue
+    /// landed mid-window.
+    /// </summary>
+    /// <returns>True when a "begun" marker was observed; false on fallback timeout.</returns>
+    public static async Task<bool> WaitForBattlegroundStartAsync(
+        LiveBotFixture bot,
+        ITestOutputHelper output,
+        string bgName,
+        TimeSpan maxWait,
+        CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        var pollInterval = TimeSpan.FromSeconds(2);
+
+        // "begun" matches both "has begun" and "Battle for ... has begun".
+        // Lower-cased compare to be tolerant of any caps changes upstream.
+        const string Marker = "begun";
+
+        var lastProgressLog = TimeSpan.Zero;
+
+        while (sw.Elapsed < maxWait)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await bot.RefreshSnapshotsAsync();
+            var snapshots = await bot.QueryAllSnapshotsAsync();
+            var hit = snapshots
+                .SelectMany(snapshot => snapshot.RecentChatMessages
+                    .Select(message => (Account: snapshot.AccountName, Message: message)))
+                .FirstOrDefault(entry =>
+                    entry.Message != null
+                    && entry.Message.IndexOf(Marker, StringComparison.OrdinalIgnoreCase) >= 0);
+
+            if (hit.Message != null)
+            {
+                output.WriteLine(
+                    $"[{bgName}:PrepWindow] gates-open marker detected after {sw.Elapsed.TotalSeconds:F0}s " +
+                    $"({maxWait.TotalSeconds:F0}s budget). account={hit.Account} msg=\"{hit.Message}\"");
+                return true;
+            }
+
+            if (sw.Elapsed - lastProgressLog >= TimeSpan.FromSeconds(15))
+            {
+                output.WriteLine($"[{bgName}:PrepWindow] no gates-open marker yet at {sw.Elapsed.TotalSeconds:F0}s/{maxWait.TotalSeconds:F0}s");
+                lastProgressLog = sw.Elapsed;
+            }
+
+            await Task.Delay(pollInterval, cancellationToken);
+        }
+
+        output.WriteLine($"[{bgName}:PrepWindow] no gates-open marker within {maxWait.TotalSeconds:F0}s; falling back to coordinator dispatch.");
+        return false;
     }
 
     internal static int CountBotsOnMap(IReadOnlyList<WoWActivitySnapshot> snapshots, uint mapId)
