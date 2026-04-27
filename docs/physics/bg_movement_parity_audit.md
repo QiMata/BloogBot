@@ -160,6 +160,46 @@ and the recorded-trace replay harness).
    detected; the toggle family is now timing-pinned to the same
    standard as the speed and root families.
 
+6. **Post-teleport snap-window broadcast diverges (Stream 1).** Live FG
+   capture from a Durotar `(-460,-4760,38)` → `Z+10` vertical-drop
+   teleport (committed at
+   [`Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/foreground_durotar_vertical_drop_baseline.json`](../../Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/foreground_durotar_vertical_drop_baseline.json))
+   shows WoW.exe broadcasts during the post-teleport fall:
+
+   | Δms | Direction | Opcode | Notes |
+   |---|---|---|---|
+   | 0 | Recv | `MSG_MOVE_TELEPORT_ACK` (37 B) | server-pushed teleport notification |
+   | 6 | Send | `MSG_MOVE_TELEPORT_ACK` (20 B) | client ACK; matches `BuildMoveTeleportAckPayload` byte layout |
+   | 491 | Send | `MSG_MOVE_HEARTBEAT` (48 B) | flags `0x6000` = `MOVEFLAG_FALLINGFAR | MOVEFLAG_JUMPING` |
+   | 991 | Send | `MSG_MOVE_HEARTBEAT` (48 B) | same FALLING flags, ~500ms cadence |
+   | 1271 | Send | `MSG_MOVE_FALL_LAND` (32 B) | landing |
+
+   BG's current
+   [`MovementController.cs:379`](../../Exports/WoWSharpClient/Movement/MovementController.cs)
+   suppresses **all** outbound packets while `_needsGroundSnap` is set
+   (introduced commit `49915f62`). That suppression is more conservative
+   than the binary and is the second contributing piece to the
+   third-party-observer double-fall symptom: BG is silent for ~1.3s
+   after teleport while the binary is broadcasting heartbeats and
+   landing. Pinned by:
+
+   - `PostTeleportPacketWindowParityTests.ForegroundBaseline_ReportsExpectedTeleportPacketSequence`
+     — locks the FG fixture's expected shape so it can't drift unnoticed.
+   - `PostTeleportPacketWindowParityTests.Background_AfterTeleportTrigger_EmitsOutboundTeleportAckMatchingForegroundShape`
+     — confirms the immediate 16-byte client ACK is byte-equivalent.
+   - `PostTeleportPacketWindowParityTests.Background_AfterTeleportTrigger_OutboundStream_StructurallyMatchesForegroundBaseline`
+     — `[Skip]` until Stream 2B narrows the suppression; converts to
+     a passing assertion as the exit criterion.
+
+   The recording infrastructure (`ForegroundPostTeleportWindowRecorder`,
+   gated on `WWOW_CAPTURE_POST_TELEPORT_WINDOW=1`) is reusable for any
+   future teleport-related parity work — additional baselines (cross-map,
+   transport, knockback-induced) can be captured by re-running the
+   `Foreground_VerticalDropTeleport_*` test against different
+   coordinates and renaming the resulting `foreground_*` fixture.
+
+   **Status: divergence pinned, fix pending Stream 2B.**
+
 ## What's *not* in scope of this audit
 
 - **Inbound parsing (SMSG side)** — covered by handler-specific tests
