@@ -120,6 +120,55 @@ public sealed class PacketFlowParityTests
         Assert.Equal(EncodeRawClientPacket(Opcode.CMSG_FORCE_RUN_SPEED_CHANGE_ACK, expectedPayload), EncodeRawClientPacket(outbound.Opcode!.Value, outbound.Payload!));
     }
 
+    // Pins the queue-first deferred-ACK contract from
+    // docs/physics/smsg_force_speed_change_handler.md and packet_ack_timing.md
+    // Q2 across the FIVE remaining speed-change variants. WoW.exe's first-stage
+    // handler stages the change into a movement queue (slots 0x14-0x19) and
+    // does not call any send helper inline; the apply + ACK both happen in the
+    // later flush. The original ForceRunSpeedChange test only covers run speed;
+    // this extends parity coverage to walk/run-back/swim/swim-back/turn-rate.
+    [Theory]
+    [InlineData(Opcode.SMSG_FORCE_RUN_BACK_SPEED_CHANGE, Opcode.CMSG_FORCE_RUN_BACK_SPEED_CHANGE_ACK, "RunBack")]
+    [InlineData(Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE, Opcode.CMSG_FORCE_SWIM_SPEED_CHANGE_ACK, "Swim")]
+    [InlineData(Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE, Opcode.CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK, "SwimBack")]
+    [InlineData(Opcode.SMSG_FORCE_WALK_SPEED_CHANGE, Opcode.CMSG_FORCE_WALK_SPEED_CHANGE_ACK, "Walk")]
+    [InlineData(Opcode.SMSG_FORCE_TURN_RATE_CHANGE, Opcode.CMSG_FORCE_TURN_RATE_CHANGE_ACK, "TurnRate")]
+    [Trait("Category", "PacketFlowParity")]
+    public void ForceSpeedChangeFamily_QueuesDeferredAck_ThenFlushesWithUpdatedState(
+        Opcode inboundOpcode,
+        Opcode ackOpcode,
+        string speedField)
+    {
+        using var trace = new PacketFlowTraceFixture();
+        const ulong playerGuid = 0x210ul;
+        trace.SeedLocalPlayer(playerGuid, position: new Position(10f, 20f, 30f), facing: 0.5f);
+        var player = Assert.IsType<WoWLocalPlayer>(trace.ObjectManager.Player);
+
+        const float newSpeed = 8.75f;
+        trace.Dispatch(inboundOpcode, BuildGuidCounterSpeedPacket(playerGuid, counter: 13u, speed: newSpeed));
+
+        // Queue-first: no outbound packet emitted from the inbound leaf.
+        Assert.Empty(trace.Events.Where(e => e.Kind == "outbound"));
+        Assert.NotEqual(newSpeed, GetSpeedField(player, speedField));
+
+        Assert.Equal(1, trace.FlushDeferredMovementChanges(gameTimeMs: 5000u));
+
+        Assert.Equal(newSpeed, GetSpeedField(player, speedField), 3);
+        var outbound = Assert.Single(Outbound(trace, ackOpcode));
+        var expectedPayload = MovementPacketHandler.BuildForceSpeedChangeAck(player, 13u, 5000u, newSpeed);
+        Assert.Equal(EncodeRawClientPacket(ackOpcode, expectedPayload), EncodeRawClientPacket(outbound.Opcode!.Value, outbound.Payload!));
+    }
+
+    private static float GetSpeedField(WoWLocalPlayer player, string field) => field switch
+    {
+        "RunBack" => player.RunBackSpeed,
+        "Walk" => player.WalkSpeed,
+        "Swim" => player.SwimSpeed,
+        "SwimBack" => player.SwimBackSpeed,
+        "TurnRate" => player.TurnRate,
+        _ => throw new InvalidOperationException($"Unknown speed field {field}"),
+    };
+
     [Fact]
     [Trait("Category", "PacketFlowParity")]
     public void ForceMoveRoot_QueuesDeferredAck_ThenFlushesWithUpdatedState()
