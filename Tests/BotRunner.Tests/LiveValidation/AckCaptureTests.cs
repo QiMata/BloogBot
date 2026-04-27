@@ -191,6 +191,109 @@ public sealed class AckCaptureTests
 
     [SkippableFact]
     [Trait("Category", "AckCaptureLive")]
+    public async Task Background_VerticalDropTeleport_CapturesPostTeleportWindow()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW"),
+                "1",
+                StringComparison.Ordinal),
+            "WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW=1 not set; BG post-teleport window capture is opt-in.");
+
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.BgAccountName),
+            "BG bot not available for post-teleport window capture.");
+
+        var bgTarget = _bot
+            .ResolveBotRunnerActionTargets(includeForegroundIfActionable: false, foregroundFirst: false)
+            .FirstOrDefault(t => !t.IsForeground);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(bgTarget.AccountName),
+            "BG bot required for post-teleport window capture.");
+
+        _output.WriteLine(
+            $"=== BG post-teleport window capture: vertical-drop teleport with {bgTarget.AccountName}/{bgTarget.CharacterName} ===");
+        _output.WriteLine(
+            $"[ACTION-PLAN] {bgTarget.RoleLabel} {bgTarget.AccountName}/{bgTarget.CharacterName}: BG post-teleport capture target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no BG capture dispatch.");
+
+        const int DurotarMapId = 1;
+        const float DurotarX = -460f;
+        const float DurotarY = -4760f;
+        const float DurotarGroundZ = 38f;
+        const float DurotarTeleportZ = DurotarGroundZ + 10f;
+
+        await _bot.EnsureCleanSlateAsync(bgTarget.AccountName, bgTarget.RoleLabel);
+
+        var staged = await _bot.StageBotRunnerAtNavigationPointAsync(
+            bgTarget.AccountName,
+            bgTarget.RoleLabel,
+            DurotarMapId,
+            DurotarX,
+            DurotarY,
+            DurotarGroundZ,
+            "bg-post-teleport ground stage",
+            cleanSlate: false,
+            xyToleranceYards: 8f,
+            zStabilizationWaitMs: 1000);
+        Assert.True(staged, "BG bot should settle on Durotar road before vertical-drop trigger.");
+
+        var windowDir = ResolveBackgroundPostTeleportWindowDirectory();
+        Assert.NotNull(windowDir);
+        var baselineCount = CountBackgroundFixtures(windowDir!);
+
+        try
+        {
+            _output.WriteLine(
+                $"[BG-WINDOW] Triggering same-map teleport to ({DurotarX:F1},{DurotarY:F1},{DurotarTeleportZ:F1}) " +
+                "to force inbound MSG_MOVE_TELEPORT_ACK + outbound snap-window packets.");
+
+            var triggered = await _bot.StageBotRunnerAtNavigationPointAsync(
+                bgTarget.AccountName,
+                bgTarget.RoleLabel,
+                DurotarMapId,
+                DurotarX,
+                DurotarY,
+                DurotarTeleportZ,
+                "bg-post-teleport vertical-drop trigger",
+                cleanSlate: false,
+                xyToleranceYards: 8f,
+                zStabilizationWaitMs: 1000);
+            Assert.True(triggered, "BG bot should settle after vertical-drop teleport trigger.");
+
+            var captured = await WaitForBackgroundFixtureCountAsync(
+                windowDir!,
+                baselineCount + 1,
+                TimeSpan.FromSeconds(15));
+            Assert.True(captured,
+                $"Expected new BG post-teleport packet window fixture under '{windowDir}' " +
+                $"after vertical-drop teleport (baseline={baselineCount}).");
+        }
+        finally
+        {
+            await _bot.StageBotRunnerAtNavigationPointAsync(
+                bgTarget.AccountName,
+                bgTarget.RoleLabel,
+                KalimdorMapId,
+                OrgX,
+                OrgY,
+                OrgZ,
+                "bg-post-teleport Orgrimmar return",
+                cleanSlate: false,
+                xyToleranceYards: 10f,
+                zStabilizationWaitMs: 1000);
+        }
+    }
+
+    [SkippableFact]
+    [Trait("Category", "AckCaptureLive")]
     public async Task Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled()
     {
         var command = Environment.GetEnvironmentVariable("WWOW_ACK_CAPTURE_GM_COMMAND");
@@ -370,6 +473,54 @@ public sealed class AckCaptureTests
             return 0;
 
         return Directory.EnumerateFiles(directory, "*.json").Count();
+    }
+
+    private static string? ResolveBackgroundPostTeleportWindowDirectory()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW"),
+                "1",
+                StringComparison.Ordinal))
+            return null;
+
+        var explicitPath = Environment.GetEnvironmentVariable("WWOW_BG_POST_TELEPORT_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(explicitPath))
+            return Path.GetFullPath(explicitPath);
+
+        var repoRoot = Environment.GetEnvironmentVariable("WWOW_REPO_ROOT");
+        if (!string.IsNullOrWhiteSpace(repoRoot) && File.Exists(Path.Combine(repoRoot, "WestworldOfWarcraft.sln")))
+        {
+            return Path.Combine(
+                Path.GetFullPath(repoRoot),
+                "Tests",
+                "WoWSharpClient.Tests",
+                "Fixtures",
+                "post_teleport_packet_window");
+        }
+
+        return null;
+    }
+
+    private static int CountBackgroundFixtures(string directory)
+    {
+        if (!Directory.Exists(directory))
+            return 0;
+
+        return Directory.EnumerateFiles(directory, "background_*.json").Count();
+    }
+
+    private static async Task<bool> WaitForBackgroundFixtureCountAsync(string directory, int target, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (CountBackgroundFixtures(directory) >= target)
+                return true;
+
+            await Task.Delay(250);
+        }
+
+        return CountBackgroundFixtures(directory) >= target;
     }
 
     private static async Task<bool> WaitForFixtureCountAsync(string directory, int target, TimeSpan timeout)
