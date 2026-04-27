@@ -93,9 +93,10 @@ public class UnequipItemTests
     /// equipped it). The test body equips when needed, then asserts the
     /// UnequipItem dispatch moves the mainhand item back to bags.
     ///
-    /// BG-only — same FG LoadoutTask gap as the EquipmentEquipTests Automated
-    /// pilot. Legacy <see cref="UnequipItem_MainhandWeapon_MovesToBags"/>
-    /// covers FG/BG parity via Shodan-staging.
+    /// FG+BG since commit cb4fd977: <c>LearnSpellStep</c> now treats the
+    /// server's "You already know this spell." system message as
+    /// satisfaction, which unblocked the FG path that previously burned
+    /// 20 retries on '.learn'-of-already-known-spells.
     /// </summary>
     [SkippableFact]
     public async Task UnequipItem_AutomatedMode_LoadoutAppliesAndUnequips()
@@ -108,12 +109,9 @@ public class UnequipItemTests
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
         await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
 
-        var targets = _bot.ResolveBotRunnerActionTargets(includeForegroundIfActionable: false);
+        var targets = _bot.ResolveBotRunnerActionTargets(includeForegroundIfActionable: true);
         _output.WriteLine(
             $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no item action dispatch.");
-        _output.WriteLine(
-            "[ACTION-PLAN] FG: skipped (Automated-mode FG LoadoutTask gap — covered by legacy " +
-            "UnequipItem_MainhandWeapon_MovesToBags until FG parity lands).");
         foreach (var target in targets)
             _output.WriteLine(
                 $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
@@ -157,6 +155,18 @@ public class UnequipItemTests
             _output.WriteLine(
                 $"  [{label}] Automated loadout never delivered Worn Mace within 90s. " +
                 $"LoadoutStatus='{diag?.LoadoutStatus}', failureReason='{diag?.LoadoutFailureReason}'.");
+            if (diag?.RecentChatMessages?.Count > 0)
+            {
+                _output.WriteLine($"  [{label}] RecentChatMessages ({diag.RecentChatMessages.Count}):");
+                foreach (var msg in diag.RecentChatMessages.TakeLast(20))
+                    _output.WriteLine($"    {msg}");
+            }
+            if (diag?.RecentErrors?.Count > 0)
+            {
+                _output.WriteLine($"  [{label}] RecentErrors ({diag.RecentErrors.Count}):");
+                foreach (var err in diag.RecentErrors.TakeLast(20))
+                    _output.WriteLine($"    {err}");
+            }
             return false;
         }
 
