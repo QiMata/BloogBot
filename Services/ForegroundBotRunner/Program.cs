@@ -3,6 +3,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Events;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -23,6 +25,7 @@ public static class Program
 
     public static void Main(string[] args)
     {
+        ConfigureSerilogStaticLogger();
         try
         {
             Console.WriteLine("=== ForegroundBotRunner.exe Main() called directly ===");
@@ -60,12 +63,65 @@ public static class Program
         }
     }
 
+    private static LogEventLevel ResolveSerilogLevel(string? rawValue, LogEventLevel fallback)
+        => Enum.TryParse<LogEventLevel>(rawValue, ignoreCase: true, out var parsed)
+            ? parsed
+            : fallback;
+
+    /// <summary>
+    /// Configures the <see cref="Serilog.Log"/> static logger with a file-only sink
+    /// so calls like <c>Serilog.Log.Information(...)</c> from <see cref="BotRunner.BotRunnerService"/>
+    /// and <see cref="BotRunner.Tasks.LoadoutTask"/> produce visible output. FG cannot
+    /// write to a console (it runs inside WoW.exe), so the sink is file-only and
+    /// mirrors the pattern in <c>Services/BackgroundBotRunner/Program.cs</c>.
+    /// </summary>
+    private static void ConfigureSerilogStaticLogger()
+    {
+        try
+        {
+            var accountName = Environment.GetEnvironmentVariable("WWOW_ACCOUNT_NAME") ?? "FG";
+            var logDir = Path.Combine(AppContext.BaseDirectory, "WWoWLogs");
+            Directory.CreateDirectory(logDir);
+            var logFile = Path.Combine(logDir, $"fg_{accountName}.log");
+            var defaultLevel = ResolveSerilogLevel(Environment.GetEnvironmentVariable("WWOW_LOG_LEVEL"), LogEventLevel.Information);
+            var fileLevel = ResolveSerilogLevel(Environment.GetEnvironmentVariable("WWOW_FILE_LOG_LEVEL"), defaultLevel);
+            var disableFileLogs = Environment.GetEnvironmentVariable("WWOW_DISABLE_FILE_LOGS") == "1";
+
+            var loggerConfiguration = new LoggerConfiguration().MinimumLevel.Verbose();
+
+            if (!disableFileLogs)
+            {
+                loggerConfiguration = loggerConfiguration.WriteTo.File(
+                    logFile,
+                    outputTemplate: "[{Timestamp:HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}",
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 3,
+                    shared: true,
+                    flushToDiskInterval: TimeSpan.FromSeconds(1),
+                    restrictedToMinimumLevel: fileLevel);
+            }
+
+            Log.Logger = loggerConfiguration.CreateLogger();
+
+            if (!disableFileLogs)
+                Log.Information("FG bot log file: {LogFile}", logFile);
+            Log.Information(
+                "FG bot logging levels: default={DefaultLevel}, file={FileLevel}, fileEnabled={FileEnabled}",
+                defaultLevel, fileLevel, !disableFileLogs);
+        }
+        catch
+        {
+            // Best-effort — never let a logging-init failure crash the injected host.
+        }
+    }
+
     /// <summary>
     /// Entry point for injected execution inside WoW.exe.
     /// Called by Loader.Load() instead of Main() when running injected.
     /// </summary>
     public static void StartInjected()
     {
+        ConfigureSerilogStaticLogger();
         string logPath = "";
         try
         {
