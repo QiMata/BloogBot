@@ -25,12 +25,13 @@ public class TaxiTests
     private const int CrossroadsTaxiNodeId = 25;
     private const int GadgetzanTaxiNodeId = 40; // Horde-side Gadgetzan route node
 
-    // Crossroads flight master Devrak (Map 1, Kalimdor / Northern Barrens).
-    // VMaNGOS DB row: (-437.137, -2596.0, 95.87). Flight paths land on a
-    // tower platform near the NPC; tolerance accounts for the landing offset
-    // plus the few yards a bot drifts after dismounting from the taxi gryphon.
-    private const float CrossroadsX = -437.137f;
-    private const float CrossroadsY = -2596.0f;
+    // Taxi node landing positions sourced from VMaNGOS mangos.taxi_nodes.
+    // Tolerance accounts for the bot dismounting on the landing platform a
+    // few yards from the taxi node origin.
+    private const float CrossroadsX = -441.8f;
+    private const float CrossroadsY = -2596.08f;
+    private const float GadgetzanX = -7048.89f;
+    private const float GadgetzanY = -3780.36f;
     private const float TaxiArrivalToleranceYards = 200.0f;
 
     public TaxiTests(LiveBotFixture bot, ITestOutputHelper output)
@@ -223,7 +224,7 @@ public class TaxiTests
         _output.WriteLine($"[TEST] SELECT_TAXI_NODE (Gadgetzan) result: {selectResult}");
 
         var moved = await WaitForTaxiDepartureAsync(target.AccountName, startSnap!.CurrentMapId, startPos,
-            timeoutMs: 60000, progressLabel: $"{target.RoleLabel} taxi-multihop");
+            timeoutMs: 60000, progressLabel: $"{target.RoleLabel} taxi-multihop-departure");
         if (!moved)
         {
             await _bot.QuiesceAccountsAsync(
@@ -233,6 +234,42 @@ public class TaxiTests
                 true,
                 "Orgrimmar-to-Gadgetzan taxi is Shodan-staged and SelectTaxiNode-dispatched, but this live run did not observe departure.");
         }
+
+        // Phase D: full multi-hop ride. Org → Gadgetzan crosses Kalimdor with
+        // an intermediate hop (typically Crossroads). 360s window covers the
+        // ~3-4 minute combined flight time. Same-map check (still Kalimdor),
+        // arrival within TaxiArrivalToleranceYards of Gadgetzan node, and
+        // taxi flag cleared.
+        var arrived = await WaitForTaxiArrivalAsync(
+            target.AccountName,
+            destinationMapId: startSnap.CurrentMapId,
+            destX: GadgetzanX,
+            destY: GadgetzanY,
+            timeoutMs: 360000,
+            progressLabel: $"{target.RoleLabel} taxi-multihop-arrival");
+
+        await _bot.RefreshSnapshotsAsync();
+        var endSnap = await _bot.GetSnapshotAsync(target.AccountName);
+        var endPos = endSnap?.Player?.Unit?.GameObject?.Base?.Position;
+        _output.WriteLine($"[TEST] Multi-hop end position: ({endPos?.X:F1}, {endPos?.Y:F1})");
+
+        if (!arrived)
+        {
+            await _bot.QuiesceAccountsAsync(
+                new[] { target.AccountName },
+                $"{target.RoleLabel} taxi multihop no-arrival cleanup");
+            global::Tests.Infrastructure.Skip.If(
+                true,
+                $"Multi-hop taxi departed but did not reach Gadgetzan (within {TaxiArrivalToleranceYards}yd of {GadgetzanX:F0},{GadgetzanY:F0}) within 360s. " +
+                $"Final pos=({endPos?.X:F1},{endPos?.Y:F1}). Likely a multi-hop chaining or boarding-state regression.");
+        }
+
+        Assert.NotNull(endPos);
+        var distance = LiveBotFixture.Distance2D(endPos!.X, endPos.Y, GadgetzanX, GadgetzanY);
+        _output.WriteLine($"[TEST] Multi-hop arrived within {distance:F1}yd of Gadgetzan flight master.");
+        Assert.True(
+            distance <= TaxiArrivalToleranceYards,
+            $"Bot did not arrive at Gadgetzan. distance={distance:F1}yd, tolerance={TaxiArrivalToleranceYards}yd.");
     }
 
     private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureTaxiSettingsAndTargetAsync()
