@@ -32,6 +32,7 @@ namespace BackgroundBotRunner
         private readonly BotCombatState _botCombatState;
         private readonly BotRunnerService _botRunner;
         private readonly BackgroundPacketTraceRecorder? _packetTraceRecorder;
+        private readonly BackgroundPostTeleportWindowRecorder? _postTeleportWindowRecorder;
         private readonly BackgroundPhysicsMode _physicsMode;
 
         /// <summary>P9.5: Per-bot ObjectManager instance (no longer using singleton).</summary>
@@ -65,6 +66,12 @@ namespace BackgroundBotRunner
             if (RecordingArtifactsFeature.IsEnabled())
             {
                 _packetTraceRecorder = new BackgroundPacketTraceRecorder(_wowClient, _loggerFactory);
+
+                if (BackgroundPostTeleportWindowRecorder.IsEnabled())
+                {
+                    _postTeleportWindowRecorder = new BackgroundPostTeleportWindowRecorder(_wowClient, _loggerFactory);
+                    _postTeleportWindowRecorder.Start();
+                }
             }
             else
             {
@@ -136,6 +143,7 @@ namespace BackgroundBotRunner
             }
 
             ResetAgentFactory();
+            _postTeleportWindowRecorder?.Dispose();
             _packetTraceRecorder?.Dispose();
 
             _logger.LogInformation("BackgroundBotWorker cleanup complete.");
