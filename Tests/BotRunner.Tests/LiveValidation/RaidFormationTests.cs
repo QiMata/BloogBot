@@ -58,7 +58,17 @@ public class RaidFormationTests
             Parameters = { new RequestParameter { StringParam = bgName } }
         });
         Assert.Equal(ResponseResult.Success, inviteResult);
-        await Task.Delay(1500);
+
+        // Phase B v8: poll for BG-side HasPendingGroupInvite snapshot field
+        // instead of blind-sleeping 1500ms.
+        var inviteDelivered = await _bot.WaitForSnapshotConditionAsync(
+            bgAccount,
+            snap => snap.HasPendingGroupInvite,
+            TimeSpan.FromSeconds(10),
+            pollIntervalMs: 200,
+            progressLabel: $"raid invite delivered to {bgAccount}");
+        if (!inviteDelivered)
+            _output.WriteLine($"[RAID] WARNING: BG never reported HasPendingGroupInvite — falling back to AcceptGroupInvite anyway.");
 
         // Step 2: BG accepts invite. Predicate-poll for both bots seeing FG
         // as the party leader, instead of blind-sleeping 2000ms.

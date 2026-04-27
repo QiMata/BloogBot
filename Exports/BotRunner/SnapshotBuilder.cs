@@ -193,6 +193,20 @@ namespace BotRunner
                 Log.Warning($"[BOT RUNNER] Error populating party leader GUID: {ex.Message}");
             }
 
+            // Phase B v8: surface pending group-invite state so tests can poll
+            // for invite delivery instead of blind-sleeping after SendGroupInvite.
+            // Cheap query — backed by PartyAgent.HasPendingInvite (FG/BG both
+            // implement IObjectManager.HasPendingGroupInvite()).
+            try
+            {
+                _activitySnapshot.HasPendingGroupInvite = _objectManager.HasPendingGroupInvite();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning($"[BOT RUNNER] Error reading HasPendingGroupInvite: {ex.Message}");
+                _activitySnapshot.HasPendingGroupInvite = false;
+            }
+
             // Player protobuf
             try
             {

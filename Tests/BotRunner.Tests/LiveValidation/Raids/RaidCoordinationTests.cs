@@ -178,17 +178,22 @@ public class RaidCoordinationTests
         var bgName = bgSnap?.CharacterName;
         var fgGuid = (await _bot.GetSnapshotAsync(fgAccount))?.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
 
-        // FG invites BG. The 1500ms blind wait that used to live here is
-        // replaced by polling for the BG-side invite acknowledgement after
-        // AcceptGroupInvite — there's no per-snapshot HasPendingGroupInvite
-        // field today, so we let SendGroupInvite be eventually-consistent
-        // and gate on the post-accept group state.
+        // FG invites BG. Phase B v8: poll for the BG-side
+        // HasPendingGroupInvite snapshot field instead of blind-sleeping
+        // 1500ms (saves ~1s per raid form on the happy path).
         await _bot.SendActionAsync(fgAccount, new ActionMessage
         {
             ActionType = ActionType.SendGroupInvite,
             Parameters = { new RequestParameter { StringParam = bgName } }
         });
-        await Task.Delay(1500);
+        var inviteDelivered = await _bot.WaitForSnapshotConditionAsync(
+            bgAccount,
+            snap => snap.HasPendingGroupInvite,
+            TimeSpan.FromSeconds(10),
+            pollIntervalMs: 200,
+            progressLabel: $"raid invite delivered to {bgAccount}");
+        if (!inviteDelivered)
+            _output.WriteLine($"[RAID] WARNING: BG never reported HasPendingGroupInvite — falling back to AcceptGroupInvite anyway.");
 
         // BG accepts. Wait for both sides to see FG as the party leader
         // (i.e. PartyLeaderGuid == fgGuid on both snapshots) instead of

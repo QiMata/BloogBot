@@ -821,7 +821,23 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
                 continue;
             }
 
-            await Task.Delay(900);
+            // Phase B v8: poll for the member's HasPendingGroupInvite snapshot
+            // field instead of blind-sleeping 900ms. On a 40-bot raid setup
+            // this saves up to ~36s (900ms × 40) when invites are delivered
+            // promptly. 6s ceiling matches the original generous budget for
+            // slow servers.
+            var inviteDelivered = await WaitForSnapshotConditionAsync(
+                memberAccount,
+                snap => snap.HasPendingGroupInvite,
+                TimeSpan.FromSeconds(6),
+                pollIntervalMs: 200,
+                progressLabel: $"{FixtureLabel}:{label} invite delivered to {memberAccount}");
+            if (!inviteDelivered)
+            {
+                // Server didn't deliver the invite in 6s — restart the cycle.
+                await Task.Delay(750);
+                continue;
+            }
 
             var acceptResult = await SendActionAsync(
                 memberAccount,

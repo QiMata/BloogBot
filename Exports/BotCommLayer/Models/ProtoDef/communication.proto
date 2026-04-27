@@ -236,6 +236,7 @@ message WoWActivitySnapshot {
     LoadoutStatus loadout_status = 29;          // P3: per-bot progress through the ApplyLoadout action. Coordinator gates raid-formation on all bots reporting LOADOUT_READY.
     string loadout_failure_reason = 30;         // P3: populated when loadout_status=LOADOUT_FAILED; human-readable fail step for diagnostics.
     repeated CommandAckEvent recent_command_acks = 31; // P4.4: structured command-ack ring buffer (cap 10).
+    bool has_pending_group_invite = 32;         // Phase B v8: server has sent SMSG_GROUP_INVITE but the bot hasn't yet accepted/declined. Lets tests poll for invite delivery instead of blind-sleeping after SendGroupInvite.
 }
 
 // P3: progress states for a bot's single ApplyLoadout action.
