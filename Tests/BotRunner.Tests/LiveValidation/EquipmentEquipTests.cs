@@ -83,12 +83,10 @@ public class EquipmentEquipTests
     /// <c>EquipItem</c> moves the loadout-supplied Worn Mace into the mainhand
     /// slot. No fixture-side <c>StageBotRunnerLoadoutAsync</c> call.
     ///
-    /// BG-only for now: the FG bot's LoadoutTask gets stuck in
-    /// <see cref="LoadoutStatus.LoadoutInProgress"/> on the chat-driven
-    /// <c>.additem</c> step (same pattern as the Onboarding pilot, which is
-    /// also BG-only). The legacy
-    /// <see cref="EquipItem_AddWeaponAndEquip_AppearsInEquipmentSlot"/> covers
-    /// FG/BG parity via Shodan-staging until FG Automated parity lands.
+    /// FG+BG since commit cb4fd977: <c>LearnSpellStep</c> now treats the
+    /// server's "You already know this spell." system message as
+    /// satisfaction, which unblocked the FG path that previously burned
+    /// 20 retries on '.learn'-of-already-known-spells.
     /// </summary>
     [SkippableFact]
     public async Task EquipItem_AutomatedMode_LoadoutAppliesAndEquips()
@@ -101,12 +99,9 @@ public class EquipmentEquipTests
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
         await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
 
-        var targets = _bot.ResolveBotRunnerActionTargets(includeForegroundIfActionable: false);
+        var targets = _bot.ResolveBotRunnerActionTargets(includeForegroundIfActionable: true);
         _output.WriteLine(
             $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no EquipItem dispatch.");
-        _output.WriteLine(
-            "[ACTION-PLAN] FG: skipped (Automated-mode FG LoadoutTask gap — covered by legacy " +
-            "EquipItem_AddWeaponAndEquip_AppearsInEquipmentSlot until FG parity lands).");
         foreach (var target in targets)
             _output.WriteLine(
                 $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
