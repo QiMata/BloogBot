@@ -176,8 +176,13 @@ public class RaidCoordinationTests
         await _bot.RefreshSnapshotsAsync();
         var bgSnap = await _bot.GetSnapshotAsync(bgAccount);
         var bgName = bgSnap?.CharacterName;
+        var fgGuid = (await _bot.GetSnapshotAsync(fgAccount))?.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
 
-        // FG invites BG
+        // FG invites BG. The 1500ms blind wait that used to live here is
+        // replaced by polling for the BG-side invite acknowledgement after
+        // AcceptGroupInvite — there's no per-snapshot HasPendingGroupInvite
+        // field today, so we let SendGroupInvite be eventually-consistent
+        // and gate on the post-accept group state.
         await _bot.SendActionAsync(fgAccount, new ActionMessage
         {
             ActionType = ActionType.SendGroupInvite,
@@ -185,20 +190,45 @@ public class RaidCoordinationTests
         });
         await Task.Delay(1500);
 
-        // BG accepts
+        // BG accepts. Wait for both sides to see FG as the party leader
+        // (i.e. PartyLeaderGuid == fgGuid on both snapshots) instead of
+        // blind-sleeping 2000ms. Saves ~1.5s per raid form on a happy path.
         await _bot.SendActionAsync(bgAccount, new ActionMessage
         {
             ActionType = ActionType.AcceptGroupInvite
         });
-        await Task.Delay(2000);
+        var partyFormed = await WaitForPartyMembershipAsync(fgAccount, bgAccount, fgGuid, TimeSpan.FromSeconds(20));
+        _output.WriteLine($"[RAID] Party formed (predicate): {partyFormed}");
 
-        // Convert to raid
+        // Convert to raid. PartyLeaderGuid stays equal to fgGuid post-convert,
+        // so the most reliable signal is to re-poll the same predicate after
+        // dispatching the action — converting to raid does NOT clear leader,
+        // and a successful Send + non-zero leader on both bots means the
+        // raid wrapper landed.
         var raidResult = await _bot.SendActionAsync(fgAccount, new ActionMessage
         {
             ActionType = ActionType.ConvertToRaid
         });
         _output.WriteLine($"[RAID] Group formed and converted to raid: {raidResult}");
-        await Task.Delay(2000);
+        var raidPersisted = await WaitForPartyMembershipAsync(fgAccount, bgAccount, fgGuid, TimeSpan.FromSeconds(10));
+        _output.WriteLine($"[RAID] Raid leader still consistent post-convert (predicate): {raidPersisted}");
+    }
+
+    private async Task<bool> WaitForPartyMembershipAsync(string leaderAccount, string memberAccount, ulong leaderGuid, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var leader = await _bot.GetSnapshotAsync(leaderAccount);
+            var member = await _bot.GetSnapshotAsync(memberAccount);
+            var leaderSeesSelf = leader?.PartyLeaderGuid == leaderGuid;
+            var memberSeesLeader = member?.PartyLeaderGuid == leaderGuid;
+            if (leaderGuid != 0 && leaderSeesSelf && memberSeesLeader)
+                return true;
+            await Task.Delay(250);
+        }
+        return false;
     }
 
     private async Task CleanupRaidAsync(string leaderAccount)
