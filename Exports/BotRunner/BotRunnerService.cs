@@ -1138,6 +1138,18 @@ namespace BotRunner
             {
                 var @class = WoWNameGenerator.ResolveClass(accountName);
 
+                // Capture any tasks the action-dispatch block already pushed this tick
+                // (notably a LoadoutTask from an early APPLY_LOADOUT). InitializeTaskSequence
+                // must seed the IdleTask + activity at the BOTTOM of the stack — pushing
+                // them naively on top would bury the LoadoutTask and prevent it from
+                // ticking, leaving LoadoutStatus stuck at LoadoutInProgress (the FG
+                // Automated-mode gap diagnosed in handoff v9). After re-seeding the
+                // bottom layers, the captured tasks are re-pushed in their original order
+                // so the previous top stays on top.
+                var preExistingTasks = new List<IBotTask>();
+                while (_botTasks.Count > 0)
+                    preExistingTasks.Add(_botTasks.Pop());
+
                 _botTasks.Push(new Tasks.IdleTask(context));
                 Log.Information("[BOT RUNNER] Initialized idle task sequence for {Account} using {Profile} ({Class})",
                     accountName, _container.ClassContainer.Name, @class);
@@ -1156,6 +1168,19 @@ namespace BotRunner
                     Log.Information(
                         "[BOT RUNNER] Activity '{Descriptor}' assigned for {Account} (useGmCommands={UseGm})",
                         _assignedActivity, accountName, _useGmCommands);
+                }
+
+                // Re-push captured tasks so the original top of stack stays on top.
+                // preExistingTasks[0] was the original top (last popped), so iterate
+                // in reverse to push the bottom-most captured task first.
+                for (var i = preExistingTasks.Count - 1; i >= 0; i--)
+                    _botTasks.Push(preExistingTasks[i]);
+
+                if (preExistingTasks.Count > 0)
+                {
+                    Log.Information(
+                        "[BOT RUNNER] Re-stacked {Count} pre-existing task(s) on top of seeded IdleTask/activity for {Account}: top={Top}",
+                        preExistingTasks.Count, accountName, preExistingTasks[0].GetType().Name);
                 }
             }
             catch (Exception ex)
