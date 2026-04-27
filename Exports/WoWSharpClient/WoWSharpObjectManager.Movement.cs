@@ -761,6 +761,13 @@ namespace WoWSharpClient
                 ackPayload
             );
 
+            // Reset the controller's packet cadence and open a one-cadence
+            // suppression window so the first physics tick's NONE -> FALLINGFAR
+            // transition does not double-fire a heartbeat inside the 500ms WoW.exe
+            // leaves silent after its outbound TELEPORT_ACK (see FG capture in
+            // Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/foreground_durotar_vertical_drop_baseline.json).
+            _movementController.NotifyExternalPacketSent();
+
             _pendingTeleportAck = null;
             _isBeingTeleported = false;
             _staleWorldEntryTransitionCandidateSinceUtc = DateTime.MinValue;

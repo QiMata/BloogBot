@@ -226,41 +226,27 @@ public sealed class PostTeleportPacketWindowParityTests
             .Select(e => e.Opcode!.Value.ToString())
             .ToArray();
 
-        // Stream 2B closes the suppression gap: BG now emits TELEPORT_ACK, then
-        // heartbeats during the fall, then FALL_LAND on landing — previously
-        // _needsGroundSnap suppressed all but the ACK and the snap-completion path
-        // emitted MOVE_STOP instead of FALL_LAND.
+        // Stream 2C closes the +1 HB gap: NotifyExternalPacketSent (called from
+        // TryFlushPendingTeleportAck after the outbound ACK) opens a one-cadence
+        // suppression window, so the first physics-tick NONE -> FALLINGFAR
+        // transition does not double-fire a heartbeat inside the 500ms WoW.exe
+        // leaves silent after its outbound TELEPORT_ACK.
         //
         // FG fixture order: [TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND]
-        // BG order today:   [TELEPORT_ACK, HEARTBEAT, HEARTBEAT, HEARTBEAT, FALL_LAND]
-        //
-        // The +1 heartbeat vs FG is the remaining parity gap (Stream 2C):
-        // ShouldSendPacket fires immediately when MovementFlags transitions
-        // NONE -> FALLINGFAR on the first physics tick after teleport, whereas
-        // WoW.exe cadence-gates the first heartbeat ~500ms after the outbound
-        // ACK. Closing that gap requires either resetting MovementController's
-        // _lastPacketTime when TryFlushPendingTeleportAck fires the outbound ACK,
-        // or gating the flag-change branch of ShouldSendPacket on PACKET_INTERVAL_MS.
-        //
-        // We pin the BG-today stream so a future regression that drops or reorders
-        // packets fails loudly, and so closing the +1 HB gap will surface here.
+        // BG order today:   [TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND] ← matches
         var fgOpcodeSet = string.Join(",", fgOutboundOpcodes);
         var bgOpcodeSet = string.Join(",", bgOutboundOpcodes);
 
         Assert.StartsWith("MSG_MOVE_TELEPORT_ACK,", bgOpcodeSet);
         Assert.EndsWith(",MSG_MOVE_FALL_LAND", bgOpcodeSet);
-        Assert.Equal(
-            "MSG_MOVE_TELEPORT_ACK,MSG_MOVE_HEARTBEAT,MSG_MOVE_HEARTBEAT,MSG_MOVE_HEARTBEAT,MSG_MOVE_FALL_LAND",
-            bgOpcodeSet);
 
-        // Sanity: structurally, BG's outbound stream is FG's stream with one
-        // extra heartbeat inserted at the start of the falling window.
+        // Stream 2C exit criterion: BG's outbound stream is byte-for-opcode-name
+        // identical to FG's. Any future regression that re-introduces the +1 HB
+        // (or any other outbound packet drift) will fail this assertion.
+        Assert.Equal(fgOutboundOpcodes, bgOutboundOpcodes);
         Assert.Equal(
             "MSG_MOVE_TELEPORT_ACK,MSG_MOVE_HEARTBEAT,MSG_MOVE_HEARTBEAT,MSG_MOVE_FALL_LAND",
-            fgOpcodeSet);
-        Assert.Equal(
-            fgOutboundOpcodes.Length + 1,
-            bgOutboundOpcodes.Length);
+            bgOpcodeSet);
     }
 
     private static PostTeleportWindowFixture LoadBaseline()
