@@ -120,6 +120,130 @@ public class FishingProfessionTests
             $"[FISHING] Both roles reported fishing_loot_success without roster restarts. FG last loot: '{fgResult.LastLootLine}' | BG last loot: '{bgResult.LastLootLine}'");
     }
 
+    /// <summary>
+    /// Phase E broader migration: Automated-mode fishing scenario for BG only.
+    /// Loads <c>Fishing.Automated.config.json</c>; the BG bot's
+    /// <c>CharacterSettings.Loadout</c> (Skills=[356/75/75], SupplementalItems=[6256])
+    /// is dispatched as <c>APPLY_LOADOUT</c> by <c>AutomatedModeHandler.OnWorldEntryAsync</c>
+    /// at first <c>IsObjectManagerValid</c>. Once the loadout lands the test stages
+    /// a Ratchet pool via Shodan, dispatches <c>ActionType.StartFishing</c>, and
+    /// asserts the BG <c>FishingTask</c> reaches <c>fishing_loot_success</c>.
+    ///
+    /// BG-only — same FG <c>LoadoutTask</c> gap as the EquipmentEquipTests
+    /// Automated pilot. Legacy
+    /// <see cref="Fishing_CatchFish_BgAndFg_RatchetStagedPool"/> covers FG/BG
+    /// parity via the bot-side <c>FishingTask</c> outfit-reset path until FG
+    /// Automated parity lands.
+    /// </summary>
+    [SkippableFact]
+    public async Task Fishing_AutomatedMode_BgOnly_RatchetStagedPool()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Fishing.Automated.config.json");
+
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+
+        var shodanAccount = _bot.ShodanAccountName;
+        Assert.False(
+            string.IsNullOrWhiteSpace(shodanAccount),
+            "Shodan admin bot was not launched by Fishing.Automated.config.json.");
+
+        var targets = _bot.ResolveBotRunnerActionTargets(includeForegroundIfActionable: false);
+        global::Tests.Infrastructure.Skip.If(targets.Count == 0, "No BG action target available.");
+
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, stages pool then dispatches StartFishing.");
+        _output.WriteLine(
+            "[ACTION-PLAN] FG: skipped (Automated-mode FG LoadoutTask gap — covered by legacy " +
+            "Fishing_CatchFish_BgAndFg_RatchetStagedPool until FG parity lands).");
+        foreach (var target in targets)
+            _output.WriteLine(
+                $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
+                "Automated mode applies fishing loadout, then dispatch StartFishing.");
+
+        await _bot.EnsureShodanAdminLoadoutAsync(shodanAccount!, _bot.ShodanCharacterName);
+
+        foreach (var target in targets)
+        {
+            var passed = await RunAutomatedFishingScenario(target.AccountName, target.RoleLabel, shodanAccount!);
+            Assert.True(
+                passed,
+                $"{target.RoleLabel} bot ({target.AccountName}/{target.CharacterName}): " +
+                "Automated-mode loadout should apply fishing skill+pole, then StartFishing should reach fishing_loot_success.");
+        }
+    }
+
+    private async Task<bool> RunAutomatedFishingScenario(string account, string label, string shodanAccount)
+    {
+        // AutomatedModeHandler.OnWorldEntryAsync dispatches APPLY_LOADOUT off
+        // CharacterSettings.Loadout. The bot's LoadoutTask walks
+        // Skills=[356/75/75] + SupplementalItems=[6256 Fishing Pole] and reports
+        // LoadoutReady on completion. Either signal — LoadoutReady or pole-in-bags
+        // — is sufficient evidence the loadout has landed before we dispatch
+        // StartFishing.
+        var loadoutLanded = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snap => snap.LoadoutStatus == LoadoutStatus.LoadoutReady
+                || snap.Player?.BagContents?.Values.Any(itemId => itemId == FishingPoleItemId) == true,
+            TimeSpan.FromSeconds(90),
+            pollIntervalMs: 500,
+            progressLabel: $"automated-loadout {account}");
+
+        if (!loadoutLanded)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var diag = await _bot.GetSnapshotAsync(account);
+            _output.WriteLine(
+                $"  [{label}] Automated loadout never delivered fishing pole within 90s. " +
+                $"LoadoutStatus='{diag?.LoadoutStatus}', failureReason='{diag?.LoadoutFailureReason}'.");
+            return false;
+        }
+
+        var stageReady = await _bot.EnsureCloseFishingPoolActiveNearAsync(
+            shodanAccount,
+            KalimdorMapId,
+            RatchetLandingX,
+            RatchetLandingY,
+            stagingZ: RatchetLandingZ + 2f,
+            acceptDistance: 55f,
+            rotateRadius: 200f,
+            respawnLimit: 5,
+            maxIterations: 5);
+        if (!stageReady)
+        {
+            _output.WriteLine($"  [{label}] Shodan could not surface a close Ratchet pool before dispatching StartFishing.");
+            return false;
+        }
+
+        var dispatchResult = await _bot.SendActionAsync(account, CreateStartFishingAction());
+        if (dispatchResult != ResponseResult.Success)
+        {
+            _output.WriteLine($"  [{label}] StartFishing dispatch returned {dispatchResult}; aborting.");
+            return false;
+        }
+
+        _output.WriteLine(
+            $"[FISHING] Waiting up to {FishingLootDeadline.TotalMinutes:F0}m for {label} ('{account}') " +
+            "to report FishingTask fishing_loot_success via an Automated-mode loadout + action-dispatched FishingTask.");
+
+        var result = await WaitForSingleLootSuccessAsync(account, label, FishingLootDeadline);
+
+        if (!result.SawActivityStart || !result.SawPoolAcquired || !result.SawLootSuccess)
+        {
+            _output.WriteLine(
+                $"  [{label}] Automated fishing did not complete: activity={result.SawActivityStart} pool={result.SawPoolAcquired} loot={result.SawLootSuccess}. " +
+                FormatChatTail(result.RecentChat));
+            return false;
+        }
+
+        _output.WriteLine($"  [{label}] Automated fishing reached fishing_loot_success: {result.LastLootLine}");
+        return true;
+    }
+
+    private const uint FishingPoleItemId = 6256;
+
     private async Task<SingleFishingPollResult> WaitForSingleLootSuccessAsync(string accountName, string roleLabel, TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
