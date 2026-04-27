@@ -373,10 +373,13 @@ namespace WoWSharpClient.Movement
                 }
             }
 
-            // 2. Send network packet if needed.
-            // Suppress packets during post-teleport ground snap — physics is still settling
-            // and sending transient FALLINGFAR heartbeats confuses the server.
-            if (!_needsGroundSnap && ShouldSendPacket(gameTimeMs))
+            // 2. Send network packet if needed. Per FG packet capture
+            // (Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/foreground_durotar_vertical_drop_baseline.json)
+            // WoW.exe continues emitting MSG_MOVE_HEARTBEAT with FALLINGFAR/JUMPING flags
+            // during the post-teleport fall, then MSG_MOVE_FALL_LAND on landing.
+            // Suppressing them here causes third-party observers to render the falling
+            // animation twice (local prediction races ahead of authoritative state).
+            if (ShouldSendPacket(gameTimeMs))
             {
                 SendMovementPacket(gameTimeMs);
             }
