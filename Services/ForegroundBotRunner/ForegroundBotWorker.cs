@@ -38,6 +38,7 @@ namespace ForegroundBotRunner
         private MovementRecorder? _movementRecorder;
         private ForegroundPacketTraceRecorder? _packetTraceRecorder;
         private ForegroundAckCorpusRecorder? _ackCorpusRecorder;
+        private ForegroundPostTeleportWindowRecorder? _postTeleportWindowRecorder;
         private PathfindingClient? _pathfindingClient;
         private BotRunnerService? _botRunner;
 
@@ -545,6 +546,8 @@ namespace ForegroundBotRunner
                 _packetTraceRecorder = new ForegroundPacketTraceRecorder(_loggerFactory);
                 _ackCorpusRecorder = new ForegroundAckCorpusRecorder(_loggerFactory);
                 _ackCorpusRecorder.Start();
+                _postTeleportWindowRecorder = new ForegroundPostTeleportWindowRecorder(_loggerFactory);
+                _postTeleportWindowRecorder.Start();
                 _logger.LogInformation("MovementRecorder ready - say 'rec' in chat to toggle recording");
             }
             else
@@ -552,6 +555,7 @@ namespace ForegroundBotRunner
                 _movementRecorder = null;
                 _packetTraceRecorder = null;
                 _ackCorpusRecorder = null;
+                _postTeleportWindowRecorder = null;
                 _logger.LogInformation("Recording artifacts disabled; FG movement and packet recorders are inactive. Set {EnvVar}=1 to enable.",
                     RecordingArtifactsFeature.EnvironmentVariableName);
             }
@@ -793,6 +797,7 @@ namespace ForegroundBotRunner
             _movementRecorder?.Dispose();
             _packetTraceRecorder?.Dispose();
             _ackCorpusRecorder?.Dispose();
+            _postTeleportWindowRecorder?.Dispose();
 
             // Dispose the named-pipe logger provider
             _pipeLoggerProvider?.Dispose();
