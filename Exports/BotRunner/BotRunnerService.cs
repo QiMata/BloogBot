@@ -738,6 +738,19 @@ namespace BotRunner
 
         private void UpdateBehaviorTree(WoWActivitySnapshot? incomingActivityMemberState)
         {
+            // Drop a stale (non-Running) tree at the top so the action block
+            // and the HasEnteredWorld branch can't accidentally leave a
+            // completed login-flow tree (e.g. EnterWorldSequence) lying around
+            // for the main loop to re-tick. Without this, ApplyLoadout's
+            // handler returns early and the bot's main loop re-runs the
+            // EnterWorldSequence's action (which would call EnterWorld again
+            // and reset Player). Handoff v7 tracks the symptom; this is the
+            // upstream gate.
+            if (_behaviorTree != null && _behaviorTreeStatus != BehaviourTreeStatus.Running)
+            {
+                _behaviorTree = null;
+            }
+
             var playerWorldReady = _objectManager.HasEnteredWorld
                 && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
@@ -957,6 +970,20 @@ namespace BotRunner
             }
 
             _pendingCharacterDeletion = false;
+            // Diagnostic for the residual gating bug (handoff v7): log when the
+            // login-flow path builds EnterWorldSequence even though the bot may
+            // already be in world. The idempotent EnterWorld guard handles the
+            // symptom; this log reveals the upstream cause.
+            var inWorldGuid = (_objectManager.Player as IWoWPlayer)?.Guid ?? 0;
+            var inWorldMapId = (_objectManager.Player as IWoWPlayer)?.MapId ?? 0;
+            Log.Warning(
+                "[BOT RUNNER] Login flow building EnterWorldSequence. HasEnteredWorld={H}, _everEnteredWorld={E}, " +
+                "Player.Guid=0x{G:X}, Player.MapId={M}, _tasksInitialized={T}",
+                _objectManager.HasEnteredWorld,
+                _everEnteredWorld,
+                inWorldGuid,
+                inWorldMapId,
+                _tasksInitialized);
             _behaviorTree = _interactionSequences.BuildEnterWorldSequence(_objectManager.CharacterSelectScreen?.CharacterSelects[0].Guid ?? 0);
         }
 
