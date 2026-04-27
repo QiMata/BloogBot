@@ -764,6 +764,19 @@ namespace WoWSharpClient
             // HasEnteredWorld intentionally flips true here so the login
             // sequence does not spam repeated CMSG_PLAYER_LOGIN packets while
             // we wait for SMSG_LOGIN_VERIFY_WORLD / object hydration.
+            //
+            // Diagnostic: log every EnterWorld so the BG-bot Automated-mode flap
+            // (handoff v6/v7) can attribute resets to their callers. Player.MapId
+            // is the key signal — if it was non-zero before this call, we're
+            // resetting a hydrated player.
+            var prevMapId = (Player as WoWLocalPlayer)?.MapId ?? 0u;
+            Log.Information(
+                "[WorldSession] EnterWorld(guid=0x{Guid:X}) called. prevHasEnteredWorld={Prev}, prevMapId={MapId}, pendingGuid=0x{Pending:X}",
+                characterGuid,
+                HasEnteredWorld,
+                prevMapId,
+                unchecked((ulong)Interlocked.Read(ref _pendingWorldEntryGuid)));
+
             PlayerGuid = new HighGuid(characterGuid);
             HasEnteredWorld = true;
             if (_woWClient.WorldClient != null)
@@ -837,6 +850,28 @@ namespace WoWSharpClient
 
                 if (_woWClient.WorldClient == null)
                 {
+                    ClearPendingWorldEntry();
+                    return;
+                }
+
+                // Suppress redundant CMSG_PLAYER_LOGIN if the server already accepted this
+                // session. Player.MapId is populated by SMSG_LOGIN_VERIFY_WORLD / SMSG_NEW_WORLD
+                // (see EventEmitter_OnLoginVerifyWorld), so a non-zero MapId proves the server
+                // sent us into world. (MaxHealth would also work but arrives in a separate
+                // SMSG_UPDATE_OBJECT that may not land within 10s of EnterWorld.) Resending
+                // CMSG_PLAYER_LOGIN in this state causes MaNGOS to disconnect the duplicate
+                // session, which kicks the bot back to CharacterSelect — and the auto-relogin
+                // in BackgroundBotWorker.LogoutComplete then re-arms this same retry, looping
+                // forever (see handoff v6).
+                if (HasEnteredWorld
+                    && Player is WoWLocalPlayer player
+                    && player.Guid != 0
+                    && player.MapId != 0)
+                {
+                    Log.Information(
+                        "[WorldSession] Suppressing redundant CMSG_PLAYER_LOGIN retry for guid 0x{Guid:X}: server already in-world (mapId={MapId}).",
+                        characterGuid,
+                        player.MapId);
                     ClearPendingWorldEntry();
                     return;
                 }
