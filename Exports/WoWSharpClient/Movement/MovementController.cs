@@ -92,6 +92,15 @@ namespace WoWSharpClient.Movement
         // approximately 500ms cadence while moving, with state-change packets in between.
         private const uint PACKET_INTERVAL_MS = 500;
         private uint _latestGameTimeMs;
+        // Suppression window for the flag-change branch of ShouldSendPacket.
+        // Bumped by NotifyExternalPacketSent when an external code path
+        // (e.g. TryFlushPendingTeleportAck) dispatches a movement opcode that
+        // MovementController didn't construct. Per FG capture
+        // (Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/foreground_durotar_vertical_drop_baseline.json)
+        // WoW.exe emits the first post-teleport heartbeat ~PACKET_INTERVAL_MS
+        // after the outbound TELEPORT_ACK, not on the immediate
+        // NONE -> FALLINGFAR transition driven by the first physics tick.
+        private uint _suppressFlagChangeUntilMs;
         private uint _staleForwardSuppressUntilMs;
         private int _staleForwardNoDisplacementTicks;
         private int _staleForwardRecoveryCount;
@@ -1016,10 +1025,33 @@ namespace WoWSharpClient.Movement
         }
 
         // ======== NETWORKING ========
+        /// <summary>
+        /// Notifies the controller that an external code path (currently
+        /// <c>WoWSharpObjectManager.TryFlushPendingTeleportAck</c>) has just dispatched a
+        /// movement-related opcode that this MovementController did not construct.
+        /// Resets cadence tracking and opens a one-cadence-window suppression so the
+        /// next physics-tick flag transition (typically NONE -> FALLINGFAR after a
+        /// teleport into open air) does not double-fire a heartbeat inside the same
+        /// 500ms window. Mirrors WoW.exe behaviour captured in
+        /// <c>foreground_durotar_vertical_drop_baseline.json</c>: the binary emits
+        /// the first post-teleport heartbeat ~PACKET_INTERVAL_MS after the outbound
+        /// TELEPORT_ACK, not on the immediate fall-flag transition.
+        /// </summary>
+        public void NotifyExternalPacketSent()
+        {
+            _lastPacketTime = _latestGameTimeMs;
+            _suppressFlagChangeUntilMs = AddMs(_latestGameTimeMs, PACKET_INTERVAL_MS);
+        }
+
         private bool ShouldSendPacket(uint gameTimeMs)
         {
-            // Send if movement state changed
-            if (_player.MovementFlags != _lastSentFlags)
+            // Send if movement state changed. Suppressed for one cadence window after
+            // an external packet dispatch (see NotifyExternalPacketSent) so the
+            // post-teleport NONE -> FALLINGFAR transition does not fire a heartbeat
+            // inside the 500ms window WoW.exe leaves silent after its outbound
+            // MSG_MOVE_TELEPORT_ACK.
+            if (_player.MovementFlags != _lastSentFlags
+                && !IsBefore(gameTimeMs, _suppressFlagChangeUntilMs))
                 return true;
 
             // Send periodic heartbeat while moving
