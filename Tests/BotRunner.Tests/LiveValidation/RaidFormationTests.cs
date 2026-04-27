@@ -60,24 +60,31 @@ public class RaidFormationTests
         Assert.Equal(ResponseResult.Success, inviteResult);
         await Task.Delay(1500);
 
-        // Step 2: BG accepts invite
+        // Step 2: BG accepts invite. Predicate-poll for both bots seeing FG
+        // as the party leader, instead of blind-sleeping 2000ms.
         _output.WriteLine("[RAID] BG accepting group invite");
         var acceptResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
         {
             ActionType = ActionType.AcceptGroupInvite
         });
         Assert.Equal(ResponseResult.Success, acceptResult);
-        await Task.Delay(2000);
 
-        // Verify group formed
         await _bot.RefreshSnapshotsAsync();
         var fgSnap = await _bot.GetSnapshotAsync(fgAccount!);
+        var fgGuid = fgSnap?.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
+        var partyFormed = await WaitForPartyMembershipAsync(fgAccount!, bgAccount, fgGuid, TimeSpan.FromSeconds(20));
+        Assert.True(partyFormed, $"Party formation predicate failed (fgGuid=0x{fgGuid:X})");
+
+        await _bot.RefreshSnapshotsAsync();
+        fgSnap = await _bot.GetSnapshotAsync(fgAccount!);
         bgSnap = await _bot.GetSnapshotAsync(bgAccount);
         Assert.True(fgSnap?.PartyLeaderGuid != 0, "FG should be in a group after invite+accept");
         Assert.True(bgSnap?.PartyLeaderGuid != 0, "BG should be in a group after invite+accept");
         _output.WriteLine($"[RAID] Group formed: FG leader=0x{fgSnap!.PartyLeaderGuid:X}, BG leader=0x{bgSnap!.PartyLeaderGuid:X}");
 
-        // Step 3: Convert to raid
+        // Step 3: Convert to raid. PartyLeaderGuid persists post-convert,
+        // so re-poll the same predicate as a smoke test that the raid
+        // wrapper landed without breaking the leader relationship.
         _output.WriteLine("[RAID] FG converting group to raid");
         var raidResult = await _bot.SendActionAsync(fgAccount!, new ActionMessage
         {
@@ -85,7 +92,8 @@ public class RaidFormationTests
         });
         _output.WriteLine($"[RAID] CONVERT_TO_RAID result: {raidResult}");
         Assert.Equal(ResponseResult.Success, raidResult);
-        await Task.Delay(2000);
+        var raidPersisted = await WaitForPartyMembershipAsync(fgAccount!, bgAccount, fgGuid, TimeSpan.FromSeconds(10));
+        Assert.True(raidPersisted, "Raid leader predicate failed post-convert");
 
         // Step 4: Change raid subgroup for BG
         _output.WriteLine("[RAID] Moving BG to subgroup 2");
@@ -130,5 +138,23 @@ public class RaidFormationTests
 
         _output.WriteLine($"[{label}] Ungrouping (leader=0x{snap.PartyLeaderGuid:X}), sending {action}");
         await _bot.SendActionAndWaitAsync(account, new ActionMessage { ActionType = action }, delayMs: 1000);
+    }
+
+    private async Task<bool> WaitForPartyMembershipAsync(string leaderAccount, string memberAccount, ulong leaderGuid, TimeSpan timeout)
+    {
+        if (leaderGuid == 0)
+            return false;
+
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var leader = await _bot.GetSnapshotAsync(leaderAccount);
+            var member = await _bot.GetSnapshotAsync(memberAccount);
+            if (leader?.PartyLeaderGuid == leaderGuid && member?.PartyLeaderGuid == leaderGuid)
+                return true;
+            await Task.Delay(250);
+        }
+        return false;
     }
 }
