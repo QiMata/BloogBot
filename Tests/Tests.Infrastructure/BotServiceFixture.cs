@@ -1003,10 +1003,15 @@ public class BotServiceFixture : IAsyncLifetime
 
             // Reduce log level to Warning to prevent stdout pipe saturation with 10+ bots.
             // .NET Host reads Logging__LogLevel__Default from environment (double underscore = : separator).
-            psi.Environment["Logging__LogLevel__Default"] = "Warning";
-            psi.Environment["WWOW_LOG_LEVEL"] = "Warning";
-            psi.Environment["WWOW_CONSOLE_LOG_LEVEL"] = "Warning";
-            psi.Environment["WWOW_FILE_LOG_LEVEL"] = "Warning";
+            // For deep debugging (e.g. LoadoutTask step traces) set WWOW_TEST_BOT_LOG_LEVEL=Information
+            // before invoking dotnet test; that propagates to the bots via the env vars below.
+            var botLogLevel = Environment.GetEnvironmentVariable("WWOW_TEST_BOT_LOG_LEVEL");
+            if (string.IsNullOrWhiteSpace(botLogLevel))
+                botLogLevel = "Warning";
+            psi.Environment["Logging__LogLevel__Default"] = botLogLevel;
+            psi.Environment["WWOW_LOG_LEVEL"] = botLogLevel;
+            psi.Environment["WWOW_CONSOLE_LOG_LEVEL"] = botLogLevel;
+            psi.Environment["WWOW_FILE_LOG_LEVEL"] = botLogLevel;
 
             // Explicitly forward coordinator toggle so restarts inherit the test's intent
             var coordDisable = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR");

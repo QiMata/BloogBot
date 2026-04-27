@@ -75,6 +75,11 @@ public class LoadoutTask : BotTask, IBotTask
             _status = LoadoutStatus.LoadoutInProgress;
             AttachExpectedAcks();
 
+            Log.Information(
+                "[LOADOUT] Plan built: {StepCount} step(s): [{Steps}]",
+                _plan.Count,
+                string.Join(" | ", _plan.Select((s, i) => $"{i}:{s.Description}")));
+
             if (_plan.Count == 0)
             {
                 TransitionToReady();
@@ -88,6 +93,9 @@ public class LoadoutTask : BotTask, IBotTask
         // advance on the very next Update without waiting for the pacing tick.
         while (_stepIndex < _plan.Count && TryIsSatisfied(_plan[_stepIndex]))
         {
+            Log.Information(
+                "[LOADOUT] Step {StepIndex} '{Step}' satisfied; advancing",
+                _stepIndex, _plan[_stepIndex].Description);
             EmitStepTerminalAck(_plan[_stepIndex], CommandAckEvent.Types.AckStatus.Success);
             _plan[_stepIndex].DetachExpectedAck();
             _stepIndex++;
@@ -116,6 +124,9 @@ public class LoadoutTask : BotTask, IBotTask
 
         if (step.TryExecute(BotContext))
         {
+            Log.Information(
+                "[LOADOUT] Step {StepIndex} '{Step}' TryExecute=true (attempts={Attempts}, dispatch={Dispatch})",
+                _stepIndex, step.Description, step.ExecuteAttempts, step.DispatchCount);
             EmitStepPendingAck(step);
             step.MarkExecuted();
             if (step.IsOneShot)
@@ -126,6 +137,9 @@ public class LoadoutTask : BotTask, IBotTask
         }
         else
         {
+            Log.Information(
+                "[LOADOUT] Step {StepIndex} '{Step}' TryExecute=false (no-dispatch retry, attempts={Attempts})",
+                _stepIndex, step.Description, step.ExecuteAttempts);
             step.MarkAttemptedWithoutDispatch();
         }
     }
@@ -450,8 +464,20 @@ public class LoadoutTask : BotTask, IBotTask
         public override bool TryExecute(IBotContext context)
         {
             var om = context.ObjectManager;
-            if (om?.Player == null) return false;
-            if (KnowsSpell(om, _spellId)) return true;
+            if (om?.Player == null)
+            {
+                Log.Information("[LOADOUT-LEARN] spell {SpellId}: no Player yet, skipping retry", _spellId);
+                return false;
+            }
+            if (KnowsSpell(om, _spellId))
+            {
+                Log.Information("[LOADOUT-LEARN] spell {SpellId}: KnowsSpell=true, treating step as no-op success", _spellId);
+                return true;
+            }
+            var knownCount = om.KnownSpellIds?.Count ?? 0;
+            Log.Information(
+                "[LOADOUT-LEARN] spell {SpellId}: dispatching '.learn {SpellId}' (knownSpellsCount={KnownCount}, ackFired={AckFired})",
+                _spellId, _spellId, knownCount, AckFired);
             om.SendChatMessage($".learn {_spellId}");
             return true;
         }
