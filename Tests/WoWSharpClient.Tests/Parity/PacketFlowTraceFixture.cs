@@ -214,6 +214,9 @@ internal sealed class PacketFlowTraceFixture : IDisposable
                 or Opcode.SMSG_FORCE_SWIM_SPEED_CHANGE or Opcode.SMSG_FORCE_SWIM_BACK_SPEED_CHANGE
                 or Opcode.SMSG_FORCE_WALK_SPEED_CHANGE or Opcode.SMSG_FORCE_TURN_RATE_CHANGE
                 or Opcode.SMSG_FORCE_MOVE_ROOT or Opcode.SMSG_FORCE_MOVE_UNROOT or Opcode.SMSG_MOVE_KNOCK_BACK
+                or Opcode.SMSG_MOVE_WATER_WALK or Opcode.SMSG_MOVE_LAND_WALK
+                or Opcode.SMSG_MOVE_SET_HOVER or Opcode.SMSG_MOVE_UNSET_HOVER
+                or Opcode.SMSG_MOVE_FEATHER_FALL or Opcode.SMSG_MOVE_NORMAL_FALL
                 or Opcode.MSG_MOVE_TELEPORT or Opcode.MSG_MOVE_TELEPORT_ACK or Opcode.SMSG_MONSTER_MOVE
                 or Opcode.SMSG_MONSTER_MOVE_TRANSPORT => MovementHandler.HandleUpdateMovement,
             _ => throw new NotSupportedException($"Opcode {opcode} is not wired in PacketFlowTraceFixture.")

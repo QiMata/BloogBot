@@ -31,9 +31,9 @@
 | `CMSG_FORCE_SWIM_BACK_SPEED_CHANGE_ACK` (0x2DD) | `BuildForceSpeedChangeAck` | `SMSG_FORCE_SWIM_BACK_SPEED_CHANGE` (0x2DC) → `0x6029D0 → 0x619740` (slot `0x18`); apply at `0x619790 → 0x7C7170` | [`docs/physics/smsg_force_speed_change_handler.md`](smsg_force_speed_change_handler.md) | Theory above | **PASS** (commit `ebff10a4`) |
 | `CMSG_FORCE_WALK_SPEED_CHANGE_ACK` (0x2DB) | `BuildForceSpeedChangeAck` | `SMSG_FORCE_WALK_SPEED_CHANGE` (0x2DA) → `0x6029FD → 0x619620` (slot `0x16`); apply at `0x619670 → 0x7C70D0` | [`docs/physics/smsg_force_speed_change_handler.md`](smsg_force_speed_change_handler.md) | Theory above | **PASS** (commit `ebff10a4`) |
 | `CMSG_FORCE_TURN_RATE_CHANGE_ACK` (0x2DF) | `BuildForceSpeedChangeAck` | `SMSG_FORCE_TURN_RATE_CHANGE` (0x2DE) → `0x6029A3 → 0x6197D0` (slot `0x19`); apply at `0x619820 → 0x7C6FF0` | [`docs/physics/smsg_force_speed_change_handler.md`](smsg_force_speed_change_handler.md) | Theory above | **PASS** (commit `ebff10a4`) |
-| `CMSG_MOVE_WATER_WALK_ACK` (0x0F2) | `MovementPacketHandler.BuildMovementFlagToggleAck` (GUID + counter + MovementInfo + trailing float marker 1.0/0.0) | `SMSG_MOVE_WATER_WALK` / `SMSG_MOVE_LAND_WALK` → queue (per VMaNGOS `MovementPacketSender`) | [`docs/physics/smsg_move_flag_toggle_handler.md`](smsg_move_flag_toggle_handler.md) | `AckBinaryParityTests.ForceMoveAckFixtures` includes the toggle ACKs | **PASS** (layout) / **PARTIAL** (timing — covered by deferred-flush model in code, no dedicated PacketFlowParityTests test) |
-| `CMSG_MOVE_HOVER_ACK` (0x0F4) | `BuildMovementFlagToggleAck` | `SMSG_MOVE_SET_HOVER` / `SMSG_MOVE_UNSET_HOVER` → queue | [`docs/physics/smsg_move_flag_toggle_handler.md`](smsg_move_flag_toggle_handler.md) | `AckBinaryParityTests` toggle fixtures | **PASS** (layout) / **PARTIAL** (timing) |
-| `CMSG_MOVE_FEATHER_FALL_ACK` (0x32B) | `BuildMovementFlagToggleAck` | `SMSG_MOVE_FEATHER_FALL` / `SMSG_MOVE_NORMAL_FALL` → queue | [`docs/physics/smsg_move_flag_toggle_handler.md`](smsg_move_flag_toggle_handler.md) | `AckBinaryParityTests` toggle fixtures | **PASS** (layout) / **PARTIAL** (timing) |
+| `CMSG_MOVE_WATER_WALK_ACK` (0x2D0) | `MovementPacketHandler.BuildMovementFlagToggleAck` (GUID + counter + MovementInfo + trailing float marker 1.0/0.0) | `SMSG_MOVE_WATER_WALK` / `SMSG_MOVE_LAND_WALK` → queue (per VMaNGOS `MovementPacketSender`) | [`docs/physics/smsg_move_flag_toggle_handler.md`](smsg_move_flag_toggle_handler.md) | `AckBinaryParityTests.ForceMoveAckFixtures` toggle fixtures; `PacketFlowParityTests.MovementFlagToggleFamily_QueuesDeferredAck_ThenFlushesWithUpdatedFlag` (theory) | **PASS** (layout + timing — Stream 2A) |
+| `CMSG_MOVE_HOVER_ACK` (0x0F6) | `BuildMovementFlagToggleAck` | `SMSG_MOVE_SET_HOVER` / `SMSG_MOVE_UNSET_HOVER` → queue | [`docs/physics/smsg_move_flag_toggle_handler.md`](smsg_move_flag_toggle_handler.md) | `AckBinaryParityTests` toggle fixtures; `PacketFlowParityTests.MovementFlagToggleFamily_*` (theory) | **PASS** (layout + timing — Stream 2A) |
+| `CMSG_MOVE_FEATHER_FALL_ACK` (0x2CF) | `BuildMovementFlagToggleAck` | `SMSG_MOVE_FEATHER_FALL` / `SMSG_MOVE_NORMAL_FALL` → queue | [`docs/physics/smsg_move_flag_toggle_handler.md`](smsg_move_flag_toggle_handler.md) | `AckBinaryParityTests` toggle fixtures; `PacketFlowParityTests.MovementFlagToggleFamily_*` (theory) | **PASS** (layout + timing — Stream 2A) |
 
 ## Outbound movement-state opcodes (heartbeats / state transitions)
 
@@ -147,13 +147,18 @@ and the recorded-trace replay harness).
    authoritative copy with VA citations; replay tests in
    `Tests/Navigation.Physics.Tests/` validate end-to-end behaviour.
 
-5. **Movement-flag-toggle timing is partially pinned.** Layout fixtures
-   exist for water-walk / hover / feather-fall ACKs in
-   `AckBinaryParityTests`, and the dispatch routes through the same
-   `QueueDeferredMovementChange` helper that `PacketFlowParityTests`
-   covers for speed/root, but no per-opcode timing test exists yet.
-   Adding parametrized coverage is straightforward and is the natural
-   next test to write if a regression lands here.
+5. **Movement-flag-toggle timing is now pinned.** Layout fixtures already
+   existed for water-walk / hover / feather-fall ACKs in
+   `AckBinaryParityTests`, and Stream 2A added a parametrized timing
+   theory (`PacketFlowParityTests.MovementFlagToggleFamily_QueuesDeferredAck_ThenFlushesWithUpdatedFlag`)
+   covering all six inbound opcodes
+   (`SMSG_MOVE_{WATER_WALK,LAND_WALK,SET_HOVER,UNSET_HOVER,FEATHER_FALL,NORMAL_FALL}`)
+   → three ACK opcodes
+   (`CMSG_MOVE_{WATER_WALK,HOVER,FEATHER_FALL}_ACK`) with
+   queue-first dispatch, deferred apply on flush, byte-exact
+   MovementInfo + trailing 1.0/0.0 marker assertion. No regression
+   detected; the toggle family is now timing-pinned to the same
+   standard as the speed and root families.
 
 ## What's *not* in scope of this audit
 

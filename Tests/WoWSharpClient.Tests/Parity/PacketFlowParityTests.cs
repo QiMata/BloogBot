@@ -193,6 +193,61 @@ public sealed class PacketFlowParityTests
         Assert.Equal(EncodeRawClientPacket(Opcode.CMSG_FORCE_MOVE_ROOT_ACK, expectedPayload), EncodeRawClientPacket(outbound.Opcode!.Value, outbound.Payload!));
     }
 
+    // Pins the queue-first deferred-ACK contract from
+    // docs/physics/smsg_move_flag_toggle_handler.md across the THREE
+    // movement-flag-toggle opcode pairs. WoW.exe's first-stage handler
+    // for SMSG_MOVE_{WATER_WALK,LAND_WALK,SET_HOVER,UNSET_HOVER,
+    // FEATHER_FALL,NORMAL_FALL} stages the change via the same
+    // deferred-movement queue as ROOT/UNROOT and the speed family; the
+    // matching CMSG_MOVE_{WATER_WALK,HOVER,FEATHER_FALL}_ACK fires only
+    // on FlushDeferredMovementChanges with a trailing 1.0f marker for
+    // set/apply or 0.0f for clear/remove (pinned in
+    // MovementPacketHandler.BuildMovementFlagToggleAck and the
+    // AckBinaryParityTests golden corpus). This regression test covers
+    // the timing half of the audit's "PASS layout / PARTIAL timing"
+    // entries so a future divergence in the queue-first dispatch path
+    // is caught at the unit-test level, not in live integration.
+    [Theory]
+    [InlineData(Opcode.SMSG_MOVE_WATER_WALK, Opcode.CMSG_MOVE_WATER_WALK_ACK, MovementFlags.MOVEFLAG_WATERWALKING, true)]
+    [InlineData(Opcode.SMSG_MOVE_LAND_WALK, Opcode.CMSG_MOVE_WATER_WALK_ACK, MovementFlags.MOVEFLAG_WATERWALKING, false)]
+    [InlineData(Opcode.SMSG_MOVE_SET_HOVER, Opcode.CMSG_MOVE_HOVER_ACK, MovementFlags.MOVEFLAG_HOVER, true)]
+    [InlineData(Opcode.SMSG_MOVE_UNSET_HOVER, Opcode.CMSG_MOVE_HOVER_ACK, MovementFlags.MOVEFLAG_HOVER, false)]
+    [InlineData(Opcode.SMSG_MOVE_FEATHER_FALL, Opcode.CMSG_MOVE_FEATHER_FALL_ACK, MovementFlags.MOVEFLAG_SAFE_FALL, true)]
+    [InlineData(Opcode.SMSG_MOVE_NORMAL_FALL, Opcode.CMSG_MOVE_FEATHER_FALL_ACK, MovementFlags.MOVEFLAG_SAFE_FALL, false)]
+    [Trait("Category", "PacketFlowParity")]
+    public void MovementFlagToggleFamily_QueuesDeferredAck_ThenFlushesWithUpdatedFlag(
+        Opcode inboundOpcode,
+        Opcode ackOpcode,
+        MovementFlags toggledFlag,
+        bool apply)
+    {
+        using var trace = new PacketFlowTraceFixture();
+        const ulong playerGuid = 0x220ul;
+        trace.SeedLocalPlayer(playerGuid, position: new Position(15f, 25f, 35f), facing: 1.25f);
+        var player = Assert.IsType<WoWLocalPlayer>(trace.ObjectManager.Player);
+
+        // Start in the opposite state of what the inbound opcode requests so we can
+        // observe the flush actually mutates the flag (apply=true → starts cleared;
+        // apply=false → starts set).
+        player.MovementFlags = apply ? MovementFlags.MOVEFLAG_NONE : toggledFlag;
+
+        const uint counter = 17u;
+        trace.Dispatch(inboundOpcode, BuildGuidCounterPacket(playerGuid, counter));
+
+        // Queue-first: no outbound packet emitted from the inbound leaf,
+        // and the flag has not yet been mutated.
+        Assert.Empty(trace.Events.Where(e => e.Kind == "outbound"));
+        Assert.Equal(!apply, player.MovementFlags.HasFlag(toggledFlag));
+
+        const uint flushTimeMs = 6000u;
+        Assert.Equal(1, trace.FlushDeferredMovementChanges(gameTimeMs: flushTimeMs));
+
+        Assert.Equal(apply, player.MovementFlags.HasFlag(toggledFlag));
+        var outbound = Assert.Single(Outbound(trace, ackOpcode));
+        var expectedPayload = MovementPacketHandler.BuildMovementFlagToggleAck(player, counter, flushTimeMs, apply);
+        Assert.Equal(EncodeRawClientPacket(ackOpcode, expectedPayload), EncodeRawClientPacket(outbound.Opcode!.Value, outbound.Payload!));
+    }
+
     [Fact]
     [Trait("Category", "PacketFlowParity")]
     public void MoveKnockBack_StagesImpulse_BeforeAckFlush()
