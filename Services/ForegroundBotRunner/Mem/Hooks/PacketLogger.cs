@@ -875,7 +875,8 @@ namespace ForegroundBotRunner.Mem.Hooks
             0x00DA => "MSG_MOVE_SET_FACING",
             0x00DC => "MSG_MOVE_WORLDPORT_ACK",
             0x00EE => "MSG_MOVE_HEARTBEAT",
-            0x00C9 => "MSG_MOVE_TELEPORT_ACK",
+            0x00C7 => "MSG_MOVE_TELEPORT_ACK",
+            0x00C9 => "MSG_MOVE_FALL_LAND",
 
             // Update objects
             0x00A9 => "SMSG_UPDATE_OBJECT",
