@@ -18,8 +18,18 @@ namespace ForegroundBotRunner.Diagnostics;
 /// suppression in <see cref="WoWSharpClient.Movement.MovementController"/> is
 /// dropping packets that WoW.exe actually emits.
 ///
-/// Triggered when a <c>Recv</c> packet with opcode <see cref="Opcode.MSG_MOVE_TELEPORT"/>
-/// (0xC5) is observed via <see cref="PacketLogger.OnPacketCapturedDetailed"/>.
+/// Triggered when an inbound <c>Recv</c> teleport-direction packet is observed
+/// via <see cref="PacketLogger.OnPacketCapturedDetailed"/>. Both 1.12.1 inbound
+/// teleport opcodes count as triggers because the WoW protocol uses bidirectional
+/// MSG_* opcodes:
+/// <list type="bullet">
+/// <item><see cref="Opcode.MSG_MOVE_TELEPORT"/> (0xC5) — server-pushed teleport
+///   without prior client request (packed_guid + MovementInfo, no counter).</item>
+/// <item><see cref="Opcode.MSG_MOVE_TELEPORT_ACK"/> (0xC7) inbound — server-side
+///   teleport notification carrying a counter and full MovementInfo (37-byte payload
+///   in the <c>.go xyz</c> path); the client replies with the same opcode 0xC7
+///   outbound (16-byte payload: guid + counter + clientTimeMs).</item>
+/// </list>
 /// Records every subsequent packet for <see cref="WindowDurationMs"/> milliseconds
 /// (default 2500) and writes a JSON fixture into
 /// <c>Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/</c>.
@@ -110,8 +120,7 @@ public sealed class ForegroundPostTeleportWindowRecorder : IDisposable
     private void HandlePacketCaptured(PacketCapture capture)
     {
         var opcode = (Opcode)(uint)capture.Opcode;
-        var isTeleportTrigger =
-            capture.Direction == PacketDirection.Recv && opcode == Opcode.MSG_MOVE_TELEPORT;
+        var isTeleportTrigger = IsInboundTeleportTrigger(capture.Direction, opcode);
 
         lock (_lock)
         {
@@ -228,6 +237,10 @@ public sealed class ForegroundPostTeleportWindowRecorder : IDisposable
             _closeTimer = null;
         }
     }
+
+    private static bool IsInboundTeleportTrigger(PacketDirection direction, Opcode opcode)
+        => direction == PacketDirection.Recv
+            && opcode is Opcode.MSG_MOVE_TELEPORT or Opcode.MSG_MOVE_TELEPORT_ACK;
 
     private static int ResolveWindowDurationMs()
     {

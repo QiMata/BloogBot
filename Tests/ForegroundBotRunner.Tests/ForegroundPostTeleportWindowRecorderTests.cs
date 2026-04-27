@@ -14,8 +14,10 @@ public sealed class ForegroundPostTeleportWindowRecorderTests
 {
     private const string RecordingArtifactsEnvVar = "WWOW_ENABLE_RECORDING_ARTIFACTS";
 
-    [Fact]
-    public void Recorder_TriggeredByInboundTeleport_CapturesSubsequentPacketsUntilWindowElapses()
+    [Theory]
+    [InlineData(Opcode.MSG_MOVE_TELEPORT)]
+    [InlineData(Opcode.MSG_MOVE_TELEPORT_ACK)]
+    public void Recorder_TriggeredByInboundTeleport_CapturesSubsequentPacketsUntilWindowElapses(Opcode triggerOpcode)
     {
         var tempDir = CreateTempDirectory();
         try
@@ -33,8 +35,8 @@ public sealed class ForegroundPostTeleportWindowRecorderTests
             // Pre-trigger noise — must be ignored.
             PacketLogger.RecordOutboundPacket((ushort)Opcode.MSG_MOVE_HEARTBEAT, [0x01, 0x02, 0x03]);
 
-            // Trigger: inbound MSG_MOVE_TELEPORT.
-            PacketLogger.RecordInboundPacket((ushort)Opcode.MSG_MOVE_TELEPORT, size: 32);
+            // Trigger: inbound teleport (either of the two bidirectional MSG_* opcodes).
+            PacketLogger.RecordInboundPacket((ushort)triggerOpcode, size: 32);
 
             // Window content: outbound ACK + outbound heartbeat.
             PacketLogger.RecordOutboundPacket(
@@ -55,18 +57,50 @@ public sealed class ForegroundPostTeleportWindowRecorderTests
             Assert.Equal(200, root.GetProperty("WindowDurationMs").GetInt32());
 
             var trigger = root.GetProperty("Trigger");
-            Assert.Equal("MSG_MOVE_TELEPORT", trigger.GetProperty("OpcodeName").GetString());
+            Assert.Equal(triggerOpcode.ToString(), trigger.GetProperty("OpcodeName").GetString());
             Assert.Equal("Recv", trigger.GetProperty("Direction").GetString());
 
             var packets = root.GetProperty("Packets").EnumerateArray().ToArray();
             Assert.Equal(3, packets.Length);
-            Assert.Equal("MSG_MOVE_TELEPORT", packets[0].GetProperty("OpcodeName").GetString());
+            Assert.Equal(triggerOpcode.ToString(), packets[0].GetProperty("OpcodeName").GetString());
             Assert.Equal("MSG_MOVE_TELEPORT_ACK", packets[1].GetProperty("OpcodeName").GetString());
             Assert.Equal("MSG_MOVE_HEARTBEAT", packets[2].GetProperty("OpcodeName").GetString());
             Assert.Equal("Recv", packets[0].GetProperty("Direction").GetString());
             Assert.Equal("Send", packets[1].GetProperty("Direction").GetString());
             Assert.Equal("Send", packets[2].GetProperty("Direction").GetString());
             Assert.True(packets[1].GetProperty("PayloadHex").GetString()!.Length > 0);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public void Recorder_OutboundTeleportAck_DoesNotTriggerWindow()
+    {
+        // A FG bot's outbound MSG_MOVE_TELEPORT_ACK (16-byte payload) is the
+        // CLIENT-side ack of an inbound teleport, not a fresh trigger. It must
+        // not open a recording window on its own — only inbound packets trigger.
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            using var artifactsScope = new EnvironmentVariableScope(RecordingArtifactsEnvVar, "1");
+            using var enableScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.EnableEnvVar, "1");
+            using var outputScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.OutputDirEnvVar, tempDir);
+            using var windowScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.WindowDurationEnvVar, "200");
+            using var loggerFactory = LoggerFactory.Create(_ => { });
+            using var recorder = new ForegroundPostTeleportWindowRecorder(loggerFactory);
+
+            recorder.Start();
+
+            PacketLogger.RecordOutboundPacket(
+                (ushort)Opcode.MSG_MOVE_TELEPORT_ACK,
+                BuildOpcodeBytes(Opcode.MSG_MOVE_TELEPORT_ACK, payloadLength: 16));
+
+            Thread.Sleep(400);
+
+            Assert.False(Directory.EnumerateFiles(tempDir, "*.json").Any());
         }
         finally
         {
