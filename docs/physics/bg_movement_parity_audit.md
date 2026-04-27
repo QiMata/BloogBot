@@ -174,17 +174,26 @@ and the recorded-trace replay harness).
    | 991 | Send | `MSG_MOVE_HEARTBEAT` (48 B) | same FALLING flags, ~500ms cadence |
    | 1271 | Send | `MSG_MOVE_FALL_LAND` (32 B) | landing |
 
-   Stream 2B closed two of the three contributing parity bugs:
+   Stream 2B + 2C closed all three contributing parity bugs:
 
-   - **`472170e3`** — dropped the `!_needsGroundSnap` suppression at
+   - **`472170e3`** (Stream 2B) — dropped the `!_needsGroundSnap`
+     suppression at
      [`MovementController.cs:379`](../../Exports/WoWSharpClient/Movement/MovementController.cs)
      (originally introduced by commit `49915f62`). BG now broadcasts
      heartbeats and `MSG_MOVE_FALL_LAND` during the snap window.
-   - **`4771d931`** — reordered `DetermineOpcode` so the
+   - **`4771d931`** (Stream 2B) — reordered `DetermineOpcode` so the
      `FALLINGFAR/JUMPING → grounded` landing rules fire before the
      `current==NONE && previous!=NONE → MSG_MOVE_STOP` rule. Pre-fix,
      the snap-completion `SendStopPacket` call emitted `MSG_MOVE_STOP`
      instead of the `MSG_MOVE_FALL_LAND` that WoW.exe emits.
+   - **`03e7a204` + `e248f1ce`** (Stream 2C) — added
+     `MovementController.NotifyExternalPacketSent` and call it from
+     `TryFlushPendingTeleportAck` after the outbound ACK. Resets
+     `_lastPacketTime` and opens a one-cadence suppression window on
+     the flag-change branch of `ShouldSendPacket`, so the first
+     physics-tick `NONE → FALLINGFAR` transition no longer double-fires
+     a heartbeat inside the 500ms WoW.exe leaves silent after its
+     outbound `MSG_MOVE_TELEPORT_ACK`.
 
    Pinned by:
 
@@ -193,7 +202,9 @@ and the recorded-trace replay harness).
    - `PostTeleportPacketWindowParityTests.Background_AfterTeleportTrigger_EmitsOutboundTeleportAckMatchingForegroundShape`
      — confirms the immediate 16-byte client ACK is byte-equivalent.
    - `PostTeleportPacketWindowParityTests.Background_AfterTeleportTrigger_OutboundStream_StructurallyMatchesForegroundBaseline`
-     — now passing; pins the BG-today outbound stream.
+     — now asserts byte-for-opcode-name equality with FG
+     (`Assert.Equal(fgOutboundOpcodes, bgOutboundOpcodes)`). Any future
+     regression that drifts BG's outbound stream will fail here.
 
    The recording infrastructure (`ForegroundPostTeleportWindowRecorder`,
    gated on `WWOW_CAPTURE_POST_TELEPORT_WINDOW=1`) is reusable for any
@@ -202,16 +213,12 @@ and the recorded-trace replay harness).
    `Foreground_VerticalDropTeleport_*` test against different
    coordinates and renaming the resulting `foreground_*` fixture.
 
-   **Status: Stream 2B closed; one parity gap remains (Stream 2C).**
+   **Status: Stream 2B + Stream 2C closed; BG outbound stream is
+   byte-for-opcode-name identical to FG during the post-teleport
+   window.**
 
    FG outbound: `[TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND]`
-   BG outbound: `[TELEPORT_ACK, HEARTBEAT, HEARTBEAT, HEARTBEAT, FALL_LAND]`
-
-   The +1 heartbeat at the start of the fall is because
-   `ShouldSendPacket` fires immediately on `NONE → FALLINGFAR`, while
-   WoW.exe cadence-gates the first heartbeat ~`PACKET_INTERVAL_MS`
-   (≈500ms) after the outbound ACK. Stream 2C plan:
-   [`docs/handoff_session_bg_movement_parity_followup_v7.md`](../handoff_session_bg_movement_parity_followup_v7.md).
+   BG outbound: `[TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND]`
 
 ## What's *not* in scope of this audit
 
