@@ -45,6 +45,8 @@ one Phase B optimization. All compile clean and pass:
 | `a643225b` | D | `feat(phase-d): TaxiTests.Taxi_MultiHop_OrgToGadgetzan asserts full arrival` — full Org→Gadgetzan multi-hop. |
 | `fe280267` | D | `feat(phase-d): add Elevator_FullRide_Undercity end-to-end assertion` — Stage upper, Goto lower, assert TransportGuid + Z arrival. |
 | `61888ba0` | B | `feat(phase-b): replace AV/WSG prep-window blind sleeps with chat-driven wait` — 130s + 95s sleeps now poll RecentChatMessages for "begun" marker, falling back to wall-clock. |
+| `2249297c` | B | `feat(phase-b): replace FormRaidAsync 2x 2000ms blind sleeps with predicates` — RaidCoordinationTests.FormRaidAsync now uses WaitForPartyMembershipAsync (PartyLeaderGuid predicate, 250ms poll, 20s/10s timeouts). Saves ~3-3.5s per raid form. |
+| `18249f2a` | B | `feat(phase-b): apply same predicate-poll to RaidFormationTests` — same refactor on the inline raid formation in RaidFormationTests. |
 
 Verification:
 - `OnboardingAutomatedModeTests.Onboarding_AutomatedMode_DispatchesApplyLoadoutAtWorldEntry` passes 6/6 in 35-43s (was: 1m43s with bot flapping).
@@ -165,8 +167,15 @@ window, the helper exits at T+90 and saves 40s.
 
 | Wall | File:Line | Notes |
 |---|---|---|
-| 1.5s × 5 | `Raids/RaidCoordinationTests.cs:160,186,193,201,207`; `RaidFormationTests.cs:61,70,88,102,116` | Replace with `WaitForRaidMembershipAsync`-style predicates. Activity-owned, handle carefully. Per-raid-member savings. |
-| 900ms × N | `CoordinatorFixtureBase.cs:817` (post-`SendGroupInvite`) | No `HasPendingGroupInvite` field on the snapshot proto today. Adding one would unlock this on a per-raid-member basis (~36s for a 40-bot raid setup). Touches `WoWActivitySnapshot` proto + FG/BG snapshot pipeline. |
+| 1.5s × 1 | `Raids/RaidCoordinationTests.cs:160` (post-`AssignLoot`) | No snapshot field for raid loot rule today. Keep as-is unless the proto is extended. |
+| 1.5s × 1 | `Raids/RaidCoordinationTests.cs:186`, `RaidFormationTests.cs:61` (post-`SendGroupInvite`) | No `HasPendingGroupInvite` field on the snapshot proto today. Same gating as the 900ms × N row below. |
+| 1.5s × 1 | `RaidFormationTests.cs:102` (post-`ChangeRaidSubgroup`) | No subgroup field on the snapshot. Keep as-is. |
+| 1.0s × 1 | `RaidFormationTests.cs:116` (post-`DisbandGroup` cleanup) | Cleanup, not test-critical. Keep as-is. |
+| 900ms × N | `CoordinatorFixtureBase.cs:817` (post-`SendGroupInvite`) | No `HasPendingGroupInvite` field on the snapshot proto today. Adding one would unlock this on a per-raid-member basis (~36s for a 40-bot raid setup) AND the `SendGroupInvite` rows above. Touches `WoWActivitySnapshot` proto + FG/BG snapshot pipeline. |
+
+**v8 progress on this section:** the 2.0s × 4 across both raid tests
+were eliminated by 2249297c and 18249f2a. The remaining items either
+need proto changes or are cleanup-only.
 
 ---
 
