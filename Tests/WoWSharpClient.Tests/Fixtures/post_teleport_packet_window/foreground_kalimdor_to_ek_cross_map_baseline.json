@@ -1,0 +1,74 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-27T23:49:22.2557543Z",
+  "CaptureScenario": "post_teleport_packet_window",
+  "Source": "WoW.exe (FG) NetClient::Send 0x005379A0 / NetClient::ProcessMessage 0x00537AA0",
+  "CloseReason": "timer",
+  "WindowDurationMs": 2500,
+  "Trigger": {
+    "DeltaMs": 0,
+    "Direction": "Recv",
+    "Opcode": 63,
+    "OpcodeName": "SMSG_TRANSFER_PENDING",
+    "Size": 6,
+    "PayloadHex": "3F0000000000"
+  },
+  "Packets": [
+    {
+      "DeltaMs": 0,
+      "Direction": "Recv",
+      "Opcode": 63,
+      "OpcodeName": "SMSG_TRANSFER_PENDING",
+      "Size": 6,
+      "PayloadHex": "3F0000000000"
+    },
+    {
+      "DeltaMs": 27,
+      "Direction": "Recv",
+      "Opcode": 502,
+      "OpcodeName": "SMSG_COMPRESSED_UPDATE_OBJECT",
+      "Size": 118,
+      "PayloadHex": "F601840000007801636460606064110292FFF7E531AA8530297CBCFDDAB14A4FE1E3EF3B4C60EEEFF63D10E15760E1C31E8107E46FBF75AC062A39FE6235D301F9E3EC2D40F27695BB970050287D0348A8044C6E0391B717041CDC013495D9C31B287F7B7EC00120EF78E01690D41BB031000CDE3B37"
+    },
+    {
+      "DeltaMs": 27,
+      "Direction": "Recv",
+      "Opcode": 169,
+      "OpcodeName": "SMSG_UPDATE_OBJECT",
+      "Size": 41,
+      "PayloadHex": "A90001000000000404000000DB6319803930F1DB6419383830F1DBA212551330F1FBAC7BB2B10210F1"
+    },
+    {
+      "DeltaMs": 27,
+      "Direction": "Recv",
+      "Opcode": 62,
+      "OpcodeName": "SMSG_NEW_WORLD",
+      "Size": 22,
+      "PayloadHex": "3E0000000000003097C500A0A4C40080FC43906B473F"
+    },
+    {
+      "DeltaMs": 28,
+      "Direction": "Recv",
+      "Opcode": 811,
+      "OpcodeName": "SMSG_UPDATE_INSTANCE_OWNERSHIP",
+      "Size": 6,
+      "PayloadHex": "2B0300000000"
+    },
+    {
+      "DeltaMs": 32,
+      "Direction": "Send",
+      "Opcode": 284,
+      "OpcodeName": "CMSG_CANCEL_TRADE",
+      "Size": 4,
+      "PayloadHex": "1C010000"
+    },
+    {
+      "DeltaMs": 102,
+      "Direction": "Recv",
+      "Opcode": 63,
+      "OpcodeName": "SMSG_TRANSFER_PENDING",
+      "Size": 0,
+      "PayloadHex": ""
+    }
+  ]
+}

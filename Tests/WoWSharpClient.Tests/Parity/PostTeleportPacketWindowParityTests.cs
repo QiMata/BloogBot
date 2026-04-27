@@ -32,6 +32,7 @@ public sealed class PostTeleportPacketWindowParityTests
     private const string BaselineFileName = "foreground_durotar_vertical_drop_baseline.json";
     private const string BackgroundBaselineFileName = "background_durotar_vertical_drop_baseline.json";
     private const string BackgroundHighDropBaselineFileName = "background_durotar_high_drop_baseline.json";
+    private const string ForegroundCrossMapBaselineFileName = "foreground_kalimdor_to_ek_cross_map_baseline.json";
     private const ulong CapturedPlayerGuid = 366ul; // matches captured ACK fixture
 
     [Fact]
@@ -401,11 +402,62 @@ public sealed class PostTeleportPacketWindowParityTests
         Assert.Equal(16, outboundAck!.Size);
     }
 
+    [Fact]
+    [Trait("Category", "PacketFlowParity")]
+    public void ForegroundCrossMapBaseline_PinsTransferPendingNewWorldShape()
+    {
+        // Stream 4 cross-map oracle: live FG capture of an Orgrimmar (Kalimdor)
+        // -> Ironforge (Eastern Kingdoms) hop. Recorder fires on SMSG_TRANSFER_PENDING
+        // (the early heads-up the server sends before tearing down the world
+        // session); the captured window includes the destination
+        // SMSG_COMPRESSED_UPDATE_OBJECT, SMSG_NEW_WORLD, and the immediate
+        // CMSG_CANCEL_TRADE the client emits as part of its world-change
+        // cleanup.
+        //
+        // Note: the post-load MSG_MOVE_WORLDPORT_ACK does NOT appear in the
+        // 2.5s window because WoW.exe pauses packet processing during the
+        // map load. To capture the WORLDPORT_ACK we'd either need a longer
+        // recording window or a second recorder triggered on
+        // SMSG_NEW_WORLD specifically. For now this baseline pins the
+        // transfer-pending side of the cross-map sequence.
+        var fixture = LoadForegroundCrossMapBaseline();
+
+        Assert.Equal(1, fixture.SchemaVersion);
+        Assert.Equal("post_teleport_packet_window", fixture.CaptureScenario);
+        Assert.Contains("WoW.exe", fixture.Source);
+
+        Assert.NotNull(fixture.Trigger);
+        Assert.Equal("Recv", fixture.Trigger!.Direction);
+        Assert.Equal("SMSG_TRANSFER_PENDING", fixture.Trigger.OpcodeName);
+        Assert.Equal(0, fixture.Trigger.DeltaMs);
+
+        var packets = fixture.Packets;
+        Assert.NotNull(packets);
+        Assert.True(packets!.Count > 0, "Captured FG cross-map window must contain at least the trigger.");
+
+        // The captured window should include SMSG_NEW_WORLD as part of the
+        // cross-map handshake (the destination map + landing position).
+        Assert.Contains(packets, p => p.OpcodeName == "SMSG_NEW_WORLD" && p.Direction == "Recv");
+
+        // The destination object update lands inside the same window.
+        Assert.Contains(packets, p => p.OpcodeName == "SMSG_COMPRESSED_UPDATE_OBJECT" && p.Direction == "Recv");
+
+        // Sanity check: the trigger payload encodes the destination map ID
+        // (4 bytes after the opcode/size header in SMSG_TRANSFER_PENDING).
+        // Org-to-Ironforge crosses Kalimdor (mapId=1) -> EK (mapId=0). The
+        // captured payload starts with 3F00 (opcode+size prefix) followed
+        // by 00000000 — the destination map ID 0 (EK) in little-endian.
+        Assert.StartsWith("3F00", fixture.Trigger.PayloadHex);
+        Assert.Contains("00000000", fixture.Trigger.PayloadHex);
+    }
+
     private static PostTeleportWindowFixture LoadBaseline() => LoadFixture(BaselineFileName);
 
     private static PostTeleportWindowFixture LoadBackgroundBaseline() => LoadFixture(BackgroundBaselineFileName);
 
     private static PostTeleportWindowFixture LoadBackgroundHighDropBaseline() => LoadFixture(BackgroundHighDropBaselineFileName);
+
+    private static PostTeleportWindowFixture LoadForegroundCrossMapBaseline() => LoadFixture(ForegroundCrossMapBaselineFileName);
 
     private static PostTeleportWindowFixture LoadFixture(string fileName)
     {
