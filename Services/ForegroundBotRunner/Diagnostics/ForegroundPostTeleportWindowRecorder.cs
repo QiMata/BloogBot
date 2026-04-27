@@ -238,9 +238,17 @@ public sealed class ForegroundPostTeleportWindowRecorder : IDisposable
         }
     }
 
+    // Stream 4: trigger on cross-map teleport opcodes too. SMSG_TRANSFER_PENDING
+    // is the early heads-up the server sends before SMSG_NEW_WORLD; SMSG_NEW_WORLD
+    // delivers the destination map/position and triggers MSG_MOVE_WORLDPORT_ACK.
+    // We open the recording window on whichever fires first so the cross-map
+    // ACK + post-load packet sequence is captured end-to-end.
     private static bool IsInboundTeleportTrigger(PacketDirection direction, Opcode opcode)
         => direction == PacketDirection.Recv
-            && opcode is Opcode.MSG_MOVE_TELEPORT or Opcode.MSG_MOVE_TELEPORT_ACK;
+            && opcode is Opcode.MSG_MOVE_TELEPORT
+                or Opcode.MSG_MOVE_TELEPORT_ACK
+                or Opcode.SMSG_NEW_WORLD
+                or Opcode.SMSG_TRANSFER_PENDING;
 
     private static int ResolveWindowDurationMs()
     {
