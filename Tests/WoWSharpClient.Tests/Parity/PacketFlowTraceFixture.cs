@@ -139,6 +139,31 @@ internal sealed class PacketFlowTraceFixture : IDisposable
         SetPrivateField(controller, "_needsGroundSnap", false);
     }
 
+    /// <summary>
+    /// Drives the MovementController through a synthetic physics tick loop, calling
+    /// <see cref="MovementController.Update"/> repeatedly with monotonically advancing
+    /// game-time values. Used by post-teleport parity tests to compare the BG outbound
+    /// packet stream against the FG baseline. The caller is expected to install a
+    /// <see cref="WoWSharpClient.Utils.NativeLocalPhysics.TestStepOverride"/> that
+    /// scripts the desired physics output.
+    /// </summary>
+    public void RunPhysicsFor(uint durationMs, uint stepMs = 33, uint startGameTimeMs = 0)
+    {
+        if (stepMs == 0)
+            throw new ArgumentOutOfRangeException(nameof(stepMs), "stepMs must be > 0.");
+
+        var controller = GetPrivateField<MovementController>(ObjectManager, "_movementController");
+        if (controller == null)
+            throw new InvalidOperationException(
+                "MovementController not initialized; call EnsureTeleportAckFlushSupport first.");
+
+        var deltaSec = stepMs / 1000f;
+        for (uint elapsed = 0; elapsed <= durationMs; elapsed += stepMs)
+        {
+            controller.Update(deltaSec, startGameTimeMs + elapsed);
+        }
+    }
+
     public void AddRemoteUnit(ulong guid)
     {
         ObjectManager.QueueUpdate(new WoWSharpObjectManager.ObjectStateUpdate(

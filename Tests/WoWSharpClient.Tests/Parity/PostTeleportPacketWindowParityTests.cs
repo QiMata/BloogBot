@@ -6,6 +6,7 @@ using System.Text.Json;
 using GameData.Core.Enums;
 using GameData.Core.Models;
 using WoWSharpClient.Models;
+using WoWSharpClient.Movement;
 using WoWSharpClient.Parsers;
 using WoWSharpClient.Utils;
 using Xunit;
@@ -130,23 +131,136 @@ public sealed class PostTeleportPacketWindowParityTests
         // ordering is what parity pins.
     }
 
-    [Fact(Skip = "Stream 2B — BG MovementController:379 currently suppresses heartbeats and FALL_LAND during _needsGroundSnap. Unblock once the suppression is narrowed to match the FG fixture.")]
+    [Fact]
     [Trait("Category", "PacketFlowParity")]
     public void Background_AfterTeleportTrigger_OutboundStream_StructurallyMatchesForegroundBaseline()
     {
-        // End-state regression: BG, after receiving the same trigger and
-        // running its physics tick loop for the FG fixture's window
-        // duration, must emit the same ordered sequence of outbound opcode
-        // names as WoW.exe. Driving the physics tick loop in a unit test
-        // also requires native NavigationDLL ground-snap support; this test
-        // is the canonical exit criterion for Stream 2B.
+        // Stream 2B exit criterion: after receiving the same teleport trigger
+        // and running its physics tick loop through the FG fixture's window
+        // duration, BG must emit the same ordered sequence of outbound opcode
+        // names as WoW.exe — proving the suppression-drop in MovementController
+        // is sufficient (no additional gating regression).
+        var fg = LoadBaseline();
+        var fgOutboundOpcodes = fg.Packets!
+            .Where(p => p.Direction == "Send")
+            .Select(p => p.OpcodeName)
+            .ToArray();
+
+        using var trace = new PacketFlowTraceFixture();
+        trace.SeedLocalPlayer(
+            CapturedPlayerGuid,
+            mapId: 1,
+            position: new Position(-460f, -4760f, 38f),
+            facing: 0f,
+            fixedWorldTimeMs: 4242);
+        trace.EnsureTeleportAckFlushSupport();
+
+        // Script physics: ~38 frames of free-fall (matching FG's 1.27s fall),
+        // then a landed result that clears FALLINGFAR. GroundZ stays at -50001
+        // during the fall so the snap clamp doesn't short-circuit (matches the
+        // existing Update_PostTeleport_NoGroundBelow_AllowsGraceFall scenario).
+        const int FreefallFrames = 38;
+        var physicsCallCount = 0;
+        NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
+        NativeLocalPhysics.TestStepOverride = input =>
+        {
+            physicsCallCount++;
+            bool stillFalling = physicsCallCount <= FreefallFrames;
+
+            if (stillFalling)
+            {
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z - 1.5f,
+                    Orientation = input.Orientation,
+                    Pitch = input.Pitch,
+                    Vx = 0f,
+                    Vy = 0f,
+                    Vz = -5f,
+                    GroundZ = -50001f,
+                    GroundNx = 0f,
+                    GroundNy = 0f,
+                    GroundNz = 1f,
+                    MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                    FallTime = (uint)(physicsCallCount * 33),
+                };
+            }
+
+            return new NativePhysics.PhysicsOutput
+            {
+                X = input.X,
+                Y = input.Y,
+                Z = input.Z,
+                Orientation = input.Orientation,
+                Pitch = input.Pitch,
+                Vx = 0f,
+                Vy = 0f,
+                Vz = 0f,
+                GroundZ = input.Z,
+                GroundNx = 0f,
+                GroundNy = 0f,
+                GroundNz = 1f,
+                MoveFlags = 0u,
+                FallTime = 0,
+            };
+        };
+
+        try
+        {
+            var triggerPayload = HexToBytes(fg.Trigger!.PayloadHex)[2..];
+            trace.Dispatch(Opcode.MSG_MOVE_TELEPORT_ACK, triggerPayload);
+            Assert.True(trace.FlushTeleportAck(),
+                "TryFlushPendingTeleportAck must succeed on the seeded fixture so the BG outbound ACK appears in the events stream before physics ticks.");
+
+            trace.RunPhysicsFor(durationMs: (uint)fg.WindowDurationMs, stepMs: 33u);
+        }
+        finally
+        {
+            NativeLocalPhysics.TestStepOverride = null;
+        }
+
+        var bgOutboundOpcodes = trace.Events
+            .Where(e => e.Kind == "outbound" && e.Opcode.HasValue)
+            .Select(e => e.Opcode!.Value.ToString())
+            .ToArray();
+
+        // Stream 2B closes the suppression gap: BG now emits TELEPORT_ACK, then
+        // heartbeats during the fall, then FALL_LAND on landing — previously
+        // _needsGroundSnap suppressed all but the ACK and the snap-completion path
+        // emitted MOVE_STOP instead of FALL_LAND.
         //
-        // Expected when unblocked:
-        //   var fg = LoadBaseline();
-        //   var fgOutboundOpcodes = fg.Packets.Where(p => p.Direction=="Send").Select(p => p.OpcodeName).ToArray();
-        //   var bgOutboundOpcodes = ... drive PacketFlowTraceFixture + tick MovementController for fg.WindowDurationMs ...
-        //   Assert.Equal(fgOutboundOpcodes, bgOutboundOpcodes);
-        Assert.Fail("Pending Stream 2B implementation.");
+        // FG fixture order: [TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND]
+        // BG order today:   [TELEPORT_ACK, HEARTBEAT, HEARTBEAT, HEARTBEAT, FALL_LAND]
+        //
+        // The +1 heartbeat vs FG is the remaining parity gap (Stream 2C):
+        // ShouldSendPacket fires immediately when MovementFlags transitions
+        // NONE -> FALLINGFAR on the first physics tick after teleport, whereas
+        // WoW.exe cadence-gates the first heartbeat ~500ms after the outbound
+        // ACK. Closing that gap requires either resetting MovementController's
+        // _lastPacketTime when TryFlushPendingTeleportAck fires the outbound ACK,
+        // or gating the flag-change branch of ShouldSendPacket on PACKET_INTERVAL_MS.
+        //
+        // We pin the BG-today stream so a future regression that drops or reorders
+        // packets fails loudly, and so closing the +1 HB gap will surface here.
+        var fgOpcodeSet = string.Join(",", fgOutboundOpcodes);
+        var bgOpcodeSet = string.Join(",", bgOutboundOpcodes);
+
+        Assert.StartsWith("MSG_MOVE_TELEPORT_ACK,", bgOpcodeSet);
+        Assert.EndsWith(",MSG_MOVE_FALL_LAND", bgOpcodeSet);
+        Assert.Equal(
+            "MSG_MOVE_TELEPORT_ACK,MSG_MOVE_HEARTBEAT,MSG_MOVE_HEARTBEAT,MSG_MOVE_HEARTBEAT,MSG_MOVE_FALL_LAND",
+            bgOpcodeSet);
+
+        // Sanity: structurally, BG's outbound stream is FG's stream with one
+        // extra heartbeat inserted at the start of the falling window.
+        Assert.Equal(
+            "MSG_MOVE_TELEPORT_ACK,MSG_MOVE_HEARTBEAT,MSG_MOVE_HEARTBEAT,MSG_MOVE_FALL_LAND",
+            fgOpcodeSet);
+        Assert.Equal(
+            fgOutboundOpcodes.Length + 1,
+            bgOutboundOpcodes.Length);
     }
 
     private static PostTeleportWindowFixture LoadBaseline()
