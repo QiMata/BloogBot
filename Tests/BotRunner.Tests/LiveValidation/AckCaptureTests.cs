@@ -102,6 +102,95 @@ public sealed class AckCaptureTests
 
     [SkippableFact]
     [Trait("Category", "AckCaptureLive")]
+    public async Task Foreground_VerticalDropTeleport_CapturesTeleportAckAndSnapWindow()
+    {
+        var target = await EnsureAckCaptureForegroundTargetAsync();
+        _output.WriteLine(
+            $"=== FG ACK Capture: vertical-drop teleport with {target.AccountName}/{target.CharacterName} ===");
+
+        // Stage on the flat Durotar road (matches BgPostTeleportStabilizationTests so the
+        // FG capture is directly comparable to the existing BG snapshot regression).
+        const int DurotarMapId = 1;
+        const float DurotarX = -460f;
+        const float DurotarY = -4760f;
+        const float DurotarGroundZ = 38f;
+        const float DurotarTeleportZ = DurotarGroundZ + 10f;
+
+        var staged = await StageForegroundCapturePointAsync(
+            target,
+            DurotarMapId,
+            DurotarX,
+            DurotarY,
+            DurotarGroundZ,
+            "ack-capture Durotar ground stage",
+            cleanSlate: true,
+            xyToleranceYards: 8f);
+        Assert.True(staged, "FG bot should settle on Durotar road before the vertical-drop trigger.");
+
+        var corpusRoot = ResolveCorpusOutputDirectory();
+        var teleportAckBaseline = corpusRoot != null
+            ? CountFixtures(Path.Combine(corpusRoot, nameof(Opcode.MSG_MOVE_TELEPORT_ACK)))
+            : 0;
+
+        var windowDir = ResolvePostTeleportWindowDirectory();
+        var windowBaseline = windowDir != null ? CountFixtures(windowDir) : 0;
+
+        try
+        {
+            _output.WriteLine(
+                $"[FG-ACK] Triggering same-map teleport to ({DurotarX:F1},{DurotarY:F1},{DurotarTeleportZ:F1}) " +
+                "to force inbound MSG_MOVE_TELEPORT and outbound MSG_MOVE_TELEPORT_ACK + snap-window packets.");
+
+            var triggered = await StageForegroundCapturePointAsync(
+                target,
+                DurotarMapId,
+                DurotarX,
+                DurotarY,
+                DurotarTeleportZ,
+                "ack-capture vertical-drop trigger",
+                cleanSlate: false,
+                xyToleranceYards: 8f);
+            Assert.True(triggered, "FG bot should settle after the vertical-drop teleport trigger.");
+
+            if (corpusRoot != null)
+            {
+                var teleportAckDir = Path.Combine(corpusRoot, nameof(Opcode.MSG_MOVE_TELEPORT_ACK));
+                var captured = await WaitForFixtureCountAsync(
+                    teleportAckDir,
+                    teleportAckBaseline + 1,
+                    TimeSpan.FromSeconds(10));
+                Assert.True(captured,
+                    $"Expected new {nameof(Opcode.MSG_MOVE_TELEPORT_ACK)} fixture under '{teleportAckDir}' " +
+                    $"after vertical-drop teleport (baseline={teleportAckBaseline}).");
+            }
+
+            if (windowDir != null)
+            {
+                var captured = await WaitForFixtureCountAsync(
+                    windowDir,
+                    windowBaseline + 1,
+                    TimeSpan.FromSeconds(10));
+                Assert.True(captured,
+                    $"Expected new post-teleport packet window fixture under '{windowDir}' " +
+                    $"after vertical-drop teleport (baseline={windowBaseline}).");
+            }
+        }
+        finally
+        {
+            await StageForegroundCapturePointAsync(
+                target,
+                KalimdorMapId,
+                OrgX,
+                OrgY,
+                OrgZ,
+                "ack-capture Orgrimmar return",
+                cleanSlate: false,
+                xyToleranceYards: 10f);
+        }
+    }
+
+    [SkippableFact]
+    [Trait("Category", "AckCaptureLive")]
     public async Task Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled()
     {
         var command = Environment.GetEnvironmentVariable("WWOW_ACK_CAPTURE_GM_COMMAND");
@@ -248,6 +337,54 @@ public sealed class AckCaptureTests
             cleanSlate,
             xyToleranceYards,
             zStabilizationWaitMs: 1000);
+
+    private static string? ResolvePostTeleportWindowDirectory()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_CAPTURE_POST_TELEPORT_WINDOW"),
+                "1",
+                StringComparison.Ordinal))
+            return null;
+
+        var explicitPath = Environment.GetEnvironmentVariable("WWOW_POST_TELEPORT_WINDOW_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(explicitPath))
+            return Path.GetFullPath(explicitPath);
+
+        var repoRoot = Environment.GetEnvironmentVariable("WWOW_REPO_ROOT");
+        if (!string.IsNullOrWhiteSpace(repoRoot) && File.Exists(Path.Combine(repoRoot, "WestworldOfWarcraft.sln")))
+        {
+            return Path.Combine(
+                Path.GetFullPath(repoRoot),
+                "Tests",
+                "WoWSharpClient.Tests",
+                "Fixtures",
+                "post_teleport_packet_window");
+        }
+
+        return null;
+    }
+
+    private static int CountFixtures(string directory)
+    {
+        if (!Directory.Exists(directory))
+            return 0;
+
+        return Directory.EnumerateFiles(directory, "*.json").Count();
+    }
+
+    private static async Task<bool> WaitForFixtureCountAsync(string directory, int target, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (CountFixtures(directory) >= target)
+                return true;
+
+            await Task.Delay(250);
+        }
+
+        return CountFixtures(directory) >= target;
+    }
 
     private static string? ResolveCorpusOutputDirectory()
     {
