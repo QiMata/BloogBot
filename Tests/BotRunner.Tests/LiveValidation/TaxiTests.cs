@@ -25,6 +25,14 @@ public class TaxiTests
     private const int CrossroadsTaxiNodeId = 25;
     private const int GadgetzanTaxiNodeId = 40; // Horde-side Gadgetzan route node
 
+    // Crossroads flight master Devrak (Map 1, Kalimdor / Northern Barrens).
+    // VMaNGOS DB row: (-437.137, -2596.0, 95.87). Flight paths land on a
+    // tower platform near the NPC; tolerance accounts for the landing offset
+    // plus the few yards a bot drifts after dismounting from the taxi gryphon.
+    private const float CrossroadsX = -437.137f;
+    private const float CrossroadsY = -2596.0f;
+    private const float TaxiArrivalToleranceYards = 200.0f;
+
     public TaxiTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -106,7 +114,7 @@ public class TaxiTests
         _output.WriteLine($"[TEST] SELECT_TAXI_NODE result: {selectResult}");
 
         var moved = await WaitForTaxiDepartureAsync(target.AccountName, startSnap!.CurrentMapId, startPos,
-            timeoutMs: 180000, progressLabel: $"{target.RoleLabel} taxi-ride-org-xroads");
+            timeoutMs: 180000, progressLabel: $"{target.RoleLabel} taxi-ride-org-xroads-departure");
         _output.WriteLine($"[TEST] Position changed during taxi ride: {moved}");
         if (!moved)
         {
@@ -118,10 +126,41 @@ public class TaxiTests
                 "Orgrimmar-to-Crossroads taxi is Shodan-staged and SelectTaxiNode-dispatched, but this live run did not observe departure.");
         }
 
+        // Phase D: full ride. Wait for the bot to actually arrive at Crossroads
+        // (close to the destination flight master AND no longer on the taxi
+        // transport flag). 180s window covers the Org → Crossroads flight
+        // (~60s typical) plus boarding/dismount overhead and the per-snapshot
+        // poll cadence.
+        var arrived = await WaitForTaxiArrivalAsync(
+            target.AccountName,
+            destinationMapId: startSnap.CurrentMapId,
+            destX: CrossroadsX,
+            destY: CrossroadsY,
+            timeoutMs: 180000,
+            progressLabel: $"{target.RoleLabel} taxi-ride-org-xroads-arrival");
+
         await _bot.RefreshSnapshotsAsync();
         var endSnap = await _bot.GetSnapshotAsync(target.AccountName);
         var endPos = endSnap?.Player?.Unit?.GameObject?.Base?.Position;
         _output.WriteLine($"[TEST] End position: ({endPos?.X:F1}, {endPos?.Y:F1})");
+
+        if (!arrived)
+        {
+            await _bot.QuiesceAccountsAsync(
+                new[] { target.AccountName },
+                $"{target.RoleLabel} taxi ride no-arrival cleanup");
+            global::Tests.Infrastructure.Skip.If(
+                true,
+                $"Taxi departed but did not reach Crossroads (within {TaxiArrivalToleranceYards}yd of {CrossroadsX:F0},{CrossroadsY:F0}) within 90s. " +
+                $"Final pos=({endPos?.X:F1},{endPos?.Y:F1}). Likely a flight-path graph or boarding-state regression.");
+        }
+
+        Assert.NotNull(endPos);
+        var distanceToCrossroads = LiveBotFixture.Distance2D(endPos!.X, endPos.Y, CrossroadsX, CrossroadsY);
+        _output.WriteLine($"[TEST] Arrived within {distanceToCrossroads:F1}yd of Crossroads flight master.");
+        Assert.True(
+            distanceToCrossroads <= TaxiArrivalToleranceYards,
+            $"Bot did not arrive at Crossroads. distance={distanceToCrossroads:F1}yd, tolerance={TaxiArrivalToleranceYards}yd, pos=({endPos.X:F1},{endPos.Y:F1}).");
     }
 
     /// <summary>
@@ -245,6 +284,50 @@ public class TaxiTests
                 var onTransport = movement.TransportGuid != 0
                     || (((MovementFlags)movement.MovementFlags) & MovementFlags.MOVEFLAG_ONTRANSPORT) != 0;
                 return moved || onTransport || snapshot.CurrentMapId != startMapId;
+            },
+            TimeSpan.FromMilliseconds(timeoutMs),
+            pollIntervalMs: 500,
+            progressLabel: progressLabel);
+    }
+
+    /// <summary>
+    /// Phase D: wait for the bot to land at the destination flight path. The
+    /// bot is "arrived" when:
+    /// 1. It is on the destination map.
+    /// 2. It is within <see cref="TaxiArrivalToleranceYards"/> 2D of the
+    ///    destination coordinates.
+    /// 3. It is no longer flagged as on a transport (taxi mount cleared).
+    /// </summary>
+    private Task<bool> WaitForTaxiArrivalAsync(
+        string account,
+        uint destinationMapId,
+        float destX,
+        float destY,
+        int timeoutMs,
+        string progressLabel)
+    {
+        return _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot =>
+            {
+                var movement = snapshot?.MovementData;
+                var position = movement?.Position;
+                if (snapshot == null || movement == null || position == null)
+                    return false;
+
+                if (snapshot.CurrentMapId != destinationMapId)
+                    return false;
+
+                var distance = LiveBotFixture.Distance2D(position.X, position.Y, destX, destY);
+                if (distance > TaxiArrivalToleranceYards)
+                    return false;
+
+                // Also require the taxi mount/transport flag to clear, so we
+                // don't false-positive when the flight path passes overhead
+                // and dips through the tolerance radius mid-flight.
+                var stillOnTransport = movement.TransportGuid != 0
+                    || (((MovementFlags)movement.MovementFlags) & MovementFlags.MOVEFLAG_ONTRANSPORT) != 0;
+                return !stillOnTransport;
             },
             TimeSpan.FromMilliseconds(timeoutMs),
             pollIntervalMs: 500,
