@@ -129,11 +129,16 @@ public class FishingProfessionTests
     /// a Ratchet pool via Shodan, dispatches <c>ActionType.StartFishing</c>, and
     /// asserts the BG <c>FishingTask</c> reaches <c>fishing_loot_success</c>.
     ///
-    /// BG-only — same FG <c>LoadoutTask</c> gap as the EquipmentEquipTests
-    /// Automated pilot. Legacy
+    /// BG-only — loadout side now works on FG since cb4fd977 (LearnSpellStep
+    /// "already know" fix), but enabling FG here surfaces a *separate*
+    /// FG-side fishing issue: from the Ratchet staged pool, FG's cast lands
+    /// at distance 20.3yd / edgeDist 18.0yd and every loot window times out
+    /// (8 attempts, all <c>loot_window_timeout</c>, ending in
+    /// <c>max_casts_reached</c>). Legacy
     /// <see cref="Fishing_CatchFish_BgAndFg_RatchetStagedPool"/> covers FG/BG
-    /// parity via the bot-side <c>FishingTask</c> outfit-reset path until FG
-    /// Automated parity lands.
+    /// parity via the bot-side <c>FishingTask</c> outfit-reset path. The
+    /// FG cast-distance/loot-window gap is tracked separately from the v10/v11
+    /// LoadoutTask gap (which IS fixed for FG).
     /// </summary>
     [SkippableFact]
     public async Task Fishing_AutomatedMode_BgOnly_RatchetStagedPool()
@@ -156,8 +161,9 @@ public class FishingProfessionTests
         _output.WriteLine(
             $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, stages pool then dispatches StartFishing.");
         _output.WriteLine(
-            "[ACTION-PLAN] FG: skipped (Automated-mode FG LoadoutTask gap — covered by legacy " +
-            "Fishing_CatchFish_BgAndFg_RatchetStagedPool until FG parity lands).");
+            "[ACTION-PLAN] FG: skipped (separate FG fishing cast-distance/loot-window issue, " +
+            "unrelated to the v10/v11 LoadoutTask gap fixed in cb4fd977 — covered by legacy " +
+            "Fishing_CatchFish_BgAndFg_RatchetStagedPool).");
         foreach (var target in targets)
             _output.WriteLine(
                 $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
@@ -198,6 +204,18 @@ public class FishingProfessionTests
             _output.WriteLine(
                 $"  [{label}] Automated loadout never delivered fishing pole within 90s. " +
                 $"LoadoutStatus='{diag?.LoadoutStatus}', failureReason='{diag?.LoadoutFailureReason}'.");
+            if (diag?.RecentChatMessages?.Count > 0)
+            {
+                _output.WriteLine($"  [{label}] RecentChatMessages ({diag.RecentChatMessages.Count}):");
+                foreach (var msg in diag.RecentChatMessages.TakeLast(20))
+                    _output.WriteLine($"    {msg}");
+            }
+            if (diag?.RecentErrors?.Count > 0)
+            {
+                _output.WriteLine($"  [{label}] RecentErrors ({diag.RecentErrors.Count}):");
+                foreach (var err in diag.RecentErrors.TakeLast(20))
+                    _output.WriteLine($"    {err}");
+            }
             return false;
         }
 
