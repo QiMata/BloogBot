@@ -12,6 +12,23 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-04-28 (ACK corpus promotion)
+- Pass result: `AckBinaryParityTests passed with three additional live ACK corpus captures`
+- Last delta:
+  - Promoted two `MSG_MOVE_TELEPORT_ACK` captures for GUID `366` with counters
+    `0` and `1`.
+  - Promoted one zero-payload `MSG_MOVE_WORLDPORT_ACK` capture.
+  - These fixtures are auto-discovered by `AckBinaryParityTests` under
+    `Fixtures/ack_golden_corpus`.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckBinaryParityTests" --logger "console;verbosity=minimal"` -> `passed (41/41; existing warnings/nonfatal dumpbin noise)`.
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_TELEPORT_ACK/20260427_234918_747_0000.json`
+  - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_TELEPORT_ACK/20260427_235007_703_0000.json`
+  - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK/20260427_234925_875_0001.json`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `git status --short --branch`
+
 ### 2026-04-28 (direct movement activity deterministic coverage)
 - Pass result: `Focused WoWSharpClient movement/object deterministic slice passed 6/6`
 - Last delta:

@@ -32,6 +32,23 @@
 
 ---
 
+## Handoff (2026-04-28, ACK corpus promotion)
+
+- Completed: promoted the three previously untracked live ACK corpus captures:
+  two `MSG_MOVE_TELEPORT_ACK` samples for GUID `366` with counters `0` and `1`,
+  plus one zero-payload `MSG_MOVE_WORLDPORT_ACK` sample.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckBinaryParityTests" --logger "console;verbosity=minimal"` -> `passed (41/41; existing warnings/nonfatal dumpbin noise)`.
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_TELEPORT_ACK/20260427_234918_747_0000.json`
+  - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_TELEPORT_ACK/20260427_235007_703_0000.json`
+  - `Tests/WoWSharpClient.Tests/Fixtures/ack_golden_corpus/MSG_MOVE_WORLDPORT_ACK/20260427_234925_875_0001.json`
+  - `docs/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `git status --short --branch`
+
+---
+
 ## Handoff (2026-04-28, direct FG/BG movement activity parity overhaul)
 
 - Completed: replaced the janky movement parity shape with direct FG/BG
