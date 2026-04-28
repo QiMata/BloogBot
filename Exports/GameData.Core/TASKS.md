@@ -57,6 +57,26 @@
 3. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-28 (Jump and knockback movement contracts)
+- Current focus: `Direct movement activity contracts shipped.`
+- Last delta:
+  - Added shared `CharacterAction.Jump` and `IObjectManager.Jump()` so
+    BotRunner can dispatch running-jump parity actions to FG/BG uniformly.
+  - Extended `KnockBackArgs` with `RequiresAck` so BG can consume self-GM
+    `MSG_MOVE_KNOCK_BACK` movement without incorrectly priming a forced ACK.
+- Pass result: `delta shipped`
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ObjectManagerWorldSessionTests.MessageMoveKnockBack_PrimesImpulseWithoutForceAck" --logger "console;verbosity=minimal"` -> included in focused slice, `passed`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_direct_actions_full_04.trx"` -> `passed (5/5; duration 2m41s)`.
+- Files changed:
+  - `Exports/GameData.Core/Enums/CharacterAction.cs`
+  - `Exports/GameData.Core/Interfaces/IObjectManager.cs`
+  - `Exports/GameData.Core/Interfaces/IWoWEventHandler.cs`
+  - `Exports/GameData.Core/TASKS.md`
+- Next queue file: `git status --short --branch`
+- Next command: `git status --short --branch`
+
 ### 2026-04-25 (Mail collection result contract)
 - Current focus: `Shared foreground/BotRunner mail collection diagnostics shipped.`
 - Last delta:

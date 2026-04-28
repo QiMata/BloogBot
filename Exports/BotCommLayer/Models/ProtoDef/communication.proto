@@ -133,6 +133,7 @@ enum ActionType {
     LEAVE_BATTLEGROUND = 78;
     TRAVEL_TO = 79;
     APPLY_LOADOUT = 80;   // P3: one-shot hand-off of full loadout spec (level, spells, skills, items, rep, quests, honor rank). BotRunner owns execution pacing; reports progress via WoWActivitySnapshot.loadout_status.
+    JUMP = 81;            // One-shot movement impulse. FG sends a real spacebar jump; BG emits MSG_MOVE_JUMP through MovementController.
 }
 
 message ActionMap {

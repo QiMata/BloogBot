@@ -105,10 +105,10 @@ Counts reflect the first-pass audit of 70 top-level files under
 | `BattlegroundQueueTests.cs` | Migrated: `Economy.config.json`; fixture-contained WSG battlemaster staging and level setup; BG dispatches `JoinBattleground` and cleanup `LeaveBattleground` only. |
 | `SpellCastOnTargetTests.cs` | Migrated: `Economy.config.json`; fixture-contained Battle Shout spell/rage/aura staging; BG dispatches `CastSpell` while FG stays idle for topology parity. |
 | `TaxiTests.cs` | Migrated: `Economy.config.json`; fixture-contained taxi readiness, taxi-node, coinage, and Orgrimmar flight-master staging; BG dispatches `VisitFlightMaster` / `SelectTaxiNode` only, with Alliance ride tracked as a Horde-roster skip. |
-| `TaxiTransportParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained taxi readiness and transport-point staging; FG/BG dispatch taxi, recording, and elevator `Goto` actions while elevator `TransportGuid` and cross-continent boarding gaps stay tracked skips. |
+| `TaxiTransportParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained taxi readiness and transport-point staging; FG/BG dispatch taxi spline actions while elevator `TransportGuid` and cross-continent gameobject boarding gaps stay tracked skips. |
 | `TransportTests.cs` | Migrated: `Economy.config.json`; fixture-contained zeppelin, Ratchet dock, Undercity elevator, and Thunder Bluff elevator staging; Horde-side snapshot checks pass while Alliance/tram/Menethil placeholders skip explicitly. |
 | `DualClientParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained shared Orgrimmar staging; FG/BG snapshot parity runs against resolved action targets while GM-command parity is a tracked skip. |
-| `MovementParityTests.cs` | Migrated: `Economy.config.json`; fixture-contained movement parity route staging; FG/BG dispatch `SetFacing`, recording, and `Goto` actions while unstable route staging/quiesce and redirect packet-edge gaps stay tracked skips. |
+| `MovementParityTests.cs` | Not Shodan-directed: direct FG/BG movement activity parity. The participants have account-level GM access and self-stage with `.go xyz`; SHODAN is unnecessary for this suite. |
 | `IntegrationValidationTests.cs` | Migrated: `Economy.config.json`; fixture-contained integration staging for dungeoneering, quest snapshot, vendor sell, reward snapshot, and assign-loot lanes; PvP/talent/trainer probes are tracked skips. |
 | `AckCaptureTests.cs` | Migrated: `Economy.config.json`; fixture-contained foreground capture positioning and configured-command dispatch; FG remains the corpus source, BG stays idle, and SHODAN is director-only. |
 
@@ -638,7 +638,7 @@ because prior Shodan spell-id slices documented foreground `ActionType.CastSpell
 by-id behavior separately.
 
 `TaxiTests.cs`, `TaxiTransportParityTests.cs`, and `TransportTests.cs` reuse
-`Economy.config.json` with `ECONBG1` as the BG transport/taxi action target,
+`Economy.config.json` with `ECONBG1` as the BG taxi/action target,
 `ECONFG1` available for parity lanes or idle topology parity, and SHODAN as
 director. The slice adds fixture-contained taxi readiness and transport
 coordinate staging helpers:
@@ -649,41 +649,42 @@ coordinate staging helpers:
 `StageBotRunnerAtThunderBluffElevatorAsync(...)`. Test bodies no longer issue
 direct `.tele`, `.modify money`, or taxi-node setup calls; executable paths
 dispatch only `ActionType.VisitFlightMaster`, `ActionType.SelectTaxiNode`,
-recording actions, or `ActionType.Goto` to resolved BotRunner action targets.
+recording actions, or tracked placeholder `ActionType.Goto` calls to resolved
+BotRunner action targets.
 
 Migration result on this slice: live artifact
 `transport_taxi_shodan_final.trx` passed overall with `8` passed and `5`
 tracked skips. `TaxiTests` passed Horde discovery, Orgrimmar-to-Crossroads,
 and Orgrimmar-to-Gadgetzan actions, while Alliance ride skips because the
 shared economy roster is Horde-only. `TaxiTransportParityTests` passed FG/BG
-taxi parity; Undercity elevator boarding remains a tracked skip after real
-FG/BG `Goto` dispatch because live clients do not reliably acquire
-`TransportGuid`, and cross-continent transport parity still lacks a stable
-action-driven boarding/disembark assertion. `TransportTests` passed Horde-side
+taxi spline parity; taxi rides are spline-based movement and are not promoted
+as transport evidence. Undercity elevator boarding remains a tracked skip after
+real FG/BG `Goto` dispatch because live clients do not reliably acquire
+`TransportGuid`, and cross-continent gameobject transport parity still lacks a
+stable action-driven boarding/disembark assertion. `TransportTests` passed Horde-side
 zeppelin, Ratchet dock, Undercity elevator, and Thunder Bluff elevator snapshot
 checks; Menethil/Theramore and Deeprun Tram stay tracked skips until an
 Alliance/dock/tram action-target config exists. The slice also fixes
 taxi-cheat confirmation polling so a final refreshed snapshot can satisfy the
 helper when MaNGOS reports "has access to all taxi nodes now".
 
-`DualClientParityTests.cs` and `MovementParityTests.cs` reuse
-`Economy.config.json` with `ECONBG1` and `ECONFG1` as the parity action
-targets and SHODAN as director. The slice moves shared Orgrimmar parity
-staging and route start staging behind fixture helpers, resolves action
-recipients through `ResolveBotRunnerActionTargets(...)`, and keeps the test
-bodies free of inline GM setup calls. Dual-client snapshot parity asserts
-nearby-unit, position, spell-list, and health agreement; the old GM-command
-parity probe is a tracked skip because it is not a production action-dispatch
-behavior. Movement parity dispatches real FG/BG `StartPhysicsRecording`,
-`SetFacing`, `Goto`, and `StopPhysicsRecording` actions.
+`DualClientParityTests.cs` still reuses `Economy.config.json` with `ECONBG1`
+and `ECONFG1` as parity action targets and SHODAN as director for shared
+Orgrimmar snapshot staging. `MovementParityTests.cs` is intentionally excluded
+from that Shodan-directed shape: the movement participants can use their own
+account-level GM `.go xyz` command for route starts, so SHODAN is unnecessary
+and can make the route probe less representative. Movement parity dispatches
+real FG/BG recording plus point-to-point `Goto`, running `Jump`, self
+knockback, and Undercity elevator gameobject transport probes after direct
+self-staging.
 
 Migration result on this slice: live artifact
 `dual_movement_parity_shodan_final2.trx` passed overall with `10` passed and
-`7` tracked skips. The skips document live staging/quiesce instability,
-redirect packet recording missing `START_FORWARD` on FG, and one route where a
-Shodan-dispatched `Goto` produced insufficient live travel. The migration shape
-is correct and the remaining gaps are runtime parity/staging issues rather than
-test-body setup ownership.
+`7` tracked skips. That Shodan-era movement result was later superseded for
+`MovementParityTests.cs` after live review showed the movement route probes
+looked janky and hid insufficient travel behind tracked skips. The movement
+suite now uses direct FG/BG self-staging; Shodan remains for setup cases that
+need a separate GM liaison, such as manually targeting pools for server refresh.
 
 `IntegrationValidationTests.cs` reuses `Economy.config.json` with `ECONBG1` as
 the integration action target, `ECONFG1` available only for the PvP comparison

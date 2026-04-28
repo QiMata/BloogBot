@@ -112,6 +112,23 @@
 4. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-28 (Jump action contract)
+- Last delta:
+  - Added protobuf `ActionType.JUMP = 81` and regenerated
+    `Exports/BotCommLayer/Models/Communication.cs`.
+  - This supports direct FG/BG running-jump movement parity without routing
+    through ad hoc chat/script actions.
+- Pass result: `delta shipped`
+- Validation/tests run:
+  - `.\protocsharp.bat "." ".."` from `Exports/BotCommLayer/Models/ProtoDef` -> `succeeded`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors after regeneration)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_direct_actions_full_04.trx"` -> `passed (5/5; duration 2m41s)`.
+- Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
+  - `Exports/BotCommLayer/Models/Communication.cs`
+  - `Exports/BotCommLayer/TASKS.md`
+- Next command: `git status --short --branch`
+
 ### 2026-04-21 (P4.4)
 - Pass result: `ActionMessage correlation ids and CommandAckEvent are part of the canonical contract`
 - Last delta:

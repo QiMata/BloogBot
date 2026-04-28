@@ -10,6 +10,7 @@ using System.IO;
 using System.Linq;
 using System;
 using System.Collections.Generic;
+using static GameData.Core.Enums.UpdateFields;
 
 namespace WoWSharpClient.Handlers
 {
@@ -220,6 +221,11 @@ namespace WoWSharpClient.Handlers
                         case Opcode.SMSG_MOVE_KNOCK_BACK:
                             ctx.EventEmitter.FireOnForceMoveKnockBack(
                                 ParseKnockBackPacket(reader)
+                            );
+                            break;
+                        case Opcode.MSG_MOVE_KNOCK_BACK:
+                            ctx.EventEmitter.FireOnForceMoveKnockBack(
+                                ParseMessageMoveKnockBackPacket(reader, ctx)
                             );
                             break;
                         case Opcode.SMSG_MONSTER_MOVE:
@@ -482,6 +488,19 @@ namespace WoWSharpClient.Handlers
             var (packedGuid, movementData) = ParseMessageMoveData(reader);
             QueueMovementUpdate(packedGuid, movementData, ctx);
             return packedGuid;
+        }
+
+        private static KnockBackArgs ParseMessageMoveKnockBackPacket(BinaryReader reader, HandlerContext ctx)
+        {
+            var (packedGuid, movementData) = ParseMessageMoveData(reader);
+            QueueMovementUpdate(packedGuid, movementData, ctx);
+
+            var vCos = reader.ReadSingle();
+            var vSin = reader.ReadSingle();
+            var hSpeed = reader.ReadSingle();
+            var vSpeed = reader.ReadSingle();
+
+            return new KnockBackArgs(packedGuid, 0u, vSin, vCos, hSpeed, vSpeed, requiresAck: false);
         }
 
         private static ulong ParseMessageMoveWithTrailingSpeed(
@@ -898,6 +917,26 @@ namespace WoWSharpClient.Handlers
 
         private static void QueueMonsterMoveUpdate(ulong moverGuid, MovementInfoUpdate moveData, HandlerContext ctx)
         {
+            if (TryGetTransportGameObjectType(moverGuid, out var gameObjectType))
+            {
+                var fields = BuildTransportGameObjectFields(moverGuid, gameObjectType);
+                var existing = ctx.ObjectManager.GetObjectByGuid(moverGuid);
+                var operation = existing is WoWGameObject
+                    ? WoWSharpObjectManager.ObjectUpdateOperation.Update
+                    : WoWSharpObjectManager.ObjectUpdateOperation.Add;
+
+                ctx.ObjectManager.QueueUpdate(
+                    new WoWSharpObjectManager.ObjectStateUpdate(
+                        moverGuid,
+                        operation,
+                        WoWObjectType.GameObj,
+                        moveData,
+                        fields
+                    )
+                );
+                return;
+            }
+
             ctx.ObjectManager.QueueUpdate(
                 new WoWSharpObjectManager.ObjectStateUpdate(
                     moverGuid,
@@ -907,6 +946,50 @@ namespace WoWSharpClient.Handlers
                     []
                 )
             );
+        }
+
+        private static bool TryGetTransportGameObjectType(ulong guid, out GameObjectType gameObjectType)
+        {
+            ushort highType = (ushort)(guid >> 48);
+            switch (highType)
+            {
+                case 0xF120:
+                    gameObjectType = GameObjectType.Transport;
+                    return true;
+                case 0x1FC0:
+                    gameObjectType = GameObjectType.MapObjectTransport;
+                    return true;
+                default:
+                    gameObjectType = default;
+                    return false;
+            }
+        }
+
+        private static Dictionary<uint, object?> BuildTransportGameObjectFields(
+            ulong guid,
+            GameObjectType gameObjectType)
+        {
+            var fields = new Dictionary<uint, object?>
+            {
+                [(uint)EObjectFields.OBJECT_FIELD_SCALE_X] = 1f,
+                [(uint)EGameObjectFields.GAMEOBJECT_TYPE_ID] = (uint)gameObjectType,
+            };
+
+            if (TryGetMovingTransportEntryFromGuid(guid, out var entry))
+                fields[(uint)EObjectFields.OBJECT_FIELD_ENTRY] = entry;
+
+            return fields;
+        }
+
+        private static bool TryGetMovingTransportEntryFromGuid(ulong guid, out uint entry)
+        {
+            entry = 0;
+            ushort highType = (ushort)(guid >> 48);
+            if (highType != 0x1FC0)
+                return false;
+
+            entry = (uint)(guid & 0x00FFFFFFUL);
+            return entry != 0;
         }
 
         private static void ApplyTransportMoveState(MovementInfoUpdate moveData, ulong transportGuid)

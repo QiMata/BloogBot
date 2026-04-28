@@ -453,6 +453,145 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
+        public void Update_IdleNearGameObjectTransport_AttachesBeforePostTeleportGroundSnap()
+        {
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = 101f,
+                    Y = 201f,
+                    Z = 51.5f,
+                    Orientation = 0.75f,
+                    GroundZ = 51.5f,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                };
+            };
+
+            var transport = new WoWGameObject(new HighGuid(0xF1200050AF00AF65ul))
+            {
+                Position = new Position(100f, 200f, 50f),
+                Facing = MathF.PI / 2f,
+                DisplayId = 455,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Transport,
+            };
+            var snapshot = ReplaceTrackedObjects(transport);
+
+            try
+            {
+                _player.Position = new Position(101f, 201f, 51.5f);
+                _player.Facing = 0.75f;
+                _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+                _player.TransportGuid = 0;
+                _player.TransportOffset = new Position(0f, 0f, 0f);
+                _player.TransportOrientation = 0f;
+
+                var controller = new MovementController(
+                    _mockClient.Object,
+                    _player,
+                    objectManager: WoWSharpObjectManager.Instance);
+                controller.Reset(teleportDestZ: 51.5f);
+                _sentPackets.Clear();
+
+                controller.Update(0.05f, 1000);
+
+                Assert.Equal(transport.Guid, _player.TransportGuid);
+                Assert.True(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
+                Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+                Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_JUMPING));
+                Assert.NotNull(capturedInput);
+                Assert.Equal(transport.Guid, capturedInput!.Value.TransportGuid);
+                Assert.True(((MovementFlags)capturedInput.Value.MoveFlags).HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
+                Assert.Equal(1f, capturedInput.Value.X, 3);
+                Assert.Equal(-1f, capturedInput.Value.Y, 3);
+                Assert.Equal(1.5f, capturedInput.Value.Z, 3);
+                Assert.NotEmpty(_sentPackets);
+
+                using var ms = new MemoryStream(_sentPackets[^1].buffer);
+                using var reader = new BinaryReader(ms);
+                var parsed = MovementPacketHandler.ParseMovementInfo(reader);
+                Assert.True(parsed.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
+                Assert.Equal(transport.Guid, parsed.TransportGuid);
+                Assert.NotNull(parsed.TransportOffset);
+            }
+            finally
+            {
+                RestoreTrackedObjects(snapshot);
+            }
+        }
+
+        [Fact]
+        public void Update_IdleNearMapObjectTransportDeck_AttachesWithZeppelinOriginOffset()
+        {
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    GroundZ = input.Z,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                };
+            };
+
+            var transport = new WoWGameObject(new HighGuid(0x1FC0000000028407ul))
+            {
+                Position = new Position(1318f, -4660.4f, 71.9f),
+                Facing = 0f,
+                DisplayId = 455,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.MapObjectTransport,
+            };
+            var snapshot = ReplaceTrackedObjects(transport);
+
+            try
+            {
+                _player.Position = new Position(1330.8f, -4652.8f, 53.54f);
+                _player.Facing = 0.75f;
+                _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+                _player.TransportGuid = 0;
+                _player.TransportOffset = new Position(0f, 0f, 0f);
+                _player.TransportOrientation = 0f;
+
+                var controller = new MovementController(
+                    _mockClient.Object,
+                    _player,
+                    objectManager: WoWSharpObjectManager.Instance);
+                controller.Reset(teleportDestZ: 53.54f);
+                _sentPackets.Clear();
+
+                controller.Update(0.05f, 1000);
+
+                Assert.Equal(transport.Guid, _player.TransportGuid);
+                Assert.True(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
+                Assert.NotNull(capturedInput);
+                Assert.Equal(transport.Guid, capturedInput!.Value.TransportGuid);
+                Assert.Equal(12.8f, capturedInput.Value.X, 3);
+                Assert.Equal(7.6f, capturedInput.Value.Y, 3);
+                Assert.Equal(-18.36f, capturedInput.Value.Z, 3);
+
+                using var ms = new MemoryStream(_sentPackets[^1].buffer);
+                using var reader = new BinaryReader(ms);
+                var parsed = MovementPacketHandler.ParseMovementInfo(reader);
+                Assert.True(parsed.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
+                Assert.Equal(transport.Guid, parsed.TransportGuid);
+            }
+            finally
+            {
+                RestoreTrackedObjects(snapshot);
+            }
+        }
+
+        [Fact]
         public void PhysicsStep_NearbyObjects_FiltersToFiniteCollidableSubset()
         {
             NativePhysics.PhysicsInput? capturedInput = null;

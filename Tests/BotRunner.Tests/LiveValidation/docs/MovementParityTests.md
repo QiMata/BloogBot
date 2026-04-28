@@ -1,45 +1,50 @@
 # MovementParityTests
 
-Shodan-directed foreground/background movement parity coverage. SHODAN owns
-route start staging while the foreground and background BotRunner targets
-receive only movement, facing, and recording actions.
+Direct foreground/background movement activity parity coverage. The foreground
+and background BotRunner accounts stage themselves with their own GM chat
+teleports, then perform the same visible live actions.
 
 ## Bot Execution Mode
 
-**Shodan FG+BG-action / tracked skip** - `Economy.config.json` launches
-`ECONBG1` as the Background Orc Warrior target, `ECONFG1` as the Foreground Orc
-Warrior target, and SHODAN as the Background Gnome Mage director.
+**Direct FG+BG parity** - the fixture launches the configured foreground and
+background movement parity accounts. SHODAN is not part of this suite; these
+characters have account-level GM access and can self-stage with `.go xyz`.
 
 ## Test Methods
 
-- Valley of Trials routes: flat path, hill path, reverse hill, long diagonal,
-  ledge drop, steep climb, and steep descent.
-- Durotar routes: road path, turn-start road path, winding path, and the
-  redirect/pause-resume road path.
-- Each executable route stages BG/FG at the same start point, starts recording,
-  dispatches matching `ActionType.Goto` actions, and compares transform,
-  movement-flag, packet, and travel evidence.
+- `Pathfinding_PointAToPointB_FgBgParity`: stages both participants in
+  Durotar, dispatches matching `ActionType.Goto`, and asserts point A to point
+  B pathfinding, travel, arrival, and FG/BG distance parity.
+- `RunningJump_FgBgParity`: starts both participants on the same Durotar path,
+  dispatches `ActionType.Jump` while they are moving, and asserts matching jump
+  evidence.
+- `Knockback_FgBgParity`: targets each participant with its own GM
+  `.targetself` command, applies `.knockback 5 5`, and asserts movement or jump
+  displacement from the command baseline.
+- `TransportRide_FgBgParity`: stages both participants on the Undercity
+  elevator and observes a real gameobject transport ride. This is not taxi
+  coverage; taxis are spline-based movement and belong to taxi/spline tests.
 
-## Shodan Staging
+## Staging
 
-The test body does not issue GM setup commands. The fixture owns:
+The test body uses only the movement-parity FG/BG accounts:
 
-- `EnsureSettingsAsync(Economy.config.json)` and
-  `AssertConfiguredCharactersMatchAsync(...)`.
-- `ResolveBotRunnerActionTargets(includeForegroundIfActionable: true,
-  foregroundFirst: false)` so SHODAN never resolves as an action target.
-- `StageBotRunnerAtNavigationPointAsync(...)` for BG and FG route starts.
-- Quiesce handling before staging, before action dispatch, and after recording
-  stops.
+- `EnsureCleanSlateAsync(...)` clears each participant before a probe.
+- `BotTeleportAsync(...)` sends each participant's own `.go xyz` GM command.
+- `WaitForTeleportSettledAsync(...)` must confirm starts for ground probes;
+  elevator staging also accepts settled transport state because transport-local
+  and world-position snapshots differ between FG and BG.
 
 ## Runtime Linkage
 
-- SHODAN is director-only and receives no movement actions.
-- BG and FG receive only `StartPhysicsRecording`, optional `SetFacing`, `Goto`,
-  and `StopPhysicsRecording`.
-- Route-local skips document live staging/quiesce instability, insufficient
-  live travel after a delivered `Goto`, and redirect packet-recording edges
-  where the FG trace misses the expected `START_FORWARD` packet.
+- BG and FG receive only recording actions plus the action under test:
+  `Goto`, `Jump`, or bot-chat GM self-knockback commands.
+- The Undercity elevator probe observes gameobject transport evidence through
+  sustained transport samples or the elevator's large vertical travel. It does
+  not classify taxi spline movement as transport behavior.
+- Route movement must produce meaningful FG and BG travel. Insufficient live
+  travel after a delivered `Goto` fails the route instead of being hidden by a
+  Shodan staging skip.
 
 ## Validation
 
@@ -50,5 +55,12 @@ The test body does not issue GM setup commands. The fixture owns:
 - Dispatch readiness bundle -> passed `60/60`.
 - `dual_movement_parity_shodan_final2.trx` -> passed overall with `10` passed
   and `7` tracked skips across the combined dual-client/movement slice.
+- 2026-04-28 direct-restoration note: `MovementParityTests` was moved back off
+  Shodan-directed staging after `movement_parity_category_latest.trx` exposed
+  janky tracked skips from Shodan-era quiesce/start-settle gates.
+- 2026-04-28 overhaul note: the suite now exercises four direct activities:
+  point-to-point pathfinding, running jump, self-knockback, and Undercity
+  elevator gameobject transport riding. Taxis are explicitly treated as
+  spline-based movement, not transport coverage.
 - Repo-scoped cleanup before and after live validation reported
   `No repo-scoped processes to stop.`

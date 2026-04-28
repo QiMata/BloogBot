@@ -108,6 +108,15 @@ namespace BotRunner
                         });
                         break;
                     }
+                    case CharacterAction.Jump:
+                    {
+                        builder.Do("Jump", time =>
+                        {
+                            _objectManager.Jump();
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
                     case CharacterAction.InteractWith:
                     {
                         if (actionEntry.Item2.Count == 0)

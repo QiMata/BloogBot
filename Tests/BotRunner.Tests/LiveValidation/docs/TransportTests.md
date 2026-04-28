@@ -45,9 +45,10 @@ that point at `176495` are for the Grom'Gol/Undercity route, not this tower.
 ## Runtime Linkage
 
 The migrated executable coverage is snapshot-based. It proves that Shodan
-stages the correct target account at transport locations and that the BotRunner
-snapshot sees the expected transport context. Action-driven boarding parity is
-covered, with tracked skips, in `TaxiTransportParityTests`.
+stages the correct target account at gameobject transport locations and that
+the BotRunner snapshot sees the expected transport context. Action-driven
+gameobject transport riding is covered by `MovementParityTests`; taxi rides are
+spline movement and are not transport evidence.
 
 ## Validation
 

@@ -32,6 +32,24 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-28 (direct jump action dispatch for movement parity)
+- Pass result: `Direct Jump dispatch supports the live FG/BG movement activity parity bundle`
+- Last delta:
+  - `ActionDispatcher` now dispatches `CharacterAction.Jump`.
+  - `BotRunnerService.ActionMapping` maps protobuf `ActionType.JUMP` to the
+    shared action enum.
+  - This supports `MovementParityTests.RunningJump_FgBgParity` without using
+    Shodan or a behavior-script workaround.
+- Validation/tests run:
+  - `.\protocsharp.bat "." ".."` from `Exports/BotCommLayer/Models/ProtoDef` -> `succeeded`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors after regeneration)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_direct_actions_full_04.trx"` -> `passed (5/5; duration 2m41s)`.
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `git status --short --branch`
+
 ### 2026-04-28 (packet-window trigger classifier)
 - Pass result: `Shared packet-window trigger classifier supports route-specific transport triggers`
 - Last delta:

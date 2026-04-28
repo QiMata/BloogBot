@@ -177,6 +177,62 @@ public class ObjectUpdateMutationOrderTests(ObjectManagerFixture fixture) : ICla
         Assert.Equal(1.25f, updated.Facing, 3);
     }
 
+    [Fact]
+    public void MovingTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject()
+    {
+        ResetObjectManager();
+
+        const ulong guid = 0x1FC000000002ABE8ul;
+        var objectManager = WoWSharpObjectManager.Instance;
+        var position = new Position(1360.9f, -4631.3f, 71.9f);
+
+        ReplayAndCapture(
+            BuildCreateGameObjectPacket(
+                guid,
+                packetObjectType: WoWObjectType.None,
+                movementPosition: position,
+                movementFacing: 0.5f,
+                descriptorPosition: position,
+                descriptorFacing: 0.5f,
+                displayId: 3031u,
+                gameObjectType: 15u));
+
+        var transport = Assert.IsType<WoWGameObject>(objectManager.GetObjectByGuid(guid));
+        Assert.Equal(WoWObjectType.GameObj, transport.ObjectType);
+        Assert.Equal(15u, transport.TypeId);
+        Assert.Equal(position.X, transport.Position.X, 3);
+        Assert.Equal(position.Y, transport.Position.Y, 3);
+        Assert.Equal(position.Z, transport.Position.Z, 3);
+    }
+
+    [Fact]
+    public void StaticTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject()
+    {
+        ResetObjectManager();
+
+        const ulong guid = 0xF1200050AF00AF65ul;
+        var objectManager = WoWSharpObjectManager.Instance;
+        var position = new Position(1544.2f, 240.8f, 55.4f);
+
+        ReplayAndCapture(
+            BuildCreateGameObjectPacket(
+                guid,
+                packetObjectType: WoWObjectType.None,
+                movementPosition: position,
+                movementFacing: 1.5f,
+                descriptorPosition: position,
+                descriptorFacing: 1.5f,
+                displayId: 3015u,
+                gameObjectType: 11u));
+
+        var transport = Assert.IsType<WoWGameObject>(objectManager.GetObjectByGuid(guid));
+        Assert.Equal(WoWObjectType.GameObj, transport.ObjectType);
+        Assert.Equal(11u, transport.TypeId);
+        Assert.Equal(position.X, transport.Position.X, 3);
+        Assert.Equal(position.Y, transport.Position.Y, 3);
+        Assert.Equal(position.Z, transport.Position.Z, 3);
+    }
+
     private void ResetObjectManager()
     {
         WoWSharpObjectManager.Instance.Initialize(
@@ -248,7 +304,8 @@ public class ObjectUpdateMutationOrderTests(ObjectManagerFixture fixture) : ICla
         float movementFacing,
         Position descriptorPosition,
         float descriptorFacing,
-        uint displayId)
+        uint displayId,
+        uint gameObjectType = 5u)
         => BuildCreateObjectPacket(
             guid,
             packetObjectType,
@@ -263,7 +320,7 @@ public class ObjectUpdateMutationOrderTests(ObjectManagerFixture fixture) : ICla
                 [(uint)EGameObjectFields.GAMEOBJECT_POS_Y] = descriptorPosition.Y,
                 [(uint)EGameObjectFields.GAMEOBJECT_POS_Z] = descriptorPosition.Z,
                 [(uint)EGameObjectFields.GAMEOBJECT_FACING] = descriptorFacing,
-                [(uint)EGameObjectFields.GAMEOBJECT_TYPE_ID] = 5u,
+                [(uint)EGameObjectFields.GAMEOBJECT_TYPE_ID] = gameObjectType,
             });
 
     private static byte[] BuildPartialThenMovementPacket(

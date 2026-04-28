@@ -20,6 +20,31 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-07` BG stop/use/cast packet trigger parity is part of the deterministic movement bundle: `ForceStopImmediate()` synchronously records `MSG_MOVE_STOP` before game-object use/cast packets, and server `0x7A` cast failure is named `TRY_AGAIN` (2026-04-15).
 
 ## Session Handoff
+### 2026-04-28 (direct movement activity support)
+- Pass result: `BG jump, knockback, moving-transport object creation, and passive gameobject-transport attach support passed deterministic and live parity validation`
+- Last delta:
+  - Added BG `Jump()` movement dispatch and `MSG_MOVE_KNOCK_BACK` handling for
+    self-GM knockback packets that should not force an ACK.
+  - Moving-transport high GUID monster-move/object-update paths now create
+    gameobject transport state for route entries such as `164871`.
+  - `MovementController` can passively attach to nearby gameobject transports,
+    with broader map-object transport deck offsets for zeppelins and tighter
+    elevator ranges for normal transports.
+  - Taxi splines are not classified as transports; the transport handling is
+    limited to gameobject transport high GUID/type evidence.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_IdleNearGameObjectTransport_AttachesBeforePostTeleportGroundSnap|FullyQualifiedName~MovementControllerTests.Update_IdleNearMapObjectTransportDeck_AttachesWithZeppelinOriginOffset|FullyQualifiedName~ObjectManagerWorldSessionTests.DirectMonsterMove_MovingTransportHighGuid_CreatesGameObjectTransport|FullyQualifiedName~ObjectManagerWorldSessionTests.MessageMoveKnockBack_PrimesImpulseWithoutForceAck|FullyQualifiedName~ObjectUpdateMutationOrderTests.MovingTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject|FullyQualifiedName~ObjectUpdateMutationOrderTests.StaticTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_direct_actions_full_04.trx"` -> `passed (5/5; duration 2m41s)`.
+- Files changed:
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Handlers/MovementHandler.cs`
+  - `Exports/WoWSharpClient/Handlers/ObjectUpdateHandler.cs`
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Objects.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+- Next command: `git status --short --branch`
+
 ### 2026-04-28 (BG inbound payload event for transport trigger)
 - Pass result: `BG packet-window recorder can classify route-specific transport object updates and the transport parity oracle passed`
 - Last delta:

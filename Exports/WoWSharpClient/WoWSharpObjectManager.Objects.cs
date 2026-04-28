@@ -85,7 +85,7 @@ namespace WoWSharpClient
                 return objectType;
 
             ushort highType = (ushort)(guid >> 48);
-            return highType is 0xF110 or 0xF130
+            return highType is 0xF110 or 0xF120 or 0xF130 or 0x1FC0
                 ? WoWObjectType.GameObj
                 : objectType;
         }
@@ -94,18 +94,9 @@ namespace WoWSharpClient
         /// Fallback object creation when ObjectType byte is None/unknown.
         /// MaNGOS sometimes sends CREATE_OBJECT with ObjectType=0 for dynamically
         /// spawned game objects (fishing bobbers, traps, etc.). We detect these by
-        /// checking the GUID's high type bits: 0xF110/0xF130 = game object range.
-        /// Without this, the bobber is created as a generic WoWObject, fails the
-        /// OfType&lt;IWoWGameObject&gt;() filter, and never appears in NearbyObjects
-        /// or triggers auto-catch in HandleGameObjectCustomAnim.
-        /// </summary>
-
-
-        /// <summary>
-        /// Fallback object creation when ObjectType byte is None/unknown.
-        /// MaNGOS sometimes sends CREATE_OBJECT with ObjectType=0 for dynamically
-        /// spawned game objects (fishing bobbers, traps, etc.). We detect these by
-        /// checking the GUID's high type bits: 0xF110/0xF130 = game object range.
+        /// checking the GUID's high type bits. This includes normal gameobjects
+        /// (0xF110/0xF130), static transports (0xF120), and moving transports
+        /// (0x1FC0).
         /// Without this, the bobber is created as a generic WoWObject, fails the
         /// OfType&lt;IWoWGameObject&gt;() filter, and never appears in NearbyObjects
         /// or triggers auto-catch in HandleGameObjectCustomAnim.
@@ -113,7 +104,7 @@ namespace WoWSharpClient
         private static WoWObject CreateFallbackObject(WoWObjectType objectType, ulong guid)
         {
             ushort highType = (ushort)(guid >> 48);
-            if (highType is 0xF110 or 0xF130)
+            if (highType is 0xF110 or 0xF120 or 0xF130 or 0x1FC0)
             {
                 Log.Information("[CreateFallback] Guid=0x{Guid:X} has GO GUID range (0x{High:X4}) but objectType={Type} — creating WoWGameObject",
                     guid, highType, objectType);

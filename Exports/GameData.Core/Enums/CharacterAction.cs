@@ -95,4 +95,5 @@ public enum CharacterAction
     AcceptBattleground, // Accept a pending BG invite.
     LeaveBattleground,  // Leave the current battleground.
     TravelTo,           // Navigate to a target position on any map via CrossMapRouter. Params: int mapId, float x, float y, float z.
+    Jump,               // Trigger one jump impulse while preserving current movement intent.
 }

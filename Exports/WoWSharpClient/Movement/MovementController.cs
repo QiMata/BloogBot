@@ -238,6 +238,7 @@ namespace WoWSharpClient.Movement
             }
 
             _objectManager?.FlushPendingDeferredMovementChanges(gameTimeMs);
+            TryAttachToNearbyTransport();
 
             // Idle guard: skip physics when no movement intent, no pending ground snap,
             // and not auto-attacking. Prevents unnecessary airborne detection on idle frames.
@@ -760,6 +761,105 @@ namespace WoWSharpClient.Movement
 
             return transport != null;
         }
+
+        private const float PassiveTransportAttach2DRange = 12f;
+        private const float PassiveTransportAttachVerticalRange = 10f;
+        private const float PassiveMapObjectTransportAttach2DRange = 24f;
+        private const float PassiveMapObjectTransportAttachVerticalRange = 25f;
+
+        private bool TryAttachToNearbyTransport()
+        {
+            if (_player.TransportGuid != 0
+                || _player.Position == null
+                || _objectManager == null
+                || (_objectManager.IsInMapTransition && _objectManager.HasPendingWorldEntry))
+            {
+                return false;
+            }
+
+            var playerPosition = _player.Position;
+            var referenceZ = _needsGroundSnap && float.IsFinite(_teleportZ)
+                ? _teleportZ
+                : playerPosition.Z;
+
+            var candidate = _objectManager.Objects
+                .OfType<WoWGameObject>()
+                .Where(IsPassiveTransportCandidate)
+                .Select(gameObject =>
+                {
+                    var position = gameObject.Position;
+                    var dx = position.X - playerPosition.X;
+                    var dy = position.Y - playerPosition.Y;
+                    var dz = position.Z - referenceZ;
+                    var maxHorizontal = PassiveTransportHorizontalRange(gameObject);
+                    return new
+                    {
+                        GameObject = gameObject,
+                        HorizontalSq = (dx * dx) + (dy * dy),
+                        Vertical = MathF.Abs(dz),
+                        MaxHorizontalSq = maxHorizontal * maxHorizontal,
+                        MaxVertical = PassiveTransportVerticalRange(gameObject)
+                    };
+                })
+                .Where(candidate =>
+                    candidate.HorizontalSq <= candidate.MaxHorizontalSq
+                    && candidate.Vertical <= candidate.MaxVertical)
+                .OrderBy(candidate => candidate.HorizontalSq)
+                .ThenBy(candidate => candidate.Vertical)
+                .FirstOrDefault();
+
+            if (candidate == null)
+                return false;
+
+            var transport = candidate.GameObject;
+            _player.TransportGuid = transport.Guid;
+            _player.Transport = transport;
+            _player.TransportOffset = TransportCoordinateHelper.WorldToLocal(
+                playerPosition,
+                transport.Position,
+                transport.Facing);
+            _player.TransportOrientation = TransportCoordinateHelper.WorldToLocalFacing(
+                _player.Facing,
+                transport.Facing);
+            _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);
+            _player.MovementFlags |= MovementFlags.MOVEFLAG_ONTRANSPORT;
+            _velocity = Vector3.Zero;
+            _fallTimeMs = 0;
+            _needsGroundSnap = false;
+            _groundSnapFrames = 0;
+            _airborneTeleportProbeCompleted = false;
+
+            Log.Information(
+                "[MovementController] Attached to nearby transport guid=0x{Guid:X} type={TypeId} " +
+                "player=({PlayerX:F1},{PlayerY:F1},{PlayerZ:F1}) transport=({TransportX:F1},{TransportY:F1},{TransportZ:F1})",
+                transport.Guid,
+                transport.TypeId,
+                playerPosition.X,
+                playerPosition.Y,
+                playerPosition.Z,
+                transport.Position.X,
+                transport.Position.Y,
+                transport.Position.Z);
+
+            return true;
+        }
+
+        private static bool IsPassiveTransportCandidate(WoWGameObject gameObject)
+            => gameObject.Guid != 0
+                && IsFinitePosition(gameObject.Position)
+                && float.IsFinite(gameObject.Facing)
+                && (gameObject.TypeId == (uint)GameObjectType.Transport
+                    || gameObject.TypeId == (uint)GameObjectType.MapObjectTransport);
+
+        private static float PassiveTransportHorizontalRange(WoWGameObject gameObject)
+            => gameObject.TypeId == (uint)GameObjectType.MapObjectTransport
+                ? PassiveMapObjectTransportAttach2DRange
+                : PassiveTransportAttach2DRange;
+
+        private static float PassiveTransportVerticalRange(WoWGameObject gameObject)
+            => gameObject.TypeId == (uint)GameObjectType.MapObjectTransport
+                ? PassiveMapObjectTransportAttachVerticalRange
+                : PassiveTransportAttachVerticalRange;
 
         private const float PhysicsNearbyObjectRadius = 40f;
         private const int MaxPhysicsNearbyObjectCount = 64;

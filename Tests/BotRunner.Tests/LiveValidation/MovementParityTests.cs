@@ -1,1151 +1,430 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Communication;
+using GameData.Core.Enums;
 using Tests.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
-using Xunit.Sdk;
+using TestSkip = Tests.Infrastructure.Skip;
 
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Movement parity tests: FG (gold standard) and BG (headless physics) walk identical paths.
-/// Both characters MUST be the same race/gender for identical capsule dimensions.
-/// Records per-frame transform data and flags per-frame speed anomalies (collision/stuck).
+/// Direct FG/BG movement activity parity probes.
 ///
-/// Run: dotnet test --filter "MovementParityTests" --configuration Release
+/// These tests keep setup small and make both real BotRunner targets perform the
+/// same visible action: pathfind from point A to point B, jump while running,
+/// get knocked back by a GM self-command, and ride a real gameobject transport.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 [Trait("Category", "MovementParity")]
 [Trait("ParityLayer", "Live")]
-public class MovementParityTests
+public sealed class MovementParityTests
 {
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int MapId = 1; // Kalimdor
-    private const float ExpectedRunSpeed = 7.0f;
-    // ~20Hz polling. Actual game runs at 60fps (16.7ms) but snapshot IPC adds latency.
-    private const int PollIntervalMs = 50;
-    // FG updates position in ~500ms bursts (only when WoW client sends movement packets).
-    // Use a rolling window to detect true stuck conditions across packet boundaries.
-    // FG updates position in ~500ms bursts (only when WoW client sends movement packets).
-    // Use a 1.2s rolling window spanning at least 2 packet intervals to detect true stuck.
-    private const float FgStuckWindowSec = 1.2f;
-    private const float BgStuckWindowSec = 0.20f;   // BG updates every 50ms tick
-    // Minimum displacement over the window period before flagging stuck.
-    // At 7 y/s over 1.2s = 8.4y; flag if < 10% (0.84y) — only fires on genuine wall collisions.
-    private const float FgMinWindowDisplacement = ExpectedRunSpeed * FgStuckWindowSec * 0.10f;
-    // At 7 y/s over 0.20s = 1.4y; flag if < 20% (0.28y).
-    private const float BgMinWindowDisplacement = ExpectedRunSpeed * BgStuckWindowSec * 0.20f;
+    private const int KalimdorMapId = 1;
+    private const int EasternKingdomsMapId = 0;
+    private const float DurotarStartX = -500f;
+    private const float DurotarStartY = -4800f;
+    private const float DurotarStartZ = 38f;
+    private const float DurotarTargetX = -460f;
+    private const float DurotarTargetY = -4760f;
+    private const float DurotarTargetZ = 38f;
+    private const float DurotarJumpTargetX = -430f;
+    private const float DurotarJumpTargetY = -4730f;
+    private const float DurotarJumpTargetZ = 38f;
+
+    private const float KnockbackStageX = -500f;
+    private const float KnockbackStageY = -4800f;
+    private const float KnockbackStageZ = 38f;
+
+    private const float UndercityElevatorWestX = 1544.24f;
+    private const float UndercityElevatorWestY = 240.77f;
+    private const float UndercityElevatorUpperZ = 55.40f;
 
     public MovementParityTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
         _output = output;
         _bot.SetOutput(output);
+        TestSkip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
 
     [SkippableFact]
-    public async Task Parity_ValleyOfTrials_FlatPath()
+    public async Task Pathfinding_PointAToPointB_FgBgParity()
     {
-        // Road path heading NE — gradual uphill (56.5→64.8 over ~55y).
-        // Ground Z from GetGroundZ: start=56.47, target=64.81
-        await RunParityTest(
-            name: "Valley of Trials — Flat Path",
-            startX: -260f, startY: -4350f, startZ: 56.5f,
-            targetX: -230f, targetY: -4310f, targetZ: 64.8f,
-            maxSeconds: 20);
+        var accounts = await EnsureDirectMovementAccountsAsync();
+        await StagePairAsync(accounts, KalimdorMapId, DurotarStartX, DurotarStartY, DurotarStartZ, "Durotar road run");
+        var recordingDir = await StartPairRecordingAsync(accounts);
+
+        try
+        {
+            await DispatchBothAsync(accounts, () => MakeGoto(DurotarTargetX, DurotarTargetY, DurotarTargetZ));
+
+            var trace = await TracePairAsync(
+                accounts,
+                TimeSpan.FromSeconds(35),
+                pollIntervalMs: 500,
+                stopWhen: sample =>
+                    DistanceTo(sample.Bg, DurotarTargetX, DurotarTargetY) <= 8f
+                    && DistanceTo(sample.Fg, DurotarTargetX, DurotarTargetY) <= 8f);
+
+            WriteTraceSummary("point-to-point pathfinding", trace);
+            AssertPointToPointParity(trace, routeDistance: Distance2D(DurotarStartX, DurotarStartY, DurotarTargetX, DurotarTargetY));
+        }
+        finally
+        {
+            await StopPairRecordingAsync(accounts);
+        }
+
+        AssertRecordingsWritten(recordingDir, accounts, "pathfinding");
     }
 
     [SkippableFact]
-    public async Task Parity_ValleyOfTrials_HillPath()
+    public async Task RunningJump_FgBgParity()
     {
-        // Start from the road, walk toward the cave entrance (uphill).
-        // Ground Z from GetGroundZ: start=57.39, target=61.41
-        await RunParityTest(
-            name: "Valley of Trials — Hill Path",
-            startX: -284f, startY: -4383f, startZ: 57.4f,
-            targetX: -254f, targetY: -4340f, targetZ: 61.4f,
-            maxSeconds: 20);
+        var accounts = await EnsureDirectMovementAccountsAsync();
+        await StagePairAsync(accounts, KalimdorMapId, DurotarStartX, DurotarStartY, DurotarStartZ, "Durotar running jump");
+        var recordingDir = await StartPairRecordingAsync(accounts);
+
+        try
+        {
+            await DispatchBothAsync(accounts, () => MakeGoto(DurotarJumpTargetX, DurotarJumpTargetY, DurotarJumpTargetZ));
+
+            var started = await TracePairAsync(
+                accounts,
+                TimeSpan.FromSeconds(8),
+                pollIntervalMs: 250,
+                stopWhen: sample =>
+                    DistanceFrom(sample.Bg, DurotarStartX, DurotarStartY) >= 3f
+                    && DistanceFrom(sample.Fg, DurotarStartX, DurotarStartY) >= 3f);
+            WriteTraceSummary("running before jump", started);
+
+            await DispatchBothAsync(accounts, MakeJump);
+
+            var jumped = await TracePairAsync(
+                accounts,
+                TimeSpan.FromSeconds(10),
+                pollIntervalMs: 200,
+                stopWhen: sample =>
+                    TraceMetrics.FromSamples(new[] { sample.Bg }).SawJump
+                    && TraceMetrics.FromSamples(new[] { sample.Fg }).SawJump);
+
+            WriteTraceSummary("running jump", jumped);
+            Assert.True(started.Bg.SawForward, "BG should start running before jump.");
+            Assert.True(started.Fg.SawForward, "FG should start running before jump.");
+            Assert.True(jumped.Bg.SawJump, DescribeFailure("BG", "jump", jumped.Bg));
+            Assert.True(jumped.Fg.SawJump, DescribeFailure("FG", "jump", jumped.Fg));
+        }
+        finally
+        {
+            await StopPairRecordingAsync(accounts);
+        }
+
+        AssertRecordingsWritten(recordingDir, accounts, "running jump");
     }
 
     [SkippableFact]
-    public async Task Parity_Durotar_RoadPath()
+    public async Task Knockback_FgBgParity()
     {
-        // Road near Razor Hill — relatively flat, long straight
-        await RunParityTest(
-            name: "Durotar — Road Path",
-            startX: -500f, startY: -4800f, startZ: 38f,
-            targetX: -460f, targetY: -4760f, targetZ: 38f,
-            maxSeconds: 20);
+        var accounts = await EnsureDirectMovementAccountsAsync();
+        await StagePairAsync(
+            accounts,
+            KalimdorMapId,
+            KnockbackStageX,
+            KnockbackStageY,
+            KnockbackStageZ,
+            "Durotar GM knockback");
+        var recordingDir = await StartPairRecordingAsync(accounts);
+
+        try
+        {
+            await DispatchGmBothAndAwaitAsync(accounts, ".targetself");
+            var beforeKnockback = await CapturePairSnapshotAsync(accounts);
+
+            await DispatchGmBothAndAwaitAsync(accounts, ".knockback 5 5");
+
+            var trace = await TracePairAsync(
+                accounts,
+                TimeSpan.FromSeconds(12),
+                pollIntervalMs: 200,
+                stopWhen: sample =>
+                    IsKnockbackObserved(sample.Bg, beforeKnockback.Bg)
+                    && IsKnockbackObserved(sample.Fg, beforeKnockback.Fg));
+
+            var bgDisplacement = DistanceBetween(beforeKnockback.Bg, trace.LastBg);
+            var fgDisplacement = DistanceBetween(beforeKnockback.Fg, trace.LastFg);
+            WriteTraceSummary("GM self knockback", trace);
+            _output.WriteLine($"Knockback displacement from command baseline: BG={bgDisplacement:F1}y FG={fgDisplacement:F1}y");
+            Assert.True(
+                trace.Bg.SawJump || trace.Bg.StraightLineDistance >= 2f || bgDisplacement >= 1.5f,
+                $"{DescribeFailure("BG", "knockback", trace.Bg)} displacement={bgDisplacement:F1}y");
+            Assert.True(
+                trace.Fg.SawJump || trace.Fg.StraightLineDistance >= 2f || fgDisplacement >= 1.5f,
+                $"{DescribeFailure("FG", "knockback", trace.Fg)} displacement={fgDisplacement:F1}y");
+        }
+        finally
+        {
+            await StopPairRecordingAsync(accounts);
+        }
+
+        AssertRecordingsWritten(recordingDir, accounts, "knockback");
     }
 
     [SkippableFact]
-    public async Task Parity_Durotar_RoadPath_TurnStart()
+    public async Task TransportRide_FgBgParity()
     {
-        await RunParityTest(
-            name: "Durotar - Road Path (turn start)",
-            startX: -500f, startY: -4800f, startZ: 38f,
-            targetX: -460f, targetY: -4760f, targetZ: 38f,
-            maxSeconds: 20,
-            initialFacing: 3.92699f);
+        var accounts = await EnsureDirectMovementAccountsAsync();
+        await StagePairAsync(
+            accounts,
+            EasternKingdomsMapId,
+            UndercityElevatorWestX,
+            UndercityElevatorWestY,
+            UndercityElevatorUpperZ,
+            "Undercity elevator upper",
+            teleportZOffset: 0f,
+            acceptTransportSettled: true);
+        var recordingDir = await StartPairRecordingAsync(accounts);
+
+        try
+        {
+            var trace = await TracePairAsync(
+                accounts,
+                TimeSpan.FromSeconds(20),
+                pollIntervalMs: 500,
+                stopWhen: sample =>
+                    sample.Elapsed >= TimeSpan.FromSeconds(10)
+                    && IsOnTransport(sample.Bg)
+                    && IsOnTransport(sample.Fg));
+
+            WriteTraceSummary("Undercity elevator gameobject transport ride", trace);
+            AssertElevatorTransportRide(trace);
+        }
+        finally
+        {
+            await StopPairRecordingAsync(accounts);
+        }
+
+        AssertRecordingsWritten(recordingDir, accounts, "transport ride");
     }
 
-    /// <summary>
-    /// Pause/resume parity: both bots walk toward point A, then mid-route are redirected
-    /// to point B. This forces StopAllMovement → MoveToward (same code path as combat
-    /// pause/resume) and proves FG/BG emit matching STOP → SET_FACING → START_FORWARD
-    /// packet sequences at the redirect point.
-    /// </summary>
-    [SkippableFact]
-    public async Task Parity_Durotar_RoadPath_Redirect()
+    private async Task<PairAccounts> EnsureDirectMovementAccountsAsync()
     {
-        await RunRedirectParityTest(
-            name: "Durotar - Road Path (mid-route redirect / pause-resume)",
-            startX: -500f, startY: -4800f, startZ: 38f,
-            firstTargetX: -460f, firstTargetY: -4760f, firstTargetZ: 38f,
-            secondTargetX: -520f, secondTargetY: -4750f, secondTargetZ: 38f,
-            redirectAfterSeconds: 3,
-            maxSeconds: 25);
-    }
-
-    [SkippableFact]
-    public async Task Parity_ValleyOfTrials_LongDiagonal()
-    {
-        // Longer route (~80y diagonal) across Valley of Trials — tests sustained parity.
-        // Ground Z: start=57.39, target=66.30
-        await RunParityTest(
-            name: "Valley of Trials — Long Diagonal",
-            startX: -284f, startY: -4383f, startZ: 57.4f,
-            targetX: -340f, targetY: -4450f, targetZ: 66.3f,
-            maxSeconds: 30);
-    }
-
-    [SkippableFact]
-    public async Task Parity_ValleyOfTrials_ReverseHill()
-    {
-        // Reverse of HillPath — start uphill, walk toward the road (downhill).
-        // Ground Z: start=61.41, target=57.39
-        await RunParityTest(
-            name: "Valley of Trials — Reverse Hill (downhill)",
-            startX: -254f, startY: -4340f, startZ: 61.4f,
-            targetX: -284f, targetY: -4383f, targetZ: 57.4f,
-            maxSeconds: 20);
-    }
-
-    // ======= Diverse MoveFlag Tests =======
-    // These routes are chosen to exercise flag transitions beyond simple FORWARD walking:
-    //   - FALLINGFAR (ledge drops, steep descents)
-    //   - Slope guard engagement (steep climbs)
-    //   - Wall collision / deflection (obstacle-dense terrain)
-    //   - Multiple facing changes (winding route with sharp turns)
-
-    [SkippableFact]
-    public async Task Parity_ValleyOfTrials_LedgeDrop()
-    {
-        // Start on elevated terrain near the cave, walk downhill to the road.
-        // The elevation drop triggers FALLINGFAR → landing flag transition.
-        // Ground Z: start=64.62, target=59.67
-        await RunParityTest(
-            name: "Valley of Trials — Ledge Drop (FALLINGFAR)",
-            startX: -240f, startY: -4330f, startZ: 64.6f,
-            targetX: -270f, targetY: -4380f, targetZ: 59.7f,
-            maxSeconds: 25);
-    }
-
-    [SkippableFact]
-    public async Task Parity_ValleyOfTrials_SteepClimb()
-    {
-        // Start at the road, walk steeply uphill toward the high ground north of cave.
-        // Ground Z: start=57.39, target=64.82
-        await RunParityTest(
-            name: "Valley of Trials — Steep Climb (slope guard)",
-            startX: -284f, startY: -4383f, startZ: 57.4f,
-            targetX: -224f, targetY: -4310f, targetZ: 64.8f,
-            maxSeconds: 30);
-    }
-
-    [SkippableFact]
-    public async Task Parity_Durotar_ObstacleDense()
-    {
-        // Route along Valley of Trials path (open terrain with some objects nearby).
-        // Replaces the old route through dense trees at (-356,-4490) → (-310,-4530)
-        // where target Z was 148.43 (unreachable hillside) causing both bots to get stuck.
-        // Ground Z: start=57.39, target=57.35
-        await RunParityTest(
-            name: "Valley of Trials — Open Path (replaced obstacle dense)",
-            startX: -284f, startY: -4383f, startZ: 57.4f,
-            targetX: -310f, targetY: -4410f, targetZ: 57.4f,
-            maxSeconds: 30);
-    }
-
-    [SkippableFact]
-    public async Task Parity_Durotar_WindingPath()
-    {
-        // Longer path from Razor Hill area across varied terrain — road, dirt, slight hills.
-        // Exercises: sustained FORWARD flag, multiple waypoint transitions, facing changes,
-        // speed consistency over distance.
-        await RunParityTest(
-            name: "Durotar — Winding Path (sustained movement)",
-            startX: -500f, startY: -4800f, startZ: 38f,
-            targetX: -400f, targetY: -4700f, targetZ: 42f,
-            maxSeconds: 40);
-    }
-
-    [SkippableFact]
-    public async Task Parity_ValleyOfTrials_SteepDescent()
-    {
-        // Start on high ground, descend steeply toward the valley floor.
-        // Ground Z: start=64.82, target=57.35
-        await RunParityTest(
-            name: "Valley of Trials — Steep Descent (FFS hysteresis)",
-            startX: -224f, startY: -4310f, startZ: 64.8f,
-            targetX: -310f, targetY: -4410f, targetZ: 57.4f,
-            maxSeconds: 30);
-    }
-
-    private async Task<(LiveBotFixture.BotRunnerActionTarget Bg, LiveBotFixture.BotRunnerActionTarget Fg)> EnsureMovementParityTargetsAsync()
-    {
-        var settingsPath = ResolveRepoPath(
-            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
-
-        await _bot.EnsureSettingsAsync(settingsPath);
         _bot.SetOutput(_output);
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
-        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
-        global::Tests.Infrastructure.Skip.If(
-            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
-            "Shodan director was not launched by Economy.config.json.");
-        global::Tests.Infrastructure.Skip.If(
-            string.IsNullOrWhiteSpace(_bot.FgAccountName),
-            "FG account not available for movement parity comparison.");
-        global::Tests.Infrastructure.Skip.IfNot(
-            await _bot.CheckFgActionableAsync(requireTeleportProbe: false),
-            "FG bot not actionable for movement parity comparison.");
-
-        var targets = _bot.ResolveBotRunnerActionTargets(
-            includeForegroundIfActionable: true,
-            foregroundFirst: false);
-        var bg = targets.Single(target => !target.IsForeground);
-        var fg = targets.Single(target => target.IsForeground);
+        TestSkip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        TestSkip.If(string.IsNullOrWhiteSpace(_bot.BgAccountName), "BG client required for movement parity.");
+        TestSkip.If(string.IsNullOrWhiteSpace(_bot.FgAccountName), "FG client required for movement parity.");
+        TestSkip.IfNot(await _bot.CheckFgActionableAsync(requireTeleportProbe: false), "FG bot not actionable for movement parity.");
 
         _output.WriteLine(
-            $"[ACTION-PLAN] BG {bg.AccountName}/{bg.CharacterName} and FG {fg.AccountName}/{fg.CharacterName}: movement parity action targets.");
-        _output.WriteLine(
-            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no movement parity action dispatch.");
-
-        return (bg, fg);
+            $"[ACTION-PLAN] BG {_bot.BgAccountName}/{_bot.BgCharacterName} and FG {_bot.FgAccountName}/{_bot.FgCharacterName}: direct movement parity targets.");
+        return new PairAccounts(_bot.BgAccountName!, _bot.FgAccountName!);
     }
 
-    private async Task QuiesceMovementParityOrSkipAsync(
-        IEnumerable<string> accounts,
+    private async Task StagePairAsync(
+        PairAccounts accounts,
+        int mapId,
+        float x,
+        float y,
+        float z,
         string label,
-        TimeSpan? timeout = null)
+        int? levelTo = null,
+        float teleportZOffset = 3f,
+        bool acceptTransportSettled = false)
     {
-        try
-        {
-            await _bot.QuiesceAccountsAsync(accounts, label, timeout);
-        }
-        catch (XunitException ex)
-        {
-            global::Tests.Infrastructure.Skip.If(
-                true,
-                $"{label} could not quiesce under Shodan movement parity staging: {ex.Message}");
-        }
+        await Task.WhenAll(
+            StageAccountAsync(accounts.Bg, "BG", mapId, x, y, z, label, levelTo, teleportZOffset, acceptTransportSettled),
+            StageAccountAsync(accounts.Fg, "FG", mapId, x, y, z, label, levelTo, teleportZOffset, acceptTransportSettled));
     }
 
-    /// <summary>
-    /// Core parity test runner. Teleports both bots, sends GOTO, records transforms,
-    /// detects per-frame anomalies, and reports parity metrics.
-    /// </summary>
-    private async Task RunParityTest(
-        string name,
-        float startX, float startY, float startZ,
-        float targetX, float targetY, float targetZ,
-        int maxSeconds,
-        float? initialFacing = null)
+    private async Task StageAccountAsync(
+        string account,
+        string role,
+        int mapId,
+        float x,
+        float y,
+        float z,
+        string label,
+        int? levelTo,
+        float teleportZOffset,
+        bool acceptTransportSettled)
     {
-        var (bgTarget, fgTarget) = await EnsureMovementParityTargetsAsync();
-        var bgAccount = bgTarget.AccountName;
-        var fgAccount = fgTarget.AccountName;
+        await _bot.EnsureCleanSlateAsync(account, role, teleportToSafeZone: false);
+
+        if (levelTo.HasValue)
+        {
+            await _bot.StageBotRunnerLoadoutAsync(
+                account,
+                role,
+                cleanSlate: false,
+                clearInventoryFirst: false,
+                levelTo: levelTo.Value);
+        }
+
+        await _bot.BotTeleportAsync(account, mapId, x, y, z + teleportZOffset);
+        var settled = await _bot.WaitForTeleportSettledAsync(
+            account,
+            x,
+            y,
+            timeoutMs: 10000,
+            progressLabel: $"{role} {label} stage",
+            xyToleranceYards: 30f);
+        var (zStable, finalZ) = await _bot.WaitForZStabilizationAsync(account, waitMs: 1000);
+        await _bot.SendGmChatCommandAsync(account, ".gm off");
         await _bot.RefreshSnapshotsAsync();
-        // Both characters MUST be Male Orc Warrior.
-        // Same race/gender = identical capsule dimensions (radius=0.3064, height=2.0313 for Orc Male).
-        _output.WriteLine($"=== {name} ===");
-        _output.WriteLine($"FG: {fgTarget.CharacterName} ({fgAccount}=Male Orc Warrior)");
-        _output.WriteLine($"BG: {bgTarget.CharacterName} ({bgAccount}=Male Orc Warrior)");
+        var snap = await _bot.GetSnapshotAsync(account);
 
-        float routeDist = Distance2D(startX, startY, targetX, targetY);
-        _output.WriteLine($"Route: ({startX},{startY},{startZ}) -> ({targetX},{targetY},{targetZ}) = {routeDist:F1}y\n");
+        _output.WriteLine(
+            $"[STAGE] {role} {label}: settled={settled} zStable={zStable} finalZ={finalZ:F2} {DescribeSnapshot(snap)}");
+        Assert.True(
+            settled || (acceptTransportSettled && IsOnTransport(snap)),
+            $"{role} did not settle for {label}. {DescribeSnapshot(snap)}");
+        Assert.True(finalZ > -500f, $"{role} staged below world for {label}. finalZ={finalZ:F2}");
+    }
 
-        await QuiesceMovementParityOrSkipAsync(
-            new[] { bgAccount, fgAccount },
-            $"{name} movement parity pre-stage");
-
-        // Stage Z+3 above nominal ground. The idle ground snap (GetGroundZ with 6y range)
-        // handles the 3y gap within the first physics frame after Reset().
-        float stageZ = startZ + 3f;
-        var bgSettled = await _bot.StageBotRunnerAtNavigationPointAsync(
-            bgAccount,
-            bgTarget.RoleLabel,
-            MapId,
-            startX,
-            startY,
-            stageZ,
-            $"{name} start",
-            cleanSlate: true,
-            xyToleranceYards: 10f,
-            zStabilizationWaitMs: 1000);
-        var fgSettled = await _bot.StageBotRunnerAtNavigationPointAsync(
-            fgAccount,
-            fgTarget.RoleLabel,
-            MapId,
-            startX,
-            startY,
-            stageZ,
-            $"{name} start",
-            cleanSlate: true,
-            xyToleranceYards: 10f,
-            zStabilizationWaitMs: 1000);
-        if (!bgSettled || !fgSettled)
-        {
-            global::Tests.Infrastructure.Skip.If(
-                true,
-                $"{name} is Shodan-staged, but live movement parity start staging did not settle: BG={bgSettled} FG={fgSettled}.");
-        }
-
-        await QuiesceMovementParityOrSkipAsync(
-            new[] { bgAccount, fgAccount },
-            $"{name} movement parity pre-action");
-
-        // Post-settle stabilization: wait for the BG bot's Z to converge toward
-        // the FG bot's Z. The BG bot may still be at teleport Z if its ground snap
-        // hasn't propagated to the snapshot yet. Poll until BG Z is within 2y of
-        // FG Z, or timeout after 5s.
-        for (int settle = 0; settle < 10; settle++)
-        {
-            await Task.Delay(500);
-            await _bot.RefreshSnapshotsAsync();
-            var fgCheck = await _bot.GetSnapshotAsync(fgAccount!);
-            var bgCheck = await _bot.GetSnapshotAsync(bgAccount!);
-            var fgCheckZ = fgCheck?.Player?.Unit?.GameObject?.Base?.Position?.Z ?? float.NaN;
-            var bgCheckZ = bgCheck?.Player?.Unit?.GameObject?.Base?.Position?.Z ?? float.NaN;
-            if (!float.IsNaN(fgCheckZ) && !float.IsNaN(bgCheckZ) &&
-                MathF.Abs(fgCheckZ - bgCheckZ) < 2.0f)
-            {
-                _output.WriteLine($"[SETTLE] BG Z converged to FG Z after {(settle + 1) * 500}ms: FG={fgCheckZ:F2} BG={bgCheckZ:F2}");
-                break;
-            }
-            if (settle == 9)
-                _output.WriteLine($"[SETTLE] WARNING: BG Z did not converge after 5s: FG={fgCheckZ:F2} BG={bgCheckZ:F2} delta={MathF.Abs(fgCheckZ - bgCheckZ):F2}");
-        }
-
-        await _bot.RefreshSnapshotsAsync();
-        var fgStart = await _bot.GetSnapshotAsync(fgAccount!);
-        var bgStart = await _bot.GetSnapshotAsync(bgAccount!);
-        var fgStartPos = fgStart?.Player?.Unit?.GameObject?.Base?.Position;
-        var bgStartPos = bgStart?.Player?.Unit?.GameObject?.Base?.Position;
-        var bgStartFlags = bgStart?.Player?.Unit?.MovementFlags ?? 0;
-
-        _output.WriteLine($"[SETUP] BG settled={bgSettled} pos=({bgStartPos?.X:F1},{bgStartPos?.Y:F1},{bgStartPos?.Z:F2}) flags=0x{bgStartFlags:X}");
-        _output.WriteLine($"[SETUP] FG settled={fgSettled} pos=({fgStartPos?.X:F1},{fgStartPos?.Y:F1},{fgStartPos?.Z:F2})");
-        Assert.NotNull(fgStartPos);
-
-        // Allow physics to snap to ground
-        await Task.Delay(2000);
-
-        if (initialFacing.HasValue)
-        {
-            await Task.WhenAll(
-                _bot.SendActionAsync(bgAccount!, MakeSetFacing(initialFacing.Value)),
-                _bot.SendActionAsync(fgAccount!, MakeSetFacing(initialFacing.Value)));
-            var bgFacingSettled = await WaitForFacingSettledAsync(bgAccount!, initialFacing.Value);
-            var fgFacingSettled = await WaitForFacingSettledAsync(fgAccount!, initialFacing.Value);
-            await Task.Delay(250);
-            _output.WriteLine($"[SETUP] Forced initial facing={initialFacing.Value:F4} rad before recording");
-            _output.WriteLine($"[SETUP] Facing settled: BG={bgFacingSettled} FG={fgFacingSettled}");
-        }
-
-        // --- START RECORDINGS (both bots) ---
+    private async Task<string> StartPairRecordingAsync(PairAccounts accounts)
+    {
         var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
-        RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, bgAccount!, "packets", "transform", "physics");
-        RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, fgAccount!, "packets", "transform");
-        await Task.WhenAll(
-            _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StartPhysicsRecording)),
-            _bot.SendActionAsync(fgAccount!, MakeRecordingAction(ActionType.StartPhysicsRecording)));
-        _output.WriteLine("[RECORDING] FG transform + BG physics frame recording started");
+        RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, accounts.Bg, "packets", "transform", "physics");
+        RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, accounts.Fg, "packets", "transform");
 
-        // --- GOTO ---
-        var bgGoto = _bot.SendActionAsync(bgAccount!, MakeGoto(targetX, targetY, targetZ));
-        var fgGoto = _bot.SendActionAsync(fgAccount!, MakeGoto(targetX, targetY, targetZ));
-        await Task.WhenAll(bgGoto, fgGoto);
-        _output.WriteLine($"[ACTION] BG GOTO={bgGoto.Result}  FG GOTO={fgGoto.Result}\n");
-
-        // --- POLL TRANSFORMS ---
-        var fgSamples = new List<TransformSample>();
-        var bgSamples = new List<TransformSample>();
-        var fgAnomalies = new List<string>();
-        var bgAnomalies = new List<string>();
-        var startTime = DateTime.UtcNow;
-        int maxPolls = maxSeconds * (1000 / PollIntervalMs);
-        bool fgArrived = false, bgArrived = false;
-
-        // Print header
-        _output.WriteLine($"{"t",7} | {"FG_X",8} {"FG_Y",8} {"FG_Z",7} {"Flg",5} {"FGspd",5} | {"BG_X",8} {"BG_Y",8} {"BG_Z",7} {"Flg",5} {"BGspd",5} | {"dXY",5} {"dZ",6} {"note",4}");
-        _output.WriteLine(new string('-', 120));
-
-        for (int i = 0; i < maxPolls; i++)
-        {
-            await Task.Delay(PollIntervalMs);
-            float elapsed = (float)(DateTime.UtcNow - startTime).TotalSeconds;
-
-            await _bot.RefreshSnapshotsAsync();
-            var fgSnap = await _bot.GetSnapshotAsync(fgAccount!);
-            var bgSnap = await _bot.GetSnapshotAsync(bgAccount!);
-
-            var fgPos = fgSnap?.Player?.Unit?.GameObject?.Base?.Position;
-            var bgPos = bgSnap?.Player?.Unit?.GameObject?.Base?.Position;
-
-            float fgX = fgPos?.X ?? float.NaN, fgY = fgPos?.Y ?? float.NaN, fgZ = fgPos?.Z ?? float.NaN;
-            float bgX = bgPos?.X ?? float.NaN, bgY = bgPos?.Y ?? float.NaN, bgZ = bgPos?.Z ?? float.NaN;
-            uint fgFlags = fgSnap?.Player?.Unit?.MovementFlags ?? 0;
-            uint bgFlags = bgSnap?.Player?.Unit?.MovementFlags ?? 0;
-
-            // FG-observed BG position: what does the server tell the FG client about where BG is?
-            // If this Z oscillates while BG's own snapshot Z is stable, the BG bot's PACKETS
-            // are wrong — the server interprets them as oscillating even though our internal
-            // physics is correct. This is the key diagnostic for packet behavior parity.
-            float fgSeesBgZ = float.NaN;
-            uint fgSeesBgFlags = 0;
-            if (!float.IsNaN(bgX) && fgSnap?.NearbyUnits != null)
-            {
-                foreach (var unit in fgSnap.NearbyUnits)
-                {
-                    var unitPos = unit.GameObject?.Base?.Position;
-                    if (unitPos == null) continue;
-                    // Match by XY proximity (within 10y — same area)
-                    float dx = unitPos.X - bgX, dy = unitPos.Y - bgY;
-                    if (dx * dx + dy * dy < 100f) // 10y radius
-                    {
-                        fgSeesBgZ = unitPos.Z;
-                        fgSeesBgFlags = unit.MovementFlags;
-                        break;
-                    }
-                }
-            }
-
-            // Per-frame speed calculation (frame-to-frame for display)
-            float fgFrameSpeed = 0f, bgFrameSpeed = 0f;
-            string note = "";
-
-            if (!float.IsNaN(fgX) && fgSamples.Count > 0)
-            {
-                var prev = fgSamples[^1];
-                float dt = elapsed - prev.T;
-                if (dt > 0.001f)
-                {
-                    float frameDist = Distance2D(fgX, fgY, prev.X, prev.Y);
-                    fgFrameSpeed = frameDist / dt;
-                }
-
-                // FG stuck detection: rolling window over 650ms (spans packet intervals).
-                // FG only updates position when WoW sends movement packets (~500ms bursts),
-                // so per-frame checks at 50ms produce false positives.
-                var windowSample = fgSamples.LastOrDefault(s => elapsed - s.T >= FgStuckWindowSec);
-                if (windowSample != null && (fgFlags & 0x1) != 0)
-                {
-                    float windowDist = Distance2D(fgX, fgY, windowSample.X, windowSample.Y);
-                    float windowDt = elapsed - windowSample.T;
-                    if (windowDt >= FgStuckWindowSec && windowDist < FgMinWindowDisplacement)
-                    {
-                        var msg = $"[FG STUCK] t={elapsed:F2}s pos=({fgX:F1},{fgY:F1},{fgZ:F1}) window={windowDt:F2}s disp={windowDist:F3}y flags=0x{fgFlags:X}";
-                        fgAnomalies.Add(msg);
-                        note = "FG!";
-                    }
-                }
-            }
-
-            if (!float.IsNaN(bgX) && bgSamples.Count > 0)
-            {
-                var prev = bgSamples[^1];
-                float dt = elapsed - prev.T;
-                if (dt > 0.001f)
-                {
-                    float frameDist = Distance2D(bgX, bgY, prev.X, prev.Y);
-                    bgFrameSpeed = frameDist / dt;
-                }
-
-                // BG stuck detection: shorter window (150ms) since BG updates every tick.
-                var windowSample = bgSamples.LastOrDefault(s => elapsed - s.T >= BgStuckWindowSec);
-                if (windowSample != null && (bgFlags & 0x1) != 0)
-                {
-                    float windowDist = Distance2D(bgX, bgY, windowSample.X, windowSample.Y);
-                    float windowDt = elapsed - windowSample.T;
-                    if (windowDt >= BgStuckWindowSec && windowDist < BgMinWindowDisplacement)
-                    {
-                        var msg = $"[BG STUCK] t={elapsed:F2}s pos=({bgX:F1},{bgY:F1},{bgZ:F1}) window={windowDt:F2}s disp={windowDist:F3}y flags=0x{bgFlags:X}";
-                        bgAnomalies.Add(msg);
-                        note += "BG!";
-                    }
-                }
-            }
-
-            if (!float.IsNaN(fgX)) fgSamples.Add(new TransformSample(elapsed, fgX, fgY, fgZ, fgFlags));
-            if (!float.IsNaN(bgX)) bgSamples.Add(new TransformSample(elapsed, bgX, bgY, bgZ, bgFlags));
-
-            float dXY = (!float.IsNaN(fgX) && !float.IsNaN(bgX)) ? Distance2D(fgX, fgY, bgX, bgY) : float.NaN;
-            float dZ = (!float.IsNaN(fgZ) && !float.IsNaN(bgZ)) ? bgZ - fgZ : float.NaN;
-
-            // Print every 10th sample (~500ms) or anomalous frames
-            if (i % 10 == 0 || note.Length > 0)
-            {
-                string fgSeesBgStr = float.IsNaN(fgSeesBgZ) ? "---" : $"{fgSeesBgZ:F1}/0x{fgSeesBgFlags:X}";
-                _output.WriteLine(
-                    $"{elapsed,7:F2}s | {fgX,8:F1} {fgY,8:F1} {fgZ,7:F2} {fgFlags,5:X} {fgFrameSpeed,5:F1} | " +
-                    $"{bgX,8:F1} {bgY,8:F1} {bgZ,7:F2} {bgFlags,5:X} {bgFrameSpeed,5:F1} | " +
-                    $"{(float.IsNaN(dXY) ? "  n/a" : $"{dXY,5:F1}")} " +
-                    $"{(float.IsNaN(dZ) ? "   n/a" : $"{dZ,6:F2}")} " +
-                    $"FG→BG:{fgSeesBgStr} {note}");
-            }
-
-            if (!float.IsNaN(fgX) && Distance2D(fgX, fgY, targetX, targetY) < 5f) fgArrived = true;
-            if (!float.IsNaN(bgX) && Distance2D(bgX, bgY, targetX, targetY) < 5f) bgArrived = true;
-            if (fgArrived && bgArrived) break;
-        }
-
-        if (fgArrived || bgArrived)
-        {
-            await Task.Delay(1000);
-        }
-
-        // --- STOP RECORDINGS (both bots) ---
-        await Task.WhenAll(
-            _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording)),
-            _bot.SendActionAsync(fgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording)));
-        await Task.Delay(500); // Allow file write to complete
-        _output.WriteLine("[RECORDING] FG transform + BG physics frame recording stopped");
-        await QuiesceMovementParityOrSkipAsync(
-            new[] { bgAccount, fgAccount },
-            $"{name} movement parity post-action",
-            TimeSpan.FromSeconds(6));
-
-        // --- SUMMARY ---
-        _output.WriteLine($"\n=== RESULTS: {name} ===");
-        _output.WriteLine($"Samples: FG={fgSamples.Count} BG={bgSamples.Count}  Arrived: FG={fgArrived} BG={bgArrived}");
-
-        // Arrival time comparison
-        float? fgArrivalT = null, bgArrivalT = null;
-        foreach (var s in fgSamples)
-            if (Distance2D(s.X, s.Y, targetX, targetY) < 5f) { fgArrivalT = s.T; break; }
-        foreach (var s in bgSamples)
-            if (Distance2D(s.X, s.Y, targetX, targetY) < 5f) { bgArrivalT = s.T; break; }
-
-        if (fgArrivalT.HasValue && bgArrivalT.HasValue)
-        {
-            float arrivalDelta = bgArrivalT.Value - fgArrivalT.Value;
-            _output.WriteLine($"Arrival: FG={fgArrivalT.Value:F1}s  BG={bgArrivalT.Value:F1}s  delta={arrivalDelta:+0.0;-0.0}s (BG {(arrivalDelta > 0 ? "slower" : "faster")})");
-        }
-        else
-        {
-            _output.WriteLine($"Arrival: FG={(fgArrivalT.HasValue ? $"{fgArrivalT.Value:F1}s" : "DNF")}  BG={(bgArrivalT.HasValue ? $"{bgArrivalT.Value:F1}s" : "DNF")}");
-        }
-
-        PrintBotSummary("FG", fgSamples);
-        PrintBotSummary("BG", bgSamples);
-
-        // Per-frame anomalies
-        if (fgAnomalies.Count > 0)
-        {
-            _output.WriteLine($"\n--- FG Anomalies ({fgAnomalies.Count} stuck frames) ---");
-            foreach (var a in fgAnomalies.Take(20))
-                _output.WriteLine($"  {a}");
-            if (fgAnomalies.Count > 20)
-                _output.WriteLine($"  ... and {fgAnomalies.Count - 20} more");
-        }
-        if (bgAnomalies.Count > 0)
-        {
-            _output.WriteLine($"\n--- BG Anomalies ({bgAnomalies.Count} stuck frames) ---");
-            foreach (var a in bgAnomalies.Take(20))
-                _output.WriteLine($"  {a}");
-            if (bgAnomalies.Count > 20)
-                _output.WriteLine($"  ... and {bgAnomalies.Count - 20} more");
-        }
-
-        // Parity comparison
-        if (fgSamples.Count >= 2 && bgSamples.Count >= 2)
-        {
-            var deltas = new List<(float t, float dXY, float dZ)>();
-            foreach (var fg in fgSamples)
-            {
-                var bg = bgSamples.MinBy(b => MathF.Abs(b.T - fg.T));
-                if (bg != null && MathF.Abs(bg.T - fg.T) < 1.0f)
-                    deltas.Add((fg.T, Distance2D(fg.X, fg.Y, bg.X, bg.Y), bg.Z - fg.Z));
-            }
-
-            if (deltas.Count > 0)
-            {
-                _output.WriteLine($"\n--- Parity ---");
-                _output.WriteLine($"XY: avg={deltas.Average(d => d.dXY):F1}y  max={deltas.Max(d => d.dXY):F1}y");
-                _output.WriteLine($" Z: avg={deltas.Average(d => MathF.Abs(d.dZ)):F2}y  max={deltas.Max(d => MathF.Abs(d.dZ)):F2}y");
-
-                // Z drift trend: compare first-half vs second-half average Z delta.
-                // Growing delta = BG physics Z is diverging from FG over time.
-                int half = deltas.Count / 2;
-                if (half >= 5)
-                {
-                    float firstHalfZ = deltas.Take(half).Average(d => d.dZ);
-                    float secondHalfZ = deltas.Skip(half).Average(d => d.dZ);
-                    float drift = secondHalfZ - firstHalfZ;
-                    _output.WriteLine($" Z drift: 1st half avg={firstHalfZ:+0.00;-0.00}y  2nd half avg={secondHalfZ:+0.00;-0.00}y  trend={drift:+0.00;-0.00}y ({(MathF.Abs(drift) < 0.5f ? "stable" : "DRIFTING")})");
-                }
-            }
-        }
-
-        // MoveFlag diversity summary — shows which flags were observed during the run
-        PrintMoveFlagSummary("FG", fgSamples);
-        PrintMoveFlagSummary("BG", bgSamples);
-
-        // Speed segment analysis — flag 1-second windows where speed drops below 50% expected
-        PrintSpeedSegments("FG", fgSamples, fgAnomalies);
-        PrintSpeedSegments("BG", bgSamples, bgAnomalies);
-
-        // --- RECORDING ANALYSIS ---
-        AnalyzeBgPhysicsRecording(bgAccount!);
-        AnalyzeTransformComparison(fgAccount!, bgAccount!);
-        AnalyzePacketComparison(fgAccount!, bgAccount!, initialFacing.HasValue);
-
-        float fgTravel = ComputeTravelDistance(fgSamples);
-        float bgTravel = ComputeTravelDistance(bgSamples);
-        float minimumMeaningfulTravel = MathF.Min(routeDist * 0.25f, 10f);
-
-        if (fgSamples.Count < 3 || bgSamples.Count < 3 ||
-            fgTravel < minimumMeaningfulTravel || bgTravel < minimumMeaningfulTravel)
-        {
-            global::Tests.Infrastructure.Skip.If(
-                true,
-                $"{name} is Shodan-staged and Goto-dispatched, but live movement did not produce enough parity travel: " +
-                $"FG samples={fgSamples.Count}, BG samples={bgSamples.Count}, " +
-                $"FG travel={fgTravel:F1}y, BG travel={bgTravel:F1}y, minimum={minimumMeaningfulTravel:F1}y on route={routeDist:F1}y.");
-        }
-
-        Assert.True(fgSamples.Count >= 3,
-            $"FG produced too few position samples ({fgSamples.Count})");
-        Assert.True(bgSamples.Count >= 3,
-            $"BG produced too few position samples ({bgSamples.Count})");
-        Assert.True(fgTravel >= minimumMeaningfulTravel,
-            $"FG only moved {fgTravel:F1}y on a {routeDist:F1}y route");
-        Assert.True(bgTravel >= minimumMeaningfulTravel,
-            $"BG only moved {bgTravel:F1}y on a {routeDist:F1}y route");
+        await DispatchBothAsync(accounts, () => new ActionMessage { ActionType = ActionType.StartPhysicsRecording });
+        _output.WriteLine($"[RECORDING] Started FG/BG movement recordings in {recordingDir}");
+        return recordingDir;
     }
 
-    private async Task<bool> WaitForFacingSettledAsync(string account, float expectedFacing, int timeoutMs = 5000)
+    private async Task StopPairRecordingAsync(PairAccounts accounts)
     {
-        var deadlineUtc = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        var consecutiveMatches = 0;
-
-        while (DateTime.UtcNow < deadlineUtc)
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var snapshot = await _bot.GetSnapshotAsync(account);
-            var facing = snapshot?.Player?.Unit?.GameObject?.Base?.Facing;
-
-            if (facing is float currentFacing &&
-                FacingDeltaRadians(currentFacing, expectedFacing) <= 0.10f)
-            {
-                consecutiveMatches++;
-                if (consecutiveMatches >= 2)
-                    return true;
-            }
-            else
-            {
-                consecutiveMatches = 0;
-            }
-
-            await Task.Delay(100);
-        }
-
-        return false;
-    }
-
-    private static float FacingDeltaRadians(float actual, float expected)
-    {
-        var delta = actual - expected;
-        while (delta > MathF.PI)
-            delta -= MathF.PI * 2f;
-        while (delta < -MathF.PI)
-            delta += MathF.PI * 2f;
-        return MathF.Abs(delta);
-    }
-
-    /// <summary>
-    /// Redirect parity test: walks both bots toward firstTarget, then after redirectAfterSeconds
-    /// sends a new GoTo to secondTarget. Captures packets/transforms/navtrace and asserts that
-    /// FG/BG emit matching STOP + start sequences at the redirect point.
-    /// </summary>
-    private async Task RunRedirectParityTest(
-        string name,
-        float startX, float startY, float startZ,
-        float firstTargetX, float firstTargetY, float firstTargetZ,
-        float secondTargetX, float secondTargetY, float secondTargetZ,
-        int redirectAfterSeconds,
-        int maxSeconds)
-    {
-        var (bgTarget, fgTarget) = await EnsureMovementParityTargetsAsync();
-        var bgAccount = bgTarget.AccountName;
-        var fgAccount = fgTarget.AccountName;
-
-        _output.WriteLine($"=== {name} ===");
-        _output.WriteLine($"FG: {fgTarget.CharacterName} ({fgAccount})  BG: {bgTarget.CharacterName} ({bgAccount})");
-
-        float leg1Dist = Distance2D(startX, startY, firstTargetX, firstTargetY);
-        float leg2Dist = Distance2D(firstTargetX, firstTargetY, secondTargetX, secondTargetY);
-        _output.WriteLine($"Leg 1: ({startX},{startY}) -> ({firstTargetX},{firstTargetY}) = {leg1Dist:F1}y");
-        _output.WriteLine($"Leg 2 (redirect): -> ({secondTargetX},{secondTargetY}) = {leg2Dist:F1}y");
-        _output.WriteLine($"Redirect after: {redirectAfterSeconds}s\n");
-
-        await QuiesceMovementParityOrSkipAsync(
-            new[] { bgAccount, fgAccount },
-            $"{name} redirect parity pre-stage");
-
-        float stageZ = startZ + 3f;
-        var bgStaged = await _bot.StageBotRunnerAtNavigationPointAsync(
-            bgAccount,
-            bgTarget.RoleLabel,
-            MapId,
-            startX,
-            startY,
-            stageZ,
-            $"{name} redirect start",
-            cleanSlate: true,
-            xyToleranceYards: 10f,
-            zStabilizationWaitMs: 1000);
-        var fgStaged = await _bot.StageBotRunnerAtNavigationPointAsync(
-            fgAccount,
-            fgTarget.RoleLabel,
-            MapId,
-            startX,
-            startY,
-            stageZ,
-            $"{name} redirect start",
-            cleanSlate: true,
-            xyToleranceYards: 10f,
-            zStabilizationWaitMs: 1000);
-        if (!bgStaged || !fgStaged)
-        {
-            global::Tests.Infrastructure.Skip.If(
-                true,
-                $"{name} is Shodan-staged, but live redirect parity start staging did not settle: BG={bgStaged} FG={fgStaged}.");
-        }
-
-        await QuiesceMovementParityOrSkipAsync(
-            new[] { bgAccount, fgAccount },
-            $"{name} redirect parity pre-action");
-        await Task.Delay(2000); // Allow physics to snap to ground
-
-        // --- START RECORDINGS ---
-        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
-        RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, bgAccount!, "packets", "transform", "physics");
-        RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, fgAccount!, "packets", "transform");
-        await Task.WhenAll(
-            _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StartPhysicsRecording)),
-            _bot.SendActionAsync(fgAccount!, MakeRecordingAction(ActionType.StartPhysicsRecording)));
-        _output.WriteLine("[RECORDING] Started on both bots");
-
-        // --- LEG 1: GOTO first target ---
-        await Task.WhenAll(
-            _bot.SendActionAsync(bgAccount!, MakeGoto(firstTargetX, firstTargetY, firstTargetZ)),
-            _bot.SendActionAsync(fgAccount!, MakeGoto(firstTargetX, firstTargetY, firstTargetZ)));
-        _output.WriteLine($"[ACTION] GoTo leg 1 sent to both bots");
-
-        // --- POLL until redirect time ---
-        var fgSamples = new List<TransformSample>();
-        var bgSamples = new List<TransformSample>();
-        var startTime = DateTime.UtcNow;
-        int maxPolls = maxSeconds * (1000 / PollIntervalMs);
-        bool redirectSent = false;
-        bool fgArrived = false, bgArrived = false;
-        int redirectPollIndex = -1;
-
-        _output.WriteLine($"{"t",7} | {"FG_X",8} {"FG_Y",8} {"FG_Z",7} {"Flg",5} | {"BG_X",8} {"BG_Y",8} {"BG_Z",7} {"Flg",5} | {"dXY",5} {"note",12}");
-        _output.WriteLine(new string('-', 100));
-
-        for (int i = 0; i < maxPolls; i++)
-        {
-            await Task.Delay(PollIntervalMs);
-            float elapsed = (float)(DateTime.UtcNow - startTime).TotalSeconds;
-
-            // --- REDIRECT mid-route ---
-            if (!redirectSent && elapsed >= redirectAfterSeconds)
-            {
-                _output.WriteLine($"\n[REDIRECT] t={elapsed:F2}s — Sending GoTo leg 2 to both bots");
-                await Task.WhenAll(
-                    _bot.SendActionAsync(bgAccount!, MakeGoto(secondTargetX, secondTargetY, secondTargetZ)),
-                    _bot.SendActionAsync(fgAccount!, MakeGoto(secondTargetX, secondTargetY, secondTargetZ)));
-                redirectSent = true;
-                redirectPollIndex = i;
-                _output.WriteLine($"[REDIRECT] GoTo leg 2 sent\n");
-            }
-
-            await _bot.RefreshSnapshotsAsync();
-            var fgSnap = await _bot.GetSnapshotAsync(fgAccount!);
-            var bgSnap = await _bot.GetSnapshotAsync(bgAccount!);
-
-            var fgPos = fgSnap?.Player?.Unit?.GameObject?.Base?.Position;
-            var bgPos = bgSnap?.Player?.Unit?.GameObject?.Base?.Position;
-
-            float fgX = fgPos?.X ?? float.NaN, fgY = fgPos?.Y ?? float.NaN, fgZ = fgPos?.Z ?? float.NaN;
-            float bgX = bgPos?.X ?? float.NaN, bgY = bgPos?.Y ?? float.NaN, bgZ = bgPos?.Z ?? float.NaN;
-            uint fgFlags = fgSnap?.Player?.Unit?.MovementFlags ?? 0;
-            uint bgFlags = bgSnap?.Player?.Unit?.MovementFlags ?? 0;
-
-            if (!float.IsNaN(fgX)) fgSamples.Add(new TransformSample(elapsed, fgX, fgY, fgZ, fgFlags));
-            if (!float.IsNaN(bgX)) bgSamples.Add(new TransformSample(elapsed, bgX, bgY, bgZ, bgFlags));
-
-            float dXY = (!float.IsNaN(fgX) && !float.IsNaN(bgX)) ? Distance2D(fgX, fgY, bgX, bgY) : float.NaN;
-
-            string note = "";
-            if (redirectSent && i == redirectPollIndex + 1) note = "<<REDIRECT>>";
-
-            // Print every 10th sample or right after redirect
-            if (i % 10 == 0 || (redirectSent && i >= redirectPollIndex && i <= redirectPollIndex + 5))
-            {
-                _output.WriteLine(
-                    $"{elapsed,7:F2}s | {fgX,8:F1} {fgY,8:F1} {fgZ,7:F2} {fgFlags,5:X} | " +
-                    $"{bgX,8:F1} {bgY,8:F1} {bgZ,7:F2} {bgFlags,5:X} | " +
-                    $"{(float.IsNaN(dXY) ? "  n/a" : $"{dXY,5:F1}")} {note}");
-            }
-
-            if (redirectSent)
-            {
-                if (!float.IsNaN(fgX) && Distance2D(fgX, fgY, secondTargetX, secondTargetY) < 5f) fgArrived = true;
-                if (!float.IsNaN(bgX) && Distance2D(bgX, bgY, secondTargetX, secondTargetY) < 5f) bgArrived = true;
-                if (fgArrived && bgArrived) break;
-            }
-        }
-
-        if (fgArrived || bgArrived)
-            await Task.Delay(1000);
-
-        // --- STOP RECORDINGS ---
-        await Task.WhenAll(
-            _bot.SendActionAsync(bgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording)),
-            _bot.SendActionAsync(fgAccount!, MakeRecordingAction(ActionType.StopPhysicsRecording)));
+        await DispatchBothAsync(accounts, () => new ActionMessage { ActionType = ActionType.StopPhysicsRecording });
         await Task.Delay(500);
-        _output.WriteLine("[RECORDING] Stopped on both bots");
-        await QuiesceMovementParityOrSkipAsync(
-            new[] { bgAccount, fgAccount },
-            $"{name} redirect parity post-action",
-            TimeSpan.FromSeconds(6));
-
-        // --- SUMMARY ---
-        _output.WriteLine($"\n=== RESULTS: {name} ===");
-        _output.WriteLine($"Samples: FG={fgSamples.Count} BG={bgSamples.Count}  Arrived: FG={fgArrived} BG={bgArrived}");
-
-        float fgTravel = ComputeTravelDistance(fgSamples);
-        float bgTravel = ComputeTravelDistance(bgSamples);
-        _output.WriteLine($"Travel: FG={fgTravel:F1}y  BG={bgTravel:F1}y");
-
-        PrintMoveFlagSummary("FG", fgSamples);
-        PrintMoveFlagSummary("BG", bgSamples);
-
-        // --- RECORDING ANALYSIS ---
-        AnalyzeBgPhysicsRecording(bgAccount!);
-        AnalyzeTransformComparison(fgAccount!, bgAccount!);
-
-        // --- PACKET REDIRECT ANALYSIS ---
-        try
-        {
-            AnalyzeRedirectPackets(fgAccount!, bgAccount!);
-        }
-        catch (XunitException ex)
-        {
-            global::Tests.Infrastructure.Skip.If(
-                true,
-                "Redirect packet parity is Shodan-staged and Goto-dispatched, but live packet recording did not capture the expected FG/BG movement packet edge: " +
-                ex.Message);
-        }
-
-        if (fgSamples.Count < 3 || bgSamples.Count < 3 || fgTravel < 5f || bgTravel < 5f)
-        {
-            global::Tests.Infrastructure.Skip.If(
-                true,
-                $"{name} is Shodan-staged and Goto-dispatched, but live redirect movement did not produce enough parity travel: " +
-                $"FG samples={fgSamples.Count}, BG samples={bgSamples.Count}, FG travel={fgTravel:F1}y, BG travel={bgTravel:F1}y.");
-        }
-
-        // Assertions: both bots must have actually moved
-        Assert.True(fgSamples.Count >= 3, $"FG produced too few samples ({fgSamples.Count})");
-        Assert.True(bgSamples.Count >= 3, $"BG produced too few samples ({bgSamples.Count})");
-        Assert.True(fgTravel >= 5f, $"FG only moved {fgTravel:F1}y");
-        Assert.True(bgTravel >= 5f, $"BG only moved {bgTravel:F1}y");
+        _output.WriteLine("[RECORDING] Stopped FG/BG movement recordings");
     }
 
-    /// <summary>
-    /// Analyze redirect packet sequences: both bots should show at least two movement
-    /// "sessions" (START_FORWARD ... STOP ... START_FORWARD ... STOP) corresponding
-    /// to leg 1 and leg 2 of the redirect test.
-    /// </summary>
-    private void AnalyzeRedirectPackets(string fgAccount, string bgAccount)
+    private async Task DispatchBothAsync(PairAccounts accounts, Func<ActionMessage> actionFactory)
     {
-        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
-
-        if (!Directory.Exists(recordingDir))
-            return;
-
-        var fgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "packets", fgAccount, "csv");
-        var bgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "packets", bgAccount, "csv");
-
-        if (fgPath == null || bgPath == null)
-        {
-            _output.WriteLine("\n--- Redirect Packet Analysis: missing CSV(s) ---");
-            return;
-        }
-
-        var fgPackets = LoadPacketCsv(fgPath);
-        var bgPackets = LoadPacketCsv(bgPath);
-
-        var fgSend = fgPackets
-            .Where(p => string.Equals(p.Direction, "Send", StringComparison.OrdinalIgnoreCase) && p.IsMovement)
-            .ToList();
-        var bgSend = bgPackets
-            .Where(p => string.Equals(p.Direction, "Send", StringComparison.OrdinalIgnoreCase) && p.IsMovement)
-            .ToList();
-
-        _output.WriteLine("\n=== REDIRECT PACKET ANALYSIS ===");
-        _output.WriteLine($"    FG outbound movement: {fgSend.Count} packets from {Path.GetFileName(fgPath)}");
-        _output.WriteLine($"    BG outbound movement: {bgSend.Count} packets from {Path.GetFileName(bgPath)}");
-
-        // Print all FG packets
-        _output.WriteLine("    FG packets:");
-        foreach (var p in fgSend.Take(30))
-            _output.WriteLine($"      {p.ElapsedMs,6}ms  {p.OpcodeName}");
-        if (fgSend.Count > 30)
-            _output.WriteLine($"      ... and {fgSend.Count - 30} more");
-
-        // Print all BG packets
-        _output.WriteLine("    BG packets:");
-        foreach (var p in bgSend.Take(30))
-            _output.WriteLine($"      {p.ElapsedMs,6}ms  {p.OpcodeName}");
-        if (bgSend.Count > 30)
-            _output.WriteLine($"      ... and {bgSend.Count - 30} more");
-
-        // Count key opcodes
-        int fgStops = fgSend.Count(p => p.OpcodeName == "MSG_MOVE_STOP");
-        int bgStops = bgSend.Count(p => p.OpcodeName == "MSG_MOVE_STOP");
-        int fgStarts = fgSend.Count(p => p.OpcodeName == "MSG_MOVE_START_FORWARD");
-        int bgStarts = bgSend.Count(p => p.OpcodeName == "MSG_MOVE_START_FORWARD");
-        int fgFacings = fgSend.Count(p => p.OpcodeName == "MSG_MOVE_SET_FACING");
-        int bgFacings = bgSend.Count(p => p.OpcodeName == "MSG_MOVE_SET_FACING");
-        int fgFallLands = fgSend.Count(p => p.OpcodeName == "MSG_MOVE_FALL_LAND");
-        int bgFallLands = bgSend.Count(p => p.OpcodeName == "MSG_MOVE_FALL_LAND");
-
-        _output.WriteLine($"\n    STOP count: FG={fgStops}  BG={bgStops}");
-        _output.WriteLine($"    START_FORWARD count: FG={fgStarts}  BG={bgStarts}");
-        _output.WriteLine($"    SET_FACING count: FG={fgFacings}  BG={bgFacings}");
-        _output.WriteLine($"    FALL_LAND count: FG={fgFallLands}  BG={bgFallLands}");
-
-        // Assert: both bots sent at least one STOP (arrival)
-        Assert.True(fgStops >= 1, $"FG sent {fgStops} STOP packets; expected at least 1");
-        Assert.True(bgStops >= 1, $"BG sent {bgStops} STOP packets; expected at least 1");
-
-        // Assert: both bots started moving
-        Assert.True(fgStarts >= 1, $"FG sent {fgStarts} START_FORWARD; expected at least 1");
-        Assert.True(bgStarts >= 1, $"BG sent {bgStarts} START_FORWARD; expected at least 1");
-
-        // Redirect evidence: FG emits SET_FACING when direction changes mid-route.
-        // BG should also emit SET_FACING. If BG doesn't, that's a parity gap to track.
-        _output.WriteLine($"\n    Redirect evidence: FG used {fgFacings} SET_FACING, BG used {bgFacings} SET_FACING");
-        if (fgFacings > 0 && bgFacings == 0)
-            _output.WriteLine("    ** PARITY GAP: FG emits SET_FACING on redirect but BG does not **");
-
-        // Compare final STOP timing (arrival at destination)
-        var fgLastStop = fgSend.LastOrDefault(p => p.OpcodeName == "MSG_MOVE_STOP");
-        var bgLastStop = bgSend.LastOrDefault(p => p.OpcodeName == "MSG_MOVE_STOP");
-        if (fgLastStop != null && bgLastStop != null)
-        {
-            var stopDelta = Math.Abs(fgLastStop.ElapsedMs - bgLastStop.ElapsedMs);
-            _output.WriteLine($"    Final STOP: FG={fgLastStop.ElapsedMs}ms  BG={bgLastStop.ElapsedMs}ms  delta={stopDelta}ms");
-            // Redirect routes have inherent pathfinding variability (different waypoint
-            // sequences for the same destination), so the stop delta bounds are wider
-            // than the forced-turn test. The key assertion is that both bots STOP, not
-            // that they stop at the exact same time.
-            Assert.True(stopDelta <= 5000,
-                $"Final STOP diverged by {stopDelta}ms (FG={fgLastStop.ElapsedMs}ms, BG={bgLastStop.ElapsedMs}ms)");
-        }
-
-        // Assert final packet is STOP for both
-        if (fgSend.Count > 0 && bgSend.Count > 0)
-        {
-            _output.WriteLine($"    Final packet: FG={fgSend[^1].OpcodeName}  BG={bgSend[^1].OpcodeName}");
-            Assert.Equal("MSG_MOVE_STOP", fgSend[^1].OpcodeName);
-            Assert.Equal("MSG_MOVE_STOP", bgSend[^1].OpcodeName);
-        }
-
-        // BG FALL_LAND parity: FG should have 0 FALL_LAND on flat terrain.
-        // BG FALL_LAND > 0 indicates the known native Z-bounce from PAR-NATIVE-01.
-        _output.WriteLine($"\n    Z-bounce indicator: FG FALL_LAND={fgFallLands}, BG FALL_LAND={bgFallLands}");
-        if (bgFallLands > 0 && fgFallLands == 0)
-            _output.WriteLine("    ** KNOWN GAP: BG has false FALL_LAND from native multi-level terrain (PAR-NATIVE-01) **");
+        var results = await Task.WhenAll(
+            _bot.SendActionAsync(accounts.Bg, actionFactory()),
+            _bot.SendActionAsync(accounts.Fg, actionFactory()));
+        Assert.All(results, result => Assert.Equal(ResponseResult.Success, result));
     }
 
-    private void PrintBotSummary(string label, List<TransformSample> samples)
+    private async Task DispatchGmBothAndAwaitAsync(PairAccounts accounts, string command)
     {
-        if (samples.Count < 2) { _output.WriteLine($"{label}: no data"); return; }
-
-        var first = samples.First();
-        var last = samples.Last();
-        float dist = Distance2D(first.X, first.Y, last.X, last.Y);
-        float time = last.T - first.T;
-        float speed = time > 0.1f ? dist / time : 0f;
-        float minZ = samples.Min(s => s.Z);
-        float maxZ = samples.Max(s => s.Z);
-
-        _output.WriteLine($"{label}: {dist:F1}y in {time:F1}s = {speed:F2} y/s  Z=[{minZ:F2}..{maxZ:F2}] (range {maxZ - minZ:F2}y)");
+        _output.WriteLine($"[CMD-SEND] [BG+FG] '{command}'");
+        var results = await Task.WhenAll(
+            _bot.SendGmChatCommandAndAwaitServerAckAsync(accounts.Bg, command),
+            _bot.SendGmChatCommandAndAwaitServerAckAsync(accounts.Fg, command));
+        Assert.All(results, result => Assert.True(result, $"Both bots should execute GM command '{command}'."));
     }
 
-    /// <summary>
-    /// Break samples into 1-second windows and flag segments where speed drops below 50% expected.
-    /// This detects collision, pathfinding obstacles, and route deviations.
-    /// </summary>
-    private void PrintSpeedSegments(string label, List<TransformSample> samples, List<string> anomalies)
+    private async Task<PairSnapshot> CapturePairSnapshotAsync(PairAccounts accounts)
     {
-        if (samples.Count < 4) return;
-
-        var slowSegments = new List<string>();
-        float windowSec = 1.0f;
-        float slowThreshold = ExpectedRunSpeed * 0.50f; // 3.5 y/s
-
-        int windowStart = 0;
-        for (int j = 1; j < samples.Count; j++)
-        {
-            float dt = samples[j].T - samples[windowStart].T;
-            if (dt >= windowSec)
-            {
-                float segDist = Distance2D(samples[j].X, samples[j].Y,
-                    samples[windowStart].X, samples[windowStart].Y);
-                float segSpeed = segDist / dt;
-
-                // Only flag if FORWARD flag was set (bot intended to move)
-                bool hadForward = samples.Skip(windowStart).Take(j - windowStart)
-                    .Any(s => (s.MoveFlags & 0x1) != 0);
-
-                if (segSpeed < slowThreshold && hadForward)
-                {
-                    slowSegments.Add(
-                        $"  t={samples[windowStart].T:F1}-{samples[j].T:F1}s  speed={segSpeed:F1}y/s  pos=({samples[j].X:F1},{samples[j].Y:F1},{samples[j].Z:F1})");
-                }
-                windowStart = j;
-            }
-        }
-
-        if (slowSegments.Count > 0)
-        {
-            _output.WriteLine($"\n--- {label} Slow Segments (<{slowThreshold:F1} y/s over 1s windows) ---");
-            foreach (var seg in slowSegments.Take(15))
-                _output.WriteLine(seg);
-            if (slowSegments.Count > 15)
-                _output.WriteLine($"  ... and {slowSegments.Count - 15} more");
-        }
+        await _bot.RefreshSnapshotsAsync();
+        return new PairSnapshot(
+            await _bot.GetSnapshotAsync(accounts.Bg),
+            await _bot.GetSnapshotAsync(accounts.Fg));
     }
 
-    /// <summary>
-    /// Print which movement flags were observed and for how many frames.
-    /// This is the key diagnostic for diverse-flag tests — confirms the route
-    /// actually exercised the intended flag transitions.
-    /// </summary>
-    private void PrintMoveFlagSummary(string label, List<TransformSample> samples)
+    private async Task<PairTrace> TracePairAsync(
+        PairAccounts accounts,
+        TimeSpan duration,
+        int pollIntervalMs,
+        Func<PairSample, bool>? stopWhen = null)
     {
-        if (samples.Count < 2) return;
+        var samples = new List<PairSample>();
+        var start = DateTime.UtcNow;
 
-        // Decode flag bits into named flags with frame counts
-        var flagCounts = new Dictionary<string, int>();
-        var transitions = new List<string>();
-        uint prevFlags = 0;
-
-        foreach (var s in samples)
+        while (DateTime.UtcNow - start < duration)
         {
-            // Count individual flag bits
-            for (int bit = 0; bit < 32; bit++)
-            {
-                uint mask = 1u << bit;
-                if ((s.MoveFlags & mask) != 0)
-                {
-                    string name = FlagBitName(mask);
-                    flagCounts[name] = flagCounts.GetValueOrDefault(name) + 1;
-                }
-            }
+            await _bot.RefreshSnapshotsAsync();
+            var sample = new PairSample(
+                DateTime.UtcNow - start,
+                await _bot.GetSnapshotAsync(accounts.Bg),
+                await _bot.GetSnapshotAsync(accounts.Fg));
+            samples.Add(sample);
 
-            // Track flag transitions (edges)
-            if (s.MoveFlags != prevFlags && prevFlags != 0)
-            {
-                uint gained = s.MoveFlags & ~prevFlags;
-                uint lost = prevFlags & ~s.MoveFlags;
-                if (gained != 0 || lost != 0)
-                {
-                    var parts = new List<string>();
-                    if (gained != 0) parts.Add($"+{FormatFlags(gained)}");
-                    if (lost != 0) parts.Add($"-{FormatFlags(lost)}");
-                    transitions.Add($"t={s.T:F2}s {string.Join(" ", parts)}");
-                }
-            }
-            prevFlags = s.MoveFlags;
+            if (samples.Count >= 2 && stopWhen?.Invoke(sample) == true)
+                break;
+
+            await Task.Delay(pollIntervalMs);
         }
 
-        _output.WriteLine($"\n--- {label} MoveFlag Summary ---");
-        if (flagCounts.Count == 0)
-        {
-            _output.WriteLine($"  No movement flags observed (all NONE)");
-            return;
-        }
-
-        foreach (var (flag, count) in flagCounts.OrderByDescending(kv => kv.Value))
-            _output.WriteLine($"  {flag,-20} {count,4} frames ({100f * count / samples.Count:F0}%)");
-
-        if (transitions.Count > 0)
-        {
-            _output.WriteLine($"  Flag transitions ({transitions.Count}):");
-            foreach (var t in transitions.Take(25))
-                _output.WriteLine($"    {t}");
-            if (transitions.Count > 25)
-                _output.WriteLine($"    ... and {transitions.Count - 25} more");
-        }
+        return new PairTrace(
+            samples,
+            TraceMetrics.FromSamples(samples.Select(sample => sample.Bg)),
+            TraceMetrics.FromSamples(samples.Select(sample => sample.Fg)));
     }
 
-    private static string FlagBitName(uint mask) => mask switch
+    private void AssertPointToPointParity(PairTrace trace, float routeDistance)
     {
-        0x00000001 => "FORWARD",
-        0x00000002 => "BACKWARD",
-        0x00000004 => "STRAFE_LEFT",
-        0x00000008 => "STRAFE_RIGHT",
-        0x00000010 => "TURN_LEFT",
-        0x00000020 => "TURN_RIGHT",
-        0x00000100 => "WALK_MODE",
-        0x00002000 => "JUMPING",
-        0x00004000 => "FALLINGFAR",
-        0x00200000 => "SWIMMING",
-        0x00400000 => "SPLINE",
-        0x02000000 => "ONTRANSPORT",
-        _ => $"0x{mask:X}"
-    };
+        Assert.True(trace.Bg.SawForward, DescribeFailure("BG", "forward run", trace.Bg));
+        Assert.True(trace.Fg.SawForward, DescribeFailure("FG", "forward run", trace.Fg));
+        Assert.True(trace.Bg.TravelDistance >= routeDistance * 0.70f, DescribeFailure("BG", "route travel", trace.Bg));
+        Assert.True(trace.Fg.TravelDistance >= routeDistance * 0.70f, DescribeFailure("FG", "route travel", trace.Fg));
+        Assert.True(trace.Bg.FinalDistanceTo(DurotarTargetX, DurotarTargetY) <= 8f, DescribeFailure("BG", "arrival", trace.Bg));
+        Assert.True(trace.Fg.FinalDistanceTo(DurotarTargetX, DurotarTargetY) <= 8f, DescribeFailure("FG", "arrival", trace.Fg));
 
-    private static string FormatFlags(uint flags)
-    {
-        var parts = new List<string>();
-        for (int bit = 0; bit < 32; bit++)
-        {
-            uint mask = 1u << bit;
-            if ((flags & mask) != 0)
-                parts.Add(FlagBitName(mask));
-        }
-        return string.Join("|", parts);
+        var travelDelta = MathF.Abs(trace.Bg.TravelDistance - trace.Fg.TravelDistance);
+        Assert.True(travelDelta <= 20f,
+            $"FG/BG travel distance diverged by {travelDelta:F1}y. BG={trace.Bg.TravelDistance:F1} FG={trace.Fg.TravelDistance:F1}");
     }
 
-    private static ActionMessage MakeGoto(float x, float y, float z)
+    private static void AssertElevatorTransportRide(PairTrace trace)
+    {
+        Assert.True(ShowsElevatorTransportRide(trace.Bg), DescribeFailure("BG", "Undercity elevator gameobject transport ride", trace.Bg));
+        Assert.True(ShowsElevatorTransportRide(trace.Fg), DescribeFailure("FG", "Undercity elevator gameobject transport ride", trace.Fg));
+    }
+
+    private static bool ShowsElevatorTransportRide(TraceMetrics metrics)
+        => metrics.TransportSamples >= 3 || metrics.VerticalRange >= 30f;
+
+    private static bool IsKnockbackObserved(WoWActivitySnapshot? snapshot, WoWActivitySnapshot? baseline)
+    {
+        return IsJumping(snapshot) || DistanceBetween(baseline, snapshot) >= 1.5f;
+    }
+
+    private static void AssertRecordingsWritten(string recordingDir, PairAccounts accounts, string scenario)
+    {
+        var fgTransform = RecordingArtifactHelper.WaitForRecordingFile(recordingDir, "transform", accounts.Fg, "csv", TimeSpan.FromSeconds(5));
+        var fgPackets = RecordingArtifactHelper.WaitForRecordingFile(recordingDir, "packets", accounts.Fg, "csv", TimeSpan.FromSeconds(5));
+        var bgTransform = RecordingArtifactHelper.WaitForRecordingFile(recordingDir, "transform", accounts.Bg, "csv", TimeSpan.FromSeconds(5));
+        var bgPhysics = RecordingArtifactHelper.WaitForRecordingFile(recordingDir, "physics", accounts.Bg, "csv", TimeSpan.FromSeconds(5));
+
+        Assert.False(string.IsNullOrWhiteSpace(fgTransform), $"FG transform recording missing for {scenario}.");
+        Assert.False(string.IsNullOrWhiteSpace(fgPackets), $"FG packet recording missing for {scenario}.");
+        Assert.False(string.IsNullOrWhiteSpace(bgTransform), $"BG transform recording missing for {scenario}.");
+        Assert.False(string.IsNullOrWhiteSpace(bgPhysics), $"BG physics recording missing for {scenario}.");
+    }
+
+    private void WriteTraceSummary(string label, PairTrace trace)
+    {
+        _output.WriteLine($"=== {label} ===");
+        _output.WriteLine($"BG: {trace.Bg}");
+        _output.WriteLine($"FG: {trace.Fg}");
+        _output.WriteLine($"Last BG: {DescribeSnapshot(trace.LastBg)}");
+        _output.WriteLine($"Last FG: {DescribeSnapshot(trace.LastFg)}");
+    }
+
+    private static string DescribeFailure(string role, string action, TraceMetrics metrics)
+        => $"{role} did not show expected {action}. {metrics}";
+
+    private static string DescribeSnapshot(WoWActivitySnapshot? snapshot)
+    {
+        if (snapshot == null)
+            return "snapshot=null";
+
+        var pos = PositionOf(snapshot);
+        var flags = FlagsOf(snapshot);
+        var transportGuid = snapshot.MovementData?.TransportGuid ?? 0UL;
+        return $"pos=({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F2}) map={snapshot.CurrentMapId} flags=0x{(uint)flags:X} transport=0x{transportGuid:X} current={snapshot.CurrentAction?.ActionType.ToString() ?? "null"} previous={snapshot.PreviousAction?.ActionType.ToString() ?? "null"}";
+    }
+
+    private static ActionMessage MakeGoto(float x, float y, float z, float stopDistance = 3f)
         => new()
         {
             ActionType = ActionType.Goto,
@@ -1154,478 +433,139 @@ public class MovementParityTests
                 new RequestParameter { FloatParam = x },
                 new RequestParameter { FloatParam = y },
                 new RequestParameter { FloatParam = z },
-                new RequestParameter { FloatParam = 3.0f }
+                new RequestParameter { FloatParam = stopDistance }
             }
         };
+
+    private static ActionMessage MakeJump()
+        => new() { ActionType = ActionType.Jump };
+
+    private static Game.Position? PositionOf(WoWActivitySnapshot? snapshot)
+        => snapshot?.MovementData?.Position
+            ?? snapshot?.Player?.Unit?.GameObject?.Base?.Position;
+
+    private static MovementFlags FlagsOf(WoWActivitySnapshot? snapshot)
+        => (MovementFlags)(snapshot?.MovementData?.MovementFlags
+            ?? snapshot?.Player?.Unit?.MovementFlags
+            ?? 0U);
+
+    private static bool IsJumping(WoWActivitySnapshot? snapshot)
+        => (FlagsOf(snapshot) & (MovementFlags.MOVEFLAG_JUMPING | MovementFlags.MOVEFLAG_FALLINGFAR)) != 0;
+
+    private static bool IsOnTransport(WoWActivitySnapshot? snapshot)
+        => (snapshot?.MovementData?.TransportGuid ?? 0UL) != 0
+            || (FlagsOf(snapshot) & MovementFlags.MOVEFLAG_ONTRANSPORT) != 0;
+
+    private static float DistanceTo(WoWActivitySnapshot? snapshot, float x, float y)
+    {
+        var pos = PositionOf(snapshot);
+        return pos == null ? float.MaxValue : Distance2D(pos.X, pos.Y, x, y);
+    }
+
+    private static float DistanceFrom(WoWActivitySnapshot? snapshot, float x, float y)
+        => DistanceTo(snapshot, x, y);
+
+    private static float DistanceBetween(WoWActivitySnapshot? from, WoWActivitySnapshot? to)
+    {
+        var start = PositionOf(from);
+        var end = PositionOf(to);
+        return start == null || end == null
+            ? 0f
+            : Distance2D(start.X, start.Y, end.X, end.Y);
+    }
 
     private static float Distance2D(float x1, float y1, float x2, float y2)
     {
-        float dx = x1 - x2;
-        float dy = y1 - y2;
+        var dx = x1 - x2;
+        var dy = y1 - y2;
         return MathF.Sqrt(dx * dx + dy * dy);
     }
 
-    private static float ComputeTravelDistance(List<TransformSample> samples)
-    {
-        if (samples.Count < 2)
-            return 0f;
+    private sealed record PairAccounts(string Bg, string Fg);
 
-        var first = samples.First();
-        var last = samples.Last();
-        return Distance2D(first.X, first.Y, last.X, last.Y);
+    private sealed record PairSnapshot(WoWActivitySnapshot? Bg, WoWActivitySnapshot? Fg);
+
+    private sealed record PairSample(TimeSpan Elapsed, WoWActivitySnapshot? Bg, WoWActivitySnapshot? Fg);
+
+    private sealed record PairTrace(
+        IReadOnlyList<PairSample> Samples,
+        TraceMetrics Bg,
+        TraceMetrics Fg)
+    {
+        public WoWActivitySnapshot? LastBg => Samples.LastOrDefault()?.Bg;
+        public WoWActivitySnapshot? LastFg => Samples.LastOrDefault()?.Fg;
     }
 
-    private static ActionMessage MakeRecordingAction(ActionType type) => new() { ActionType = type };
+    private sealed record TraceMetrics(
+        int Samples,
+        float TravelDistance,
+        float StraightLineDistance,
+        float MinZ,
+        float MaxZ,
+        bool SawForward,
+        bool SawJump,
+        bool SawTransport,
+        int TransportSamples,
+        Game.Position? Start,
+        Game.Position? End)
+    {
+        public float VerticalRange => MaxZ - MinZ;
 
-    private static ActionMessage MakeSetFacing(float facing)
-        => new()
+        public float FinalDistanceTo(float x, float y)
+            => End == null ? float.MaxValue : Distance2D(End.X, End.Y, x, y);
+
+        public static TraceMetrics FromSamples(IEnumerable<WoWActivitySnapshot?> snapshots)
         {
-            ActionType = ActionType.SetFacing,
-            Parameters =
+            var snapshotList = snapshots.Where(snapshot => snapshot != null).ToList();
+            var positions = snapshotList
+                .Select(PositionOf)
+                .Where(position => position != null)
+                .Cast<Game.Position>()
+                .ToList();
+
+            if (positions.Count == 0)
             {
-                new RequestParameter { FloatParam = facing }
+                return new TraceMetrics(
+                    Samples: snapshotList.Count,
+                    TravelDistance: 0f,
+                    StraightLineDistance: 0f,
+                    MinZ: float.NaN,
+                    MaxZ: float.NaN,
+                    SawForward: false,
+                    SawJump: false,
+                    SawTransport: false,
+                    TransportSamples: 0,
+                    Start: null,
+                    End: null);
             }
-        };
 
-    /// <summary>
-    /// Find and analyze the most recent BG physics recording CSV.
-    /// Prints Z-trace with guard annotations — the key diagnostic for bouncing.
-    /// </summary>
-    private void AnalyzeBgPhysicsRecording(string bgAccount)
-    {
-        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
+            var travel = 0f;
+            for (var i = 1; i < positions.Count; i++)
+                travel += Distance2D(positions[i - 1].X, positions[i - 1].Y, positions[i].X, positions[i].Y);
 
-        if (!Directory.Exists(recordingDir))
-        {
-            _output.WriteLine("\n--- BG Physics Recording: directory not found ---");
-            return;
+            var flags = snapshotList.Select(FlagsOf).ToList();
+            var start = positions[0];
+            var end = positions[^1];
+            var maxZ = positions.Max(position => position.Z);
+            var minZ = positions.Min(position => position.Z);
+            var sawJump = flags.Any(flag => (flag & (MovementFlags.MOVEFLAG_JUMPING | MovementFlags.MOVEFLAG_FALLINGFAR)) != 0)
+                || maxZ - start.Z >= 0.75f;
+
+            return new TraceMetrics(
+                Samples: snapshotList.Count,
+                TravelDistance: travel,
+                StraightLineDistance: Distance2D(start.X, start.Y, end.X, end.Y),
+                MinZ: minZ,
+                MaxZ: maxZ,
+                SawForward: flags.Any(flag => (flag & MovementFlags.MOVEFLAG_FORWARD) != 0),
+                SawJump: sawJump,
+                SawTransport: snapshotList.Any(IsOnTransport),
+                TransportSamples: snapshotList.Count(IsOnTransport),
+                Start: start,
+                End: end);
         }
 
-        var csvPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "physics", bgAccount, "csv");
-        if (csvPath == null)
-        {
-            _output.WriteLine("\n--- BG Physics Recording: no CSV found ---");
-            return;
-        }
-
-        var lines = File.ReadAllLines(csvPath);
-        if (lines.Length < 2)
-        {
-            _output.WriteLine($"\n--- BG Physics Recording: empty ({csvPath}) ---");
-            return;
-        }
-
-        _output.WriteLine($"\n--- BG Physics Frame Recording ({lines.Length - 1} frames) ---");
-        _output.WriteLine($"    File: {csvPath}");
-
-        // Parse frames
-        var frames = new List<FrameData>();
-        for (int i = 1; i < lines.Length; i++)
-        {
-            var parts = lines[i].Split(',');
-            if (parts.Length < 28) continue;
-            try
-            {
-                frames.Add(new FrameData
-                {
-                    Frame = int.Parse(parts[0]),
-                    PosX = float.Parse(parts[3], CultureInfo.InvariantCulture),
-                    PosY = float.Parse(parts[4], CultureInfo.InvariantCulture),
-                    PosZ = float.Parse(parts[5], CultureInfo.InvariantCulture),
-                    RawPosZ = float.Parse(parts[6], CultureInfo.InvariantCulture),
-                    PhysicsGroundZ = float.Parse(parts[7], CultureInfo.InvariantCulture),
-                    PrevGroundZ = float.Parse(parts[8], CultureInfo.InvariantCulture),
-                    VelZ = float.Parse(parts[12], CultureInfo.InvariantCulture),
-                    FallTimeMs = uint.Parse(parts[13]),
-                    IsFalling = parts[14] == "1",
-                    MoveFlags = parts[15],
-                    SlopeGuard = parts[16] == "1",
-                    PathGuard = parts[17] == "1",
-                    FalseFreefallSup = parts[18] == "1",
-                    TeleportClamp = parts[19] == "1",
-                    UndergroundSnap = parts[20] == "1",
-                    HitWall = parts[21] == "1",
-                    PathWpZ = parts[25] == "NaN" ? float.NaN : float.Parse(parts[25], CultureInfo.InvariantCulture),
-                    ZDelta = float.Parse(parts[27], CultureInfo.InvariantCulture),
-                });
-            }
-            catch { /* skip malformed lines */ }
-        }
-
-        if (frames.Count == 0)
-        {
-            _output.WriteLine("    No parseable frames.");
-            return;
-        }
-
-        // Z statistics
-        float minZ = frames.Min(f => f.PosZ);
-        float maxZ = frames.Max(f => f.PosZ);
-        float zRange = maxZ - minZ;
-        int bounceCount = 0;
-        for (int i = 2; i < frames.Count; i++)
-        {
-            // Detect Z direction reversals > 0.1y (bouncing signature)
-            float d1 = frames[i - 1].PosZ - frames[i - 2].PosZ;
-            float d2 = frames[i].PosZ - frames[i - 1].PosZ;
-            if (MathF.Abs(d1) > 0.1f && MathF.Abs(d2) > 0.1f && MathF.Sign(d1) != MathF.Sign(d2))
-                bounceCount++;
-        }
-
-        int slopeGuardFrames = frames.Count(f => f.SlopeGuard);
-        int pathGuardFrames = frames.Count(f => f.PathGuard);
-        int falseFreefallFrames = frames.Count(f => f.FalseFreefallSup);
-        int teleportClampFrames = frames.Count(f => f.TeleportClamp);
-        int undergroundSnapFrames = frames.Count(f => f.UndergroundSnap);
-        int fallingFrames = frames.Count(f => f.IsFalling);
-        int wallHitFrames = frames.Count(f => f.HitWall);
-
-        _output.WriteLine($"    Z range: [{minZ:F2}..{maxZ:F2}] ({zRange:F2}y)");
-        _output.WriteLine($"    Z bounces (direction reversals > 0.1y): {bounceCount}");
-        _output.WriteLine($"    Guard activations:");
-        _output.WriteLine($"      Slope guard:        {slopeGuardFrames} frames");
-        _output.WriteLine($"      Path ground guard:  {pathGuardFrames} frames");
-        _output.WriteLine($"      False freefall sup: {falseFreefallFrames} frames");
-        _output.WriteLine($"      Teleport clamp:     {teleportClampFrames} frames");
-        _output.WriteLine($"      Underground snap:   {undergroundSnapFrames} frames");
-        _output.WriteLine($"      Falling:            {fallingFrames} frames");
-        _output.WriteLine($"      Wall hit:           {wallHitFrames} frames");
-
-        // Print frames where guards fired (the diagnostic gold)
-        var guardFrames = frames.Where(f =>
-            f.SlopeGuard || f.PathGuard || f.FalseFreefallSup ||
-            f.UndergroundSnap || MathF.Abs(f.ZDelta) > 0.5f).ToList();
-
-        if (guardFrames.Count > 0)
-        {
-            _output.WriteLine($"\n    --- Guard events + large Z jumps ({guardFrames.Count} frames) ---");
-            _output.WriteLine($"    {"Frame",7} {"PosZ",8} {"RawZ",8} {"GndZ",8} {"PrevGZ",8} {"VelZ",7} {"ZΔ",7} {"Guards"}");
-            foreach (var f in guardFrames.Take(50))
-            {
-                var guards = new List<string>();
-                if (f.SlopeGuard) guards.Add("SLOPE");
-                if (f.PathGuard) guards.Add("PATH");
-                if (f.FalseFreefallSup) guards.Add("FREEFALL_SUP");
-                if (f.UndergroundSnap) guards.Add("UNDERMAP");
-                if (MathF.Abs(f.ZDelta) > 0.5f) guards.Add($"JUMP({f.ZDelta:+0.0;-0.0})");
-
-                _output.WriteLine($"    {f.Frame,7} {f.PosZ,8:F2} {f.RawPosZ,8:F2} {f.PhysicsGroundZ,8:F2} {f.PrevGroundZ,8:F2} {f.VelZ,7:F2} {f.ZDelta,7:F3} {string.Join("+", guards)}");
-            }
-            if (guardFrames.Count > 50)
-                _output.WriteLine($"    ... and {guardFrames.Count - 50} more");
-        }
-
-        // Print first 20 frames for Z trace context
-        _output.WriteLine($"\n    --- First 20 frames Z trace ---");
-        _output.WriteLine($"    {"Frame",7} {"PosZ",8} {"RawZ",8} {"GndZ",8} {"PrevGZ",8} {"VelZ",7} {"Fall",5} {"Flags",8}");
-        foreach (var f in frames.Take(20))
-        {
-            _output.WriteLine($"    {f.Frame,7} {f.PosZ,8:F2} {f.RawPosZ,8:F2} {f.PhysicsGroundZ,8:F2} {f.PrevGroundZ,8:F2} {f.VelZ,7:F2} {f.FallTimeMs,5} {f.MoveFlags,8}");
-        }
-    }
-
-    private sealed record TransformSample(float T, float X, float Y, float Z, uint MoveFlags);
-
-    private sealed class FrameData
-    {
-        public int Frame;
-        public float PosX, PosY, PosZ, RawPosZ, PhysicsGroundZ, PrevGroundZ;
-        public float VelZ;
-        public uint FallTimeMs;
-        public bool IsFalling;
-        public string MoveFlags = "";
-        public bool SlopeGuard, PathGuard, FalseFreefallSup, TeleportClamp, UndergroundSnap, HitWall;
-        public float PathWpZ, ZDelta;
-    }
-
-    private sealed class TransformData
-    {
-        public int Frame;
-        public long ElapsedMs;
-        public float PosX, PosY, PosZ;
-        public float Facing;
-        public string MoveFlags = "";
-        public float RunSpeed;
-        public uint FallTime;
-    }
-
-    private sealed class PacketTraceData
-    {
-        public int Index;
-        public long ElapsedMs;
-        public string Direction = "";
-        public ushort Opcode;
-        public string OpcodeName = "";
-        public int Size;
-        public bool IsMovement;
-    }
-
-    /// <summary>
-    /// Load FG transform CSV and BG physics CSV, time-align frames, and print
-    /// side-by-side position comparison with Z divergence analysis.
-    /// </summary>
-    private void AnalyzeTransformComparison(string fgAccount, string bgAccount)
-    {
-        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
-
-        if (!Directory.Exists(recordingDir)) return;
-
-        var fgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "transform", fgAccount, "csv");
-        var bgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "transform", bgAccount, "csv");
-
-        if (fgPath == null)
-        {
-            _output.WriteLine("\n--- FG Transform Recording: no CSV found ---");
-            return;
-        }
-        if (bgPath == null)
-        {
-            _output.WriteLine("\n--- BG Transform Recording: no CSV found ---");
-            return;
-        }
-
-        var fgFrames = LoadTransformCsv(fgPath);
-        var bgFrames = LoadTransformCsv(bgPath);
-
-        _output.WriteLine($"\n=== TRANSFORM COMPARISON (FG gold standard vs BG physics) ===");
-        _output.WriteLine($"    FG: {fgFrames.Count} frames from {Path.GetFileName(fgPath)}");
-        _output.WriteLine($"    BG: {bgFrames.Count} frames from {Path.GetFileName(bgPath)}");
-
-        if (fgFrames.Count == 0 || bgFrames.Count == 0)
-        {
-            _output.WriteLine("    Insufficient data for comparison.");
-            return;
-        }
-
-        // Time-align: match BG frames to FG by elapsed time
-        var comparisons = new List<(TransformData fg, TransformData bg, float dXY, float dZ)>();
-        foreach (var fg in fgFrames)
-        {
-            var bg = bgFrames.MinBy(b => Math.Abs(b.ElapsedMs - fg.ElapsedMs));
-            if (bg != null && Math.Abs(bg.ElapsedMs - fg.ElapsedMs) < 200) // within 200ms
-            {
-                float dXY = Distance2D(fg.PosX, fg.PosY, bg.PosX, bg.PosY);
-                float dZ = bg.PosZ - fg.PosZ;
-                comparisons.Add((fg, bg, dXY, dZ));
-            }
-        }
-
-        if (comparisons.Count == 0)
-        {
-            _output.WriteLine("    No time-aligned frame pairs found.");
-            return;
-        }
-
-        // Summary stats
-        float avgDXY = comparisons.Average(c => c.dXY);
-        float maxDXY = comparisons.Max(c => c.dXY);
-        float avgDZ = comparisons.Average(c => MathF.Abs(c.dZ));
-        float maxDZ = comparisons.Max(c => MathF.Abs(c.dZ));
-        float avgSignedDZ = comparisons.Average(c => c.dZ);
-
-        _output.WriteLine($"\n    Paired frames: {comparisons.Count}");
-        _output.WriteLine($"    XY divergence: avg={avgDXY:F2}y  max={maxDXY:F2}y");
-        _output.WriteLine($"    Z  divergence: avg={avgDZ:F2}y  max={maxDZ:F2}y  signed avg={avgSignedDZ:+0.00;-0.00}y (BG {(avgSignedDZ > 0 ? "higher" : "lower")})");
-
-        // Z trend over time
-        int half = comparisons.Count / 2;
-        if (half >= 3)
-        {
-            float firstHalf = comparisons.Take(half).Average(c => c.dZ);
-            float secondHalf = comparisons.Skip(half).Average(c => c.dZ);
-            float drift = secondHalf - firstHalf;
-            _output.WriteLine($"    Z trend: 1st half={firstHalf:+0.00;-0.00}y  2nd half={secondHalf:+0.00;-0.00}y  drift={drift:+0.00;-0.00}y");
-        }
-
-        // Speed comparison (FG gold standard vs BG)
-        var fgMoving = fgFrames.Where(f => f.MoveFlags.Contains("0x1") || f.RunSpeed > 0).ToList();
-        var bgMoving = bgFrames.Where(f => f.MoveFlags.Contains("0x1") || f.RunSpeed > 0).ToList();
-        if (fgMoving.Count >= 2 && bgMoving.Count >= 2)
-        {
-            float fgDuration = (fgMoving.Last().ElapsedMs - fgMoving.First().ElapsedMs) / 1000f;
-            float bgDuration = (bgMoving.Last().ElapsedMs - bgMoving.First().ElapsedMs) / 1000f;
-            float fgDist = Distance2D(fgMoving.First().PosX, fgMoving.First().PosY,
-                fgMoving.Last().PosX, fgMoving.Last().PosY);
-            float bgDist = Distance2D(bgMoving.First().PosX, bgMoving.First().PosY,
-                bgMoving.Last().PosX, bgMoving.Last().PosY);
-            float fgSpeed = fgDuration > 0.1f ? fgDist / fgDuration : 0;
-            float bgSpeed = bgDuration > 0.1f ? bgDist / bgDuration : 0;
-            _output.WriteLine($"    Effective speed: FG={fgSpeed:F2}y/s  BG={bgSpeed:F2}y/s  ratio={bgSpeed / Math.Max(fgSpeed, 0.01f):F3}");
-        }
-
-        // Print first 25 paired frames for detailed inspection
-        _output.WriteLine($"\n    --- Side-by-side (first 25 paired frames) ---");
-        _output.WriteLine($"    {"Ms",6} | {"FG_X",8} {"FG_Y",8} {"FG_Z",7} {"FGflg",8} | {"BG_X",8} {"BG_Y",8} {"BG_Z",7} {"BGflg",8} | {"dXY",5} {"dZ",6}");
-        _output.WriteLine("    " + new string('-', 105));
-        foreach (var (fg, bg, dXY, dZ) in comparisons.Take(25))
-        {
-            _output.WriteLine(
-                $"    {fg.ElapsedMs,6} | {fg.PosX,8:F1} {fg.PosY,8:F1} {fg.PosZ,7:F2} {fg.MoveFlags,8} | " +
-                $"{bg.PosX,8:F1} {bg.PosY,8:F1} {bg.PosZ,7:F2} {bg.MoveFlags,8} | " +
-                $"{dXY,5:F1} {dZ,6:F2}");
-        }
-
-        // Print frames with large divergence (> 2y Z or > 5y XY)
-        var divergent = comparisons.Where(c => MathF.Abs(c.dZ) > 2f || c.dXY > 5f).ToList();
-        if (divergent.Count > 0)
-        {
-            _output.WriteLine($"\n    --- Divergent frames (|dZ|>2y or dXY>5y): {divergent.Count} ---");
-            foreach (var (fg, bg, dXY, dZ) in divergent.Take(30))
-            {
-                _output.WriteLine(
-                    $"    t={fg.ElapsedMs}ms FG=({fg.PosX:F1},{fg.PosY:F1},{fg.PosZ:F2}) " +
-                    $"BG=({bg.PosX:F1},{bg.PosY:F1},{bg.PosZ:F2}) dXY={dXY:F1} dZ={dZ:+0.00;-0.00}");
-            }
-        }
-    }
-
-    private void AnalyzePacketComparison(string fgAccount, string bgAccount, bool expectTurnStart)
-    {
-        var recordingDir = RecordingArtifactHelper.GetRecordingDirectory();
-
-        if (!Directory.Exists(recordingDir))
-            return;
-
-        var fgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "packets", fgAccount, "csv");
-        var bgPath = RecordingArtifactHelper.FindLatestRecordingFile(recordingDir, "packets", bgAccount, "csv");
-
-        if (fgPath == null)
-        {
-            _output.WriteLine("\n--- FG Packet Recording: no CSV found ---");
-            return;
-        }
-
-        if (bgPath == null)
-        {
-            _output.WriteLine("\n--- BG Packet Recording: no CSV found ---");
-            return;
-        }
-
-        var fgPackets = LoadPacketCsv(fgPath);
-        var bgPackets = LoadPacketCsv(bgPath);
-
-        var fgSendMovement = fgPackets
-            .Where(p => string.Equals(p.Direction, "Send", StringComparison.OrdinalIgnoreCase) && p.IsMovement)
-            .ToList();
-        var bgSendMovement = bgPackets
-            .Where(p => string.Equals(p.Direction, "Send", StringComparison.OrdinalIgnoreCase) && p.IsMovement)
-            .ToList();
-
-        _output.WriteLine("\n=== PACKET COMPARISON ===");
-        _output.WriteLine($"    FG packets: {fgSendMovement.Count} outbound movement packets from {Path.GetFileName(fgPath)}");
-        _output.WriteLine($"    BG packets: {bgSendMovement.Count} outbound movement packets from {Path.GetFileName(bgPath)}");
-        _output.WriteLine("    FG opening packets:");
-        foreach (var packet in fgSendMovement.Take(6))
-            _output.WriteLine($"      {packet.ElapsedMs,5}ms  0x{packet.Opcode:X4}  {packet.OpcodeName}");
-        _output.WriteLine("    BG opening packets:");
-        foreach (var packet in bgSendMovement.Take(6))
-            _output.WriteLine($"      {packet.ElapsedMs,5}ms  0x{packet.Opcode:X4}  {packet.OpcodeName}");
-
-        if (!expectTurnStart)
-            return;
-
-        var fgOpening = fgSendMovement.Take(2).Select(p => p.OpcodeName).ToArray();
-        var bgOpening = bgSendMovement.Take(2).Select(p => p.OpcodeName).ToArray();
-
-        Assert.True(fgOpening.Length >= 2, "FG packet trace did not capture enough outbound opening movement packets");
-        Assert.True(bgOpening.Length >= 2, "BG packet trace did not capture enough outbound opening movement packets");
-        Assert.Equal("MSG_MOVE_SET_FACING", fgOpening[0]);
-        Assert.Equal("MSG_MOVE_START_FORWARD", fgOpening[1]);
-        Assert.Equal(fgOpening, bgOpening);
-
-        Assert.DoesNotContain(fgSendMovement.Skip(2), packet => packet.OpcodeName == "MSG_MOVE_SET_FACING");
-        Assert.DoesNotContain(bgSendMovement.Skip(2), packet => packet.OpcodeName == "MSG_MOVE_SET_FACING");
-
-        var fgStop = fgSendMovement.LastOrDefault(packet => packet.OpcodeName == "MSG_MOVE_STOP");
-        var bgStop = bgSendMovement.LastOrDefault(packet => packet.OpcodeName == "MSG_MOVE_STOP");
-        Assert.NotNull(fgStop);
-        Assert.NotNull(bgStop);
-        Assert.Equal("MSG_MOVE_STOP", fgSendMovement[^1].OpcodeName);
-        Assert.Equal("MSG_MOVE_STOP", bgSendMovement[^1].OpcodeName);
-
-        var stopDeltaMs = Math.Abs(fgStop!.ElapsedMs - bgStop!.ElapsedMs);
-        _output.WriteLine($"    Stop packets: FG={fgStop.ElapsedMs}ms  BG={bgStop.ElapsedMs}ms  delta={stopDeltaMs}ms");
-        // Live FG/BG parity keeps the opening packet edge strict, but the downhill
-        // Durotar forced-turn slice still shows ~0.8-0.9s native/runtime timing spread
-        // even when the packet ordering and final STOP terminality match.
-        // The deterministic MovementParity bundle remains the tighter owner of native
-        // micro-timing, so keep this live guard wide enough to avoid false reds while
-        // still rejecting multi-second stop-tail regressions.
-        Assert.True(stopDeltaMs <= 1000,
-            $"Stop edge diverged by {stopDeltaMs}ms (FG={fgStop.ElapsedMs}ms, BG={bgStop.ElapsedMs}ms)");
-    }
-
-    private static List<TransformData> LoadTransformCsv(string path)
-    {
-        var result = new List<TransformData>();
-        var lines = File.ReadAllLines(path);
-        for (int i = 1; i < lines.Length; i++)
-        {
-            var parts = lines[i].Split(',');
-            if (parts.Length < 9) continue;
-            try
-            {
-                result.Add(new TransformData
-                {
-                    Frame = int.Parse(parts[0]),
-                    ElapsedMs = long.Parse(parts[1]),
-                    PosX = float.Parse(parts[2], CultureInfo.InvariantCulture),
-                    PosY = float.Parse(parts[3], CultureInfo.InvariantCulture),
-                    PosZ = float.Parse(parts[4], CultureInfo.InvariantCulture),
-                    Facing = float.Parse(parts[5], CultureInfo.InvariantCulture),
-                    MoveFlags = parts[6],
-                    RunSpeed = float.Parse(parts[7], CultureInfo.InvariantCulture),
-                    FallTime = uint.Parse(parts[8]),
-                });
-            }
-            catch { }
-        }
-        return result;
-    }
-
-    private static List<PacketTraceData> LoadPacketCsv(string path)
-    {
-        var result = new List<PacketTraceData>();
-        var lines = File.ReadAllLines(path);
-        for (int i = 1; i < lines.Length; i++)
-        {
-            var parts = lines[i].Split(',');
-            if (parts.Length < 8)
-                continue;
-
-            try
-            {
-                result.Add(new PacketTraceData
-                {
-                    Index = int.Parse(parts[0], CultureInfo.InvariantCulture),
-                    ElapsedMs = long.Parse(parts[1], CultureInfo.InvariantCulture),
-                    Direction = parts[2],
-                    Opcode = ushort.Parse(parts[3], CultureInfo.InvariantCulture),
-                    OpcodeName = parts[5],
-                    Size = int.Parse(parts[6], CultureInfo.InvariantCulture),
-                    IsMovement = parts[7] == "1",
-                });
-            }
-            catch
-            {
-            }
-        }
-
-        return result;
-    }
-
-    private static string ResolveRepoPath(params string[] segments)
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine(new[] { dir.FullName }.Concat(segments).ToArray());
-            if (File.Exists(candidate) || Directory.Exists(candidate))
-                return candidate;
-            dir = dir.Parent;
-        }
-
-        throw new DirectoryNotFoundException(
-            $"Could not resolve repository path for {Path.Combine(segments)} from {AppContext.BaseDirectory}.");
+        public override string ToString()
+            => $"samples={Samples} travel={TravelDistance:F1} straight={StraightLineDistance:F1} zRange={VerticalRange:F2} forward={SawForward} jump={SawJump} transport={SawTransport} transportSamples={TransportSamples} start=({Start?.X:F1},{Start?.Y:F1},{Start?.Z:F2}) end=({End?.X:F1},{End?.Y:F1},{End?.Z:F2})";
     }
 }

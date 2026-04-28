@@ -32,6 +32,43 @@
 
 ---
 
+## Handoff (2026-04-28, direct FG/BG movement activity parity overhaul)
+
+- Completed: replaced the janky movement parity shape with direct FG/BG
+  activity probes: point-to-point pathfinding, running jump, GM self-knockback,
+  and an Undercity elevator gameobject transport ride.
+- Key corrections:
+  - SHODAN is not used as a behavior actor in `MovementParityTests`; the
+    movement participants self-stage with account-level GM access.
+  - Taxi rides are documented as spline-based movement, not transport evidence.
+  - Gameobject transport evidence is now tied to the Undercity elevator probe
+    via sustained transport samples or the elevator's vertical ride.
+  - BG handles direct jump dispatch, BG self-knockback packets without forcing
+    an ACK, moving-transport high GUID object creation, and passive attach to
+    nearby gameobject transports.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `.\protocsharp.bat "." ".."` from `Exports/BotCommLayer/Models/ProtoDef` -> `succeeded`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors after proto regeneration)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_IdleNearGameObjectTransport_AttachesBeforePostTeleportGroundSnap|FullyQualifiedName~MovementControllerTests.Update_IdleNearMapObjectTransportDeck_AttachesWithZeppelinOriginOffset|FullyQualifiedName~ObjectManagerWorldSessionTests.DirectMonsterMove_MovingTransportHighGuid_CreatesGameObjectTransport|FullyQualifiedName~ObjectManagerWorldSessionTests.MessageMoveKnockBack_PrimesImpulseWithoutForceAck|FullyQualifiedName~ObjectUpdateMutationOrderTests.MovingTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject|FullyQualifiedName~ObjectUpdateMutationOrderTests.StaticTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_elevator_04.trx"` -> `passed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_direct_actions_full_04.trx"` -> `passed (5/5; duration 2m41s)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - TRX: `tmp/test-runtime/results-live/movement_parity_transport_elevator_04.trx`.
+  - TRX: `tmp/test-runtime/results-live/movement_parity_direct_actions_full_04.trx`.
+- Worktree note:
+  - The three untracked ACK corpus captures remain untracked and were not
+    promoted.
+- Files changed:
+  - movement action contracts/dispatch, WoWSharpClient movement/object handling,
+    deterministic WoWSharpClient tests, live `MovementParityTests`, and
+    movement/taxi/transport docs/task trackers.
+- Next command: `git status --short --branch`
+
+---
+
 ## Handoff (2026-04-28, live movement parity bundle)
 
 - Completed: ran the live BotRunner movement parity bundle after Stream 4

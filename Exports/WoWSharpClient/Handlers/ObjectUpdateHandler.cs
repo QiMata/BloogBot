@@ -108,7 +108,7 @@ namespace WoWSharpClient.Handlers
                 return objectType;
 
             ushort highType = (ushort)(guid >> 48);
-            return highType is 0xF110 or 0xF130
+            return highType is 0xF110 or 0xF120 or 0xF130 or 0x1FC0
                 ? WoWObjectType.GameObj
                 : objectType;
         }

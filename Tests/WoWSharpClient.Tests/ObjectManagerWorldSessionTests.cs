@@ -547,6 +547,45 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
+    public void DirectMonsterMove_MovingTransportHighGuid_CreatesGameObjectTransport()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x204;
+        const ulong transportGuid = 0x1FC0000000028407ul;
+        const uint transportEntry = 164871;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        uint startTime = unchecked((uint)Environment.TickCount64 + 2000u);
+        MovementHandler.HandleUpdateMovement(
+            Opcode.SMSG_MONSTER_MOVE,
+            BuildMonsterMovePayload(
+                transportGuid,
+                new Position(100f, 200f, 50f),
+                startTime,
+                durationMs: 1000u,
+                points: [new Position(100f, 200f, 60f)]),
+            ctx);
+        UpdateProcessingHelper.DrainPendingUpdates();
+        WaitForCondition(() => objectManager.SplineCtrl.HasActiveSpline(transportGuid));
+
+        var transport = Assert.IsType<WoWGameObject>(objectManager.GetObjectByGuid(transportGuid));
+        Assert.Equal(transportEntry, transport.Entry);
+        Assert.Equal((uint)GameObjectType.MapObjectTransport, transport.TypeId);
+        Assert.Equal(100f, transport.Position.X, 2);
+        Assert.Equal(200f, transport.Position.Y, 2);
+        Assert.Equal(50f, transport.Position.Z, 2);
+
+        objectManager.SplineCtrl.Update(500f);
+
+        Assert.Equal(55f, transport.Position.Z, 2);
+
+        objectManager.SplineCtrl.Remove(transportGuid);
+    }
+
+    [Fact]
     public void RemoteUnitAdd_PrimesExtrapolationStateFromMovementBlock()
     {
         ResetObjectManager();
@@ -659,6 +698,57 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(vSpeed, vz, 5);
         Assert.False(objectManager.TryConsumePendingKnockback(out _, out _, out _));
 
+        Assert.Empty(sentPackets);
+    }
+
+    [Fact]
+    [Trait("Category", "MovementParity")]
+    [Trait("ParityLayer", "DeterministicBgProtocol")]
+    public void MessageMoveKnockBack_PrimesImpulseWithoutForceAck()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x0102030405060713ul;
+        const float vSin = -0.4f;
+        const float vCos = 0.9f;
+        const float hSpeed = 5.0f;
+        const float vSpeed = -5.0f;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(15f, 25f, 35f);
+        player.Facing = 1.25f;
+        player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+
+        SetPrivateField(_fixture._woWClient.Object, "_worldClient", CreateWorldClientRecorder(out var sentPackets).Object);
+        SetPrivateField(objectManager, "_worldTimeTracker", new WorldTimeTracker());
+
+        MovementHandler.HandleUpdateMovement(
+            Opcode.MSG_MOVE_KNOCK_BACK,
+            BuildMessageMoveKnockBackPayload(
+                playerGuid,
+                MovementFlags.MOVEFLAG_NONE,
+                player.Position,
+                player.Facing,
+                vCos,
+                vSin,
+                hSpeed,
+                vSpeed),
+            ctx);
+
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_JUMPING));
+        Assert.Equal(vSpeed, player.JumpVerticalSpeed, 5);
+        Assert.Equal(vCos, player.JumpCosAngle, 5);
+        Assert.Equal(vSin, player.JumpSinAngle, 5);
+        Assert.Equal(hSpeed, player.JumpHorizontalSpeed, 5);
+
+        Assert.True(objectManager.TryConsumePendingKnockback(out float vx, out float vy, out float vz));
+        Assert.Equal(hSpeed * vCos, vx, 5);
+        Assert.Equal(hSpeed * vSin, vy, 5);
+        Assert.Equal(vSpeed, vz, 5);
+        Assert.False(objectManager.TryFlushPendingKnockbackAck(1234u));
         Assert.Empty(sentPackets);
     }
 
@@ -3169,6 +3259,27 @@ public class ObjectManagerWorldSessionTests
         ReaderUtils.WritePackedGuid(writer, guid);
         writer.Write(BuildMovementInfoPayload(guid, movementFlags, position, facing));
         writer.Write(speed);
+        return ms.ToArray();
+    }
+
+    private static byte[] BuildMessageMoveKnockBackPayload(
+        ulong guid,
+        MovementFlags movementFlags,
+        Position position,
+        float facing,
+        float vCos,
+        float vSin,
+        float hSpeed,
+        float vSpeed)
+    {
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms);
+        ReaderUtils.WritePackedGuid(writer, guid);
+        writer.Write(BuildMovementInfoPayload(guid, movementFlags, position, facing));
+        writer.Write(vCos);
+        writer.Write(vSin);
+        writer.Write(hSpeed);
+        writer.Write(vSpeed);
         return ms.ToArray();
     }
 

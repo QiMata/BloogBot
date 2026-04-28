@@ -113,7 +113,7 @@ namespace Communication {
             "X2xvY2F0aW9uX25hbWUYAyABKAkSGQoRYWxsb3dfaGVhcnRoc3RvbmUYBCAB",
             "KAgSHAoUYWxsb3dfY2xhc3NfdGVsZXBvcnQYBSABKAgiTwoITG9nRW50cnkS",
             "DQoFbGV2ZWwYASABKAkSEAoIY2F0ZWdvcnkYAiABKAkSDwoHbWVzc2FnZRgD",
-            "IAEoCRIRCgl0aW1lc3RhbXAYBCABKAkqjgwKCkFjdGlvblR5cGUSCAoEV0FJ",
+            "IAEoCRIRCgl0aW1lc3RhbXAYBCABKAkqmAwKCkFjdGlvblR5cGUSCAoEV0FJ",
             "VBAAEggKBEdPVE8QARIRCg1JTlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dP",
             "U1NJUBADEhQKEFNFTEVDVF9UQVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQ",
             "BRIRCg1ERUNMSU5FX1FVRVNUEAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNP",
@@ -148,19 +148,19 @@ namespace Communication {
             "X1NVQkdST1VQEEoSEQoNRk9MTE9XX1RBUkdFVBBLEhUKEUpPSU5fQkFUVExF",
             "R1JPVU5EEEwSFwoTQUNDRVBUX0JBVFRMRUdST1VORBBNEhYKEkxFQVZFX0JB",
             "VFRMRUdST1VORBBOEg0KCVRSQVZFTF9UTxBPEhEKDUFQUExZX0xPQURPVVQQ",
-            "UCovCg1Cb3RSdW5uZXJUeXBlEg4KCkZPUkVHUk9VTkQQABIOCgpCQUNLR1JP",
-            "VU5EEAEqqgEKD1N0YXRlQ2hhbmdlVHlwZRIICgROQU1FEAASDAoIT1BFTk5F",
-            "U1MQARIVChFDT05TQ0lFTlRJT1VTTkVTUxACEhAKDEVYVFJBVkVSU0lPThAD",
-            "EhEKDUFHUkVFQUJMRU5FU1MQBBIPCgtORVVST1RJQ0lTTRAFEhcKE0NPT1JE",
-            "SU5BVE9SX0VOQUJMRUQQBhIZChVEUkFJTl9QRU5ESU5HX0FDVElPTlMQByo7",
-            "Cg5SZXNwb25zZVJlc3VsdBILCgdTVUNDRVNTEAASCwoHRkFJTFVSRRABEg8K",
-            "C0lOX1BST0dSRVNTEAIqrAEKEkJvdENvbm5lY3Rpb25TdGF0ZRIUChBCT1Rf",
-            "RElTQ09OTkVDVEVEEAASFgoSQk9UX0FVVEhFTlRJQ0FUSU5HEAESEwoPQk9U",
-            "X0NIQVJfU0VMRUNUEAISFgoSQk9UX0VOVEVSSU5HX1dPUkxEEAMSEAoMQk9U",
-            "X0lOX1dPUkxEEAQSFAoQQk9UX1RSQU5TRkVSUklORxAFEhMKD0JPVF9MT0dH",
-            "SU5HX09VVBAGKmgKDUxvYWRvdXRTdGF0dXMSFwoTTE9BRE9VVF9OT1RfU1RB",
-            "UlRFRBAAEhcKE0xPQURPVVRfSU5fUFJPR1JFU1MQARIRCg1MT0FET1VUX1JF",
-            "QURZEAISEgoOTE9BRE9VVF9GQUlMRUQQA2IGcHJvdG8z"));
+            "UBIICgRKVU1QEFEqLwoNQm90UnVubmVyVHlwZRIOCgpGT1JFR1JPVU5EEAAS",
+            "DgoKQkFDS0dST1VORBABKqoBCg9TdGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAA",
+            "EgwKCE9QRU5ORVNTEAESFQoRQ09OU0NJRU5USU9VU05FU1MQAhIQCgxFWFRS",
+            "QVZFUlNJT04QAxIRCg1BR1JFRUFCTEVORVNTEAQSDwoLTkVVUk9USUNJU00Q",
+            "BRIXChNDT09SRElOQVRPUl9FTkFCTEVEEAYSGQoVRFJBSU5fUEVORElOR19B",
+            "Q1RJT05TEAcqOwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAAEgsKB0ZB",
+            "SUxVUkUQARIPCgtJTl9QUk9HUkVTUxACKqwBChJCb3RDb25uZWN0aW9uU3Rh",
+            "dGUSFAoQQk9UX0RJU0NPTk5FQ1RFRBAAEhYKEkJPVF9BVVRIRU5USUNBVElO",
+            "RxABEhMKD0JPVF9DSEFSX1NFTEVDVBACEhYKEkJPVF9FTlRFUklOR19XT1JM",
+            "RBADEhAKDEJPVF9JTl9XT1JMRBAEEhQKEEJPVF9UUkFOU0ZFUlJJTkcQBRIT",
+            "Cg9CT1RfTE9HR0lOR19PVVQQBipoCg1Mb2Fkb3V0U3RhdHVzEhcKE0xPQURP",
+            "VVRfTk9UX1NUQVJURUQQABIXChNMT0FET1VUX0lOX1BST0dSRVNTEAESEQoN",
+            "TE9BRE9VVF9SRUFEWRACEhIKDkxPQURPVVRfRkFJTEVEEANiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), typeof(global::Communication.LoadoutStatus), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -274,6 +274,10 @@ namespace Communication {
     /// P3: one-shot hand-off of full loadout spec (level, spells, skills, items, rep, quests, honor rank). BotRunner owns execution pacing; reports progress via WoWActivitySnapshot.loadout_status.
     /// </summary>
     [pbr::OriginalName("APPLY_LOADOUT")] ApplyLoadout = 80,
+    /// <summary>
+    /// One-shot movement impulse. FG sends a real spacebar jump; BG emits MSG_MOVE_JUMP through MovementController.
+    /// </summary>
+    [pbr::OriginalName("JUMP")] Jump = 81,
   }
 
   public enum BotRunnerType {

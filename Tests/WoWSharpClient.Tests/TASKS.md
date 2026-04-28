@@ -12,6 +12,24 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-04-28 (direct movement activity deterministic coverage)
+- Pass result: `Focused WoWSharpClient movement/object deterministic slice passed 6/6`
+- Last delta:
+  - Added deterministic coverage for passive gameobject transport attach,
+    map-object transport deck offsets, moving transport high GUID creation,
+    self-GM knockback packet parsing without forced ACK, and high GUID
+    object-update create blocks with packet type `None`.
+  - The coverage intentionally separates gameobject transports from taxi
+    spline movement.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_IdleNearGameObjectTransport_AttachesBeforePostTeleportGroundSnap|FullyQualifiedName~MovementControllerTests.Update_IdleNearMapObjectTransportDeck_AttachesWithZeppelinOriginOffset|FullyQualifiedName~ObjectManagerWorldSessionTests.DirectMonsterMove_MovingTransportHighGuid_CreatesGameObjectTransport|FullyQualifiedName~ObjectManagerWorldSessionTests.MessageMoveKnockBack_PrimesImpulseWithoutForceAck|FullyQualifiedName~ObjectUpdateMutationOrderTests.MovingTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject|FullyQualifiedName~ObjectUpdateMutationOrderTests.StaticTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WoWSharpClient.Tests/Parity/ObjectUpdateMutationOrderTests.cs`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `git status --short --branch`
+
 ### 2026-04-28 (tracker sweep after Stream 4 closeout)
 - Pass result: `Post-Stream-4 tracker sweep found no unchecked parity tasks`
 - Last delta:

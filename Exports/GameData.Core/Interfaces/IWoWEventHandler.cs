@@ -222,7 +222,7 @@ namespace GameData.Core.Interfaces
     /// SMSG_MOVE_KNOCK_BACK packet data. WoW.exe inbound handler at 0x5E59B0.
     /// Wire format: packed_guid + counter + vsin + vcos + hspeed + vspeed.
     /// </summary>
-    public class KnockBackArgs(ulong guid, uint counter, float vSin, float vCos, float hSpeed, float vSpeed)
+    public class KnockBackArgs(ulong guid, uint counter, float vSin, float vCos, float hSpeed, float vSpeed, bool requiresAck = true)
         : RequiresAcknowledgementArgs(guid, counter)
     {
         /// <summary>sin(facing) component of knockback direction</summary>
@@ -233,6 +233,8 @@ namespace GameData.Core.Interfaces
         public float HSpeed { get; } = hSpeed;
         /// <summary>Vertical knockback speed (yards/second, positive = upward)</summary>
         public float VSpeed { get; } = vSpeed;
+        /// <summary>Whether this knockback came from a force-move packet that requires CMSG_MOVE_KNOCK_BACK_ACK.</summary>
+        public bool RequiresAck { get; } = requiresAck;
     }
 
 }

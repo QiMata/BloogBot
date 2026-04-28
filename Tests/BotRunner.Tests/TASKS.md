@@ -45,7 +45,7 @@
 - [x] Migrate `BattlegroundQueueTests` to the Shodan shape via `Economy.config.json` + fixture-contained WSG battlemaster/level staging; BG dispatches only `JoinBattleground` and cleanup `LeaveBattleground`.
 - [x] Migrate `SpellCastOnTargetTests` to the Shodan shape via `Economy.config.json` + fixture-contained Battle Shout spell/rage/aura staging; BG dispatches only `CastSpell` while FG stays idle for topology parity.
 - [x] Migrate `TaxiTests` / `TaxiTransportParityTests` / `TransportTests` to the Shodan shape via `Economy.config.json` + fixture-contained taxi readiness and transport-point staging; taxi actions dispatch to BG/FG targets only, with elevator/cross-continent/Alliance placeholders tracked as skips.
-- [x] Migrate `DualClientParityTests` / `MovementParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained shared Orgrimmar and route-start staging; FG/BG snapshot and movement parity lanes dispatch only production actions, with runtime staging/quiesce/packet gaps tracked as skips.
+- [x] Migrate `DualClientParityTests` to the Shodan shape via `Economy.config.json` + fixture-contained shared Orgrimmar staging; keep `MovementParityTests` direct FG/BG because the parity participants can self-stage with account-level GM `.go xyz` and do not need Shodan.
 - [x] Migrate `IntegrationValidationTests` to the Shodan shape via `Economy.config.json` + fixture-contained integration staging; dungeoneering, quest snapshot, vendor sell, reward snapshot, and assign-loot lanes pass, while PvP/talent/trainer lanes are explicit tracked skips.
 - [x] Migrate `AckCaptureTests` to the Shodan shape via `Economy.config.json` + fixture-contained foreground capture positioning/command dispatch; worldport probe passes and configured command capture remains env-gated.
 - [x] Follow-up pass: replace bot-chat `.learn` / `.setskill` / `.additem` inside `StageBotRunnerLoadoutAsync` with Shodan cross-targeting or SOAP name-targeted variants where MaNGOS supports them.
@@ -87,6 +87,41 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-28 (direct FG/BG movement activity parity overhaul)
+- Pass result: `Category=MovementParity passed with direct pathfinding, jump, knockback, and gameobject transport probes (5/5)`
+- Last delta:
+  - Replaced the oversized route/parity shape with four direct FG/BG activity
+    probes in `MovementParityTests`: point-to-point pathfinding, running jump,
+    GM self-knockback, and Undercity elevator gameobject transport riding.
+  - SHODAN is not an action participant in this suite; BG/FG self-stage with
+    account-level GM access. SHODAN remains setup/GM liaison only for suites
+    that need target-pool/server setup.
+  - Taxi rides are documented as spline-based movement, not transport coverage.
+    Gameobject transport coverage now belongs to the direct elevator probe.
+  - Added direct `Jump` action dispatch support and recording assertions for
+    the new live probes.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `.\protocsharp.bat "." ".."` from `Exports/BotCommLayer/Models/ProtoDef` -> `succeeded`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors after proto regeneration)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_IdleNearGameObjectTransport_AttachesBeforePostTeleportGroundSnap|FullyQualifiedName~MovementControllerTests.Update_IdleNearMapObjectTransportDeck_AttachesWithZeppelinOriginOffset|FullyQualifiedName~ObjectManagerWorldSessionTests.DirectMonsterMove_MovingTransportHighGuid_CreatesGameObjectTransport|FullyQualifiedName~ObjectManagerWorldSessionTests.MessageMoveKnockBack_PrimesImpulseWithoutForceAck|FullyQualifiedName~ObjectUpdateMutationOrderTests.MovingTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject|FullyQualifiedName~ObjectUpdateMutationOrderTests.StaticTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_elevator_04.trx"` -> `passed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_direct_actions_full_04.trx"` -> `passed (5/5; duration 2m41s)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/movement_parity_transport_elevator_04.trx`
+  - `tmp/test-runtime/results-live/movement_parity_direct_actions_full_04.trx`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MovementParityTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TaxiTransportParityTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TransportTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - shared action dispatch/contract and WoWSharpClient movement support files.
+- Next command: `git status --short --branch`
+
 ### 2026-04-28 (live movement parity bundle)
 - Pass result: `Category=MovementParity passed with 8 passed, 5 tracked skips, 0 failures`
 - Last delta:

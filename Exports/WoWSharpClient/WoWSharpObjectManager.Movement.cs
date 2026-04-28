@@ -167,6 +167,27 @@ namespace WoWSharpClient
             StopMovement(stopBits);
         }
 
+        public void Jump()
+        {
+            var player = (WoWLocalPlayer)Player;
+            if (player == null || IsPlayerAirborne(player)) return;
+
+            var horizontalSpeed =
+                player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD) ? player.RunSpeed :
+                player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_BACKWARD) ? player.RunBackSpeed :
+                player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT)
+                    || player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT) ? player.RunSpeed :
+                0f;
+
+            player.JumpVerticalSpeed = 7.955547f;
+            player.JumpCosAngle = MathF.Cos(player.Facing);
+            player.JumpSinAngle = MathF.Sin(player.Facing);
+            player.JumpHorizontalSpeed = horizontalSpeed;
+            player.FallTime = 0;
+            StartMovement(ControlBits.Jump);
+            _movementController?.NotifyServerJumpStart();
+        }
+
         /// <summary>
         /// Clears directional movement intent and immediately sends the appropriate movement opcode.
         /// Active physics state (for example falling or swimming) is preserved.
@@ -325,7 +346,8 @@ namespace WoWSharpClient
             player.JumpSinAngle = e.VSin;
             player.JumpHorizontalSpeed = e.HSpeed;
 
-            _pendingKnockbackAck = new PendingKnockbackAck(player.Guid, e.Counter);
+            if (e.RequiresAck)
+                _pendingKnockbackAck = new PendingKnockbackAck(player.Guid, e.Counter);
 
             Serilog.Log.Information("[KNOCKBACK] vel=({VelX:F2},{VelY:F2},{VelZ:F2}) hSpeed={HSpeed:F2} dir=({VCos:F3},{VSin:F3})",
                 velX, velY, velZ, e.HSpeed, e.VCos, e.VSin);

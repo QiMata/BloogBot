@@ -78,7 +78,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | LootCorpseTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged clean bags and Durotar mob area; BG StartMeleeAttack / LootCorpse proof |
 | MapTransitionTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Deeprun Tram bounce; BG post-bounce action liveness |
 | MountEnvironmentTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged riding loadout and indoor/outdoor mount scene checks |
-| MovementParityTests | Shodan FG+BG-action / tracked skip | BG + FG + SHODAN | Movement parity yes where staged | Shodan-staged route parity; FG/BG recording, facing, and Goto actions with staging/quiesce/packet-edge skips |
+| MovementParityTests | Direct FG+BG parity | BG + FG | Movement activity parity yes | FG/BG self-stage via account-level GM `.go xyz`, then run pathfinding, jump, knockback, and gameobject transport probes |
 | MovementSpeedTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Durotar road start; BG Goto speed probe |
 | NavigationTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Durotar road/winding probes; BG Goto route checks; Valley long diagonal tracked skip |
 | NpcInteractionTests | Shodan FG+BG-action / tracked skip | BG + FG + SHODAN | Vendor/flight/object-manager yes | Shodan-staged NPC interactions; trainer subcase skips due live funding/mailbox staging gap |
@@ -90,7 +90,7 @@ StateManager also forwards BG stdout to test output with `[TESTBOT2]` prefix.
 | StarterQuestTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged quest accept/turn-in baseline |
 | TalentAllocationTests | Dual-Bot Conditional | BG + FG | Yes (when available) | Learn talent scenarios |
 | TaxiTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged Orgrimmar taxi discovery/ride; Alliance ride skips under Horde roster |
-| TaxiTransportParityTests | Shodan FG+BG-action / tracked skip | BG + FG + SHODAN | Taxi parity yes; elevator tracked | Shodan-staged taxi/elevator parity; elevator `TransportGuid` and cross-continent boarding gaps skip |
+| TaxiTransportParityTests | Shodan FG+BG-action / tracked skip | BG + FG + SHODAN | Taxi spline parity yes; transport placeholders tracked | Shodan-staged taxi spline movement parity; elevator `TransportGuid` and cross-continent gameobject boarding gaps skip |
 | TileBoundaryCrossingTests | Shodan BG-action | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged tile-boundary probes; BG TravelTo route checks |
 | TransportTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged transport location snapshots; Alliance/tram/Menethil placeholders skip |
 | TravelPlannerTests | Shodan BG-action / tracked skip | BG + idle FG + SHODAN | **No behavior parity** | Shodan-staged street-level Orgrimmar start; short BG TravelTo passes, long Crossroads probes skip for no-movement gap |
@@ -119,5 +119,5 @@ These tests run BG-only and have **no ground truth comparison**. Any BG protocol
 16. **BgInteractionTests** - Shodan topology is in place, but the migrated smoke proof is BG-action-only; bank deposit waits for a BotRunner action surface and Deeprun Tram remains in the dedicated transport slice.
 17. **BattlegroundQueueTests** - Shodan topology is in place, but the migrated WSG queue smoke is BG-action-only while FG stays idle for topology parity.
 18. **SpellCastOnTargetTests** - Shodan topology is in place, but the migrated Battle Shout proof is BG-action-only while FG stays idle for topology parity.
-19. **TaxiTests / TransportTests** - Shodan topology is in place, but the migrated taxi and transport-location proofs are BG-action or snapshot-only; `TaxiTransportParityTests` covers taxi FG/BG parity separately while elevator/cross-continent boarding gaps remain tracked skips.
+19. **TaxiTests / TransportTests** - Shodan topology is in place, but the migrated taxi and transport-location proofs are BG-action or snapshot-only; `TaxiTransportParityTests` covers taxi spline FG/BG parity separately while gameobject elevator/cross-continent boarding gaps remain tracked skips.
 20. **IntegrationValidationTests** - Shodan topology is in place, but the migrated V3 subset is BG-action/snapshot-only; PvP needs an opposing-faction topology plus PvP-flag staging, talent needs a production action surface, and trainer waits on the existing live funding/staging gap.

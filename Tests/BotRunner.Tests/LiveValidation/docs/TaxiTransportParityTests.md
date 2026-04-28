@@ -1,23 +1,26 @@
 # TaxiTransportParityTests
 
-Shodan-directed FG/BG taxi and transport parity coverage.
+Shodan-directed FG/BG taxi spline movement coverage plus tracked legacy
+gameobject transport placeholders.
 
 ## Bot Execution Mode
 
 **Shodan FG+BG-action / tracked skip** - `Economy.config.json` launches
 `ECONBG1` and `ECONFG1` as real BotRunner participants plus SHODAN as the
-director. Taxi parity dispatches actions to both FG and BG; transport boarding
-dispatches real `Goto` actions but keeps unstable runtime observations as
-tracked skips.
+director. Taxi parity dispatches actions to both FG and BG and validates taxi
+rides as spline-based movement. The old elevator/zeppelin entries remain
+tracked gameobject-transport placeholders; live action-driven gameobject
+transport activity is covered by `MovementParityTests`.
 
 ## Test Methods
 
 - `Taxi_Ride_FgBgParity`: stages both FG and BG for Orgrimmar taxi readiness,
   starts packet/physics/transform recording, dispatches `VisitFlightMaster` and
-  `SelectTaxiNode`, and compares departure behavior.
+  `SelectTaxiNode`, and compares taxi spline departure behavior.
 - `Transport_Board_FgBgParity`: stages both clients at the Undercity elevator
   upper stop, records both clients, dispatches `Goto` toward the lower stop, and
-  tracks the current elevator `TransportGuid` acquisition gap.
+  remains a tracked legacy placeholder for the current elevator
+  `TransportGuid` acquisition gap.
 - `Transport_CrossContinent_FgBgParity`: stages the BG target at the Orgrimmar
   zeppelin tower, then skips with the documented missing action-driven
   boarding/disembark assertion.
@@ -42,9 +45,10 @@ Grom'Gol/Undercity and should not be used for this cross-continent probe.
 ## Runtime Linkage
 
 - Taxi parity dispatches `ActionType.VisitFlightMaster` and
-  `ActionType.SelectTaxiNode` to both FG and BG.
-- Elevator boarding dispatches `ActionType.Goto` to both FG and BG after
-  Shodan staging.
+  `ActionType.SelectTaxiNode` to both FG and BG. This is spline movement, not
+  transport riding.
+- Elevator and zeppelin entries remain documented placeholders here; the direct
+  live gameobject-transport ride check now lives in `MovementParityTests`.
 - Recording actions remain BotRunner dispatches; setup remains fixture-owned.
 
 ## Current Gaps
@@ -54,6 +58,8 @@ Grom'Gol/Undercity and should not be used for this cross-continent probe.
   elevator.
 - Cross-continent transport parity still needs a stable production action path
   for boarding, riding, and disembarking a zeppelin route.
+- Taxi rides should not be promoted as transport evidence; they are
+  spline-based movement paths.
 - The 2026-04-28 packet-window probe confirmed that the normal
   Orgrimmar/Undercity zeppelin route does not emit
   `SMSG_MONSTER_MOVE_TRANSPORT`; the promoted packet-window baselines use the

@@ -189,6 +189,7 @@ namespace GameData.Core.Interfaces
         void SetFacing(float facing);
         void StartMovement(ControlBits bits);
         void StopMovement(ControlBits bits);
+        void Jump();
         bool PhysicsHitWall => false;
         (float X, float Y) PhysicsWallNormal2D => (0f, 0f);
         float PhysicsBlockedFraction => 1.0f;
