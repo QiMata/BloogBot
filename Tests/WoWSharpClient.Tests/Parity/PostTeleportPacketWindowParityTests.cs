@@ -272,15 +272,11 @@ public sealed class PostTeleportPacketWindowParityTests
         // with the cadence-gated heartbeat + outbound TELEPORT_ACK, in line
         // with FG's [TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND] shape.
         //
-        // KNOWN remaining FG/BG live divergence (Stream 2E.2/2E.3 in
-        // follow-up): live BG still does not emit MSG_MOVE_FALL_LAND in
-        // the 2.5s window for a 10-yard drop. Server-pushed SMSG_MONSTER_MOVE
-        // updates and NativeLocalPhysics ground-snap absorb the small drop
-        // without going through FALLINGFAR -> grounded. Higher-Z (e.g.
-        // Z+100) capture is needed to determine whether BG ever emits
-        // FALL_LAND live, or whether the synthetic parity test (which
-        // forces a 38-frame free-fall) is testing a code path the live
-        // BG never exercises.
+        // Stream 2E.3 resolved: live BG now emits MSG_MOVE_FALL_LAND for the
+        // same 10-yard drop. The fix primes same-map airborne teleports as
+        // MOVEFLAG_FALLINGFAR before the first NativeLocalPhysics tick, so the
+        // native engine cannot classify the first post-teleport frame as an
+        // already-complete ground snap.
         var fixture = LoadBackgroundBaseline();
 
         Assert.Equal(1, fixture.SchemaVersion);
@@ -300,16 +296,13 @@ public sealed class PostTeleportPacketWindowParityTests
         Assert.Equal("MSG_MOVE_TELEPORT_ACK", packets[0].OpcodeName);
         Assert.Equal("Recv", packets[0].Direction);
 
-        // BG-live outbound stream we observe today (post-Stream-2E.1):
-        //   1. MSG_MOVE_HEARTBEAT (~60ms after trigger) — the post-teleport
-        //      first-frame heartbeat. The Stream 2C cadence-gate keeps
-        //      synthetic tests at zero pre-ACK heartbeats; live BG still
-        //      emits one because the physics-tick HB and TryFlushPendingTeleportAck
-        //      land within the same poll cycle.
-        //   2. MSG_MOVE_TELEPORT_ACK (~60ms after trigger) — the outbound
-        //      ACK matches FG structurally (16 bytes: guid+counter+clientTimeMs).
-        //   No FALL_LAND in the 2.5s window — see comment block above for
-        //   the open Stream 2E.2/2E.3 follow-up.
+        // BG-live outbound stream after Stream 2E.3:
+        //   1. MSG_MOVE_HEARTBEAT in the first poll cycle.
+        //   2. MSG_MOVE_TELEPORT_ACK in the same first poll cycle; its payload
+        //      matches FG structurally (16 bytes: guid+counter+clientTimeMs).
+        //   3. More heartbeats during the fall.
+        //   4. MSG_MOVE_FALL_LAND after the local fall lands, matching the
+        //      foreground binary oracle.
         //
         // Regression guard: explicitly assert NO CMSG_SET_ACTIVE_MOVER in
         // the outbound stream. The Stream 2E.1 fix removed the spurious
@@ -317,8 +310,8 @@ public sealed class PostTeleportPacketWindowParityTests
         // `!_isBeingTeleported` to the early-return condition), this test
         // fails loudly.
         var bgOutbound = packets.Where(p => p.Direction == "Send").ToArray();
-        Assert.True(bgOutbound.Length >= 2,
-            $"BG live baseline must record >=2 outbound packets in the snap window; got {bgOutbound.Length}.");
+        Assert.True(bgOutbound.Length >= 5,
+            $"BG live baseline must record >=5 outbound packets in the snap window; got {bgOutbound.Length}.");
 
         Assert.DoesNotContain(
             bgOutbound,
@@ -332,6 +325,12 @@ public sealed class PostTeleportPacketWindowParityTests
         Assert.NotNull(firstHeartbeat);
         Assert.Equal(28, firstHeartbeat!.Size);
 
+        var fallLand = bgOutbound.SingleOrDefault(p => p.OpcodeName == "MSG_MOVE_FALL_LAND");
+        Assert.NotNull(fallLand);
+        Assert.Equal(28, fallLand!.Size);
+        Assert.True(fallLand.DeltaMs > 1000 && fallLand.DeltaMs < 2000,
+            $"BG MSG_MOVE_FALL_LAND must fire 1-2s after trigger for the 10y drop; got {fallLand.DeltaMs}ms.");
+
         // The first outbound packet must fire within ~150ms of the inbound
         // trigger (BG's same-poll-cycle TryFlushPendingTeleportAck + first
         // physics-tick heartbeat).
@@ -342,34 +341,20 @@ public sealed class PostTeleportPacketWindowParityTests
 
     [Fact]
     [Trait("Category", "PacketFlowParity")]
-    public void BackgroundHighDropBaseline_DoesNotEmitFallLand_PinsBgPhysicsEmissionGap()
+    public void BackgroundHighDropBaseline_EmitsFallLand_AfterAirborneTeleportPriming()
     {
-        // Stream 2E.2 oracle: a 100-yard vertical-drop teleport (Z=38 -> Z=138)
-        // captured live from BG. Even at 10x the standard vertical-drop test
-        // height, BG still does NOT emit MSG_MOVE_FALL_LAND in the 2.5s
-        // window. Outbound stream: [MSG_MOVE_HEARTBEAT, MSG_MOVE_TELEPORT_ACK]
-        // — the same shape as the 10y baseline. Server-pushed
-        // SMSG_MONSTER_MOVE updates absorb the entire fall.
-        //
-        // This pins a CURRENT-BUG state: WoW.exe (FG) emits MSG_MOVE_FALL_LAND
-        // on every fall regardless of server-side intervention. BG's
-        // NativeLocalPhysics + MovementController.DetermineOpcode path is
-        // either:
-        //   - Never going through the FALLINGFAR -> grounded transition
-        //     locally (server position updates short-circuit the local fall).
-        //   - Going through the transition but suppressing the FALL_LAND
-        //     packet because some gate (e.g. _isBeingTeleported, ground-snap)
-        //     is still active when the transition fires.
-        //
-        // When Stream 2E.3 fixes the gap, this test will FAIL because
-        // FALL_LAND will appear in the outbound stream. At that point,
-        // update the assertion to require the FALL_LAND (and update this
-        // comment block to reflect the resolved state).
+        // Stream 2E.3 extended oracle: a 100-yard vertical-drop teleport
+        // (Z=38 -> Z=138) captured live from BG with a 10s recorder window.
+        // The window starts on the staging teleport and includes the high-drop
+        // trigger about 5s later; the important invariant is that the high
+        // fall now reaches MSG_MOVE_FALL_LAND instead of regressing to the
+        // old no-FALL_LAND state.
         var fixture = LoadBackgroundHighDropBaseline();
 
         Assert.Equal(1, fixture.SchemaVersion);
         Assert.Equal("post_teleport_packet_window", fixture.CaptureScenario);
         Assert.Contains("BackgroundBotRunner", fixture.Source);
+        Assert.Equal(10000, fixture.WindowDurationMs);
 
         Assert.NotNull(fixture.Trigger);
         Assert.Equal("Recv", fixture.Trigger!.Direction);
@@ -389,13 +374,14 @@ public sealed class PostTeleportPacketWindowParityTests
             bgOutbound,
             p => p.OpcodeName == "CMSG_SET_ACTIVE_MOVER");
 
-        // The Stream 2E.2 finding: NO FALL_LAND in the 2.5s window even
-        // for a 100y drop. Pin this so any future change that emits
-        // FALL_LAND on a long drop trips the assertion and forces the
-        // test author to update Stream 2E.3 docs.
-        Assert.DoesNotContain(
-            bgOutbound,
-            p => p.OpcodeName == "MSG_MOVE_FALL_LAND");
+        // The high-drop capture lands late in the extended window; pin that
+        // packet so future changes cannot silently regress back to the old
+        // no-FALL_LAND state.
+        var fallLand = bgOutbound.SingleOrDefault(p => p.OpcodeName == "MSG_MOVE_FALL_LAND");
+        Assert.NotNull(fallLand);
+        Assert.Equal(28, fallLand!.Size);
+        Assert.True(fallLand.DeltaMs > 8000 && fallLand.DeltaMs < 9000,
+            $"BG high-drop FALL_LAND should appear late in the 10s extended window; got {fallLand.DeltaMs}ms.");
 
         var outboundAck = bgOutbound.FirstOrDefault(p => p.OpcodeName == "MSG_MOVE_TELEPORT_ACK");
         Assert.NotNull(outboundAck);

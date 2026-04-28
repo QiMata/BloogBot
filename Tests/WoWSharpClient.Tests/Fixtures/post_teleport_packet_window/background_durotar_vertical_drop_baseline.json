@@ -1,6 +1,6 @@
 {
   "SchemaVersion": 1,
-  "CapturedAtUtc": "2026-04-27T23:27:34.8492268Z",
+  "CapturedAtUtc": "2026-04-28T13:12:56.4362119Z",
   "CaptureScenario": "post_teleport_packet_window",
   "Source": "BG (BackgroundBotRunner) WoWClient.PacketSent / WoWClient.PacketReceived",
   "CloseReason": "duration-elapsed",
@@ -23,7 +23,7 @@
       "PayloadHex": ""
     },
     {
-      "DeltaMs": 58,
+      "DeltaMs": 3,
       "Direction": "Send",
       "Opcode": 238,
       "OpcodeName": "MSG_MOVE_HEARTBEAT",
@@ -31,7 +31,7 @@
       "PayloadHex": ""
     },
     {
-      "DeltaMs": 58,
+      "DeltaMs": 3,
       "Direction": "Send",
       "Opcode": 199,
       "OpcodeName": "MSG_MOVE_TELEPORT_ACK",
@@ -39,31 +39,15 @@
       "PayloadHex": ""
     },
     {
-      "DeltaMs": 255,
-      "Direction": "Recv",
-      "Opcode": 221,
-      "OpcodeName": "SMSG_MONSTER_MOVE",
-      "Size": 56,
+      "DeltaMs": 497,
+      "Direction": "Send",
+      "Opcode": 238,
+      "OpcodeName": "MSG_MOVE_HEARTBEAT",
+      "Size": 28,
       "PayloadHex": ""
     },
     {
-      "DeltaMs": 1357,
-      "Direction": "Recv",
-      "Opcode": 221,
-      "OpcodeName": "SMSG_MONSTER_MOVE",
-      "Size": 60,
-      "PayloadHex": ""
-    },
-    {
-      "DeltaMs": 1757,
-      "Direction": "Recv",
-      "Opcode": 221,
-      "OpcodeName": "SMSG_MONSTER_MOVE",
-      "Size": 60,
-      "PayloadHex": ""
-    },
-    {
-      "DeltaMs": 1757,
+      "DeltaMs": 659,
       "Direction": "Recv",
       "Opcode": 221,
       "OpcodeName": "SMSG_MONSTER_MOVE",
@@ -71,7 +55,79 @@
       "PayloadHex": ""
     },
     {
-      "DeltaMs": 2060,
+      "DeltaMs": 789,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 48,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1051,
+      "Direction": "Send",
+      "Opcode": 238,
+      "OpcodeName": "MSG_MOVE_HEARTBEAT",
+      "Size": 28,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1253,
+      "Direction": "Send",
+      "Opcode": 201,
+      "OpcodeName": "MSG_MOVE_FALL_LAND",
+      "Size": 28,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1391,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 48,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1591,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 52,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1696,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 52,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1892,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 48,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1992,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 60,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 2093,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 56,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 2396,
       "Direction": "Recv",
       "Opcode": 221,
       "OpcodeName": "SMSG_MONSTER_MOVE",
