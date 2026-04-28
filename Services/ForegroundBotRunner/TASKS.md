@@ -38,6 +38,26 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
+### 2026-04-28 (packet-window worldport ACK + knockback scenarios)
+- Pass result: `Foreground packet-window recorder now captures post-load worldport ACK and knockback windows`
+- Last delta:
+  - `ForegroundPostTeleportWindowRecorder` now labels recorder windows by
+    scenario and can open on transfer triggers, outbound
+    `MSG_MOVE_WORLDPORT_ACK`, and inbound `SMSG_MOVE_KNOCK_BACK`.
+  - `Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled`
+    produced a foreground transfer window containing outbound
+    `MSG_MOVE_WORLDPORT_ACK`; the source fixture was
+    `tmp/test-runtime/fg-worldport-ack-capture-20260428_02/foreground_20260428_145244_980.json`.
+  - `ForegroundAndBackground_Knockback_CapturesPacketWindows` produced the
+    foreground Taragaman `Uppercut` knockback window used by the parity oracle.
+- Validation/tests run:
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_POST_TELEPORT_WINDOW='1'; $env:WWOW_POST_TELEPORT_WINDOW_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/fg-worldport-ack-capture-20260428_02'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fg_worldport_ack_window_02.trx"` -> `passed (1/1)`.
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_POST_TELEPORT_WINDOW='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_POST_TELEPORT_WINDOW_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/knockback-capture-20260428_09'; $env:WWOW_BG_POST_TELEPORT_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/knockback-capture-20260428_09'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundAndBackground_Knockback_CapturesPacketWindows" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fg_bg_knockback_window_09.trx"` -> `passed (1/1)`.
+- Files changed:
+  - `Services/ForegroundBotRunner/Diagnostics/ForegroundPostTeleportWindowRecorder.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+- Next command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"`
+
 ### 2026-04-26 (Trading Shodan foreground stabilization)
 - Pass result: `TradeParityTests foreground cancel and FG-to-BG transfer now pass under Shodan; BG-to-FG transfer remains a documented server/protocol completion gap`
 - Last delta:

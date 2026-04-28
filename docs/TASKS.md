@@ -32,49 +32,60 @@
 
 ---
 
-## Handoff (2026-04-28, BG movement parity Stream 4 cross-map baseline)
+## Handoff (2026-04-28, BG movement parity Stream 4 worldport ACK + knockback)
 
-- Completed: closed the primary Stream 4 gap. BG now has a live
-  Kalimdor -> Eastern Kingdoms post-teleport packet-window baseline
-  alongside the existing FG cross-map oracle.
+- Completed: closed the FG `MSG_MOVE_WORLDPORT_ACK` post-load recorder gap and
+  the knockback Stream 4 baseline/implementation gap. Transport/zeppelin is
+  now the remaining Stream 4 research item.
 - Last delta:
-  - Added `AckCaptureTests.Background_CrossMapTeleport_CapturesPostTeleportWindow`,
-    which stages BG in Orgrimmar, performs a real cross-map hop to Ironforge,
-    waits for the BG recorder fixture, and returns BG to Orgrimmar.
-  - Promoted
-    `background_kalimdor_to_ek_cross_map_baseline.json`. It records
-    `SMSG_TRANSFER_PENDING` (4 B) as the trigger, immediate
-    `MSG_MOVE_WORLDPORT_ACK` (0 B), `SMSG_NEW_WORLD`, destination object
-    updates, login-world packets, and a later heartbeat.
-  - Added `BackgroundCrossMapBaseline_PinsTransferPendingNewWorldShape`;
-    `PostTeleportPacketWindowParityTests` now passes `7/7`.
-  - Primary Streams 2A-2E and Stream 4 cross-map baselines are closed.
-    Lower-priority Stream 4 followups remain optional research:
-    transport/zeppelin, knockback, and longer or second-window
-    `MSG_MOVE_WORLDPORT_ACK` FG capture.
+  - Foreground and background post-teleport window recorders now classify
+    transfer windows, outbound `MSG_MOVE_WORLDPORT_ACK` windows, and inbound
+    `SMSG_MOVE_KNOCK_BACK` windows by scenario.
+  - `Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled` now
+    also waits for a foreground packet-window fixture containing
+    `MSG_MOVE_WORLDPORT_ACK`; promoted
+    `foreground_ek_to_kalimdor_worldport_ack_baseline.json`.
+  - BG knockback now stages server knockback as `MOVEFLAG_JUMPING`, preserves
+    directional intent, primes jump fields from the server vector, consumes the
+    impulse in `MovementController`, then emits `CMSG_MOVE_KNOCK_BACK_ACK`
+    followed by movement packets.
+  - Added `ForegroundAndBackground_Knockback_CapturesPacketWindows`, using
+    Taragaman the Hungerer's real `Uppercut` knockback in Ragefire Chasm; it
+    captures both FG and BG windows and isolates FG before the BG leg so the
+    creature targets the BG bot.
+  - Promoted `foreground_knockback_baseline.json` and
+    `background_knockback_baseline.json`; added
+    `ForegroundWorldportAckBaseline_PinsObservedAckInsideTransferWindow` and
+    `KnockbackBaselines_PinFgAndBgAckShape`.
 - Validation/tests run:
-  - `git status --short` -> only the three pre-existing untracked ACK corpus
-    JSON files were present before edits.
-  - `docker ps` -> confirmed `mangosd`, `realmd`, `pathfinding-service`, and
-    `maria-db` were running/healthy.
-  - `git fetch origin`; `git log --oneline -10` -> tip was `70674f38`
-    (`docs(bg-movement-parity): v11 handoff after BG FALL_LAND fix`).
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (6/6)` before changes.
+  - `git status --short` -> preserved the three pre-existing untracked ACK
+    corpus JSON files and added only post-teleport packet-window fixtures.
+  - `docker ps` -> checked once at session start; `mangosd`, `realmd`,
+    `pathfinding-service`, and `maria-db` were running/healthy.
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings; nonfatal dumpbin warning)`.
-  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_BG_POST_TELEPORT_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/bg-cross-map-capture-20260428_01'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~Background_CrossMapTeleport_CapturesPostTeleportWindow" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=bg_cross_map_capture.trx"` -> `passed (1/1)`.
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`.
-  - `.\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_POST_TELEPORT_WINDOW='1'; $env:WWOW_POST_TELEPORT_WINDOW_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/fg-worldport-ack-capture-20260428_02'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~Foreground_CrossMapTeleport_CapturesWorldportAckWhenCorpusEnabled" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fg_worldport_ack_window_02.trx"` -> `passed (1/1)`.
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_POST_TELEPORT_WINDOW='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_POST_TELEPORT_WINDOW_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/knockback-capture-20260428_09'; $env:WWOW_BG_POST_TELEPORT_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/knockback-capture-20260428_09'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundAndBackground_Knockback_CapturesPacketWindows" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fg_bg_knockback_window_09.trx"` -> `passed (1/1)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MoveKnockBack|FullyQualifiedName~PendingKnockback|FullyQualifiedName~AckBinaryParityTests" --logger "console;verbosity=minimal"` -> `passed (46/46)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (9/9)`.
 - Evidence:
-  - Raw capture promoted from
-    `tmp/test-runtime/bg-cross-map-capture-20260428_01/background_20260428_135947_736.json`.
-  - TRX: `tmp/test-runtime/results-live/bg_cross_map_capture.trx`.
+  - Worldport ACK source:
+    `tmp/test-runtime/fg-worldport-ack-capture-20260428_02/foreground_20260428_145244_980.json`.
+  - Knockback sources:
+    `tmp/test-runtime/knockback-capture-20260428_09/foreground_20260428_155002_042.json` and
+    `tmp/test-runtime/knockback-capture-20260428_09/background_20260428_155012_776.json`.
+  - TRX files:
+    `tmp/test-runtime/results-live/fg_worldport_ack_window_02.trx` and
+    `tmp/test-runtime/results-live/fg_bg_knockback_window_09.trx`.
 - Files changed:
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Services/ForegroundBotRunner/Diagnostics/ForegroundPostTeleportWindowRecorder.cs`
+  - `Services/BackgroundBotRunner/Diagnostics/BackgroundPostTeleportWindowRecorder.cs`
   - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
   - `Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs`
-  - `Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/background_kalimdor_to_ek_cross_map_baseline.json`
-  - `docs/physics/bg_movement_parity_audit.md`
-  - task trackers.
-- Next command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"`
+  - knockback/object-manager parity tests and new packet-window fixtures
+  - physics docs and task trackers.
+- Next command: `rg -n "TransportGuid|ON_TRANSPORT|SMSG_MONSTER_MOVE_TRANSPORT|TaxiTransportParityTests|TransportTests" Tests/BotRunner.Tests/LiveValidation Services docs/physics -g "!**/bin/**" -g "!**/obj/**"`
 
 ---
 

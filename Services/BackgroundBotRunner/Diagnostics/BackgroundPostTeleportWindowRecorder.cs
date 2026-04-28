@@ -56,6 +56,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
     private int _windowDurationMs = DefaultWindowDurationMs;
 
     private List<PacketEntry>? _windowPackets;
+    private string? _windowScenario;
     private DateTime _windowStartUtc;
     private Timer? _closeTimer;
 
@@ -124,7 +125,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
     private void HandlePacket(PacketDirection direction, Opcode opcode, int size)
     {
         var capturedAt = DateTime.UtcNow;
-        var isTeleportTrigger = IsInboundTeleportTrigger(direction, opcode);
+        var triggerScenario = ResolveTriggerScenario(direction, opcode);
 
         lock (_lock)
         {
@@ -133,18 +134,18 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
 
             if (_windowPackets is null)
             {
-                if (!isTeleportTrigger)
+                if (triggerScenario is null)
                     return;
 
-                StartWindowLocked(capturedAt, direction, opcode, size);
+                StartWindowLocked(capturedAt, direction, opcode, size, triggerScenario);
                 return;
             }
 
             if ((capturedAt - _windowStartUtc).TotalMilliseconds > _windowDurationMs)
             {
                 FlushWindowLocked("duration-elapsed");
-                if (isTeleportTrigger)
-                    StartWindowLocked(capturedAt, direction, opcode, size);
+                if (triggerScenario is not null)
+                    StartWindowLocked(capturedAt, direction, opcode, size, triggerScenario);
                 return;
             }
 
@@ -154,9 +155,10 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
         }
     }
 
-    private void StartWindowLocked(DateTime startUtc, PacketDirection direction, Opcode opcode, int size)
+    private void StartWindowLocked(DateTime startUtc, PacketDirection direction, Opcode opcode, int size, string scenario)
     {
         _windowPackets = new List<PacketEntry>(capacity: 32);
+        _windowScenario = scenario;
         _windowStartUtc = startUtc;
         AppendPacketLocked(startUtc, direction, opcode, size);
 
@@ -205,7 +207,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
             var entry = new WindowFixture
             {
                 CapturedAtUtc = capturedAtUtc,
-                CaptureScenario = "post_teleport_packet_window",
+                CaptureScenario = _windowScenario ?? "post_teleport_packet_window",
                 Source = "BG (BackgroundBotRunner) WoWClient.PacketSent / WoWClient.PacketReceived",
                 CloseReason = reason,
                 WindowDurationMs = _windowDurationMs,
@@ -234,6 +236,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
         finally
         {
             _windowPackets = null;
+            _windowScenario = null;
             _closeTimer?.Dispose();
             _closeTimer = null;
         }
@@ -241,15 +244,27 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
 
     // Stream 4: trigger on cross-map teleport opcodes too. SMSG_TRANSFER_PENDING
     // is the early heads-up the server sends before SMSG_NEW_WORLD; SMSG_NEW_WORLD
-    // delivers the destination map/position and triggers MSG_MOVE_WORLDPORT_ACK.
-    // We open the recording window on whichever fires first so the cross-map
-    // ACK + post-load packet sequence is captured end-to-end.
-    private static bool IsInboundTeleportTrigger(PacketDirection direction, Opcode opcode)
-        => direction == PacketDirection.Recv
-            && opcode is Opcode.MSG_MOVE_TELEPORT
+    // delivers the destination map/position. The outbound MSG_MOVE_WORLDPORT_ACK
+    // trigger mirrors FG's late-ACK recorder path, while SMSG_MOVE_KNOCK_BACK
+    // records the server-driven knockback parity window.
+    private static string? ResolveTriggerScenario(PacketDirection direction, Opcode opcode)
+    {
+        if (direction == PacketDirection.Send && opcode == Opcode.MSG_MOVE_WORLDPORT_ACK)
+            return "worldport_ack_packet_window";
+
+        if (direction != PacketDirection.Recv)
+            return null;
+
+        return opcode switch
+        {
+            Opcode.MSG_MOVE_TELEPORT
                 or Opcode.MSG_MOVE_TELEPORT_ACK
                 or Opcode.SMSG_NEW_WORLD
-                or Opcode.SMSG_TRANSFER_PENDING;
+                or Opcode.SMSG_TRANSFER_PENDING => "post_teleport_packet_window",
+            Opcode.SMSG_MOVE_KNOCK_BACK => "knockback_packet_window",
+            _ => null,
+        };
+    }
 
     private static int ResolveWindowDurationMs()
     {

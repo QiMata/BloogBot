@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Communication;
 using GameData.Core.Enums;
@@ -31,6 +32,15 @@ public sealed class AckCaptureTests
     private const float IronforgeY = -1317f;
     private const float IronforgeZ = 505f;
 
+    private const int KnockbackCombatLevel = 20;
+    private const int StormscaleWaveRiderEntry = 2179;
+    private const int LordSinslayerEntry = 7017;
+    private const int TaragamanTheHungererEntry = 11520;
+    private const int KnockbackStageMapId = 389;
+    private const float KnockbackStageX = -252.0f;
+    private const float KnockbackStageY = 150.0f;
+    private const float KnockbackStageZ = -18.8f;
+
     public AckCaptureTests(LiveBotFixture bot, ITestOutputHelper output)
     {
         _bot = bot;
@@ -57,6 +67,9 @@ public sealed class AckCaptureTests
             xyToleranceYards: 10f);
         Assert.True(startSettled, "FG bot should settle in Orgrimmar before the cross-map capture hop.");
 
+        var worldportWindowDir = ResolvePostTeleportWindowDirectory();
+        var returnedToOrg = false;
+
         try
         {
             _output.WriteLine("[FG-ACK] Moving FG from Kalimdor to Ironforge to force SMSG_NEW_WORLD -> MSG_MOVE_WORLDPORT_ACK.");
@@ -78,17 +91,18 @@ public sealed class AckCaptureTests
             Assert.Equal((uint)EasternKingdomsMapId, fgSnap!.Player?.Unit?.GameObject?.Base?.MapId ?? 0U);
 
             var corpusRoot = ResolveCorpusOutputDirectory();
-            if (corpusRoot != null)
-            {
-                var worldportDir = Path.Combine(corpusRoot, nameof(Opcode.MSG_MOVE_WORLDPORT_ACK));
-                var captured = await WaitForFixtureAsync(worldportDir, TimeSpan.FromSeconds(10));
-                Assert.True(captured,
-                    $"Expected {nameof(Opcode.MSG_MOVE_WORLDPORT_ACK)} fixture under '{worldportDir}' when WWOW_CAPTURE_ACK_CORPUS=1.");
-            }
-        }
-        finally
-        {
-            await StageForegroundCapturePointAsync(
+            var corpusBaseline = corpusRoot != null
+                ? CountFixtures(Path.Combine(corpusRoot, nameof(Opcode.MSG_MOVE_WORLDPORT_ACK)))
+                : 0;
+            var worldportWindowBaseline = worldportWindowDir != null
+                ? CountForegroundWindowsWithPacket(
+                    worldportWindowDir,
+                    nameof(Opcode.MSG_MOVE_WORLDPORT_ACK),
+                    "Send")
+                : 0;
+
+            _output.WriteLine("[FG-ACK] Returning FG from Ironforge to Orgrimmar to capture the foreground worldport ACK window.");
+            var returned = await StageForegroundCapturePointAsync(
                 target,
                 KalimdorMapId,
                 OrgX,
@@ -97,6 +111,198 @@ public sealed class AckCaptureTests
                 "ack-capture Orgrimmar return",
                 cleanSlate: false,
                 xyToleranceYards: 10f);
+            Assert.True(returned, "FG bot should settle in Orgrimmar after the cross-map return hop.");
+            returnedToOrg = true;
+
+            await _bot.RefreshSnapshotsAsync();
+            fgSnap = _bot.ForegroundBot;
+            Assert.NotNull(fgSnap);
+            Assert.Equal((uint)KalimdorMapId, fgSnap!.Player?.Unit?.GameObject?.Base?.MapId ?? 0U);
+
+            if (corpusRoot != null)
+            {
+                var worldportDir = Path.Combine(corpusRoot, nameof(Opcode.MSG_MOVE_WORLDPORT_ACK));
+                var captured = await WaitForFixtureCountAsync(
+                    worldportDir,
+                    corpusBaseline + 1,
+                    TimeSpan.FromSeconds(10));
+                Assert.True(captured,
+                    $"Expected {nameof(Opcode.MSG_MOVE_WORLDPORT_ACK)} fixture under '{worldportDir}' when WWOW_CAPTURE_ACK_CORPUS=1.");
+            }
+
+            if (worldportWindowDir != null)
+            {
+                var captured = await WaitForForegroundWindowWithPacketCountAsync(
+                    worldportWindowDir,
+                    nameof(Opcode.MSG_MOVE_WORLDPORT_ACK),
+                    "Send",
+                    worldportWindowBaseline + 1,
+                    TimeSpan.FromSeconds(15));
+                Assert.True(captured,
+                    $"Expected a foreground packet-window fixture containing {nameof(Opcode.MSG_MOVE_WORLDPORT_ACK)} under '{worldportWindowDir}' " +
+                    "when WWOW_CAPTURE_POST_TELEPORT_WINDOW=1.");
+            }
+        }
+        finally
+        {
+            if (!returnedToOrg)
+            {
+                await StageForegroundCapturePointAsync(
+                    target,
+                    KalimdorMapId,
+                    OrgX,
+                    OrgY,
+                    OrgZ,
+                    "ack-capture Orgrimmar return",
+                    cleanSlate: false,
+                    xyToleranceYards: 10f);
+            }
+        }
+    }
+
+    [SkippableFact]
+    [Trait("Category", "AckCaptureLive")]
+    public async Task ForegroundAndBackground_Knockback_CapturesPacketWindows()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_CAPTURE_POST_TELEPORT_WINDOW"),
+                "1",
+                StringComparison.Ordinal)
+            && string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW"),
+                "1",
+                StringComparison.Ordinal),
+            "WWOW_CAPTURE_POST_TELEPORT_WINDOW=1 and WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW=1 are required.");
+
+        var fgTarget = await EnsureAckCaptureForegroundTargetAsync();
+
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.BgAccountName),
+            "BG bot not available for knockback packet-window capture.");
+
+        var bgTarget = _bot
+            .ResolveBotRunnerActionTargets(includeForegroundIfActionable: false, foregroundFirst: false)
+            .FirstOrDefault(t => !t.IsForeground);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(bgTarget.AccountName),
+            "BG bot required for knockback packet-window capture.");
+
+        _output.WriteLine(
+            $"=== FG/BG knockback packet-window capture: FG {fgTarget.AccountName}/{fgTarget.CharacterName}, " +
+            $"BG {bgTarget.AccountName}/{bgTarget.CharacterName} ===");
+        _output.WriteLine(
+            $"[ACTION-PLAN] FG {fgTarget.AccountName}/{fgTarget.CharacterName}: knockback binary oracle capture target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] {bgTarget.RoleLabel} {bgTarget.AccountName}/{bgTarget.CharacterName}: BG knockback parity capture target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no knockback dispatch.");
+
+        var fgWindowDir = ResolvePostTeleportWindowDirectory();
+        var bgWindowDir = ResolveBackgroundPostTeleportWindowDirectory();
+        Assert.NotNull(fgWindowDir);
+        Assert.NotNull(bgWindowDir);
+        Directory.CreateDirectory(fgWindowDir!);
+        Directory.CreateDirectory(bgWindowDir!);
+
+        await PrepareKnockbackCombatTargetAsync(fgTarget);
+        var fgPreStageCount = CountForegroundFixtures(fgWindowDir!);
+        var fgStaged = await StageForegroundCapturePointAsync(
+            fgTarget,
+            KnockbackStageMapId,
+            KnockbackStageX,
+            KnockbackStageY,
+            KnockbackStageZ,
+            "knockback-capture Taragaman FG stage",
+            cleanSlate: false,
+            xyToleranceYards: 25f);
+        Assert.True(fgStaged, "FG bot should settle near a real knockback creature before knockback capture.");
+        var fgStageWindowClosed = await WaitForForegroundFixtureCountAsync(
+            fgWindowDir!,
+            fgPreStageCount + 1,
+            TimeSpan.FromSeconds(5));
+        Assert.True(fgStageWindowClosed,
+            $"Expected FG staging packet-window fixture under '{fgWindowDir}' before knockback capture.");
+
+        await PrepareKnockbackCombatTargetAsync(bgTarget);
+        var bgPreStageCount = CountBackgroundFixtures(bgWindowDir!);
+        var bgStaged = await _bot.StageBotRunnerAtNavigationPointAsync(
+            bgTarget.AccountName,
+            bgTarget.RoleLabel,
+            KnockbackStageMapId,
+            KnockbackStageX,
+            KnockbackStageY,
+            KnockbackStageZ,
+            "knockback-capture Taragaman BG stage",
+            cleanSlate: false,
+            xyToleranceYards: 25f,
+            zStabilizationWaitMs: 1000);
+        Assert.True(bgStaged, "BG bot should settle near a real knockback creature before knockback capture.");
+        var bgStageWindowClosed = await WaitForBackgroundFixtureCountAsync(
+            bgWindowDir!,
+            bgPreStageCount + 1,
+            TimeSpan.FromSeconds(5));
+        Assert.True(bgStageWindowClosed,
+            $"Expected BG staging packet-window fixture under '{bgWindowDir}' before knockback capture.");
+
+        try
+        {
+            await TriggerCreatureKnockbackAsync(fgTarget);
+            var fgCaptured = await WaitForForegroundScenarioFixtureCountAsync(
+                fgWindowDir!,
+                "knockback_packet_window",
+                CountWindowFixturesByScenario(fgWindowDir!, "foreground_*.json", "knockback_packet_window") + 1,
+                TimeSpan.FromSeconds(30));
+            Assert.True(fgCaptured,
+                $"Expected new FG knockback packet-window fixture under '{fgWindowDir}' after real knockback-creature combat.");
+
+            await StopAttackIfPossibleAsync(fgTarget);
+            await StageForegroundCapturePointAsync(
+                fgTarget,
+                KalimdorMapId,
+                OrgX,
+                OrgY,
+                OrgZ,
+                "knockback-capture Orgrimmar FG isolate",
+                cleanSlate: false,
+                xyToleranceYards: 10f);
+
+            await TriggerCreatureKnockbackAsync(bgTarget);
+            var bgCaptured = await WaitForScenarioFixtureCountAsync(
+                bgWindowDir!,
+                "background_*.json",
+                "knockback_packet_window",
+                CountWindowFixturesByScenario(bgWindowDir!, "background_*.json", "knockback_packet_window") + 1,
+                TimeSpan.FromSeconds(30));
+            Assert.True(bgCaptured,
+                $"Expected new BG knockback packet-window fixture under '{bgWindowDir}' after real knockback-creature combat.");
+        }
+        finally
+        {
+            await StopAttackIfPossibleAsync(fgTarget);
+            await StopAttackIfPossibleAsync(bgTarget);
+
+            await StageForegroundCapturePointAsync(
+                fgTarget,
+                KalimdorMapId,
+                OrgX,
+                OrgY,
+                OrgZ,
+                "knockback-capture Orgrimmar FG return",
+                cleanSlate: false,
+                xyToleranceYards: 10f);
+
+            await _bot.StageBotRunnerAtNavigationPointAsync(
+                bgTarget.AccountName,
+                bgTarget.RoleLabel,
+                KalimdorMapId,
+                OrgX,
+                OrgY,
+                OrgZ,
+                "knockback-capture Orgrimmar BG return",
+                cleanSlate: false,
+                xyToleranceYards: 10f,
+                zStabilizationWaitMs: 1000);
         }
     }
 
@@ -551,6 +757,128 @@ public sealed class AckCaptureTests
             xyToleranceYards,
             zStabilizationWaitMs: 1000);
 
+    private async Task PrepareKnockbackCombatTargetAsync(LiveBotFixture.BotRunnerActionTarget target)
+    {
+        await _bot.StageBotRunnerLoadoutAsync(
+            target.AccountName,
+            target.RoleLabel,
+            cleanSlate: true,
+            clearInventoryFirst: false,
+            levelTo: KnockbackCombatLevel);
+    }
+
+    private async Task TriggerCreatureKnockbackAsync(LiveBotFixture.BotRunnerActionTarget target)
+    {
+        var targetVisible = await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snapshot => FindKnockbackCreatureGuid(snapshot) != 0UL,
+            TimeSpan.FromSeconds(20),
+            pollIntervalMs: 500,
+            progressLabel: $"{target.RoleLabel} knockback creature visibility");
+        if (!targetVisible)
+        {
+            await _bot.RefreshSnapshotsAsync();
+            var missedSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+            _output.WriteLine(
+                $"[KNOCKBACK-CAPTURE] {target.RoleLabel} nearby units before failure: " +
+                DescribeNearbyUnits(missedSnapshot));
+        }
+
+        Assert.True(targetVisible,
+            $"{target.RoleLabel} should see a living knockback creature before knockback capture.");
+
+        await _bot.RefreshSnapshotsAsync();
+        var snapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        var creatureGuid = FindKnockbackCreatureGuid(snapshot);
+        Assert.NotEqual(0UL, creatureGuid);
+
+        var creature = snapshot?.NearbyUnits?.FirstOrDefault(
+            unit => (unit.GameObject?.Base?.Guid ?? 0UL) == creatureGuid);
+        _output.WriteLine(
+            $"[KNOCKBACK-CAPTURE] {target.RoleLabel} engaging " +
+            $"{creature?.GameObject?.Name ?? "knockback creature"} " +
+            $"entry={creature?.GameObject?.Entry ?? 0} GUID=0x{creatureGuid:X} " +
+            $"HP={creature?.Health ?? 0}/{creature?.MaxHealth ?? 0}.");
+
+        var attack = await _bot.SendActionAsync(
+            target.AccountName,
+            new ActionMessage
+            {
+                ActionType = ActionType.StartMeleeAttack,
+                Parameters = { new RequestParameter { LongParam = (long)creatureGuid } }
+            });
+        Assert.Equal(ResponseResult.Success, attack);
+    }
+
+    private async Task StopAttackIfPossibleAsync(LiveBotFixture.BotRunnerActionTarget target)
+    {
+        if (string.IsNullOrWhiteSpace(target.AccountName))
+            return;
+
+        await _bot.SendActionAsync(
+            target.AccountName,
+            new ActionMessage { ActionType = ActionType.StopAttack });
+    }
+
+    private static ulong FindKnockbackCreatureGuid(WoWActivitySnapshot? snapshot)
+    {
+        var playerPosition = snapshot?.Player?.Unit?.GameObject?.Base?.Position;
+        if (playerPosition == null)
+            return 0UL;
+
+        var candidate = snapshot?.NearbyUnits?
+            .Where(unit =>
+            {
+                var guid = unit.GameObject?.Base?.Guid ?? 0UL;
+                if (guid == 0UL)
+                    return false;
+
+                if (unit.Health == 0 || unit.MaxHealth == 0)
+                    return false;
+
+                if (unit.NpcFlags != 0)
+                    return false;
+
+                var entry = unit.GameObject?.Entry ?? 0;
+                return entry == StormscaleWaveRiderEntry
+                    || entry == LordSinslayerEntry
+                    || entry == TaragamanTheHungererEntry;
+            })
+            .Select(unit =>
+            {
+                var position = unit.GameObject?.Base?.Position;
+                var distance = position == null
+                    ? float.MaxValue
+                    : LiveBotFixture.Distance2D(playerPosition.X, playerPosition.Y, position.X, position.Y);
+                return new
+                {
+                    Guid = unit.GameObject?.Base?.Guid ?? 0UL,
+                    Distance = distance
+                };
+            })
+            .OrderBy(unit => unit.Distance)
+            .FirstOrDefault();
+
+        return candidate?.Guid ?? 0UL;
+    }
+
+    private static string DescribeNearbyUnits(WoWActivitySnapshot? snapshot)
+    {
+        var units = snapshot?.NearbyUnits?
+            .Take(12)
+            .Select(unit =>
+                $"{unit.GameObject?.Name ?? "?"}" +
+                $" entry={unit.GameObject?.Entry ?? 0}" +
+                $" guid=0x{unit.GameObject?.Base?.Guid ?? 0UL:X}" +
+                $" hp={unit.Health}/{unit.MaxHealth}" +
+                $" npcFlags={unit.NpcFlags}")
+            .ToArray();
+
+        return units is { Length: > 0 }
+            ? string.Join("; ", units)
+            : "(none)";
+    }
+
     private static string? ResolvePostTeleportWindowDirectory()
     {
         if (!string.Equals(
@@ -583,6 +911,17 @@ public sealed class AckCaptureTests
             return 0;
 
         return Directory.EnumerateFiles(directory, "*.json").Count();
+    }
+
+    private static int CountForegroundFixtures(string directory)
+        => CountFixtures(directory, "foreground_*.json");
+
+    private static int CountFixtures(string directory, string searchPattern)
+    {
+        if (!Directory.Exists(directory))
+            return 0;
+
+        return Directory.EnumerateFiles(directory, searchPattern).Count();
     }
 
     private static string? ResolveBackgroundPostTeleportWindowDirectory()
@@ -631,6 +970,163 @@ public sealed class AckCaptureTests
         }
 
         return CountBackgroundFixtures(directory) >= target;
+    }
+
+    private static async Task<bool> WaitForForegroundFixtureCountAsync(string directory, int target, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (CountForegroundFixtures(directory) >= target)
+                return true;
+
+            await Task.Delay(250);
+        }
+
+        return CountForegroundFixtures(directory) >= target;
+    }
+
+    private static async Task<bool> WaitForForegroundScenarioFixtureCountAsync(
+        string directory,
+        string scenario,
+        int minimumCount,
+        TimeSpan timeout)
+        => await WaitForScenarioFixtureCountAsync(
+            directory,
+            "foreground_*.json",
+            scenario,
+            minimumCount,
+            timeout);
+
+    private static async Task<bool> WaitForScenarioFixtureCountAsync(
+        string directory,
+        string searchPattern,
+        string scenario,
+        int minimumCount,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (CountWindowFixturesByScenario(directory, searchPattern, scenario) >= minimumCount)
+                return true;
+
+            await Task.Delay(250);
+        }
+
+        return CountWindowFixturesByScenario(directory, searchPattern, scenario) >= minimumCount;
+    }
+
+    private static async Task<bool> WaitForForegroundWindowWithPacketCountAsync(
+        string directory,
+        string opcodeName,
+        string direction,
+        int minimumCount,
+        TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (CountForegroundWindowsWithPacket(directory, opcodeName, direction) >= minimumCount)
+                return true;
+
+            await Task.Delay(250);
+        }
+
+        return CountForegroundWindowsWithPacket(directory, opcodeName, direction) >= minimumCount;
+    }
+
+    private static int CountForegroundWindowsWithPacket(string directory, string opcodeName, string direction)
+        => CountWindowFixturesWithPacket(directory, "foreground_*.json", opcodeName, direction);
+
+    private static int CountWindowFixturesByScenario(string directory, string searchPattern, string scenario)
+    {
+        if (!Directory.Exists(directory))
+            return 0;
+
+        var count = 0;
+        foreach (var path in Directory.EnumerateFiles(directory, searchPattern))
+        {
+            if (FixtureScenarioEquals(path, scenario))
+                count++;
+        }
+
+        return count;
+    }
+
+    private static int CountWindowFixturesWithPacket(
+        string directory,
+        string searchPattern,
+        string opcodeName,
+        string direction)
+    {
+        if (!Directory.Exists(directory))
+            return 0;
+
+        var count = 0;
+        foreach (var path in Directory.EnumerateFiles(directory, searchPattern))
+        {
+            if (FixtureContainsPacket(path, opcodeName, direction))
+                count++;
+        }
+
+        return count;
+    }
+
+    private static bool FixtureScenarioEquals(string path, string scenario)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            return document.RootElement.TryGetProperty("CaptureScenario", out var property)
+                && string.Equals(property.GetString(), scenario, StringComparison.Ordinal);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool FixtureContainsPacket(string path, string opcodeName, string direction)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            if (!document.RootElement.TryGetProperty("Packets", out var packets)
+                || packets.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            foreach (var packet in packets.EnumerateArray())
+            {
+                if (!packet.TryGetProperty("OpcodeName", out var packetOpcode)
+                    || !packet.TryGetProperty("Direction", out var packetDirection))
+                {
+                    continue;
+                }
+
+                if (string.Equals(packetOpcode.GetString(), opcodeName, StringComparison.Ordinal)
+                    && string.Equals(packetDirection.GetString(), direction, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static async Task<bool> WaitForFixtureCountAsync(string directory, int target, TimeSpan timeout)

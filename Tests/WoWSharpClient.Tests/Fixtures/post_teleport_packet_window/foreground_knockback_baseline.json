@@ -1,0 +1,642 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-28T15:50:02.0426816Z",
+  "CaptureScenario": "knockback_packet_window",
+  "Source": "WoW.exe (FG) NetClient::Send 0x005379A0 / NetClient::ProcessMessage 0x00537AA0",
+  "CloseReason": "duration-elapsed",
+  "WindowDurationMs": 2500,
+  "Trigger": {
+    "DeltaMs": 0,
+    "Direction": "Recv",
+    "Opcode": 239,
+    "OpcodeName": "SMSG_MOVE_KNOCK_BACK",
+    "Size": 25,
+    "PayloadHex": "EF00036E010000000059787DBFF19A0FBE0000803FCDCC5CC1"
+  },
+  "Packets": [
+    {
+      "DeltaMs": 0,
+      "Direction": "Recv",
+      "Opcode": 239,
+      "OpcodeName": "SMSG_MOVE_KNOCK_BACK",
+      "Size": 25,
+      "PayloadHex": "EF00036E010000000059787DBFF19A0FBE0000803FCDCC5CC1"
+    },
+    {
+      "DeltaMs": 0,
+      "Direction": "Recv",
+      "Opcode": 592,
+      "OpcodeName": "SMSG_SPELLNONMELEEDAMAGELOG",
+      "Size": 39,
+      "PayloadHex": "5002036E01D342BE2D30F198460000760000000000000000000000000000000000000000000000"
+    },
+    {
+      "DeltaMs": 4,
+      "Direction": "Recv",
+      "Opcode": 330,
+      "OpcodeName": "SMSG_ATTACKERSTATEUPDATE",
+      "Size": 56,
+      "PayloadHex": "4A0102800000D342BE2D30F1036E015700000001000000000000AE4257000000000000000000000001000000000000000000000000000000"
+    },
+    {
+      "DeltaMs": 7,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB53BE3A2C30F129C69AC3B32F6043800ABEC1D12202000000010000E10100000100000097339AC3F37D60436EA5BFC1"
+    },
+    {
+      "DeltaMs": 8,
+      "Direction": "Send",
+      "Opcode": 240,
+      "OpcodeName": "CMSG_MOVE_KNOCK_BACK_ACK",
+      "Size": 60,
+      "PayloadHex": "F00000006E010000000000000000000001200000BAB1A61300007CC300001643666696C1C1C5934000000000CDCC5CC159787DBFF19A0FBE0000803F"
+    },
+    {
+      "DeltaMs": 102,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB66BE3A2C30F177A1C8C33E055743C0514CBF912B02000000010000F8010000010000001060C8C31E2758439EC87EBF"
+    },
+    {
+      "DeltaMs": 102,
+      "Direction": "Recv",
+      "Opcode": 502,
+      "OpcodeName": "SMSG_COMPRESSED_UPDATE_OBJECT",
+      "Size": 32,
+      "PayloadHex": "F601B2000000780163640001E63C464D20C508E60C626205330303006BEB0149"
+    },
+    {
+      "DeltaMs": 201,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB61BE3A2C30F14465B8C330DE54432613AFC1932B020000000100002702000001000000D08FB8C3818853432613AFC1"
+    },
+    {
+      "DeltaMs": 296,
+      "Direction": "Recv",
+      "Opcode": 311,
+      "OpcodeName": "SMSG_UPDATE_AURA_DURATION",
+      "Size": 7,
+      "PayloadHex": "37010188130000"
+    },
+    {
+      "DeltaMs": 296,
+      "Direction": "Recv",
+      "Opcode": 311,
+      "OpcodeName": "SMSG_UPDATE_AURA_DURATION",
+      "Size": 7,
+      "PayloadHex": "37010188130000"
+    },
+    {
+      "DeltaMs": 399,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB5CBE3A2C30F10D65ADC3AB2B564362B4ABC1942B020000000100004003000001000000A950ADC387195443A86AACC1"
+    },
+    {
+      "DeltaMs": 499,
+      "Direction": "Send",
+      "Opcode": 238,
+      "OpcodeName": "MSG_MOVE_HEARTBEAT",
+      "Size": 48,
+      "PayloadHex": "EE00000001200000AEB3A613BC7E7CC30DEE154371FB64C1C1C59340F4010000CDCC5CC159787DBFF19A0FBE0000803F"
+    },
+    {
+      "DeltaMs": 602,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB03BE372C30F1AA1612C3B230D84168AD1BC2EC220200000001000002030000010000001F0214C37751D741325B1BC2"
+    },
+    {
+      "DeltaMs": 602,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB43BE3B2C30F16C3F80C3131D16430E8196C1ED220200000001000082010000020000004A6B7DC368EF1543A85696C104000000"
+    },
+    {
+      "DeltaMs": 603,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 57,
+      "PayloadHex": "DD00D342BE2D30F131B876C378BF1643043096C1EE22020000000100007702000003000000D9B57BC3810A16436DE495C1F4F73F00FCFF3F00"
+    },
+    {
+      "DeltaMs": 603,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB53BE3A2C30F197339AC3F37D60436EA5BFC1EF2202000000010000C503000002000000E2169BC368DD5E4392AFBEC1FFFF3F00"
+    },
+    {
+      "DeltaMs": 603,
+      "Direction": "Recv",
+      "Opcode": 169,
+      "OpcodeName": "SMSG_UPDATE_OBJECT",
+      "Size": 19,
+      "PayloadHex": "A90001000000000401000000DB3ABE392C30F1"
+    },
+    {
+      "DeltaMs": 699,
+      "Direction": "Recv",
+      "Opcode": 330,
+      "OpcodeName": "SMSG_ATTACKERSTATEUPDATE",
+      "Size": 57,
+      "PayloadHex": "4A0102800000DB43BE3B2C30F1036E013F000000010000000000007C423F000000000000000000000001000000000000000000000000000000"
+    },
+    {
+      "DeltaMs": 797,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB27BE382C30F1E06594C32B30EE404D453EC2F22202000000010000C600000001000000478E94C3BDFDF440D0013DC2"
+    },
+    {
+      "DeltaMs": 798,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB0ABE362C30F1392636C3FA3E2740A8E560C2F32202000000010000B204000002000000C54A38C347708D40953765C2FE17C0FF"
+    },
+    {
+      "DeltaMs": 798,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB24BE392C30F1C4FB51C3ADEE5F42821D5FC1F422020000000100005C010000010000002CA250C38FBE5F4276295FC1"
+    },
+    {
+      "DeltaMs": 802,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB61BE3A2C30F1D08FB8C3818853432613AFC1F52202000000010000CC010000010000009B6CB8C33FA654432613AFC1"
+    },
+    {
+      "DeltaMs": 803,
+      "Direction": "Recv",
+      "Opcode": 502,
+      "OpcodeName": "SMSG_COMPRESSED_UPDATE_OBJECT",
+      "Size": 32,
+      "PayloadHex": "F601B2000000780163640001E63C464D20C508E60C62622F330303006C3F015E"
+    },
+    {
+      "DeltaMs": 901,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 58,
+      "PayloadHex": "DD00DB3FBE3B2C30F188AA7DC3BFB8D442A316C5C1F622020000000100006E09000003000000692080C3D085DA4253FCC3C1FD4F400005308000"
+    },
+    {
+      "DeltaMs": 901,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB65BE3A2C30F1316FBAC36C5E48432613AFC1F72202000000010000280200000100000098E9BAC3DA5C49432613AFC1"
+    },
+    {
+      "DeltaMs": 902,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB56BE3A2C30F1781796C3AD7979438A6652C1F822020000000100005A04000002000000C08C96C3EFE17643CAD04BC1FFEF3F00"
+    },
+    {
+      "DeltaMs": 999,
+      "Direction": "Send",
+      "Opcode": 238,
+      "OpcodeName": "MSG_MOVE_HEARTBEAT",
+      "Size": 48,
+      "PayloadHex": "EE00000001200000A2B5A61378FD7CC319DC15432E546AC1C1C59340E8030000CDCC5CC159787DBFF19A0FBE0000803F"
+    },
+    {
+      "DeltaMs": 1101,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 58,
+      "PayloadHex": "DD00DB0FBE362C30F19ECF58C3728A32C1A93777C2F92202000000010000C2070000030000002D7257C34DF37EC18F3E77C203A83F0001E03F00"
+    },
+    {
+      "DeltaMs": 1101,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB27BE382C30F1478E94C3BDFDF440D0013DC2FA22020000000100004802000001000000464295C3DF0CF8404B873EC2"
+    },
+    {
+      "DeltaMs": 1101,
+      "Direction": "Recv",
+      "Opcode": 311,
+      "OpcodeName": "SMSG_UPDATE_AURA_DURATION",
+      "Size": 7,
+      "PayloadHex": "37010188130000"
+    },
+    {
+      "DeltaMs": 1101,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 49,
+      "PayloadHex": "DD00D342BE2D30F11AB07AC3932F164366D795C1FB2202000000010000F800000001000000B8A57CC387E81543111996C1"
+    },
+    {
+      "DeltaMs": 1214,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB24BE392C30F12CA250C38FBE5F4276295FC1B52B020000000100007101000001000000A5624FC3639262422C805FC1"
+    },
+    {
+      "DeltaMs": 1315,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB61BE3A2C30F19B6CB8C33FA654432613AFC1B62B020000000100000501000001000000E034B8C3292A54432613AFC1"
+    },
+    {
+      "DeltaMs": 1415,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB03BE372C30F11F0214C37751D741325B1BC20523020000000100002601000001000000DC2014C30C8CD141832B1BC2"
+    },
+    {
+      "DeltaMs": 1441,
+      "Direction": "Send",
+      "Opcode": 201,
+      "OpcodeName": "MSG_MOVE_FALL_LAND",
+      "Size": 32,
+      "PayloadHex": "C90000000000000050B7A6137E6A7DC3A8CC1543B35696C1C1C5934096050000"
+    },
+    {
+      "DeltaMs": 1517,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB65BE3A2C30F198E9BAC3DA5C49432613AFC10823020000000100008B02000001000000A9E8BAC3E7FC4A432613AFC1"
+    },
+    {
+      "DeltaMs": 1517,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB57BE3A2C30F1B6DB92C34DE18043425B6BC1092302000000010000CE03000002000000141C93C32A617F43F9CF69C100F03F00"
+    },
+    {
+      "DeltaMs": 1616,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB24BE392C30F1A5624FC3639262422C805FC1BD2B020000000100003403000002000000CB8552C35A4B6042821D5FC1FBFF3F00"
+    },
+    {
+      "DeltaMs": 1617,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB61BE3A2C30F1E034B8C3292A54432613AFC1BF2B020000000100006C010000010000003A77B8C3F06A53432613AFC1"
+    },
+    {
+      "DeltaMs": 1617,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB53BE3A2C30F1E2169BC368DD5E4392AFBEC1C02B02000000010000DA0100000100000053009BC3AE0660434482BDC1"
+    },
+    {
+      "DeltaMs": 1816,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB09BE362C30F17E794DC3C23064BF992376C2C12B02000000010000D802000001000000A53C4CC38E6B0CC0DC3F77C2"
+    },
+    {
+      "DeltaMs": 1816,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB27BE382C30F1464295C3DF0CF8404B873EC2C22B020000000100004205000002000000ABCC93C39A45C3405CDE3DC205E87F00"
+    },
+    {
+      "DeltaMs": 1816,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 45,
+      "PayloadHex": "3201DB18BE392C30F1DB18BE392C30F1C02E0000000100002200DB18BE392C30F101D07BC3C946BB40822B48C2"
+    },
+    {
+      "DeltaMs": 1817,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 45,
+      "PayloadHex": "3201DB24BE392C30F1DB24BE392C30F1C02E0000000100002200DB24BE392C30F1A5624FC3639262422C805FC1"
+    },
+    {
+      "DeltaMs": 1817,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 45,
+      "PayloadHex": "3201DB2ABE392C30F1DB2ABE392C30F1C02E0000000100002200DB2ABE392C30F116D844C35B4A6E42AE4C5DC1"
+    },
+    {
+      "DeltaMs": 1818,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 45,
+      "PayloadHex": "3201DB28BE392C30F1DB28BE392C30F1C02E0000000100002200DB28BE392C30F1E2D3F8C2065F7D427F3EA9C1"
+    },
+    {
+      "DeltaMs": 1818,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 45,
+      "PayloadHex": "3201DB06BE392C30F1DB06BE392C30F1C02E0000000100002200DB06BE392C30F1A071E5C216D64942F1C792C1"
+    },
+    {
+      "DeltaMs": 1819,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 45,
+      "PayloadHex": "3201DB29BE392C30F1DB29BE392C30F1C02E0000000100002200DB29BE392C30F1181631C310EA9C42DE19AEC1"
+    },
+    {
+      "DeltaMs": 1819,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 45,
+      "PayloadHex": "3201DB2BBE392C30F1DB2BBE392C30F1C02E0000000100002200DB2BBE392C30F1E99012C31BB99D42BAA3A7C1"
+    },
+    {
+      "DeltaMs": 1819,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 45,
+      "PayloadHex": "3201DB2EBE392C30F1DB2EBE392C30F1C02E0000000100002200DB2EBE392C30F1927AF9C264049442F25CACC1"
+    },
+    {
+      "DeltaMs": 1819,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 58,
+      "PayloadHex": "DD00DB2EBE392C30F1927AF9C264049442F25CACC1C32B02000000010000CA040000030000004D5F01C3CCEE954283A3B0C1F517C0FFFD0F0000"
+    },
+    {
+      "DeltaMs": 1820,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 45,
+      "PayloadHex": "3201DB2DBE392C30F1DB2DBE392C30F1C02E0000000100002200DB2DBE392C30F1B853E2C208A99E424908A3C1"
+    },
+    {
+      "DeltaMs": 1820,
+      "Direction": "Recv",
+      "Opcode": 782,
+      "OpcodeName": "SMSG_SPLINE_MOVE_SET_WALK_MODE",
+      "Size": 8,
+      "PayloadHex": "0E03D342BE2D30F1"
+    },
+    {
+      "DeltaMs": 1820,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 49,
+      "PayloadHex": "DD00D342BE2D30F1B8A57CC387E81543111996C1C52B020000000100007B05000001000000DBB87DC3E6911243405A96C1"
+    },
+    {
+      "DeltaMs": 1820,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 58,
+      "PayloadHex": "DD00DB32BE3B2C30F1527841C30C2206434BAABBC1C62B02000000010000FF100000030000003D4A44C3D578F7421571B1C1FDAF3F00FFEF3F00"
+    },
+    {
+      "DeltaMs": 1915,
+      "Direction": "Recv",
+      "Opcode": 782,
+      "OpcodeName": "SMSG_SPLINE_MOVE_SET_WALK_MODE",
+      "Size": 9,
+      "PayloadHex": "0E03DB43BE3B2C30F1"
+    },
+    {
+      "DeltaMs": 1915,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB43BE3B2C30F14A6B7DC368EF1543A85696C119230200000001000085030000010000009B9D7DC361B113437B5B96C1"
+    },
+    {
+      "DeltaMs": 1915,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB4EBE3A2C30F1D1B993C31C044443B407CAC11A23020000000100004E01000001000000905193C35B1E4443F434CBC1"
+    },
+    {
+      "DeltaMs": 2116,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB0ABE362C30F1C54A38C347708D40953765C21C2302000000010000700400000200000061E735C399BD5940559860C202F87F00"
+    },
+    {
+      "DeltaMs": 2116,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB6DBE3A2C30F10049C1C31B891D43D4A1F7401F230200000001000063030000010000000F36C0C30F431D43D4A1F740"
+    },
+    {
+      "DeltaMs": 2116,
+      "Direction": "Recv",
+      "Opcode": 330,
+      "OpcodeName": "SMSG_ATTACKERSTATEUPDATE",
+      "Size": 56,
+      "PayloadHex": "4A0102800000D342BE2D30F1036E016400000001000000000000C84264000000000000000000000001000000000000000000000000000000"
+    },
+    {
+      "DeltaMs": 2118,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB61BE3A2C30F13A77B8C3F06A53432613AFC1202302000000010000A400000001000000438CB8C36B1A53439D70ADC1"
+    },
+    {
+      "DeltaMs": 2118,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB56BE3A2C30F1C08C96C3EFE17643CAD04BC12123020000000100007A06000002000000554E96C3EBF97A4306E852C10140C0FF"
+    },
+    {
+      "DeltaMs": 2218,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB29BE392C30F1181631C310EA9C42DE19AEC1222302000000010000200400000200000054602FC395749542D694AEC104C03F00"
+    },
+    {
+      "DeltaMs": 2218,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB65BE3A2C30F1A9E8BAC3E7FC4A432613AFC1232302000000010000D6040000020000001B58BBC3160448432613AFC1FFE73F00"
+    },
+    {
+      "DeltaMs": 2218,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB58BE3A2C30F1FAD1A9C3C7C44F432B2EA7C124230200000001000013020000010000004060AAC39F834F43A69BACC1"
+    },
+    {
+      "DeltaMs": 2218,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB4BBE3C2C30F1EFB08EC3E7075B43BE25C8C1252302000000010000F60200000100000087838EC3772B5943BE25C8C1"
+    },
+    {
+      "DeltaMs": 2218,
+      "Direction": "Recv",
+      "Opcode": 502,
+      "OpcodeName": "SMSG_COMPRESSED_UPDATE_OBJECT",
+      "Size": 50,
+      "PayloadHex": "F601BE000000780163640001E63C464D20C508E6509F20D15C1E9C2EB8CFCCC020C390C220BA8EDD6142B18A3D009144047D"
+    },
+    {
+      "DeltaMs": 2317,
+      "Direction": "Recv",
+      "Opcode": 305,
+      "OpcodeName": "SMSG_SPELL_START",
+      "Size": 32,
+      "PayloadHex": "3101D342BE2D30F1D342BE2D30F1C22E00000200000000000200D342BE2D30F1"
+    },
+    {
+      "DeltaMs": 2317,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB4EBE3A2C30F1905193C35B1E4443F434CBC12623020000000100008500000001000000405993C3CACD4343AC80CAC1"
+    },
+    {
+      "DeltaMs": 2317,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB61BE3A2C30F1438CB8C36B1A53439D70ADC12723020000000100008901000001000000DBB3B8C3090354432613AFC1"
+    },
+    {
+      "DeltaMs": 2414,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB0CBE372C30F1FF8953C31C85D5C0A83777C22823020000000100009C000000010000002BEC53C3CD88D3C0A93777C2"
+    },
+    {
+      "DeltaMs": 2414,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB41BE3A2C30F151F586C3239CBE42E5A0C6C1292302000000010000A201000001000000839C86C3AF1EC0421427C8C1"
+    },
+    {
+      "DeltaMs": 2416,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 50,
+      "PayloadHex": "3201D342BE2D30F1D342BE2D30F1C22E00000001016E01000000000000002200D342BE2D30F12A087DC3BDB61443643096C1"
+    },
+    {
+      "DeltaMs": 2416,
+      "Direction": "Recv",
+      "Opcode": 592,
+      "OpcodeName": "SMSG_SPELLNONMELEEDAMAGELOG",
+      "Size": 39,
+      "PayloadHex": "5002036E01D342BE2D30F1C22E0000550000000200000000000000000000000000000000000000"
+    },
+    {
+      "DeltaMs": 2419,
+      "Direction": "Recv",
+      "Opcode": 781,
+      "OpcodeName": "SMSG_SPLINE_MOVE_SET_RUN_MODE",
+      "Size": 8,
+      "PayloadHex": "0D03D907710140F1"
+    },
+    {
+      "DeltaMs": 2419,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 61,
+      "PayloadHex": "DD00D907710140F1512E90C3BD725A43BE25C8C12B23020004D7D29C4000010000900800000300000035098DC3D1E05943BE25C8C111F03F0009F83F00"
+    },
+    {
+      "DeltaMs": 2419,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB50BE3A2C30F1647565C3CBC94E4370C5C6C12C2302000000010000B700000001000000201F65C364174F433018C7C1"
+    }
+  ]
+}

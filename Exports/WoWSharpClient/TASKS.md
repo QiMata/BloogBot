@@ -20,6 +20,29 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-07` BG stop/use/cast packet trigger parity is part of the deterministic movement bundle: `ForceStopImmediate()` synchronously records `MSG_MOVE_STOP` before game-object use/cast packets, and server `0x7A` cast failure is named `TRY_AGAIN` (2026-04-15).
 
 ## Session Handoff
+### 2026-04-28 (BG knockback jump-state parity)
+- Pass result: `Knockback queue consumption now preserves binary-backed jump state and the focused deterministic parity slice passed`
+- Last delta:
+  - `EventEmitter_OnForceMoveKnockBack(...)` now stages server knockback as
+    `MOVEFLAG_JUMPING`, clears `MOVEFLAG_FALLINGFAR`, preserves directional
+    movement intent, resets fall time, and primes the jump block from the
+    server-provided horizontal/vertical values.
+  - `MovementController` consumes the pending knockback vector on the next
+    physics tick, preserving primed jump fields for ACK parity when present
+    and deriving them only as a fallback.
+  - Updated object-manager, packet-flow, state-machine, and movement tests to
+    pin jumping-not-falling state, preserved directional flags, and staged
+    ACK-after-consume behavior.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MoveKnockBack|FullyQualifiedName~PendingKnockback|FullyQualifiedName~AckBinaryParityTests" --logger "console;verbosity=minimal"` -> `passed (46/46)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (9/9)`.
+- Files changed:
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - deterministic WoWSharpClient parity tests
+  - `Exports/WoWSharpClient/TASKS.md`
+- Next command: `rg -n "TryConsumePendingKnockback|EventEmitter_OnForceMoveKnockBack|JumpHorizontalSpeed|CMSG_MOVE_KNOCK_BACK_ACK" Exports/WoWSharpClient Tests/WoWSharpClient.Tests -g "!**/bin/**" -g "!**/obj/**"`
+
 ### 2026-04-28 (BG post-teleport FALL_LAND parity)
 - Pass result: `Stream 2E.3 closed; live BG emits MSG_MOVE_FALL_LAND for same-map airborne teleports`
 - Last delta:

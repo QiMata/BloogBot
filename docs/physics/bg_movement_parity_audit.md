@@ -255,22 +255,37 @@ and the recorded-trace replay harness).
    - `foreground_kalimdor_to_ek_cross_map_baseline.json` fires on
      `SMSG_TRANSFER_PENDING` and captures the WoW.exe transfer-pending side:
      destination object updates, `SMSG_NEW_WORLD`, and the immediate
-     `CMSG_CANCEL_TRADE` cleanup packet. `MSG_MOVE_WORLDPORT_ACK` remains
-     outside the 2.5s foreground window because WoW.exe pauses packet
-     processing during map load.
+     `CMSG_CANCEL_TRADE` cleanup packet.
    - `background_kalimdor_to_ek_cross_map_baseline.json` fires on
      `SMSG_TRANSFER_PENDING` and captures BG's managed-worldport shape:
      immediate zero-payload `MSG_MOVE_WORLDPORT_ACK`, `SMSG_NEW_WORLD`,
      destination object updates, login-world packets, and a later heartbeat.
+   - `foreground_ek_to_kalimdor_worldport_ack_baseline.json` captures the
+     delayed WoW.exe post-load side on the Eastern Kingdoms -> Kalimdor return:
+     `SMSG_NEW_WORLD` followed by outbound `MSG_MOVE_WORLDPORT_ACK` at
+     1576ms with payload `DC000000`.
 
    Pinned by
-   `PostTeleportPacketWindowParityTests.ForegroundCrossMapBaseline_PinsTransferPendingNewWorldShape`
+   `PostTeleportPacketWindowParityTests.ForegroundCrossMapBaseline_PinsTransferPendingNewWorldShape`,
+   `PostTeleportPacketWindowParityTests.BackgroundCrossMapBaseline_PinsTransferPendingNewWorldShape`,
    and
-   `PostTeleportPacketWindowParityTests.BackgroundCrossMapBaseline_PinsTransferPendingNewWorldShape`.
-   This closes the primary Stream 4 baseline gap. Remaining Stream 4 ideas
-   are lower-priority research: transport/zeppelin capture, knockback capture,
-   and a longer or second foreground window for post-load
-   `MSG_MOVE_WORLDPORT_ACK`.
+   `PostTeleportPacketWindowParityTests.ForegroundWorldportAckBaseline_PinsObservedAckInsideTransferWindow`.
+
+9. **Stream 4 knockback baselines are pinned.** A real Taragaman the Hungerer
+   `Uppercut` in Ragefire Chasm now drives both foreground and background
+   packet-window fixtures:
+
+   - `foreground_knockback_baseline.json` fires on `SMSG_MOVE_KNOCK_BACK` and
+     captures prompt `CMSG_MOVE_KNOCK_BACK_ACK`, WoW.exe heartbeat updates,
+     and `MSG_MOVE_FALL_LAND`.
+   - `background_knockback_baseline.json` fires on `SMSG_MOVE_KNOCK_BACK` and
+     captures `CMSG_MOVE_KNOCK_BACK_ACK`, `MSG_MOVE_JUMP`,
+     `MSG_MOVE_HEARTBEAT`, and `MSG_MOVE_FALL_LAND`.
+
+   Pinned by
+   `PostTeleportPacketWindowParityTests.KnockbackBaselines_PinFgAndBgAckShape`.
+   This closes the knockback Stream 4 baseline and BG implementation gap.
+   Remaining Stream 4 research is transport/zeppelin capture.
 
 ## What's *not* in scope of this audit
 

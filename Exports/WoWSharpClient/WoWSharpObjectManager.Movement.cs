@@ -299,11 +299,12 @@ namespace WoWSharpClient
         {
             var player = (WoWLocalPlayer)Player;
 
-            // Apply knockback velocity — WoW.exe 0x5E59B0.
-            // vCos/vSin define the horizontal direction, hSpeed is magnitude, vSpeed is vertical launch.
+            // Apply knockback velocity. vCos/vSin define the horizontal
+            // direction, hSpeed is magnitude, vSpeed is the jump block's
+            // vertical speed (VMaNGOS .knockback sends upward as negative).
             float velX = e.HSpeed * e.VCos;
             float velY = e.HSpeed * e.VSin;
-            float velZ = e.VSpeed;  // positive = upward
+            float velZ = e.VSpeed;
 
             // Store pending knockback for MovementController to consume next frame
             _pendingKnockbackVelX = velX;
@@ -311,11 +312,18 @@ namespace WoWSharpClient
             _pendingKnockbackVelZ = velZ;
             _hasPendingKnockback = true;
 
-            // Set FALLINGFAR — knockback initiates a fall trajectory
-            player.MovementFlags |= MovementFlags.MOVEFLAG_FALLINGFAR;
-            // Clear directional flags — knockback overrides player input
-            player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_BACKWARD
-                | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
+            // FG corpus captures for CMSG_MOVE_KNOCK_BACK_ACK show WoW.exe
+            // serializing MOVEFLAG_JUMPING plus the jump block, not a bare
+            // FALLINGFAR state. Preserve held directional intent; the client
+            // ACK reflects the current movement input at the moment the impulse
+            // is consumed.
+            player.MovementFlags |= MovementFlags.MOVEFLAG_JUMPING;
+            player.MovementFlags &= ~MovementFlags.MOVEFLAG_FALLINGFAR;
+            player.FallTime = 0;
+            player.JumpVerticalSpeed = e.VSpeed;
+            player.JumpCosAngle = e.VCos;
+            player.JumpSinAngle = e.VSin;
+            player.JumpHorizontalSpeed = e.HSpeed;
 
             _pendingKnockbackAck = new PendingKnockbackAck(player.Guid, e.Counter);
 

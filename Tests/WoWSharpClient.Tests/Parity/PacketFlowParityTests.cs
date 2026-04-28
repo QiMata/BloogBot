@@ -262,9 +262,10 @@ public sealed class PacketFlowParityTests
             Opcode.SMSG_MOVE_KNOCK_BACK,
             BuildKnockBackPacket(playerGuid, counter: 11u, vSin: 0.6f, vCos: 0.8f, hSpeed: 5.5f, vSpeed: 3.25f));
 
-        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
-        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
-        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT));
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_JUMPING));
+        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT));
         Assert.Empty(trace.Events.Where(e => e.Kind == "outbound"));
 
         Assert.True(trace.ConsumeKnockbackAndFlushAck(gameTimeMs: 4000u));

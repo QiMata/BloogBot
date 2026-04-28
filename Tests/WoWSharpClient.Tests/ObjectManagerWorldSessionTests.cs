@@ -598,7 +598,7 @@ public class ObjectManagerWorldSessionTests
     [Fact]
     [Trait("Category", "MovementParity")]
     [Trait("ParityLayer", "DeterministicBgProtocol")]
-    public void MoveKnockBack_ParseStoresImpulseClearsDirectionAndDefersAck()
+    public void MoveKnockBack_ParseStoresImpulsePrimesJumpAndDefersAck()
     {
         ResetObjectManager();
 
@@ -644,9 +644,14 @@ public class ObjectManagerWorldSessionTests
         Assert.Equal(hSpeed, capturedArgs.HSpeed, 5);
         Assert.Equal(vSpeed, capturedArgs.VSpeed, 5);
 
-        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
-        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
-        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_JUMPING));
+        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+        Assert.Equal(vSpeed, player.JumpVerticalSpeed, 5);
+        Assert.Equal(vCos, player.JumpCosAngle, 5);
+        Assert.Equal(vSin, player.JumpSinAngle, 5);
+        Assert.Equal(hSpeed, player.JumpHorizontalSpeed, 5);
 
         Assert.True(objectManager.TryConsumePendingKnockback(out float vx, out float vy, out float vz));
         Assert.Equal(hSpeed * vCos, vx, 5);
@@ -699,7 +704,9 @@ public class ObjectManagerWorldSessionTests
                 GroundNx = 0f,
                 GroundNy = 0f,
                 GroundNz = 1f,
-                MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                MoveFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD
+                    | MovementFlags.MOVEFLAG_STRAFE_RIGHT
+                    | MovementFlags.MOVEFLAG_FALLINGFAR),
                 FallTime = 50,
             };
         };
@@ -731,9 +738,10 @@ public class ObjectManagerWorldSessionTests
                 ctx);
 
             Assert.Empty(ackPackets);
-            Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
-            Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
-            Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+            Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_JUMPING));
+            Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+            Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+            Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
 
             var ackOrigin = new Position(player.Position.X, player.Position.Y, player.Position.Z);
             controller.Update(0.05f, 1000);
@@ -745,7 +753,10 @@ public class ObjectManagerWorldSessionTests
             Assert.Equal(hSpeed * vCos, capturedInput!.Value.Vx, 3);
             Assert.Equal(hSpeed * vSin, capturedInput.Value.Vy, 3);
             Assert.Equal(vSpeed, capturedInput.Value.Vz, 3);
-            Assert.Equal((uint)MovementFlags.MOVEFLAG_FALLINGFAR, capturedInput.Value.MoveFlags);
+            Assert.True(((MovementFlags)capturedInput.Value.MoveFlags).HasFlag(MovementFlags.MOVEFLAG_JUMPING));
+            Assert.True(((MovementFlags)capturedInput.Value.MoveFlags).HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+            Assert.True(((MovementFlags)capturedInput.Value.MoveFlags).HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+            Assert.False(((MovementFlags)capturedInput.Value.MoveFlags).HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
             Assert.False(objectManager.TryConsumePendingKnockback(out _, out _, out _));
 
             using (var ackStream = new MemoryStream(ack.payload))
@@ -759,8 +770,14 @@ public class ObjectManagerWorldSessionTests
                 Assert.Equal(ackOrigin.Y, ackMovement.Y, 5);
                 Assert.Equal(ackOrigin.Z, ackMovement.Z, 5);
                 Assert.Equal(player.Facing, ackMovement.Facing, 5);
-                Assert.True(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
-                Assert.False(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+                Assert.True(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_JUMPING));
+                Assert.False(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+                Assert.True(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+                Assert.True(ackMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+                Assert.Equal(vSpeed, Assert.NotNull(ackMovement.JumpVerticalSpeed), 5);
+                Assert.Equal(vCos, Assert.NotNull(ackMovement.JumpCosAngle), 5);
+                Assert.Equal(vSin, Assert.NotNull(ackMovement.JumpSinAngle), 5);
+                Assert.Equal(hSpeed, Assert.NotNull(ackMovement.JumpHorizontalSpeed), 5);
                 Assert.Equal(ackStream.Length, ackStream.Position);
             }
 
@@ -770,8 +787,8 @@ public class ObjectManagerWorldSessionTests
             using var reader = new BinaryReader(ms);
             var movementInfo = MovementPacketHandler.ParseMovementInfo(reader);
             Assert.True(movementInfo.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
-            Assert.False(movementInfo.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
-            Assert.False(movementInfo.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+            Assert.True(movementInfo.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+            Assert.True(movementInfo.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
         }
         finally
         {

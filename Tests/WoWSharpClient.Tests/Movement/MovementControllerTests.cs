@@ -1802,7 +1802,7 @@ namespace WoWSharpClient.Tests.Movement
         [Fact]
         [Trait("Category", "MovementParity")]
         [Trait("ParityLayer", "DeterministicBgProtocol")]
-        public void PendingKnockback_OverridesDirectionalInputAndFeedsPhysicsVelocity()
+        public void PendingKnockback_PrimesJumpAndFeedsPhysicsVelocity()
         {
             ClearPendingKnockback();
 
@@ -1838,10 +1838,17 @@ namespace WoWSharpClient.Tests.Movement
             Assert.Equal(4f, capturedInput!.Value.Vx, 3);
             Assert.Equal(-2f, capturedInput.Value.Vy, 3);
             Assert.Equal(6f, capturedInput.Value.Vz, 3);
-            Assert.Equal((uint)MovementFlags.MOVEFLAG_FALLINGFAR, capturedInput.Value.MoveFlags);
+            Assert.True(((MovementFlags)capturedInput.Value.MoveFlags).HasFlag(MovementFlags.MOVEFLAG_JUMPING));
+            Assert.True(((MovementFlags)capturedInput.Value.MoveFlags).HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+            Assert.True(((MovementFlags)capturedInput.Value.MoveFlags).HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT));
+            Assert.False(((MovementFlags)capturedInput.Value.MoveFlags).HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
             Assert.True(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
-            Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
-            Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT));
+            Assert.True(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+            Assert.True(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_LEFT));
+            Assert.Equal(6f, _player.JumpVerticalSpeed, 3);
+            Assert.Equal(4f / MathF.Sqrt(20f), _player.JumpCosAngle, 3);
+            Assert.Equal(-2f / MathF.Sqrt(20f), _player.JumpSinAngle, 3);
+            Assert.Equal(MathF.Sqrt(20f), _player.JumpHorizontalSpeed, 3);
 
             Assert.False(WoWSharpObjectManager.Instance.TryConsumePendingKnockback(out _, out _, out _));
         }

@@ -34,6 +34,9 @@ public sealed class PostTeleportPacketWindowParityTests
     private const string BackgroundHighDropBaselineFileName = "background_durotar_high_drop_baseline.json";
     private const string ForegroundCrossMapBaselineFileName = "foreground_kalimdor_to_ek_cross_map_baseline.json";
     private const string BackgroundCrossMapBaselineFileName = "background_kalimdor_to_ek_cross_map_baseline.json";
+    private const string ForegroundWorldportAckBaselineFileName = "foreground_ek_to_kalimdor_worldport_ack_baseline.json";
+    private const string ForegroundKnockbackBaselineFileName = "foreground_knockback_baseline.json";
+    private const string BackgroundKnockbackBaselineFileName = "background_knockback_baseline.json";
     private const ulong CapturedPlayerGuid = 366ul; // matches captured ACK fixture
 
     [Fact]
@@ -401,12 +404,9 @@ public sealed class PostTeleportPacketWindowParityTests
         // CMSG_CANCEL_TRADE the client emits as part of its world-change
         // cleanup.
         //
-        // Note: the post-load MSG_MOVE_WORLDPORT_ACK does NOT appear in the
-        // 2.5s window because WoW.exe pauses packet processing during the
-        // map load. To capture the WORLDPORT_ACK we'd either need a longer
-        // recording window or a second recorder triggered on
-        // SMSG_NEW_WORLD specifically. For now this baseline pins the
-        // transfer-pending side of the cross-map sequence.
+        // The dedicated foreground worldport-ACK baseline below pins a return
+        // cross-map hop where WoW.exe emits MSG_MOVE_WORLDPORT_ACK inside the
+        // same transfer-pending window.
         var fixture = LoadForegroundCrossMapBaseline();
 
         Assert.Equal(1, fixture.SchemaVersion);
@@ -490,6 +490,96 @@ public sealed class PostTeleportPacketWindowParityTests
             p => p.OpcodeName == "CMSG_SET_ACTIVE_MOVER");
     }
 
+    [Fact]
+    [Trait("Category", "PacketFlowParity")]
+    public void ForegroundWorldportAckBaseline_PinsObservedAckInsideTransferWindow()
+    {
+        // Live FG cross-map return capture (Eastern Kingdoms -> Kalimdor).
+        // WoW.exe emits the zero-payload MSG_MOVE_WORLDPORT_ACK after
+        // SMSG_NEW_WORLD, while the transfer-pending recorder window is still
+        // open. The recorder can still open a second ACK-triggered window on
+        // slower loads, but this fixture pins the observed binary shape.
+        var fixture = LoadForegroundWorldportAckBaseline();
+
+        Assert.Equal(1, fixture.SchemaVersion);
+        Assert.Equal("post_teleport_packet_window", fixture.CaptureScenario);
+        Assert.Contains("WoW.exe", fixture.Source);
+        Assert.Equal(2500, fixture.WindowDurationMs);
+
+        Assert.NotNull(fixture.Trigger);
+        Assert.Equal("Recv", fixture.Trigger!.Direction);
+        Assert.Equal("SMSG_TRANSFER_PENDING", fixture.Trigger.OpcodeName);
+        Assert.Equal(0, fixture.Trigger.DeltaMs);
+        Assert.StartsWith("3F00", fixture.Trigger.PayloadHex);
+
+        var packets = fixture.Packets;
+        Assert.NotNull(packets);
+        Assert.True(packets!.Count > 0, "Captured FG worldport-ACK window must contain at least the trigger.");
+        Assert.Equal("SMSG_TRANSFER_PENDING", packets[0].OpcodeName);
+        Assert.Equal("Recv", packets[0].Direction);
+        Assert.Contains(packets, p => p.OpcodeName == "SMSG_NEW_WORLD" && p.Direction == "Recv");
+
+        var worldportAck = Assert.Single(packets.Where(p => p.OpcodeName == "MSG_MOVE_WORLDPORT_ACK" && p.Direction == "Send"));
+        Assert.Equal(4, worldportAck.Size);
+        Assert.Equal("DC000000", worldportAck.PayloadHex);
+        Assert.True(worldportAck.DeltaMs > 0 && worldportAck.DeltaMs < fixture.WindowDurationMs,
+            $"FG WORLDPORT_ACK should land inside this transfer window; got {worldportAck.DeltaMs}ms.");
+
+        var newWorldIndex = packets.FindIndex(p => p.OpcodeName == "SMSG_NEW_WORLD" && p.Direction == "Recv");
+        var ackIndex = packets.FindIndex(p => p.OpcodeName == "MSG_MOVE_WORLDPORT_ACK" && p.Direction == "Send");
+        Assert.True(newWorldIndex >= 0);
+        Assert.True(ackIndex > newWorldIndex,
+            "WoW.exe sends MSG_MOVE_WORLDPORT_ACK after processing SMSG_NEW_WORLD.");
+    }
+
+    [Fact]
+    [Trait("Category", "PacketFlowParity")]
+    public void KnockbackBaselines_PinFgAndBgAckShape()
+    {
+        // Live FG/BG Taragaman the Hungerer `Uppercut` capture. FG supplies
+        // the binary oracle, including raw ACK bytes; BG supplies the
+        // managed-client live shape. The payload-size relationship is
+        // intentionally asserted: FG records the 4-byte CMSG opcode prefix
+        // plus payload, while BG's event surface records payload size only.
+        var fg = LoadForegroundKnockbackBaseline();
+        var bg = LoadBackgroundKnockbackBaseline();
+
+        Assert.Equal("knockback_packet_window", fg.CaptureScenario);
+        Assert.Equal("knockback_packet_window", bg.CaptureScenario);
+        Assert.Contains("WoW.exe", fg.Source);
+        Assert.Contains("BackgroundBotRunner", bg.Source);
+
+        AssertKnockbackTrigger(fg, expectedRawPayloadPrefix: "EF00");
+        AssertKnockbackTrigger(bg, expectedRawPayloadPrefix: null);
+
+        var fgAck = Assert.Single(fg.Packets!.Where(p => p.Direction == "Send" && p.OpcodeName == "CMSG_MOVE_KNOCK_BACK_ACK"));
+        var bgAck = Assert.Single(bg.Packets!.Where(p => p.Direction == "Send" && p.OpcodeName == "CMSG_MOVE_KNOCK_BACK_ACK"));
+
+        Assert.Equal(60, fgAck.Size);
+        Assert.Equal(56, bgAck.Size);
+        Assert.True(fgAck.DeltaMs <= 250, $"FG knockback ACK should be prompt; got {fgAck.DeltaMs}ms.");
+        Assert.True(bgAck.DeltaMs <= 250, $"BG knockback ACK should be prompt; got {bgAck.DeltaMs}ms.");
+
+        var fgMovement = ParseForegroundForceMoveAck(fgAck, out _, out _);
+        Assert.True(fgMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_JUMPING));
+        Assert.False(fgMovement.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+        Assert.NotNull(fgMovement.JumpVerticalSpeed);
+        Assert.NotNull(fgMovement.JumpCosAngle);
+        Assert.NotNull(fgMovement.JumpSinAngle);
+        Assert.NotNull(fgMovement.JumpHorizontalSpeed);
+        Assert.InRange(MathF.Abs(fgMovement.JumpVerticalSpeed!.Value), 13.7f, 13.9f);
+        Assert.InRange(fgMovement.JumpHorizontalSpeed!.Value, 0.99f, 1.01f);
+
+        var horizontalUnitLength = MathF.Sqrt(
+            (fgMovement.JumpCosAngle!.Value * fgMovement.JumpCosAngle.Value)
+            + (fgMovement.JumpSinAngle!.Value * fgMovement.JumpSinAngle.Value));
+        Assert.InRange(horizontalUnitLength, 0.99f, 1.01f);
+
+        Assert.Contains(bg.Packets!, p => p.Direction == "Send" && p.OpcodeName == "MSG_MOVE_JUMP");
+        Assert.Contains(bg.Packets!, p => p.Direction == "Send" && p.OpcodeName == "MSG_MOVE_HEARTBEAT");
+        Assert.Contains(bg.Packets!, p => p.Direction == "Send" && p.OpcodeName == "MSG_MOVE_FALL_LAND");
+    }
+
     private static PostTeleportWindowFixture LoadBaseline() => LoadFixture(BaselineFileName);
 
     private static PostTeleportWindowFixture LoadBackgroundBaseline() => LoadFixture(BackgroundBaselineFileName);
@@ -499,6 +589,48 @@ public sealed class PostTeleportPacketWindowParityTests
     private static PostTeleportWindowFixture LoadForegroundCrossMapBaseline() => LoadFixture(ForegroundCrossMapBaselineFileName);
 
     private static PostTeleportWindowFixture LoadBackgroundCrossMapBaseline() => LoadFixture(BackgroundCrossMapBaselineFileName);
+
+    private static PostTeleportWindowFixture LoadForegroundWorldportAckBaseline() => LoadFixture(ForegroundWorldportAckBaselineFileName);
+
+    private static PostTeleportWindowFixture LoadForegroundKnockbackBaseline() => LoadFixture(ForegroundKnockbackBaselineFileName);
+
+    private static PostTeleportWindowFixture LoadBackgroundKnockbackBaseline() => LoadFixture(BackgroundKnockbackBaselineFileName);
+
+    private static void AssertKnockbackTrigger(PostTeleportWindowFixture fixture, string? expectedRawPayloadPrefix)
+    {
+        Assert.NotNull(fixture.Trigger);
+        Assert.Equal("Recv", fixture.Trigger!.Direction);
+        Assert.Equal("SMSG_MOVE_KNOCK_BACK", fixture.Trigger.OpcodeName);
+        Assert.Equal(0, fixture.Trigger.DeltaMs);
+
+        var packets = fixture.Packets;
+        Assert.NotNull(packets);
+        Assert.True(packets!.Count > 0, "Captured knockback window must contain at least the trigger.");
+        Assert.Equal("SMSG_MOVE_KNOCK_BACK", packets[0].OpcodeName);
+        Assert.Equal("Recv", packets[0].Direction);
+
+        if (expectedRawPayloadPrefix != null)
+            Assert.StartsWith(expectedRawPayloadPrefix, fixture.Trigger.PayloadHex);
+    }
+
+    private static MovementInfoUpdate ParseForegroundForceMoveAck(
+        PostTeleportPacketEntry packet,
+        out ulong guid,
+        out uint counter)
+    {
+        var raw = HexToBytes(packet.PayloadHex);
+        Assert.True(raw.Length >= 16, $"Foreground force-move ACK payload too short: {raw.Length} bytes.");
+        Assert.Equal((uint)Opcode.CMSG_MOVE_KNOCK_BACK_ACK, BitConverter.ToUInt32(raw, 0));
+
+        guid = BitConverter.ToUInt64(raw, 4);
+        counter = BitConverter.ToUInt32(raw, 12);
+
+        using var movementStream = new MemoryStream(raw, 16, raw.Length - 16);
+        using var movementReader = new BinaryReader(movementStream);
+        var movement = MovementPacketHandler.ParseMovementInfo(movementReader);
+        Assert.Equal(movementStream.Length, movementStream.Position);
+        return movement;
+    }
 
     private static PostTeleportWindowFixture LoadFixture(string fileName)
     {

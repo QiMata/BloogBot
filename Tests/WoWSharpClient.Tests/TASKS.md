@@ -12,6 +12,33 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-04-28 (FG worldport ACK + knockback packet-window baselines)
+- Pass result: `PostTeleportPacketWindowParityTests green with worldport ACK and knockback baselines added (9/9)`
+- Last delta:
+  - Added `foreground_ek_to_kalimdor_worldport_ack_baseline.json`, captured
+    from a live Eastern Kingdoms -> Kalimdor return transfer. The foreground
+    transfer-pending window contains `SMSG_NEW_WORLD` followed by outbound
+    `MSG_MOVE_WORLDPORT_ACK` at 1576ms with payload `DC000000`.
+  - Added `foreground_knockback_baseline.json` and
+    `background_knockback_baseline.json`, captured from Taragaman the
+    Hungerer's real `Uppercut` knockback in Ragefire Chasm.
+  - Added
+    `ForegroundWorldportAckBaseline_PinsObservedAckInsideTransferWindow` and
+    `KnockbackBaselines_PinFgAndBgAckShape`. The knockback oracle pins prompt
+    `CMSG_MOVE_KNOCK_BACK_ACK`, FG jump vector shape, and BG's
+    `MSG_MOVE_JUMP` / heartbeat / `MSG_MOVE_FALL_LAND` follow-up sequence.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MoveKnockBack|FullyQualifiedName~PendingKnockback|FullyQualifiedName~AckBinaryParityTests" --logger "console;verbosity=minimal"` -> `passed (46/46)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (9/9)`.
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/ObjectManagerWorldSessionTests.cs`
+  - `Tests/WoWSharpClient.Tests/Parity/PacketFlowParityTests.cs`
+  - `Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs`
+  - `Tests/WoWSharpClient.Tests/Parity/StateMachineParityTests.cs`
+  - new packet-window fixtures.
+- Next command: `rg -n "TransportGuid|ON_TRANSPORT|SMSG_MONSTER_MOVE_TRANSPORT|TaxiTransportParityTests|TransportTests" Tests/BotRunner.Tests/LiveValidation Services docs/physics -g "!**/bin/**" -g "!**/obj/**"`
+
 ### 2026-04-28 (BG cross-map post-teleport baseline)
 - Pass result: `PostTeleportPacketWindowParityTests green with BG cross-map baseline added (7/7)`
 - Last delta:

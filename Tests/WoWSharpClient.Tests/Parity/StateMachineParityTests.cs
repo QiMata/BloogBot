@@ -160,9 +160,10 @@ public sealed class StateMachineParityTests
             Opcode.SMSG_MOVE_KNOCK_BACK,
             BuildKnockBackPacket(playerGuid, counter: 23u, vSin: -0.5f, vCos: 0.25f, hSpeed: 7.5f, vSpeed: 4.0f));
 
-        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
-        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
-        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_JUMPING));
+        Assert.False(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR));
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD));
+        Assert.True(player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_STRAFE_RIGHT));
         Assert.Empty(trace.Events.Where(e => e.Kind == "outbound"));
 
         var eventIndex = trace.Events.FindIndex(e => e.Kind == "event" && e.Label == "OnForceMoveKnockBack");

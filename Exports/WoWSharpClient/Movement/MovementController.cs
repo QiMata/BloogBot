@@ -213,10 +213,25 @@ namespace WoWSharpClient.Movement
             {
                 _velocity = new Vector3(kbVx, kbVy, kbVz);
                 _fallTimeMs = 0;
-                // FALLINGFAR is already set by the event handler; ensure FORWARD/BACKWARD cleared
-                _player.MovementFlags |= MovementFlags.MOVEFLAG_FALLINGFAR;
-                _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_BACKWARD
-                    | MovementFlags.MOVEFLAG_STRAFE_LEFT | MovementFlags.MOVEFLAG_STRAFE_RIGHT);
+                var horizontalSpeed = MathF.Sqrt((kbVx * kbVx) + (kbVy * kbVy));
+                _player.MovementFlags |= MovementFlags.MOVEFLAG_JUMPING;
+                _player.MovementFlags &= ~MovementFlags.MOVEFLAG_FALLINGFAR;
+                _player.FallTime = 0;
+                if (_player.JumpHorizontalSpeed <= 0.0001f)
+                {
+                    _player.JumpVerticalSpeed = kbVz;
+                    _player.JumpHorizontalSpeed = horizontalSpeed;
+                    if (horizontalSpeed > 0.0001f)
+                    {
+                        _player.JumpCosAngle = kbVx / horizontalSpeed;
+                        _player.JumpSinAngle = kbVy / horizontalSpeed;
+                    }
+                    else
+                    {
+                        _player.JumpCosAngle = 0f;
+                        _player.JumpSinAngle = 0f;
+                    }
+                }
                 Log.Information("[MovementController] Applied knockback impulse vel=({VelX:F2},{VelY:F2},{VelZ:F2})",
                     kbVx, kbVy, kbVz);
                 _objectManager.TryFlushPendingKnockbackAck(gameTimeMs);
