@@ -32,6 +32,29 @@
 
 ---
 
+## Handoff (2026-04-28, live movement parity bundle)
+
+- Completed: ran the live BotRunner movement parity bundle after Stream 4
+  closeout.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_category_latest.trx"` -> `passed (8 passed, 5 skipped, 0 failed; duration 10m26s)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - TRX: `tmp/test-runtime/results-live/movement_parity_category_latest.trx`.
+  - Skipped lanes remained the tracked MovementParity skips:
+    `Parity_Durotar_ObstacleDense`, `Parity_ValleyOfTrials_ReverseHill`,
+    `Parity_ValleyOfTrials_SteepDescent`, `Parity_ValleyOfTrials_LedgeDrop`,
+    and `Parity_ValleyOfTrials_HillPath`.
+- Worktree note:
+  - The three untracked ACK corpus captures remain untracked and were not
+    promoted.
+- Files changed:
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "TransportGuid|Transport_Board_FgBgParity|Transport_CrossContinent_FgBgParity|StageBotRunnerAtOrgrimmarZeppelinTowerAsync|StageBotRunnerAtUndercityElevatorUpperAsync" Tests/BotRunner.Tests/LiveValidation Tests/BotRunner.Tests/LiveValidation/docs`
+
+---
+
 ## Handoff (2026-04-28, tracker sweep after Stream 4 closeout)
 
 - Completed: confirmed Stream 4 is fully closed in the master/local parity docs

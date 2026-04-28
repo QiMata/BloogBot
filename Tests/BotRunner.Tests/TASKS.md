@@ -87,6 +87,23 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-28 (live movement parity bundle)
+- Pass result: `Category=MovementParity passed with 8 passed, 5 tracked skips, 0 failures`
+- Last delta:
+  - Ran the live BotRunner movement parity bundle after the Stream 4 transport
+    packet-window closeout.
+  - No test/code changes were required; this was validation-only.
+  - The three untracked ACK corpus JSONs remain untracked and were not promoted.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_category_latest.trx"` -> `passed (8 passed, 5 skipped, 0 failed; duration 10m26s)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/movement_parity_category_latest.trx`
+- Files changed:
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `rg -n "TransportGuid|Transport_Board_FgBgParity|Transport_CrossContinent_FgBgParity|StageBotRunnerAtOrgrimmarZeppelinTowerAsync|StageBotRunnerAtUndercityElevatorUpperAsync" Tests/BotRunner.Tests/LiveValidation Tests/BotRunner.Tests/LiveValidation/docs`
+
 ### 2026-04-28 (tracker sweep after Stream 4 closeout)
 - Pass result: `No unchecked BotRunner/WoWSharpClient movement-parity task items remain; ACK extras left untracked`
 - Last delta:
