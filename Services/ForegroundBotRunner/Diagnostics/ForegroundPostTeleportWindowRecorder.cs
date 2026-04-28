@@ -246,7 +246,8 @@ public sealed class ForegroundPostTeleportWindowRecorder : IDisposable
     // delivers the destination map/position. WoW.exe may pause packet processing
     // long enough that the outbound MSG_MOVE_WORLDPORT_ACK lands after the default
     // transfer-pending window, so that outbound ACK can start its own post-load
-    // window. Knockback uses the same schema for the packet-window parity baseline.
+    // window. Knockback and normal transport movement use the same schema for
+    // packet-window parity baselines.
     private static string? ResolveTriggerScenario(PacketDirection direction, Opcode opcode)
     {
         if (direction == PacketDirection.Send && opcode == Opcode.MSG_MOVE_WORLDPORT_ACK)
@@ -262,6 +263,7 @@ public sealed class ForegroundPostTeleportWindowRecorder : IDisposable
                 or Opcode.SMSG_NEW_WORLD
                 or Opcode.SMSG_TRANSFER_PENDING => "post_teleport_packet_window",
             Opcode.SMSG_MOVE_KNOCK_BACK => "knockback_packet_window",
+            Opcode.SMSG_MONSTER_MOVE_TRANSPORT => "transport_packet_window",
             _ => null,
         };
     }

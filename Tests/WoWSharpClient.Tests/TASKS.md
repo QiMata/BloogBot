@@ -12,6 +12,26 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-04-28 (transport packet-window trigger research)
+- Pass result: `No WoWSharpClient baseline promoted; transport trigger research remains open`
+- Last delta:
+  - FG/BG packet-window recorders now recognize inbound
+    `SMSG_MONSTER_MOVE_TRANSPORT` as `transport_packet_window`.
+  - The opt-in live Orgrimmar/Undercity zeppelin probe staged both bots at the
+    corrected transport point and waited one route cycle, but captured only
+    `post_teleport_packet_window` staging fixtures. No committed
+    `transport_packet_window` baseline was added.
+  - Next parity work should identify the normal zeppelin movement trigger from
+    live packet/object-update evidence before adding a WoWSharpClient fixture.
+- Validation/tests run:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundPostTeleportWindowRecorderTests" --logger "console;verbosity=minimal"` -> `passed (6/6; existing nonfatal dumpbin warning)`.
+  - Live zeppelin probe -> `test run successful; 1 skipped`, no
+    `transport_packet_window` fixture under
+    `tmp/test-runtime/zeppelin-transport-capture-20260428_02`.
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `rg -n "SMSG_MONSTER_MOVE|SMSG_COMPRESSED_UPDATE_OBJECT|OBJECT_FIELD_ENTRY|TransportGuid|MOVEFLAG_ONTRANSPORT" Exports/WoWSharpClient Services/ForegroundBotRunner Services/BackgroundBotRunner Tests/BotRunner.Tests/LiveValidation docs/physics -g "!**/bin/**" -g "!**/obj/**"`
+
 ### 2026-04-28 (FG worldport ACK + knockback packet-window baselines)
 - Pass result: `PostTeleportPacketWindowParityTests green with worldport ACK and knockback baselines added (9/9)`
 - Last delta:

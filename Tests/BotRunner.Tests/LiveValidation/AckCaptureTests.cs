@@ -40,6 +40,13 @@ public sealed class AckCaptureTests
     private const float KnockbackStageX = -252.0f;
     private const float KnockbackStageY = 150.0f;
     private const float KnockbackStageZ = -18.8f;
+    // MaNGOS game_tele DurotarZeppelin / transports entry "Orgrimmar and Undercity".
+    private const float OrgrimmarZeppelinTowerX = 1340.98f;
+    private const float OrgrimmarZeppelinTowerY = -4638.58f;
+    private const float OrgrimmarZeppelinTowerZ = 53.5445f;
+    private const uint OrgrimmarUndercityZeppelinEntry = 164871;
+    private const uint GoTypeTransport = 11;
+    private const uint GoTypeMoTransport = 15;
 
     public AckCaptureTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -304,6 +311,126 @@ public sealed class AckCaptureTests
                 xyToleranceYards: 10f,
                 zStabilizationWaitMs: 1000);
         }
+    }
+
+    [SkippableFact]
+    [Trait("Category", "AckCaptureLive")]
+    public async Task ForegroundAndBackground_OrgrimmarZeppelin_CapturesTransportPacketWindows()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_CAPTURE_POST_TELEPORT_WINDOW"),
+                "1",
+                StringComparison.Ordinal)
+            && string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW"),
+                "1",
+                StringComparison.Ordinal),
+            "WWOW_CAPTURE_POST_TELEPORT_WINDOW=1 and WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW=1 are required.");
+
+        var fgTarget = await EnsureAckCaptureForegroundTargetAsync();
+
+        var bgTarget = _bot
+            .ResolveBotRunnerActionTargets(includeForegroundIfActionable: false, foregroundFirst: false)
+            .FirstOrDefault(t => !t.IsForeground);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(bgTarget.AccountName),
+            "BG bot required for transport packet-window capture.");
+
+        _output.WriteLine(
+            $"=== FG/BG transport packet-window capture: Orgrimmar zeppelin tower with " +
+            $"FG {fgTarget.AccountName}/{fgTarget.CharacterName}, BG {bgTarget.AccountName}/{bgTarget.CharacterName} ===");
+        _output.WriteLine(
+            $"[ACTION-PLAN] FG {fgTarget.AccountName}/{fgTarget.CharacterName}: zeppelin transport binary oracle capture target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] {bgTarget.RoleLabel} {bgTarget.AccountName}/{bgTarget.CharacterName}: BG zeppelin transport capture target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no transport dispatch.");
+
+        var fgWindowDir = ResolvePostTeleportWindowDirectory();
+        var bgWindowDir = ResolveBackgroundPostTeleportWindowDirectory();
+        Assert.NotNull(fgWindowDir);
+        Assert.NotNull(bgWindowDir);
+        Directory.CreateDirectory(fgWindowDir!);
+        Directory.CreateDirectory(bgWindowDir!);
+
+        var fgStaged = await StageForegroundCapturePointAsync(
+            fgTarget,
+            KalimdorMapId,
+            OrgrimmarZeppelinTowerX,
+            OrgrimmarZeppelinTowerY,
+            OrgrimmarZeppelinTowerZ,
+            "transport-capture Orgrimmar zeppelin FG stage",
+            cleanSlate: false,
+            xyToleranceYards: 20f);
+        Assert.True(fgStaged, "FG bot should settle at the Orgrimmar zeppelin tower before transport capture.");
+
+        var bgStaged = await _bot.StageBotRunnerAtOrgrimmarZeppelinTowerAsync(
+            bgTarget.AccountName,
+            bgTarget.RoleLabel);
+        Assert.True(bgStaged, "BG bot should settle at the Orgrimmar zeppelin tower before transport capture.");
+
+        var fgBaseline = CountWindowFixturesByScenario(
+            fgWindowDir!,
+            "foreground_*.json",
+            "transport_packet_window");
+        var bgBaseline = CountWindowFixturesByScenario(
+            bgWindowDir!,
+            "background_*.json",
+            "transport_packet_window");
+
+        Game.GameObjectSnapshot? lastFgTransport = null;
+        Game.GameObjectSnapshot? lastBgTransport = null;
+        var captured = await _bot.WaitForSnapshotConditionAsync(
+            fgTarget.AccountName,
+            snapshot =>
+            {
+                lastFgTransport = FindNearestZeppelinTransport(_bot.ForegroundBot ?? snapshot);
+                lastBgTransport = FindNearestZeppelinTransport(_bot.BackgroundBot);
+
+                return CountWindowFixturesByScenario(
+                        fgWindowDir!,
+                        "foreground_*.json",
+                        "transport_packet_window") >= fgBaseline + 1
+                    && CountWindowFixturesByScenario(
+                        bgWindowDir!,
+                        "background_*.json",
+                        "transport_packet_window") >= bgBaseline + 1;
+            },
+            TimeSpan.FromMinutes(7),
+            pollIntervalMs: 500,
+            progressLabel: "FG/BG zeppelin transport packet-window");
+
+        if (!captured)
+        {
+            var fgCount = CountWindowFixturesByScenario(
+                fgWindowDir!,
+                "foreground_*.json",
+                "transport_packet_window");
+            var bgCount = CountWindowFixturesByScenario(
+                bgWindowDir!,
+                "background_*.json",
+                "transport_packet_window");
+            _output.WriteLine(
+                $"[TRANSPORT-CAPTURE-GAP] FG fixtures={fgCount - fgBaseline}, BG fixtures={bgCount - bgBaseline}, " +
+                $"last FG transport={DescribeTransport(lastFgTransport)}, last BG transport={DescribeTransport(lastBgTransport)}.");
+
+            await _bot.QuiesceAccountsAsync(
+                new[] { fgTarget.AccountName, bgTarget.AccountName },
+                "zeppelin transport packet-window no-capture cleanup");
+            global::Tests.Infrastructure.Skip.If(
+                true,
+                "Orgrimmar/Undercity zeppelin staging completed, but the live route did not emit " +
+                "SMSG_MONSTER_MOVE_TRANSPORT transport packet-window fixtures within one route cycle.");
+        }
+
+        Assert.True(captured,
+            $"Expected new FG and BG zeppelin transport packet-window fixtures under '{fgWindowDir}' / '{bgWindowDir}' " +
+            "after staging at the Orgrimmar tower.");
+
+        await _bot.QuiesceAccountsAsync(
+            new[] { fgTarget.AccountName, bgTarget.AccountName },
+            "zeppelin transport packet-window cleanup");
     }
 
     [SkippableFact]
@@ -860,6 +987,43 @@ public sealed class AckCaptureTests
             .FirstOrDefault();
 
         return candidate?.Guid ?? 0UL;
+    }
+
+    private static Game.GameObjectSnapshot? FindNearestZeppelinTransport(WoWActivitySnapshot? snapshot)
+    {
+        var playerPosition = snapshot?.Player?.Unit?.GameObject?.Base?.Position
+            ?? snapshot?.MovementData?.Position;
+        if (playerPosition == null)
+            return null;
+
+        return snapshot?.MovementData?.NearbyGameObjects?
+            .Where(go =>
+                go != null
+                && (go.Entry == OrgrimmarUndercityZeppelinEntry
+                    || go.GameObjectType == GoTypeTransport
+                    || go.GameObjectType == GoTypeMoTransport))
+            .OrderBy(go =>
+            {
+                var position = go.Position;
+                return position == null
+                    ? float.MaxValue
+                    : LiveBotFixture.Distance2D(
+                        playerPosition.X,
+                        playerPosition.Y,
+                        position.X,
+                        position.Y);
+            })
+            .FirstOrDefault();
+    }
+
+    private static string DescribeTransport(Game.GameObjectSnapshot? transport)
+    {
+        if (transport?.Position == null)
+            return "none";
+
+        var position = transport.Position;
+        return $"{transport.Entry}:{transport.Name ?? "?"}:type={transport.GameObjectType} " +
+            $"guid=0x{transport.Guid:X} pos=({position.X:F1},{position.Y:F1},{position.Z:F1})";
     }
 
     private static string DescribeNearbyUnits(WoWActivitySnapshot? snapshot)

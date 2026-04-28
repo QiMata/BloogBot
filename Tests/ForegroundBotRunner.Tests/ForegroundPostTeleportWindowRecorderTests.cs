@@ -109,6 +109,48 @@ public sealed class ForegroundPostTeleportWindowRecorderTests
     }
 
     [Fact]
+    public void Recorder_InboundMonsterMoveTransport_CapturesTransportScenario()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            using var artifactsScope = new EnvironmentVariableScope(RecordingArtifactsEnvVar, "1");
+            using var enableScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.EnableEnvVar, "1");
+            using var outputScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.OutputDirEnvVar, tempDir);
+            using var windowScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.WindowDurationEnvVar, "200");
+            using var loggerFactory = LoggerFactory.Create(_ => { });
+            using var recorder = new ForegroundPostTeleportWindowRecorder(loggerFactory);
+
+            recorder.Start();
+
+            PacketLogger.RecordInboundPacket((ushort)Opcode.SMSG_MONSTER_MOVE_TRANSPORT, size: 48);
+            PacketLogger.RecordOutboundPacket(
+                (ushort)Opcode.MSG_MOVE_HEARTBEAT,
+                BuildOpcodeBytes(Opcode.MSG_MOVE_HEARTBEAT, payloadLength: 36));
+
+            var fixturePath = WaitForFixture(tempDir, TimeSpan.FromSeconds(2));
+            Assert.NotNull(fixturePath);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(fixturePath!));
+            var root = document.RootElement;
+
+            Assert.Equal("transport_packet_window", root.GetProperty("CaptureScenario").GetString());
+            var trigger = root.GetProperty("Trigger");
+            Assert.Equal("SMSG_MONSTER_MOVE_TRANSPORT", trigger.GetProperty("OpcodeName").GetString());
+            Assert.Equal("Recv", trigger.GetProperty("Direction").GetString());
+
+            var packets = root.GetProperty("Packets").EnumerateArray().ToArray();
+            Assert.Equal(2, packets.Length);
+            Assert.Equal("SMSG_MONSTER_MOVE_TRANSPORT", packets[0].GetProperty("OpcodeName").GetString());
+            Assert.Equal("MSG_MOVE_HEARTBEAT", packets[1].GetProperty("OpcodeName").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
+        }
+    }
+
+    [Fact]
     public void Recorder_WhenNotTriggered_DoesNotEmitFixture()
     {
         var tempDir = CreateTempDirectory();

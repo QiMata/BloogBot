@@ -38,6 +38,28 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
+### 2026-04-28 (transport packet-window trigger research)
+- Pass result: `Foreground recorder deterministically classifies SMSG_MONSTER_MOVE_TRANSPORT transport windows`
+- Last delta:
+  - `ForegroundPostTeleportWindowRecorder` now opens
+    `transport_packet_window` on inbound `SMSG_MONSTER_MOVE_TRANSPORT`.
+  - `ForegroundPostTeleportWindowRecorderTests` covers the new scenario and
+    pins trigger/opcode ordering.
+  - The live Orgrimmar/Undercity zeppelin probe did not produce a foreground
+    transport window within one route cycle, so the next trigger research must
+    inspect normal zeppelin object-update/monster-move evidence before a
+    baseline can be promoted.
+- Validation/tests run:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundPostTeleportWindowRecorderTests" --logger "console;verbosity=minimal"` -> `passed (6/6; existing nonfatal dumpbin warning)`.
+  - Live zeppelin probe -> `test run successful; 1 skipped`, no foreground
+    `transport_packet_window` fixture under
+    `tmp/test-runtime/zeppelin-transport-capture-20260428_02`.
+- Files changed:
+  - `Services/ForegroundBotRunner/Diagnostics/ForegroundPostTeleportWindowRecorder.cs`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundPostTeleportWindowRecorderTests.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+- Next command: `rg -n "SMSG_MONSTER_MOVE|SMSG_COMPRESSED_UPDATE_OBJECT|OBJECT_FIELD_ENTRY|TransportGuid|MOVEFLAG_ONTRANSPORT" Exports/WoWSharpClient Services/ForegroundBotRunner Services/BackgroundBotRunner Tests/BotRunner.Tests/LiveValidation docs/physics -g "!**/bin/**" -g "!**/obj/**"`
+
 ### 2026-04-28 (packet-window worldport ACK + knockback scenarios)
 - Pass result: `Foreground packet-window recorder now captures post-load worldport ACK and knockback windows`
 - Last delta:

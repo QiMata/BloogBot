@@ -246,7 +246,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
     // is the early heads-up the server sends before SMSG_NEW_WORLD; SMSG_NEW_WORLD
     // delivers the destination map/position. The outbound MSG_MOVE_WORLDPORT_ACK
     // trigger mirrors FG's late-ACK recorder path, while SMSG_MOVE_KNOCK_BACK
-    // records the server-driven knockback parity window.
+    // and SMSG_MONSTER_MOVE_TRANSPORT record server-driven movement windows.
     private static string? ResolveTriggerScenario(PacketDirection direction, Opcode opcode)
     {
         if (direction == PacketDirection.Send && opcode == Opcode.MSG_MOVE_WORLDPORT_ACK)
@@ -262,6 +262,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
                 or Opcode.SMSG_NEW_WORLD
                 or Opcode.SMSG_TRANSFER_PENDING => "post_teleport_packet_window",
             Opcode.SMSG_MOVE_KNOCK_BACK => "knockback_packet_window",
+            Opcode.SMSG_MONSTER_MOVE_TRANSPORT => "transport_packet_window",
             _ => null,
         };
     }

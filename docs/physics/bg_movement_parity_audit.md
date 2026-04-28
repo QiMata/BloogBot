@@ -287,6 +287,30 @@ and the recorded-trace replay harness).
    This closes the knockback Stream 4 baseline and BG implementation gap.
    Remaining Stream 4 research is transport/zeppelin capture.
 
+10. **Stream 4 zeppelin transport trigger remains open.** The first transport
+    recorder candidate is now wired: FG and BG post-teleport window recorders
+    classify inbound `SMSG_MONSTER_MOVE_TRANSPORT` as
+    `transport_packet_window`. Deterministic FG coverage proves the recorder
+    emits that scenario when the opcode is observed.
+
+    The live Orgrimmar/Undercity zeppelin probe corrected the staging data to
+    the local MaNGOS `DurotarZeppelin` point (`map=1`, `1340.98, -4638.58,
+    53.5445`) and transport entry `164871`, then waited one route cycle with
+    both FG and BG capture enabled. It produced only staging
+    `post_teleport_packet_window` fixtures and no transport-window fixtures:
+
+    - TRX:
+      `tmp/test-runtime/results-live/fg_bg_zeppelin_transport_window_02.trx`
+    - Staging-only fixtures:
+      `tmp/test-runtime/zeppelin-transport-capture-20260428_02/*.json`
+
+    Conclusion: normal zeppelin movement did not expose the obvious
+    `SMSG_MONSTER_MOVE_TRANSPORT` trigger in that probe. The next transport
+    baseline attempt should derive a route-specific trigger from live
+    object-update / ordinary `SMSG_MONSTER_MOVE` evidence or from stable
+    action-driven boarding, then promote fixtures only after FG and BG windows
+    are captured.
+
 ## What's *not* in scope of this audit
 
 - **Inbound parsing (SMSG side)** — covered by handler-specific tests

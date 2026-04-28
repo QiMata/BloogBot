@@ -19,6 +19,27 @@ None.
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-28 (transport packet-window trigger research)
+- Pass result: `Background recorder recognizes the candidate transport opcode; live zeppelin route did not emit it`
+- Last delta:
+  - `BackgroundPostTeleportWindowRecorder` now opens
+    `transport_packet_window` on inbound `SMSG_MONSTER_MOVE_TRANSPORT`.
+  - The opt-in FG/BG Orgrimmar/Undercity zeppelin probe staged the BG target
+    at the corrected MaNGOS Durotar zeppelin point (`1340.98, -4638.58,
+    53.5445`) with transport entry `164871`.
+  - The route produced only BG post-teleport staging fixtures and skipped after
+    one route cycle with no `transport_packet_window`; next work should find
+    the normal zeppelin trigger before promoting a BG baseline.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings; nonfatal dumpbin warning)`.
+  - Live zeppelin probe -> `test run successful; 1 skipped`, no background
+    `transport_packet_window` fixture under
+    `tmp/test-runtime/zeppelin-transport-capture-20260428_02`.
+- Files changed:
+  - `Services/BackgroundBotRunner/Diagnostics/BackgroundPostTeleportWindowRecorder.cs`
+  - `Services/BackgroundBotRunner/TASKS.md`
+- Next command: `rg -n "SMSG_MONSTER_MOVE|SMSG_COMPRESSED_UPDATE_OBJECT|OBJECT_FIELD_ENTRY|TransportGuid|MOVEFLAG_ONTRANSPORT" Exports/WoWSharpClient Services/ForegroundBotRunner Services/BackgroundBotRunner Tests/BotRunner.Tests/LiveValidation docs/physics -g "!**/bin/**" -g "!**/obj/**"`
+
 ### 2026-04-28 (packet-window knockback scenario)
 - Pass result: `Background packet-window recorder captures the Taragaman knockback window and BG emits ACK/JUMP/HEARTBEAT/FALL_LAND`
 - Last delta:

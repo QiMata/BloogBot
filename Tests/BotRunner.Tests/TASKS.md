@@ -87,6 +87,31 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-28 (zeppelin transport packet-window trigger research)
+- Pass result: `Recorder trigger is deterministic; live Orgrimmar/Undercity zeppelin probe skipped with no SMSG_MONSTER_MOVE_TRANSPORT window`
+- Last delta:
+  - Added `AckCaptureTests.ForegroundAndBackground_OrgrimmarZeppelin_CapturesTransportPacketWindows`.
+    The probe stages FG and BG at the corrected MaNGOS Durotar zeppelin point
+    (`1340.98, -4638.58, 53.5445`, map `1`) and waits one route cycle for FG
+    and BG `transport_packet_window` fixtures.
+  - Corrected `StageBotRunnerAtOrgrimmarZeppelinTowerAsync(...)` and the
+    taxi/transport constants to the Orgrimmar/Undercity transport entry
+    `164871` instead of the Grom'Gol/Undercity entry.
+  - The live route produced only post-teleport staging fixtures, then skipped
+    with a tracked reason because no `SMSG_MONSTER_MOVE_TRANSPORT` windows
+    appeared. No fixture was promoted.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings; nonfatal dumpbin warning)`.
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_POST_TELEPORT_WINDOW='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_POST_TELEPORT_WINDOW_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/zeppelin-transport-capture-20260428_02'; $env:WWOW_BG_POST_TELEPORT_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/zeppelin-transport-capture-20260428_02'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundAndBackground_OrgrimmarZeppelin_CapturesTransportPacketWindows" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fg_bg_zeppelin_transport_window_02.trx"` -> `test run successful; 1 skipped`.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TaxiTransportParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TransportTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TaxiTransportParityTests.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "SMSG_MONSTER_MOVE|SMSG_COMPRESSED_UPDATE_OBJECT|OBJECT_FIELD_ENTRY|TransportGuid|MOVEFLAG_ONTRANSPORT" Exports/WoWSharpClient Services/ForegroundBotRunner Services/BackgroundBotRunner Tests/BotRunner.Tests/LiveValidation docs/physics -g "!**/bin/**" -g "!**/obj/**"`
+
 ### 2026-04-28 (FG worldport ACK + FG/BG knockback capture)
 - Pass result: `FG worldport ACK packet-window capture and Taragaman FG/BG knockback capture both passed`
 - Last delta:

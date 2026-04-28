@@ -37,6 +37,11 @@ The fixture owns all transport coordinate setup:
 The test body resolves only the BG BotRunner target and never sends setup GM
 commands directly. SHODAN remains director-only.
 
+The Orgrimmar zeppelin helper now stages at the local MaNGOS
+`DurotarZeppelin` point (`map=1`, `x=1340.98`, `y=-4638.58`, `z=53.5445`) and
+uses transport entry `164871` for the Orgrimmar/Undercity route. Older notes
+that point at `176495` are for the Grom'Gol/Undercity route, not this tower.
+
 ## Runtime Linkage
 
 The migrated executable coverage is snapshot-based. It proves that Shodan
@@ -54,3 +59,6 @@ covered, with tracked skips, in `TaxiTransportParityTests`.
   Horde-side snapshot checks and skipped the two Alliance/tram placeholders.
 - Repo-scoped cleanup before and after live validation reported
   `No repo-scoped processes to stop.`
+- 2026-04-28 transport trigger probe: FG/BG staging at the corrected tower
+  point succeeded, but no `SMSG_MONSTER_MOVE_TRANSPORT` packet-window fixture
+  appeared within one route cycle; transport trigger research remains open.

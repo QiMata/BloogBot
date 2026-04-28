@@ -34,6 +34,11 @@ The test body no longer issues direct setup GM commands. The fixture owns:
 - `StageBotRunnerAtUndercityElevatorUpperAsync(...)` and
   `StageBotRunnerAtOrgrimmarZeppelinTowerAsync(...)` for transport locations.
 
+`StageBotRunnerAtOrgrimmarZeppelinTowerAsync(...)` uses the MaNGOS
+`DurotarZeppelin` point (`map=1`, `x=1340.98`, `y=-4638.58`, `z=53.5445`) and
+the Orgrimmar/Undercity transport entry `164871`. Entry `176495` is
+Grom'Gol/Undercity and should not be used for this cross-continent probe.
+
 ## Runtime Linkage
 
 - Taxi parity dispatches `ActionType.VisitFlightMaster` and
@@ -49,6 +54,11 @@ The test body no longer issues direct setup GM commands. The fixture owns:
   elevator.
 - Cross-continent transport parity still needs a stable production action path
   for boarding, riding, and disembarking a zeppelin route.
+- The 2026-04-28 packet-window probe confirmed that the normal
+  Orgrimmar/Undercity zeppelin route did not emit
+  `SMSG_MONSTER_MOVE_TRANSPORT` within one route cycle, so the next baseline
+  attempt needs fresh trigger research from object-update or ordinary
+  `SMSG_MONSTER_MOVE` evidence.
 
 ## Validation
 

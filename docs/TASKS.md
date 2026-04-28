@@ -32,6 +32,47 @@
 
 ---
 
+## Handoff (2026-04-28, Stream 4 zeppelin transport trigger research)
+
+- Completed/partial: added the first explicit transport packet-window trigger
+  for `SMSG_MONSTER_MOVE_TRANSPORT` in the FG and BG packet-window recorders,
+  corrected Orgrimmar/Undercity zeppelin staging to the MaNGOS
+  `DurotarZeppelin` point (`1340.98, -4638.58, 53.5445`, map `1`) and
+  transport entry `164871`, and added an opt-in FG/BG zeppelin live probe.
+- Research result:
+  - Deterministic recorder coverage proves FG captures
+    `SMSG_MONSTER_MOVE_TRANSPORT` as `transport_packet_window`.
+  - The live Orgrimmar/Undercity zeppelin probe staged both FG and BG at the
+    corrected tower point and waited one route cycle, but produced only
+    staging `post_teleport_packet_window` fixtures. No
+    `transport_packet_window` fixture was emitted, so no transport baseline was
+    promoted.
+  - Next transport work should research a route-specific trigger beyond
+    `SMSG_MONSTER_MOVE_TRANSPORT` (likely GO update / ordinary
+    `SMSG_MONSTER_MOVE` payload correlation or action-driven boarding), rather
+    than assuming the obvious transport opcode covers normal zeppelins.
+- Validation/tests run:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundPostTeleportWindowRecorderTests" --logger "console;verbosity=minimal"` -> `passed (6/6; existing nonfatal dumpbin warning)`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings; nonfatal dumpbin warning)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_POST_TELEPORT_WINDOW='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_POST_TELEPORT_WINDOW_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/zeppelin-transport-capture-20260428_02'; $env:WWOW_BG_POST_TELEPORT_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/zeppelin-transport-capture-20260428_02'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundAndBackground_OrgrimmarZeppelin_CapturesTransportPacketWindows" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fg_bg_zeppelin_transport_window_02.trx"` -> `test run successful; 1 skipped with tracked reason: no SMSG_MONSTER_MOVE_TRANSPORT transport windows within one route cycle`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - TRX: `tmp/test-runtime/results-live/fg_bg_zeppelin_transport_window_02.trx`.
+  - Staging-only fixtures:
+    `tmp/test-runtime/zeppelin-transport-capture-20260428_02/*.json`
+    (`post_teleport_packet_window` only; no `transport_packet_window`).
+- Files changed:
+  - `Services/ForegroundBotRunner/Diagnostics/ForegroundPostTeleportWindowRecorder.cs`
+  - `Services/BackgroundBotRunner/Diagnostics/BackgroundPostTeleportWindowRecorder.cs`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundPostTeleportWindowRecorderTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TaxiTransportParityTests.cs`
+  - transport docs/task trackers.
+- Next command: `rg -n "SMSG_MONSTER_MOVE|SMSG_COMPRESSED_UPDATE_OBJECT|OBJECT_FIELD_ENTRY|TransportGuid|MOVEFLAG_ONTRANSPORT" Exports/WoWSharpClient Services/ForegroundBotRunner Services/BackgroundBotRunner Tests/BotRunner.Tests/LiveValidation docs/physics -g "!**/bin/**" -g "!**/obj/**"`
+
+---
+
 ## Handoff (2026-04-28, BG movement parity Stream 4 worldport ACK + knockback)
 
 - Completed: closed the FG `MSG_MOVE_WORLDPORT_ACK` post-load recorder gap and
