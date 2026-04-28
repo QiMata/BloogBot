@@ -12,6 +12,30 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-04-28 (tracker sweep after Stream 4 closeout)
+- Pass result: `Post-Stream-4 tracker sweep found no unchecked parity tasks`
+- Last delta:
+  - Confirmed the transport object-update baseline entry is the current
+    WoWSharpClient parity state; the earlier "transport research remains open"
+    handoff is historical and superseded by
+    `OrgrimmarZeppelinTransportBaselines_PinRouteObjectUpdateTrigger`.
+  - Inspected the three untracked ACK corpus JSONs. They are valid
+    `MSG_MOVE_TELEPORT_ACK` / `MSG_MOVE_WORLDPORT_ACK` live captures, but they
+    do not add a new deterministic layout or timing shape to the committed
+    corpus, so they remain untracked.
+  - Corrected the physics audit wording so Stream 4 no longer reads as if
+    transport/zeppelin capture remains open.
+- Validation/checks run:
+  - `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md` -> no matches.
+  - ACK JSON inspection -> duplicate 20-byte teleport ACK and 4-byte worldport
+    ACK corpus shapes; not promoted.
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+  - `docs/physics/bg_movement_parity_audit.md`
+  - `docs/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_category_latest.trx"`
+
 ### 2026-04-28 (transport packet-window object-update baselines)
 - Pass result: `PostTeleportPacketWindowParityTests green with Orgrimmar zeppelin FG/BG object-update baselines (10/10)`
 - Last delta:

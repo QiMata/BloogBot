@@ -32,6 +32,41 @@
 
 ---
 
+## Handoff (2026-04-28, tracker sweep after Stream 4 closeout)
+
+- Completed: confirmed Stream 4 is fully closed in the master/local parity docs
+  and found no remaining unchecked items in the listed task trackers.
+- ACK corpus decision:
+  - Inspected the three untracked ACK corpus captures:
+    `MSG_MOVE_TELEPORT_ACK/20260427_234918_747_0000.json`,
+    `MSG_MOVE_TELEPORT_ACK/20260427_235007_703_0000.json`, and
+    `MSG_MOVE_WORLDPORT_ACK/20260427_234925_875_0001.json`.
+  - They are valid live captures, but they add no new deterministic shape beyond
+    the committed teleport/worldport ACK corpus coverage, so they were left
+    untracked and intentionally not promoted.
+- Archive/tracker sweep:
+  - `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md` -> no matches.
+  - No completed checklist item needed to move to `TASKS_ARCHIVE.md` in this
+    sweep; the current handoff blocks remain in-place as continuation context.
+  - Corrected `docs/physics/bg_movement_parity_audit.md` so the knockback
+    section points to the now-closed transport/zeppelin section instead of
+    claiming transport remains open.
+- Session checks:
+  - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"` ->
+    `mangosd`, `realmd`, `pathfinding-service`, and `maria-db` were running
+    and healthy.
+  - `git log -1 --oneline` -> `46296362 test(bg-movement-parity): pin zeppelin transport object-update window`.
+  - `git status --short --branch` -> `main...origin/main`, with only the three
+    untracked ACK corpus captures listed above.
+- Files changed:
+  - `docs/TASKS.md`
+  - `docs/physics/bg_movement_parity_audit.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_category_latest.trx"`
+
+---
+
 ## Handoff (2026-04-28, Stream 4 zeppelin transport object-update baselines)
 
 - Completed: closed the Stream 4 zeppelin transport baseline gap. FG/BG

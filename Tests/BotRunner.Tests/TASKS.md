@@ -87,6 +87,29 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-28 (tracker sweep after Stream 4 closeout)
+- Pass result: `No unchecked BotRunner/WoWSharpClient movement-parity task items remain; ACK extras left untracked`
+- Last delta:
+  - Confirmed the Stream 4 zeppelin object-update baseline handoff is the
+    current BotRunner transport state, and the earlier
+    `SMSG_MONSTER_MOVE_TRANSPORT`-only research note is superseded by the
+    route-specific `SMSG_UPDATE_OBJECT` trigger for entry `164871`.
+  - Inspected the three untracked ACK corpus JSONs from `2026-04-27`; they are
+    valid teleport/worldport ACK captures but duplicate already-promoted corpus
+    shapes, so this owner did not stage or promote them.
+  - No completed checklist item needed moving to `TASKS_ARCHIVE.md` in this
+    sweep.
+- Validation/checks run:
+  - `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md` -> no matches.
+  - `Get-Content -Raw` on the three untracked ACK corpus JSONs -> duplicate
+    20-byte `MSG_MOVE_TELEPORT_ACK` / 4-byte `MSG_MOVE_WORLDPORT_ACK` shapes.
+- Files changed:
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+  - `docs/physics/bg_movement_parity_audit.md`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_category_latest.trx"`
+
 ### 2026-04-28 (zeppelin transport object-update baselines)
 - Pass result: `ForegroundAndBackground_OrgrimmarZeppelin_CapturesTransportPacketWindows passed with route-specific SMSG_UPDATE_OBJECT triggers`
 - Last delta:

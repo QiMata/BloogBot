@@ -284,8 +284,9 @@ and the recorded-trace replay harness).
 
    Pinned by
    `PostTeleportPacketWindowParityTests.KnockbackBaselines_PinFgAndBgAckShape`.
-   This closes the knockback Stream 4 baseline and BG implementation gap.
-   Remaining Stream 4 research is transport/zeppelin capture.
+   This closed the knockback Stream 4 baseline and BG implementation gap; the
+   remaining transport/zeppelin research was later closed by the object-update
+   baselines below.
 
 10. **Stream 4 zeppelin transport object-update baselines are pinned.** The
     first candidate (`SMSG_MONSTER_MOVE_TRANSPORT`) remained valid but did not
