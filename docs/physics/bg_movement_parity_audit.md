@@ -220,6 +220,34 @@ and the recorded-trace replay harness).
    FG outbound: `[TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND]`
    BG outbound: `[TELEPORT_ACK, HEARTBEAT, HEARTBEAT, FALL_LAND]`
 
+7. **Live BG post-teleport FALL_LAND gap is closed (Stream 2E.3).**
+   The Stream 2D/2E live BG captures later exposed that the synthetic
+   parity harness was correct but live BG still skipped
+   `MSG_MOVE_FALL_LAND`: the first post-teleport physics tick could
+   classify an airborne teleport destination as a completed ground snap
+   with `MOVEFLAG_NONE`, so the controller never observed a
+   `FALLINGFAR -> grounded` transition.
+
+   Fixed by priming same-map airborne teleports as
+   `MOVEFLAG_FALLINGFAR` before the first `NativeLocalPhysics` tick
+   when a downward ground probe finds support well below the teleport
+   Z. The probe is local to the post-teleport reset path and preserves
+   nearby-support snaps.
+
+   Fresh live BG evidence:
+
+   - `background_durotar_vertical_drop_baseline.json` now contains
+     `MSG_MOVE_FALL_LAND` at 1253ms for the standard 10y Durotar drop.
+   - `background_durotar_high_drop_baseline.json` was refreshed with
+     `WWOW_BG_POST_TELEPORT_WINDOW_MS=10000` and contains
+     `MSG_MOVE_FALL_LAND` at 8357ms for the 100y drop. The default
+     2500ms recorder window is too short for that high fall.
+
+   Pinned by
+   `PostTeleportPacketWindowParityTests.BackgroundBaseline_ReportsLiveCapturedTeleportPacketSequence`
+   and
+   `PostTeleportPacketWindowParityTests.BackgroundHighDropBaseline_EmitsFallLand_AfterAirborneTeleportPriming`.
+
 ## What's *not* in scope of this audit
 
 - **Inbound parsing (SMSG side)** — covered by handler-specific tests

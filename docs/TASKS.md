@@ -32,6 +32,45 @@
 
 ---
 
+## Handoff (2026-04-28, BG post-teleport FALL_LAND parity Stream 2E.3)
+
+- Completed: closed Stream 2E.3. Live BackgroundBotRunner now emits
+  `MSG_MOVE_FALL_LAND` after same-map airborne teleports; the 10y and 100y
+  BG post-teleport baselines were refreshed and parity tests now require
+  FALL_LAND instead of pinning the old gap.
+- Last delta:
+  - `MovementController` now primes same-map airborne teleport destinations
+    with `MOVEFLAG_FALLINGFAR` before the first native physics step when a
+    downward ground probe finds support well below the teleport Z.
+  - `background_durotar_vertical_drop_baseline.json` records FALL_LAND at
+    1253ms for the 10y Durotar drop.
+  - `background_durotar_high_drop_baseline.json` records FALL_LAND at 8357ms
+    in a 10s window for the 100y drop.
+  - Stream 4 remains open only for the BG cross-map baseline.
+- Validation/tests run:
+  - Initial sanity `docker ps` confirmed `mangosd`, `realmd`,
+    `pathfinding-service`, and `maria-db` were running/healthy.
+  - Initial sanity `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests"` -> `passed (6/6)`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_REPO_ROOT='e:/repos/Westworld of Warcraft'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~Background_VerticalDropTeleport_CapturesPostTeleportWindow"` -> `passed (1/1)` for the 10y capture.
+  - Same command with temporary BG `DurotarTeleportZ = DurotarGroundZ + 100f`
+    and `WWOW_BG_POST_TELEPORT_WINDOW_MS='10000'` -> `passed (1/1)` for the
+    100y extended capture; temporary source flip reverted before commit.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~Update_PostTeleport_AirborneDestinationPrimesFallingBeforeFirstPhysicsStep|FullyQualifiedName~Update_PostTeleport_NearbySupportBelowTeleportTarget_SnapsToNearbyGround|FullyQualifiedName~Update_PostTeleport_NoGroundBelow_AllowsGraceFall|FullyQualifiedName~Update_TeleportWithGroundSnap_RunsPhysics" --logger "console;verbosity=minimal"` -> `passed (4/4)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+- Files changed:
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs`
+  - `Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/background_durotar_vertical_drop_baseline.json`
+  - `Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/background_durotar_high_drop_baseline.json`
+  - `docs/physics/bg_movement_parity_audit.md`
+  - `docs/handoff_session_bg_movement_parity_followup_v11.md`
+  - task trackers.
+- Next command: `rg -n "Foreground_CrossMapTeleport|Background_VerticalDropTeleport|ForegroundCrossMapBaseline|IsInboundTeleportTrigger" Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs Services/BackgroundBotRunner/Diagnostics/BackgroundPostTeleportWindowRecorder.cs Services/ForegroundBotRunner/Diagnostics/ForegroundPostTeleportWindowRecorder.cs`
+
+---
+
 ## Handoff (2026-04-26, Shodan trade foreground stabilization)
 
 - Completed: closed the foreground trade action follow-up. `TradeParityTests`

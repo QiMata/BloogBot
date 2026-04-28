@@ -20,6 +20,24 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-07` BG stop/use/cast packet trigger parity is part of the deterministic movement bundle: `ForceStopImmediate()` synchronously records `MSG_MOVE_STOP` before game-object use/cast packets, and server `0x7A` cast failure is named `TRY_AGAIN` (2026-04-15).
 
 ## Session Handoff
+### 2026-04-28 (BG post-teleport FALL_LAND parity)
+- Pass result: `Stream 2E.3 closed; live BG emits MSG_MOVE_FALL_LAND for same-map airborne teleports`
+- Last delta:
+  - `MovementController` primes same-map airborne teleport destinations with
+    `MOVEFLAG_FALLINGFAR` before the first `NativeLocalPhysics` tick when the
+    post-teleport ground probe finds support well below the teleport Z.
+  - Nearby-support snaps are preserved; the probe runs once per reset and does
+    not add `_needsGroundSnap` to teleport ACK readiness.
+  - Diagnostic first-frame logging remains scoped to the first post-reset
+    ground-snap frames for future capture work.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~Update_PostTeleport_AirborneDestinationPrimesFallingBeforeFirstPhysicsStep|FullyQualifiedName~Update_PostTeleport_NearbySupportBelowTeleportTarget_SnapsToNearbyGround|FullyQualifiedName~Update_PostTeleport_NoGroundBelow_AllowsGraceFall|FullyQualifiedName~Update_TeleportWithGroundSnap_RunsPhysics" --logger "console;verbosity=minimal"` -> `passed (4/4)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+- Files changed:
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+- Next command: `rg -n "PrimeAirborneTeleportFallIfNeeded|POST_TELEPORT_AIRBORNE_GROUND_SEARCH_DISTANCE|_airborneTeleportProbeCompleted" Exports/WoWSharpClient/Movement/MovementController.cs Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+
 ### 2026-04-26 (BG trade accept protocol follow-up)
 - Pass result: `TradeNetworkClientComponent final-accept semantics are pinned; Shodan trade validation passed foreground parity and documented the remaining BG-to-FG server completion gap`
 - Last delta:

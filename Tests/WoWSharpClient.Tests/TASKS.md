@@ -12,6 +12,28 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-04-28 (BG post-teleport FALL_LAND parity baselines)
+- Pass result: `PostTeleportPacketWindowParityTests green with refreshed live BG FALL_LAND baselines`
+- Last delta:
+  - `BackgroundBaseline_ReportsLiveCapturedTeleportPacketSequence` now
+    requires `MSG_MOVE_FALL_LAND` in the 10y live BG window.
+  - `BackgroundHighDropBaseline_EmitsFallLand_AfterAirborneTeleportPriming`
+    replaces the old current-bug oracle and pins the 100y extended-window
+    landing packet.
+  - Refreshed BG baselines:
+    - `background_durotar_vertical_drop_baseline.json` -> FALL_LAND at 1253ms.
+    - `background_durotar_high_drop_baseline.json` -> 10s window, FALL_LAND at 8357ms.
+- Validation/tests run:
+  - Initial sanity `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests"` -> `passed (6/6)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs`
+  - `Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/background_durotar_vertical_drop_baseline.json`
+  - `Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/background_durotar_high_drop_baseline.json`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"`
+
 ### 2026-04-24 (Wand Shoot protocol coverage)
 - Pass result: `WoWSharpObjectManagerCombatTests green after BG wand Shoot fix`
 - Last delta:
