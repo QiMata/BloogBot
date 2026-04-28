@@ -57,6 +57,7 @@ namespace WoWSharpClient.Movement
         /// </summary>
         public bool NeedsGroundSnap => _needsGroundSnap;
         private int _groundSnapFrames = 0;
+        private bool _airborneTeleportProbeCompleted = false;
         private const int POST_TELEPORT_DIAG_FRAME_LIMIT = 5;
         private const int GROUND_SNAP_MAX_FRAMES = 60; // ~2s at 30fps — safety limit
         // Server-authoritative Z from the teleport — used to clamp position.
@@ -67,6 +68,7 @@ namespace WoWSharpClient.Movement
         private float _teleportZ = float.NaN;
         private const float GROUND_SNAP_MAX_DROP = 5.0f;
         private const float TELEPORT_NEARBY_SUPPORT_PROBE_DISTANCE = 6.0f;
+        private const float POST_TELEPORT_AIRBORNE_GROUND_SEARCH_DISTANCE = 150.0f;
         // Max allowed ground Z descent per physics frame (large single-frame drops).
         private const float MaxGroundZDropPerFrame = 5.0f;
 
@@ -268,6 +270,8 @@ namespace WoWSharpClient.Movement
                 return;
             }
 
+            PrimeAirborneTeleportFallIfNeeded();
+
             Log.Verbose("[MovementController] Frame {Frame} dt={Delta:F4}s Pos=({X:F1},{Y:F1},{Z:F1}) Flags={Flags}",
                 _frameCounter, deltaSec, _player.Position.X, _player.Position.Y, _player.Position.Z, _player.MovementFlags);
 
@@ -428,6 +432,55 @@ namespace WoWSharpClient.Movement
         private bool ShouldLogPostTeleportDiagnosticFrame()
         {
             return _needsGroundSnap && _groundSnapFrames < POST_TELEPORT_DIAG_FRAME_LIMIT;
+        }
+
+        private void PrimeAirborneTeleportFallIfNeeded()
+        {
+            if (!_needsGroundSnap
+                || _airborneTeleportProbeCompleted
+                || _groundSnapFrames != 0
+                || float.IsNaN(_teleportZ)
+                || _player.Position == null
+                || _player.MovementFlags != MovementFlags.MOVEFLAG_NONE)
+            {
+                return;
+            }
+
+            _airborneTeleportProbeCompleted = true;
+
+            _ = EnsureLocalSceneDataFresh();
+            var queryZ = MathF.Max(_player.Position.Z, _teleportZ) + 0.5f;
+            var (groundZ, foundGround) = NativeLocalPhysics.GetGroundZ(
+                _player.MapId,
+                _player.Position.X,
+                _player.Position.Y,
+                queryZ,
+                POST_TELEPORT_AIRBORNE_GROUND_SEARCH_DISTANCE);
+
+            if (!foundGround)
+                return;
+
+            var drop = _teleportZ - groundZ;
+            if (drop <= TELEPORT_NEARBY_SUPPORT_PROBE_DISTANCE)
+                return;
+
+            _player.MovementFlags |= MovementFlags.MOVEFLAG_FALLINGFAR;
+            _fallTimeMs = 0;
+            _velocity = new Vector3(_velocity.X, _velocity.Y, MathF.Min(_velocity.Z, 0f));
+            _prevGroundZ = groundZ;
+            _prevGroundNormal = new Vector3(0, 0, 1);
+            _hasPhysicsGroundContact = true;
+            _wasGroundedLastFrame = false;
+
+            Log.Information(
+                "[MovementController] Airborne teleport primed falling state: map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} groundZ={GroundZ:F1} drop={Drop:F1}",
+                _player.MapId,
+                _player.Position.X,
+                _player.Position.Y,
+                _player.Position.Z,
+                _teleportZ,
+                groundZ,
+                drop);
         }
 
         private void TrySnapToNearbyTeleportSupport()
@@ -1465,6 +1518,7 @@ namespace WoWSharpClient.Movement
             // the pre-teleport value at the time Reset() is called (position is written AFTER).
             _needsGroundSnap = true;
             _groundSnapFrames = 0;
+            _airborneTeleportProbeCompleted = false;
             _teleportZ = float.IsNaN(teleportDestZ) ? _player.Position.Z : teleportDestZ;
             // Ground snap state reset on new teleport
 

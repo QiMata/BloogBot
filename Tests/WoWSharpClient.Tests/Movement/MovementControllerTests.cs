@@ -1093,6 +1093,67 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
+        public void Update_PostTeleport_AirborneDestinationPrimesFallingBeforeFirstPhysicsStep()
+        {
+            var broadGroundProbeSeen = false;
+            var firstPhysicsInputWasFalling = false;
+
+            NativeLocalPhysics.TestGetGroundZOverride = (_, x, y, z, maxSearchDist) =>
+            {
+                if (maxSearchDist >= 100f)
+                {
+                    broadGroundProbeSeen = true;
+                    Assert.Equal(-460f, x, 3);
+                    Assert.Equal(-4760f, y, 3);
+                    Assert.True(z >= 48f);
+                }
+
+                return (38f, true);
+            };
+
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                firstPhysicsInputWasFalling =
+                    (input.MoveFlags & (uint)MovementFlags.MOVEFLAG_FALLINGFAR) != 0;
+
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z - 1.5f,
+                    Orientation = input.Orientation,
+                    Pitch = input.Pitch,
+                    Vx = 0f,
+                    Vy = 0f,
+                    Vz = -5f,
+                    GroundZ = 38f,
+                    GroundNx = 0f,
+                    GroundNy = 0f,
+                    GroundNz = 1f,
+                    MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
+                    FallTime = 50,
+                };
+            };
+
+            _player.MapId = 1;
+            _player.Position = new Position(-460f, -4760f, 38f);
+            _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+            _controller.Reset(teleportDestZ: 48f);
+
+            // MovementHandler writes the teleport destination immediately after Reset().
+            _player.Position = new Position(-460f, -4760f, 48f);
+            _sentPackets.Clear();
+
+            _controller.Update(0.05f, 1000);
+
+            Assert.True(broadGroundProbeSeen);
+            Assert.True(firstPhysicsInputWasFalling);
+            Assert.Equal(46.5f, _player.Position.Z, 3);
+            Assert.True((_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0);
+            Assert.True(_controller.NeedsGroundSnap);
+        }
+
+        [Fact]
         public void Update_TeleportWithGroundSnap_DuringMapTransition_DefersPhysicsUntilTransitionClears()
         {
             var objectManager = new WoWSharpObjectManager();
