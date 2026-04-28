@@ -57,6 +57,7 @@ namespace WoWSharpClient.Movement
         /// </summary>
         public bool NeedsGroundSnap => _needsGroundSnap;
         private int _groundSnapFrames = 0;
+        private const int POST_TELEPORT_DIAG_FRAME_LIMIT = 5;
         private const int GROUND_SNAP_MAX_FRAMES = 60; // ~2s at 30fps — safety limit
         // Server-authoritative Z from the teleport — used to clamp position.
         // If the physics engine doesn't have geometry (e.g. docks, bridges, beaches)
@@ -272,6 +273,18 @@ namespace WoWSharpClient.Movement
 
             // 1. Run physics based on current player state
             var physicsResult = RunPhysics(deltaSec);
+            if (ShouldLogPostTeleportDiagnosticFrame() && physicsResult != null)
+            {
+                Log.Information(
+                    "[MovementController][PostTeleportDiag] after RunPhysics frame={Frame} snapFrame={SnapFrame} physicsFlags=0x{PhysicsFlags:X} newZ={NewZ:F3} groundZ={GroundZ:F3} playerZ={PlayerZ:F3}",
+                    _frameCounter,
+                    _groundSnapFrames + 1,
+                    physicsResult.MovementFlags,
+                    physicsResult.NewPosZ,
+                    physicsResult.GroundZ,
+                    _player.Position.Z);
+            }
+
             if (ShouldDiscardStalePhysicsResult(gameTimeMs))
             {
                 CapturePhysicsFrameRecord(output: null, deltaSec: deltaSec, gameTimeMs: gameTimeMs);
@@ -307,6 +320,16 @@ namespace WoWSharpClient.Movement
                 return;
             }
             ApplyPhysicsResult(physicsResult, deltaSec);
+            if (ShouldLogPostTeleportDiagnosticFrame())
+            {
+                Log.Information(
+                    "[MovementController][PostTeleportDiag] after ApplyPhysicsResult frame={Frame} snapFrame={SnapFrame} playerFlags=0x{PlayerFlags:X} velocityZ={VelocityZ:F3}",
+                    _frameCounter,
+                    _groundSnapFrames + 1,
+                    (uint)_player.MovementFlags,
+                    _velocity.Z);
+            }
+
             var newPhysicsPos = new Vector3(physicsResult.NewPosX, physicsResult.NewPosY, physicsResult.NewPosZ);
             var frameDelta = (newPhysicsPos - _lastPhysicsPosition).Length();
             if (_frameCounter % 100 == 1 && _player.MovementFlags != MovementFlags.MOVEFLAG_NONE)
@@ -358,6 +381,12 @@ namespace WoWSharpClient.Movement
                 }
 
                 bool stillFalling = (_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0;
+                Log.Information(
+                    "[MovementController][PostTeleportDiag] ground snap frame={SnapFrame} stillFalling={StillFalling} playerFlags=0x{PlayerFlags:X}",
+                    _groundSnapFrames,
+                    stillFalling,
+                    (uint)_player.MovementFlags);
+
                 if (!stillFalling || _groundSnapFrames >= GROUND_SNAP_MAX_FRAMES)
                 {
                     _needsGroundSnap = false;
@@ -394,6 +423,11 @@ namespace WoWSharpClient.Movement
             }
 
             CapturePhysicsFrameRecord(physicsResult, deltaSec, gameTimeMs);
+        }
+
+        private bool ShouldLogPostTeleportDiagnosticFrame()
+        {
+            return _needsGroundSnap && _groundSnapFrames < POST_TELEPORT_DIAG_FRAME_LIMIT;
         }
 
         private void TrySnapToNearbyTeleportSupport()
