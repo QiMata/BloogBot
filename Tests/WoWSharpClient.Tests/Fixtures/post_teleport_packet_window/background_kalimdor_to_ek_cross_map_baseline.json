@@ -1,0 +1,218 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-28T13:59:47.7368833Z",
+  "CaptureScenario": "post_teleport_packet_window",
+  "Source": "BG (BackgroundBotRunner) WoWClient.PacketSent / WoWClient.PacketReceived",
+  "CloseReason": "timer",
+  "WindowDurationMs": 2500,
+  "Trigger": {
+    "DeltaMs": 0,
+    "Direction": "Recv",
+    "Opcode": 63,
+    "OpcodeName": "SMSG_TRANSFER_PENDING",
+    "Size": 4,
+    "PayloadHex": ""
+  },
+  "Packets": [
+    {
+      "DeltaMs": 0,
+      "Direction": "Recv",
+      "Opcode": 63,
+      "OpcodeName": "SMSG_TRANSFER_PENDING",
+      "Size": 4,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 0,
+      "Direction": "Recv",
+      "Opcode": 169,
+      "OpcodeName": "SMSG_UPDATE_OBJECT",
+      "Size": 114,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 0,
+      "Direction": "Recv",
+      "Opcode": 169,
+      "OpcodeName": "SMSG_UPDATE_OBJECT",
+      "Size": 39,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 0,
+      "Direction": "Send",
+      "Opcode": 220,
+      "OpcodeName": "MSG_MOVE_WORLDPORT_ACK",
+      "Size": 0,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 0,
+      "Direction": "Recv",
+      "Opcode": 62,
+      "OpcodeName": "SMSG_NEW_WORLD",
+      "Size": 20,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 0,
+      "Direction": "Recv",
+      "Opcode": 811,
+      "OpcodeName": "SMSG_UPDATE_INSTANCE_OWNERSHIP",
+      "Size": 4,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 50,
+      "Direction": "Recv",
+      "Opcode": 542,
+      "OpcodeName": "SMSG_SET_REST_START",
+      "Size": 4,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 50,
+      "Direction": "Recv",
+      "Opcode": 341,
+      "OpcodeName": "SMSG_BINDPOINTUPDATE",
+      "Size": 20,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 50,
+      "Direction": "Recv",
+      "Opcode": 253,
+      "OpcodeName": "SMSG_TUTORIAL_FLAGS",
+      "Size": 32,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 50,
+      "Direction": "Recv",
+      "Opcode": 298,
+      "OpcodeName": "SMSG_INITIAL_SPELLS",
+      "Size": 177,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 50,
+      "Direction": "Recv",
+      "Opcode": 297,
+      "OpcodeName": "SMSG_ACTION_BUTTONS",
+      "Size": 480,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 50,
+      "Direction": "Recv",
+      "Opcode": 290,
+      "OpcodeName": "SMSG_INITIALIZE_FACTIONS",
+      "Size": 324,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 50,
+      "Direction": "Send",
+      "Opcode": 462,
+      "OpcodeName": "CMSG_QUERY_TIME",
+      "Size": 0,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 50,
+      "Direction": "Recv",
+      "Opcode": 66,
+      "OpcodeName": "SMSG_LOGIN_SETTIMESPEED",
+      "Size": 8,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 52,
+      "Direction": "Recv",
+      "Opcode": 502,
+      "OpcodeName": "SMSG_COMPRESSED_UPDATE_OBJECT",
+      "Size": 846,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 53,
+      "Direction": "Recv",
+      "Opcode": 502,
+      "OpcodeName": "SMSG_COMPRESSED_UPDATE_OBJECT",
+      "Size": 472,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 55,
+      "Direction": "Recv",
+      "Opcode": 502,
+      "OpcodeName": "SMSG_COMPRESSED_UPDATE_OBJECT",
+      "Size": 2419,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 56,
+      "Direction": "Recv",
+      "Opcode": 706,
+      "OpcodeName": "SMSG_INIT_WORLD_STATES",
+      "Size": 1322,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 56,
+      "Direction": "Recv",
+      "Opcode": 756,
+      "OpcodeName": "SMSG_WEATHER",
+      "Size": 13,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 56,
+      "Direction": "Recv",
+      "Opcode": 311,
+      "OpcodeName": "SMSG_UPDATE_AURA_DURATION",
+      "Size": 5,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 58,
+      "Direction": "Recv",
+      "Opcode": 306,
+      "OpcodeName": "SMSG_SPELL_GO",
+      "Size": 27,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 64,
+      "Direction": "Recv",
+      "Opcode": 463,
+      "OpcodeName": "SMSG_QUERY_TIME_RESPONSE",
+      "Size": 4,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 64,
+      "Direction": "Recv",
+      "Opcode": 502,
+      "OpcodeName": "SMSG_COMPRESSED_UPDATE_OBJECT",
+      "Size": 51,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1038,
+      "Direction": "Send",
+      "Opcode": 238,
+      "OpcodeName": "MSG_MOVE_HEARTBEAT",
+      "Size": 28,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1382,
+      "Direction": "Recv",
+      "Opcode": 169,
+      "OpcodeName": "SMSG_UPDATE_OBJECT",
+      "Size": 82,
+      "PayloadHex": ""
+    }
+  ]
+}

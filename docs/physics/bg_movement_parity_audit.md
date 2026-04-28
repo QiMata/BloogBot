@@ -248,6 +248,30 @@ and the recorded-trace replay harness).
    and
    `PostTeleportPacketWindowParityTests.BackgroundHighDropBaseline_EmitsFallLand_AfterAirborneTeleportPriming`.
 
+8. **Stream 4 cross-map baselines are pinned.** Foreground and background
+   now both have committed post-teleport packet-window fixtures for a real
+   Orgrimmar (Kalimdor) -> Ironforge (Eastern Kingdoms) hop:
+
+   - `foreground_kalimdor_to_ek_cross_map_baseline.json` fires on
+     `SMSG_TRANSFER_PENDING` and captures the WoW.exe transfer-pending side:
+     destination object updates, `SMSG_NEW_WORLD`, and the immediate
+     `CMSG_CANCEL_TRADE` cleanup packet. `MSG_MOVE_WORLDPORT_ACK` remains
+     outside the 2.5s foreground window because WoW.exe pauses packet
+     processing during map load.
+   - `background_kalimdor_to_ek_cross_map_baseline.json` fires on
+     `SMSG_TRANSFER_PENDING` and captures BG's managed-worldport shape:
+     immediate zero-payload `MSG_MOVE_WORLDPORT_ACK`, `SMSG_NEW_WORLD`,
+     destination object updates, login-world packets, and a later heartbeat.
+
+   Pinned by
+   `PostTeleportPacketWindowParityTests.ForegroundCrossMapBaseline_PinsTransferPendingNewWorldShape`
+   and
+   `PostTeleportPacketWindowParityTests.BackgroundCrossMapBaseline_PinsTransferPendingNewWorldShape`.
+   This closes the primary Stream 4 baseline gap. Remaining Stream 4 ideas
+   are lower-priority research: transport/zeppelin capture, knockback capture,
+   and a longer or second foreground window for post-load
+   `MSG_MOVE_WORLDPORT_ACK`.
+
 ## What's *not* in scope of this audit
 
 - **Inbound parsing (SMSG side)** — covered by handler-specific tests

@@ -33,6 +33,7 @@ public sealed class PostTeleportPacketWindowParityTests
     private const string BackgroundBaselineFileName = "background_durotar_vertical_drop_baseline.json";
     private const string BackgroundHighDropBaselineFileName = "background_durotar_high_drop_baseline.json";
     private const string ForegroundCrossMapBaselineFileName = "foreground_kalimdor_to_ek_cross_map_baseline.json";
+    private const string BackgroundCrossMapBaselineFileName = "background_kalimdor_to_ek_cross_map_baseline.json";
     private const ulong CapturedPlayerGuid = 366ul; // matches captured ACK fixture
 
     [Fact]
@@ -437,6 +438,58 @@ public sealed class PostTeleportPacketWindowParityTests
         Assert.Contains("00000000", fixture.Trigger.PayloadHex);
     }
 
+    [Fact]
+    [Trait("Category", "PacketFlowParity")]
+    public void BackgroundCrossMapBaseline_PinsTransferPendingNewWorldShape()
+    {
+        // Stream 4 BG cross-map baseline: live BackgroundBotRunner capture of
+        // the same Orgrimmar (Kalimdor) -> Ironforge (Eastern Kingdoms) hop as
+        // the foreground oracle. This pins BG-today behavior separately: BG's
+        // managed client processes SMSG_NEW_WORLD without WoW.exe's map-load
+        // pause, so the zero-payload MSG_MOVE_WORLDPORT_ACK appears inside the
+        // 2.5s transfer-pending window.
+        var fixture = LoadBackgroundCrossMapBaseline();
+
+        Assert.Equal(1, fixture.SchemaVersion);
+        Assert.Equal("post_teleport_packet_window", fixture.CaptureScenario);
+        Assert.Contains("BackgroundBotRunner", fixture.Source);
+        Assert.Equal(2500, fixture.WindowDurationMs);
+
+        Assert.NotNull(fixture.Trigger);
+        Assert.Equal("Recv", fixture.Trigger!.Direction);
+        Assert.Equal("SMSG_TRANSFER_PENDING", fixture.Trigger.OpcodeName);
+        Assert.Equal(0, fixture.Trigger.DeltaMs);
+        Assert.Equal(4, fixture.Trigger.Size);
+
+        var packets = fixture.Packets;
+        Assert.NotNull(packets);
+        Assert.True(packets!.Count > 0, "Captured BG cross-map window must contain at least the trigger.");
+        Assert.Equal("SMSG_TRANSFER_PENDING", packets[0].OpcodeName);
+        Assert.Equal("Recv", packets[0].Direction);
+
+        Assert.Contains(packets, p => p.OpcodeName == "SMSG_NEW_WORLD" && p.Direction == "Recv");
+        Assert.Contains(packets, p => p.OpcodeName == "SMSG_COMPRESSED_UPDATE_OBJECT" && p.Direction == "Recv");
+
+        var worldportAck = packets.SingleOrDefault(p => p.OpcodeName == "MSG_MOVE_WORLDPORT_ACK" && p.Direction == "Send");
+        Assert.NotNull(worldportAck);
+        Assert.Equal(0, worldportAck!.Size);
+        Assert.True(worldportAck.DeltaMs <= 50,
+            $"BG WORLDPORT_ACK should be immediate in the managed cross-map window; got {worldportAck.DeltaMs}ms.");
+
+        var triggerIndex = packets.FindIndex(p => p.OpcodeName == "SMSG_TRANSFER_PENDING" && p.Direction == "Recv");
+        var ackIndex = packets.FindIndex(p => p.OpcodeName == "MSG_MOVE_WORLDPORT_ACK" && p.Direction == "Send");
+        var newWorldIndex = packets.FindIndex(p => p.OpcodeName == "SMSG_NEW_WORLD" && p.Direction == "Recv");
+        Assert.True(triggerIndex >= 0);
+        Assert.True(ackIndex > triggerIndex);
+        Assert.True(newWorldIndex > triggerIndex);
+        Assert.True(ackIndex < newWorldIndex,
+            "The BG recorder observes the ACK send while the SMSG_NEW_WORLD handler is still running; pin the captured event order.");
+
+        Assert.DoesNotContain(
+            packets.Where(p => p.Direction == "Send"),
+            p => p.OpcodeName == "CMSG_SET_ACTIVE_MOVER");
+    }
+
     private static PostTeleportWindowFixture LoadBaseline() => LoadFixture(BaselineFileName);
 
     private static PostTeleportWindowFixture LoadBackgroundBaseline() => LoadFixture(BackgroundBaselineFileName);
@@ -444,6 +497,8 @@ public sealed class PostTeleportPacketWindowParityTests
     private static PostTeleportWindowFixture LoadBackgroundHighDropBaseline() => LoadFixture(BackgroundHighDropBaselineFileName);
 
     private static PostTeleportWindowFixture LoadForegroundCrossMapBaseline() => LoadFixture(ForegroundCrossMapBaselineFileName);
+
+    private static PostTeleportWindowFixture LoadBackgroundCrossMapBaseline() => LoadFixture(BackgroundCrossMapBaselineFileName);
 
     private static PostTeleportWindowFixture LoadFixture(string fileName)
     {

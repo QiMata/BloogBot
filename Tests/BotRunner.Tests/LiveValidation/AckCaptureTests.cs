@@ -294,6 +294,116 @@ public sealed class AckCaptureTests
 
     [SkippableFact]
     [Trait("Category", "AckCaptureLive")]
+    public async Task Background_CrossMapTeleport_CapturesPostTeleportWindow()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW"),
+                "1",
+                StringComparison.Ordinal),
+            "WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW=1 not set; BG post-teleport window capture is opt-in.");
+
+        var settingsPath = ResolveRepoPath(
+            "Services", "WoWStateManager", "Settings", "Configs", "Economy.config.json");
+        await _bot.EnsureSettingsAsync(settingsPath);
+        _bot.SetOutput(_output);
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
+        await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(_bot.BgAccountName),
+            "BG bot not available for post-teleport window capture.");
+
+        var bgTarget = _bot
+            .ResolveBotRunnerActionTargets(includeForegroundIfActionable: false, foregroundFirst: false)
+            .FirstOrDefault(t => !t.IsForeground);
+        global::Tests.Infrastructure.Skip.If(
+            string.IsNullOrWhiteSpace(bgTarget.AccountName),
+            "BG bot required for post-teleport window capture.");
+
+        _output.WriteLine(
+            $"=== BG post-teleport window capture: cross-map teleport with {bgTarget.AccountName}/{bgTarget.CharacterName} ===");
+        _output.WriteLine(
+            $"[ACTION-PLAN] {bgTarget.RoleLabel} {bgTarget.AccountName}/{bgTarget.CharacterName}: BG cross-map post-teleport capture target.");
+        _output.WriteLine(
+            $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no BG capture dispatch.");
+
+        var windowDir = ResolveBackgroundPostTeleportWindowDirectory();
+        Assert.NotNull(windowDir);
+        Directory.CreateDirectory(windowDir!);
+
+        await _bot.EnsureCleanSlateAsync(bgTarget.AccountName, bgTarget.RoleLabel);
+
+        var preStageCount = CountBackgroundFixtures(windowDir!);
+        var startSettled = await _bot.StageBotRunnerAtNavigationPointAsync(
+            bgTarget.AccountName,
+            bgTarget.RoleLabel,
+            KalimdorMapId,
+            OrgX,
+            OrgY,
+            OrgZ,
+            "bg-post-teleport Orgrimmar cross-map start",
+            cleanSlate: false,
+            xyToleranceYards: 10f,
+            zStabilizationWaitMs: 1000);
+        Assert.True(startSettled, "BG bot should settle in Orgrimmar before the cross-map capture hop.");
+
+        var stagingWindowClosed = await WaitForBackgroundFixtureCountAsync(
+            windowDir!,
+            preStageCount + 1,
+            TimeSpan.FromSeconds(5));
+        Assert.True(stagingWindowClosed,
+            $"Expected BG setup teleport window fixture under '{windowDir}' before starting the cross-map capture.");
+        var baselineCount = CountBackgroundFixtures(windowDir!);
+
+        try
+        {
+            _output.WriteLine(
+                "[BG-WINDOW] Moving BG from Kalimdor to Ironforge to force SMSG_TRANSFER_PENDING/SMSG_NEW_WORLD + BG worldport ACK.");
+
+            var settled = await _bot.StageBotRunnerAtNavigationPointAsync(
+                bgTarget.AccountName,
+                bgTarget.RoleLabel,
+                EasternKingdomsMapId,
+                IronforgeX,
+                IronforgeY,
+                IronforgeZ,
+                "bg-post-teleport Ironforge cross-map hop",
+                cleanSlate: false,
+                xyToleranceYards: 25f,
+                zStabilizationWaitMs: 1000);
+            Assert.True(settled, "BG bot should settle in Ironforge after the cross-map capture hop.");
+
+            await _bot.RefreshSnapshotsAsync();
+            var bgSnap = await _bot.GetSnapshotAsync(bgTarget.AccountName);
+            Assert.NotNull(bgSnap);
+            Assert.Equal((uint)EasternKingdomsMapId, bgSnap!.Player?.Unit?.GameObject?.Base?.MapId ?? 0U);
+
+            var captured = await WaitForBackgroundFixtureCountAsync(
+                windowDir!,
+                baselineCount + 1,
+                TimeSpan.FromSeconds(15));
+            Assert.True(captured,
+                $"Expected new BG cross-map post-teleport packet window fixture under '{windowDir}' " +
+                $"after Kalimdor -> Eastern Kingdoms teleport (baseline={baselineCount}).");
+        }
+        finally
+        {
+            await _bot.StageBotRunnerAtNavigationPointAsync(
+                bgTarget.AccountName,
+                bgTarget.RoleLabel,
+                KalimdorMapId,
+                OrgX,
+                OrgY,
+                OrgZ,
+                "bg-post-teleport Orgrimmar return",
+                cleanSlate: false,
+                xyToleranceYards: 10f,
+                zStabilizationWaitMs: 1000);
+        }
+    }
+
+    [SkippableFact]
+    [Trait("Category", "AckCaptureLive")]
     public async Task Foreground_GmCommand_CapturesConfiguredAckCorpusWhenEnabled()
     {
         var command = Environment.GetEnvironmentVariable("WWOW_ACK_CAPTURE_GM_COMMAND");

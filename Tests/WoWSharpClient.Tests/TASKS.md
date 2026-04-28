@@ -12,6 +12,25 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-04-28 (BG cross-map post-teleport baseline)
+- Pass result: `PostTeleportPacketWindowParityTests green with BG cross-map baseline added (7/7)`
+- Last delta:
+  - Added `background_kalimdor_to_ek_cross_map_baseline.json`, captured live
+    from BackgroundBotRunner during an Orgrimmar (Kalimdor) -> Ironforge
+    (Eastern Kingdoms) hop.
+  - Added `BackgroundCrossMapBaseline_PinsTransferPendingNewWorldShape`,
+    which pins BG's transfer-pending window: `SMSG_TRANSFER_PENDING`,
+    immediate zero-payload `MSG_MOVE_WORLDPORT_ACK`, `SMSG_NEW_WORLD`,
+    destination object updates, and no `CMSG_SET_ACTIVE_MOVER`.
+- Validation/tests run:
+  - Initial sanity `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`.
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs`
+  - `Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/background_kalimdor_to_ek_cross_map_baseline.json`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"`
+
 ### 2026-04-28 (BG post-teleport FALL_LAND parity baselines)
 - Pass result: `PostTeleportPacketWindowParityTests green with refreshed live BG FALL_LAND baselines`
 - Last delta:

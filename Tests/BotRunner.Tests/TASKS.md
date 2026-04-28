@@ -87,6 +87,26 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-28 (BG cross-map post-teleport capture)
+- Pass result: `Background_CrossMapTeleport_CapturesPostTeleportWindow passed and produced the BG Kalimdor -> EK baseline`
+- Last delta:
+  - Added `AckCaptureTests.Background_CrossMapTeleport_CapturesPostTeleportWindow`.
+  - The live test stages the BG Economy target in Orgrimmar, captures a real
+    Orgrimmar -> Ironforge cross-map hop with
+    `WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW=1`, asserts the BG snapshot lands on
+    map `0`, and returns the target to Orgrimmar.
+  - The capture was written to
+    `tmp/test-runtime/bg-cross-map-capture-20260428_01/`; the promoted source
+    was `background_20260428_135947_736.json`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings; nonfatal dumpbin warning)`.
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_BG_POST_TELEPORT_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/bg-cross-map-capture-20260428_01'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~Background_CrossMapTeleport_CapturesPostTeleportWindow" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=bg_cross_map_capture.trx"` -> `passed (1/1)`.
+  - `.\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"`
+
 ### 2026-04-26 (Trading Shodan foreground follow-up)
 - Pass result: `TradeParityTests foreground cancel and FG-to-BG transfer pass under Shodan; TradingTests keeps only the BG-to-FG transfer server-completion gap skipped`
 - Last delta:

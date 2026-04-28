@@ -32,42 +32,49 @@
 
 ---
 
-## Handoff (2026-04-28, BG post-teleport FALL_LAND parity Stream 2E.3)
+## Handoff (2026-04-28, BG movement parity Stream 4 cross-map baseline)
 
-- Completed: closed Stream 2E.3. Live BackgroundBotRunner now emits
-  `MSG_MOVE_FALL_LAND` after same-map airborne teleports; the 10y and 100y
-  BG post-teleport baselines were refreshed and parity tests now require
-  FALL_LAND instead of pinning the old gap.
+- Completed: closed the primary Stream 4 gap. BG now has a live
+  Kalimdor -> Eastern Kingdoms post-teleport packet-window baseline
+  alongside the existing FG cross-map oracle.
 - Last delta:
-  - `MovementController` now primes same-map airborne teleport destinations
-    with `MOVEFLAG_FALLINGFAR` before the first native physics step when a
-    downward ground probe finds support well below the teleport Z.
-  - `background_durotar_vertical_drop_baseline.json` records FALL_LAND at
-    1253ms for the 10y Durotar drop.
-  - `background_durotar_high_drop_baseline.json` records FALL_LAND at 8357ms
-    in a 10s window for the 100y drop.
-  - Stream 4 remains open only for the BG cross-map baseline.
+  - Added `AckCaptureTests.Background_CrossMapTeleport_CapturesPostTeleportWindow`,
+    which stages BG in Orgrimmar, performs a real cross-map hop to Ironforge,
+    waits for the BG recorder fixture, and returns BG to Orgrimmar.
+  - Promoted
+    `background_kalimdor_to_ek_cross_map_baseline.json`. It records
+    `SMSG_TRANSFER_PENDING` (4 B) as the trigger, immediate
+    `MSG_MOVE_WORLDPORT_ACK` (0 B), `SMSG_NEW_WORLD`, destination object
+    updates, login-world packets, and a later heartbeat.
+  - Added `BackgroundCrossMapBaseline_PinsTransferPendingNewWorldShape`;
+    `PostTeleportPacketWindowParityTests` now passes `7/7`.
+  - Primary Streams 2A-2E and Stream 4 cross-map baselines are closed.
+    Lower-priority Stream 4 followups remain optional research:
+    transport/zeppelin, knockback, and longer or second-window
+    `MSG_MOVE_WORLDPORT_ACK` FG capture.
 - Validation/tests run:
-  - Initial sanity `docker ps` confirmed `mangosd`, `realmd`,
-    `pathfinding-service`, and `maria-db` were running/healthy.
-  - Initial sanity `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests"` -> `passed (6/6)`.
-  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`.
-  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_REPO_ROOT='e:/repos/Westworld of Warcraft'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~Background_VerticalDropTeleport_CapturesPostTeleportWindow"` -> `passed (1/1)` for the 10y capture.
-  - Same command with temporary BG `DurotarTeleportZ = DurotarGroundZ + 100f`
-    and `WWOW_BG_POST_TELEPORT_WINDOW_MS='10000'` -> `passed (1/1)` for the
-    100y extended capture; temporary source flip reverted before commit.
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~Update_PostTeleport_AirborneDestinationPrimesFallingBeforeFirstPhysicsStep|FullyQualifiedName~Update_PostTeleport_NearbySupportBelowTeleportTarget_SnapsToNearbyGround|FullyQualifiedName~Update_PostTeleport_NoGroundBelow_AllowsGraceFall|FullyQualifiedName~Update_TeleportWithGroundSnap_RunsPhysics" --logger "console;verbosity=minimal"` -> `passed (4/4)`.
-  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+  - `git status --short` -> only the three pre-existing untracked ACK corpus
+    JSON files were present before edits.
+  - `docker ps` -> confirmed `mangosd`, `realmd`, `pathfinding-service`, and
+    `maria-db` were running/healthy.
+  - `git fetch origin`; `git log --oneline -10` -> tip was `70674f38`
+    (`docs(bg-movement-parity): v11 handoff after BG FALL_LAND fix`).
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (6/6)` before changes.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings; nonfatal dumpbin warning)`.
+  - `$env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_BG_POST_TELEPORT_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/bg-cross-map-capture-20260428_01'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~Background_CrossMapTeleport_CapturesPostTeleportWindow" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=bg_cross_map_capture.trx"` -> `passed (1/1)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (7/7)`.
+  - `.\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - Raw capture promoted from
+    `tmp/test-runtime/bg-cross-map-capture-20260428_01/background_20260428_135947_736.json`.
+  - TRX: `tmp/test-runtime/results-live/bg_cross_map_capture.trx`.
 - Files changed:
-  - `Exports/WoWSharpClient/Movement/MovementController.cs`
-  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
   - `Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs`
-  - `Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/background_durotar_vertical_drop_baseline.json`
-  - `Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/background_durotar_high_drop_baseline.json`
+  - `Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/background_kalimdor_to_ek_cross_map_baseline.json`
   - `docs/physics/bg_movement_parity_audit.md`
-  - `docs/handoff_session_bg_movement_parity_followup_v11.md`
   - task trackers.
-- Next command: `rg -n "Foreground_CrossMapTeleport|Background_VerticalDropTeleport|ForegroundCrossMapBaseline|IsInboundTeleportTrigger" Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs Services/BackgroundBotRunner/Diagnostics/BackgroundPostTeleportWindowRecorder.cs Services/ForegroundBotRunner/Diagnostics/ForegroundPostTeleportWindowRecorder.cs`
+- Next command: `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"`
 
 ---
 
