@@ -62,6 +62,11 @@ namespace WoWSharpClient.Client
         /// </summary>
         public event Action<Opcode, int>? PacketReceived;
 
+        /// <summary>
+        /// Fires after every inbound SMSG is decoded and routed with the decoded payload.
+        /// </summary>
+        public event Action<Opcode, int, ReadOnlyMemory<byte>>? PacketReceivedDetailed;
+
         public void Dispose()
         {
             if (!_disposed)
@@ -135,6 +140,11 @@ namespace WoWSharpClient.Client
             _worldClient = WoWClientFactory.CreateWorldClient();
             _worldClient.PacketSent += (opcode, size) => PacketSent?.Invoke(opcode, size);
             _worldClient.PacketReceived += (opcode, size) => PacketReceived?.Invoke(opcode, size);
+            if (_worldClient is WorldClient concreteWorldClient)
+            {
+                concreteWorldClient.PacketReceivedDetailed += (opcode, size, payload) =>
+                    PacketReceivedDetailed?.Invoke(opcode, size, payload);
+            }
 
             // Apply stored handler context to the new WorldClient
             if (_pendingHandlerContextOm != null && _pendingHandlerContextEe != null && _worldClient is WorldClient newWc)

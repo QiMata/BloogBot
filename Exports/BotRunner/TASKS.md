@@ -32,6 +32,26 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-04-28 (packet-window trigger classifier)
+- Pass result: `Shared packet-window trigger classifier supports route-specific transport triggers`
+- Last delta:
+  - Added `PostTeleportWindowTriggerClassifier` to keep FG/BG recorder trigger
+    rules in one place.
+  - The classifier preserves existing teleport, worldport ACK, knockback, and
+    `SMSG_MONSTER_MOVE_TRANSPORT` scenarios, and adds route-specific
+    transport-entry classification for ordinary `SMSG_MONSTER_MOVE` and
+    object-update payloads.
+  - `WWOW_TRANSPORT_PACKET_WINDOW_ENTRIES` / singular
+    `WWOW_TRANSPORT_PACKET_WINDOW_ENTRY` can override the default local
+    Orgrimmar/Undercity zeppelin entry `164871`.
+- Validation/tests run:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundPostTeleportWindowRecorderTests" --logger "console;verbosity=minimal"` -> `passed (9/9; existing warnings; nonfatal dumpbin warning)`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings; nonfatal dumpbin warning)`.
+- Files changed:
+  - `Exports/BotRunner/PostTeleportWindowTriggerClassifier.cs`
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-26 (Trade action dispatch follow-up)
 - Pass result: `Trade action dispatch routes foreground trade operations through object-manager helpers; deterministic dispatch bundles and Shodan trade live validation passed in the expected shape`
 - Last delta:

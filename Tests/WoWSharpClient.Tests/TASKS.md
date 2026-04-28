@@ -12,6 +12,30 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-04-28 (transport packet-window object-update baselines)
+- Pass result: `PostTeleportPacketWindowParityTests green with Orgrimmar zeppelin FG/BG object-update baselines (10/10)`
+- Last delta:
+  - Added `foreground_orgrimmar_zeppelin_transport_update_baseline.json` and
+    `background_orgrimmar_zeppelin_transport_update_baseline.json`.
+  - Added
+    `OrgrimmarZeppelinTransportBaselines_PinRouteObjectUpdateTrigger`, which
+    pins `transport_packet_window` capture on `SMSG_UPDATE_OBJECT` for route
+    entry `164871`, verifies the FG raw payload contains
+    `GAMEOBJECT_TYPE_ID = 15`, and proves FG/BG observe the same ordinary
+    `SMSG_MONSTER_MOVE` sequence with no `SMSG_MONSTER_MOVE_TRANSPORT`.
+  - `PacketPipeline` / `WorldClient` / `WoWClient` now expose decoded inbound
+    packet payloads for the BG recorder's route-specific trigger logic.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (10/10; existing warnings; nonfatal dumpbin warning)`.
+- Files changed:
+  - `Exports/WoWSharpClient/Networking/Implementation/PacketPipeline.cs`
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Client/WoWClient.cs`
+  - `Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs`
+  - new transport packet-window fixtures
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-28 (transport packet-window trigger research)
 - Pass result: `No WoWSharpClient baseline promoted; transport trigger research remains open`
 - Last delta:

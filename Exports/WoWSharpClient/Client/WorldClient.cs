@@ -60,6 +60,7 @@ namespace WoWSharpClient.Client
 
         public event Action<Opcode, int>? PacketSent;
         public event Action<Opcode, int>? PacketReceived;
+        public event Action<Opcode, int, ReadOnlyMemory<byte>>? PacketReceivedDetailed;
 
         public WorldClient(
             IConnection connection,
@@ -74,6 +75,8 @@ namespace WoWSharpClient.Client
             _pipeline = new PacketPipeline<Opcode>(connection, encryptor, framer, codec, router);
             _pipeline.PacketSending += (opcode, size) => PacketSent?.Invoke(opcode, size);
             _pipeline.PacketRouted += (opcode, size) => PacketReceived?.Invoke(opcode, size);
+            _pipeline.PacketRoutedDetailed += (opcode, payload) =>
+                PacketReceivedDetailed?.Invoke(opcode, payload.Length, payload);
 
             RegisterWorldHandlers();
         }

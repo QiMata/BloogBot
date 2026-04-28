@@ -20,6 +20,25 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-07` BG stop/use/cast packet trigger parity is part of the deterministic movement bundle: `ForceStopImmediate()` synchronously records `MSG_MOVE_STOP` before game-object use/cast packets, and server `0x7A` cast failure is named `TRY_AGAIN` (2026-04-15).
 
 ## Session Handoff
+### 2026-04-28 (BG inbound payload event for transport trigger)
+- Pass result: `BG packet-window recorder can classify route-specific transport object updates and the transport parity oracle passed`
+- Last delta:
+  - `PacketPipeline` now raises `PacketRoutedDetailed` with decoded inbound
+    payloads.
+  - `WorldClient` exposes the detailed inbound payload event, and `WoWClient`
+    forwards it from the concrete world client.
+  - This supports BG transport packet-window classification without widening
+    triggers to every object update.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings; nonfatal dumpbin warning)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (10/10; existing warnings; nonfatal dumpbin warning)`.
+- Files changed:
+  - `Exports/WoWSharpClient/Networking/Implementation/PacketPipeline.cs`
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Client/WoWClient.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+- Next command: `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-28 (BG knockback jump-state parity)
 - Pass result: `Knockback queue consumption now preserves binary-backed jump state and the focused deterministic parity slice passed`
 - Last delta:

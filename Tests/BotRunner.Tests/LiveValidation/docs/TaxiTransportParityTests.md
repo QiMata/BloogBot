@@ -55,10 +55,9 @@ Grom'Gol/Undercity and should not be used for this cross-continent probe.
 - Cross-continent transport parity still needs a stable production action path
   for boarding, riding, and disembarking a zeppelin route.
 - The 2026-04-28 packet-window probe confirmed that the normal
-  Orgrimmar/Undercity zeppelin route did not emit
-  `SMSG_MONSTER_MOVE_TRANSPORT` within one route cycle, so the next baseline
-  attempt needs fresh trigger research from object-update or ordinary
-  `SMSG_MONSTER_MOVE` evidence.
+  Orgrimmar/Undercity zeppelin route does not emit
+  `SMSG_MONSTER_MOVE_TRANSPORT`; the promoted packet-window baselines use the
+  route-specific `SMSG_UPDATE_OBJECT` trigger for transport entry `164871`.
 
 ## Validation
 

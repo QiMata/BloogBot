@@ -60,5 +60,9 @@ covered, with tracked skips, in `TaxiTransportParityTests`.
 - Repo-scoped cleanup before and after live validation reported
   `No repo-scoped processes to stop.`
 - 2026-04-28 transport trigger probe: FG/BG staging at the corrected tower
-  point succeeded, but no `SMSG_MONSTER_MOVE_TRANSPORT` packet-window fixture
-  appeared within one route cycle; transport trigger research remains open.
+  point first showed that the route does not emit
+  `SMSG_MONSTER_MOVE_TRANSPORT`. The follow-up route-specific trigger captured
+  FG/BG `transport_packet_window` fixtures from `SMSG_UPDATE_OBJECT` evidence
+  for entry `164871`; the promoted parity baselines are
+  `foreground_orgrimmar_zeppelin_transport_update_baseline.json` and
+  `background_orgrimmar_zeppelin_transport_update_baseline.json`.

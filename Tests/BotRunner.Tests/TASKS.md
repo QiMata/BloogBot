@@ -87,6 +87,29 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-28 (zeppelin transport object-update baselines)
+- Pass result: `ForegroundAndBackground_OrgrimmarZeppelin_CapturesTransportPacketWindows passed with route-specific SMSG_UPDATE_OBJECT triggers`
+- Last delta:
+  - The opt-in FG/BG zeppelin probe now captures `transport_packet_window`
+    fixtures for the Orgrimmar/Undercity route by enabling
+    `WWOW_TRANSPORT_PACKET_WINDOW_ENTRIES=164871`.
+  - Promoted source pair:
+    `tmp/test-runtime/zeppelin-transport-capture-20260428_03/foreground_20260428_175423_661.json`
+    and
+    `tmp/test-runtime/zeppelin-transport-capture-20260428_03/background_20260428_175423_657.json`.
+  - The promoted pair proves the normal route trigger is
+    `SMSG_UPDATE_OBJECT` for entry `164871`, followed by ordinary
+    `SMSG_MONSTER_MOVE`; no `SMSG_MONSTER_MOVE_TRANSPORT` appears.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings; nonfatal dumpbin warning)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_POST_TELEPORT_WINDOW='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_TRANSPORT_PACKET_WINDOW_ENTRIES='164871'; $env:WWOW_POST_TELEPORT_WINDOW_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/zeppelin-transport-capture-20260428_03'; $env:WWOW_BG_POST_TELEPORT_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/zeppelin-transport-capture-20260428_03'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundAndBackground_OrgrimmarZeppelin_CapturesTransportPacketWindows" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fg_bg_zeppelin_transport_window_03.trx"` -> `passed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TransportTests.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/TaxiTransportParityTests.md`
+- Next command: `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-28 (zeppelin transport packet-window trigger research)
 - Pass result: `Recorder trigger is deterministic; live Orgrimmar/Undercity zeppelin probe skipped with no SMSG_MONSTER_MOVE_TRANSPORT window`
 - Last delta:

@@ -287,29 +287,36 @@ and the recorded-trace replay harness).
    This closes the knockback Stream 4 baseline and BG implementation gap.
    Remaining Stream 4 research is transport/zeppelin capture.
 
-10. **Stream 4 zeppelin transport trigger remains open.** The first transport
-    recorder candidate is now wired: FG and BG post-teleport window recorders
-    classify inbound `SMSG_MONSTER_MOVE_TRANSPORT` as
-    `transport_packet_window`. Deterministic FG coverage proves the recorder
-    emits that scenario when the opcode is observed.
+10. **Stream 4 zeppelin transport object-update baselines are pinned.** The
+    first candidate (`SMSG_MONSTER_MOVE_TRANSPORT`) remained valid but did not
+    appear on the normal Orgrimmar/Undercity route. The route-specific trigger
+    is now the transport entry evidence itself:
 
-    The live Orgrimmar/Undercity zeppelin probe corrected the staging data to
-    the local MaNGOS `DurotarZeppelin` point (`map=1`, `1340.98, -4638.58,
-    53.5445`) and transport entry `164871`, then waited one route cycle with
-    both FG and BG capture enabled. It produced only staging
-    `post_teleport_packet_window` fixtures and no transport-window fixtures:
+    - FG and BG post-teleport window recorders classify ordinary
+      `SMSG_MONSTER_MOVE` as `transport_packet_window` when the mover GUID
+      encodes the configured transport entry.
+    - FG and BG recorders also classify `SMSG_UPDATE_OBJECT` /
+      `SMSG_COMPRESSED_UPDATE_OBJECT` as `transport_packet_window` when the
+      decoded object-update payload mentions the configured transport entry.
+    - The default configured entry is the local MaNGOS
+      Orgrimmar/Undercity zeppelin route `164871` (`DurotarZeppelin`), and the
+      trigger can be overridden with `WWOW_TRANSPORT_PACKET_WINDOW_ENTRIES`.
+
+    Fresh live evidence:
 
     - TRX:
-      `tmp/test-runtime/results-live/fg_bg_zeppelin_transport_window_02.trx`
-    - Staging-only fixtures:
-      `tmp/test-runtime/zeppelin-transport-capture-20260428_02/*.json`
+      `tmp/test-runtime/results-live/fg_bg_zeppelin_transport_window_03.trx`
+      -> passed `1/1`.
+    - Promoted baselines:
+      `foreground_orgrimmar_zeppelin_transport_update_baseline.json` and
+      `background_orgrimmar_zeppelin_transport_update_baseline.json`.
 
-    Conclusion: normal zeppelin movement did not expose the obvious
-    `SMSG_MONSTER_MOVE_TRANSPORT` trigger in that probe. The next transport
-    baseline attempt should derive a route-specific trigger from live
-    object-update / ordinary `SMSG_MONSTER_MOVE` evidence or from stable
-    action-driven boarding, then promote fixtures only after FG and BG windows
-    are captured.
+    The promoted FG/BG window pair triggers on `SMSG_UPDATE_OBJECT` for entry
+    `164871`; the FG raw payload also contains `GAMEOBJECT_TYPE_ID = 15`
+    (`MoTransport`). Both clients then observe the same ordinary
+    `SMSG_MONSTER_MOVE` sequence, and neither window contains
+    `SMSG_MONSTER_MOVE_TRANSPORT`. Pinned by
+    `PostTeleportPacketWindowParityTests.OrgrimmarZeppelinTransportBaselines_PinRouteObjectUpdateTrigger`.
 
 ## What's *not* in scope of this audit
 

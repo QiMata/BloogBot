@@ -121,7 +121,7 @@ public sealed class ForegroundPostTeleportWindowRecorder : IDisposable
     private void HandlePacketCaptured(PacketCapture capture)
     {
         var opcode = (Opcode)(uint)capture.Opcode;
-        var triggerScenario = ResolveTriggerScenario(capture.Direction, opcode);
+        var triggerScenario = ResolveTriggerScenario(capture.Direction, opcode, capture.RawBytes);
 
         lock (_lock)
         {
@@ -247,26 +247,16 @@ public sealed class ForegroundPostTeleportWindowRecorder : IDisposable
     // long enough that the outbound MSG_MOVE_WORLDPORT_ACK lands after the default
     // transfer-pending window, so that outbound ACK can start its own post-load
     // window. Knockback and normal transport movement use the same schema for
-    // packet-window parity baselines.
-    private static string? ResolveTriggerScenario(PacketDirection direction, Opcode opcode)
-    {
-        if (direction == PacketDirection.Send && opcode == Opcode.MSG_MOVE_WORLDPORT_ACK)
-            return "worldport_ack_packet_window";
-
-        if (direction != PacketDirection.Recv)
-            return null;
-
-        return opcode switch
-        {
-            Opcode.MSG_MOVE_TELEPORT
-                or Opcode.MSG_MOVE_TELEPORT_ACK
-                or Opcode.SMSG_NEW_WORLD
-                or Opcode.SMSG_TRANSFER_PENDING => "post_teleport_packet_window",
-            Opcode.SMSG_MOVE_KNOCK_BACK => "knockback_packet_window",
-            Opcode.SMSG_MONSTER_MOVE_TRANSPORT => "transport_packet_window",
-            _ => null,
-        };
-    }
+    // packet-window parity baselines. Transport windows are route-specific:
+    // ordinary SMSG_MONSTER_MOVE mover GUIDs and object updates are only accepted
+    // when they reference the configured transport entry.
+    private static string? ResolveTriggerScenario(PacketDirection direction, Opcode opcode, byte[]? rawBytes)
+        => PostTeleportWindowTriggerClassifier.ResolveTriggerScenario(
+            isSend: direction == PacketDirection.Send,
+            isReceive: direction == PacketDirection.Recv,
+            opcode,
+            rawBytes ?? [],
+            packetIncludesOpcodePrefix: true);
 
     private static int ResolveWindowDurationMs()
     {

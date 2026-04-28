@@ -1,8 +1,10 @@
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
+using BotRunner;
 using ForegroundBotRunner.Diagnostics;
 using ForegroundBotRunner.Mem.Hooks;
 using GameData.Core.Enums;
@@ -151,6 +153,119 @@ public sealed class ForegroundPostTeleportWindowRecorderTests
     }
 
     [Fact]
+    public void Recorder_InboundMonsterMoveForConfiguredTransportEntry_CapturesTransportScenario()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            using var artifactsScope = new EnvironmentVariableScope(RecordingArtifactsEnvVar, "1");
+            using var enableScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.EnableEnvVar, "1");
+            using var outputScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.OutputDirEnvVar, tempDir);
+            using var windowScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.WindowDurationEnvVar, "200");
+            using var entryScope = new EnvironmentVariableScope(PostTeleportWindowTriggerClassifier.TransportEntriesEnvVar, "164871");
+            using var loggerFactory = LoggerFactory.Create(_ => { });
+            using var recorder = new ForegroundPostTeleportWindowRecorder(loggerFactory);
+
+            recorder.Start();
+
+            PacketLogger.RecordInboundPacket(
+                (ushort)Opcode.SMSG_MONSTER_MOVE,
+                BuildServerPacketBytes(
+                    Opcode.SMSG_MONSTER_MOVE,
+                    BuildMonsterMovePayload(0xF110028407000123UL)));
+            PacketLogger.RecordOutboundPacket(
+                (ushort)Opcode.MSG_MOVE_HEARTBEAT,
+                BuildOpcodeBytes(Opcode.MSG_MOVE_HEARTBEAT, payloadLength: 36));
+
+            var fixturePath = WaitForFixture(tempDir, TimeSpan.FromSeconds(2));
+            Assert.NotNull(fixturePath);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(fixturePath!));
+            var root = document.RootElement;
+
+            Assert.Equal("transport_packet_window", root.GetProperty("CaptureScenario").GetString());
+            var trigger = root.GetProperty("Trigger");
+            Assert.Equal("SMSG_MONSTER_MOVE", trigger.GetProperty("OpcodeName").GetString());
+            Assert.Equal("Recv", trigger.GetProperty("Direction").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public void Recorder_InboundCompressedObjectUpdateMentioningConfiguredTransportEntry_CapturesTransportScenario()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            using var artifactsScope = new EnvironmentVariableScope(RecordingArtifactsEnvVar, "1");
+            using var enableScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.EnableEnvVar, "1");
+            using var outputScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.OutputDirEnvVar, tempDir);
+            using var windowScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.WindowDurationEnvVar, "200");
+            using var entryScope = new EnvironmentVariableScope(PostTeleportWindowTriggerClassifier.TransportEntriesEnvVar, "164871");
+            using var loggerFactory = LoggerFactory.Create(_ => { });
+            using var recorder = new ForegroundPostTeleportWindowRecorder(loggerFactory);
+
+            recorder.Start();
+
+            PacketLogger.RecordInboundPacket(
+                (ushort)Opcode.SMSG_COMPRESSED_UPDATE_OBJECT,
+                BuildServerPacketBytes(
+                    Opcode.SMSG_COMPRESSED_UPDATE_OBJECT,
+                    BuildCompressedObjectUpdatePayload(BitConverter.GetBytes(164871u))));
+
+            var fixturePath = WaitForFixture(tempDir, TimeSpan.FromSeconds(2));
+            Assert.NotNull(fixturePath);
+
+            using var document = JsonDocument.Parse(File.ReadAllText(fixturePath!));
+            var root = document.RootElement;
+
+            Assert.Equal("transport_packet_window", root.GetProperty("CaptureScenario").GetString());
+            var trigger = root.GetProperty("Trigger");
+            Assert.Equal("SMSG_COMPRESSED_UPDATE_OBJECT", trigger.GetProperty("OpcodeName").GetString());
+            Assert.Equal("Recv", trigger.GetProperty("Direction").GetString());
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public void Recorder_InboundMonsterMoveForCreatureEntry_DoesNotTriggerTransportScenario()
+    {
+        var tempDir = CreateTempDirectory();
+        try
+        {
+            using var artifactsScope = new EnvironmentVariableScope(RecordingArtifactsEnvVar, "1");
+            using var enableScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.EnableEnvVar, "1");
+            using var outputScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.OutputDirEnvVar, tempDir);
+            using var windowScope = new EnvironmentVariableScope(ForegroundPostTeleportWindowRecorder.WindowDurationEnvVar, "200");
+            using var entryScope = new EnvironmentVariableScope(PostTeleportWindowTriggerClassifier.TransportEntriesEnvVar, "164871");
+            using var loggerFactory = LoggerFactory.Create(_ => { });
+            using var recorder = new ForegroundPostTeleportWindowRecorder(loggerFactory);
+
+            recorder.Start();
+
+            PacketLogger.RecordInboundPacket(
+                (ushort)Opcode.SMSG_MONSTER_MOVE,
+                BuildServerPacketBytes(
+                    Opcode.SMSG_MONSTER_MOVE,
+                    BuildMonsterMovePayload(0xF130000C1C001F35UL)));
+
+            Thread.Sleep(400);
+
+            Assert.False(Directory.EnumerateFiles(tempDir, "*.json").Any());
+        }
+        finally
+        {
+            TryDeleteDirectory(tempDir);
+        }
+    }
+
+    [Fact]
     public void Recorder_WhenNotTriggered_DoesNotEmitFixture()
     {
         var tempDir = CreateTempDirectory();
@@ -229,6 +344,57 @@ public sealed class ForegroundPostTeleportWindowRecorderTests
         for (int i = 0; i < payloadLength; i++)
             buf[4 + i] = (byte)(i & 0xFF);
         return buf;
+    }
+
+    private static byte[] BuildServerPacketBytes(Opcode opcode, byte[] payload)
+    {
+        var buf = new byte[2 + payload.Length];
+        BitConverter.GetBytes((ushort)opcode).CopyTo(buf, 0);
+        payload.CopyTo(buf, 2);
+        return buf;
+    }
+
+    private static byte[] BuildMonsterMovePayload(ulong moverGuid)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        WritePackedGuid(writer, moverGuid);
+        return stream.ToArray();
+    }
+
+    private static byte[] BuildCompressedObjectUpdatePayload(byte[] decompressedPayload)
+    {
+        using var compressed = new MemoryStream();
+        using (var zlib = new ZLibStream(compressed, CompressionMode.Compress, leaveOpen: true))
+        {
+            zlib.Write(decompressedPayload);
+        }
+
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write(decompressedPayload.Length);
+        writer.Write(compressed.ToArray());
+        return stream.ToArray();
+    }
+
+    private static void WritePackedGuid(BinaryWriter writer, ulong guid)
+    {
+        byte mask = 0;
+        Span<byte> guidBytes = stackalloc byte[8];
+        var count = 0;
+
+        for (int i = 0; i < 8; i++)
+        {
+            byte part = (byte)((guid >> (i * 8)) & 0xFF);
+            if (part == 0)
+                continue;
+
+            mask |= (byte)(1 << i);
+            guidBytes[count++] = part;
+        }
+
+        writer.Write(mask);
+        writer.Write(guidBytes[..count]);
     }
 
     private static string CreateTempDirectory()

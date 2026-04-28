@@ -1,0 +1,98 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-28T17:54:23.6570225Z",
+  "CaptureScenario": "transport_packet_window",
+  "Source": "BG (BackgroundBotRunner) WoWClient.PacketSent / WoWClient.PacketReceived",
+  "CloseReason": "timer",
+  "WindowDurationMs": 2500,
+  "Trigger": {
+    "DeltaMs": 0,
+    "Direction": "Recv",
+    "Opcode": 169,
+    "OpcodeName": "SMSG_UPDATE_OBJECT",
+    "Size": 83,
+    "PayloadHex": ""
+  },
+  "Packets": [
+    {
+      "DeltaMs": 0,
+      "Direction": "Recv",
+      "Opcode": 169,
+      "OpcodeName": "SMSG_UPDATE_OBJECT",
+      "Size": 83,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 974,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 60,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 974,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 48,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1075,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 52,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1176,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 48,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1176,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 56,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1579,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 52,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 1680,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 48,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 2180,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 56,
+      "PayloadHex": ""
+    },
+    {
+      "DeltaMs": 2180,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 52,
+      "PayloadHex": ""
+    }
+  ]
+}

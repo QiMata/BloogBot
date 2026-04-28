@@ -37,6 +37,8 @@ public sealed class PostTeleportPacketWindowParityTests
     private const string ForegroundWorldportAckBaselineFileName = "foreground_ek_to_kalimdor_worldport_ack_baseline.json";
     private const string ForegroundKnockbackBaselineFileName = "foreground_knockback_baseline.json";
     private const string BackgroundKnockbackBaselineFileName = "background_knockback_baseline.json";
+    private const string ForegroundOrgrimmarZeppelinTransportBaselineFileName = "foreground_orgrimmar_zeppelin_transport_update_baseline.json";
+    private const string BackgroundOrgrimmarZeppelinTransportBaselineFileName = "background_orgrimmar_zeppelin_transport_update_baseline.json";
     private const ulong CapturedPlayerGuid = 366ul; // matches captured ACK fixture
 
     [Fact]
@@ -580,6 +582,50 @@ public sealed class PostTeleportPacketWindowParityTests
         Assert.Contains(bg.Packets!, p => p.Direction == "Send" && p.OpcodeName == "MSG_MOVE_FALL_LAND");
     }
 
+    [Fact]
+    [Trait("Category", "PacketFlowParity")]
+    public void OrgrimmarZeppelinTransportBaselines_PinRouteObjectUpdateTrigger()
+    {
+        // Stream 4 transport oracle: live FG/BG Orgrimmar zeppelin tower capture
+        // for the local MaNGOS Orgrimmar/Undercity route. The normal route did
+        // not emit SMSG_MONSTER_MOVE_TRANSPORT; the stable trigger is the
+        // route-specific SMSG_UPDATE_OBJECT that mentions transport entry 164871
+        // and gameobject type 15 (MoTransport), followed by ordinary
+        // SMSG_MONSTER_MOVE traffic in both clients.
+        var fg = LoadForegroundOrgrimmarZeppelinTransportBaseline();
+        var bg = LoadBackgroundOrgrimmarZeppelinTransportBaseline();
+
+        Assert.Equal("transport_packet_window", fg.CaptureScenario);
+        Assert.Equal("transport_packet_window", bg.CaptureScenario);
+        Assert.Contains("WoW.exe", fg.Source);
+        Assert.Contains("BackgroundBotRunner", bg.Source);
+        Assert.Equal(2500, fg.WindowDurationMs);
+        Assert.Equal(2500, bg.WindowDurationMs);
+
+        AssertTransportUpdateTrigger(fg, expectedRawPayloadPrefix: "A900", expectRawEntryFields: true);
+        AssertTransportUpdateTrigger(bg, expectedRawPayloadPrefix: null, expectRawEntryFields: false);
+
+        Assert.DoesNotContain(fg.Packets!, p => p.OpcodeName == "SMSG_MONSTER_MOVE_TRANSPORT");
+        Assert.DoesNotContain(bg.Packets!, p => p.OpcodeName == "SMSG_MONSTER_MOVE_TRANSPORT");
+
+        var fgSequence = fg.Packets!.Select(p => p.OpcodeName).ToArray();
+        var bgSequence = bg.Packets!.Select(p => p.OpcodeName).ToArray();
+        Assert.Equal(fgSequence, bgSequence);
+        Assert.Equal("SMSG_UPDATE_OBJECT", fgSequence[0]);
+        Assert.All(fgSequence.Skip(1), opcode => Assert.Equal("SMSG_MONSTER_MOVE", opcode));
+
+        Assert.Equal(fg.Packets!.Count, bg.Packets!.Count);
+        for (int i = 0; i < fg.Packets.Count; i++)
+        {
+            Assert.Equal("Recv", fg.Packets[i].Direction);
+            Assert.Equal("Recv", bg.Packets![i].Direction);
+
+            // FG raw CDataStore sizes include the inbound opcode prefix; BG's
+            // managed event surface reports decoded payload size.
+            Assert.Equal(bg.Packets[i].Size + 2, fg.Packets[i].Size);
+        }
+    }
+
     private static PostTeleportWindowFixture LoadBaseline() => LoadFixture(BaselineFileName);
 
     private static PostTeleportWindowFixture LoadBackgroundBaseline() => LoadFixture(BackgroundBaselineFileName);
@@ -595,6 +641,38 @@ public sealed class PostTeleportPacketWindowParityTests
     private static PostTeleportWindowFixture LoadForegroundKnockbackBaseline() => LoadFixture(ForegroundKnockbackBaselineFileName);
 
     private static PostTeleportWindowFixture LoadBackgroundKnockbackBaseline() => LoadFixture(BackgroundKnockbackBaselineFileName);
+
+    private static PostTeleportWindowFixture LoadForegroundOrgrimmarZeppelinTransportBaseline()
+        => LoadFixture(ForegroundOrgrimmarZeppelinTransportBaselineFileName);
+
+    private static PostTeleportWindowFixture LoadBackgroundOrgrimmarZeppelinTransportBaseline()
+        => LoadFixture(BackgroundOrgrimmarZeppelinTransportBaselineFileName);
+
+    private static void AssertTransportUpdateTrigger(
+        PostTeleportWindowFixture fixture,
+        string? expectedRawPayloadPrefix,
+        bool expectRawEntryFields)
+    {
+        Assert.NotNull(fixture.Trigger);
+        Assert.Equal("Recv", fixture.Trigger!.Direction);
+        Assert.Equal("SMSG_UPDATE_OBJECT", fixture.Trigger.OpcodeName);
+        Assert.Equal(0, fixture.Trigger.DeltaMs);
+
+        var packets = fixture.Packets;
+        Assert.NotNull(packets);
+        Assert.True(packets!.Count > 0, "Captured transport window must contain at least the trigger.");
+        Assert.Equal("SMSG_UPDATE_OBJECT", packets[0].OpcodeName);
+        Assert.Equal("Recv", packets[0].Direction);
+
+        if (expectedRawPayloadPrefix != null)
+            Assert.StartsWith(expectedRawPayloadPrefix, fixture.Trigger.PayloadHex);
+
+        if (expectRawEntryFields)
+        {
+            Assert.Contains("07840200", fixture.Trigger.PayloadHex); // 164871 little-endian
+            Assert.Contains("0F000000", fixture.Trigger.PayloadHex); // GAMEOBJECT_TYPE_ID = 15
+        }
+    }
 
     private static void AssertKnockbackTrigger(PostTeleportWindowFixture fixture, string? expectedRawPayloadPrefix)
     {

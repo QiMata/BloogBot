@@ -32,6 +32,63 @@
 
 ---
 
+## Handoff (2026-04-28, Stream 4 zeppelin transport object-update baselines)
+
+- Completed: closed the Stream 4 zeppelin transport baseline gap. FG/BG
+  recorders now derive `transport_packet_window` from route-specific transport
+  evidence rather than relying only on `SMSG_MONSTER_MOVE_TRANSPORT`.
+- Last delta:
+  - Added `PostTeleportWindowTriggerClassifier`, shared by FG/BG recorders.
+    It keeps the existing teleport/worldport/knockback triggers, still accepts
+    `SMSG_MONSTER_MOVE_TRANSPORT`, and adds:
+    - ordinary `SMSG_MONSTER_MOVE` when the mover GUID encodes the configured
+      transport entry;
+    - `SMSG_UPDATE_OBJECT` / `SMSG_COMPRESSED_UPDATE_OBJECT` when the decoded
+      object-update payload mentions the configured transport entry.
+  - Added `WWOW_TRANSPORT_PACKET_WINDOW_ENTRIES` /
+    `WWOW_TRANSPORT_PACKET_WINDOW_ENTRY` support; default is the local MaNGOS
+    Orgrimmar/Undercity zeppelin entry `164871`.
+  - Exposed decoded BG receive payloads through `WoWClient.PacketReceivedDetailed`
+    so the BG recorder can classify object-update / monster-move triggers.
+  - Promoted FG/BG Orgrimmar zeppelin transport baselines:
+    `foreground_orgrimmar_zeppelin_transport_update_baseline.json` and
+    `background_orgrimmar_zeppelin_transport_update_baseline.json`.
+  - Added
+    `PostTeleportPacketWindowParityTests.OrgrimmarZeppelinTransportBaselines_PinRouteObjectUpdateTrigger`.
+- Research result:
+  - The normal Orgrimmar/Undercity route still did not emit
+    `SMSG_MONSTER_MOVE_TRANSPORT`.
+  - The stable trigger is `SMSG_UPDATE_OBJECT` mentioning entry `164871`; the
+    FG raw payload also contains `GAMEOBJECT_TYPE_ID = 15` (`MoTransport`).
+  - Both FG and BG transport windows then observe the same ordinary
+    `SMSG_MONSTER_MOVE` sequence.
+- Validation/tests run:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundPostTeleportWindowRecorderTests" --logger "console;verbosity=minimal"` -> `passed (9/9; existing warnings/nonfatal dumpbin noise)`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_ENABLE_RECORDING_ARTIFACTS='1'; $env:WWOW_CAPTURE_POST_TELEPORT_WINDOW='1'; $env:WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW='1'; $env:WWOW_TRANSPORT_PACKET_WINDOW_ENTRIES='164871'; $env:WWOW_POST_TELEPORT_WINDOW_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/zeppelin-transport-capture-20260428_03'; $env:WWOW_BG_POST_TELEPORT_OUTPUT='E:/repos/Westworld of Warcraft/tmp/test-runtime/zeppelin-transport-capture-20260428_03'; $env:WWOW_REPO_ROOT='E:/repos/Westworld of Warcraft'; $env:WWOW_LOG_LEVEL='Information'; $env:WWOW_FILE_LOG_LEVEL='Information'; $env:WWOW_CONSOLE_LOG_LEVEL='Warning'; $env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundAndBackground_OrgrimmarZeppelin_CapturesTransportPacketWindows" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=fg_bg_zeppelin_transport_window_03.trx"` -> `passed (1/1)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PostTeleportPacketWindowParityTests" --logger "console;verbosity=minimal"` -> `passed (10/10; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - TRX: `tmp/test-runtime/results-live/fg_bg_zeppelin_transport_window_03.trx`.
+  - Promoted source fixtures:
+    `tmp/test-runtime/zeppelin-transport-capture-20260428_03/foreground_20260428_175423_661.json` and
+    `tmp/test-runtime/zeppelin-transport-capture-20260428_03/background_20260428_175423_657.json`.
+- Files changed:
+  - `Exports/BotRunner/PostTeleportWindowTriggerClassifier.cs`
+  - `Exports/WoWSharpClient/Networking/Implementation/PacketPipeline.cs`
+  - `Exports/WoWSharpClient/Client/WorldClient.cs`
+  - `Exports/WoWSharpClient/Client/WoWClient.cs`
+  - `Services/ForegroundBotRunner/Diagnostics/ForegroundPostTeleportWindowRecorder.cs`
+  - `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs`
+  - `Services/BackgroundBotRunner/Diagnostics/BackgroundPostTeleportWindowRecorder.cs`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundPostTeleportWindowRecorderTests.cs`
+  - `Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs`
+  - new transport packet-window fixtures
+  - transport docs/task trackers.
+- Next command: `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md`
+
+---
+
 ## Handoff (2026-04-28, Stream 4 zeppelin transport trigger research)
 
 - Completed/partial: added the first explicit transport packet-window trigger

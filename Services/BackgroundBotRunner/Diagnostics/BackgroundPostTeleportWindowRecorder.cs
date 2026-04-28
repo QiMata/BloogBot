@@ -19,15 +19,16 @@ namespace BackgroundBotRunner.Diagnostics;
 /// <c>docs/handoff_session_bg_movement_parity_followup_v8.md</c>).
 ///
 /// Triggered when an inbound teleport-direction packet is observed via
-/// <see cref="WoWClient.PacketReceived"/>. Records every subsequent packet for
-/// <see cref="WindowDurationMs"/> milliseconds (default 2500) and writes a JSON
-/// fixture into <c>Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/</c>.
+/// <see cref="WoWClient.PacketReceivedDetailed"/>. Records every subsequent
+/// packet for <see cref="WindowDurationMs"/> milliseconds (default 2500) and
+/// writes a JSON fixture into
+/// <c>Tests/WoWSharpClient.Tests/Fixtures/post_teleport_packet_window/</c>.
 ///
 /// Schema matches <c>PostTeleportWindowFixture</c> consumed by
 /// <c>Tests/WoWSharpClient.Tests/Parity/PostTeleportPacketWindowParityTests.cs</c>
 /// so a single loader can deserialize either FG or BG baselines. PayloadHex is
-/// left empty because the BG event surface only exposes (opcode, size) — the
-/// fixture's purpose is opcode shape + timing parity, not byte-for-byte payload.
+/// left empty because the BG fixture's purpose is opcode shape + timing parity,
+/// not byte-for-byte payload.
 ///
 /// Gated on <c>WWOW_ENABLE_RECORDING_ARTIFACTS=1</c> AND
 /// <c>WWOW_CAPTURE_BG_POST_TELEPORT_WINDOW=1</c>; honors the optional
@@ -49,7 +50,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
     private readonly ILogger<BackgroundPostTeleportWindowRecorder> _logger;
     private readonly object _lock = new();
     private readonly Action<Opcode, int> _packetSentHandler;
-    private readonly Action<Opcode, int> _packetReceivedHandler;
+    private readonly Action<Opcode, int, ReadOnlyMemory<byte>> _packetReceivedHandler;
 
     private bool _started;
     private string? _outputDirectory;
@@ -68,7 +69,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
         _wowClient = wowClient;
         _logger = loggerFactory.CreateLogger<BackgroundPostTeleportWindowRecorder>();
         _packetSentHandler = (op, size) => HandlePacket(PacketDirection.Send, op, size);
-        _packetReceivedHandler = (op, size) => HandlePacket(PacketDirection.Recv, op, size);
+        _packetReceivedHandler = (op, size, payload) => HandlePacket(PacketDirection.Recv, op, size, payload);
     }
 
     public static bool IsEnabled()
@@ -91,7 +92,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
             _windowDurationMs = ResolveWindowDurationMs();
 
             _wowClient.PacketSent += _packetSentHandler;
-            _wowClient.PacketReceived += _packetReceivedHandler;
+            _wowClient.PacketReceivedDetailed += _packetReceivedHandler;
             _started = true;
         }
 
@@ -109,7 +110,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
                 return;
 
             _wowClient.PacketSent -= _packetSentHandler;
-            _wowClient.PacketReceived -= _packetReceivedHandler;
+            _wowClient.PacketReceivedDetailed -= _packetReceivedHandler;
             _started = false;
 
             if (_windowPackets is { Count: > 0 })
@@ -122,10 +123,14 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
         }
     }
 
-    private void HandlePacket(PacketDirection direction, Opcode opcode, int size)
+    private void HandlePacket(
+        PacketDirection direction,
+        Opcode opcode,
+        int size,
+        ReadOnlyMemory<byte> payload = default)
     {
         var capturedAt = DateTime.UtcNow;
-        var triggerScenario = ResolveTriggerScenario(direction, opcode);
+        var triggerScenario = ResolveTriggerScenario(direction, opcode, payload.Span);
 
         lock (_lock)
         {
@@ -208,7 +213,7 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
             {
                 CapturedAtUtc = capturedAtUtc,
                 CaptureScenario = _windowScenario ?? "post_teleport_packet_window",
-                Source = "BG (BackgroundBotRunner) WoWClient.PacketSent / WoWClient.PacketReceived",
+                Source = "BG (BackgroundBotRunner) WoWClient.PacketSent / WoWClient.PacketReceivedDetailed",
                 CloseReason = reason,
                 WindowDurationMs = _windowDurationMs,
                 Trigger = trigger,
@@ -245,27 +250,18 @@ public sealed class BackgroundPostTeleportWindowRecorder : IDisposable
     // Stream 4: trigger on cross-map teleport opcodes too. SMSG_TRANSFER_PENDING
     // is the early heads-up the server sends before SMSG_NEW_WORLD; SMSG_NEW_WORLD
     // delivers the destination map/position. The outbound MSG_MOVE_WORLDPORT_ACK
-    // trigger mirrors FG's late-ACK recorder path, while SMSG_MOVE_KNOCK_BACK
-    // and SMSG_MONSTER_MOVE_TRANSPORT record server-driven movement windows.
-    private static string? ResolveTriggerScenario(PacketDirection direction, Opcode opcode)
-    {
-        if (direction == PacketDirection.Send && opcode == Opcode.MSG_MOVE_WORLDPORT_ACK)
-            return "worldport_ack_packet_window";
-
-        if (direction != PacketDirection.Recv)
-            return null;
-
-        return opcode switch
-        {
-            Opcode.MSG_MOVE_TELEPORT
-                or Opcode.MSG_MOVE_TELEPORT_ACK
-                or Opcode.SMSG_NEW_WORLD
-                or Opcode.SMSG_TRANSFER_PENDING => "post_teleport_packet_window",
-            Opcode.SMSG_MOVE_KNOCK_BACK => "knockback_packet_window",
-            Opcode.SMSG_MONSTER_MOVE_TRANSPORT => "transport_packet_window",
-            _ => null,
-        };
-    }
+    // trigger mirrors FG's late-ACK recorder path, while knockback and
+    // route-specific transport movement record server-driven movement windows.
+    private static string? ResolveTriggerScenario(
+        PacketDirection direction,
+        Opcode opcode,
+        ReadOnlySpan<byte> payload)
+        => PostTeleportWindowTriggerClassifier.ResolveTriggerScenario(
+            isSend: direction == PacketDirection.Send,
+            isReceive: direction == PacketDirection.Recv,
+            opcode,
+            payload,
+            packetIncludesOpcodePrefix: false);
 
     private static int ResolveWindowDurationMs()
     {

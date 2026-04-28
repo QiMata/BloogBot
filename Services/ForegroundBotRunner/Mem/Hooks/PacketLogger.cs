@@ -753,6 +753,24 @@ namespace ForegroundBotRunner.Mem.Hooks
         }
 
         /// <summary>
+        /// Test/helper hook for simulated inbound packets with raw bytes.
+        /// </summary>
+        public static void RecordInboundPacket(ushort opcode, byte[] rawBytes)
+        {
+            ArgumentNullException.ThrowIfNull(rawBytes);
+
+            _recvCount++;
+            RecordPacket(PacketDirection.Recv, opcode, rawBytes.Length);
+            OnPacketCaptured?.Invoke(PacketDirection.Recv, opcode, rawBytes.Length);
+            OnPacketCapturedDetailed?.Invoke(new PacketCapture(
+                DateTime.UtcNow,
+                PacketDirection.Recv,
+                opcode,
+                rawBytes.Length,
+                (byte[])rawBytes.Clone()));
+        }
+
+        /// <summary>
         /// Test/helper hook for simulated outbound packets with raw bytes.
         /// </summary>
         public static void RecordOutboundPacket(ushort opcode, byte[] rawBytes)

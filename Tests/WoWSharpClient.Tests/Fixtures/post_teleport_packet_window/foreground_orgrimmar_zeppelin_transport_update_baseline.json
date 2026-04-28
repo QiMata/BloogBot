@@ -1,0 +1,98 @@
+{
+  "SchemaVersion": 1,
+  "CapturedAtUtc": "2026-04-28T17:54:23.6610598Z",
+  "CaptureScenario": "transport_packet_window",
+  "Source": "WoW.exe (FG) NetClient::Send 0x005379A0 / NetClient::ProcessMessage 0x00537AA0",
+  "CloseReason": "timer",
+  "WindowDurationMs": 2500,
+  "Trigger": {
+    "DeltaMs": 0,
+    "Direction": "Recv",
+    "Opcode": 169,
+    "OpcodeName": "SMSG_UPDATE_OBJECT",
+    "Size": 85,
+    "PayloadHex": "A900010000000002C7078402C01F05520000000000000000000000008A3D92400100000068250114011F432001078402000000C01F21000000078402000000803FD70B000028000000010000000F00000064000000"
+  },
+  "Packets": [
+    {
+      "DeltaMs": 0,
+      "Direction": "Recv",
+      "Opcode": 169,
+      "OpcodeName": "SMSG_UPDATE_OBJECT",
+      "Size": 85,
+      "PayloadHex": "A900010000000002C7078402C01F05520000000000000000000000008A3D92400100000068250114011F432001078402000000C01F21000000078402000000803FD70B000028000000010000000F00000064000000"
+    },
+    {
+      "DeltaMs": 973,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 62,
+      "PayloadHex": "DD00DB542FE40C30F172D9A6443B0792C52D28C541A31718030000010000B90B00000400000081F0A5442EFC91C56259C041EB2740FFF31F80FFFA0FC0FF"
+    },
+    {
+      "DeltaMs": 974,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB351F1C0C30F153E8A744FD8692C55AEF0442A41718030000010000B100000001000000DDEBA744A58792C5849C0642"
+    },
+    {
+      "DeltaMs": 1077,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB371F1C0C30F12FEAA044A35890C5E33EA241DDC817030000010000F00300000200000087A0A0448A6090C5E708A041FEFF3F00"
+    },
+    {
+      "DeltaMs": 1174,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB351F1C0C30F1DDEBA744A58792C5849C0642C817180300000100006F0100000100000096EDA7445D8192C5C3BC0442"
+    },
+    {
+      "DeltaMs": 1174,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 58,
+      "PayloadHex": "DD00DB27301C0C30F17FCFA8449B4290C50156D041C917180300000100006108000003000000BA10A944386A90C554DCCD4105A0FFFF02D83F00"
+    },
+    {
+      "DeltaMs": 1577,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB351F1C0C30F196EDA7445D8192C5C3BC04421818180300000100007D050000020000003FD6A744506692C5BB0D0742FF374000"
+    },
+    {
+      "DeltaMs": 1680,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 50,
+      "PayloadHex": "DD00DB7A2E1C0C30F1E65DAE446AF092C5A264EC4138C119030000010000D701000001000000563AAE4480F392C53D9CEC41"
+    },
+    {
+      "DeltaMs": 2179,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 58,
+      "PayloadHex": "DD00DB7A2E1C0C30F1563AAE4480F392C53D9CEC41B818180300000100005E07000003000000F5AFAD44770293C5190DEE41F6E73F00FDFF3F00"
+    },
+    {
+      "DeltaMs": 2180,
+      "Direction": "Recv",
+      "Opcode": 221,
+      "OpcodeName": "SMSG_MONSTER_MOVE",
+      "Size": 54,
+      "PayloadHex": "DD00DB371F1C0C30F187A0A0448A6090C5E708A041B91818030000010000DD030000020000001758A044DC5890C575F99D41FE0F0000"
+    }
+  ]
+}

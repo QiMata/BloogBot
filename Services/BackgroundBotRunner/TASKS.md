@@ -19,6 +19,27 @@ None.
 Known remaining work in this owner: `0` items.
 
 ## Session Handoff
+### 2026-04-28 (route-specific transport packet-window trigger)
+- Pass result: `Background recorder captures Orgrimmar zeppelin transport windows from route-specific object-update evidence`
+- Last delta:
+  - `BackgroundPostTeleportWindowRecorder` now consumes
+    `WoWClient.PacketReceivedDetailed` so it can classify decoded BG inbound
+    payloads with the shared `PostTeleportWindowTriggerClassifier`.
+  - The recorder still accepts `SMSG_MONSTER_MOVE_TRANSPORT`, and now also
+    accepts configured-entry ordinary `SMSG_MONSTER_MOVE` mover GUIDs and
+    `SMSG_UPDATE_OBJECT` / `SMSG_COMPRESSED_UPDATE_OBJECT` payload evidence.
+  - Live probe with `WWOW_TRANSPORT_PACKET_WINDOW_ENTRIES=164871` promoted the
+    background source
+    `tmp/test-runtime/zeppelin-transport-capture-20260428_03/background_20260428_175423_657.json`.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings; nonfatal dumpbin warning)`.
+  - Live zeppelin probe with `WWOW_TRANSPORT_PACKET_WINDOW_ENTRIES=164871` -> `passed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Files changed:
+  - `Services/BackgroundBotRunner/Diagnostics/BackgroundPostTeleportWindowRecorder.cs`
+  - `Services/BackgroundBotRunner/TASKS.md`
+- Next command: `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-28 (transport packet-window trigger research)
 - Pass result: `Background recorder recognizes the candidate transport opcode; live zeppelin route did not emit it`
 - Last delta:

@@ -101,6 +101,11 @@ namespace WoWSharpClient.Networking.Implementation
         public event Action<TOpcode, int>? PacketRouted;
 
         /// <summary>
+        /// Fires after every inbound packet is decoded and routed with the decoded payload.
+        /// </summary>
+        public event Action<TOpcode, ReadOnlyMemory<byte>>? PacketRoutedDetailed;
+
+        /// <summary>
         /// Connects to the specified host and port.
         /// </summary>
         public Task ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
@@ -188,6 +193,7 @@ namespace WoWSharpClient.Networking.Implementation
                         {
                             await _router.RouteAsync(opcode, payload);
                             PacketRouted?.Invoke(opcode, payload.Length);
+                            PacketRoutedDetailed?.Invoke(opcode, payload);
                         }
                         else
                             Console.WriteLine($"Failed to decode packet of {message.Length} bytes");
@@ -250,6 +256,7 @@ namespace WoWSharpClient.Networking.Implementation
                         }
                         await _router.RouteAsync(opcode, payload);
                         PacketRouted?.Invoke(opcode, payload.Length);
+                        PacketRoutedDetailed?.Invoke(opcode, payload);
                     }
                     else
                     {

@@ -38,6 +38,28 @@
 - [x] `FG-PKT-005` Direct SMSG receive hook for `NetClient::ProcessMessage`, with binary-backed address/prologue audit and working handler-table pattern fallback.
 
 ## Session Handoff
+### 2026-04-28 (route-specific transport packet-window trigger)
+- Pass result: `Foreground recorder captures Orgrimmar zeppelin transport windows from route-specific object-update evidence`
+- Last delta:
+  - `ForegroundPostTeleportWindowRecorder` now delegates trigger selection to
+    `PostTeleportWindowTriggerClassifier`, adding configured transport-entry
+    triggers for ordinary `SMSG_MONSTER_MOVE` mover GUIDs and
+    `SMSG_UPDATE_OBJECT` / `SMSG_COMPRESSED_UPDATE_OBJECT` payloads.
+  - `PacketLogger.RecordInboundPacket(...)` has a raw-byte test helper so
+    deterministic recorder coverage can exercise payload-based triggers.
+  - `ForegroundPostTeleportWindowRecorderTests` now covers the explicit
+    transport opcode, configured-entry ordinary monster movement, compressed
+    object-update entry evidence, and the nearby-creature non-trigger guard.
+- Validation/tests run:
+  - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundPostTeleportWindowRecorderTests" --logger "console;verbosity=minimal"` -> `passed (9/9; existing warnings; nonfatal dumpbin warning)`.
+  - Live zeppelin probe with `WWOW_TRANSPORT_PACKET_WINDOW_ENTRIES=164871` -> `passed (1/1)` and produced the promoted foreground source `tmp/test-runtime/zeppelin-transport-capture-20260428_03/foreground_20260428_175423_661.json`.
+- Files changed:
+  - `Services/ForegroundBotRunner/Diagnostics/ForegroundPostTeleportWindowRecorder.cs`
+  - `Services/ForegroundBotRunner/Mem/Hooks/PacketLogger.cs`
+  - `Tests/ForegroundBotRunner.Tests/ForegroundPostTeleportWindowRecorderTests.cs`
+  - `Services/ForegroundBotRunner/TASKS.md`
+- Next command: `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md`
+
 ### 2026-04-28 (transport packet-window trigger research)
 - Pass result: `Foreground recorder deterministically classifies SMSG_MONSTER_MOVE_TRANSPORT transport windows`
 - Last delta:
