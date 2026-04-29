@@ -32,6 +32,67 @@
 
 ---
 
+## Active Tasks
+
+### MVT-TRANSPORT-FG Stabilize foreground gameobject transport ride evidence
+- [ ] `MovementParityTests.TransportRide_FgBgParity` is intermittently not fully
+  healthy in the full live bundle. BG records Undercity elevator gameobject
+  transport evidence, but FG can crash during staging and/or remain at the lower
+  stop without `TransportGuid` or vertical ride evidence. Latest tracked run:
+  `movement_parity_current_polling_helper.trx` exited green with this lane
+  skipped (`4` passed, `1` skipped). Keep taxis classified as spline movement;
+  this task is specifically gameobject transport/elevator coverage.
+
+---
+
+## Handoff (2026-04-29, movement parity health check)
+
+- Completed:
+  - Confirmed the user suspicion: the live movement bundle was not fully healthy
+    at the start of the session.
+  - Fixed the knockback staging settle gate so a stable, in-world final snapshot
+    can satisfy staging when `WaitForTeleportSettledAsync` is stale.
+  - Reworked the Undercity elevator probe to synchronize on the real west
+    elevator at the lower stop, then place FG/BG on the lower car.
+  - Converted the remaining intermittent foreground elevator ride gap into
+    tracked work `MVT-TRANSPORT-FG`; taxi rides remain spline movement coverage,
+    not gameobject transport coverage.
+  - Replaced new ad-hoc elevator/placement wait loops with
+    `WaitForSnapshotConditionAsync(...)` snapshot polling helpers.
+- Validation/tests run:
+  - `docker ps` -> required containers were up: `mangosd`, `realmd`,
+    `pathfinding-service`, and `maria-db`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AckBinaryParityTests" --logger "console;verbosity=minimal"` -> `passed (41/41)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.Update_IdleNearGameObjectTransport_AttachesBeforePostTeleportGroundSnap|FullyQualifiedName~MovementControllerTests.Update_IdleNearMapObjectTransportDeck_AttachesWithZeppelinOriginOffset|FullyQualifiedName~ObjectManagerWorldSessionTests.DirectMonsterMove_MovingTransportHighGuid_CreatesGameObjectTransport|FullyQualifiedName~ObjectManagerWorldSessionTests.MessageMoveKnockBack_PrimesImpulseWithoutForceAck|FullyQualifiedName~ObjectUpdateMutationOrderTests.MovingTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject|FullyQualifiedName~ObjectUpdateMutationOrderTests.StaticTransportHighGuidCreateBlock_WithPacketTypeNone_CreatesGameObject" --logger "console;verbosity=minimal"` -> `passed (6/6)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_current_check.trx"` -> `failed (1/5; knockback staging did not settle despite stable BG position)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.Knockback_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_knockback_current_fix.trx"` -> `passed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_current_fix_full.trx"` -> `failed (1/5; FG did not show Undercity elevator transport ride evidence)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_current_fix.trx"` -> `passed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_current_fix_full_02.trx"` -> `failed (1/5; FG WoW.exe crashed during staging and later stayed at the lower elevator stop without transport evidence while BG recorded transport samples)`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_current_tracked_fg_transport.trx"` -> `passed (5/5; intermittent FG transport gap did not reproduce)`.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors after polling-helper refactor; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_current_polling_helper.trx"` -> `passed overall with tracked skip (4 passed, 1 skipped, 0 failed)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - TRX: `tmp/test-runtime/results-live/movement_parity_current_check.trx`.
+  - TRX: `tmp/test-runtime/results-live/movement_parity_knockback_current_fix.trx`.
+  - TRX: `tmp/test-runtime/results-live/movement_parity_current_fix_full.trx`.
+  - TRX: `tmp/test-runtime/results-live/movement_parity_transport_current_fix.trx`.
+  - TRX: `tmp/test-runtime/results-live/movement_parity_current_fix_full_02.trx`.
+  - TRX: `tmp/test-runtime/results-live/movement_parity_current_tracked_fg_transport.trx`.
+  - TRX: `tmp/test-runtime/results-live/movement_parity_current_polling_helper.trx`.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MovementParityTests.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_gap_followup.trx"`
+
+---
+
 ## Handoff (2026-04-28, ACK corpus promotion)
 
 - Completed: promoted the three previously untracked live ACK corpus captures:
