@@ -44,7 +44,9 @@
   the Crossroads -> Undercity route reaches the Eastern Kingdoms target.
   - [x] Deterministic planner route selection covers the Crossroads -> Orgrimmar
     taxi leg before the Orgrimmar -> Undercity zeppelin.
-  - [ ] `TravelTo` execution and live validation remain open.
+  - [x] Cross-map `TravelTo` dispatch now upserts a persistent staged
+    `TravelTask` instead of failing immediately.
+  - [ ] Focused live validation remains open.
 
 ---
 

@@ -1,5 +1,7 @@
 using Communication;
+using BotRunner.Combat;
 using BotRunner.Helpers;
+using BotRunner.Tasks.Travel;
 using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
@@ -1230,13 +1232,33 @@ namespace BotRunner
                         var targetZ = Convert.ToSingle(actionEntry.Item2[3]);
                         builder.Do($"TravelTo map={targetMapId} ({targetX:F0},{targetY:F0},{targetZ:F0})", time =>
                         {
+                            var target = new Position(targetX, targetY, targetZ);
                             if (_objectManager.Player.MapId != targetMapId)
                             {
-                                Log.Warning("[BOT RUNNER] TravelTo cross-map not yet implemented (target map {Map})", targetMapId);
-                                return BehaviourTreeStatus.Failure;
+                                var options = new TravelOptions
+                                {
+                                    PlayerFaction = TravelFaction.Horde,
+                                    DiscoveredFlightNodes = FlightPathData
+                                        .GetNodesForFaction((int)_objectManager.Player.MapId, FlightPathData.Faction.Horde)
+                                        .Select(n => n.NodeId)
+                                        .ToArray()
+                                };
+
+                                var travelResult = UpsertTravelTask(_botTasks, context, targetMapId, target, options, arrivalRadius: 15f);
+                                if (travelResult != TravelTaskUpsertResult.Duplicate)
+                                {
+                                    Log.Information(
+                                        "[BOT RUNNER] TravelTo staged upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1})",
+                                        travelResult,
+                                        targetMapId,
+                                        targetX,
+                                        targetY,
+                                        targetZ);
+                                }
+
+                                return BehaviourTreeStatus.Success;
                             }
 
-                            var target = new Position(targetX, targetY, targetZ);
                             var finalDist = _objectManager.Player.Position.DistanceTo2D(target);
                             if (finalDist <= 15f)
                             {
@@ -1271,6 +1293,13 @@ namespace BotRunner
             Duplicate
         }
 
+        internal enum TravelTaskUpsertResult
+        {
+            Pushed,
+            Retargeted,
+            Duplicate
+        }
+
         internal enum BattlegroundQueueTaskUpsertResult
         {
             Pushed,
@@ -1299,6 +1328,29 @@ namespace BotRunner
 
             botTasks.Push(new Tasks.GoToTask(botContext, target.X, target.Y, target.Z, normalizedTolerance));
             return GoToTaskUpsertResult.Pushed;
+        }
+
+        internal static TravelTaskUpsertResult UpsertTravelTask(
+            Stack<Interfaces.IBotTask> botTasks,
+            Interfaces.IBotContext botContext,
+            uint targetMapId,
+            Position target,
+            TravelOptions options,
+            float arrivalRadius)
+        {
+            var normalizedArrivalRadius = arrivalRadius > 0f ? arrivalRadius : 5f;
+            var existingTask = botTasks.OfType<TravelTask>().FirstOrDefault();
+            if (existingTask != null)
+            {
+                if (existingTask.MatchesTarget(targetMapId, target, normalizedArrivalRadius))
+                    return TravelTaskUpsertResult.Duplicate;
+
+                existingTask.Retarget(target, normalizedArrivalRadius);
+                return TravelTaskUpsertResult.Retargeted;
+            }
+
+            botTasks.Push(new TravelTask(botContext, targetMapId, target, options, normalizedArrivalRadius));
+            return TravelTaskUpsertResult.Pushed;
         }
 
         internal static BattlegroundQueueTaskUpsertResult UpsertBattlegroundQueueTask(

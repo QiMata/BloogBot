@@ -23,6 +23,8 @@
   such as Booty Bay/Ratchet or neutral/dungeon transitions.
   - [x] `CrossMapRouterTests.CrossroadsToUndercity_HordeUsesTaxiToOrgrimmarThenZeppelin`
     pins the staged route selection and shortcut rejection.
+  - [x] `BotRunnerServiceCombatDispatchTests.BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask`
+    pins cross-map `TravelTo` dispatch to the staged executor.
   - [ ] Add focused live validation for `TravelTo` executing the staged route.
 
 0. Shodan test-director migration (started 2026-04-24)

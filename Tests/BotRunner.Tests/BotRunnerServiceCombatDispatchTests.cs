@@ -2,6 +2,7 @@ using BotRunner.Clients;
 using BotRunner.Combat;
 using BotRunner.Interfaces;
 using BotRunner.Tasks;
+using BotRunner.Tasks.Travel;
 using GameData.Core.Enums;
 using GameData.Core.Frames;
 using GameData.Core.Interfaces;
@@ -352,21 +353,27 @@ public class BotRunnerServiceCombatDispatchTests
     }
 
     [Fact]
-    public void BuildBehaviorTreeFromActions_TravelTo_CrossMap_ReturnsFailureWithoutTask()
+    public void BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask()
     {
         var service = CreateService(out var objectManager);
         var player = new WoWLocalPlayer(new HighGuid(0x22))
         {
-            MapId = 0,
+            MapId = 1,
             Position = new Position(10f, 20f, 5f),
         };
         objectManager.SetupGet(o => o.Player).Returns(player);
 
-        var node = BuildActionTree(service, CharacterAction.TravelTo, 1, 100f, 200f, 15f);
+        var node = BuildActionTree(service, CharacterAction.TravelTo, 0, 100f, 200f, 15f);
 
-        Assert.Equal(BehaviourTreeStatus.Failure, node.Tick(new TimeData(0.1f)));
+        Assert.Equal(BehaviourTreeStatus.Success, node.Tick(new TimeData(0.1f)));
         objectManager.Verify(o => o.StopAllMovement(), Times.Never);
-        Assert.Empty(GetBotTasks(service));
+
+        var task = Assert.IsType<TravelTask>(Assert.Single(GetBotTasks(service)));
+        Assert.Equal(0u, task.TargetMapId);
+        Assert.Equal(100f, task.TargetPosition.X);
+        Assert.Equal(200f, task.TargetPosition.Y);
+        Assert.Equal(15f, task.TargetPosition.Z);
+        Assert.Equal(15f, task.ArrivalRadius);
     }
 
     [Fact]

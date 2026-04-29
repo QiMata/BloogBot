@@ -26,8 +26,10 @@
   taxi `25` -> Orgrimmar `23`, walk to the Orgrimmar zeppelin tower,
   Orgrimmar/Undercity zeppelin, then final Undercity walk without choosing
   Ratchet/Booty Bay or dungeon shortcuts.
-- [ ] Wire `CharacterAction.TravelTo` to the staged executor for cross-map
-  long-pathing and prove it live.
+- [x] `CharacterAction.TravelTo` now upserts a persistent `TravelTask` for
+  cross-map targets instead of returning `TravelTo cross-map not yet
+  implemented`; deterministic dispatch coverage proves the task is queued.
+- [ ] Add and pass focused live validation for Crossroads -> Undercity.
 
 ### BR-NAV-006 Prove path ownership through combat and movement-controller handoff
 Known remaining work in this owner: `0` items.
