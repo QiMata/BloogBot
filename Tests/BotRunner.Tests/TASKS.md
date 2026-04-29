@@ -65,14 +65,7 @@
 - [x] Collected the final core live-validation evidence with the updated FG recorder baseline.
 
 4. Movement/controller parity coverage
-Known remaining work in this owner: `1` item.
-- [ ] `MVT-TRANSPORT-NAMED-UC`: complete the stricter named-Undercity elevator
-  parity path. The test now uses `.tele name <character> undercity` and
-  fixture-dispatched `SetFacing` + `StartMovement` / `StopMovement`, but the
-  first route segment still fails live because FG drops to the wrong
-  `z=-66` layer while BG reaches waypoint 1 on the expected `z=-43` layer.
-  Find the client-safe route from the named teleport landing to the west
-  elevator lower boarding point, then re-run the focused transport lane.
+Known remaining work in this owner: `0` items.
 - [x] Added deterministic coverage for the persistent `BADFACING` retry window that was holding the candidate `3/15` mining route in stationary combat.
 - [x] Added targeted BG corpse-run coverage for live waypoint ownership: `DeathCorpseRunTests` now asserts the emitted `navtrace_<account>.json` captured `RetrieveCorpseTask` ownership and a non-null `TraceSnapshot`, with deterministic helper tests covering stable recording-file lookup/cleanup.
 - [x] Session 188: `Parity_Durotar_RoadPath_Redirect` proves pause/resume packet ordering. BG `SET_FACING` on mid-route redirects now matches FG. Full live proof bundle green.
@@ -94,6 +87,37 @@ Known remaining work in this owner: `1` item.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-29 (MVT-TRANSPORT-NAMED-UC closeout)
+- Pass result: focused named-Undercity transport lane is green:
+  `movement_parity_transport_named_undercity_pathfinding_route_18.trx`
+  passed `1/1`.
+- What changed:
+  - `MovementParityTests.TransportRide_FgBgParity` now asks
+    PathfindingService on `127.0.0.1:5001` for the route from the named
+    Undercity teleport landing to the west lower elevator board point, then
+    fixture-drives the returned corners instead of relying on hand-authored
+    approach waypoints.
+  - The final board start remains the exact lower elevator staging point, while
+    intermediate pathfinding corners are driven as flow-through route points so
+    the clients stay on the live-safe lower approach.
+  - The ride trace now begins at simultaneous forward boarding and stops each
+    participant when it reaches the upper exit, preserving the stricter
+    transport-evidence and upper-dismount assertions.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_named_undercity_pathfinding_route_18.trx"` -> `passed (1/1; generated 13-corner route; both clients boarded, rode up, and dismounted near the upper exit)`.
+- Evidence:
+  - `tmp/test-runtime/results-live/movement_parity_transport_named_undercity_pathfinding_route_18.trx`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MovementParityTests.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`
+  - `docs/TASKS.md`
+  - `docs/TASKS_ARCHIVE.md`
+- Next command: `git status --short --branch`
+
 ### 2026-04-29 (named Undercity elevator route correction)
 - Pass result: focused transport lane now fails at the stronger route gate,
   which is expected until the named-teleport-to-elevator path is corrected:

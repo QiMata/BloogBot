@@ -584,6 +584,7 @@ namespace WoWSharpClient.Movement
             if (_player.TransportGuid != _lastTransportGuid)
             {
                 ResetTransportContinuity();
+                ResetKnownElevatorRide();
                 _lastTransportGuid = _player.TransportGuid;
             }
 
@@ -592,16 +593,25 @@ namespace WoWSharpClient.Movement
             WoWGameObject? activeTransport = null;
             if (TryGetActiveTransport(out activeTransport))
             {
-                _player.TransportOffset = TransportCoordinateHelper.WorldToLocal(
-                    _player.Position,
-                    activeTransport.Position,
-                    activeTransport.Facing);
-                _player.TransportOrientation = TransportCoordinateHelper.WorldToLocalFacing(
-                    _player.Facing,
-                    activeTransport.Facing);
+                if (ApplyKnownElevatorRideMotion(activeTransport, deltaSec))
+                {
+                    _player.Position = TransportCoordinateHelper.LocalToWorld(
+                        _player.TransportOffset,
+                        activeTransport.Position,
+                        activeTransport.Facing);
+                    _player.Facing = TransportCoordinateHelper.LocalToWorldFacing(
+                        _player.TransportOrientation,
+                        activeTransport.Facing);
 
-                physicsPosition = _player.TransportOffset;
-                physicsFacing = _player.TransportOrientation;
+                    physicsPosition = _player.TransportOffset;
+                    physicsFacing = _player.TransportOrientation;
+                }
+                else
+                {
+                    activeTransport = null;
+                    physicsPosition = _player.Position;
+                    physicsFacing = _player.Facing;
+                }
             }
 
             // Build physics input from current player state
@@ -739,6 +749,140 @@ namespace WoWSharpClient.Movement
             }
         }
 
+        private const uint UndercityElevatorDisplayId = 455;
+        private const uint UndercityWestElevatorEntry = 20655;
+        private const uint UndercityEastElevatorEntry = 20652;
+        private const uint UndercityNorthElevatorEntry = 20649;
+        private const float UndercityElevatorLowerZ = -40.80f;
+        private const float UndercityElevatorUpperZ = 55.72f;
+        private const float UndercityElevatorLowerTolerance = 3.0f;
+        private const float UndercityElevatorHoldLowerMs = 4500f;
+        private const float UndercityElevatorAscentMs = 3600f;
+        private const float UndercityElevatorDismountGraceMs = 500f;
+        private const float UndercityElevatorExitLocalX = 7.55f;
+        private const float UndercityElevatorDismountLocalX = 6.0f;
+
+        private KnownElevatorRideState? _knownElevatorRide;
+
+        private sealed class KnownElevatorRideState
+        {
+            public ulong TransportGuid { get; init; }
+            public float ElapsedMs { get; set; }
+        }
+
+        private void ResetKnownElevatorRide() => _knownElevatorRide = null;
+
+        private bool ApplyKnownElevatorRideMotion(WoWGameObject activeTransport, float deltaSec)
+        {
+            var entry = TransportEntryFromGuid(_player.TransportGuid);
+            if (!IsKnownUndercityElevator(entry, activeTransport))
+            {
+                ResetKnownElevatorRide();
+                return true;
+            }
+
+            _knownElevatorRide ??= TryCreateKnownElevatorRide(activeTransport);
+            if (_knownElevatorRide == null)
+                return true;
+
+            if (_knownElevatorRide.TransportGuid != _player.TransportGuid)
+            {
+                ResetKnownElevatorRide();
+                return true;
+            }
+
+            _knownElevatorRide.ElapsedMs += MathF.Max(0f, deltaSec * 1000f);
+            var currentZ = ResolveUndercityElevatorZ(_knownElevatorRide.ElapsedMs);
+            activeTransport.Position = new Position(
+                activeTransport.Position.X,
+                activeTransport.Position.Y,
+                currentZ);
+
+            if ((_player.MovementFlags & MovementFlags.MOVEFLAG_FORWARD) != 0
+                && _player.TransportOffset.X < UndercityElevatorExitLocalX)
+            {
+                _player.TransportOffset = new Position(
+                    MathF.Min(
+                        UndercityElevatorExitLocalX,
+                        _player.TransportOffset.X + (_player.RunSpeed * deltaSec)),
+                    _player.TransportOffset.Y,
+                    _player.TransportOffset.Z);
+            }
+
+            var dismountAtMs = UndercityElevatorHoldLowerMs
+                + UndercityElevatorAscentMs
+                + UndercityElevatorDismountGraceMs;
+            if (_knownElevatorRide.ElapsedMs >= dismountAtMs
+                && _player.TransportOffset.X >= UndercityElevatorDismountLocalX)
+            {
+                var worldPosition = TransportCoordinateHelper.LocalToWorld(
+                    _player.TransportOffset,
+                    activeTransport.Position,
+                    activeTransport.Facing);
+                var worldFacing = TransportCoordinateHelper.LocalToWorldFacing(
+                    _player.TransportOrientation,
+                    activeTransport.Facing);
+
+                _player.Position = worldPosition;
+                _player.Facing = worldFacing;
+                _player.Transport = null;
+                _player.TransportGuid = 0;
+                _player.TransportOffset = new Position(0f, 0f, 0f);
+                _player.TransportOrientation = 0f;
+                _player.MovementFlags &= ~MovementFlags.MOVEFLAG_ONTRANSPORT;
+                ResetKnownElevatorRide();
+                return false;
+            }
+
+            return true;
+        }
+
+        private static KnownElevatorRideState? TryCreateKnownElevatorRide(WoWGameObject activeTransport)
+        {
+            if (MathF.Abs(activeTransport.Position.Z - UndercityElevatorLowerZ) > UndercityElevatorLowerTolerance)
+                return null;
+
+            return new KnownElevatorRideState
+            {
+                TransportGuid = activeTransport.Guid,
+                ElapsedMs = 0f,
+            };
+        }
+
+        private static float ResolveUndercityElevatorZ(float elapsedMs)
+        {
+            if (elapsedMs <= UndercityElevatorHoldLowerMs)
+                return UndercityElevatorLowerZ;
+
+            var ascentElapsed = MathF.Min(
+                MathF.Max(0f, elapsedMs - UndercityElevatorHoldLowerMs),
+                UndercityElevatorAscentMs);
+            var progress = ascentElapsed / UndercityElevatorAscentMs;
+            return UndercityElevatorLowerZ
+                + ((UndercityElevatorUpperZ - UndercityElevatorLowerZ) * progress);
+        }
+
+        private static bool IsKnownUndercityElevator(uint entry, WoWGameObject activeTransport)
+            => activeTransport.DisplayId == UndercityElevatorDisplayId
+                && activeTransport.TypeId == (uint)GameObjectType.Transport
+                && (entry == UndercityWestElevatorEntry
+                    || entry == UndercityEastElevatorEntry
+                    || entry == UndercityNorthElevatorEntry);
+
+        private static uint TransportEntryFromGuid(ulong transportGuid)
+        {
+            if (transportGuid == 0)
+                return 0;
+
+            var highType = (ushort)(transportGuid >> 48);
+            return highType switch
+            {
+                0xF120 => (uint)((transportGuid >> 24) & 0xFFFFFF),
+                0x1FC0 => (uint)(transportGuid & 0x00FFFFFF),
+                _ => 0,
+            };
+        }
+
         private bool TryGetActiveTransport(out WoWGameObject? transport)
         {
             transport = null;
@@ -762,10 +906,11 @@ namespace WoWSharpClient.Movement
             return transport != null;
         }
 
-        private const float PassiveTransportAttach2DRange = 12f;
+        private const float PassiveTransportAttach2DRange = 9f;
         private const float PassiveTransportAttachVerticalRange = 10f;
         private const float PassiveMapObjectTransportAttach2DRange = 24f;
         private const float PassiveMapObjectTransportAttachVerticalRange = 25f;
+        private const uint ElevatorStopMarkerDisplayId = 462;
 
         private bool TryAttachToNearbyTransport()
         {
@@ -848,8 +993,14 @@ namespace WoWSharpClient.Movement
             => gameObject.Guid != 0
                 && IsFinitePosition(gameObject.Position)
                 && float.IsFinite(gameObject.Facing)
+                && gameObject.DisplayId != ElevatorStopMarkerDisplayId
+                && !IsKnownUndercityElevatorAtUpperStop(gameObject)
                 && (gameObject.TypeId == (uint)GameObjectType.Transport
                     || gameObject.TypeId == (uint)GameObjectType.MapObjectTransport);
+
+        private static bool IsKnownUndercityElevatorAtUpperStop(WoWGameObject gameObject)
+            => IsKnownUndercityElevator(TransportEntryFromGuid(gameObject.Guid), gameObject)
+                && gameObject.Position.Z >= UndercityElevatorUpperZ - UndercityElevatorLowerTolerance;
 
         private static float PassiveTransportHorizontalRange(WoWGameObject gameObject)
             => gameObject.TypeId == (uint)GameObjectType.MapObjectTransport

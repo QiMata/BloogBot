@@ -12,6 +12,30 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-04-29 (Undercity elevator transport-local parity)
+- Pass result: focused transport-controller slice passed `8/8`.
+- Last delta:
+  - `MovementController` now keeps the transport-local offset authoritative
+    while on gameobject transports and syncs the world position from the active
+    transport instead of recomputing the local offset every frame.
+  - Added a known Undercity elevator ride model for the three elevator entries
+    so BG can follow the lower hold, ascent, and upper dismount observed by
+    the live parity probe.
+  - Passive transport attach now ignores Undercity elevator door markers and
+    upper-stop elevator cars so a dismounted player does not immediately
+    reattach after reaching the upper exit.
+  - Explicit world-facing updates on transport also refresh
+    `TransportOrientation`, keeping `SetFacing` / route movement stable while
+    the player is attached to a gameobject transport.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.PhysicsStep_OnMovingTransport_PreservesLocalOffsetAndSyncsWorldPosition|FullyQualifiedName~MovementControllerTests.Update_KnownUndercityElevatorRide_AnimatesToUpperAndDismounts|FullyQualifiedName~MovementControllerTests.Update_AtUpperUndercityElevatorExit_DoesNotPassiveReattach|FullyQualifiedName~MovementControllerTests.PhysicsStep_OnTransport_UsesLocalCoordinatesAndIncludesTransportObject|FullyQualifiedName~MovementControllerTests.PhysicsResult_OnTransport_RecomputesLocalOffsetFromWorldOutput|FullyQualifiedName~MovementControllerTests.Update_BeforeUndercityElevatorDeck_DoesNotPassiveAttach|FullyQualifiedName~MovementControllerTests.Update_OnUndercityElevatorDeck_AttachesToCar|FullyQualifiedName~MovementControllerTests.Update_IdleNearUndercityElevatorDoorMarker_DoesNotPassiveAttach" --logger "console;verbosity=minimal"` -> `passed (8/8; existing warnings/nonfatal dumpbin noise)`.
+- Files changed:
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `git status --short --branch`
+
 ### 2026-04-28 (ACK corpus promotion)
 - Pass result: `AckBinaryParityTests passed with three additional live ACK corpus captures`
 - Last delta:

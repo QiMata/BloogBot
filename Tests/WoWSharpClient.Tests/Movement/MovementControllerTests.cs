@@ -453,6 +453,172 @@ namespace WoWSharpClient.Tests.Movement
         }
 
         [Fact]
+        public void PhysicsStep_OnMovingTransport_PreservesLocalOffsetAndSyncsWorldPosition()
+        {
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = 102f,
+                    Y = 199f,
+                    Z = 63f,
+                    Orientation = 0.25f,
+                    GroundZ = 63f,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                };
+            };
+
+            var transport = new WoWGameObject(new HighGuid(0xF120000000000003ul))
+            {
+                Position = new Position(100f, 200f, 60f),
+                Facing = 0f,
+                DisplayId = 455,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Transport,
+            };
+
+            _player.Transport = transport;
+            _player.TransportGuid = transport.Guid;
+            _player.TransportOffset = new Position(2f, -1f, 3f);
+            _player.TransportOrientation = 0.25f;
+            _player.Position = new Position(102f, 199f, 53f);
+            _player.Facing = 0.25f;
+            _player.MovementFlags = MovementFlags.MOVEFLAG_ONTRANSPORT;
+
+            _controller.Update(0.05f, 1000);
+
+            Assert.NotNull(capturedInput);
+            Assert.Equal(2f, capturedInput!.Value.X, 3);
+            Assert.Equal(-1f, capturedInput.Value.Y, 3);
+            Assert.Equal(3f, capturedInput.Value.Z, 3);
+            Assert.Equal(102f, _player.Position.X, 3);
+            Assert.Equal(199f, _player.Position.Y, 3);
+            Assert.Equal(63f, _player.Position.Z, 3);
+            Assert.Equal(2f, _player.TransportOffset.X, 3);
+            Assert.Equal(-1f, _player.TransportOffset.Y, 3);
+            Assert.Equal(3f, _player.TransportOffset.Z, 3);
+        }
+
+        [Fact]
+        public void Update_KnownUndercityElevatorRide_AnimatesToUpperAndDismounts()
+        {
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                if (input.TransportGuid == 0)
+                {
+                    return new NativePhysics.PhysicsOutput
+                    {
+                        X = input.X,
+                        Y = input.Y,
+                        Z = input.Z,
+                        Orientation = input.Orientation,
+                        GroundZ = input.Z,
+                        GroundNz = 1f,
+                        MoveFlags = input.MoveFlags,
+                    };
+                }
+
+                var transport = NativeLocalPhysics
+                    .ReadNearbyObjectsForTest(input)
+                    .Single(obj => obj.Guid == input.TransportGuid);
+
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X + transport.X,
+                    Y = input.Y + transport.Y,
+                    Z = input.Z + transport.Z,
+                    Orientation = input.Orientation + transport.Orientation,
+                    GroundZ = input.Z + transport.Z,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                };
+            };
+
+            var transport = new WoWGameObject(new HighGuid(0xF1200050AF00AF65ul))
+            {
+                Position = new Position(1544.24f, 240.77f, -40.80f),
+                Facing = 0f,
+                DisplayId = 455,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Transport,
+            };
+
+            _player.Transport = transport;
+            _player.TransportGuid = transport.Guid;
+            _player.TransportOffset = new Position(-7.3f, 1.2f, -0.46f);
+            _player.TransportOrientation = 0f;
+            _player.Position = new Position(1536.94f, 241.97f, -41.26f);
+            _player.Facing = 0f;
+            _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_ONTRANSPORT;
+            _player.RunSpeed = 7.0f;
+
+            var controller = new MovementController(_mockClient.Object, _player);
+
+            for (var i = 0; i < 20; i++)
+                controller.Update(0.5f, (uint)(1000 + (i * 500)));
+
+            Assert.Equal(0UL, _player.TransportGuid);
+            Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
+            Assert.InRange(_player.Position.X, 1550f, 1556f);
+            Assert.InRange(_player.Position.Y, 241f, 243f);
+            Assert.InRange(_player.Position.Z, 55f, 56f);
+        }
+
+        [Fact]
+        public void Update_AtUpperUndercityElevatorExit_DoesNotPassiveReattach()
+        {
+            NativeLocalPhysics.TestStepOverride = input =>
+                new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    GroundZ = input.Z,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                };
+
+            var elevator = new WoWGameObject(new HighGuid(0xF1200050AF00AF65ul))
+            {
+                Position = new Position(1544.24f, 240.77f, 55.72f),
+                Facing = 0f,
+                DisplayId = 455,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Transport,
+            };
+            var snapshot = ReplaceTrackedObjects(elevator);
+
+            try
+            {
+                _player.Position = new Position(1551.80f, 242.00f, 55.06f);
+                _player.Facing = 0f;
+                _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+                _player.Transport = null!;
+                _player.TransportGuid = 0;
+                _player.TransportOffset = new Position(0f, 0f, 0f);
+                _player.TransportOrientation = 0f;
+
+                var controller = new MovementController(
+                    _mockClient.Object,
+                    _player,
+                    objectManager: WoWSharpObjectManager.Instance);
+
+                controller.Update(0.05f, 1000);
+
+                Assert.Equal(0UL, _player.TransportGuid);
+                Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
+            }
+            finally
+            {
+                RestoreTrackedObjects(snapshot);
+            }
+        }
+
+        [Fact]
         public void Update_IdleNearGameObjectTransport_AttachesBeforePostTeleportGroundSnap()
         {
             NativePhysics.PhysicsInput? capturedInput = null;
@@ -517,6 +683,183 @@ namespace WoWSharpClient.Tests.Movement
                 Assert.True(parsed.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
                 Assert.Equal(transport.Guid, parsed.TransportGuid);
                 Assert.NotNull(parsed.TransportOffset);
+            }
+            finally
+            {
+                RestoreTrackedObjects(snapshot);
+            }
+        }
+
+        [Fact]
+        public void Update_IdleNearUndercityElevatorDoorMarker_DoesNotPassiveAttach()
+        {
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    GroundZ = input.Z,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                };
+            };
+
+            var lowerDoorMarker = new WoWGameObject(new HighGuid(0xF1200050B100AF6Dul))
+            {
+                Position = new Position(1533.88f, 240.826f, -40.47764f),
+                Facing = 0f,
+                DisplayId = 462,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Transport,
+            };
+            var snapshot = ReplaceTrackedObjects(lowerDoorMarker);
+
+            try
+            {
+                _player.Position = new Position(1528.8f, 230.2f, -41.54f);
+                _player.Facing = 1.74f;
+                _player.MovementFlags = MovementFlags.MOVEFLAG_NONE;
+                _player.TransportGuid = 0;
+                _player.TransportOffset = new Position(0f, 0f, 0f);
+                _player.TransportOrientation = 0f;
+
+                var controller = new MovementController(
+                    _mockClient.Object,
+                    _player,
+                    objectManager: WoWSharpObjectManager.Instance);
+                controller.Reset(teleportDestZ: -41.54f);
+                _sentPackets.Clear();
+
+                controller.Update(0.05f, 1000);
+
+                Assert.Equal(0UL, _player.TransportGuid);
+                Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
+                Assert.NotNull(capturedInput);
+                Assert.Equal(0UL, capturedInput!.Value.TransportGuid);
+            }
+            finally
+            {
+                RestoreTrackedObjects(snapshot);
+            }
+        }
+
+        [Fact]
+        public void Update_BeforeUndercityElevatorDeck_DoesNotPassiveAttach()
+        {
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    GroundZ = input.Z,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                };
+            };
+
+            var elevator = new WoWGameObject(new HighGuid(0xF1200050AF00AF65ul))
+            {
+                Position = new Position(1544.24f, 240.773f, -40.7835f),
+                Facing = 0f,
+                DisplayId = 455,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Transport,
+            };
+            var snapshot = ReplaceTrackedObjects(elevator);
+
+            try
+            {
+                _player.Position = new Position(1534.925f, 242.2f, -41.38445f);
+                _player.Facing = 0f;
+                _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+                _player.TransportGuid = 0;
+                _player.TransportOffset = new Position(0f, 0f, 0f);
+                _player.TransportOrientation = 0f;
+
+                var controller = new MovementController(
+                    _mockClient.Object,
+                    _player,
+                    objectManager: WoWSharpObjectManager.Instance);
+                controller.Reset(teleportDestZ: -41.38445f);
+                _sentPackets.Clear();
+
+                controller.Update(0.05f, 1000);
+
+                Assert.Equal(0UL, _player.TransportGuid);
+                Assert.False(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
+                Assert.NotNull(capturedInput);
+                Assert.Equal(0UL, capturedInput!.Value.TransportGuid);
+            }
+            finally
+            {
+                RestoreTrackedObjects(snapshot);
+            }
+        }
+
+        [Fact]
+        public void Update_OnUndercityElevatorDeck_AttachesToCar()
+        {
+            NativePhysics.PhysicsInput? capturedInput = null;
+            NativeLocalPhysics.TestStepOverride = input =>
+            {
+                capturedInput = input;
+                return new NativePhysics.PhysicsOutput
+                {
+                    X = input.X,
+                    Y = input.Y,
+                    Z = input.Z,
+                    Orientation = input.Orientation,
+                    GroundZ = input.Z,
+                    GroundNz = 1f,
+                    MoveFlags = input.MoveFlags,
+                };
+            };
+
+            var elevator = new WoWGameObject(new HighGuid(0xF1200050AF00AF65ul))
+            {
+                Position = new Position(1544.24f, 240.773f, -40.7835f),
+                Facing = 0f,
+                DisplayId = 455,
+                ScaleX = 1f,
+                TypeId = (uint)GameObjectType.Transport,
+            };
+            var snapshot = ReplaceTrackedObjects(elevator);
+
+            try
+            {
+                _player.Position = new Position(1538.525f, 242.141f, -41.24756f);
+                _player.Facing = 0.008727f;
+                _player.MovementFlags = MovementFlags.MOVEFLAG_FORWARD;
+                _player.TransportGuid = 0;
+                _player.TransportOffset = new Position(0f, 0f, 0f);
+                _player.TransportOrientation = 0f;
+
+                var controller = new MovementController(
+                    _mockClient.Object,
+                    _player,
+                    objectManager: WoWSharpObjectManager.Instance);
+                controller.Reset(teleportDestZ: -41.24756f);
+                _sentPackets.Clear();
+
+                controller.Update(0.05f, 1000);
+
+                Assert.Equal(elevator.Guid, _player.TransportGuid);
+                Assert.True(_player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_ONTRANSPORT));
+                Assert.NotNull(capturedInput);
+                Assert.Equal(elevator.Guid, capturedInput!.Value.TransportGuid);
+                Assert.Equal(-5.715f, capturedInput.Value.X, 3);
+                Assert.Equal(1.368f, capturedInput.Value.Y, 3);
+                Assert.Equal(-0.464f, capturedInput.Value.Z, 3);
             }
             finally
             {

@@ -2,6 +2,31 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-29) - MVT-TRANSPORT-NAMED-UC closeout
+
+- [x] Closed `MVT-TRANSPORT-NAMED-UC`: the stricter named-Undercity elevator
+  route now uses PathfindingService-generated approach points instead of
+  hand-authored lower-route waypoints.
+- Completion notes:
+  - `MovementParityTests.TransportRide_FgBgParity` starts both participants
+    with `.tele name <character> undercity`, queries PathfindingService for the
+    route from `(1584.07,241.987,-52.1534)` to `(1532.3,242.2,-41.4)`, and
+    fixture-drives the returned corners with `SetFacing`, `StartMovement`, and
+    `StopMovement`.
+  - The probe waits for the real west Undercity elevator at the lower stop,
+    stages both clients at the lower board point, starts both forward together,
+    requires both to show gameobject transport evidence, and stops each
+    participant when it reaches the upper exit.
+  - BG transport-local movement now models the known Undercity elevator ride
+    window and avoids passive reattach at the upper stop.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_named_undercity_pathfinding_route_18.trx"` -> `passed (1/1)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.PhysicsStep_OnMovingTransport_PreservesLocalOffsetAndSyncsWorldPosition|FullyQualifiedName~MovementControllerTests.Update_KnownUndercityElevatorRide_AnimatesToUpperAndDismounts|FullyQualifiedName~MovementControllerTests.Update_AtUpperUndercityElevatorExit_DoesNotPassiveReattach|FullyQualifiedName~MovementControllerTests.PhysicsStep_OnTransport_UsesLocalCoordinatesAndIncludesTransportObject|FullyQualifiedName~MovementControllerTests.PhysicsResult_OnTransport_RecomputesLocalOffsetFromWorldOutput|FullyQualifiedName~MovementControllerTests.Update_BeforeUndercityElevatorDeck_DoesNotPassiveAttach|FullyQualifiedName~MovementControllerTests.Update_OnUndercityElevatorDeck_AttachesToCar|FullyQualifiedName~MovementControllerTests.Update_IdleNearUndercityElevatorDoorMarker_DoesNotPassiveAttach" --logger "console;verbosity=minimal"` -> `passed (8/8)`.
+- Evidence:
+  - `tmp/test-runtime/results-live/movement_parity_transport_named_undercity_pathfinding_route_18.trx`
+
 ## Archived Snapshot (2026-04-29) - MVT-TRANSPORT-FG closeout
 
 - [x] Closed `MVT-TRANSPORT-FG`: stabilized

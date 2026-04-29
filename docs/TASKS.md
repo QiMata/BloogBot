@@ -34,15 +34,47 @@
 
 ## Active Tasks
 
-- [ ] **MVT-TRANSPORT-NAMED-UC** - Finish the stricter Undercity elevator
-  parity route. `MovementParityTests.TransportRide_FgBgParity` now starts both
-  participants with `.tele name <character> undercity` and manually drives
-  movement via fixture-dispatched `SetFacing` + `StartMovement` /
-  `StopMovement`, but the first named-teleport-to-lower-route segment currently
-  fails live: BG reaches waypoint 1 at about `(1549.9,224.8,-43.10)` while FG
-  reaches similar XY on the wrong lower layer `(1556.4,222.5,-66.26)`.
-  Identify the real client-safe path from the named Undercity landing to the
-  west elevator lower boarding point, then re-run the focused transport test.
+No active task-tracked items.
+
+---
+
+## Handoff (2026-04-29, MVT-TRANSPORT-NAMED-UC closeout)
+
+- Completed:
+  - Closed `MVT-TRANSPORT-NAMED-UC`: the stricter named-Undercity elevator
+    parity lane now asks PathfindingService for the route from `.tele name
+    <character> undercity` landing `(1584.07,241.987,-52.1534)` to the west
+    lower boarding point `(1532.3,242.2,-41.4)` instead of using hand-authored
+    approach waypoints.
+  - `MovementParityTests.TransportRide_FgBgParity` now logs the generated
+    route, fixture-drives the generated corners with `SetFacing` +
+    `StartMovement` / `StopMovement`, waits for the real west elevator at the
+    lower stop, boards both clients together, requires transport evidence for
+    both, and stops each participant as soon as it reaches the upper exit.
+  - Background transport-local movement now preserves the player offset while
+    on gameobject transports, models the known Undercity elevator lower-hold /
+    ascent / upper-dismount window, avoids passive reattach to upper-stop
+    elevator cars, and preserves transport-local orientation when explicit
+    facing updates occur on transport.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_named_undercity_pathfinding_route_18.trx"` -> `passed (1/1; route generated 13 corners; both clients rode and dismounted at the upper exit)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests.PhysicsStep_OnMovingTransport_PreservesLocalOffsetAndSyncsWorldPosition|FullyQualifiedName~MovementControllerTests.Update_KnownUndercityElevatorRide_AnimatesToUpperAndDismounts|FullyQualifiedName~MovementControllerTests.Update_AtUpperUndercityElevatorExit_DoesNotPassiveReattach|FullyQualifiedName~MovementControllerTests.PhysicsStep_OnTransport_UsesLocalCoordinatesAndIncludesTransportObject|FullyQualifiedName~MovementControllerTests.PhysicsResult_OnTransport_RecomputesLocalOffsetFromWorldOutput|FullyQualifiedName~MovementControllerTests.Update_BeforeUndercityElevatorDeck_DoesNotPassiveAttach|FullyQualifiedName~MovementControllerTests.Update_OnUndercityElevatorDeck_AttachesToCar|FullyQualifiedName~MovementControllerTests.Update_IdleNearUndercityElevatorDoorMarker_DoesNotPassiveAttach" --logger "console;verbosity=minimal"` -> `passed (8/8; existing warnings/nonfatal dumpbin noise)`.
+- Evidence:
+  - TRX: `tmp/test-runtime/results-live/movement_parity_transport_named_undercity_pathfinding_route_18.trx`.
+- Files changed:
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MovementParityTests.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+  - `docs/TASKS.md`
+  - `docs/TASKS_ARCHIVE.md`
+- Next command: `git status --short --branch`
 
 ---
 

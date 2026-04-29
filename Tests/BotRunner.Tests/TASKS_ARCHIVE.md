@@ -2,6 +2,24 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-29) - MVT-TRANSPORT-NAMED-UC closeout
+
+- [x] Closed the stricter named-Undercity elevator parity route.
+- Completion notes:
+  - The test now queries PathfindingService for the named teleport landing to
+    west lower board route and fixture-drives the generated route points.
+  - The lower board point remains exact and the ride still uses the real west
+    Undercity elevator object, simultaneous forward boarding, required
+    transport evidence for both clients, and upper-exit dismount assertions.
+  - The focused live route generated 13 corners and completed the lower route,
+    board, ride-up, and dismount sequence.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_named_undercity_pathfinding_route_18.trx"` -> `passed (1/1)`.
+- Evidence:
+  - `tmp/test-runtime/results-live/movement_parity_transport_named_undercity_pathfinding_route_18.trx`
+
 ## Archived Snapshot (2026-04-29) - MVT-TRANSPORT-FG closeout
 
 - [x] Stabilized `MovementParityTests.TransportRide_FgBgParity` foreground

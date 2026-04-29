@@ -254,6 +254,7 @@ namespace WoWSharpClient
             if (player == null) return;
 
             player.Facing = facing;
+            UpdateTransportOrientationFromWorldFacing(player, facing);
 
             // Send facing update immediately via movement controller
             if (_movementController != null && _isInControl && !_isBeingTeleported)
@@ -1038,6 +1039,7 @@ namespace WoWSharpClient
             if (facingDelta > 0.0f)
             {
                 player.Facing = facing;
+                UpdateTransportOrientationFromWorldFacing(player, facing);
                 bool sendFacingPacket = facingDelta > FacingPacketThresholdRadians;
                 if (sendFacingPacket && _movementController != null && _isInControl && !_isBeingTeleported)
                 {
@@ -1053,6 +1055,29 @@ namespace WoWSharpClient
             {
                 _movementController.SetTargetWaypoint(position);
             }
+        }
+
+        private void UpdateTransportOrientationFromWorldFacing(WoWLocalPlayer player, float worldFacing)
+        {
+            if (player.TransportGuid == 0)
+                return;
+
+            WoWGameObject? transport = null;
+            if (player.Transport is WoWGameObject cachedTransport
+                && cachedTransport.Guid == player.TransportGuid)
+            {
+                transport = cachedTransport;
+            }
+            else if (GetObjectByGuid(player.TransportGuid) is WoWGameObject resolvedTransport)
+            {
+                transport = resolvedTransport;
+            }
+
+            if (transport == null)
+                return;
+
+            player.Transport = transport;
+            player.TransportOrientation = TransportCoordinateHelper.WorldToLocalFacing(worldFacing, transport.Facing);
         }
 
         private void UpdateAirborneSteering(Position target)

@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using BotRunner.Clients;
 using Communication;
 using GameData.Core.Enums;
+using GameData.Core.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using Tests.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
@@ -27,6 +31,7 @@ public sealed class MovementParityTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
+    private const int PathfindingServicePort = 5001;
     private const int KalimdorMapId = 1;
     private const int EasternKingdomsMapId = 0;
     private const float DurotarStartX = -500f;
@@ -50,23 +55,16 @@ public sealed class MovementParityTests
     private const float UndercityElevatorWestY = 240.77f;
     private const float UndercityElevatorUpperZ = 55.40f;
     private const uint UndercityElevatorWestEntry = 20655;
+    private const float UndercityElevatorObjectXYTolerance = 8.0f;
     private const float UndercityElevatorLowerZ = -40.80f;
     private const float UndercityElevatorUpperExitX = 1552.10f;
     private const float UndercityElevatorUpperExitY = 242.20f;
     private const float UndercityElevatorUpperExitZ = 55.10f;
     private const float ElevatorArrivalZTolerance = 8.0f;
+    private const float UndercityRouteRunSpeedYardsPerSecond = 7.0f;
     private const float UndercityElevatorLowerBoardStartX = 1532.30f;
     private const float UndercityElevatorLowerBoardStartY = 242.20f;
     private const float UndercityElevatorLowerBoardStartZ = -41.40f;
-    private static readonly WorldPoint[] UndercityLowerRouteWaypoints =
-    [
-        new(1549.0f, 222.4f, -43.1f),
-        new(1538.5f, 217.5f, -43.1f),
-        new(1529.3f, 219.3f, -43.1f),
-        new(1527.2f, 230.3f, -41.7f),
-        new(1531.8f, 240.2f, -41.4f),
-        new(UndercityElevatorLowerBoardStartX, UndercityElevatorLowerBoardStartY, UndercityElevatorLowerBoardStartZ),
-    ];
 
     public MovementParityTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -201,37 +199,79 @@ public sealed class MovementParityTests
     [SkippableFact]
     public async Task TransportRide_FgBgParity()
     {
+        TestSkip.IfNot(_bot.IsPathfindingReady, "PathfindingService not available on port 5001.");
+
         var accounts = await EnsureDirectMovementAccountsAsync();
         await StagePairAtNamedUndercityAsync(accounts);
+        var lowerRoute = ResolveUndercityLowerPathfindingRoute();
+        Assert.True(lowerRoute.Count >= 2, "PathfindingService must return an approach route plus a lower elevator board target.");
+        var lowerApproachRoute = lowerRoute.Take(lowerRoute.Count - 1).ToArray();
+        var lowerBoardStart = new WorldPoint(
+            UndercityElevatorLowerBoardStartX,
+            UndercityElevatorLowerBoardStartY,
+            UndercityElevatorLowerBoardStartZ);
         var recordingDir = await StartPairRecordingAsync(accounts);
 
         try
         {
-            await WalkPairThroughUndercityLowerRouteAsync(accounts);
+            await WalkPairThroughUndercityLowerRouteAsync(
+                accounts,
+                lowerApproachRoute,
+                "Undercity pathfinding lower approach",
+                finalWaypointIsBoardStart: false,
+                isBoardingLane: false);
 
             var elevatorAtLower = await WaitForElevatorAtStopAsync(
                 accounts,
+                UndercityElevatorWestEntry,
                 UndercityElevatorLowerZ,
-                "lower",
-                TimeSpan.FromSeconds(60));
+                "lower boarding",
+                TimeSpan.FromSeconds(60),
+                zTolerance: 1.5f);
             Assert.True(elevatorAtLower, "Undercity west elevator did not reach the lower stop before the ride probe.");
 
+            await DrivePairToWaypointAsync(
+                accounts,
+                lowerBoardStart,
+                "Undercity lower board start",
+                xyToleranceYards: 4.0f,
+                zToleranceYards: 1.0f,
+                timeout: TimeSpan.FromSeconds(8),
+                requireStoppedAtWaypoint: true);
+
+            await DispatchPairAsync(
+                accounts,
+                MakeSetFacing(0f),
+                MakeSetFacing(0f));
+            var facingReady = await WaitForPairFacingAsync(accounts, 0f, "Undercity lower board facing", TimeSpan.FromSeconds(6));
+            Assert.True(facingReady, "Both bots should face east from the lower Undercity board-start point before boarding.");
+
             PairTrace? trace = null;
-            await DispatchPairAsync(accounts, MakeSetFacing(0f), MakeSetFacing(0f));
             await DispatchBothAsync(accounts, () => MakeMovement(ActionType.StartMovement, ControlBits.Front));
 
             try
             {
-                var boarded = await WaitForPairOnTransportAsync(accounts, "Undercity elevator lower boarding", TimeSpan.FromSeconds(12));
-                Assert.True(boarded, "Both bots should board the west Undercity elevator from the lower platform.");
-
+                var bgReachedUpperExit = false;
+                var fgReachedUpperExit = false;
                 trace = await TracePairAsync(
                     accounts,
                     TimeSpan.FromSeconds(120),
-                    pollIntervalMs: 500,
-                    stopWhen: sample =>
-                        IsAtUpperElevatorExit(sample.Bg)
-                        && IsAtUpperElevatorExit(sample.Fg));
+                    pollIntervalMs: 100,
+                    stopWhen: _ => bgReachedUpperExit && fgReachedUpperExit,
+                    onSample: async sample =>
+                    {
+                        if (!bgReachedUpperExit && IsAtUpperElevatorExit(sample.Bg))
+                        {
+                            bgReachedUpperExit = true;
+                            await _bot.SendActionAsync(accounts.Bg, MakeMovement(ActionType.StopMovement, ControlBits.Front));
+                        }
+
+                        if (!fgReachedUpperExit && IsAtUpperElevatorExit(sample.Fg))
+                        {
+                            fgReachedUpperExit = true;
+                            await _bot.SendActionAsync(accounts.Fg, MakeMovement(ActionType.StopMovement, ControlBits.Front));
+                        }
+                    });
             }
             finally
             {
@@ -395,22 +435,92 @@ public sealed class MovementParityTests
         }
     }
 
-    private async Task WalkPairThroughUndercityLowerRouteAsync(PairAccounts accounts)
+    private IReadOnlyList<WorldPoint> ResolveUndercityLowerPathfindingRoute()
     {
-        for (var i = 0; i < UndercityLowerRouteWaypoints.Length; i++)
+        using var client = new PathfindingClient(
+            "127.0.0.1",
+            PathfindingServicePort,
+            NullLogger<PathfindingClient>.Instance);
+
+        var start = new Position(
+            UndercityNamedTeleportX,
+            UndercityNamedTeleportY,
+            UndercityNamedTeleportZ);
+        var end = new Position(
+            UndercityElevatorLowerBoardStartX,
+            UndercityElevatorLowerBoardStartY,
+            UndercityElevatorLowerBoardStartZ);
+
+        var result = client.GetPathResult((uint)EasternKingdomsMapId, start, end, smoothPath: false);
+        _output.WriteLine(
+            $"[PATHFINDING] Undercity named teleport -> west lower board: result={result.Result} supported={result.PathSupported} corners={result.Corners.Length}/{result.RawCornerCount} blocked={result.BlockedReason} segment={result.BlockedSegmentIndex?.ToString() ?? "none"} maxAffordance={result.MaxAffordance} zGain={result.TotalZGain:F1} zLoss={result.TotalZLoss:F1} maxSlope={result.MaxSlopeAngleDeg:F1}");
+
+        Assert.True(
+            result.Corners.Length > 0,
+            $"PathfindingService returned no route from named Undercity teleport to west lower board start. result={result.Result} blocked={result.BlockedReason}");
+        var route = ToWorldPoints(result.Corners, end);
+        for (var i = 0; i < route.Count; i++)
         {
-            var waypoint = UndercityLowerRouteWaypoints[i];
-            var label = $"Undercity lower route waypoint {i + 1}/{UndercityLowerRouteWaypoints.Length}";
+            var point = route[i];
+            _output.WriteLine($"[PATHFINDING]   {i + 1}/{route.Count}: ({point.X:F1},{point.Y:F1},{point.Z:F2})");
+        }
+
+        return route;
+    }
+    private static IReadOnlyList<WorldPoint> ToWorldPoints(IReadOnlyList<Position> corners, Position end)
+    {
+        var route = new List<WorldPoint>(corners.Count + 1);
+        foreach (var corner in corners)
+        {
+            if (route.Count > 0
+                && Distance2D(route[^1].X, route[^1].Y, corner.X, corner.Y) < 0.75f
+                && MathF.Abs(route[^1].Z - corner.Z) < 0.25f)
+            {
+                continue;
+            }
+
+            route.Add(new WorldPoint(corner.X, corner.Y, corner.Z));
+        }
+
+        if (route.Count == 0
+            || Distance2D(route[^1].X, route[^1].Y, end.X, end.Y) > 1.0f
+            || MathF.Abs(route[^1].Z - end.Z) > 1.0f)
+        {
+            route.Add(new WorldPoint(end.X, end.Y, end.Z));
+        }
+
+        return route;
+    }
+
+    private async Task WalkPairThroughUndercityLowerRouteAsync(
+        PairAccounts accounts,
+        IReadOnlyList<WorldPoint> waypoints,
+        string routeLabel,
+        bool finalWaypointIsBoardStart,
+        bool isBoardingLane)
+    {
+        for (var i = 0; i < waypoints.Count; i++)
+        {
+            var waypoint = waypoints[i];
+            var isBoardStart = finalWaypointIsBoardStart && i == waypoints.Count - 1;
+            var label = $"{routeLabel} waypoint {i + 1}/{waypoints.Count}";
 
             await DrivePairToWaypointAsync(
                 accounts,
                 waypoint,
                 label,
-                xyToleranceYards: 7f,
-                zToleranceYards: i == UndercityLowerRouteWaypoints.Length - 1 ? 15f : 30f,
-                timeout: TimeSpan.FromSeconds(35));
+                xyToleranceYards: UndercityLowerRouteXYTolerance(waypoint, isBoardStart, isBoardingLane),
+                zToleranceYards: UndercityLowerRouteZTolerance(waypoint, isBoardStart, isBoardingLane),
+                timeout: TimeSpan.FromSeconds(35),
+                requireStoppedAtWaypoint: isBoardStart || i == waypoints.Count - 1);
         }
     }
+
+    private static float UndercityLowerRouteXYTolerance(WorldPoint waypoint, bool isBoardStart, bool isBoardingLane)
+        => isBoardStart ? 1.5f : isBoardingLane ? 1.5f : waypoint.Z <= -43.05f ? 1.5f : 3f;
+
+    private static float UndercityLowerRouteZTolerance(WorldPoint waypoint, bool isBoardStart, bool isBoardingLane)
+        => isBoardStart ? 2f : isBoardingLane ? 2f : waypoint.X >= 1550f ? 3f : 2f;
 
     private async Task DrivePairToWaypointAsync(
         PairAccounts accounts,
@@ -418,17 +528,75 @@ public sealed class MovementParityTests
         string label,
         float xyToleranceYards,
         float zToleranceYards,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        bool requireStoppedAtWaypoint)
     {
-        var results = await Task.WhenAll(
-            DriveAccountToWaypointAsync(accounts.Bg, "BG", point, label, xyToleranceYards, zToleranceYards, timeout),
-            DriveAccountToWaypointAsync(accounts.Fg, "FG", point, label, xyToleranceYards, zToleranceYards, timeout));
+        PairSnapshot snapshots = default!;
+        bool[] results = [false, false];
 
-        var snapshots = await CapturePairSnapshotAsync(accounts);
-        _output.WriteLine($"[ROUTE] {label}: BG {DescribeSnapshot(snapshots.Bg)} | FG {DescribeSnapshot(snapshots.Fg)}");
+        for (var attempt = 1; attempt <= 2; attempt++)
+        {
+            results = await Task.WhenAll(
+                DriveAccountToWaypointAsync(accounts.Bg, "BG", point, label, xyToleranceYards, zToleranceYards, timeout, stopAfterReach: requireStoppedAtWaypoint),
+                DriveAccountToWaypointAsync(accounts.Fg, "FG", point, label, xyToleranceYards, zToleranceYards, timeout, stopAfterReach: requireStoppedAtWaypoint));
+
+            snapshots = await CapturePairSnapshotAsync(accounts);
+            var attemptLabel = attempt == 1 ? label : $"{label} retry {attempt}";
+            _output.WriteLine($"[ROUTE] {attemptLabel}: BG {DescribeSnapshot(snapshots.Bg)} | FG {DescribeSnapshot(snapshots.Fg)}");
+
+            if (IsOnTransport(snapshots.Bg) || IsOnTransport(snapshots.Fg))
+                break;
+
+            if (!requireStoppedAtWaypoint && results[0] && results[1])
+                return;
+
+            if (results[0] && results[1]
+                && await WaitForPairStoppedAtWaypointAsync(
+                    accounts,
+                    point,
+                    label,
+                    xyToleranceYards + 1.5f,
+                    zToleranceYards + 1f))
+            {
+                return;
+            }
+        }
+
+        snapshots = await CapturePairSnapshotAsync(accounts);
         Assert.True(
             results[0] && results[1],
             $"{label} did not settle for both bots. BG {DescribeSnapshot(snapshots.Bg)} | FG {DescribeSnapshot(snapshots.Fg)}");
+
+        Assert.Fail($"{label} did not stop at the waypoint before the next route leg. BG {DescribeSnapshot(snapshots.Bg)} | FG {DescribeSnapshot(snapshots.Fg)}");
+    }
+
+    private async Task<bool> WaitForPairStoppedAtWaypointAsync(
+        PairAccounts accounts,
+        WorldPoint point,
+        string label,
+        float xyToleranceYards,
+        float zToleranceYards)
+    {
+        var results = await Task.WhenAll(
+            _bot.WaitForSnapshotConditionAsync(
+                accounts.Bg,
+                snapshot => IsRouteStoppedAtCheckpoint(snapshot, point, xyToleranceYards, zToleranceYards),
+                TimeSpan.FromSeconds(6),
+                pollIntervalMs: 100,
+                progressLabel: $"BG {label} stopped"),
+            _bot.WaitForSnapshotConditionAsync(
+                accounts.Fg,
+                snapshot => IsRouteStoppedAtCheckpoint(snapshot, point, xyToleranceYards, zToleranceYards),
+                TimeSpan.FromSeconds(6),
+                pollIntervalMs: 100,
+                progressLabel: $"FG {label} stopped"));
+
+        var snapshots = await CapturePairSnapshotAsync(accounts);
+        if (results[0] && results[1])
+            return true;
+
+        _output.WriteLine($"[ROUTE] {label} stop drift: BG {DescribeSnapshot(snapshots.Bg)} | FG {DescribeSnapshot(snapshots.Fg)}");
+        return false;
     }
 
     private async Task<bool> DriveAccountToWaypointAsync(
@@ -438,37 +606,65 @@ public sealed class MovementParityTests
         string label,
         float xyToleranceYards,
         float zToleranceYards,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        bool stopAfterReach)
     {
         await _bot.RefreshSnapshotsAsync();
         var start = await _bot.GetSnapshotAsync(account);
+        if (IsRouteStoppedAtCheckpoint(
+            start,
+            point,
+            xyToleranceYards + 1.5f,
+            zToleranceYards + 1f))
+        {
+            return true;
+        }
+
         var facing = FacingTo(start, point);
         var facingResult = await _bot.SendActionAsync(account, MakeSetFacing(facing));
         Assert.Equal(ResponseResult.Success, facingResult);
         var startResult = await _bot.SendActionAsync(account, MakeMovement(ActionType.StartMovement, ControlBits.Front));
         Assert.Equal(ResponseResult.Success, startResult);
+        var pulseCutoff = RouteMovementPulseCutoff(start, point, xyToleranceYards);
+        var pulseTimer = new Stopwatch();
+        var reached = false;
 
         try
         {
-            return await _bot.WaitForSnapshotConditionAsync(
+            reached = await _bot.WaitForSnapshotConditionAsync(
                 account,
-                snapshot => IsNearPoint3D(snapshot, EasternKingdomsMapId, point.X, point.Y, point.Z, xyToleranceYards, zToleranceYards),
+                snapshot =>
+                {
+                    if (IsRouteCheckpointSettled(snapshot, point, xyToleranceYards, zToleranceYards))
+                        return true;
+
+                    if (!pulseTimer.IsRunning && HasRouteMovementStarted(start, snapshot))
+                        pulseTimer.Start();
+
+                    return pulseTimer.IsRunning && pulseTimer.Elapsed >= pulseCutoff;
+                },
                 timeout,
-                pollIntervalMs: 250,
+                pollIntervalMs: 25,
                 progressLabel: $"{role} {label}");
+            return reached;
         }
         finally
         {
-            var stopResult = await _bot.SendActionAsync(account, MakeMovement(ActionType.StopMovement, ControlBits.Front));
-            Assert.Equal(ResponseResult.Success, stopResult);
+            if (stopAfterReach || !reached)
+            {
+                var stopResult = await _bot.SendActionAsync(account, MakeMovement(ActionType.StopMovement, ControlBits.Front));
+                Assert.Equal(ResponseResult.Success, stopResult);
+            }
         }
     }
 
     private async Task<bool> WaitForElevatorAtStopAsync(
         PairAccounts accounts,
+        uint elevatorEntry,
         float stopZ,
         string stopLabel,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        float zTolerance = 6f)
     {
         Game.GameObjectSnapshot? bgElevator = null;
         Game.GameObjectSnapshot? fgElevator = null;
@@ -478,42 +674,83 @@ public sealed class MovementParityTests
                 accounts.Bg,
                 snapshot =>
                 {
-                    bgElevator = FindElevatorAtStop(snapshot, stopZ);
+                    bgElevator = FindElevatorAtStop(snapshot, elevatorEntry, stopZ, zTolerance);
                     return bgElevator != null;
                 },
                 timeout,
                 pollIntervalMs: 500,
-                progressLabel: $"west Undercity elevator {stopLabel} stop BG"),
+                progressLabel: $"west Undercity elevator {elevatorEntry} {stopLabel} stop BG"),
             _bot.WaitForSnapshotConditionAsync(
                 accounts.Fg,
                 snapshot =>
                 {
-                    fgElevator = FindElevatorAtStop(snapshot, stopZ);
+                    fgElevator = FindElevatorAtStop(snapshot, elevatorEntry, stopZ, zTolerance);
                     return fgElevator != null;
                 },
                 timeout,
                 pollIntervalMs: 500,
-                progressLabel: $"west Undercity elevator {stopLabel} stop FG"));
+                progressLabel: $"west Undercity elevator {elevatorEntry} {stopLabel} stop FG"));
 
         if (reached[0] && reached[1])
             _output.WriteLine(
-                $"[ELEVATOR] West Undercity elevator reached {stopLabel} stop: BG sees {DescribeTransport(bgElevator)} | FG sees {DescribeTransport(fgElevator)}");
+                $"[ELEVATOR] West Undercity elevator {elevatorEntry} reached {stopLabel} stop: BG sees {DescribeTransport(bgElevator)} | FG sees {DescribeTransport(fgElevator)}");
 
         return reached[0] && reached[1];
     }
 
-    private async Task<bool> WaitForPairOnTransportAsync(PairAccounts accounts, string label, TimeSpan timeout)
+    private async Task<bool> WaitForPairFacingAsync(
+        PairAccounts accounts,
+        float expectedFacing,
+        string label,
+        TimeSpan timeout)
+        => await WaitForPairFacingAsync(accounts, expectedFacing, expectedFacing, label, timeout);
+
+    private async Task<bool> WaitForPairFacingAsync(
+        PairAccounts accounts,
+        float bgExpectedFacing,
+        float fgExpectedFacing,
+        string label,
+        TimeSpan timeout)
     {
         var results = await Task.WhenAll(
             _bot.WaitForSnapshotConditionAsync(
                 accounts.Bg,
-                IsOnTransport,
+                snapshot => IsFacing(snapshot, bgExpectedFacing, toleranceRadians: 0.15f),
+                timeout,
+                pollIntervalMs: 100,
+                progressLabel: $"BG {label}"),
+            _bot.WaitForSnapshotConditionAsync(
+                accounts.Fg,
+                snapshot => IsFacing(snapshot, fgExpectedFacing, toleranceRadians: 0.15f),
+                timeout,
+                pollIntervalMs: 100,
+                progressLabel: $"FG {label}"));
+
+        var snapshots = await CapturePairSnapshotAsync(accounts);
+        _output.WriteLine($"[ROUTE] {label}: BG {DescribeSnapshot(snapshots.Bg)} | FG {DescribeSnapshot(snapshots.Fg)}");
+        return results[0] && results[1];
+    }
+
+    private async Task<bool> WaitForPairOnTransportAsync(
+        PairAccounts accounts,
+        string label,
+        TimeSpan timeout,
+        uint? transportEntry = null)
+    {
+        var results = await Task.WhenAll(
+            _bot.WaitForSnapshotConditionAsync(
+                accounts.Bg,
+                snapshot => transportEntry.HasValue
+                    ? IsOnTransportEntry(snapshot, transportEntry.Value)
+                    : IsOnTransport(snapshot),
                 timeout,
                 pollIntervalMs: 250,
                 progressLabel: $"BG {label}"),
             _bot.WaitForSnapshotConditionAsync(
                 accounts.Fg,
-                IsOnTransport,
+                snapshot => transportEntry.HasValue
+                    ? IsOnTransportEntry(snapshot, transportEntry.Value)
+                    : IsOnTransport(snapshot),
                 timeout,
                 pollIntervalMs: 250,
                 progressLabel: $"FG {label}"));
@@ -617,7 +854,8 @@ public sealed class MovementParityTests
         PairAccounts accounts,
         TimeSpan duration,
         int pollIntervalMs,
-        Func<PairSample, bool>? stopWhen = null)
+        Func<PairSample, bool>? stopWhen = null,
+        Func<PairSample, Task>? onSample = null)
     {
         var samples = new List<PairSample>();
         var start = DateTime.UtcNow;
@@ -630,6 +868,9 @@ public sealed class MovementParityTests
                 await _bot.GetSnapshotAsync(accounts.Bg),
                 await _bot.GetSnapshotAsync(accounts.Fg));
             samples.Add(sample);
+
+            if (onSample != null)
+                await onSample(sample);
 
             if (samples.Count >= 2 && stopWhen?.Invoke(sample) == true)
                 break;
@@ -713,7 +954,12 @@ public sealed class MovementParityTests
         var pos = PositionOf(snapshot);
         var flags = FlagsOf(snapshot);
         var transportGuid = snapshot.MovementData?.TransportGuid ?? 0UL;
-        return $"pos=({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F2}) map={snapshot.CurrentMapId} screen={snapshot.ScreenState} conn={snapshot.ConnectionState} transition={snapshot.IsMapTransition} flags=0x{(uint)flags:X} transport=0x{transportGuid:X} current={snapshot.CurrentAction?.ActionType.ToString() ?? "null"} previous={snapshot.PreviousAction?.ActionType.ToString() ?? "null"}";
+        var transportEntry = TransportEntryOf(transportGuid);
+        var transportEntryText = transportEntry == 0 ? "none" : transportEntry.ToString();
+        var facingText = snapshot.MovementData == null
+            ? "?"
+            : NormalizeFacing(snapshot.MovementData.Facing).ToString("F3");
+        return $"pos=({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F2}) facing={facingText} map={snapshot.CurrentMapId} screen={snapshot.ScreenState} conn={snapshot.ConnectionState} transition={snapshot.IsMapTransition} flags=0x{(uint)flags:X} transport=0x{transportGuid:X} entry={transportEntryText} current={snapshot.CurrentAction?.ActionType.ToString() ?? "null"} previous={snapshot.PreviousAction?.ActionType.ToString() ?? "null"}";
     }
 
     private static ActionMessage MakeGoto(float x, float y, float z, float stopDistance = 3f)
@@ -771,6 +1017,74 @@ public sealed class MovementParityTests
         => (snapshot?.MovementData?.TransportGuid ?? 0UL) != 0
             || (FlagsOf(snapshot) & MovementFlags.MOVEFLAG_ONTRANSPORT) != 0;
 
+    private static bool IsOnTransportEntry(WoWActivitySnapshot? snapshot, uint expectedEntry)
+    {
+        var transportGuid = snapshot?.MovementData?.TransportGuid ?? 0UL;
+        return transportGuid != 0
+            && TransportEntryOf(transportGuid) == expectedEntry;
+    }
+
+    private static uint TransportEntryOf(ulong transportGuid)
+        => transportGuid == 0 ? 0 : (uint)((transportGuid >> 24) & 0xFFFFFF);
+
+    private static bool IsRouteCheckpointSettled(
+        WoWActivitySnapshot? snapshot,
+        WorldPoint point,
+        float xyToleranceYards,
+        float zToleranceYards)
+        => IsNearPoint3D(snapshot, EasternKingdomsMapId, point.X, point.Y, point.Z, xyToleranceYards, zToleranceYards)
+            && !IsJumping(snapshot)
+            && !IsOnTransport(snapshot);
+
+    private static bool IsRouteStoppedAtCheckpoint(
+        WoWActivitySnapshot? snapshot,
+        WorldPoint point,
+        float xyToleranceYards,
+        float zToleranceYards)
+        => IsRouteStopped(snapshot)
+            && IsNearPoint3D(snapshot, EasternKingdomsMapId, point.X, point.Y, point.Z, xyToleranceYards, zToleranceYards);
+
+    private static bool IsRouteStopped(WoWActivitySnapshot? snapshot)
+        => !IsMovingHorizontally(snapshot) && !IsJumping(snapshot) && !IsOnTransport(snapshot);
+
+    private static TimeSpan RouteMovementPulseCutoff(
+        WoWActivitySnapshot? start,
+        WorldPoint point,
+        float xyToleranceYards)
+    {
+        var startPosition = PositionOf(start);
+        if (startPosition == null)
+            return TimeSpan.FromSeconds(1);
+
+        var distance = Distance2D(startPosition.X, startPosition.Y, point.X, point.Y);
+        var stopLead = MathF.Min(3f, MathF.Max(0.5f, xyToleranceYards * 0.5f));
+        var stopDistance = MathF.Max(0.5f, distance - stopLead);
+        return TimeSpan.FromSeconds(stopDistance / UndercityRouteRunSpeedYardsPerSecond);
+    }
+
+    private static bool HasRouteMovementStarted(WoWActivitySnapshot? start, WoWActivitySnapshot? snapshot)
+    {
+        if (IsMovingHorizontally(snapshot))
+            return true;
+
+        var startPosition = PositionOf(start);
+        var currentPosition = PositionOf(snapshot);
+        return startPosition != null
+            && currentPosition != null
+            && Distance2D(startPosition.X, startPosition.Y, currentPosition.X, currentPosition.Y) >= 0.5f;
+    }
+
+    private static bool IsFacing(WoWActivitySnapshot? snapshot, float expectedFacing, float toleranceRadians)
+        => snapshot?.MovementData != null
+            && FacingDelta(snapshot.MovementData.Facing, expectedFacing) <= toleranceRadians;
+
+    private static float FacingDelta(float a, float b)
+    {
+        var delta = MathF.Abs(NormalizeFacing(a) - NormalizeFacing(b));
+        var twoPi = MathF.PI * 2f;
+        return MathF.Min(delta, twoPi - delta);
+    }
+
     private static float FacingTo(WoWActivitySnapshot? snapshot, WorldPoint point)
     {
         var pos = PositionOf(snapshot);
@@ -798,13 +1112,18 @@ public sealed class MovementParityTests
                 zToleranceYards: ElevatorArrivalZTolerance)
             && !IsOnTransport(snapshot);
 
-    private static Game.GameObjectSnapshot? FindElevatorAtStop(WoWActivitySnapshot? snapshot, float stopZ)
+    private static Game.GameObjectSnapshot? FindElevatorAtStop(
+        WoWActivitySnapshot? snapshot,
+        uint elevatorEntry,
+        float stopZ,
+        float zTolerance)
         => snapshot?.MovementData?.NearbyGameObjects?
             .Where(go =>
                 go != null
-                && go.Entry == UndercityElevatorWestEntry
+                && go.Entry == elevatorEntry
                 && go.Position != null
-                && MathF.Abs(go.Position.Z - stopZ) <= 6f)
+                && Distance2D(go.Position.X, go.Position.Y, UndercityElevatorWestX, UndercityElevatorWestY) <= UndercityElevatorObjectXYTolerance
+                && MathF.Abs(go.Position.Z - stopZ) <= zTolerance)
             .OrderBy(go => MathF.Abs(go.Position!.Z - stopZ))
             .FirstOrDefault();
 
@@ -814,7 +1133,7 @@ public sealed class MovementParityTests
             return "none";
 
         var pos = transport.Position;
-        return $"{transport.Entry}:{transport.Name ?? "?"}:type={transport.GameObjectType} pos=({pos.X:F1},{pos.Y:F1},{pos.Z:F1})";
+        return $"{transport.Entry}:{transport.Name ?? "?"}:display={transport.DisplayId}:type={transport.GameObjectType} state={transport.GoState} pos=({pos.X:F1},{pos.Y:F1},{pos.Z:F1})";
     }
 
     private static bool IsNearStagePoint(

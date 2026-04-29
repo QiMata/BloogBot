@@ -22,11 +22,13 @@ characters have account-level GM access and can self-stage with `.go xyz`.
   `.targetself` command, applies `.knockback 5 5`, and asserts movement or jump
   displacement from the command baseline.
 - `TransportRide_FgBgParity`: teleports both participants with
-  `.tele name <character> undercity`, fixture-drives the walk toward the
-  Undercity west elevator with `SetFacing` + `StartMovement` / `StopMovement`,
-  waits for the lower elevator car, starts both bots forward together to board,
-  then traces ride-up and upper dismount evidence. This is not taxi coverage;
-  taxis are spline-based movement and belong to taxi/spline tests.
+  `.tele name <character> undercity`, asks PathfindingService for the route
+  from that named teleport landing to the Undercity west elevator lower board
+  point, fixture-drives the generated corners with `SetFacing` +
+  `StartMovement` / `StopMovement`, waits for the lower elevator car, starts
+  both bots forward together to board, then traces ride-up and upper dismount
+  evidence. This is not taxi coverage; taxis are spline-based movement and
+  belong to taxi/spline tests.
 
 ## Staging
 
@@ -36,7 +38,8 @@ The test body uses only the movement-parity FG/BG accounts:
 - `BotTeleportAsync(...)` sends each participant's own `.go xyz` GM command
   for point/ramp probes.
 - `BotTeleportToNamedAsync(...)` stages the elevator probe at the named
-  Undercity teleport location before the fixture-driven walk.
+  Undercity teleport location before the PathfindingService-generated,
+  fixture-driven walk.
 - `WaitForTeleportSettledAsync(...)` must confirm starts for ground probes;
   elevator staging also accepts settled transport state because transport-local
   and world-position snapshots differ between FG and BG.
@@ -76,13 +79,13 @@ The test body uses only the movement-parity FG/BG accounts:
   final movement bundle,
   `movement_parity_transport_fg_goto_board_full_04.trx`, passed with `5`
   passed and `0` skipped.
-- 2026-04-29 named-route correction: the transport probe was tightened to the
-  requested shape: `.tele name <character> undercity`, manual fixture-driven
-  walk to the elevator, lower-car wait, simultaneous board, ride-up, and upper
-  dismount assertion. The stronger focused run
-  `movement_parity_transport_named_undercity_observe_05.trx` currently fails
-  before boarding because FG reaches similar XY to waypoint 1 on the wrong
-  lower `z=-66` layer while BG reaches the expected `z=-43` layer. Tracked as
-  `MVT-TRANSPORT-NAMED-UC`.
+- 2026-04-29 named-route closeout: `MVT-TRANSPORT-NAMED-UC` is closed. The
+  transport probe keeps the stricter shape (`.tele name <character> undercity`,
+  manual fixture-driven walk, lower-car wait, simultaneous board, ride-up, and
+  upper dismount assertion), but the approach route now comes from
+  PathfindingService instead of hand-authored waypoints. Focused live proof
+  `movement_parity_transport_named_undercity_pathfinding_route_18.trx` passed
+  with a 13-corner route, both clients acquiring elevator transport evidence,
+  and final upper-exit positions near `(1552.1,242.2,55.1)`.
 - Repo-scoped cleanup before and after live validation reported
   `No repo-scoped processes to stop.`
