@@ -19,6 +19,16 @@
 
 ## Active Tasks
 
+### `LPATH-CROSSROADS-UC` - staged long-path execution
+- [x] `CrossMapRouter` now compares cross-map candidates by total staged
+  route cost and can insert a same-map flight path to the selected transition.
+  Deterministic coverage proves Crossroads -> Undercity plans as Crossroads
+  taxi `25` -> Orgrimmar `23`, walk to the Orgrimmar zeppelin tower,
+  Orgrimmar/Undercity zeppelin, then final Undercity walk without choosing
+  Ratchet/Booty Bay or dungeon shortcuts.
+- [ ] Wire `CharacterAction.TravelTo` to the staged executor for cross-map
+  long-pathing and prove it live.
+
 ### BR-NAV-006 Prove path ownership through combat and movement-controller handoff
 Known remaining work in this owner: `0` items.
 - [x] BG corpse-run live recording now persists the active `RetrieveCorpseTask` corridor snapshot to `navtrace_<account>.json`, and `DeathCorpseRunTests` asserts that the sidecar captured `RecordedTask=RetrieveCorpseTask`, `TaskStack=[RetrieveCorpseTask, IdleTask]`, and a non-null `TraceSnapshot`.

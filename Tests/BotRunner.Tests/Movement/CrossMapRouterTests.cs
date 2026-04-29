@@ -9,6 +9,45 @@ public class CrossMapRouterTests
 {
     private readonly CrossMapRouter _router = new();
 
+    [Fact]
+    public void CrossroadsToUndercity_HordeUsesTaxiToOrgrimmarThenZeppelin()
+    {
+        var start = new Position(-500f, -2635f, 96f);  // Near Crossroads
+        var end = new Position(1584f, 242f, -52f);     // Undercity destination
+
+        var legs = _router.PlanRoute(
+            1,
+            start,
+            0,
+            end,
+            FlightPathData.Faction.Horde,
+            discoveredFlightNodes: [25u, 23u]);
+
+        Assert.Collection(
+            legs,
+            leg => Assert.Equal(TransitionType.Walk, leg.Type),
+            leg =>
+            {
+                Assert.Equal(TransitionType.FlightPath, leg.Type);
+                Assert.Equal(25u, leg.FlightStartNodeId);
+                Assert.Equal(23u, leg.FlightEndNodeId);
+            },
+            leg => Assert.Equal(TransitionType.Walk, leg.Type),
+            leg =>
+            {
+                Assert.Equal(TransitionType.Zeppelin, leg.Type);
+                Assert.NotNull(leg.Transport);
+                Assert.Contains("Orgrimmar", leg.Transport!.Name);
+                Assert.Contains("Undercity", leg.Transport.Name);
+            },
+            leg => Assert.Equal(TransitionType.Walk, leg.Type));
+
+        Assert.DoesNotContain(legs, leg => leg.Type == TransitionType.Boat);
+        Assert.DoesNotContain(legs, leg => leg.Type == TransitionType.DungeonPortal);
+        Assert.DoesNotContain(legs, leg => leg.Transport?.Name.Contains("Ratchet", System.StringComparison.OrdinalIgnoreCase) == true);
+        Assert.DoesNotContain(legs, leg => leg.Transport?.Name.Contains("Booty", System.StringComparison.OrdinalIgnoreCase) == true);
+    }
+
     // =====================================================================
     // SAME MAP — SIMPLE WALK
     // =====================================================================

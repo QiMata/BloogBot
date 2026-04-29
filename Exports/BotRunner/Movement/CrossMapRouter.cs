@@ -205,20 +205,30 @@ public class CrossMapRouter
         FlightPathData.Faction faction,
         IReadOnlyCollection<uint>? discoveredFlightNodes)
     {
-        // Try direct transition first
-        var direct = MapTransitionGraph.FindNearestTransition(
-            startMapId, startPos, targetMapId: destMapId, faction: faction);
+        var candidates = new List<List<RouteLeg>>();
 
-        if (direct != null)
-            return BuildTransitionRoute(startMapId, startPos, destMapId, destPos, direct);
+        foreach (var transition in MapTransitionGraph.GetTransitionsFrom(startMapId, faction)
+            .Where(t => t.ToMapId == destMapId))
+        {
+            candidates.Add(BuildTransitionRoute(startMapId, startPos, destMapId, destPos, transition));
+        }
+
+        candidates.AddRange(BuildFlightPathToTransitionRoutes(
+            startMapId,
+            startPos,
+            destMapId,
+            destPos,
+            faction,
+            discoveredFlightNodes));
 
         // Try 1-hop: start → intermediate → dest
         var oneHop = FindOneHopRoute(startMapId, startPos, destMapId, destPos, faction);
         if (oneHop != null)
-            return oneHop;
+            candidates.Add(oneHop);
 
-        // No route found
-        return [];
+        return candidates
+            .OrderBy(EstimateRouteTime)
+            .FirstOrDefault() ?? [];
     }
 
     private List<RouteLeg> BuildTransitionRoute(
@@ -259,6 +269,80 @@ public class CrossMapRouter
         }
 
         return legs;
+    }
+
+    private IEnumerable<List<RouteLeg>> BuildFlightPathToTransitionRoutes(
+        uint startMapId,
+        Position startPos,
+        uint destMapId,
+        Position destPos,
+        FlightPathData.Faction faction,
+        IReadOnlyCollection<uint>? discoveredFlightNodes)
+    {
+        if (discoveredFlightNodes == null || discoveredFlightNodes.Count < 2)
+            yield break;
+
+        var availableNodes = FlightPathData.GetNodesForFaction((int)startMapId, faction)
+            .Where(n => discoveredFlightNodes.Contains(n.NodeId))
+            .ToList();
+        if (availableNodes.Count < 2)
+            yield break;
+
+        var sourceNode = availableNodes
+            .OrderBy(n => Distance2D(startPos, ToPosition(n)))
+            .FirstOrDefault();
+        if (sourceNode == null)
+            yield break;
+
+        var sourceNodePos = ToPosition(sourceNode);
+
+        foreach (var transition in MapTransitionGraph.GetTransitionsFrom(startMapId, faction)
+            .Where(t => t.ToMapId == destMapId))
+        {
+            var transitionNode = availableNodes
+                .Where(n => n.NodeId != sourceNode.NodeId)
+                .OrderBy(n => Distance2D(transition.FromPos, ToPosition(n)))
+                .FirstOrDefault();
+            if (transitionNode == null)
+                continue;
+
+            var transitionNodePos = ToPosition(transitionNode);
+            var walkToSource = Distance2D(startPos, sourceNodePos);
+            var walkFromDestinationNode = Distance2D(transitionNodePos, transition.FromPos);
+            var directWalkToTransition = Distance2D(startPos, transition.FromPos);
+
+            // Keep taxis for material same-continent staging gains, not tiny detours.
+            if (walkToSource + walkFromDestinationNode >= directWalkToTransition * 0.85f)
+                continue;
+
+            var route = new List<RouteLeg>();
+            if (walkToSource > 5f)
+            {
+                route.Add(new RouteLeg(TransitionType.Walk, startMapId, startPos, sourceNodePos,
+                    null, null, null, null, null, walkToSource / WALK_SPEED));
+            }
+
+            var flightTime = Distance2D(sourceNodePos, transitionNodePos) / 40f;
+            route.Add(new RouteLeg(TransitionType.FlightPath, startMapId, sourceNodePos, transitionNodePos,
+                null, null, null, sourceNode.NodeId, transitionNode.NodeId, flightTime));
+
+            if (walkFromDestinationNode > 5f)
+            {
+                route.Add(new RouteLeg(TransitionType.Walk, startMapId, transitionNodePos, transition.FromPos,
+                    null, null, null, null, null, walkFromDestinationNode / WALK_SPEED));
+            }
+
+            route.Add(MakeTransitionLeg(transition));
+
+            var walkToDestination = Distance3D(transition.ToPos, destPos);
+            if (walkToDestination > 5f)
+            {
+                route.Add(new RouteLeg(TransitionType.Walk, destMapId, transition.ToPos, destPos,
+                    null, null, null, null, null, walkToDestination / WALK_SPEED));
+            }
+
+            yield return route;
+        }
     }
 
     private List<RouteLeg>? FindOneHopRoute(
@@ -361,4 +445,7 @@ public class CrossMapRouter
         float dy = a.Y - b.Y;
         return MathF.Sqrt(dx * dx + dy * dy);
     }
+
+    private static Position ToPosition(FlightPathData.TaxiNodeInfo node)
+        => new(node.X, node.Y, node.Z);
 }

@@ -42,6 +42,9 @@
   prove this staged route does not collapse into one direct path or choose
   Booty Bay/Ratchet/dungeon-neutral shortcuts, and live validation must prove
   the Crossroads -> Undercity route reaches the Eastern Kingdoms target.
+  - [x] Deterministic planner route selection covers the Crossroads -> Orgrimmar
+    taxi leg before the Orgrimmar -> Undercity zeppelin.
+  - [ ] `TravelTo` execution and live validation remain open.
 
 ---
 

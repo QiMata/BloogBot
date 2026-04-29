@@ -21,6 +21,9 @@
   Orgrimmar zeppelin tower, Orgrimmar/Undercity zeppelin, then final Undercity
   walk. The test must reject single giant direct routing and wrong shortcuts
   such as Booty Bay/Ratchet or neutral/dungeon transitions.
+  - [x] `CrossMapRouterTests.CrossroadsToUndercity_HordeUsesTaxiToOrgrimmarThenZeppelin`
+    pins the staged route selection and shortcut rejection.
+  - [ ] Add focused live validation for `TravelTo` executing the staged route.
 
 0. Shodan test-director migration (started 2026-04-24)
 - [x] Audit top-level `LiveValidation/*.cs` for FG/BG GM-command usage and group by category. Inventory at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`.
