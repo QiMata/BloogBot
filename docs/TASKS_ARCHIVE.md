@@ -2,6 +2,29 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-29) - MVT-TRANSPORT-FG closeout
+
+- [x] Closed `MVT-TRANSPORT-FG`: stabilized
+  `MovementParityTests.TransportRide_FgBgParity` foreground gameobject
+  transport evidence in the full live bundle.
+- Completion notes:
+  - The direct FG/BG movement bundle now has no open task-tracked items and no
+    tracked elevator skip.
+  - `TransportRide_FgBgParity` boards the real Undercity west elevator through
+    action-driven `Goto` movement from the lower wait point to the lower car
+    center, preserving the taxi-vs-gameobject-transport coverage split.
+  - Staging now clears residual horizontal movement before the next live parity
+    lane and accepts stable in-world snapshots when teleport-settle polling is
+    stale.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_lower.trx"` -> `passed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_full_04.trx"` -> `passed (5/5, 0 skipped; duration 3m22s)`.
+  - Final `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/movement_parity_transport_fg_goto_board_lower.trx`
+  - `tmp/test-runtime/results-live/movement_parity_transport_fg_goto_board_full_04.trx`
+
 ## Archived Snapshot (2026-04-21) - P3 Unified Loadout Hand-off closeout
 
 - [x] `P3.1` Plumbing — proto types (`LoadoutSpec`, `LoadoutStatus`, `ActionType.ApplyLoadout`, `WoWActivitySnapshot.loadoutStatus` + `loadoutFailureReason`, status field included in `SnapshotChangeSignature`). Shipped in commit `9c0e6339`.

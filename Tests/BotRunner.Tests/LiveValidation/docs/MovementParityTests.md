@@ -22,11 +22,9 @@ characters have account-level GM access and can self-stage with `.go xyz`.
   `.targetself` command, applies `.knockback 5 5`, and asserts movement or jump
   displacement from the command baseline.
 - `TransportRide_FgBgParity`: synchronizes on the Undercity west elevator
-  gameobject at the lower stop and observes ride evidence. This is not taxi
-  coverage; taxis are spline-based movement and belong to taxi/spline tests.
-  Current full-bundle status is an intermittent tracked FG gap: BG can record
-  transport evidence, but FG may crash during staging or remain at the lower
-  stop without `TransportGuid` / vertical ride evidence.
+  gameobject at the lower stop, dispatches matching `Goto` movement onto the
+  lower car center, and observes ride evidence. This is not taxi coverage;
+  taxis are spline-based movement and belong to taxi/spline tests.
 
 ## Staging
 
@@ -44,8 +42,7 @@ The test body uses only the movement-parity FG/BG accounts:
   `Goto`, `Jump`, or bot-chat GM self-knockback commands.
 - The Undercity elevator probe observes gameobject transport evidence through
   sustained transport samples or the elevator's large vertical travel. It does
-  not classify taxi spline movement as transport behavior. The FG elevator lane
-  is currently tracked as `MVT-TRANSPORT-FG` instead of being counted as closed.
+  not classify taxi spline movement as transport behavior.
 - Route movement must produce meaningful FG and BG travel. Insufficient live
   travel after a delivered `Goto` fails the route instead of being hidden by a
   Shodan staging skip.
@@ -62,11 +59,16 @@ The test body uses only the movement-parity FG/BG accounts:
 - 2026-04-28 direct-restoration note: `MovementParityTests` was moved back off
   Shodan-directed staging after `movement_parity_category_latest.trx` exposed
   janky tracked skips from Shodan-era quiesce/start-settle gates.
-- 2026-04-29 current-health note: point-to-point pathfinding, running jump, and
+- 2026-04-29 earlier health-check note: point-to-point pathfinding, running jump, and
   self-knockback are live-green after revalidation. The Undercity elevator
-  probe is synchronized on the real lower-stop elevator object. The final
-  movement bundle, `movement_parity_current_polling_helper.trx`, passed overall
-  with `4` passed and `1` tracked skip for the intermittent FG elevator evidence
-  gap.
+  probe was synchronized on the real lower-stop elevator object. At that point,
+  `movement_parity_current_polling_helper.trx` passed overall with `4` passed
+  and `1` tracked skip for the intermittent FG elevator evidence gap.
+- 2026-04-29 `MVT-TRANSPORT-FG` closeout: the Undercity elevator probe now
+  boards via action-driven `Goto` from the lower wait point to the lower car
+  center, without synthetic lower-car teleport placement or tracked skip. The
+  final movement bundle,
+  `movement_parity_transport_fg_goto_board_full_04.trx`, passed with `5`
+  passed and `0` skipped.
 - Repo-scoped cleanup before and after live validation reported
   `No repo-scoped processes to stop.`

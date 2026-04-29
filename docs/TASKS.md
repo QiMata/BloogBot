@@ -34,14 +34,48 @@
 
 ## Active Tasks
 
-### MVT-TRANSPORT-FG Stabilize foreground gameobject transport ride evidence
-- [ ] `MovementParityTests.TransportRide_FgBgParity` is intermittently not fully
-  healthy in the full live bundle. BG records Undercity elevator gameobject
-  transport evidence, but FG can crash during staging and/or remain at the lower
-  stop without `TransportGuid` or vertical ride evidence. Latest tracked run:
-  `movement_parity_current_polling_helper.trx` exited green with this lane
-  skipped (`4` passed, `1` skipped). Keep taxis classified as spline movement;
-  this task is specifically gameobject transport/elevator coverage.
+_No open task-tracked items._
+
+---
+
+## Handoff (2026-04-29, MVT-TRANSPORT-FG closeout)
+
+- Completed:
+  - Closed `MVT-TRANSPORT-FG`: `MovementParityTests.TransportRide_FgBgParity`
+    no longer carries the tracked FG skip, and the full live movement bundle is
+    green with `5` passed and `0` skipped.
+  - Replaced the synthetic lower-car teleport with action-driven boarding:
+    after synchronizing on the real west Undercity elevator at the lower stop,
+    FG/BG now dispatch `Goto` from the lower wait point to the lower car center.
+  - Hardened direct movement staging so an in-world, near-target, non-airborne
+    final snapshot can satisfy stale teleport-settle polling, but still-moving
+    horizontal snapshots are stopped before the test action begins.
+  - Added post-running-jump residual movement cleanup so a short jump probe
+    cannot leak native forward movement into the next live parity lane.
+- Validation/tests run:
+  - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"` ->
+    required containers were up: `mangosd`, `realmd`,
+    `pathfinding-service`, and `maria-db`.
+  - `git status --short --branch` -> `## main...origin/main` at session start.
+  - `rg -n "^- \[ \]" docs/TASKS.md Tests/BotRunner.Tests/TASKS.md Tests/WoWSharpClient.Tests/TASKS.md Services/ForegroundBotRunner/TASKS.md Services/BackgroundBotRunner/TASKS.md Exports/WoWSharpClient/TASKS.md Exports/BotRunner/TASKS.md` -> found only `MVT-TRANSPORT-FG` in master/local BotRunner trackers.
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_lower.trx"` -> `passed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_full.trx"` -> `failed (2/5; FG lower-wait settle rejected an in-world final snapshot; later knockback saw the crashed FG client)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_full_02.trx"` -> `failed (1/5; transport passed, knockback exposed residual native movement after transport)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_full_03.trx"` -> `failed (1/5; transport passed, knockback still exposed residual movement before staging was tightened)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_full_04.trx"` -> `passed (5/5, 0 skipped; duration 3m22s)`.
+  - Final `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - TRX: `tmp/test-runtime/results-live/movement_parity_transport_fg_goto_board_lower.trx`.
+  - TRX: `tmp/test-runtime/results-live/movement_parity_transport_fg_goto_board_full_04.trx`.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MovementParityTests.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`
+  - `docs/TASKS.md`
+  - `docs/TASKS_ARCHIVE.md`
+- Next command: `git status --short --branch`
 
 ---
 

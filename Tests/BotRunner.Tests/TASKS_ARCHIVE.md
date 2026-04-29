@@ -2,6 +2,30 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-04-29) - MVT-TRANSPORT-FG closeout
+
+- [x] Stabilized `MovementParityTests.TransportRide_FgBgParity` foreground
+  gameobject transport evidence in the full live bundle.
+- Completion notes:
+  - Removed the tracked FG skip from the Undercity elevator probe.
+  - Replaced synthetic lower-car teleport placement with action-driven boarding:
+    after synchronizing on the real west Undercity elevator at the lower stop,
+    both participants dispatch `Goto` from the lower wait point to the lower car
+    center.
+  - Hardened direct movement staging to stop residual horizontal movement before
+    the next action begins, while allowing stable in-world final snapshots to
+    satisfy stale teleport-settle polling.
+  - Added post-running-jump cleanup so native forward movement cannot leak into
+    the following movement parity lane.
+- Validation:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_lower.trx"` -> `passed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_full_04.trx"` -> `passed (5/5, 0 skipped; duration 3m22s)`.
+  - Final `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/movement_parity_transport_fg_goto_board_lower.trx`
+  - `tmp/test-runtime/results-live/movement_parity_transport_fg_goto_board_full_04.trx`
+
 ## Archived Snapshot (2026-04-15) - Corpse-run and route-validator regression coverage
 
 - [x] Added deterministic BotRunner coverage for long-horizon local-physics route validation and corpse-run close-waypoint advancement.

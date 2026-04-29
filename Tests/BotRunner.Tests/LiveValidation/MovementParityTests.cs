@@ -128,6 +128,7 @@ public sealed class MovementParityTests
         }
         finally
         {
+            await StopResidualMovementAsync(accounts, "running jump");
             await StopPairRecordingAsync(accounts);
         }
 
@@ -204,17 +205,17 @@ public sealed class MovementParityTests
                 TimeSpan.FromSeconds(60));
             Assert.True(elevatorAtLower, "Undercity west elevator did not reach the lower stop before the ride probe.");
 
-            await TeleportPairWithoutCleanSlateAsync(
+            await DispatchBothAsync(
                 accounts,
-                EasternKingdomsMapId,
-                UndercityElevatorWestX,
-                UndercityElevatorWestY,
-                UndercityElevatorLowerZ,
-                "Undercity elevator lower car");
+                () => MakeGoto(
+                    UndercityElevatorWestX,
+                    UndercityElevatorWestY,
+                    UndercityElevatorLowerZ,
+                    stopDistance: 2f));
 
             var trace = await TracePairAsync(
                 accounts,
-                TimeSpan.FromSeconds(45),
+                TimeSpan.FromSeconds(75),
                 pollIntervalMs: 500,
                 stopWhen: sample =>
                     sample.Elapsed >= TimeSpan.FromSeconds(10)
@@ -222,10 +223,6 @@ public sealed class MovementParityTests
                     && IsOnTransport(sample.Fg));
 
             WriteTraceSummary("Undercity elevator gameobject transport ride", trace);
-            TestSkip.If(
-                ShowsElevatorTransportRide(trace.Bg) && !ShowsElevatorTransportRide(trace.Fg),
-                "MVT-TRANSPORT-FG: BG sees the Undercity elevator gameobject transport, but FG does not reliably acquire transport/vertical ride evidence in the full live bundle. " +
-                "Fresh evidence: movement_parity_current_fix_full_02.trx showed FG WoW.exe crashed during staging and later stayed at the lower stop without TransportGuid.");
             AssertElevatorTransportRide(trace);
         }
         finally
@@ -301,7 +298,23 @@ public sealed class MovementParityTests
         await _bot.SendGmChatCommandAsync(account, ".gm off");
         await _bot.RefreshSnapshotsAsync();
         var snap = await _bot.GetSnapshotAsync(account);
-        var finalSnapshotSettled = zStable && IsNearStagePoint(snap, mapId, x, y, xyToleranceYards: 30f);
+
+        if (IsMovingHorizontally(snap) && !IsOnTransport(snap))
+        {
+            await StopResidualMovementAsync(account, role, snap, $"{label} stage");
+            await _bot.WaitForSnapshotConditionAsync(
+                account,
+                snapshot => !IsMovingHorizontally(snapshot) || IsOnTransport(snapshot),
+                TimeSpan.FromSeconds(5),
+                pollIntervalMs: 500,
+                progressLabel: $"{role} {label} stage stop residual movement");
+            await _bot.RefreshSnapshotsAsync();
+            snap = await _bot.GetSnapshotAsync(account);
+        }
+
+        var finalSnapshotSettled = IsNearStagePoint(snap, mapId, x, y, xyToleranceYards: 30f)
+            && !IsMovingHorizontally(snap)
+            && (zStable || !IsJumping(snap));
 
         _output.WriteLine(
             $"[STAGE] {role} {label}: settled={settled} finalSnapshotSettled={finalSnapshotSettled} zStable={zStable} finalZ={finalZ:F2} {DescribeSnapshot(snap)}");
@@ -409,6 +422,45 @@ public sealed class MovementParityTests
         await DispatchBothAsync(accounts, () => new ActionMessage { ActionType = ActionType.StopPhysicsRecording });
         await Task.Delay(500);
         _output.WriteLine("[RECORDING] Stopped FG/BG movement recordings");
+    }
+
+    private async Task StopResidualMovementAsync(PairAccounts accounts, string label)
+    {
+        await _bot.RefreshSnapshotsAsync();
+        var snapshots = await CapturePairSnapshotAsync(accounts);
+
+        await Task.WhenAll(
+            StopResidualMovementAsync(accounts.Bg, "BG", snapshots.Bg, label),
+            StopResidualMovementAsync(accounts.Fg, "FG", snapshots.Fg, label));
+
+        await Task.WhenAll(
+            _bot.WaitForSnapshotConditionAsync(
+                accounts.Bg,
+                snapshot => !IsMovingHorizontally(snapshot) || IsOnTransport(snapshot),
+                TimeSpan.FromSeconds(5),
+                pollIntervalMs: 500,
+                progressLabel: $"{label} BG stop residual movement"),
+            _bot.WaitForSnapshotConditionAsync(
+                accounts.Fg,
+                snapshot => !IsMovingHorizontally(snapshot) || IsOnTransport(snapshot),
+                TimeSpan.FromSeconds(5),
+                pollIntervalMs: 500,
+                progressLabel: $"{label} FG stop residual movement"));
+    }
+
+    private async Task StopResidualMovementAsync(string account, string role, WoWActivitySnapshot? snapshot, string label)
+    {
+        if (!IsMovingHorizontally(snapshot) || IsOnTransport(snapshot))
+            return;
+
+        var pos = PositionOf(snapshot);
+        if (pos == null)
+            return;
+
+        var result = await _bot.SendActionAsync(
+            account,
+            MakeGoto(pos.X, pos.Y, pos.Z, stopDistance: 50f));
+        _output.WriteLine($"[CLEANUP] {role} {label}: stop residual movement via arrived Goto => {result}");
     }
 
     private async Task DispatchBothAsync(PairAccounts accounts, Func<ActionMessage> actionFactory)
@@ -557,6 +609,9 @@ public sealed class MovementParityTests
 
     private static bool IsJumping(WoWActivitySnapshot? snapshot)
         => (FlagsOf(snapshot) & (MovementFlags.MOVEFLAG_JUMPING | MovementFlags.MOVEFLAG_FALLINGFAR)) != 0;
+
+    private static bool IsMovingHorizontally(WoWActivitySnapshot? snapshot)
+        => (FlagsOf(snapshot) & MovementFlags.MOVEFLAG_MASK_XZ) != 0;
 
     private static bool IsOnTransport(WoWActivitySnapshot? snapshot)
         => (snapshot?.MovementData?.TransportGuid ?? 0UL) != 0

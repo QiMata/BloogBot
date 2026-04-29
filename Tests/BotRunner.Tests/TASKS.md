@@ -65,14 +65,7 @@
 - [x] Collected the final core live-validation evidence with the updated FG recorder baseline.
 
 4. Movement/controller parity coverage
-Known remaining work in this owner: `1` item.
-- [ ] Stabilize `MovementParityTests.TransportRide_FgBgParity` foreground
-  gameobject transport evidence in the full live bundle. Fresh validation shows
-  BG can see the Undercity elevator transport, but FG may crash during staging
-  and later stay at the lower stop without `TransportGuid` or vertical ride
-  evidence. Latest tracked run `movement_parity_current_polling_helper.trx`
-  passed overall with this lane skipped (`4` passed, `1` skipped). This is not
-  taxi spline coverage.
+Known remaining work in this owner: `0` items.
 - [x] Added deterministic coverage for the persistent `BADFACING` retry window that was holding the candidate `3/15` mining route in stationary combat.
 - [x] Added targeted BG corpse-run coverage for live waypoint ownership: `DeathCorpseRunTests` now asserts the emitted `navtrace_<account>.json` captured `RetrieveCorpseTask` ownership and a non-null `TraceSnapshot`, with deterministic helper tests covering stable recording-file lookup/cleanup.
 - [x] Session 188: `Parity_Durotar_RoadPath_Redirect` proves pause/resume packet ordering. BG `SET_FACING` on mid-route redirects now matches FG. Full live proof bundle green.
@@ -94,6 +87,39 @@ Known remaining work in this owner: `1` item.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-29 (MVT-TRANSPORT-FG closeout)
+- Pass result: `Category=MovementParity` is green without tracked skips:
+  `5` passed, `0` skipped in
+  `movement_parity_transport_fg_goto_board_full_04.trx`.
+- What changed:
+  - `MovementParityTests.TransportRide_FgBgParity` now boards the real
+    Undercity west elevator through action-driven `Goto` movement from the
+    lower wait point to the lower car center instead of teleporting directly
+    onto the car.
+  - The tracked FG skip was removed; both FG and BG must now show gameobject
+    transport ride evidence.
+  - Movement staging now stops residual horizontal movement before the next
+    live parity action begins, while still allowing an in-world, near-target,
+    non-airborne snapshot to close out stale teleport-settle polling.
+  - `RunningJump_FgBgParity` cleans up residual movement in `finally` so native
+    forward movement cannot bleed into later lanes.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_lower.trx"` -> `passed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_fg_goto_board_full_04.trx"` -> `passed (5/5, 0 skipped; duration 3m22s)`.
+  - Final `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+- Evidence:
+  - `tmp/test-runtime/results-live/movement_parity_transport_fg_goto_board_lower.trx`
+  - `tmp/test-runtime/results-live/movement_parity_transport_fg_goto_board_full_04.trx`
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MovementParityTests.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS_ARCHIVE.md`
+  - `docs/TASKS.md`
+  - `docs/TASKS_ARCHIVE.md`
+- Next command: `git status --short --branch`
+
 ### 2026-04-29 (movement parity health check)
 - Pass result: `Category=MovementParity` now exits green with the remaining FG
   elevator lane tracked (`4` passed, `1` skipped) in
