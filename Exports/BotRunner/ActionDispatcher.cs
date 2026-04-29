@@ -901,6 +901,30 @@ namespace BotRunner
                         });
                         break;
 
+                    case CharacterAction.StartMovement:
+                    {
+                        var movementBits = (ControlBits)(int)actionEntry.Item2[0];
+                        builder.Do($"Start Movement: {movementBits}", time =>
+                        {
+                            Log.Information("[BOT RUNNER] Starting movement bits {Bits}", movementBits);
+                            _objectManager.StartMovement(movementBits);
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
+                    case CharacterAction.StopMovement:
+                    {
+                        var movementBits = (ControlBits)(int)actionEntry.Item2[0];
+                        builder.Do($"Stop Movement: {movementBits}", time =>
+                        {
+                            Log.Information("[BOT RUNNER] Stopping movement bits {Bits}", movementBits);
+                            _objectManager.StopMovement(movementBits);
+                            return BehaviourTreeStatus.Success;
+                        });
+                        break;
+                    }
+
                     case CharacterAction.ReleaseCorpse:
                         builder.Do("Release Spirit", time =>
                         {

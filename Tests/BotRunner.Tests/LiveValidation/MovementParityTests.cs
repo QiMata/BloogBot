@@ -43,14 +43,30 @@ public sealed class MovementParityTests
     private const float KnockbackStageY = -4800f;
     private const float KnockbackStageZ = 38f;
 
+    private const float UndercityNamedTeleportX = 1584.07f;
+    private const float UndercityNamedTeleportY = 241.987f;
+    private const float UndercityNamedTeleportZ = -52.1534f;
     private const float UndercityElevatorWestX = 1544.24f;
     private const float UndercityElevatorWestY = 240.77f;
     private const float UndercityElevatorUpperZ = 55.40f;
     private const uint UndercityElevatorWestEntry = 20655;
     private const float UndercityElevatorLowerZ = -40.80f;
+    private const float UndercityElevatorUpperExitX = 1552.10f;
+    private const float UndercityElevatorUpperExitY = 242.20f;
+    private const float UndercityElevatorUpperExitZ = 55.10f;
+    private const float ElevatorArrivalZTolerance = 8.0f;
     private const float UndercityElevatorLowerBoardStartX = 1532.30f;
     private const float UndercityElevatorLowerBoardStartY = 242.20f;
     private const float UndercityElevatorLowerBoardStartZ = -41.40f;
+    private static readonly WorldPoint[] UndercityLowerRouteWaypoints =
+    [
+        new(1549.0f, 222.4f, -43.1f),
+        new(1538.5f, 217.5f, -43.1f),
+        new(1529.3f, 219.3f, -43.1f),
+        new(1527.2f, 230.3f, -41.7f),
+        new(1531.8f, 240.2f, -41.4f),
+        new(UndercityElevatorLowerBoardStartX, UndercityElevatorLowerBoardStartY, UndercityElevatorLowerBoardStartZ),
+    ];
 
     public MovementParityTests(LiveBotFixture bot, ITestOutputHelper output)
     {
@@ -186,18 +202,13 @@ public sealed class MovementParityTests
     public async Task TransportRide_FgBgParity()
     {
         var accounts = await EnsureDirectMovementAccountsAsync();
-        await StagePairAsync(
-            accounts,
-            EasternKingdomsMapId,
-            UndercityElevatorLowerBoardStartX,
-            UndercityElevatorLowerBoardStartY,
-            UndercityElevatorLowerBoardStartZ,
-            "Undercity elevator lower wait",
-            teleportZOffset: 0f);
+        await StagePairAtNamedUndercityAsync(accounts);
         var recordingDir = await StartPairRecordingAsync(accounts);
 
         try
         {
+            await WalkPairThroughUndercityLowerRouteAsync(accounts);
+
             var elevatorAtLower = await WaitForElevatorAtStopAsync(
                 accounts,
                 UndercityElevatorLowerZ,
@@ -205,25 +216,31 @@ public sealed class MovementParityTests
                 TimeSpan.FromSeconds(60));
             Assert.True(elevatorAtLower, "Undercity west elevator did not reach the lower stop before the ride probe.");
 
-            await DispatchBothAsync(
-                accounts,
-                () => MakeGoto(
-                    UndercityElevatorWestX,
-                    UndercityElevatorWestY,
-                    UndercityElevatorLowerZ,
-                    stopDistance: 2f));
+            PairTrace? trace = null;
+            await DispatchPairAsync(accounts, MakeSetFacing(0f), MakeSetFacing(0f));
+            await DispatchBothAsync(accounts, () => MakeMovement(ActionType.StartMovement, ControlBits.Front));
 
-            var trace = await TracePairAsync(
-                accounts,
-                TimeSpan.FromSeconds(75),
-                pollIntervalMs: 500,
-                stopWhen: sample =>
-                    sample.Elapsed >= TimeSpan.FromSeconds(10)
-                    && IsOnTransport(sample.Bg)
-                    && IsOnTransport(sample.Fg));
+            try
+            {
+                var boarded = await WaitForPairOnTransportAsync(accounts, "Undercity elevator lower boarding", TimeSpan.FromSeconds(12));
+                Assert.True(boarded, "Both bots should board the west Undercity elevator from the lower platform.");
 
-            WriteTraceSummary("Undercity elevator gameobject transport ride", trace);
-            AssertElevatorTransportRide(trace);
+                trace = await TracePairAsync(
+                    accounts,
+                    TimeSpan.FromSeconds(120),
+                    pollIntervalMs: 500,
+                    stopWhen: sample =>
+                        IsAtUpperElevatorExit(sample.Bg)
+                        && IsAtUpperElevatorExit(sample.Fg));
+            }
+            finally
+            {
+                await DispatchBothAsync(accounts, () => MakeMovement(ActionType.StopMovement, ControlBits.Front));
+            }
+
+            var completedTrace = trace ?? throw new InvalidOperationException("Elevator ride trace was not captured.");
+            WriteTraceSummary("Undercity named-teleport lower route, elevator ride up, and disembark", completedTrace);
+            AssertUndercityElevatorUpRide(completedTrace);
         }
         finally
         {
@@ -239,6 +256,8 @@ public sealed class MovementParityTests
         TestSkip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
         TestSkip.If(string.IsNullOrWhiteSpace(_bot.BgAccountName), "BG client required for movement parity.");
         TestSkip.If(string.IsNullOrWhiteSpace(_bot.FgAccountName), "FG client required for movement parity.");
+        TestSkip.If(string.IsNullOrWhiteSpace(_bot.BgCharacterName), "BG character name required for named Undercity teleport.");
+        TestSkip.If(string.IsNullOrWhiteSpace(_bot.FgCharacterName), "FG character name required for named Undercity teleport.");
         TestSkip.IfNot(await _bot.CheckFgActionableAsync(requireTeleportProbe: false), "FG bot not actionable for movement parity.");
 
         _output.WriteLine(
@@ -324,6 +343,127 @@ public sealed class MovementParityTests
         Assert.True(finalZ > -500f, $"{role} staged below world for {label}. finalZ={finalZ:F2}");
     }
 
+    private async Task StagePairAtNamedUndercityAsync(PairAccounts accounts)
+    {
+        await Task.WhenAll(
+            StageAccountAtNamedUndercityAsync(accounts.Bg, _bot.BgCharacterName!, "BG"),
+            StageAccountAtNamedUndercityAsync(accounts.Fg, _bot.FgCharacterName!, "FG"));
+
+        await _bot.QuiesceAccountsAsync(
+            new[] { accounts.Bg, accounts.Fg },
+            "movement parity named Undercity stage",
+            TimeSpan.FromSeconds(12));
+    }
+
+    private async Task StageAccountAtNamedUndercityAsync(string account, string characterName, string role)
+    {
+        await _bot.EnsureCleanSlateAsync(account, role, teleportToSafeZone: false);
+
+        _output.WriteLine($"[CMD-SEND] [{role}] .tele name {characterName} undercity");
+        await _bot.BotTeleportToNamedAsync(account, characterName, "undercity");
+
+        var settled = await _bot.WaitForSnapshotConditionAsync(
+            account,
+            snapshot => IsNearPoint3D(
+                snapshot,
+                EasternKingdomsMapId,
+                UndercityNamedTeleportX,
+                UndercityNamedTeleportY,
+                UndercityNamedTeleportZ,
+                xyToleranceYards: 20f,
+                zToleranceYards: 15f),
+            TimeSpan.FromSeconds(15),
+            pollIntervalMs: 500,
+            progressLabel: $"{role} named Undercity teleport");
+
+        var gmOff = await _bot.SendGmChatCommandAndAwaitServerAckAsync(account, ".gm off");
+        await _bot.RefreshSnapshotsAsync();
+        var snap = await _bot.GetSnapshotAsync(account);
+        _output.WriteLine($"[STAGE] {role} named Undercity teleport: settled={settled} gmOff={gmOff} {DescribeSnapshot(snap)}");
+        Assert.True(settled, $"{role} did not settle at `.tele name {characterName} undercity`. {DescribeSnapshot(snap)}");
+        Assert.True(gmOff, $"{role} did not acknowledge `.gm off` after named Undercity teleport. {DescribeSnapshot(snap)}");
+
+        if (IsMovingHorizontally(snap) && !IsOnTransport(snap))
+        {
+            await StopResidualMovementAsync(account, role, snap, "named Undercity teleport");
+            await _bot.WaitForSnapshotConditionAsync(
+                account,
+                snapshot => !IsMovingHorizontally(snapshot) || IsOnTransport(snapshot),
+                TimeSpan.FromSeconds(5),
+                pollIntervalMs: 500,
+                progressLabel: $"{role} named Undercity teleport stop residual movement");
+        }
+    }
+
+    private async Task WalkPairThroughUndercityLowerRouteAsync(PairAccounts accounts)
+    {
+        for (var i = 0; i < UndercityLowerRouteWaypoints.Length; i++)
+        {
+            var waypoint = UndercityLowerRouteWaypoints[i];
+            var label = $"Undercity lower route waypoint {i + 1}/{UndercityLowerRouteWaypoints.Length}";
+
+            await DrivePairToWaypointAsync(
+                accounts,
+                waypoint,
+                label,
+                xyToleranceYards: 7f,
+                zToleranceYards: i == UndercityLowerRouteWaypoints.Length - 1 ? 15f : 30f,
+                timeout: TimeSpan.FromSeconds(35));
+        }
+    }
+
+    private async Task DrivePairToWaypointAsync(
+        PairAccounts accounts,
+        WorldPoint point,
+        string label,
+        float xyToleranceYards,
+        float zToleranceYards,
+        TimeSpan timeout)
+    {
+        var results = await Task.WhenAll(
+            DriveAccountToWaypointAsync(accounts.Bg, "BG", point, label, xyToleranceYards, zToleranceYards, timeout),
+            DriveAccountToWaypointAsync(accounts.Fg, "FG", point, label, xyToleranceYards, zToleranceYards, timeout));
+
+        var snapshots = await CapturePairSnapshotAsync(accounts);
+        _output.WriteLine($"[ROUTE] {label}: BG {DescribeSnapshot(snapshots.Bg)} | FG {DescribeSnapshot(snapshots.Fg)}");
+        Assert.True(
+            results[0] && results[1],
+            $"{label} did not settle for both bots. BG {DescribeSnapshot(snapshots.Bg)} | FG {DescribeSnapshot(snapshots.Fg)}");
+    }
+
+    private async Task<bool> DriveAccountToWaypointAsync(
+        string account,
+        string role,
+        WorldPoint point,
+        string label,
+        float xyToleranceYards,
+        float zToleranceYards,
+        TimeSpan timeout)
+    {
+        await _bot.RefreshSnapshotsAsync();
+        var start = await _bot.GetSnapshotAsync(account);
+        var facing = FacingTo(start, point);
+        var facingResult = await _bot.SendActionAsync(account, MakeSetFacing(facing));
+        Assert.Equal(ResponseResult.Success, facingResult);
+        var startResult = await _bot.SendActionAsync(account, MakeMovement(ActionType.StartMovement, ControlBits.Front));
+        Assert.Equal(ResponseResult.Success, startResult);
+
+        try
+        {
+            return await _bot.WaitForSnapshotConditionAsync(
+                account,
+                snapshot => IsNearPoint3D(snapshot, EasternKingdomsMapId, point.X, point.Y, point.Z, xyToleranceYards, zToleranceYards),
+                timeout,
+                pollIntervalMs: 250,
+                progressLabel: $"{role} {label}");
+        }
+        finally
+        {
+            var stopResult = await _bot.SendActionAsync(account, MakeMovement(ActionType.StopMovement, ControlBits.Front));
+            Assert.Equal(ResponseResult.Success, stopResult);
+        }
+    }
+
     private async Task<bool> WaitForElevatorAtStopAsync(
         PairAccounts accounts,
         float stopZ,
@@ -333,77 +473,54 @@ public sealed class MovementParityTests
         Game.GameObjectSnapshot? bgElevator = null;
         Game.GameObjectSnapshot? fgElevator = null;
 
-        var bgReached = await _bot.WaitForSnapshotConditionAsync(
-            accounts.Bg,
-            snapshot =>
-            {
-                bgElevator = FindElevatorAtStop(snapshot, stopZ);
-                return bgElevator != null;
-            },
-            timeout,
-            pollIntervalMs: 500,
-            progressLabel: $"west Undercity elevator {stopLabel} stop BG");
+        var reached = await Task.WhenAll(
+            _bot.WaitForSnapshotConditionAsync(
+                accounts.Bg,
+                snapshot =>
+                {
+                    bgElevator = FindElevatorAtStop(snapshot, stopZ);
+                    return bgElevator != null;
+                },
+                timeout,
+                pollIntervalMs: 500,
+                progressLabel: $"west Undercity elevator {stopLabel} stop BG"),
+            _bot.WaitForSnapshotConditionAsync(
+                accounts.Fg,
+                snapshot =>
+                {
+                    fgElevator = FindElevatorAtStop(snapshot, stopZ);
+                    return fgElevator != null;
+                },
+                timeout,
+                pollIntervalMs: 500,
+                progressLabel: $"west Undercity elevator {stopLabel} stop FG"));
 
-        var fgReached = await _bot.WaitForSnapshotConditionAsync(
-            accounts.Fg,
-            snapshot =>
-            {
-                fgElevator = FindElevatorAtStop(snapshot, stopZ);
-                return fgElevator != null;
-            },
-            bgReached ? TimeSpan.FromSeconds(10) : TimeSpan.Zero,
-            pollIntervalMs: 500,
-            progressLabel: $"west Undercity elevator {stopLabel} stop FG");
-
-        if (bgReached && fgReached)
+        if (reached[0] && reached[1])
             _output.WriteLine(
                 $"[ELEVATOR] West Undercity elevator reached {stopLabel} stop: BG sees {DescribeTransport(bgElevator)} | FG sees {DescribeTransport(fgElevator)}");
 
-        return bgReached && fgReached;
+        return reached[0] && reached[1];
     }
 
-    private async Task TeleportPairWithoutCleanSlateAsync(
-        PairAccounts accounts,
-        int mapId,
-        float x,
-        float y,
-        float z,
-        string label)
+    private async Task<bool> WaitForPairOnTransportAsync(PairAccounts accounts, string label, TimeSpan timeout)
     {
-        await Task.WhenAll(
-            _bot.BotTeleportAsync(accounts.Bg, mapId, x, y, z),
-            _bot.BotTeleportAsync(accounts.Fg, mapId, x, y, z));
-
-        bool IsSettled(WoWActivitySnapshot snapshot)
-            => IsNearStagePoint(snapshot, mapId, x, y, xyToleranceYards: 15f) || IsOnTransport(snapshot);
-
-        var settled = await Task.WhenAll(
+        var results = await Task.WhenAll(
             _bot.WaitForSnapshotConditionAsync(
                 accounts.Bg,
-                IsSettled,
-                TimeSpan.FromSeconds(8),
-                pollIntervalMs: 500,
-                progressLabel: $"{label} BG placement"),
+                IsOnTransport,
+                timeout,
+                pollIntervalMs: 250,
+                progressLabel: $"BG {label}"),
             _bot.WaitForSnapshotConditionAsync(
                 accounts.Fg,
-                IsSettled,
-                TimeSpan.FromSeconds(8),
-                pollIntervalMs: 500,
-                progressLabel: $"{label} FG placement"));
+                IsOnTransport,
+                timeout,
+                pollIntervalMs: 250,
+                progressLabel: $"FG {label}"));
 
-        if (settled[0] && settled[1])
-        {
-            await _bot.RefreshSnapshotsAsync();
-            var bg = await _bot.GetSnapshotAsync(accounts.Bg);
-            var fg = await _bot.GetSnapshotAsync(accounts.Fg);
-            _output.WriteLine($"[STAGE] {label}: BG {DescribeSnapshot(bg)} | FG {DescribeSnapshot(fg)}");
-            return;
-        }
-
-        await _bot.RefreshSnapshotsAsync();
-        var finalBg = await _bot.GetSnapshotAsync(accounts.Bg);
-        var finalFg = await _bot.GetSnapshotAsync(accounts.Fg);
-        Assert.Fail($"{label} placement did not settle. BG {DescribeSnapshot(finalBg)} | FG {DescribeSnapshot(finalFg)}");
+        var snapshots = await CapturePairSnapshotAsync(accounts);
+        _output.WriteLine($"[ELEVATOR] {label}: BG {DescribeSnapshot(snapshots.Bg)} | FG {DescribeSnapshot(snapshots.Fg)}");
+        return results[0] && results[1];
     }
 
     private async Task<string> StartPairRecordingAsync(PairAccounts accounts)
@@ -471,6 +588,14 @@ public sealed class MovementParityTests
         Assert.All(results, result => Assert.Equal(ResponseResult.Success, result));
     }
 
+    private async Task DispatchPairAsync(PairAccounts accounts, ActionMessage bgAction, ActionMessage fgAction)
+    {
+        var results = await Task.WhenAll(
+            _bot.SendActionAsync(accounts.Bg, bgAction),
+            _bot.SendActionAsync(accounts.Fg, fgAction));
+        Assert.All(results, result => Assert.Equal(ResponseResult.Success, result));
+    }
+
     private async Task DispatchGmBothAndAwaitAsync(PairAccounts accounts, string command)
     {
         _output.WriteLine($"[CMD-SEND] [BG+FG] '{command}'");
@@ -532,14 +657,23 @@ public sealed class MovementParityTests
             $"FG/BG travel distance diverged by {travelDelta:F1}y. BG={trace.Bg.TravelDistance:F1} FG={trace.Fg.TravelDistance:F1}");
     }
 
-    private static void AssertElevatorTransportRide(PairTrace trace)
+    private static void AssertUndercityElevatorUpRide(PairTrace trace)
     {
-        Assert.True(ShowsElevatorTransportRide(trace.Bg), DescribeFailure("BG", "Undercity elevator gameobject transport ride", trace.Bg));
-        Assert.True(ShowsElevatorTransportRide(trace.Fg), DescribeFailure("FG", "Undercity elevator gameobject transport ride", trace.Fg));
+        AssertElevatorUpRide("BG", trace.Bg);
+        AssertElevatorUpRide("FG", trace.Fg);
+        Assert.True(IsAtUpperElevatorExit(trace.LastBg), $"BG did not disembark at the upper Undercity elevator exit. {DescribeSnapshot(trace.LastBg)}");
+        Assert.True(IsAtUpperElevatorExit(trace.LastFg), $"FG did not disembark at the upper Undercity elevator exit. {DescribeSnapshot(trace.LastFg)}");
     }
 
-    private static bool ShowsElevatorTransportRide(TraceMetrics metrics)
-        => metrics.TransportSamples >= 3 || metrics.VerticalRange >= 30f;
+    private static void AssertElevatorUpRide(string role, TraceMetrics metrics)
+    {
+        Assert.True(metrics.TransportSamples >= 2, DescribeFailure(role, "Undercity elevator boarding", metrics));
+        Assert.True(metrics.MinZ <= UndercityElevatorLowerZ + ElevatorArrivalZTolerance, DescribeFailure(role, "lower-stop ride start", metrics));
+        Assert.True(metrics.MaxZ >= UndercityElevatorUpperExitZ - ElevatorArrivalZTolerance, DescribeFailure(role, "upper-stop ride arrival", metrics));
+        Assert.True(metrics.VerticalRange >= 80f, DescribeFailure(role, "full lower-to-upper elevator ride", metrics));
+        Assert.True(metrics.FinalDistanceTo(UndercityElevatorUpperExitX, UndercityElevatorUpperExitY) <= 10f,
+            DescribeFailure(role, "upper elevator disembark XY", metrics));
+    }
 
     private static bool IsKnockbackObserved(WoWActivitySnapshot? snapshot, WoWActivitySnapshot? baseline)
     {
@@ -595,6 +729,26 @@ public sealed class MovementParityTests
             }
         };
 
+    private static ActionMessage MakeSetFacing(float facing)
+        => new()
+        {
+            ActionType = ActionType.SetFacing,
+            Parameters =
+            {
+                new RequestParameter { FloatParam = NormalizeFacing(facing) }
+            }
+        };
+
+    private static ActionMessage MakeMovement(ActionType actionType, ControlBits bits)
+        => new()
+        {
+            ActionType = actionType,
+            Parameters =
+            {
+                new RequestParameter { IntParam = (int)bits }
+            }
+        };
+
     private static ActionMessage MakeJump()
         => new() { ActionType = ActionType.Jump };
 
@@ -616,6 +770,33 @@ public sealed class MovementParityTests
     private static bool IsOnTransport(WoWActivitySnapshot? snapshot)
         => (snapshot?.MovementData?.TransportGuid ?? 0UL) != 0
             || (FlagsOf(snapshot) & MovementFlags.MOVEFLAG_ONTRANSPORT) != 0;
+
+    private static float FacingTo(WoWActivitySnapshot? snapshot, WorldPoint point)
+    {
+        var pos = PositionOf(snapshot);
+        if (pos == null)
+            return 0f;
+
+        return NormalizeFacing(MathF.Atan2(point.Y - pos.Y, point.X - pos.X));
+    }
+
+    private static float NormalizeFacing(float facing)
+    {
+        var twoPi = MathF.PI * 2f;
+        var normalized = facing % twoPi;
+        return normalized < 0f ? normalized + twoPi : normalized;
+    }
+
+    private static bool IsAtUpperElevatorExit(WoWActivitySnapshot? snapshot)
+        => IsNearPoint3D(
+                snapshot,
+                EasternKingdomsMapId,
+                UndercityElevatorUpperExitX,
+                UndercityElevatorUpperExitY,
+                UndercityElevatorUpperExitZ,
+                xyToleranceYards: 10f,
+                zToleranceYards: ElevatorArrivalZTolerance)
+            && !IsOnTransport(snapshot);
 
     private static Game.GameObjectSnapshot? FindElevatorAtStop(WoWActivitySnapshot? snapshot, float stopZ)
         => snapshot?.MovementData?.NearbyGameObjects?
@@ -649,6 +830,22 @@ public sealed class MovementParityTests
             && Distance2D(pos.X, pos.Y, expectedX, expectedY) <= xyToleranceYards;
     }
 
+    private static bool IsNearPoint3D(
+        WoWActivitySnapshot? snapshot,
+        int expectedMapId,
+        float expectedX,
+        float expectedY,
+        float expectedZ,
+        float xyToleranceYards,
+        float zToleranceYards)
+    {
+        var pos = PositionOf(snapshot);
+        return pos != null
+            && snapshot?.CurrentMapId == expectedMapId
+            && Distance2D(pos.X, pos.Y, expectedX, expectedY) <= xyToleranceYards
+            && MathF.Abs(pos.Z - expectedZ) <= zToleranceYards;
+    }
+
     private static float DistanceTo(WoWActivitySnapshot? snapshot, float x, float y)
     {
         var pos = PositionOf(snapshot);
@@ -675,6 +872,8 @@ public sealed class MovementParityTests
     }
 
     private sealed record PairAccounts(string Bg, string Fg);
+
+    private sealed record WorldPoint(float X, float Y, float Z);
 
     private sealed record PairSnapshot(WoWActivitySnapshot? Bg, WoWActivitySnapshot? Fg);
 

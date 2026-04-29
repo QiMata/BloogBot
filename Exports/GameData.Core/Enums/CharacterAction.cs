@@ -96,4 +96,6 @@ public enum CharacterAction
     LeaveBattleground,  // Leave the current battleground.
     TravelTo,           // Navigate to a target position on any map via CrossMapRouter. Params: int mapId, float x, float y, float z.
     Jump,               // Trigger one jump impulse while preserving current movement intent.
+    StartMovement,      // Begin holding movement control bits. Params: int ControlBits.
+    StopMovement,       // Release movement control bits. Params: int ControlBits.
 }

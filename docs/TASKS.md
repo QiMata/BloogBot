@@ -34,7 +34,52 @@
 
 ## Active Tasks
 
-_No open task-tracked items._
+- [ ] **MVT-TRANSPORT-NAMED-UC** - Finish the stricter Undercity elevator
+  parity route. `MovementParityTests.TransportRide_FgBgParity` now starts both
+  participants with `.tele name <character> undercity` and manually drives
+  movement via fixture-dispatched `SetFacing` + `StartMovement` /
+  `StopMovement`, but the first named-teleport-to-lower-route segment currently
+  fails live: BG reaches waypoint 1 at about `(1549.9,224.8,-43.10)` while FG
+  reaches similar XY on the wrong lower layer `(1556.4,222.5,-66.26)`.
+  Identify the real client-safe path from the named Undercity landing to the
+  west elevator lower boarding point, then re-run the focused transport test.
+
+---
+
+## Handoff (2026-04-29, named Undercity elevator route correction)
+
+- Completed:
+  - Replaced the weak lower-car `Goto` transport check with the stricter test
+    shape requested for `MovementParityTests.TransportRide_FgBgParity`:
+    both bots are teleported with `.tele name <character> undercity`, then the
+    fixture manually drives movement toward the Undercity west elevator using
+    `SetFacing`, `StartMovement`, and `StopMovement` actions.
+  - Added minimal `START_MOVEMENT` / `STOP_MOVEMENT` action contracts and
+    BotRunner dispatch mapping so live tests can drive FG/BG forward movement
+    without going through `Goto` pathfinding.
+  - Elevator boarding now waits for the real west Undercity elevator at the
+    lower stop, then starts both bots forward together and requires both to
+    acquire transport state before tracing the ride up and dismount.
+  - Re-opened tracker `MVT-TRANSPORT-NAMED-UC` because the stronger named
+    Undercity route currently fails before boarding.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_named_undercity_observe_05.trx"` -> `failed (1/1; first named-teleport lower-route waypoint: BG reached the intended z=-43 layer, FG fell/drove on z=-66 layer)`.
+- Evidence:
+  - TRX: `tmp/test-runtime/results-live/movement_parity_transport_named_undercity_observe_05.trx`.
+- Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
+  - `Exports/BotCommLayer/Models/Communication.cs`
+  - `Exports/GameData.Core/Enums/CharacterAction.cs`
+  - `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Tests/BotRunner.Tests/ActionForwardingContractTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MovementParityTests.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_named_undercity_route_followup.trx"`
 
 ---
 

@@ -65,7 +65,14 @@
 - [x] Collected the final core live-validation evidence with the updated FG recorder baseline.
 
 4. Movement/controller parity coverage
-Known remaining work in this owner: `0` items.
+Known remaining work in this owner: `1` item.
+- [ ] `MVT-TRANSPORT-NAMED-UC`: complete the stricter named-Undercity elevator
+  parity path. The test now uses `.tele name <character> undercity` and
+  fixture-dispatched `SetFacing` + `StartMovement` / `StopMovement`, but the
+  first route segment still fails live because FG drops to the wrong
+  `z=-66` layer while BG reaches waypoint 1 on the expected `z=-43` layer.
+  Find the client-safe route from the named teleport landing to the west
+  elevator lower boarding point, then re-run the focused transport lane.
 - [x] Added deterministic coverage for the persistent `BADFACING` retry window that was holding the candidate `3/15` mining route in stationary combat.
 - [x] Added targeted BG corpse-run coverage for live waypoint ownership: `DeathCorpseRunTests` now asserts the emitted `navtrace_<account>.json` captured `RetrieveCorpseTask` ownership and a non-null `TraceSnapshot`, with deterministic helper tests covering stable recording-file lookup/cleanup.
 - [x] Session 188: `Parity_Durotar_RoadPath_Redirect` proves pause/resume packet ordering. BG `SET_FACING` on mid-route redirects now matches FG. Full live proof bundle green.
@@ -87,6 +94,45 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-04-29 (named Undercity elevator route correction)
+- Pass result: focused transport lane now fails at the stronger route gate,
+  which is expected until the named-teleport-to-elevator path is corrected:
+  `movement_parity_transport_named_undercity_observe_05.trx` failed `1/1`.
+- What changed:
+  - `MovementParityTests.TransportRide_FgBgParity` now stages both
+    participants with `.tele name <character> undercity`.
+  - Added fixture-driven movement controls (`ActionType.StartMovement` and
+    `ActionType.StopMovement`) so the test can drive direct forward movement
+    like the Undercity recording scenario instead of relying on StateManager or
+    `Goto` pathfinding for this probe.
+  - Route driving stops each bot independently when it reaches a checkpoint,
+    then asserts pair parity.
+  - Elevator boarding now waits for the lower car, starts both bots forward
+    together, requires both to board, and then traces the ride-up/dismount.
+- Current blocker:
+  - First lower-route checkpoint fails after named teleport. BG stops near
+    `(1549.9,224.8,-43.10)`; FG reaches similar XY but falls/drives at
+    `(1556.4,222.5,-66.26)`. Existing recordings start on the `z=-43` route
+    layer and do not include the named-teleport landing approach.
+- Validation/tests run:
+  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings/nonfatal dumpbin noise)`.
+  - `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly` -> `No repo-scoped processes to stop.`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_named_undercity_observe_05.trx"` -> `failed (1/1; first route checkpoint layer mismatch)`.
+- Evidence:
+  - `tmp/test-runtime/results-live/movement_parity_transport_named_undercity_observe_05.trx`
+- Files changed:
+  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto`
+  - `Exports/BotCommLayer/Models/Communication.cs`
+  - `Exports/GameData.Core/Enums/CharacterAction.cs`
+  - `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Tests/BotRunner.Tests/ActionForwardingContractTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/MovementParityTests.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementParityTests.TransportRide_FgBgParity" --logger "console;verbosity=minimal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=movement_parity_transport_named_undercity_route_followup.trx"`
+
 ### 2026-04-29 (MVT-TRANSPORT-FG closeout)
 - Pass result: `Category=MovementParity` is green without tracked skips:
   `5` passed, `0` skipped in

@@ -113,7 +113,7 @@ namespace Communication {
             "X2xvY2F0aW9uX25hbWUYAyABKAkSGQoRYWxsb3dfaGVhcnRoc3RvbmUYBCAB",
             "KAgSHAoUYWxsb3dfY2xhc3NfdGVsZXBvcnQYBSABKAgiTwoITG9nRW50cnkS",
             "DQoFbGV2ZWwYASABKAkSEAoIY2F0ZWdvcnkYAiABKAkSDwoHbWVzc2FnZRgD",
-            "IAEoCRIRCgl0aW1lc3RhbXAYBCABKAkqmAwKCkFjdGlvblR5cGUSCAoEV0FJ",
+            "IAEoCRIRCgl0aW1lc3RhbXAYBCABKAkqvwwKCkFjdGlvblR5cGUSCAoEV0FJ",
             "VBAAEggKBEdPVE8QARIRCg1JTlRFUkFDVF9XSVRIEAISEQoNU0VMRUNUX0dP",
             "U1NJUBADEhQKEFNFTEVDVF9UQVhJX05PREUQBBIQCgxBQ0NFUFRfUVVFU1QQ",
             "BRIRCg1ERUNMSU5FX1FVRVNUEAYSEQoNU0VMRUNUX1JFV0FSRBAHEhIKDkNP",
@@ -148,19 +148,20 @@ namespace Communication {
             "X1NVQkdST1VQEEoSEQoNRk9MTE9XX1RBUkdFVBBLEhUKEUpPSU5fQkFUVExF",
             "R1JPVU5EEEwSFwoTQUNDRVBUX0JBVFRMRUdST1VORBBNEhYKEkxFQVZFX0JB",
             "VFRMRUdST1VORBBOEg0KCVRSQVZFTF9UTxBPEhEKDUFQUExZX0xPQURPVVQQ",
-            "UBIICgRKVU1QEFEqLwoNQm90UnVubmVyVHlwZRIOCgpGT1JFR1JPVU5EEAAS",
-            "DgoKQkFDS0dST1VORBABKqoBCg9TdGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAA",
-            "EgwKCE9QRU5ORVNTEAESFQoRQ09OU0NJRU5USU9VU05FU1MQAhIQCgxFWFRS",
-            "QVZFUlNJT04QAxIRCg1BR1JFRUFCTEVORVNTEAQSDwoLTkVVUk9USUNJU00Q",
-            "BRIXChNDT09SRElOQVRPUl9FTkFCTEVEEAYSGQoVRFJBSU5fUEVORElOR19B",
-            "Q1RJT05TEAcqOwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAAEgsKB0ZB",
-            "SUxVUkUQARIPCgtJTl9QUk9HUkVTUxACKqwBChJCb3RDb25uZWN0aW9uU3Rh",
-            "dGUSFAoQQk9UX0RJU0NPTk5FQ1RFRBAAEhYKEkJPVF9BVVRIRU5USUNBVElO",
-            "RxABEhMKD0JPVF9DSEFSX1NFTEVDVBACEhYKEkJPVF9FTlRFUklOR19XT1JM",
-            "RBADEhAKDEJPVF9JTl9XT1JMRBAEEhQKEEJPVF9UUkFOU0ZFUlJJTkcQBRIT",
-            "Cg9CT1RfTE9HR0lOR19PVVQQBipoCg1Mb2Fkb3V0U3RhdHVzEhcKE0xPQURP",
-            "VVRfTk9UX1NUQVJURUQQABIXChNMT0FET1VUX0lOX1BST0dSRVNTEAESEQoN",
-            "TE9BRE9VVF9SRUFEWRACEhIKDkxPQURPVVRfRkFJTEVEEANiBnByb3RvMw=="));
+            "UBIICgRKVU1QEFESEgoOU1RBUlRfTU9WRU1FTlQQUhIRCg1TVE9QX01PVkVN",
+            "RU5UEFMqLwoNQm90UnVubmVyVHlwZRIOCgpGT1JFR1JPVU5EEAASDgoKQkFD",
+            "S0dST1VORBABKqoBCg9TdGF0ZUNoYW5nZVR5cGUSCAoETkFNRRAAEgwKCE9Q",
+            "RU5ORVNTEAESFQoRQ09OU0NJRU5USU9VU05FU1MQAhIQCgxFWFRSQVZFUlNJ",
+            "T04QAxIRCg1BR1JFRUFCTEVORVNTEAQSDwoLTkVVUk9USUNJU00QBRIXChND",
+            "T09SRElOQVRPUl9FTkFCTEVEEAYSGQoVRFJBSU5fUEVORElOR19BQ1RJT05T",
+            "EAcqOwoOUmVzcG9uc2VSZXN1bHQSCwoHU1VDQ0VTUxAAEgsKB0ZBSUxVUkUQ",
+            "ARIPCgtJTl9QUk9HUkVTUxACKqwBChJCb3RDb25uZWN0aW9uU3RhdGUSFAoQ",
+            "Qk9UX0RJU0NPTk5FQ1RFRBAAEhYKEkJPVF9BVVRIRU5USUNBVElORxABEhMK",
+            "D0JPVF9DSEFSX1NFTEVDVBACEhYKEkJPVF9FTlRFUklOR19XT1JMRBADEhAK",
+            "DEJPVF9JTl9XT1JMRBAEEhQKEEJPVF9UUkFOU0ZFUlJJTkcQBRITCg9CT1Rf",
+            "TE9HR0lOR19PVVQQBipoCg1Mb2Fkb3V0U3RhdHVzEhcKE0xPQURPVVRfTk9U",
+            "X1NUQVJURUQQABIXChNMT0FET1VUX0lOX1BST0dSRVNTEAESEQoNTE9BRE9V",
+            "VF9SRUFEWRACEhIKDkxPQURPVVRfRkFJTEVEEANiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), typeof(global::Communication.LoadoutStatus), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -278,6 +279,14 @@ namespace Communication {
     /// One-shot movement impulse. FG sends a real spacebar jump; BG emits MSG_MOVE_JUMP through MovementController.
     /// </summary>
     [pbr::OriginalName("JUMP")] Jump = 81,
+    /// <summary>
+    /// Begin holding movement control bits; int param is GameData.Core.Enums.ControlBits.
+    /// </summary>
+    [pbr::OriginalName("START_MOVEMENT")] StartMovement = 82,
+    /// <summary>
+    /// Release movement control bits; int param is GameData.Core.Enums.ControlBits.
+    /// </summary>
+    [pbr::OriginalName("STOP_MOVEMENT")] StopMovement = 83,
   }
 
   public enum BotRunnerType {

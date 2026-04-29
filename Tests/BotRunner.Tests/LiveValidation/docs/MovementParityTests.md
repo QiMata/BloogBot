@@ -21,9 +21,11 @@ characters have account-level GM access and can self-stage with `.go xyz`.
 - `Knockback_FgBgParity`: targets each participant with its own GM
   `.targetself` command, applies `.knockback 5 5`, and asserts movement or jump
   displacement from the command baseline.
-- `TransportRide_FgBgParity`: synchronizes on the Undercity west elevator
-  gameobject at the lower stop, dispatches matching `Goto` movement onto the
-  lower car center, and observes ride evidence. This is not taxi coverage;
+- `TransportRide_FgBgParity`: teleports both participants with
+  `.tele name <character> undercity`, fixture-drives the walk toward the
+  Undercity west elevator with `SetFacing` + `StartMovement` / `StopMovement`,
+  waits for the lower elevator car, starts both bots forward together to board,
+  then traces ride-up and upper dismount evidence. This is not taxi coverage;
   taxis are spline-based movement and belong to taxi/spline tests.
 
 ## Staging
@@ -31,7 +33,10 @@ characters have account-level GM access and can self-stage with `.go xyz`.
 The test body uses only the movement-parity FG/BG accounts:
 
 - `EnsureCleanSlateAsync(...)` clears each participant before a probe.
-- `BotTeleportAsync(...)` sends each participant's own `.go xyz` GM command.
+- `BotTeleportAsync(...)` sends each participant's own `.go xyz` GM command
+  for point/ramp probes.
+- `BotTeleportToNamedAsync(...)` stages the elevator probe at the named
+  Undercity teleport location before the fixture-driven walk.
 - `WaitForTeleportSettledAsync(...)` must confirm starts for ground probes;
   elevator staging also accepts settled transport state because transport-local
   and world-position snapshots differ between FG and BG.
@@ -39,7 +44,8 @@ The test body uses only the movement-parity FG/BG accounts:
 ## Runtime Linkage
 
 - BG and FG receive only recording actions plus the action under test:
-  `Goto`, `Jump`, or bot-chat GM self-knockback commands.
+  `Goto`, `Jump`, fixture-driven `SetFacing` / `StartMovement` /
+  `StopMovement`, or bot-chat GM self-knockback commands.
 - The Undercity elevator probe observes gameobject transport evidence through
   sustained transport samples or the elevator's large vertical travel. It does
   not classify taxi spline movement as transport behavior.
@@ -70,5 +76,13 @@ The test body uses only the movement-parity FG/BG accounts:
   final movement bundle,
   `movement_parity_transport_fg_goto_board_full_04.trx`, passed with `5`
   passed and `0` skipped.
+- 2026-04-29 named-route correction: the transport probe was tightened to the
+  requested shape: `.tele name <character> undercity`, manual fixture-driven
+  walk to the elevator, lower-car wait, simultaneous board, ride-up, and upper
+  dismount assertion. The stronger focused run
+  `movement_parity_transport_named_undercity_observe_05.trx` currently fails
+  before boarding because FG reaches similar XY to waypoint 1 on the wrong
+  lower `z=-66` layer while BG reaches the expected `z=-43` layer. Tracked as
+  `MVT-TRANSPORT-NAMED-UC`.
 - Repo-scoped cleanup before and after live validation reported
   `No repo-scoped processes to stop.`

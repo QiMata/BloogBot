@@ -904,6 +904,8 @@ public class ActionForwardingContractTests
     [InlineData(ActionType.CastSpell)]
     [InlineData(ActionType.SendChat)]
     [InlineData(ActionType.SetFacing)]
+    [InlineData(ActionType.StartMovement)]
+    [InlineData(ActionType.StopMovement)]
     [InlineData(ActionType.VisitVendor)]
     [InlineData(ActionType.VisitTrainer)]
     [InlineData(ActionType.VisitFlightMaster)]

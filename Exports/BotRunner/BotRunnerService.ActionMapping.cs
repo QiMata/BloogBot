@@ -97,6 +97,8 @@ namespace BotRunner
             Communication.ActionType.LeaveBattleground => CharacterAction.LeaveBattleground,
             Communication.ActionType.TravelTo => CharacterAction.TravelTo,
             Communication.ActionType.Jump => CharacterAction.Jump,
+            Communication.ActionType.StartMovement => CharacterAction.StartMovement,
+            Communication.ActionType.StopMovement => CharacterAction.StopMovement,
             _ => null,
         };
 
