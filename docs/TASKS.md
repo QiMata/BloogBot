@@ -34,7 +34,14 @@
 
 ## Active Tasks
 
-No active task-tracked items.
+- [ ] `LPATH-CROSSROADS-UC` - Implement staged long-pathing from Crossroads to
+  Undercity. The resolver/executor must choose observable travel objectives in
+  sequence: Crossroads taxi access -> flight path `25` Crossroads to `23`
+  Orgrimmar -> walk to Orgrimmar zeppelin tower -> Orgrimmar/Undercity
+  zeppelin -> walk to the Undercity destination. Deterministic coverage must
+  prove this staged route does not collapse into one direct path or choose
+  Booty Bay/Ratchet/dungeon-neutral shortcuts, and live validation must prove
+  the Crossroads -> Undercity route reaches the Eastern Kingdoms target.
 
 ---
 

@@ -14,6 +14,14 @@
 5. Update this file in the same session as any BotRunner test delta.
 
 ## Active Priorities
+5. Long-pathing staged travel
+- [ ] `LPATH-CROSSROADS-UC`: add deterministic planner coverage and focused
+  live validation for Crossroads -> Undercity staged travel. Expected stages:
+  walk/taxi access at Crossroads, flight path `25` -> `23`, walk to the
+  Orgrimmar zeppelin tower, Orgrimmar/Undercity zeppelin, then final Undercity
+  walk. The test must reject single giant direct routing and wrong shortcuts
+  such as Booty Bay/Ratchet or neutral/dungeon transitions.
+
 0. Shodan test-director migration (started 2026-04-24)
 - [x] Audit top-level `LiveValidation/*.cs` for FG/BG GM-command usage and group by category. Inventory at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`.
 - [x] Add `LiveBotFixture.StageBotRunnerLoadoutAsync(...)` test-director helper plus `Equipment.config.json` for migrated equipment-loadout tests.
