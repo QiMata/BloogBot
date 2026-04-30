@@ -422,6 +422,42 @@ extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ en
     }
 }
 
+extern "C" __declspec(dllexport) XYZ* FindPathForAgent(
+    uint32_t mapId,
+    XYZ start,
+    XYZ end,
+    bool smoothPath,
+    float agentRadius,
+    float agentHeight,
+    int* length)
+{
+    try
+    {
+        if (!g_initialized)
+            InitializeAllSystems();
+
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+        auto* navigation = Navigation::GetInstance();
+        if (navigation)
+            return navigation->CalculatePathForAgent(mapId, start, end, smoothPath, agentRadius, agentHeight, length);
+
+        if (length)
+            *length = 0;
+        return nullptr;
+    }
+    catch (...)
+    {
+        OutputDebugStringA("[Navigation.dll] SEH exception in FindPathForAgent\n");
+        fprintf(stderr, "[Navigation.dll] SEH exception in FindPathForAgent (code=0x%08lx)\n",
+                0);
+
+        if (length)
+            *length = 0;
+        return nullptr;
+    }
+}
+
 extern "C" __declspec(dllexport) void PathArrFree(XYZ* pathArr)
 {
     delete[] pathArr;

@@ -52,6 +52,7 @@ public:
         float r, float h,
         float step /* =0.3f */);
     XYZ* CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool smoothPath, int* length);
+    XYZ* CalculatePathForAgent(unsigned int mapId, XYZ start, XYZ end, bool smoothPath, float agentRadius, float agentHeight, int* length);
     void FreePathArr(XYZ* length);
     std::string GetMmapsPath();
     bool IsLineOfSight(uint32_t mapId, const XYZ& a, const XYZ& b);

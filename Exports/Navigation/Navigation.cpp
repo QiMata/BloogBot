@@ -64,6 +64,11 @@ const dtNavMeshQuery* Navigation::GetQueryForMap(uint32_t mapId)
 
 XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool smoothPath, int* length)
 {
+	return CalculatePathForAgent(mapId, start, end, smoothPath, 0.3064f, 2.0313f, length);
+}
+
+XYZ* Navigation::CalculatePathForAgent(unsigned int mapId, XYZ start, XYZ end, bool smoothPath, float agentRadius, float agentHeight, int* length)
+{
 	if (length)
 		*length = 0;
 
@@ -78,6 +83,7 @@ XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool smoo
 	// true  => Detour smooth path
 	// false => straight corner path
 	pathFinder.setUseStrightPath(!smoothPath);
+	pathFinder.setCapsuleDimensions(agentRadius, agentHeight);
 	pathFinder.calculate(start.X, start.Y, start.Z, end.X, end.Y, end.Z);
 	m_lastOverlayRepairedSegment.segmentIndex = pathFinder.getOverlayBlockedSegmentIndex();
 	m_lastOverlayRepairedSegment.blockingInstanceId = pathFinder.getOverlayBlockingInstanceId();

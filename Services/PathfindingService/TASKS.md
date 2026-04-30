@@ -25,21 +25,26 @@
 - [x] Validate split Linux containers against mounted `WWOW_DATA_DIR` nav/scene data and capture readiness evidence.
 
 ## Session Handoff
-- Last updated: 2026-04-15
-- Active task: `none (all tracked owner items closed)`
+- Last updated: 2026-04-30
+- Active task: `LPATH-CROSSROADS-UC` deterministic Tauren-sized route clearance slice
 - Last delta:
-  - Added `PathAffordanceClassifier` and wired `PathfindingSocketServer` to emit the expanded route affordance response fields: jump-gap, safe-drop, unsafe-drop, blocked counts, max climb height, max gap distance, and max drop height.
-  - `Repository.Navigation` now exposes `ClassifySegmentAffordance(...)` for explicit native segment classification calls.
-  - Default response aggregation remains fast/geometric; bounded native aggregation is opt-in via `WWOW_ENABLE_NATIVE_AFFORDANCE_SUMMARY=1`.
-- Pass result: `surface affordance response metadata shipped; all currently tracked PathfindingService items remain complete`
+  - `Repository.Navigation` now calls native `FindPathForAgent(...)` with the requested capsule radius/height instead of using a fixed pathfinding capsule.
+  - Long smooth routes are densified before deterministic validation, early duplicate support anchors are collapsed to the real support layer, and the early static/capsule repair pass remains bounded to the first 24 segments.
+  - Added generic local escape candidates for early static/capsule breaks so the Orgrimmar support/tree stall can route out through PathfindingService without hard-coded micro-waypoints.
+- Pass result: `delta shipped; deterministic Tauren Male long-pathing route suite passed, live validation remains in BotRunner owner`
 - Validation/tests run:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded`
   - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathAffordanceClassifierTests|FullyQualifiedName~PathfindingSocketServerIntegrationTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routes_tauren_agent_collapsed_support.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (10/10)`
 - Files changed:
-  - `Services/PathfindingService/PathAffordanceClassifier.cs`
-  - `Services/PathfindingService/PathfindingSocketServer.cs`
   - `Services/PathfindingService/Repository/Navigation.cs`
-  - `Services/PathfindingService/README.md`
   - `Services/PathfindingService/TASKS.md`
+  - `Tests/PathfindingService.Tests/LongPathingRouteTests.cs`
+  - `Tests/PathfindingService.Tests/PathRouteAssertions.cs`
+  - `Exports/Navigation/DllMain.cpp`
+  - `Exports/Navigation/Navigation.cpp`
+  - `Exports/Navigation/Navigation.h`
+  - `Exports/Navigation/PathFinder.cpp`
+  - `Exports/Navigation/PathFinder.h`
   - `docs/TASKS.md`
-- Next command: `rg -n "^- \\[ \\]|\\[ \\] Problem|Active task:" docs/TASKS.md Exports/Navigation/TASKS.md Services/PathfindingService/TASKS.md Tests/PathfindingService.Tests/TASKS.md Tests/Navigation.Physics.Tests/TASKS.md Exports/BotRunner/TASKS.md Tests/BotRunner.Tests/TASKS.md`
+- Next command: `git status --short --branch`

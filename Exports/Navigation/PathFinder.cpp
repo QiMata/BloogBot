@@ -31,6 +31,7 @@
 #include <cmath>
 #include <chrono>
 #include <cstring>
+#include <algorithm>
 
 extern "C" uint32_t ValidateWalkableSegment(
     uint32_t mapId,
@@ -65,14 +66,19 @@ public:
 
 namespace
 {
-    constexpr float PathValidationAgentRadius = 0.6f;
-    constexpr float PathValidationAgentHeight = 2.0f;
+    constexpr float DefaultPathValidationAgentRadius = 0.6f;
+    constexpr float DefaultPathValidationAgentHeight = 2.0f;
     constexpr uint32_t SegmentValidationClear = 0;
     constexpr uint32_t SegmentValidationMissingSupport = 2;
     constexpr int MaxSegmentRefinementDepth = 3;
     constexpr int MaxRefinementTotalCalls = 500;
     constexpr float RedundantPointDistanceThreshold = 0.75f;
     constexpr int MaxSimplificationPasses = 4;
+    constexpr int MaxWallClearanceInsertedPoints = 192;
+    constexpr float WallClearanceSafetyMargin = 0.15f;
+    constexpr float WallClearanceProbePadding = 1.25f;
+    constexpr float WallClearanceMinAdjustment = 0.05f;
+    constexpr float WallClearanceSampleSpacing = 2.0f;
     constexpr float MinDetourSegmentLength = 2.0f;
     constexpr float MaxDetourLengthInflation = 2.75f;
     constexpr float MinCandidateEndpointDistance = 1.0f;
@@ -101,6 +107,8 @@ namespace
         uint32_t mapId,
         const Vector3& start,
         const Vector3& end,
+        float radius,
+        float height,
         Vector3* adjustedEnd,
         uint32_t* resultCode = nullptr)
     {
@@ -111,8 +119,8 @@ namespace
             mapId,
             ToXyz(start),
             ToXyz(end),
-            PathValidationAgentRadius,
-            PathValidationAgentHeight,
+            radius,
+            height,
             &resolvedEndZ,
             &supportDelta,
             &travelFraction);
@@ -200,6 +208,8 @@ namespace
         uint32_t mapId,
         const Vector3& start,
         const Vector3& end,
+        float radius,
+        float height,
         int depth,
         PointsArray& output,
         int& totalCalls);
@@ -209,19 +219,21 @@ namespace
         const Vector3& start,
         const Vector3& candidate,
         const Vector3& end,
+        float radius,
+        float height,
         int depth,
         PointsArray& output,
         int& totalCalls)
     {
         const size_t baseSize = output.size();
-        if (!AppendRefinedSegment(mapId, start, candidate, depth + 1, output, totalCalls))
+        if (!AppendRefinedSegment(mapId, start, candidate, radius, height, depth + 1, output, totalCalls))
         {
             output.resize(baseSize);
             return false;
         }
 
         const Vector3 candidateEnd = output.back();
-        if (!AppendRefinedSegment(mapId, candidateEnd, end, depth + 1, output, totalCalls))
+        if (!AppendRefinedSegment(mapId, candidateEnd, end, radius, height, depth + 1, output, totalCalls))
         {
             output.resize(baseSize);
             return false;
@@ -234,6 +246,8 @@ namespace
         uint32_t mapId,
         const Vector3& start,
         const Vector3& end,
+        float radius,
+        float height,
         int depth,
         PointsArray& output,
         int& totalCalls)
@@ -255,7 +269,7 @@ namespace
                     if (!TryBuildDetourCandidate(mapId, start, end, alongFraction, lateralOffset, directionSign, &candidate))
                         continue;
 
-                    if (AppendRefinedCandidate(mapId, start, candidate, end, depth, output, totalCalls))
+                    if (AppendRefinedCandidate(mapId, start, candidate, end, radius, height, depth, output, totalCalls))
                         return true;
                 }
             }
@@ -268,6 +282,8 @@ namespace
         uint32_t mapId,
         const Vector3& start,
         const Vector3& end,
+        float radius,
+        float height,
         int depth,
         PointsArray& output,
         int& totalCalls)
@@ -278,7 +294,7 @@ namespace
 
         Vector3 adjustedEnd = end;
         uint32_t validation = SegmentValidationClear;
-        if (ValidatePathSegment(mapId, start, end, &adjustedEnd, &validation))
+        if (ValidatePathSegment(mapId, start, end, radius, height, &adjustedEnd, &validation))
         {
             output.push_back(adjustedEnd);
             return true;
@@ -287,14 +303,14 @@ namespace
         if (depth >= MaxSegmentRefinementDepth)
             return false;
 
-        if (TryAppendDetourSegment(mapId, start, end, depth, output, totalCalls))
+        if (TryAppendDetourSegment(mapId, start, end, radius, height, depth, output, totalCalls))
             return true;
 
         const Vector3 midpoint = BuildGroundedMidpoint(mapId, start, end);
-        return AppendRefinedCandidate(mapId, start, midpoint, end, depth, output, totalCalls);
+        return AppendRefinedCandidate(mapId, start, midpoint, end, radius, height, depth, output, totalCalls);
     }
 
-    void RefinePathForWalkability(uint32_t mapId, PointsArray& pathPoints)
+    void RefinePathForWalkability(uint32_t mapId, PointsArray& pathPoints, float radius, float height)
     {
         if (pathPoints.size() < 2)
             return;
@@ -320,14 +336,14 @@ namespace
 
             Vector3 adjustedEnd = end;
             uint32_t validation = SegmentValidationClear;
-            if (ValidatePathSegment(mapId, start, end, &adjustedEnd, &validation))
+            if (ValidatePathSegment(mapId, start, end, radius, height, &adjustedEnd, &validation))
             {
                 refined.push_back(adjustedEnd);
                 continue;
             }
 
             const size_t beforeRefineSize = refined.size();
-            if (AppendRefinedSegment(mapId, start, end, 0, refined, totalCalls))
+            if (AppendRefinedSegment(mapId, start, end, radius, height, 0, refined, totalCalls))
             {
                 changed = true;
                 continue;
@@ -343,7 +359,7 @@ namespace
 
     constexpr int MaxSimplificationTotalCalls = 500;
 
-    void SimplifyPathForWalkability(uint32_t mapId, PointsArray& pathPoints)
+    void SimplifyPathForWalkability(uint32_t mapId, PointsArray& pathPoints, float radius, float height)
     {
         if (pathPoints.size() < 3)
             return;
@@ -387,7 +403,7 @@ namespace
                 ++totalCalls;
                 Vector3 adjustedNext = pendingNext;
                 uint32_t validation = SegmentValidationClear;
-                if (ValidatePathSegment(mapId, prev, pendingNext, &adjustedNext, &validation))
+                if (ValidatePathSegment(mapId, prev, pendingNext, radius, height, &adjustedNext, &validation))
                 {
                     pendingNext = adjustedNext;
                     changed = true;
@@ -406,13 +422,148 @@ namespace
                 return;
         }
     }
+
+    bool TryPushPointAwayFromWall(
+        const dtNavMeshQuery* query,
+        const dtQueryFilter& filter,
+        float requiredClearance,
+        Vector3* point)
+    {
+        if (!query || !point || requiredClearance <= 0.0f)
+            return false;
+
+        float pos[VERTEX_SIZE] = { point->y, point->z, point->x };
+        const float horizontalExtent = std::max(1.0f, requiredClearance * 2.0f);
+        float extents[VERTEX_SIZE] = { horizontalExtent, 5.0f, horizontalExtent };
+        dtPolyRef ref = 0;
+        float nearest[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
+        dtStatus status = query->findNearestPoly(pos, extents, &filter, &ref, nearest);
+        if (dtStatusFailed(status) || ref == INVALID_POLYREF)
+            return false;
+        if (!std::isfinite(nearest[0]) || !std::isfinite(nearest[1]) || !std::isfinite(nearest[2]))
+            return false;
+
+        float wallDistance = 0.0f;
+        float wallPos[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
+        float wallNormal[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
+        status = query->findDistanceToWall(
+            ref,
+            nearest,
+            requiredClearance + WallClearanceProbePadding,
+            &filter,
+            &wallDistance,
+            wallPos,
+            wallNormal);
+        if (dtStatusFailed(status) || !std::isfinite(wallDistance))
+            return false;
+        if (!std::isfinite(wallNormal[0]) || !std::isfinite(wallNormal[2]))
+            return false;
+
+        const float targetClearance = requiredClearance + WallClearanceSafetyMargin;
+        if (wallDistance >= targetClearance)
+            return false;
+
+        const float nudge = targetClearance - wallDistance;
+        if (nudge <= WallClearanceMinAdjustment)
+            return false;
+
+        float adjusted[VERTEX_SIZE] = {
+            nearest[0] + (wallNormal[0] * nudge),
+            nearest[1],
+            nearest[2] + (wallNormal[2] * nudge)
+        };
+        if (!std::isfinite(adjusted[0]) || !std::isfinite(adjusted[1]) || !std::isfinite(adjusted[2]))
+            return false;
+
+        float adjustedHeight = adjusted[1];
+        if (dtStatusSucceed(query->getPolyHeight(ref, adjusted, &adjustedHeight)))
+            adjusted[1] = adjustedHeight + 0.5f;
+
+        point->x = adjusted[2];
+        point->y = adjusted[0];
+        point->z = adjusted[1];
+        return true;
+    }
+
+    void AppendPointIfDistinct(PointsArray& output, const Vector3& point)
+    {
+        if (output.empty())
+        {
+            output.push_back(point);
+            return;
+        }
+
+        const Vector3& last = output.back();
+        const float dx = point.x - last.x;
+        const float dy = point.y - last.y;
+        const float dz = point.z - last.z;
+        if ((dx * dx) + (dy * dy) + (dz * dz) <= 0.01f)
+            return;
+
+        output.push_back(point);
+    }
+
+    void ApplyWallClearanceToPath(
+        const dtNavMeshQuery* query,
+        const dtQueryFilter& filter,
+        float requiredClearance,
+        PointsArray& pathPoints)
+    {
+        if (!query || pathPoints.size() < 3 || requiredClearance <= 0.0f)
+            return;
+
+        PointsArray adjusted;
+        adjusted.reserve(pathPoints.size() + 8);
+        adjusted.push_back(pathPoints.front());
+
+        int insertedPoints = 0;
+        bool changed = false;
+        for (size_t i = 1; i < pathPoints.size(); ++i)
+        {
+            const Vector3 segmentStart = adjusted.back();
+            Vector3 segmentEnd = pathPoints[i];
+            const float horizontal = HorizontalDistance(segmentStart, segmentEnd);
+
+            if (horizontal > WallClearanceSampleSpacing && insertedPoints < MaxWallClearanceInsertedPoints)
+            {
+                const int sampleCount = std::min(8, static_cast<int>(std::floor(horizontal / WallClearanceSampleSpacing)));
+                for (int sample = 1; sample < sampleCount && insertedPoints < MaxWallClearanceInsertedPoints; ++sample)
+                {
+                    const float t = static_cast<float>(sample) / static_cast<float>(sampleCount);
+                    Vector3 samplePoint(
+                        segmentStart.x + ((segmentEnd.x - segmentStart.x) * t),
+                        segmentStart.y + ((segmentEnd.y - segmentStart.y) * t),
+                        segmentStart.z + ((segmentEnd.z - segmentStart.z) * t));
+
+                    if (TryPushPointAwayFromWall(query, filter, requiredClearance, &samplePoint))
+                    {
+                        AppendPointIfDistinct(adjusted, samplePoint);
+                        insertedPoints++;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (i + 1 < pathPoints.size() &&
+                TryPushPointAwayFromWall(query, filter, requiredClearance, &segmentEnd))
+            {
+                changed = true;
+            }
+
+            AppendPointIfDistinct(adjusted, segmentEnd);
+        }
+
+        if (changed)
+            pathPoints.swap(adjusted);
+    }
 }
 
 ////////////////// PathFinder //////////////////
 PathFinder::PathFinder(unsigned int mapId, unsigned int instanceId) :
 m_polyLength(0), m_type(PATHFIND_BLANK),
 m_useStraightPath(false), m_forceDestination(false), m_pointPathLimit(MAX_POINT_PATH_LENGTH),
-m_capsuleRadius(0.3064f), // Default Orc capsule radius — P11.2
+m_capsuleRadius(0.3064f), // Default player capsule radius.
+m_capsuleHeight(2.0313f),
 m_mapId(mapId), m_instanceId(instanceId), m_navMesh(NULL), m_navMeshQuery(NULL)
 {
 	//printf("++ PathFinder::PathInfo for ME \n");
@@ -427,6 +578,16 @@ m_mapId(mapId), m_instanceId(instanceId), m_navMesh(NULL), m_navMeshQuery(NULL)
 PathFinder::~PathFinder()
 {
 	//printf("++ PathFinder::~PathInfo() for ME \n");
+}
+
+void PathFinder::setCapsuleDimensions(float radius, float height)
+{
+	m_capsuleRadius = std::isfinite(radius) && radius > 0.0f
+		? radius
+		: DefaultPathValidationAgentRadius;
+	m_capsuleHeight = std::isfinite(height) && height > 0.0f
+		? height
+		: DefaultPathValidationAgentHeight;
 }
 
 bool PathFinder::calculate(float originX, float originY, float originZ, float destX, float destY, float destZ, bool forceDest, bool isSwimming)
@@ -822,46 +983,7 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 		m_pathPoints[i] = Vector3(pathPoints[i * VERTEX_SIZE + 2], pathPoints[i * VERTEX_SIZE], pathPoints[i * VERTEX_SIZE + 1]);
 	}
 
-	// P11.2: Nudge interior waypoints away from polygon edges by capsule radius.
-	// When the smooth path hugs a wall, the bot's capsule clips the corner.
-	// For each interior point, compute the direction from prev→next and offset
-	// the waypoint inward (perpendicular to path direction) if it would clip.
-	if (pointCount > 2 && m_capsuleRadius > 0.0f)
-	{
-		for (unsigned int i = 1; i < pointCount - 1; ++i)
-		{
-			// Direction from prev to next waypoint (skip current)
-			Vector3 dir = m_pathPoints[i + 1] - m_pathPoints[i - 1];
-			dir.y = 0; // XZ plane only
-			float len2d = sqrtf(dir.x * dir.x + dir.z * dir.z);
-			if (len2d < 0.01f) continue;
-
-			// Check if this waypoint is near a polygon edge using navmesh
-			float pos[3] = { m_pathPoints[i].z, m_pathPoints[i].y, m_pathPoints[i].x }; // Convert to Detour coords
-			float closest[3];
-			dtPolyRef nearPoly;
-			float extents[3] = { m_capsuleRadius * 2.0f, 4.0f, m_capsuleRadius * 2.0f };
-			if (dtStatusSucceed(m_navMeshQuery->findNearestPoly(pos, extents, &m_filter, &nearPoly, closest)))
-			{
-				// Distance from waypoint to nearest poly center
-				float dx = pos[0] - closest[0];
-				float dz = pos[2] - closest[2];
-				float distToEdge = sqrtf(dx * dx + dz * dz);
-
-				// If the waypoint is very close to where findNearestPoly snapped it,
-				// it's already well-centered. Only nudge if it moved significantly.
-				if (distToEdge > 0.01f && distToEdge < m_capsuleRadius)
-				{
-					// Nudge toward the poly center by the deficit
-					float nudge = m_capsuleRadius - distToEdge;
-					float nx = (closest[0] - pos[0]) / distToEdge * nudge;
-					float nz = (closest[2] - pos[2]) / distToEdge * nudge;
-					m_pathPoints[i].z += nx; // Detour X → our Z
-					m_pathPoints[i].x += nz; // Detour Z → our X
-				}
-			}
-		}
-	}
+	ApplyWallClearanceToPath(m_navMeshQuery, m_filter, m_capsuleRadius, m_pathPoints);
 
     auto afterRefine = afterSmooth;
     auto afterSimplify = afterSmooth;
@@ -869,10 +991,10 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
     {
         CaptureFirstDynamicOverlayBlock();
 
-        RefinePathForWalkability(m_mapId, m_pathPoints);
+        RefinePathForWalkability(m_mapId, m_pathPoints, m_capsuleRadius, m_capsuleHeight);
         afterRefine = std::chrono::steady_clock::now();
 
-        SimplifyPathForWalkability(m_mapId, m_pathPoints);
+        SimplifyPathForWalkability(m_mapId, m_pathPoints, m_capsuleRadius, m_capsuleHeight);
         afterSimplify = std::chrono::steady_clock::now();
     }
 

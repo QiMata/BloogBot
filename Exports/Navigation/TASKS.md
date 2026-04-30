@@ -75,22 +75,16 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
-- Last updated: 2026-04-15
-- Pass result: `delta shipped; NAV-OBJ-003 and NAV-OBJ-004 archived`
-- Active task: `none`
+- Last updated: 2026-04-30
+- Pass result: `delta shipped; deterministic Tauren Male Crossroads -> Undercity route suite passed`
+- Active task: `LPATH-CROSSROADS-UC` native agent-aware path construction slice
 - Last delta:
-  - Closed `NAV-OBJ-003`: exported native `ClassifyPathSegmentAffordance(...)` for explicit segment affordance queries, including step-up, steep-climb, jump-gap, safe-drop, unsafe-drop, vertical, and blocked classifications plus climb/gap/drop/slope/resolved-Z metrics.
-  - Extended `pathfinding.proto` / generated C# / `PathfindingClient` route metadata with jump-gap, safe-drop, unsafe-drop, blocked counts and max climb/gap/drop metrics.
-  - Added `PathAffordanceClassifier` so service responses aggregate affordance metadata; default response aggregation stays fast/geometric, while bounded native segment aggregation is available via `WWOW_ENABLE_NATIVE_AFFORDANCE_SUMMARY=1`.
-  - Closed `NAV-OBJ-004` by evidence: native `PathFinder` already generates grounded lateral detour candidates, validates detour legs with `ValidateWalkableSegment(...)`, and deterministic dynamic-overlay tests prove repaired native/corridor paths avoid the registered blocker.
+  - Added exported `FindPathForAgent(...)` and `Navigation::CalculatePathForAgent(...)` so callers can supply capsule radius/height per request.
+  - `PathFinder` now carries the active capsule dimensions through smooth-path wall-clearance nudging, dynamic-overlay refinement, walkability segment validation, detour refinement, and simplification.
+  - Replaced the old edge-snap nudge with Detour `findDistanceToWall(...)` clearance sampling guarded against non-finite wall/nearest-poly outputs.
 - Validation:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded`
   - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
-  - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
-  - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathAffordanceClassifierTests|FullyQualifiedName~PathfindingSocketServerIntegrationTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~SegmentAffordanceClassificationTests" --logger "console;verbosity=minimal"` -> `passed (2/2)`
-  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~DynamicObjectRegistryTests|FullyQualifiedName~FindPath_ObstructedDirectSegment_ReformsIntoWalkableDetour" --logger "console;verbosity=minimal"` -> `passed (4/4)`
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingClientRequestTests" --logger "console;verbosity=minimal"` -> `passed (2/2)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routes_tauren_agent_collapsed_support.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (10/10)`
 - Next command:
-  - `rg -n "^- \\[ \\]|\\[ \\] Problem|Active task:" docs/TASKS.md Exports/Navigation/TASKS.md Services/PathfindingService/TASKS.md Tests/PathfindingService.Tests/TASKS.md Tests/Navigation.Physics.Tests/TASKS.md Exports/BotRunner/TASKS.md Tests/BotRunner.Tests/TASKS.md`
+  - `git status --short --branch`

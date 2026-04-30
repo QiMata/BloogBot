@@ -97,6 +97,7 @@ public:
 
 	// option setters - use optional
 	void setUseStrightPath(bool useStraightPath) { m_useStraightPath = useStraightPath; };
+	void setCapsuleDimensions(float radius, float height);
 	void setPathLengthLimit(float distance)
 	{
 		const auto requestedLimit = static_cast<unsigned int>(distance / SMOOTH_PATH_STEP_SIZE);
@@ -127,6 +128,7 @@ private:
 	bool           m_forceDestination; // when set, we will always arrive at given point
 	unsigned int         m_pointPathLimit;   // limit point path size; min(this, MAX_POINT_PATH_LENGTH)
 	float          m_capsuleRadius;     // P11.2: bot capsule radius for edge nudging (0 = disabled)
+	float          m_capsuleHeight;     // bot capsule height for segment validation
 
 	Vector3        m_startPosition;    // {x, y, z} of current location
 	Vector3        m_endPosition;      // {x, y, z} of the destination

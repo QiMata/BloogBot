@@ -46,7 +46,52 @@
     taxi leg before the Orgrimmar -> Undercity zeppelin.
   - [x] Cross-map `TravelTo` dispatch now upserts a persistent staged
     `TravelTask` instead of failing immediately.
+  - [x] Deterministic PathfindingService coverage now exercises the Orgrimmar
+    flight-master, city support-stall, ramp/ceiling, exterior support, and
+    Undercity arrival legs with Tauren Male capsule dimensions through native
+    agent-aware route construction.
   - [ ] Focused live validation remains open.
+
+---
+
+## Handoff (2026-04-30, Crossroads -> Undercity Tauren pathfinding clearance)
+
+- Completed:
+  - Added native `FindPathForAgent(...)` / `CalculatePathForAgent(...)` so
+    PathfindingService can route with the caller's capsule radius and height
+    instead of the fixed default player capsule.
+  - Updated `PathFinder` smoothing/validation to carry the agent capsule into
+    segment validation, local detour refinement, simplification, and Detour
+    wall-clearance nudging.
+  - Reworked `PathfindingService.Repository.Navigation` long-route validation
+    to stay bounded while repairing early static/capsule breaks: smooth-route
+    densification, duplicate support-anchor collapse, early support-layer
+    normalization, and generic local escape candidates now cover the Orgrimmar
+    support/tree stall without hard-coded Orgrimmar micro-waypoints.
+  - Added `LongPathingRouteTests` for the known Crossroads -> Undercity bad
+    walk legs using Tauren Male dimensions, including the flight-master descent,
+    city support stall, L-corner/pillar corridor, ramp/ceiling stall, exterior
+    support recovery, tower friction recovery, and Undercity arrival route.
+- Validation/tests run:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded`.
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded` with existing `PathfindingSocketServer` warnings and nonfatal `dumpbin` noise.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routes_tauren_agent_collapsed_support.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (10/10)`.
+- Evidence:
+  - TRX: `tmp/test-runtime/results-pathfinding/long_pathing_routes_tauren_agent_collapsed_support.trx`.
+- Files changed:
+  - `Exports/Navigation/DllMain.cpp`
+  - `Exports/Navigation/Navigation.cpp`
+  - `Exports/Navigation/Navigation.h`
+  - `Exports/Navigation/PathFinder.cpp`
+  - `Exports/Navigation/PathFinder.h`
+  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `Tests/PathfindingService.Tests/LongPathingRouteTests.cs`
+  - `Tests/PathfindingService.Tests/PathRouteAssertions.cs`
+  - `docs/TASKS.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+- Next command: `git status --short --branch`
 
 ---
 

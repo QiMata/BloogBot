@@ -32,20 +32,28 @@
 3. Route validity focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName=PathfindingService.Tests.PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_ReroutesAroundBlockedDirectLine|FullyQualifiedName=PathfindingService.Tests.PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_StraightRequestCompletesWithinBudget|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-04-15
-- Active task: `none`
+- Last updated: 2026-04-30
+- Active task: `LPATH-CROSSROADS-UC` deterministic Tauren-sized route coverage slice
 - Last delta:
-  - Added `PathAffordanceClassifierTests` to pin native-classification aggregation, counts, max climb/gap/drop metrics, and unsupported route decisions.
-  - Revalidated `NavigationOverlayAwarePathTests` and `PathfindingSocketServerIntegrationTests` against the expanded path response metadata.
-  - Kept native affordance response aggregation latency-safe by covering the default fast classifier path while leaving explicit native segment classification to `Navigation.Physics.Tests`.
+  - Added `LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes`.
+  - The route data pins the known Crossroads -> Undercity bad walk legs: Orgrimmar flight-master descent, city support/tree stall, L-corner/pillar corridor, zeppelin tower ramp/ceiling stall, exterior support recovery, tower friction recovery, and Undercity arrival.
+  - `PathRouteAssertions` now supports Tauren-sized capsule validation, bounded native segment checks, static LOS checks, and early support-Z drift checks for long-pathing regressions.
 - Pass result: `delta shipped`
 - Validation/tests run:
+  - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded`
   - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `succeeded`
-  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~PathAffordanceClassifierTests|FullyQualifiedName~PathfindingSocketServerIntegrationTests" --logger "console;verbosity=minimal"` -> `passed (8/8)`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routes_tauren_agent_collapsed_support.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (10/10)`
 - Files changed:
-  - `Tests/PathfindingService.Tests/PathAffordanceClassifierTests.cs`
+  - `Tests/PathfindingService.Tests/LongPathingRouteTests.cs`
+  - `Tests/PathfindingService.Tests/PathRouteAssertions.cs`
   - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `Exports/Navigation/DllMain.cpp`
+  - `Exports/Navigation/Navigation.cpp`
+  - `Exports/Navigation/Navigation.h`
+  - `Exports/Navigation/PathFinder.cpp`
+  - `Exports/Navigation/PathFinder.h`
   - `docs/TASKS.md`
 - Blockers:
   - none
-- Next command: `rg -n "^- \\[ \\]|\\[ \\] Problem|Active task:" docs/TASKS.md Exports/Navigation/TASKS.md Services/PathfindingService/TASKS.md Tests/PathfindingService.Tests/TASKS.md Tests/Navigation.Physics.Tests/TASKS.md Exports/BotRunner/TASKS.md Tests/BotRunner.Tests/TASKS.md`
+- Next command: `git status --short --branch`
