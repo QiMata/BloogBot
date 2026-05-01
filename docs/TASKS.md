@@ -60,10 +60,47 @@
   - [x] Focused Undercity arrival tiles on map `0`, `27,30` through `30,32`,
     were regenerated with GO-aware MaNGOS source and Tauren Male Detour
     headers, and `tools/NavDataAudit` now passes against the focused build log.
+  - [x] Long-travel movement execution now keeps vertical-aware ramp/corner
+    waypoints active when stall recovery sees farther destination progress,
+    preventing the Orgrimmar zeppelin deck shortcut observed at
+    `(1339.4,-4645.4,51.9)`.
   - [ ] Regenerate maps `0` and `1` with GO-aware generator source and
     Tauren Male `agentRadius=1.0247`, `agentHeight=2.625`, then rerun the
     audit until it passes.
   - [ ] Focused live validation remains open.
+
+---
+
+## Handoff (2026-05-01, Orgrimmar zeppelin ramp-corner guard)
+
+- Completed:
+  - Diagnosed the latest focused live failure as long-travel stall recovery
+    promoting past an unsatisfied uphill ramp/corner waypoint near the
+    Orgrimmar zeppelin tower, matching the user-provided screenshot of the
+    Tauren blocked on the deck corner.
+  - Added a vertical-aware promotion guard so stuck recovery and long-travel
+    destination-progress promotion cannot skip intermediate uphill waypoints
+    that have not been vertically reached.
+  - Added regression coverage for the failing Orgrimmar deck sequence so the
+    active waypoint stays on the ramp corner instead of jumping to the deck
+    waypoint.
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_focused_mmap_map0_map1.trx" --results-directory tmp/test-runtime/results-live` -> `failed after 12m54s; still on map=1 at pos=(1339.4,-4645.4,51.9), transport=0x0`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledLongTravelPromotesToDestinationProgressWaypoint|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledVerticalAwareLongTravel_DoesNotPromoteToStackedLowerLayerWaypoint|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledVerticalAwareLongTravel_DoesNotPromotePastUnsatisfiedUphillRampCorner|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelReplansWhenNearWaypointIsOverheadLayer" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navpath_long_travel_ramp_corner_promotion.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (4/4)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~RaceDimensionsConcurrencyTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_pathing_focus_after_ramp_corner_guard.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (116/116)`.
+- Evidence:
+  - Live TRX: `tmp/test-runtime/results-live/long_pathing_crossroads_undercity_focused_mmap_map0_map1.trx`.
+  - Targeted TRX: `tmp/test-runtime/results-botrunner/navpath_long_travel_ramp_corner_promotion.trx`.
+  - Focus TRX: `tmp/test-runtime/results-botrunner/botrunner_long_pathing_focus_after_ramp_corner_guard.trx`.
+  - The failure screenshot helper returned no path (`exit=2`); the user
+    supplied the WoW-client screenshot showing the blocked deck-corner state.
+- Files changed:
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_ramp_corner_guard.trx" --results-directory tmp/test-runtime/results-live`
 
 ---
 

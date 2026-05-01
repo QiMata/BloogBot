@@ -27,6 +27,8 @@
     pins cross-map `TravelTo` dispatch to the staged executor.
   - [x] `TransportWaitingLogicTests` pins the live Orgrimmar/Undercity
     zeppelin entry `164871` and keeps Grom'gol routes from matching it.
+  - [x] `NavigationPathTests.GetNextWaypoint_StalledVerticalAwareLongTravel_DoesNotPromotePastUnsatisfiedUphillRampCorner`
+    pins the Orgrimmar zeppelin ramp/deck shortcut blocker.
   - [ ] Add focused live validation for `TravelTo` executing the staged route.
 
 0. Shodan test-director migration (started 2026-04-24)
@@ -102,6 +104,29 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-05-01 (long-travel ramp-corner regression)
+- Pass result: targeted NavigationPath ramp-corner slice passed `4/4`, and
+  the BotRunner focused long-pathing suite passed `116/116`.
+- What changed:
+  - Added deterministic regression coverage for the Orgrimmar zeppelin ramp
+    sequence observed in the focused live failure.
+  - The test keeps the active long-travel waypoint on the unsatisfied uphill
+    ramp corner instead of allowing stall recovery to promote to the deck
+    waypoint.
+  - Recorded the focused live failure evidence that still stopped on map `1`
+    at `(1339.4,-4645.4,51.9)` before the zeppelin transfer.
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_focused_mmap_map0_map1.trx" --results-directory tmp/test-runtime/results-live` -> `failed after 12m54s; expected Orgrimmar -> Undercity zeppelin transfer, still map=1 at pos=(1339.4,-4645.4,51.9)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledLongTravelPromotesToDestinationProgressWaypoint|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledVerticalAwareLongTravel_DoesNotPromoteToStackedLowerLayerWaypoint|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledVerticalAwareLongTravel_DoesNotPromotePastUnsatisfiedUphillRampCorner|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelReplansWhenNearWaypointIsOverheadLayer" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navpath_long_travel_ramp_corner_promotion.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (4/4)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~RaceDimensionsConcurrencyTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_pathing_focus_after_ramp_corner_guard.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (116/116)`.
+- Files changed:
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_ramp_corner_guard.trx" --results-directory tmp/test-runtime/results-live`
+
 ### 2026-05-01 (Orgrimmar/Undercity zeppelin route identity)
 - Pass result: `TransportWaitingLogicTests` passed `28/28`.
 - What changed:

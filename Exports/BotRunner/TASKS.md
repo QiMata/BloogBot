@@ -31,6 +31,9 @@
   implemented`; deterministic dispatch coverage proves the task is queued.
 - [x] `TransportData` now maps the live Orgrimmar/Undercity zeppelin to
   entry `164871` and keeps the Grom'gol zeppelin entries separate.
+- [x] Long-travel navigation uses vertical-aware waypoint arrival and now
+  refuses to promote past unsatisfied uphill ramp/corner waypoints during
+  stuck recovery.
 - [ ] Add and pass focused live validation for Crossroads -> Undercity.
 
 ### BR-NAV-006 Prove path ownership through combat and movement-controller handoff
@@ -46,6 +49,29 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-05-01 (long-travel ramp-corner promotion guard)
+- Pass result: BotRunner focused long-pathing suite passed `116/116`.
+- Last delta:
+  - Added a vertical-aware guard around stuck-recovery and destination-progress
+    waypoint promotion so long-travel routes do not cut across important uphill
+    ramp/corner waypoints.
+  - The regression mirrors the Orgrimmar zeppelin deck failure where the
+    character stayed near `(1339.4,-4645.4,51.9)` while the active waypoint was
+    promoted up to the deck layer.
+  - The preceding focused live run still failed before the zeppelin transfer;
+    the user-provided screenshot identifies this ramp-corner shortcut as the
+    blocker.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledLongTravelPromotesToDestinationProgressWaypoint|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledVerticalAwareLongTravel_DoesNotPromoteToStackedLowerLayerWaypoint|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledVerticalAwareLongTravel_DoesNotPromotePastUnsatisfiedUphillRampCorner|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelReplansWhenNearWaypointIsOverheadLayer" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navpath_long_travel_ramp_corner_promotion.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (4/4)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~RaceDimensionsConcurrencyTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_pathing_focus_after_ramp_corner_guard.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (116/116)`.
+- Files changed:
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_ramp_corner_guard.trx" --results-directory tmp/test-runtime/results-live`
+
 ### 2026-05-01 (Orgrimmar/Undercity zeppelin route identity)
 - Pass result: `TransportWaitingLogicTests` passed `28/28`.
 - Last delta:
