@@ -50,7 +50,31 @@
     flight-master, city support-stall, ramp/ceiling, exterior support, and
     Undercity arrival legs with Tauren Male capsule dimensions through native
     agent-aware route construction.
+  - [x] `TransportData` now pins the Orgrimmar/Undercity zeppelin to live
+    route entry `164871` and keeps the two Grom'gol entries distinct.
   - [ ] Focused live validation remains open.
+
+---
+
+## Handoff (2026-05-01, Orgrimmar/Undercity zeppelin route identity)
+
+- Completed:
+  - Corrected the static BotRunner zeppelin route entries so
+    Orgrimmar/Undercity uses entry `164871`, Grom'gol/Undercity uses
+    `176495`, and Orgrimmar/Grom'gol uses `175080`.
+  - Added deterministic `TransportWaitingLogicTests` coverage that verifies
+    entry `164871` has Orgrimmar and Undercity stops and no Grom'gol stop.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TransportWaitingLogicTests" --logger "console;verbosity=minimal"` -> `passed (28/28)`.
+- Evidence:
+  - Console result: `Passed! - Failed: 0, Passed: 28, Skipped: 0`.
+- Files changed:
+  - `Exports/BotRunner/Movement/TransportData.cs`
+  - `Tests/BotRunner.Tests/Movement/TransportWaitingLogicTests.cs`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `git diff --check -- Exports/BotRunner/Movement/TransportData.cs Tests/BotRunner.Tests/Movement/TransportWaitingLogicTests.cs docs/TASKS.md Exports/BotRunner/TASKS.md Tests/BotRunner.Tests/TASKS.md`
 
 ---
 

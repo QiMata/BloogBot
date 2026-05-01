@@ -316,6 +316,35 @@ public class TransportWaitingLogicTests
     }
 
     [Fact]
+    public void FindByEntry_OrgrimmarUndercityZeppelin_UsesLiveRouteEntry()
+    {
+        var result = TransportData.FindByEntry(164871);
+
+        Assert.NotNull(result);
+        Assert.Same(ZeppelinUndercityOrgrimmar, result);
+        Assert.Equal("Zeppelin: Orgrimmar <-> Undercity", result.Name);
+        AssertHasStopNear(result, 1, new Position(1320.0f, -4649.0f, 53.0f), 2f);
+        AssertHasStopNear(result, 0, new Position(2066.0f, 288.0f, 97.0f), 2f);
+        Assert.DoesNotContain(result.Stops, stop => IsStopNear(stop, 0, new Position(-12407.0f, 214.0f, 32.0f), 50f));
+    }
+
+    [Fact]
+    public void FindByEntry_GromgolZeppelins_AreNotOrgrimmarUndercityRoute()
+    {
+        var gromgolUndercity = TransportData.FindByEntry(176495);
+        var orgrimmarGromgol = TransportData.FindByEntry(175080);
+
+        Assert.NotNull(gromgolUndercity);
+        Assert.NotNull(orgrimmarGromgol);
+
+        Assert.Same(ZeppelinUndercityGromgol, gromgolUndercity);
+        Assert.Same(ZeppelinOrgrimmarGromgol, orgrimmarGromgol);
+        Assert.DoesNotContain(gromgolUndercity.Stops, stop => IsStopNear(stop, 1, new Position(1320.0f, -4649.0f, 53.0f), 20f));
+        AssertHasStopNear(orgrimmarGromgol, 1, new Position(1317.0f, -4652.0f, 53.0f), 2f);
+        AssertHasStopNear(orgrimmarGromgol, 0, new Position(-12407.0f, 214.0f, 32.0f), 10f);
+    }
+
+    [Fact]
     public void GetDestinationStop_ReturnsOtherStop()
     {
         var pos = new Position(1544, 241, 55); // Near upper stop
@@ -389,6 +418,22 @@ public class TransportWaitingLogicTests
         logic.Update(LowerStop.WaitPosition, 0, null, DT);
         Assert.Equal(TransportPhase.Complete, logic.CurrentPhase);
         return logic;
+    }
+
+    private static void AssertHasStopNear(TransportDefinition transport, uint mapId, Position expected, float maxDistance)
+    {
+        Assert.Contains(transport.Stops, stop => IsStopNear(stop, mapId, expected, maxDistance));
+    }
+
+    private static bool IsStopNear(TransportStop stop, uint mapId, Position expected, float maxDistance)
+    {
+        if (stop.MapId != mapId)
+            return false;
+
+        float dx = stop.WaitPosition.X - expected.X;
+        float dy = stop.WaitPosition.Y - expected.Y;
+        float dz = stop.WaitPosition.Z - expected.Z;
+        return MathF.Sqrt(dx * dx + dy * dy + dz * dz) <= maxDistance;
     }
 
     private static List<DynamicObjectProto> MakeElevatorAtZ(float z)

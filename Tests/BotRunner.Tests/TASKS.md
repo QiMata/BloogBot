@@ -25,6 +25,8 @@
     pins the staged route selection and shortcut rejection.
   - [x] `BotRunnerServiceCombatDispatchTests.BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask`
     pins cross-map `TravelTo` dispatch to the staged executor.
+  - [x] `TransportWaitingLogicTests` pins the live Orgrimmar/Undercity
+    zeppelin entry `164871` and keeps Grom'gol routes from matching it.
   - [ ] Add focused live validation for `TravelTo` executing the staged route.
 
 0. Shodan test-director migration (started 2026-04-24)
@@ -100,6 +102,21 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-05-01 (Orgrimmar/Undercity zeppelin route identity)
+- Pass result: `TransportWaitingLogicTests` passed `28/28`.
+- What changed:
+  - Added deterministic coverage that entry `164871` resolves to the
+    Orgrimmar/Undercity zeppelin with stops at the Orgrimmar and Undercity
+    towers.
+  - Added guard coverage that entries `176495` and `175080` stay assigned to
+    the Grom'gol routes instead of the Orgrimmar/Undercity live route.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TransportWaitingLogicTests" --logger "console;verbosity=minimal"` -> `passed (28/28)`.
+- Files changed:
+  - `Tests/BotRunner.Tests/Movement/TransportWaitingLogicTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `git diff --check -- Tests/BotRunner.Tests/Movement/TransportWaitingLogicTests.cs Tests/BotRunner.Tests/TASKS.md`
+
 ### 2026-04-29 (MVT-TRANSPORT-NAMED-UC closeout)
 - Pass result: focused named-Undercity transport lane is green:
   `movement_parity_transport_named_undercity_pathfinding_route_18.trx`

@@ -158,33 +158,33 @@ public static class TransportData
     // =========================================================================
 
     public static readonly TransportDefinition ZeppelinUndercityOrgrimmar = new(
-        GameObjectEntry: 176495,
+        GameObjectEntry: 164871,
         DisplayId: 3031,
-        Name: "Zeppelin: Undercity ↔ Orgrimmar",
+        Name: "Zeppelin: Orgrimmar <-> Undercity",
         Type: TransportType.Zeppelin,
         Stops:
         [
-            new("Undercity Zeppelin Tower", 0, new Position(2066.0f, 288.0f, 97.0f), BoardingRadius: 15f),
             new("Orgrimmar Zeppelin Tower", 1, new Position(1320.0f, -4649.0f, 53.0f), BoardingRadius: 15f),
+            new("Undercity Zeppelin Tower", 0, new Position(2066.0f, 288.0f, 97.0f), BoardingRadius: 15f),
         ],
         VerticalRange: 0f);
 
     public static readonly TransportDefinition ZeppelinUndercityGromgol = new(
-        GameObjectEntry: 175080,
+        GameObjectEntry: 176495,
         DisplayId: 3031,
-        Name: "Zeppelin: Undercity ↔ Grom'gol",
+        Name: "Zeppelin: Grom'gol <-> Undercity",
         Type: TransportType.Zeppelin,
         Stops:
         [
-            new("Undercity Zeppelin Tower (South)", 0, new Position(2066.0f, 286.0f, 97.0f), BoardingRadius: 15f),
             new("Grom'gol Zeppelin Tower", 0, new Position(-12411.0f, 213.0f, 32.0f), BoardingRadius: 15f),
+            new("Undercity Zeppelin Tower (South)", 0, new Position(2066.0f, 286.0f, 97.0f), BoardingRadius: 15f),
         ],
         VerticalRange: 0f);
 
     public static readonly TransportDefinition ZeppelinOrgrimmarGromgol = new(
-        GameObjectEntry: 164871,
+        GameObjectEntry: 175080,
         DisplayId: 3031,
-        Name: "Zeppelin: Orgrimmar ↔ Grom'gol",
+        Name: "Zeppelin: Orgrimmar <-> Grom'gol",
         Type: TransportType.Zeppelin,
         Stops:
         [

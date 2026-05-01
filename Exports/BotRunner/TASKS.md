@@ -29,6 +29,8 @@
 - [x] `CharacterAction.TravelTo` now upserts a persistent `TravelTask` for
   cross-map targets instead of returning `TravelTo cross-map not yet
   implemented`; deterministic dispatch coverage proves the task is queued.
+- [x] `TransportData` now maps the live Orgrimmar/Undercity zeppelin to
+  entry `164871` and keeps the Grom'gol zeppelin entries separate.
 - [ ] Add and pass focused live validation for Crossroads -> Undercity.
 
 ### BR-NAV-006 Prove path ownership through combat and movement-controller handoff
@@ -44,6 +46,20 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-05-01 (Orgrimmar/Undercity zeppelin route identity)
+- Pass result: `TransportWaitingLogicTests` passed `28/28`.
+- Last delta:
+  - Corrected BotRunner's static zeppelin transport definitions so
+    Orgrimmar/Undercity uses the live entry `164871`.
+  - Reassigned Grom'gol/Undercity to `176495` and Orgrimmar/Grom'gol to
+    `175080`, matching the live transport docs and packet-window captures.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TransportWaitingLogicTests" --logger "console;verbosity=minimal"` -> `passed (28/28)`.
+- Files changed:
+  - `Exports/BotRunner/Movement/TransportData.cs`
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `git diff --check -- Exports/BotRunner/Movement/TransportData.cs Exports/BotRunner/TASKS.md`
+
 ### 2026-04-28 (direct jump action dispatch for movement parity)
 - Pass result: `Direct Jump dispatch supports the live FG/BG movement activity parity bundle`
 - Last delta:
