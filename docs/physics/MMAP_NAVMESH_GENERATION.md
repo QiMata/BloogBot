@@ -71,7 +71,7 @@ dotnet run --project tools/GameObjectExporter/GameObjectExporter.csproj -- "Serv
 Run the repo-owned audit before and after any mmap regeneration:
 
 ```powershell
-dotnet run --project tools/NavDataAudit/NavDataAudit.csproj -- D:/MaNGOS/data
+dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data
 ```
 
 The audit checks:
@@ -84,7 +84,20 @@ The audit checks:
   Orgrimmar spawns.
 - `map1_build.log` proves the audited Orgrimmar tiles loaded baked GO meshes.
 
-Current audit result before regeneration:
+MaNGOS writes tile files as `mapId + tileY + tileX`; for example generator
+tile `28,40` is `mmaps/0014028.mmtile`.
+
+Current focused audit result after rebuilding Orgrimmar route tiles on
+2026-05-01:
+
+- `D:/MaNGOS/data/config.json` has map `1` set to `agentRadius=1.0247`,
+  `agentHeight=2.625`, `walkableRadius=4`, and `walkableHeight=11`.
+- Audited Orgrimmar route tiles `28,39` through `30,41` pass with Detour
+  headers `walkableRadius=1.0247` and `walkableHeight=2.625`.
+- GO input evidence still passes, with `930` model mappings and `297`
+  modeled Orgrimmar corridor/tower spawns.
+
+Historical audit result before focused regeneration:
 
 - GO evidence passes for the Orgrimmar route tiles.
 - Radius/height evidence fails: Orgrimmar tiles still report
@@ -94,10 +107,11 @@ Example focused tile generation command after the generator/config are fixed:
 
 ```powershell
 Push-Location D:/MaNGOS/data
-D:/MaNGOS/source/build/contrib/mmap/MoveMapGenerator.exe 1 --tile 28,40 --threads 1 --silent --configInputPath config.json
+D:/MaNGOS/source/bin/MoveMapGenerator.exe 1 --tile 28,40 --threads 1 --silent --configInputPath config.json
 Pop-Location
 ```
 
-Regenerate all audited Orgrimmar tiles (`28,39` through `30,41`) before
-re-running deterministic long-route tests. Regenerate the full maps `0` and `1`
-before treating live Crossroads -> Undercity as final evidence.
+Regenerate the full maps `0` and `1` before treating live Crossroads ->
+Undercity as final evidence. Focused Orgrimmar tiles are useful for deterministic
+route iteration, but live evidence should come from a complete compatible data
+set.

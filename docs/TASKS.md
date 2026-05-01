@@ -54,10 +54,49 @@
     route entry `164871` and keeps the two Grom'gol entries distinct.
   - [x] `tools/NavDataAudit` proves the current Orgrimmar data has GO bake
     evidence but still has small-agent Detour tile headers.
+  - [x] Focused Orgrimmar route tiles `28,39` through `30,41` were regenerated
+    with GO-aware MaNGOS source and Tauren Male Detour headers, and
+    `tools/NavDataAudit` now passes for that corridor set.
   - [ ] Regenerate maps `0` and `1` with GO-aware generator source and
     Tauren Male `agentRadius=1.0247`, `agentHeight=2.625`, then rerun the
     audit until it passes.
   - [ ] Focused live validation remains open.
+
+---
+
+## Handoff (2026-05-01, focused Orgrimmar MMAP regeneration audit)
+
+- Completed:
+  - Corrected `tools/NavDataAudit` to use the MaNGOS generator tile filename
+    order (`mapId + tileY + tileX`), so tile `28,40` audits
+    `mmaps/0014028.mmtile`.
+  - Rebuilt the local `D:/MaNGOS/source` `MoveMapGenerator` after restoring
+    GO-aware marking and `agentRadius` / `agentHeight` config handling.
+  - Regenerated the focused Orgrimmar route tiles `28,39` through `30,41` in
+    `D:/MaNGOS/data/mmaps` with Tauren Male radius `1.0247` and height
+    `2.625`.
+- Validation/tests run:
+  - `cmd.exe /c 'call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" && cmake --build D:/MaNGOS/source/build-nmake-extractors --target MoveMapGenerator --config Release'` -> `succeeded`.
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data` -> `passed`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routes_focused_mmap_tauren_go.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (12/12)`.
+- Evidence:
+  - Audit output: Orgrimmar tiles `0013928`, `0014028`, `0014128`,
+    `0013929`, `0014029`, `0014129`, `0013930`, `0014030`, and `0014130`
+    report `walkableRadius=1.0247` and `walkableHeight=2.6250`.
+  - Regeneration output marked GO span boxes in every focused tile, including
+    `tile=28,40: marked 637 gameobject span boxes`.
+  - TRX: `tmp/test-runtime/results-pathfinding/long_pathing_routes_focused_mmap_tauren_go.trx`.
+- Files changed:
+  - `tools/NavDataAudit/Program.cs`
+  - `docs/physics/MMAP_NAVMESH_GENERATION.md`
+  - `docs/TASKS.md`
+  - `Exports/Navigation/TASKS.md`
+- External local data/source touched:
+  - `D:/MaNGOS/source/contrib/mmap/src/TileWorker.cpp`
+  - `D:/MaNGOS/data/config.json`
+  - `D:/MaNGOS/data/mmaps/0013928.mmtile` through
+    `D:/MaNGOS/data/mmaps/0014130.mmtile`
+- Next command: `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~RaceDimensionsConcurrencyTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_pathing_focus_after_focused_mmap.trx" --results-directory tmp/test-runtime/results-botrunner`
 
 ---
 
@@ -78,8 +117,12 @@
   - `dotnet build tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -v:minimal` -> `succeeded`.
   - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data` -> `failed as expected; GO evidence passed, Tauren radius/height evidence failed`.
 - Evidence:
-  - Audit output: Orgrimmar tiles `0012839` through `0013041` report
-    `walkableRadius=0.2000` and `walkableHeight=1.5000`.
+  - Audit output before the tile-name correction targeted `mapId + tileX +
+    tileY` filenames; the corrected MaNGOS generator order is `mapId + tileY +
+    tileX`.
+  - Corrected audit output before focused regeneration: Orgrimmar route tiles
+    `0013928` through `0014130` reported `walkableRadius=0.2000` and
+    `walkableHeight=1.5000`.
   - Audit output: `temp_gameobject_models` has `930` model mappings,
     `gameobject_spawns.json` has `297` modeled Orgrimmar corridor/tower
     spawns, and the audited map `1` tiles all have `[GO] ... loaded ...`

@@ -142,7 +142,7 @@ static void AuditTileHeaders(string dataRoot, uint mapId, List<Tile> tiles, floa
     var mmaps = Path.Combine(dataRoot, "mmaps");
     foreach (var tile in tiles)
     {
-        var path = Path.Combine(mmaps, $"{mapId:000}{tile.X:00}{tile.Y:00}.mmtile");
+        var path = Path.Combine(mmaps, $"{mapId:000}{tile.Y:00}{tile.X:00}.mmtile");
         if (!File.Exists(path))
         {
             Fail(failures, $"missing tile {Path.GetFileName(path)}");

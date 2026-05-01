@@ -76,23 +76,24 @@
 
 ## Session Handoff
 - Last updated: 2026-05-01
-- Pass result: `delta shipped; MMAP/Recast audit now proves current GO evidence and Tauren-clearance gap`
+- Pass result: `delta shipped; focused Orgrimmar MMAP tiles regenerated and audit passes with Tauren clearance`
 - Active task: `LPATH-CROSSROADS-UC` navmesh generation source-of-truth slice
 - Last delta:
-  - Added `tools/NavDataAudit` to inspect the generated nav data directly:
-    `config.json`, selected Orgrimmar `.mmtile` Detour headers,
-    `temp_gameobject_models`, `gameobject_spawns.json`, and `map1_build.log`.
-  - Added `docs/physics/MMAP_NAVMESH_GENERATION.md` with the required
-    Tauren Male generation settings: `agentRadius=1.0247`,
-    `agentHeight=2.625`, `walkableRadius=4`, and `walkableHeight=11`.
-  - The audit proves the current Orgrimmar GO inputs/build-log evidence are
-    present, but generated tile headers still report `walkableRadius=0.2` and
-    `walkableHeight=1.5`.
+  - Corrected `tools/NavDataAudit` to match MaNGOS generator tile filenames:
+    `mapId + tileY + tileX`; generator tile `28,40` is
+    `mmaps/0014028.mmtile`.
+  - Rebuilt local `D:/MaNGOS/source/bin/MoveMapGenerator.exe` after restoring
+    GO-aware marking and `agentRadius` / `agentHeight` config handling in the
+    MaNGOS generator source.
+  - Regenerated focused Orgrimmar route tiles `28,39` through `30,41` in
+    `D:/MaNGOS/data/mmaps` with Tauren Male radius `1.0247` and height
+    `2.625`.
 - Validation:
-  - `dotnet build tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -v:minimal` -> `succeeded`
-  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data` -> `failed as expected; GO evidence passed, Tauren radius/height evidence failed`
+  - `cmd.exe /c 'call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" && cmake --build D:/MaNGOS/source/build-nmake-extractors --target MoveMapGenerator --config Release'` -> `succeeded`
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data` -> `passed; all focused Orgrimmar route tiles report walkableRadius=1.0247 and walkableHeight=2.6250`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routes_focused_mmap_tauren_go.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (12/12)`
 - Next command:
-  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~RaceDimensionsConcurrencyTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_pathing_focus_after_focused_mmap.trx" --results-directory tmp/test-runtime/results-botrunner`
 
 ---
 
