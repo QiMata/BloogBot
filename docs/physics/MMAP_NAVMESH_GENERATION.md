@@ -78,24 +78,29 @@ The audit checks:
 
 - `config.json` contains Tauren Male `agentRadius`, `agentHeight`, and Recast
   cell settings for the audited map.
-- Orgrimmar `.mmtile` Detour headers were actually generated with Tauren-sized
+- Audited `.mmtile` Detour headers were actually generated with Tauren-sized
   `walkableRadius` and `walkableHeight`.
 - `temp_gameobject_models` and `gameobject_spawns.json` contain model-backed
-  Orgrimmar spawns.
-- `map1_build.log` proves the audited Orgrimmar tiles loaded baked GO meshes.
+  spawns in the audited tile set.
+- The selected build log proves the audited tiles loaded or marked baked GO
+  geometry. Use `--build-log <path>` when auditing a focused regeneration log
+  instead of the default `map<N>_build.log`.
 
 MaNGOS writes tile files as `mapId + tileY + tileX`; for example generator
 tile `28,40` is `mmaps/0014028.mmtile`.
 
-Current focused audit result after rebuilding Orgrimmar route tiles on
+Current focused audit result after rebuilding route tiles on
 2026-05-01:
 
 - `D:/MaNGOS/data/config.json` has map `1` set to `agentRadius=1.0247`,
   `agentHeight=2.625`, `walkableRadius=4`, and `walkableHeight=11`.
 - Audited Orgrimmar route tiles `28,39` through `30,41` pass with Detour
   headers `walkableRadius=1.0247` and `walkableHeight=2.625`.
-- GO input evidence still passes, with `930` model mappings and `297`
-  modeled Orgrimmar corridor/tower spawns.
+- Audited Undercity arrival tiles on map `0`, `27,30` through `30,32`, pass
+  with Detour headers `walkableRadius=1.0247` and `walkableHeight=2.625`.
+- GO input evidence still passes, with `930` model mappings, `868` modeled
+  spawns in the Orgrimmar tile set, and `772` modeled spawns in the Undercity
+  arrival tile set.
 
 Historical audit result before focused regeneration:
 

@@ -57,10 +57,51 @@
   - [x] Focused Orgrimmar route tiles `28,39` through `30,41` were regenerated
     with GO-aware MaNGOS source and Tauren Male Detour headers, and
     `tools/NavDataAudit` now passes for that corridor set.
+  - [x] Focused Undercity arrival tiles on map `0`, `27,30` through `30,32`,
+    were regenerated with GO-aware MaNGOS source and Tauren Male Detour
+    headers, and `tools/NavDataAudit` now passes against the focused build log.
   - [ ] Regenerate maps `0` and `1` with GO-aware generator source and
     Tauren Male `agentRadius=1.0247`, `agentHeight=2.625`, then rerun the
     audit until it passes.
   - [ ] Focused live validation remains open.
+
+---
+
+## Handoff (2026-05-01, focused Undercity MMAP regeneration audit)
+
+- Completed:
+  - Generalized `tools/NavDataAudit` so GO input checks count model-backed
+    spawns in the audited tile set for any map, not only Orgrimmar, and added
+    `--build-log` for focused generation logs.
+  - Regenerated focused map `0` Undercity arrival tiles `27,30` through
+    `30,32` with the GO-aware generator and Tauren Male radius/height.
+  - Re-ran deterministic route validation after both focused map `1`
+    Orgrimmar and focused map `0` Undercity tiles were regenerated.
+- Validation/tests run:
+  - `dotnet build tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -v:minimal` -> `succeeded`.
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data` -> `passed`.
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data --map 0 --build-log D:/MaNGOS/data/map0_focused_undercity_build.log --tile 27,30 --tile 27,31 --tile 27,32 --tile 28,30 --tile 28,31 --tile 28,32 --tile 29,30 --tile 29,31 --tile 29,32 --tile 30,30 --tile 30,31 --tile 30,32` -> `passed`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routes_focused_mmap_map0_map1_tauren_go.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (12/12)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~RaceDimensionsConcurrencyTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_pathing_focus_after_focused_mmap.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (115/115)`.
+- Evidence:
+  - Map `0` audit output: tiles `0003027`, `0003127`, `0003227`,
+    `0003028`, `0003128`, `0003228`, `0003029`, `0003129`, `0003229`,
+    `0003030`, `0003130`, and `0003230` report `walkableRadius=1.0247`
+    and `walkableHeight=2.6250`.
+  - Map `0` focused build log: `D:/MaNGOS/data/map0_focused_undercity_build.log`;
+    GO marks include `tile=28,31: marked 390 gameobject span boxes`.
+  - TRX: `tmp/test-runtime/results-pathfinding/long_pathing_routes_focused_mmap_map0_map1_tauren_go.trx`.
+  - TRX: `tmp/test-runtime/results-botrunner/botrunner_long_pathing_focus_after_focused_mmap.trx`.
+- Files changed:
+  - `tools/NavDataAudit/Program.cs`
+  - `docs/physics/MMAP_NAVMESH_GENERATION.md`
+  - `docs/TASKS.md`
+  - `Exports/Navigation/TASKS.md`
+- External local data/source touched:
+  - `D:/MaNGOS/data/map0_focused_undercity_build.log`
+  - `D:/MaNGOS/data/mmaps/0003027.mmtile` through
+    `D:/MaNGOS/data/mmaps/0003230.mmtile`
+- Next command: `git status --short --branch`
 
 ---
 

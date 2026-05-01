@@ -76,24 +76,25 @@
 
 ## Session Handoff
 - Last updated: 2026-05-01
-- Pass result: `delta shipped; focused Orgrimmar MMAP tiles regenerated and audit passes with Tauren clearance`
+- Pass result: `delta shipped; focused Orgrimmar and Undercity MMAP tiles regenerated and audited with Tauren clearance`
 - Active task: `LPATH-CROSSROADS-UC` navmesh generation source-of-truth slice
 - Last delta:
-  - Corrected `tools/NavDataAudit` to match MaNGOS generator tile filenames:
-    `mapId + tileY + tileX`; generator tile `28,40` is
-    `mmaps/0014028.mmtile`.
-  - Rebuilt local `D:/MaNGOS/source/bin/MoveMapGenerator.exe` after restoring
-    GO-aware marking and `agentRadius` / `agentHeight` config handling in the
-    MaNGOS generator source.
-  - Regenerated focused Orgrimmar route tiles `28,39` through `30,41` in
-    `D:/MaNGOS/data/mmaps` with Tauren Male radius `1.0247` and height
-    `2.625`.
+  - Generalized `tools/NavDataAudit` so GO input checks count model-backed
+    spawns in the audited tile set for any map, and added `--build-log` for
+    focused generation logs.
+  - Regenerated focused map `0` Undercity arrival tiles `27,30` through
+    `30,32` with the GO-aware generator and Tauren Male radius/height.
+  - With the earlier focused map `1` Orgrimmar tiles, both route-side map
+    slices now audit with Detour `walkableRadius=1.0247` and
+    `walkableHeight=2.6250`.
 - Validation:
-  - `cmd.exe /c 'call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat" && cmake --build D:/MaNGOS/source/build-nmake-extractors --target MoveMapGenerator --config Release'` -> `succeeded`
-  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data` -> `passed; all focused Orgrimmar route tiles report walkableRadius=1.0247 and walkableHeight=2.6250`
-  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routes_focused_mmap_tauren_go.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (12/12)`
+  - `dotnet build tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -v:minimal` -> `succeeded`
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data` -> `passed`
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data --map 0 --build-log D:/MaNGOS/data/map0_focused_undercity_build.log --tile 27,30 --tile 27,31 --tile 27,32 --tile 28,30 --tile 28,31 --tile 28,32 --tile 29,30 --tile 29,31 --tile 29,32 --tile 30,30 --tile 30,31 --tile 30,32` -> `passed`
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routes_focused_mmap_map0_map1_tauren_go.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (12/12)`
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~RaceDimensionsConcurrencyTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_pathing_focus_after_focused_mmap.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (115/115)`
 - Next command:
-  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingClientRequestTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~RaceDimensionsConcurrencyTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_pathing_focus_after_focused_mmap.trx" --results-directory tmp/test-runtime/results-botrunner`
+  - `git status --short --branch`
 
 ---
 

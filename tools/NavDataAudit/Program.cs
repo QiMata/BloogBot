@@ -5,6 +5,7 @@ using System.Text.Json;
 
 const float CellSize = 0.2666666f;
 const float ContinentCellHeight = 0.25f;
+const float MmapTileSize = 533.3333333f;
 const float TaurenMaleRadius = 0.9747f;
 const float TaurenMaleHeight = 2.625f;
 const float CapsulePadding = 0.05f;
@@ -12,6 +13,7 @@ const uint MapKalimdor = 1;
 
 var dataRoot = ResolveDataRoot(args);
 var mapId = GetUIntOption(args, "--map", MapKalimdor);
+var buildLogPath = ResolveBuildLogPath(args, dataRoot, mapId);
 var tiles = GetTileOptions(args);
 if (tiles.Count == 0)
 {
@@ -38,7 +40,7 @@ Console.WriteLine();
 
 AuditConfig(dataRoot, mapId, requiredRadius, requiredHeight, requiredRadiusCells, requiredHeightCells, failures);
 AuditTileHeaders(dataRoot, mapId, tiles, requiredRadius, requiredHeight, failures);
-AuditGameObjectInputs(dataRoot, mapId, tiles, failures);
+AuditGameObjectInputs(dataRoot, mapId, tiles, buildLogPath, failures);
 
 Console.WriteLine();
 if (failures.Count == 0)
@@ -77,6 +79,17 @@ static uint GetUIntOption(string[] args, string name, uint defaultValue)
     }
 
     return defaultValue;
+}
+
+static string ResolveBuildLogPath(string[] args, string dataRoot, uint mapId)
+{
+    for (var i = 0; i < args.Length - 1; i++)
+    {
+        if (string.Equals(args[i], "--build-log", StringComparison.OrdinalIgnoreCase))
+            return Path.GetFullPath(args[i + 1]);
+    }
+
+    return Path.Combine(dataRoot, $"map{mapId}_build.log");
 }
 
 static List<Tile> GetTileOptions(string[] args)
@@ -188,7 +201,7 @@ static DetourTileHeader? ReadTileHeader(string path)
         BitConverter.ToSingle(bytes, mmapTileHeaderSize + detourWalkableClimbOffset));
 }
 
-static void AuditGameObjectInputs(string dataRoot, uint mapId, List<Tile> tiles, List<string> failures)
+static void AuditGameObjectInputs(string dataRoot, uint mapId, List<Tile> tiles, string buildLogPath, List<string> failures)
 {
     var tempModelsPath = Path.Combine(dataRoot, "vmaps", "temp_gameobject_models");
     var modelDisplayIds = ReadGameObjectModelDisplayIds(tempModelsPath);
@@ -198,20 +211,19 @@ static void AuditGameObjectInputs(string dataRoot, uint mapId, List<Tile> tiles,
         Pass($"temp_gameobject_models contains {modelDisplayIds.Count} displayId model mappings.");
 
     var spawnsPath = Path.Combine(dataRoot, "gameobject_spawns.json");
-    var modeledOrgrimmarSpawns = CountModeledOrgrimmarSpawns(spawnsPath, mapId, modelDisplayIds);
-    if (modeledOrgrimmarSpawns <= 0)
-        Fail(failures, $"no modeled Orgrimmar gameobject spawns found in {spawnsPath}");
+    var modeledTileSpawns = CountModeledTileSpawns(spawnsPath, mapId, tiles, modelDisplayIds);
+    if (modeledTileSpawns <= 0)
+        Fail(failures, $"no modeled gameobject spawns found in audited tiles for map {mapId} in {spawnsPath}");
     else
-        Pass($"gameobject_spawns.json has {modeledOrgrimmarSpawns} modeled Orgrimmar corridor/tower spawns on map {mapId}.");
+        Pass($"gameobject_spawns.json has {modeledTileSpawns} modeled gameobject spawns in audited tiles on map {mapId}.");
 
-    var buildLogPath = Path.Combine(dataRoot, $"map{mapId}_build.log");
     if (!File.Exists(buildLogPath))
     {
         Fail(failures, $"missing build log {buildLogPath}");
         return;
     }
 
-    var log = File.ReadAllText(buildLogPath);
+    var log = File.ReadAllText(buildLogPath).Replace("\0", string.Empty, StringComparison.Ordinal);
     if (!log.Contains("Loaded ", StringComparison.Ordinal) || !log.Contains("gameobject spawns", StringComparison.Ordinal))
         Fail(failures, $"{Path.GetFileName(buildLogPath)} does not show gameobject spawn loading.");
     else
@@ -219,19 +231,17 @@ static void AuditGameObjectInputs(string dataRoot, uint mapId, List<Tile> tiles,
 
     foreach (var tile in tiles)
     {
-        var marker = $"[GO] map={mapId} tile={tile.X},{tile.Y}: loaded ";
-        var line = FindLine(log, marker);
+        var line = FindGameObjectBakeLine(log, mapId, tile, out var verb, out var count);
         if (line is null)
         {
-            Fail(failures, $"{Path.GetFileName(buildLogPath)} has no GO bake line for tile {tile.X},{tile.Y}");
+            Fail(failures, $"{Path.GetFileName(buildLogPath)} has no GO bake/mark line for tile {tile.X},{tile.Y}");
             continue;
         }
 
-        var loaded = ParseLoadedCount(line, marker);
-        if (loaded <= 0)
-            Fail(failures, $"tile {tile.X},{tile.Y} GO bake line loaded {loaded} meshes: {line.Trim()}");
+        if (count <= 0)
+            Fail(failures, $"tile {tile.X},{tile.Y} GO bake line {verb} {count}: {line.Trim()}");
         else
-            Pass($"tile {tile.X},{tile.Y} GO bake line loaded {loaded} meshes.");
+            Pass($"tile {tile.X},{tile.Y} GO bake line {verb} {count}.");
     }
 }
 
@@ -262,11 +272,12 @@ static HashSet<uint> ReadGameObjectModelDisplayIds(string path)
     return result;
 }
 
-static int CountModeledOrgrimmarSpawns(string path, uint mapId, HashSet<uint> modelDisplayIds)
+static int CountModeledTileSpawns(string path, uint mapId, List<Tile> tiles, HashSet<uint> modelDisplayIds)
 {
     if (!File.Exists(path) || modelDisplayIds.Count == 0)
         return 0;
 
+    var tileSet = tiles.ToHashSet();
     using var doc = JsonDocument.Parse(File.ReadAllText(path));
     if (!doc.RootElement.TryGetProperty(mapId.ToString(CultureInfo.InvariantCulture), out var mapSpawns))
         return 0;
@@ -280,12 +291,14 @@ static int CountModeledOrgrimmarSpawns(string path, uint mapId, HashSet<uint> mo
 
         var x = spawn.GetProperty("x").GetSingle();
         var y = spawn.GetProperty("y").GetSingle();
-        if (x is >= 1300f and <= 1685f && y is >= -4665f and <= -4300f)
+        if (tileSet.Contains(new Tile(ToMmapTile(x), ToMmapTile(y))))
             count++;
     }
 
     return count;
 }
+
+static int ToMmapTile(float coordinate) => (int)(32.0f - coordinate / MmapTileSize);
 
 static string? FindLine(string text, string marker)
 {
@@ -300,7 +313,33 @@ static string? FindLine(string text, string marker)
     return null;
 }
 
-static int ParseLoadedCount(string line, string marker)
+static string? FindGameObjectBakeLine(string text, uint mapId, Tile tile, out string verb, out int count)
+{
+    var loadedMarker = $"[GO] map={mapId} tile={tile.X},{tile.Y}: loaded ";
+    var markedMarker = $"[GO] map={mapId} tile={tile.X},{tile.Y}: marked ";
+
+    var loadedLine = FindLine(text, loadedMarker);
+    if (loadedLine is not null)
+    {
+        verb = "loaded";
+        count = ParseCountAfterMarker(loadedLine, loadedMarker);
+        return loadedLine;
+    }
+
+    var markedLine = FindLine(text, markedMarker);
+    if (markedLine is not null)
+    {
+        verb = "marked";
+        count = ParseCountAfterMarker(markedLine, markedMarker);
+        return markedLine;
+    }
+
+    verb = "found";
+    count = -1;
+    return null;
+}
+
+static int ParseCountAfterMarker(string line, string marker)
 {
     var start = line.IndexOf(marker, StringComparison.Ordinal);
     if (start < 0)
