@@ -75,6 +75,27 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
+- Last updated: 2026-05-01
+- Pass result: `delta shipped; MMAP/Recast audit now proves current GO evidence and Tauren-clearance gap`
+- Active task: `LPATH-CROSSROADS-UC` navmesh generation source-of-truth slice
+- Last delta:
+  - Added `tools/NavDataAudit` to inspect the generated nav data directly:
+    `config.json`, selected Orgrimmar `.mmtile` Detour headers,
+    `temp_gameobject_models`, `gameobject_spawns.json`, and `map1_build.log`.
+  - Added `docs/physics/MMAP_NAVMESH_GENERATION.md` with the required
+    Tauren Male generation settings: `agentRadius=1.0247`,
+    `agentHeight=2.625`, `walkableRadius=4`, and `walkableHeight=11`.
+  - The audit proves the current Orgrimmar GO inputs/build-log evidence are
+    present, but generated tile headers still report `walkableRadius=0.2` and
+    `walkableHeight=1.5`.
+- Validation:
+  - `dotnet build tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -v:minimal` -> `succeeded`
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data` -> `failed as expected; GO evidence passed, Tauren radius/height evidence failed`
+- Next command:
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data`
+
+---
+
 - Last updated: 2026-04-30
 - Pass result: `delta shipped; deterministic Tauren Male Crossroads -> Undercity route suite passed`
 - Active task: `LPATH-CROSSROADS-UC` native agent-aware path construction slice

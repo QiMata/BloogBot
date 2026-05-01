@@ -52,7 +52,46 @@
     agent-aware route construction.
   - [x] `TransportData` now pins the Orgrimmar/Undercity zeppelin to live
     route entry `164871` and keeps the two Grom'gol entries distinct.
+  - [x] `tools/NavDataAudit` proves the current Orgrimmar data has GO bake
+    evidence but still has small-agent Detour tile headers.
+  - [ ] Regenerate maps `0` and `1` with GO-aware generator source and
+    Tauren Male `agentRadius=1.0247`, `agentHeight=2.625`, then rerun the
+    audit until it passes.
   - [ ] Focused live validation remains open.
+
+---
+
+## Handoff (2026-05-01, MMAP/Recast generation audit)
+
+- Completed:
+  - Added `tools/NavDataAudit`, a deterministic audit that reads
+    `config.json`, Orgrimmar `.mmtile` Detour headers,
+    `vmaps/temp_gameobject_models`, `gameobject_spawns.json`, and
+    `map1_build.log`.
+  - Documented the required Tauren Male navmesh generation shape in
+    `docs/physics/MMAP_NAVMESH_GENERATION.md`: `agentRadius=1.0247`,
+    `agentHeight=2.625`, `walkableRadius=4`, `walkableHeight=11`.
+  - Confirmed the current `D:/MaNGOS/data` GO evidence passes for Orgrimmar
+    route tiles, but generated tile headers still fail with
+    `walkableRadius=0.2` and `walkableHeight=1.5`.
+- Validation/tests run:
+  - `dotnet build tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -v:minimal` -> `succeeded`.
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data` -> `failed as expected; GO evidence passed, Tauren radius/height evidence failed`.
+- Evidence:
+  - Audit output: Orgrimmar tiles `0012839` through `0013041` report
+    `walkableRadius=0.2000` and `walkableHeight=1.5000`.
+  - Audit output: `temp_gameobject_models` has `930` model mappings,
+    `gameobject_spawns.json` has `297` modeled Orgrimmar corridor/tower
+    spawns, and the audited map `1` tiles all have `[GO] ... loaded ...`
+    build-log evidence.
+- Files changed:
+  - `tools/NavDataAudit/NavDataAudit.csproj`
+  - `tools/NavDataAudit/Program.cs`
+  - `docs/physics/MMAP_NAVMESH_GENERATION.md`
+  - `docs/physics/README.md`
+  - `docs/TASKS.md`
+  - `Exports/Navigation/TASKS.md`
+- Next command: `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data`
 
 ---
 
