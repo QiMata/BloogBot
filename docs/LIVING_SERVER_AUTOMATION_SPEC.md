@@ -319,6 +319,86 @@ Example:
 The response should include selected bots, missing role wait state, travel ETA,
 and any legality warnings.
 
+## WoWStateManagerUI Dashboard
+
+`WoWStateManagerUI` should make the existing Dashboard tab the operator surface
+for both observability and on-demand activity control. Do not create a separate
+metrics tab unless the Dashboard becomes too dense after implementation.
+
+Dashboard responsibilities:
+
+- Show service health and server readiness.
+- Show living-server metrics from StateManager and the supporting services.
+- Load, inspect, edit, validate, and save on-demand activity configurations.
+- Start, pause, cancel, and inspect activity instances.
+- Show selected bots, missing roles, travel ETA, legality failures, and active
+  bot leases for each activity.
+- Surface the highest-count known errors with enough labels to decide the next
+  engineering fix.
+
+The UI should not be the authoritative scheduler or metrics registry. It is a
+desktop operator console. StateManager owns activity state, legality,
+scheduling, and persisted activity definitions; the UI edits those definitions
+through StateManager APIs and renders the resulting state.
+
+### Dashboard Metrics Panels
+
+The Dashboard tab should include these panels:
+
+| Panel | Data |
+|---|---|
+| Server health | realmd, mangosd, SOAP, StateManager, PathfindingService, SceneDataService |
+| Bot population | online, available, leased, disconnected, by faction/mode/level band |
+| Activity operations | active requests, queued requests, completed/failed counts, queue duration |
+| On-demand activities | catalog entries, enabled state, selected config, validation status |
+| Pathfinding | queue depth, latency, timeouts, route-pack hits/bypasses |
+| Connections | connect/disconnect counters by service and normalized reason |
+| Error triage | top error counters by service/activity/reason |
+| Logging health | suppressed log counts and noisy categories |
+
+### Activity Config Editing
+
+On-demand activities should be editable as structured configs, not loose JSON
+text first. The UI can include an advanced raw JSON view later, but the normal
+flow should be form/grid based:
+
+```text
+ActivityConfig {
+  Id,
+  Enabled,
+  Activity,
+  Location,
+  LevelRange,
+  FactionPolicy,
+  RoleTemplate,
+  MinPlayers,
+  MaxPlayers,
+  LegalParams,
+  EntryRequirements,
+  TravelTarget,
+  BotSelectionPolicy,
+  HumanJoinPolicy,
+  ExpectedDuration,
+  Tags
+}
+```
+
+UI actions:
+
+- `LoadActivityCatalog`
+- `ValidateActivityConfig`
+- `SaveActivityConfig`
+- `EnableActivity`
+- `DisableActivity`
+- `DuplicateActivityConfig`
+- `RequestActivity`
+- `CancelActivity`
+
+Validation must happen server-side in StateManager so CLI/API/UI callers all
+get the same legality result. The UI may run client-side field validation for
+immediacy, but it must still display the authoritative StateManager validation
+result before saving or launching an activity.
+
 ## Bot Selection
 
 Selection scores candidates by:
@@ -379,6 +459,9 @@ Final topology:
 WWoW should use `System.Diagnostics.Metrics` as the in-process API and expose
 Prometheus-compatible metrics through OpenTelemetry where HTTP endpoints exist.
 For non-HTTP socket services, add a small metrics endpoint or sidecar endpoint.
+The WoWStateManagerUI Dashboard consumes metrics through StateManager summary
+APIs first, and may optionally read Prometheus/OTLP-backed APIs later. The UI
+may emit UI-local metrics, but those are separate from living-server authority.
 
 Metric naming:
 
@@ -584,6 +667,10 @@ The spec requires these generated artifacts:
    available.
 5. `MetricsCatalog.md` - generated or checked from code meters.
 6. `LoggingProfileCatalog.md` - lists category levels and diagnostics toggles.
+7. `DashboardMetricsView.json` - StateManager-owned summary model optimized for
+   the WoWStateManagerUI Dashboard tab.
+8. `ActivityConfigSchema.json` - schema for UI/API validation and editing of
+   on-demand activity configs.
 
 ## Implementation Phases
 
@@ -610,6 +697,8 @@ The spec requires these generated artifacts:
 - Generate/load the activity catalog.
 - Add legality validation and structured rejection.
 - Add deterministic tests for representative legal/illegal requests.
+- Add StateManager APIs for loading, validating, saving, enabling, and
+  disabling activity configs.
 
 ### Phase 3 - Bot lease scheduler
 
@@ -617,6 +706,16 @@ The spec requires these generated artifacts:
 - Add bot selection scoring.
 - Add single-StateManager coordination for dungeon and BG requests.
 - Add activity status API.
+- Add Dashboard summary API for metrics, activities, leases, and top errors.
+
+### Phase 3.5 - WoWStateManagerUI Dashboard
+
+- Extend the existing Dashboard tab with metrics panels.
+- Add activity catalog loading and config editing views inside the Dashboard
+  tab.
+- Show authoritative StateManager validation results before save or launch.
+- Add UI tests for activity config view-model validation, load/save command
+  state, and dashboard metric mapping.
 
 ### Phase 4 - Automated progression loop
 
@@ -648,13 +747,16 @@ The spec requires these generated artifacts:
 The living-server spec is satisfied when:
 
 - A human can list on-demand activities by activity/location/level range.
+- WoWStateManagerUI Dashboard can load, edit, validate, save, enable, disable,
+  request, and cancel on-demand activity configs through StateManager APIs.
 - A human can request at least one dungeon, one battleground, one zone questing
   session, and one profession/economy activity.
 - StateManager selects legal bots, forms the activity, tracks status, and
   returns bots to progression.
 - Automated progression continues without human requests.
 - Metrics expose activity failures, path failures, disconnects, task failures,
-  and latency histograms.
+  and latency histograms, and the Dashboard tab renders the operator-critical
+  subset.
 - Docker logs are rotated and normal operation is quiet enough that warnings
   mean something.
 - The highest-volume path and scene requests have caches, route packs, or
@@ -664,8 +766,8 @@ The living-server spec is satisfied when:
 
 1. Should `ActivityCatalog.json` be generated at build time from markdown or
    checked in as source of truth with markdown as commentary?
-2. Should the first on-demand API live in WoWStateManager HTTP, the WPF UI, or a
-   small separate ActivityGateway service?
+2. Should the Dashboard read metrics only through StateManager summary APIs, or
+   should it also support direct Prometheus HTTP API queries for advanced users?
 3. Should Prometheus scraping be first-class in Docker Compose now, or should
    services expose `/metrics` first and leave Prometheus/Grafana compose files
    for the next slice?

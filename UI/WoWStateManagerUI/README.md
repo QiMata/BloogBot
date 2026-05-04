@@ -2,6 +2,12 @@
 
 WPF desktop application (.NET 8) for monitoring and managing bot instances. MVVM pattern with real-time character state display, server status polling, and Big Five personality configuration.
 
+The planned living-server Dashboard responsibilities are specified in
+[../../docs/LIVING_SERVER_AUTOMATION_SPEC.md](../../docs/LIVING_SERVER_AUTOMATION_SPEC.md):
+the existing Dashboard tab should render operator metrics and support loading,
+editing, validating, saving, enabling, disabling, requesting, and canceling
+on-demand activity configs through StateManager APIs.
+
 ## Quick Start
 
 ```bash

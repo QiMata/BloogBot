@@ -38,8 +38,9 @@
   automation spec from the gameplay documentation and architecture notes. The
   spec must quantify on-demand activities by `Activity`, `Location`, and
   `Level Range`, and cover automated progression, StateManager topology,
-  scalable pathfinding/scene data providers, Prometheus-style metrics, and
-  Docker/service logging policy.
+  scalable pathfinding/scene data providers, Prometheus-style metrics,
+  Dashboard-tab rendering in `WoWStateManagerUI`, on-demand activity config
+  editing, and Docker/service logging policy.
 
 - [ ] `LPATH-CROSSROADS-UC` - Implement staged long-pathing from Crossroads to
   Undercity. The resolver/executor must choose observable travel objectives in
@@ -139,7 +140,13 @@
     progression, StateManager topology, human on-demand activity API,
     pathfinding/scene-data scale, metrics registry, logging policy, data
     products, phases, acceptance criteria, and open decisions.
+  - Updated the spec to make the existing `WoWStateManagerUI` Dashboard tab the
+    operator surface for metrics and on-demand activity configs. The UI should
+    load/edit/validate/save/enable/disable/request/cancel activity configs
+    through StateManager APIs, while StateManager remains authoritative.
   - Linked the new spec from `docs/WESTWORLD_ARCHITECTURE.md`.
+  - Linked the planned Dashboard responsibilities from
+    `UI/WoWStateManagerUI/README.md`.
 - Research inputs:
   - Local: `docs/WESTWORLD_ARCHITECTURE.md`,
     `docs/leveling-guide/README.md`, `docs/leveling-guide/decision-engine/*`,
@@ -151,6 +158,7 @@
 - Files changed:
   - `docs/LIVING_SERVER_AUTOMATION_SPEC.md`
   - `docs/WESTWORLD_ARCHITECTURE.md`
+  - `UI/WoWStateManagerUI/README.md`
   - `docs/TASKS.md`
 - Next command: `git status --short --branch`
 
