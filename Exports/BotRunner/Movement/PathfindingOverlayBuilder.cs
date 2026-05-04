@@ -13,14 +13,24 @@ public static class PathfindingOverlayBuilder
     public const float DefaultNearbyObjectRadius = 40f;
     public const int MaxNearbyObjectCount = 64;
 
-    private static readonly GameObjectType[] CollisionRelevantTypes =
+    private static readonly GameObjectType[] AlwaysOverlayTypes =
     [
+        GameObjectType.Button,
         GameObjectType.Door,
+        GameObjectType.Trap,
         GameObjectType.Transport,
-        GameObjectType.MapObject,
         GameObjectType.MapObjectTransport,
         GameObjectType.DestructibleBuilding,
         GameObjectType.TrapDoor
+    ];
+
+    private static readonly GameObjectType[] StaticPropTypes =
+    [
+        GameObjectType.Generic,
+        GameObjectType.Chair,
+        GameObjectType.SpellFocus,
+        GameObjectType.Goober,
+        GameObjectType.MapObject
     ];
 
     private static readonly GameObjectType[] GameplayRelevantTypes =
@@ -81,16 +91,18 @@ public static class PathfindingOverlayBuilder
             if (!IsFinitePosition(position))
                 return false;
 
-            if (gameObject.DisplayId == 0 || !IsCollisionOrGameplayRelevantType(gameObject.TypeId))
+            if (gameObject.DisplayId == 0 || !IsDynamicOverlayCandidate(gameObject.TypeId, gameObject.GoState))
                 return false;
 
             distance = MathF.Min(position!.DistanceTo(start), position.DistanceTo(end));
             if (distance > maxDistance)
                 return false;
 
+            var resolvedEntry = TransportObjectIdentity.ResolveEntry(gameObject.Guid, gameObject.Entry);
             proto = new DynamicObjectProto
             {
                 Guid = gameObject.Guid,
+                Entry = resolvedEntry,
                 DisplayId = gameObject.DisplayId,
                 X = position.X,
                 Y = position.Y,
@@ -108,10 +120,12 @@ public static class PathfindingOverlayBuilder
         }
     }
 
-    private static bool IsCollisionOrGameplayRelevantType(uint typeId)
+    private static bool IsDynamicOverlayCandidate(uint typeId, GOState goState)
         => Enum.IsDefined(typeof(GameObjectType), (int)typeId)
-            && (Array.IndexOf(CollisionRelevantTypes, (GameObjectType)typeId) >= 0
-                || Array.IndexOf(GameplayRelevantTypes, (GameObjectType)typeId) >= 0);
+            && (Array.IndexOf(AlwaysOverlayTypes, (GameObjectType)typeId) >= 0
+                || Array.IndexOf(GameplayRelevantTypes, (GameObjectType)typeId) >= 0
+                || (goState != GOState.Ready
+                    && Array.IndexOf(StaticPropTypes, (GameObjectType)typeId) >= 0));
 
     private static bool IsFinitePosition(Position? position)
         => position != null

@@ -20,9 +20,8 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// xUnit fixture that launches WoWStateManager (which spawns both a Background
-/// headless client and a Foreground injected client) and waits for both bots
-/// to enter the world before tests run.
+/// xUnit fixture that prepares live-validation infrastructure and launches
+/// WoWStateManager only after a test-specific settings file is known.
 ///
 /// Tests observe bots through <see cref="WoWActivitySnapshot"/> queries via
 /// port 8088 and command them through <see cref="ActionForwardRequest"/>.
@@ -487,8 +486,16 @@ public partial class LiveBotFixture : IAsyncLifetime
             // config, the INSERT is still harmless idempotent DB prep.
             _ = await EnsureShodanAccountAsync();
 
+            if (string.IsNullOrWhiteSpace(_presetSettingsPath))
+            {
+                FailureReason = "StateManager startup deferred until a test calls EnsureSettingsAsync(...) with its settings.";
+                _logger.LogInformation("[FIXTURE] {Reason}", FailureReason);
+                return;
+            }
+
             // 1. Start StateManager (which launches all configured bots)
-            _logger.LogInformation("[FIXTURE] Starting BotServiceFixture (StateManager)...");
+            _logger.LogInformation("[FIXTURE] Starting BotServiceFixture (StateManager) with preset settings: {Settings}",
+                _presetSettingsPath);
             await _serviceFixture.InitializeAsync();
 
             if (!_serviceFixture.ServicesReady)
@@ -1568,7 +1575,8 @@ public partial class LiveBotFixture : IAsyncLifetime
         IReadOnlyList<string> ErrorMessages,
         string? CorrelationId = null,
         CommandAckEvent.Types.AckStatus? AckStatus = null,
-        string? AckFailureReason = null);
+        string? AckFailureReason = null,
+        bool ActionSeen = false);
 
 
     public sealed record DeathInductionResult(

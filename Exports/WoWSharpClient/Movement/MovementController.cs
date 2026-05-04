@@ -352,13 +352,16 @@ namespace WoWSharpClient.Movement
 
             var newPhysicsPos = new Vector3(physicsResult.NewPosX, physicsResult.NewPosY, physicsResult.NewPosZ);
             var frameDelta = (newPhysicsPos - _lastPhysicsPosition).Length();
+            var frameDx = newPhysicsPos.X - _lastPhysicsPosition.X;
+            var frameDy = newPhysicsPos.Y - _lastPhysicsPosition.Y;
+            var frameHorizontalDelta = MathF.Sqrt((frameDx * frameDx) + (frameDy * frameDy));
             if (_frameCounter % 100 == 1 && _player.MovementFlags != MovementFlags.MOVEFLAG_NONE)
             {
-                Log.Information("[MovementController] Frame#{Frame} dt={DeltaSec:F4}s frameDelta={FrameDelta:F3}y expected={Expected:F3}y flags=0x{Flags:X}",
-                    _frameCounter, deltaSec, frameDelta, deltaSec * _player.RunSpeed, (uint)_player.MovementFlags);
+                Log.Information("[MovementController] Frame#{Frame} dt={DeltaSec:F4}s frameDelta={FrameDelta:F3}y horizontal={HorizontalDelta:F3}y expected={Expected:F3}y flags=0x{Flags:X}",
+                    _frameCounter, deltaSec, frameDelta, frameHorizontalDelta, deltaSec * _player.RunSpeed, (uint)_player.MovementFlags);
             }
 
-            ObserveStaleForwardAndRecover(frameDelta, gameTimeMs);
+            ObserveStaleForwardAndRecover(frameHorizontalDelta, gameTimeMs);
             _lastPhysicsPosition = new Vector3(_player.Position.X, _player.Position.Y, _player.Position.Z);
             _lastPhysicsMapId = _player.MapId;
 
@@ -910,6 +913,16 @@ namespace WoWSharpClient.Movement
         private const float PassiveTransportAttachVerticalRange = 10f;
         private const float PassiveMapObjectTransportAttach2DRange = 24f;
         private const float PassiveMapObjectTransportAttachVerticalRange = 25f;
+        private const float PassiveScheduledTransportAttach2DRange = 36f;
+        private const float PassiveScheduledTransportAttachVerticalRange = 30f;
+        private const uint BoatMenethilAuberdineEntry = 176231;
+        private const uint BoatMenethilTheramoreEntry = 176310;
+        private const uint BoatBootyBayRatchetEntry = 20808;
+        private const uint BoatAuberdineTeldrassilEntry = 176244;
+        private const uint ZeppelinUndercityOrgrimmarEntry = 164871;
+        private const uint ZeppelinUndercityGromgolEntry = 176495;
+        private const uint ZeppelinOrgrimmarGromgolEntry = 175080;
+        private const uint DeeprunTramEntry = 176085;
         private const uint ElevatorStopMarkerDisplayId = 462;
 
         private bool TryAttachToNearbyTransport()
@@ -996,21 +1009,48 @@ namespace WoWSharpClient.Movement
                 && gameObject.DisplayId != ElevatorStopMarkerDisplayId
                 && !IsKnownUndercityElevatorAtUpperStop(gameObject)
                 && (gameObject.TypeId == (uint)GameObjectType.Transport
-                    || gameObject.TypeId == (uint)GameObjectType.MapObjectTransport);
+                    || gameObject.TypeId == (uint)GameObjectType.MapObjectTransport
+                    || IsKnownScheduledTransport(gameObject));
 
         private static bool IsKnownUndercityElevatorAtUpperStop(WoWGameObject gameObject)
             => IsKnownUndercityElevator(TransportEntryFromGuid(gameObject.Guid), gameObject)
                 && gameObject.Position.Z >= UndercityElevatorUpperZ - UndercityElevatorLowerTolerance;
 
         private static float PassiveTransportHorizontalRange(WoWGameObject gameObject)
-            => gameObject.TypeId == (uint)GameObjectType.MapObjectTransport
+        {
+            if (IsKnownScheduledTransport(gameObject))
+                return PassiveScheduledTransportAttach2DRange;
+
+            return gameObject.TypeId == (uint)GameObjectType.MapObjectTransport
                 ? PassiveMapObjectTransportAttach2DRange
                 : PassiveTransportAttach2DRange;
+        }
 
         private static float PassiveTransportVerticalRange(WoWGameObject gameObject)
-            => gameObject.TypeId == (uint)GameObjectType.MapObjectTransport
+        {
+            if (IsKnownScheduledTransport(gameObject))
+                return PassiveScheduledTransportAttachVerticalRange;
+
+            return gameObject.TypeId == (uint)GameObjectType.MapObjectTransport
                 ? PassiveMapObjectTransportAttachVerticalRange
                 : PassiveTransportAttachVerticalRange;
+        }
+
+        private static bool IsKnownScheduledTransport(WoWGameObject gameObject)
+        {
+            var entry = gameObject.Entry != 0
+                ? gameObject.Entry
+                : TransportEntryFromGuid(gameObject.Guid);
+
+            return entry is BoatMenethilAuberdineEntry
+                or BoatMenethilTheramoreEntry
+                or BoatBootyBayRatchetEntry
+                or BoatAuberdineTeldrassilEntry
+                or ZeppelinUndercityOrgrimmarEntry
+                or ZeppelinUndercityGromgolEntry
+                or ZeppelinOrgrimmarGromgolEntry
+                or DeeprunTramEntry;
+        }
 
         private const float PhysicsNearbyObjectRadius = 40f;
         private const int MaxPhysicsNearbyObjectCount = 64;
@@ -1075,6 +1115,7 @@ namespace WoWSharpClient.Movement
                     proto: new DynamicObjectProto
                     {
                         Guid = gameObject.Guid,
+                        Entry = gameObject.Entry,
                         DisplayId = gameObject.DisplayId,
                         X = position.X,
                         Y = position.Y,

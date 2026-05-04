@@ -1,9 +1,9 @@
-name: wwow
+name: world-of-warcraft
 
 services:
-  realmd:
+  wow-realmd:
     image: ghcr.io/mserajnik/vmangos-server:5875
-    container_name: realmd
+    container_name: wow-realmd
     restart: unless-stopped
     command: ["/bin/sh", "/wwow-docker/start-realmd.sh"]
     healthcheck:
@@ -27,13 +27,13 @@ services:
       - ./docker/linux/vmangos:/wwow-docker:ro
       - ./docker/linux/vmangos/storage/realmd/logs:/opt/vmangos/storage/logs
 
-  mangosd:
+  wow-mangosd:
     image: ghcr.io/mserajnik/vmangos-server:5875
-    container_name: mangosd
+    container_name: wow-mangosd
     restart: unless-stopped
     command: ["/bin/sh", "/wwow-docker/start-mangosd.sh"]
     depends_on:
-      realmd:
+      wow-realmd:
         condition: service_started
     tty: true
     stdin_open: true
@@ -63,11 +63,11 @@ services:
       - ./docker/linux/vmangos/storage/mangosd/logs:/opt/vmangos/storage/logs
       - ./docker/linux/vmangos/storage/mangosd/honor:/opt/vmangos/storage/honor
 
-  pathfinding-service:
+  wwow-pathfinding:
     build:
       context: .
       dockerfile: Services/PathfindingService/Dockerfile
-    container_name: pathfinding-service
+    container_name: wwow-pathfinding
     restart: unless-stopped
     environment:
       DOTNET_ENVIRONMENT: Docker
@@ -85,11 +85,11 @@ services:
       retries: 3
       start_period: 15s
 
-  scene-data-service:
+  wwow-scene-data:
     build:
       context: .
       dockerfile: Services/SceneDataService/Dockerfile
-    container_name: scene-data-service
+    container_name: wwow-scene-data
     restart: unless-stopped
     environment:
       DOTNET_ENVIRONMENT: Docker

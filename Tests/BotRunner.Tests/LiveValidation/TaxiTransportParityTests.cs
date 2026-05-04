@@ -30,9 +30,9 @@ public class TaxiTransportParityTests
     private const float CrossroadsY = -2596.0f;
     private const float CrossroadsZ = 96.0f;
     private const int CrossroadsTaxiNodeId = 25;
-    private const float OrgrimmarZeppelinTowerX = 1340.98f;
-    private const float OrgrimmarZeppelinTowerY = -4638.58f;
-    private const float OrgrimmarZeppelinTowerZ = 53.5445f;
+    private const float OrgrimmarZeppelinTowerX = 1320.142944f;
+    private const float OrgrimmarZeppelinTowerY = -4653.158691f;
+    private const float OrgrimmarZeppelinTowerZ = 53.891945f;
     private const uint OrgrimmarUndercityZeppelinEntry = 164871;
     private const float UndercityElevatorWestX = 1544.24f;
     private const float UndercityElevatorWestY = 240.77f;

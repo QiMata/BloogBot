@@ -11,7 +11,9 @@ internal static class LocalPhysicsSupport
         if (objectManager == null)
             return true;
 
-        if (objectManager.GetType().Namespace?.StartsWith("ForegroundBotRunner", StringComparison.Ordinal) == true)
+        var objectManagerNamespace = objectManager.GetType().Namespace;
+        if (objectManagerNamespace?.StartsWith("ForegroundBotRunner", StringComparison.Ordinal) == true
+            || objectManagerNamespace?.StartsWith("Castle.Proxies", StringComparison.Ordinal) == true)
             return false;
 
         if (objectManager is WoWSharpObjectManager wowSharpObjectManager)

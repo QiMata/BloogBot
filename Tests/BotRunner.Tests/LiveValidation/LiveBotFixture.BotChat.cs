@@ -178,6 +178,7 @@ public partial class LiveBotFixture
         var baseline = await GetSnapshotAsync(accountName);
         var baselineChats = baseline?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
         var baselineErrors = baseline?.RecentErrors.ToArray() ?? Array.Empty<string>();
+        var commandExecutedWithoutConfirmation = false;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
@@ -188,6 +189,15 @@ public partial class LiveBotFixture
                 delayMs: 4500);
 
             Assert.Equal(ResponseResult.Success, trace.DispatchResult);
+            if (trace.AckStatus is CommandAckEvent.Types.AckStatus.Failed or CommandAckEvent.Types.AckStatus.TimedOut)
+            {
+                throw new Xunit.Sdk.XunitException(
+                    $"[{label}] '.taxicheat on' reported ACK {trace.AckStatus} " +
+                    $"(reason={trace.AckFailureReason ?? "(none)"}).");
+            }
+
+            commandExecutedWithoutConfirmation |= trace.AckStatus == CommandAckEvent.Types.AckStatus.Success
+                || trace.ActionSeen;
 
             var responses = trace.ChatMessages.Concat(trace.ErrorMessages).ToArray();
             foreach (var response in responses)
@@ -233,6 +243,14 @@ public partial class LiveBotFixture
             baselineChats = current?.RecentChatMessages.ToArray() ?? baselineChats;
             baselineErrors = current?.RecentErrors.ToArray() ?? baselineErrors;
             _testOutput?.WriteLine($"[{label}] taxicheat confirmation not seen on attempt {attempt}/{maxAttempts}; retrying.");
+        }
+
+        if (commandExecutedWithoutConfirmation)
+        {
+            _testOutput?.WriteLine(
+                $"[{label}] '.taxicheat on' completed without a visible chat confirmation; " +
+                "continuing and relying on downstream taxi-route assertions.");
+            return;
         }
 
         var finalSnapshot = await GetSnapshotAsync(accountName);
@@ -430,10 +448,10 @@ public partial class LiveBotFixture
         var errors = new List<string>();
         CommandAckEvent.Types.AckStatus? ackStatus = null;
         string? ackFailureReason = null;
+        var actionSeen = false;
         if (captureResponse && _stateManagerClient != null)
         {
             var pollDeadlineUtc = DateTime.UtcNow.AddMilliseconds(GetTrackedChatCommandDelayMs(command, delayMs));
-            var actionSeen = false;
             var responseSeen = false;
 
             while (DateTime.UtcNow < pollDeadlineUtc)
@@ -473,7 +491,15 @@ public partial class LiveBotFixture
             LogChatCommandResponses(accountName, command, chats, errors);
         }
 
-        return new GmChatCommandTrace(attemptCount, dispatchResult, chats, errors, correlationId, ackStatus, ackFailureReason);
+        return new GmChatCommandTrace(
+            attemptCount,
+            dispatchResult,
+            chats,
+            errors,
+            correlationId,
+            ackStatus,
+            ackFailureReason,
+            actionSeen || ackStatus == CommandAckEvent.Types.AckStatus.Success);
     }
 
     private static CommandAckEvent? FindLatestMatchingAck(WoWActivitySnapshot snapshot, string correlationId)

@@ -631,6 +631,11 @@ static float ProbeEndSupportZ(uint32_t mapId, XYZ end, float radius)
         radius);
 }
 
+static float PathValidationOverlapTolerance(float radius)
+{
+    return std::max(0.12f, radius * 0.35f);
+}
+
 static bool HasBlockingCapsuleOverlap(
     uint32_t mapId,
     float x,
@@ -638,7 +643,8 @@ static bool HasBlockingCapsuleOverlap(
     float z,
     float radius,
     float height,
-    float orientation)
+    float orientation,
+    float maxAllowedPenDepth = -1.0f)
 {
     CapsuleCollision::Capsule cap = PhysShapes::BuildFullHeightCapsule(x, y, z, radius, height);
     std::vector<SceneHit> overlaps;
@@ -651,8 +657,10 @@ static bool HasBlockingCapsuleOverlap(
             continue;
 
         const float penetrationDepth = std::max(0.0f, hit.penetrationDepth);
-        const float maxAllowedPenDepth = std::max(0.05f, radius * 0.75f);
-        if (penetrationDepth <= maxAllowedPenDepth)
+        const float allowedPenDepth = maxAllowedPenDepth >= 0.0f
+            ? maxAllowedPenDepth
+            : std::max(0.05f, radius * 0.75f);
+        if (penetrationDepth <= allowedPenDepth)
             continue;
 
         if (std::fabs(hit.normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z)
@@ -723,7 +731,15 @@ static SegmentValidationCode FinalizeSimulatedSegment(
             ? std::max(0.0f, std::min(1.0f, completedFraction))
             : 1.0f;
 
-    if (HasBlockingCapsuleOverlap(mapId, x, y, supportZ, radius, height, orientation))
+    if (HasBlockingCapsuleOverlap(
+        mapId,
+        x,
+        y,
+        supportZ,
+        radius,
+        height,
+        orientation,
+        PathValidationOverlapTolerance(radius)))
     {
         if (ShouldAcceptNearCompleteSegment(horizontalDistance, completedFraction, radius))
             return SegmentValidationCode::Clear;
@@ -1012,8 +1028,15 @@ extern "C" __declspec(dllexport) uint32_t ValidateWalkableSegment(
             *travelFraction = completedFraction;
         }
 
-        if (traveled > 0.05f &&
-            HasBlockingCapsuleOverlap(mapId, x, y, groundZ, radius, height, orientation))
+        if (HasBlockingCapsuleOverlap(
+            mapId,
+            x,
+            y,
+            groundZ,
+            radius,
+            height,
+            orientation,
+            PathValidationOverlapTolerance(radius)))
         {
             const float completedFraction = horizontalDistance > 0.01f
                 ? std::max(0.0f, std::min(1.0f, traveled / horizontalDistance))
@@ -1705,7 +1728,6 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
 {
     CorridorResult result = {};
     ResetCorridorResult(result);
-    std::unique_ptr<XYZ[]> overlayPath;
 
     try
     {
@@ -1720,29 +1742,6 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
         // on the same query object corrupts internal state and causes access violations.
         // With 10 bots on the same map, all sharing one query, this is fatal.
         std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
-
-        if (HasActiveDynamicObjectOverlay())
-        {
-            int overlayPathLength = 0;
-            overlayPath.reset(navigation->CalculatePath(mapId, start, end, true, &overlayPathLength));
-            if (overlayPath != nullptr && overlayPathLength > 0)
-            {
-                FillResultFromPointPath(result, start, overlayPath.get(), overlayPathLength);
-                const auto overlayBlock = navigation->GetLastOverlayRepairedSegment();
-                SetCorridorBlockMetadata(
-                    result,
-                    overlayBlock.segmentIndex,
-                    overlayBlock.blockingInstanceId,
-                    overlayBlock.blockingGuid,
-                    overlayBlock.blockingDisplayId,
-                    true);
-                result.handle = RegisterPassiveCorridorHandle(mapId);
-                fprintf(stderr, "[CORRIDOR] overlay-aware native path reused smooth point-path: corners=%d handle=%u blockedIdx=%d display=%u guid=0x%llx\n",
-                    result.cornerCount, result.handle, result.blockedSegmentIndex, result.blockingDisplayId,
-                    (unsigned long long)result.blockingGuid);
-                return result;
-            }
-        }
 
         dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
         if (!query) { fprintf(stderr, "[CORRIDOR] no query for map %u\n", mapId); return result; }

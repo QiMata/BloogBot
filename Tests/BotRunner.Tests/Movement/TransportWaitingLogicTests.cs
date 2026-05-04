@@ -89,7 +89,7 @@ public class TransportWaitingLogicTests
     }
 
     [Fact]
-    public void WaitingForArrival_Timeout_TransitionsToComplete()
+    public void WaitingForArrival_ElevatorTimeout_TransitionsToComplete()
     {
         var logic = MakeWaitingLogic();
         var noObjects = new List<DynamicObjectProto>();
@@ -98,6 +98,219 @@ public class TransportWaitingLogicTests
         logic.Update(UpperStop.WaitPosition, 0, noObjects, 121f);
 
         Assert.Equal(TransportPhase.Complete, logic.CurrentPhase);
+    }
+
+    [Fact]
+    public void WaitingForArrival_ZeppelinWithoutOverlay_PrepositionsAtBoardingWaypointAfterDwell()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        var target = logic.Update(boardingStop.WaitPosition, 0, null, 121f);
+
+        Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.NotNull(boardingStop.BoardingPosition);
+        Assert.Equal(boardingStop.BoardingPosition!.X, target!.X, 1);
+        Assert.Equal(boardingStop.BoardingPosition.Y, target.Y, 1);
+        Assert.Equal(boardingStop.WaitPosition.Z, target.Z, 1);
+    }
+
+    [Fact]
+    public void WaitingForArrival_ZeppelinWithoutOverlay_StaysAtWaitPositionBeforeDwell()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        var target = logic.Update(boardingStop.WaitPosition, 0, null, 5f);
+
+        Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.Equal(boardingStop.WaitPosition.X, target!.X, 1);
+        Assert.Equal(boardingStop.WaitPosition.Y, target.Y, 1);
+        Assert.Equal(boardingStop.WaitPosition.Z, target.Z, 1);
+    }
+
+    [Fact]
+    public void Approaching_ZeppelinAtConfiguredBoardingPosition_HoldsConfiguredBoardingPoint()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var boardingPosition = boardingStop.BoardingPosition!;
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        var firstTarget = logic.Update(boardingPosition, 0, null, DT);
+        var secondTarget = logic.Update(boardingPosition, 0, null, 5f);
+
+        Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+        Assert.NotNull(firstTarget);
+        Assert.NotNull(secondTarget);
+        Assert.Equal(boardingPosition.X, firstTarget!.X, 1);
+        Assert.Equal(boardingPosition.Y, firstTarget.Y, 1);
+        Assert.Equal(boardingPosition.Z, firstTarget.Z, 1);
+        Assert.Equal(boardingPosition.X, secondTarget!.X, 1);
+        Assert.Equal(boardingPosition.Y, secondTarget.Y, 1);
+        Assert.Equal(boardingPosition.Z, secondTarget.Z, 1);
+    }
+
+    [Fact]
+    public void WaitingForArrival_OnTransport_TransitionsToRiding()
+    {
+        var logic = MakeWaitingLogic();
+
+        var target = logic.Update(UpperStop.WaitPosition, currentTransportGuid: 0xABCUL, nearbyObjects: null, elapsedSec: DT);
+
+        Assert.Equal(TransportPhase.Riding, logic.CurrentPhase);
+        Assert.Null(target);
+    }
+
+    [Fact]
+    public void WaitingForArrival_ZeppelinOnTransportBeforeDeckOffset_ReturnsLocalBoardingOffset()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+        var sideOffset = new Position(6.7f, 0.1f, -18.6f);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        var target = logic.Update(
+            sideOffset,
+            currentTransportGuid: 0xABCUL,
+            nearbyObjects: null,
+            elapsedSec: DT,
+            currentMapId: boardingStop.MapId,
+            currentIsOnTransport: true);
+
+        Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.NotNull(boardingStop.TransportBoardingOffset);
+        Assert.Equal(boardingStop.TransportBoardingOffset!.X, target!.X, 3);
+        Assert.Equal(boardingStop.TransportBoardingOffset.Y, target.Y, 3);
+        Assert.Equal(boardingStop.TransportBoardingOffset.Z, target.Z, 3);
+    }
+
+    [Fact]
+    public void WaitingForArrival_ZeppelinAtStopButMoving_StaysWaitingAtBoardingPosition()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        logic.Update(
+            boardingStop.WaitPosition,
+            0,
+            MakeZeppelinAtDock(0, ZeppelinUndercityOrgrimmar.GameObjectEntry, 1318.1f, -4658.0f, 71.9f),
+            DT);
+        var target = logic.Update(
+            boardingStop.WaitPosition,
+            0,
+            MakeZeppelinAtDock(0, ZeppelinUndercityOrgrimmar.GameObjectEntry, 1338.0f, -4639.0f, 71.9f),
+            1f);
+
+        Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.NotNull(boardingStop.BoardingPosition);
+        Assert.Equal(boardingStop.BoardingPosition!.X, target!.X, 1);
+        Assert.Equal(boardingStop.BoardingPosition.Y, target.Y, 1);
+        Assert.Equal(boardingStop.BoardingPosition.Z, target.Z, 1);
+    }
+
+    [Fact]
+    public void WaitingForArrival_ZeppelinAtStopStillCreeping_StaysWaitingAtBoardingPosition()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        logic.Update(
+            boardingStop.WaitPosition,
+            0,
+            MakeZeppelinAtDock(0, ZeppelinUndercityOrgrimmar.GameObjectEntry, 1318.1f, -4658.0f, 71.9f),
+            DT);
+        var target = logic.Update(
+            boardingStop.WaitPosition,
+            0,
+            MakeZeppelinAtDock(0, ZeppelinUndercityOrgrimmar.GameObjectEntry, 1318.2f, -4658.0f, 71.9f),
+            5f);
+
+        Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.NotNull(boardingStop.BoardingPosition);
+        Assert.Equal(boardingStop.BoardingPosition!.X, target!.X, 1);
+        Assert.Equal(boardingStop.BoardingPosition.Y, target.Y, 1);
+        Assert.Equal(boardingStop.BoardingPosition.Z, target.Z, 1);
+    }
+
+    [Fact]
+    public void WaitingForArrival_ZeppelinAtStopStable_TransitionsToBoarding()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        var target = AdvanceStableZeppelinAtDock(logic, boardingStop.WaitPosition);
+
+        Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.NotNull(boardingStop.TransportBoardingOffset);
+        var expected = LocalToWorld(
+            boardingStop.TransportBoardingOffset!,
+            new Position(1318.1f, -4658.0f, 71.9f),
+            orientation: 0f);
+        Assert.Equal(expected.X, target!.X, 3);
+        Assert.Equal(expected.Y, target.Y, 3);
+        Assert.Equal(expected.Z, target.Z, 3);
+    }
+
+    [Fact]
+    public void WaitingForArrival_ZeppelinAtStopStable_UsesTransportLocalBoardingOffset()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+        const float orientation = -MathF.PI / 2f;
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        var target = AdvanceStableZeppelinAtDock(
+            logic,
+            boardingStop.WaitPosition,
+            MakeZeppelinAtDock(
+                0,
+                ZeppelinUndercityOrgrimmar.GameObjectEntry,
+                1318.1f,
+                -4658.0f,
+                71.9f,
+                orientation));
+
+        var expected = LocalToWorld(
+            boardingStop.TransportBoardingOffset!,
+            new Position(1318.1f, -4658.0f, 71.9f),
+            orientation);
+        Assert.NotNull(target);
+        Assert.Equal(expected.X, target!.X, 3);
+        Assert.Equal(expected.Y, target.Y, 3);
+        Assert.Equal(expected.Z, target.Z, 3);
+    }
+
+    [Fact]
+    public void WaitingForArrival_CrossMapDestinationReached_TransitionsToComplete()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        var target = logic.Update(destinationStop.WaitPosition, 0, nearbyObjects: null, elapsedSec: DT, currentMapId: destinationStop.MapId);
+
+        Assert.Equal(TransportPhase.Complete, logic.CurrentPhase);
+        Assert.Null(target);
     }
 
     [Fact]
@@ -120,6 +333,149 @@ public class TransportWaitingLogicTests
         logic.Update(UpperStop.WaitPosition, 0, null, 11f);
 
         Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+    }
+
+    [Fact]
+    public void Boarding_OnTransportAfterDefaultTimeout_TransitionsToRiding()
+    {
+        var logic = MakeBoardingLogic();
+
+        logic.Update(UpperStop.WaitPosition, currentTransportGuid: 12345, null, 11f);
+
+        Assert.Equal(TransportPhase.Riding, logic.CurrentPhase);
+    }
+
+    [Fact]
+    public void Boarding_ZeppelinOnTransportBeforeDeckOffset_StaysBoarding()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+        var sideOffset = new Position(6.7f, 0.1f, -18.6f);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        AdvanceStableZeppelinAtDock(logic, boardingStop.WaitPosition);
+        var target = logic.Update(
+            sideOffset,
+            currentTransportGuid: 0xABCUL,
+            nearbyObjects: MakeOrgrimmarUndercityZeppelinAtDock(),
+            elapsedSec: DT,
+            currentMapId: boardingStop.MapId,
+            currentIsOnTransport: true);
+
+        Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.NotNull(boardingStop.TransportBoardingOffset);
+        Assert.Equal(boardingStop.TransportBoardingOffset!.X, target!.X, 3);
+        Assert.Equal(boardingStop.TransportBoardingOffset.Y, target.Y, 3);
+        Assert.Equal(boardingStop.TransportBoardingOffset.Z, target.Z, 3);
+    }
+
+    [Fact]
+    public void Boarding_ZeppelinOnTransportAtDeckOffset_TransitionsToRiding()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        AdvanceStableZeppelinAtDock(logic, boardingStop.WaitPosition);
+        var target = logic.Update(
+            boardingStop.TransportBoardingOffset!,
+            currentTransportGuid: 0xABCUL,
+            nearbyObjects: MakeOrgrimmarUndercityZeppelinAtDock(),
+            elapsedSec: DT,
+            currentMapId: boardingStop.MapId,
+            currentIsOnTransport: true);
+
+        Assert.Equal(TransportPhase.Riding, logic.CurrentPhase);
+        Assert.Null(target);
+    }
+
+    [Fact]
+    public void Boarding_ZeppelinAtStop_WaitsPastElevatorBoardingTimeout()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        AdvanceStableZeppelinAtDock(logic, boardingStop.WaitPosition);
+        var target = logic.Update(boardingStop.WaitPosition, 0, MakeOrgrimmarUndercityZeppelinAtDock(), 11f);
+
+        Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.NotNull(boardingStop.TransportBoardingOffset);
+        var expected = LocalToWorld(
+            boardingStop.TransportBoardingOffset!,
+            new Position(1318.1f, -4658.0f, 71.9f),
+            orientation: 0f);
+        Assert.Equal(expected.X, target!.X, 3);
+        Assert.Equal(expected.Y, target.Y, 3);
+        Assert.Equal(expected.Z, target.Z, 3);
+    }
+
+    [Fact]
+    public void Boarding_ZeppelinGoneAfterDefaultTimeout_TransitionsBackToWaiting()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        AdvanceStableZeppelinAtDock(logic, boardingStop.WaitPosition);
+        var target = logic.Update(boardingStop.WaitPosition, 0, nearbyObjects: null, elapsedSec: 11f);
+
+        Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+        Assert.True(logic.MissedBoardingAttempt);
+        Assert.NotNull(target);
+        Assert.Equal(boardingStop.WaitPosition.X, target!.X, 1);
+        Assert.Equal(boardingStop.WaitPosition.Y, target.Y, 1);
+    }
+
+    [Fact]
+    public void Boarding_ZeppelinObjectMovesWithinStop_KeepsInitialBoardingWaypoint()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        var initialTarget = AdvanceStableZeppelinAtDock(logic, boardingStop.WaitPosition);
+        var movingObjectTarget = logic.Update(
+            boardingStop.WaitPosition,
+            0,
+            MakeZeppelinAtDock(0, ZeppelinUndercityOrgrimmar.GameObjectEntry, 1338f, -4639f, 71.9f),
+            DT);
+
+        Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
+        Assert.NotNull(initialTarget);
+        Assert.NotNull(movingObjectTarget);
+        Assert.Equal(initialTarget!.X, movingObjectTarget!.X, 3);
+        Assert.Equal(initialTarget.Y, movingObjectTarget.Y, 3);
+        Assert.Equal(initialTarget.Z, movingObjectTarget.Z, 3);
+    }
+
+    [Fact]
+    public void Boarding_ZeppelinFallsBelowDeck_FlagsMissedBoarding()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        AdvanceStableZeppelinAtDock(logic, boardingStop.WaitPosition);
+        var fallenPosition = new Position(
+            boardingStop.WaitPosition.X,
+            boardingStop.WaitPosition.Y,
+            boardingStop.WaitPosition.Z - 20f);
+        var target = logic.Update(fallenPosition, 0, MakeOrgrimmarUndercityZeppelinAtDock(), DT);
+
+        Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+        Assert.True(logic.MissedBoardingAttempt);
+        Assert.NotNull(target);
+        Assert.Equal(boardingStop.WaitPosition.X, target!.X, 1);
+        Assert.Equal(boardingStop.WaitPosition.Y, target.Y, 1);
     }
 
     [Fact]
@@ -158,6 +514,72 @@ public class TransportWaitingLogicTests
         logic.Update(new Position(100, 100, 10), currentTransportGuid: 0, null, DT);
 
         Assert.Equal(TransportPhase.Complete, logic.CurrentPhase);
+    }
+
+    [Fact]
+    public void Riding_CrossMapZeppelinGuidDropAwayFromDestination_StaysRiding()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = MakeZeppelinRidingLogic(boardingStop, destinationStop);
+
+        var target = logic.Update(
+            new Position(2995.2f, 1739.2f, -2.1f),
+            currentTransportGuid: 0,
+            nearbyObjects: null,
+            elapsedSec: DT,
+            currentMapId: destinationStop.MapId,
+            currentIsOnTransport: false);
+
+        Assert.Equal(TransportPhase.Riding, logic.CurrentPhase);
+        Assert.Null(target);
+    }
+
+    [Fact]
+    public void Riding_CrossMapZeppelinGuidDropAtDestination_Completes()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = MakeZeppelinRidingLogic(boardingStop, destinationStop);
+
+        logic.Update(
+            destinationStop.WaitPosition,
+            currentTransportGuid: 0,
+            nearbyObjects: null,
+            elapsedSec: DT,
+            currentMapId: destinationStop.MapId,
+            currentIsOnTransport: false);
+
+        Assert.Equal(TransportPhase.Complete, logic.CurrentPhase);
+    }
+
+    [Fact]
+    public void Riding_ZeppelinAtDestination_ReturnsTransportLocalDisembarkWaypoint()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = MakeZeppelinRidingLogic(boardingStop, destinationStop);
+        var transportAtDestination = MakeZeppelinAtDock(
+            0,
+            ZeppelinUndercityOrgrimmar.GameObjectEntry,
+            destinationStop.WaitPosition.X + 10f,
+            destinationStop.WaitPosition.Y - 5f,
+            destinationStop.WaitPosition.Z + 30f,
+            orientation: 0f);
+
+        var target = logic.Update(
+            boardingStop.TransportBoardingOffset!,
+            currentTransportGuid: 0xABCUL,
+            nearbyObjects: transportAtDestination,
+            elapsedSec: DT,
+            currentMapId: destinationStop.MapId,
+            currentIsOnTransport: true);
+
+        Assert.Equal(TransportPhase.Disembarking, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.Equal(-10f, target!.X, 3);
+        Assert.Equal(5f, target.Y, 3);
+        Assert.Equal(-30f, target.Z, 3);
     }
 
     [Fact]
@@ -283,6 +705,113 @@ public class TransportWaitingLogicTests
         Assert.True(logic.IsTransportAtStop(objects, UpperStop));
     }
 
+    [Fact]
+    public void IsTransportAtStop_ZeppelinObjectOriginOffset_ReturnsTrue()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        Assert.True(logic.IsTransportAtStop(MakeOrgrimmarUndercityZeppelinAtDock(), boardingStop));
+    }
+
+    [Fact]
+    public void IsTransportAtStop_ZeppelinGuidDerivedEntry_ReturnsTrue()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        var objects = MakeZeppelinAtDock(
+            MovingTransportGuid(ZeppelinUndercityOrgrimmar.GameObjectEntry),
+            reportedEntry: 0);
+
+        Assert.True(logic.IsTransportAtStop(objects, boardingStop));
+    }
+
+    [Fact]
+    public void IsTransportAtStop_ZeppelinWrongReportedEntryButCorrectGuid_ReturnsTrue()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        var objects = MakeZeppelinAtDock(
+            MovingTransportGuid(ZeppelinUndercityOrgrimmar.GameObjectEntry),
+            reportedEntry: ZeppelinOrgrimmarGromgol.GameObjectEntry);
+
+        Assert.True(logic.IsTransportAtStop(objects, boardingStop));
+    }
+
+    [Fact]
+    public void IsTransportAtStop_ZeppelinSameDisplayWrongEntry_ReturnsFalse()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        Assert.False(logic.IsTransportAtStop(MakeOrgrimmarGromgolZeppelinAtDock(), boardingStop));
+    }
+
+    [Fact]
+    public void IsTransportAtStop_ZeppelinSameDisplayWrongGuidEntry_ReturnsFalse()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        var objects = MakeZeppelinAtDock(
+            MovingTransportGuid(ZeppelinOrgrimmarGromgol.GameObjectEntry),
+            reportedEntry: 0);
+
+        Assert.False(logic.IsTransportAtStop(objects, boardingStop));
+    }
+
+    [Fact]
+    public void WaitingForArrival_ZeppelinObjectOriginOffset_ReturnsTransportLocalDeckBoardingWaypoint()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        var target = AdvanceStableZeppelinAtDock(logic, boardingStop.WaitPosition);
+
+        Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.NotNull(boardingStop.TransportBoardingOffset);
+        var expected = LocalToWorld(
+            boardingStop.TransportBoardingOffset!,
+            new Position(1318.1f, -4658.0f, 71.9f),
+            orientation: 0f);
+        Assert.Equal(expected.X, target!.X, 3);
+        Assert.Equal(expected.Y, target.Y, 3);
+        Assert.Equal(expected.Z, target.Z, 3);
+        Assert.True(
+            boardingStop.TransportBoardingOffset.Y <= -3.0f,
+            "The zeppelin boarding offset should be inside the lower deck surface, not at the side contact edge.");
+        Assert.True(
+            DistanceXY(target, boardingStop.BoardingPosition!) > 2.0f,
+            "Active boarding waypoint should advance beyond the configured staging point once the stopped zeppelin is present.");
+    }
+
+    [Fact]
+    public void WaitingForArrival_ZeppelinSameDisplayWrongEntry_StaysAtWaitPosition()
+    {
+        var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        var target = logic.Update(boardingStop.WaitPosition, 0, MakeOrgrimmarGromgolZeppelinAtDock(), DT);
+
+        Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+        Assert.NotNull(target);
+        Assert.Equal(boardingStop.WaitPosition.X, target!.X, 1);
+        Assert.Equal(boardingStop.WaitPosition.Y, target.Y, 1);
+        Assert.Equal(boardingStop.WaitPosition.Z, target.Z, 1);
+    }
+
     // =====================================================================
     // TransportData LOOKUP TESTS
     // =====================================================================
@@ -323,8 +852,8 @@ public class TransportWaitingLogicTests
         Assert.NotNull(result);
         Assert.Same(ZeppelinUndercityOrgrimmar, result);
         Assert.Equal("Zeppelin: Orgrimmar <-> Undercity", result.Name);
-        AssertHasStopNear(result, 1, new Position(1320.0f, -4649.0f, 53.0f), 2f);
-        AssertHasStopNear(result, 0, new Position(2066.0f, 288.0f, 97.0f), 2f);
+        AssertHasStopNear(result, 1, new Position(1320.142944f, -4653.158691f, 53.891945f), 2f);
+        AssertHasStopNear(result, 0, new Position(2066.911377f, 290.113708f, 97.031593f), 2f);
         Assert.DoesNotContain(result.Stops, stop => IsStopNear(stop, 0, new Position(-12407.0f, 214.0f, 32.0f), 50f));
     }
 
@@ -342,6 +871,22 @@ public class TransportWaitingLogicTests
         Assert.DoesNotContain(gromgolUndercity.Stops, stop => IsStopNear(stop, 1, new Position(1320.0f, -4649.0f, 53.0f), 20f));
         AssertHasStopNear(orgrimmarGromgol, 1, new Position(1317.0f, -4652.0f, 53.0f), 2f);
         AssertHasStopNear(orgrimmarGromgol, 0, new Position(-12407.0f, 214.0f, 32.0f), 10f);
+    }
+
+    [Fact]
+    public void FindByGuid_MovingTransportGuid_ReturnsOrgrimmarUndercityZeppelin()
+    {
+        var result = TransportData.FindByGuid(MovingTransportGuid(ZeppelinUndercityOrgrimmar.GameObjectEntry));
+
+        Assert.Same(ZeppelinUndercityOrgrimmar, result);
+    }
+
+    [Fact]
+    public void FindByGuid_StaticTransportGuid_ReturnsElevator()
+    {
+        var result = TransportData.FindByGuid(StaticTransportGuid(UndercityElevatorWest.GameObjectEntry));
+
+        Assert.Same(UndercityElevatorWest, result);
     }
 
     [Fact]
@@ -420,6 +965,41 @@ public class TransportWaitingLogicTests
         return logic;
     }
 
+    private static TransportWaitingLogic MakeZeppelinRidingLogic(
+        TransportStop boardingStop,
+        TransportStop destinationStop)
+    {
+        var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+        logic.Update(boardingStop.WaitPosition, 0, null, DT);
+        Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+        AdvanceStableZeppelinAtDock(logic, boardingStop.WaitPosition);
+        Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
+        logic.Update(
+            boardingStop.TransportBoardingOffset!,
+            0xABCUL,
+            MakeOrgrimmarUndercityZeppelinAtDock(),
+            DT,
+            boardingStop.MapId,
+            currentIsOnTransport: true);
+        Assert.Equal(TransportPhase.Riding, logic.CurrentPhase);
+        return logic;
+    }
+
+    private static Position? AdvanceStableZeppelinAtDock(
+        TransportWaitingLogic logic,
+        Position currentPosition,
+        IReadOnlyList<DynamicObjectProto>? nearbyObjects = null)
+    {
+        var objects = nearbyObjects ?? MakeOrgrimmarUndercityZeppelinAtDock();
+        var waitingTarget = logic.Update(currentPosition, 0, objects, DT);
+        Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
+        Assert.NotNull(waitingTarget);
+
+        var boardingTarget = logic.Update(currentPosition, 0, objects, 5f);
+        Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
+        return boardingTarget;
+    }
+
     private static void AssertHasStopNear(TransportDefinition transport, uint mapId, Position expected, float maxDistance)
     {
         Assert.Contains(transport.Stops, stop => IsStopNear(stop, mapId, expected, maxDistance));
@@ -436,6 +1016,23 @@ public class TransportWaitingLogicTests
         return MathF.Sqrt(dx * dx + dy * dy + dz * dz) <= maxDistance;
     }
 
+    private static float DistanceXY(Position a, Position b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        return MathF.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static Position LocalToWorld(Position localPosition, Position transportPosition, float orientation)
+    {
+        var cos = MathF.Cos(orientation);
+        var sin = MathF.Sin(orientation);
+        return new Position(
+            transportPosition.X + (localPosition.X * cos) - (localPosition.Y * sin),
+            transportPosition.Y + (localPosition.X * sin) + (localPosition.Y * cos),
+            transportPosition.Z + localPosition.Z);
+    }
+
     private static List<DynamicObjectProto> MakeElevatorAtZ(float z)
     {
         return
@@ -449,4 +1046,44 @@ public class TransportWaitingLogicTests
             }
         ];
     }
+
+    private static List<DynamicObjectProto> MakeOrgrimmarUndercityZeppelinAtDock()
+        => MakeZeppelinAtDock(
+            guid: 0,
+            reportedEntry: ZeppelinUndercityOrgrimmar.GameObjectEntry);
+
+    private static List<DynamicObjectProto> MakeOrgrimmarGromgolZeppelinAtDock()
+        => MakeZeppelinAtDock(
+            guid: 0,
+            reportedEntry: ZeppelinOrgrimmarGromgol.GameObjectEntry);
+
+    private static List<DynamicObjectProto> MakeZeppelinAtDock(
+        ulong guid,
+        uint reportedEntry,
+        float x = 1318.1f,
+        float y = -4658.0f,
+        float z = 71.9f,
+        float orientation = 0f)
+    {
+        return
+        [
+            new DynamicObjectProto
+            {
+                Guid = guid,
+                Entry = reportedEntry,
+                DisplayId = ZeppelinUndercityOrgrimmar.DisplayId,
+                X = x,
+                Y = y,
+                Z = z,
+                Orientation = orientation,
+                Scale = 1f
+            }
+        ];
+    }
+
+    private static ulong MovingTransportGuid(uint entry)
+        => 0x1FC0000000000000UL | entry;
+
+    private static ulong StaticTransportGuid(uint entry, ulong low = 1)
+        => 0xF120000000000000UL | ((ulong)entry << 24) | (low & 0x00FFFFFFUL);
 }

@@ -35,6 +35,12 @@ Rules:
 - Keep interfaces/contracts in lower layers, implementations in higher layers.
 - Do not add upward dependencies (for example, Exports project depending on Services/UI).
 - If you must alter cross-layer contracts, update all impacted consumers and tests in one change.
+- Static world collision belongs in generated navigation data. Do not hardcode
+  route-specific blocker coordinates, clearance cylinders, detour waypoints, or
+  live-position guards in production pathfinding/BotRunner code to make a route
+  pass. If a generated route clips a bonfire, tree, corner, support, or other
+  static gameobject, fix the GO-aware mmap generation/data and keep the offline
+  route gate red until the regenerated mmaps avoid it naturally.
 
 ## 4. Repository Map
 

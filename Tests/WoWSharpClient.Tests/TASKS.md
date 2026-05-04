@@ -12,6 +12,25 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-05-04 (scheduled zeppelin passive attach deck gate)
+- Pass result: focused movement-controller deterministic coverage passed
+  `76/76`.
+- Last delta:
+  - Updated scheduled-transport attach coverage so deck-height map-transfer
+    evidence still attaches while the old below-deck Orgrimmar zeppelin layer
+    is rejected.
+  - This pins the boarding/deck evidence needed by the long-pathing
+    Orgrimmar -> Undercity zeppelin work without adding route-specific
+    production exceptions.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=wowsharp_movement_scheduled_transport_attach_deck_gate.trx" --results-directory tmp/test-runtime/results-wowsharp` -> `passed (76/76)`.
+- Files changed:
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+  - `Exports/WoWSharpClient/TASKS.md`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
 ### 2026-04-29 (Undercity elevator transport-local parity)
 - Pass result: focused transport-controller slice passed `8/8`.
 - Last delta:

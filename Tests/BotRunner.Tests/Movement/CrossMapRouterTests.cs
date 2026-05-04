@@ -1,6 +1,7 @@
 using BotRunner.Combat;
 using BotRunner.Movement;
 using GameData.Core.Models;
+using System;
 using System.Linq;
 
 namespace BotRunner.Tests.Movement;
@@ -8,6 +9,7 @@ namespace BotRunner.Tests.Movement;
 public class CrossMapRouterTests
 {
     private readonly CrossMapRouter _router = new();
+    private static readonly Position OrgrimmarUndercityZeppelinBoardingPoint = new(1320.142944f, -4653.158691f, 53.891945f);
 
     [Fact]
     public void CrossroadsToUndercity_HordeUsesTaxiToOrgrimmarThenZeppelin()
@@ -32,13 +34,20 @@ public class CrossMapRouterTests
                 Assert.Equal(25u, leg.FlightStartNodeId);
                 Assert.Equal(23u, leg.FlightEndNodeId);
             },
-            leg => Assert.Equal(TransitionType.Walk, leg.Type),
+            leg =>
+            {
+                Assert.Equal(TransitionType.Walk, leg.Type);
+                AssertNear(OrgrimmarUndercityZeppelinBoardingPoint, leg.End, xyTolerance: 2f, zTolerance: 1f);
+            },
             leg =>
             {
                 Assert.Equal(TransitionType.Zeppelin, leg.Type);
                 Assert.NotNull(leg.Transport);
                 Assert.Contains("Orgrimmar", leg.Transport!.Name);
                 Assert.Contains("Undercity", leg.Transport.Name);
+                AssertNear(OrgrimmarUndercityZeppelinBoardingPoint, leg.Start, xyTolerance: 2f, zTolerance: 1f);
+                Assert.NotNull(leg.BoardStop);
+                AssertNear(OrgrimmarUndercityZeppelinBoardingPoint, leg.BoardStop!.WaitPosition, xyTolerance: 2f, zTolerance: 1f);
             },
             leg => Assert.Equal(TransitionType.Walk, leg.Type));
 
@@ -126,7 +135,7 @@ public class CrossMapRouterTests
     public void Map1ToMap0_Horde_ZeppelinRoute()
     {
         // Orgrimmar (Kalimdor) → Undercity (EK)
-        var start = new Position(1320, -4649, 53);    // Near Org zeppelin tower
+        var start = OrgrimmarUndercityZeppelinBoardingPoint;    // Near Org zeppelin tower
         var end = new Position(1700, 200, 50);         // Somewhere in UC area
 
         var legs = _router.PlanRoute(1, start, 0, end,
@@ -306,5 +315,11 @@ public class CrossMapRouterTests
 
         Assert.NotNull(t);
         Assert.Equal(TransitionType.Zeppelin, t.Type);
+    }
+
+    private static void AssertNear(Position expected, Position actual, float xyTolerance, float zTolerance)
+    {
+        Assert.InRange(actual.DistanceTo2D(expected), 0f, xyTolerance);
+        Assert.InRange(MathF.Abs(actual.Z - expected.Z), 0f, zTolerance);
     }
 }

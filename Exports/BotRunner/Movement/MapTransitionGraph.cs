@@ -147,14 +147,14 @@ public static class MapTransitionGraph
             FactionRestriction: FlightPathData.Faction.Alliance),
 
         // --- ZEPPELINS (Horde) ---
-        new(MAP_EASTERN_KINGDOMS, new Position(2066f, 288f, 97f),
-            MAP_KALIMDOR, new Position(1320f, -4649f, 53f),
+        new(MAP_EASTERN_KINGDOMS, new Position(2066.911377f, 290.113708f, 97.031593f),
+            MAP_KALIMDOR, new Position(1320.142944f, -4653.158691f, 53.891945f),
             TransitionType.Zeppelin, ZeppelinUndercityOrgrimmar,
             EstimatedTransitTimeSec: 60f,
             FactionRestriction: FlightPathData.Faction.Horde),
 
-        new(MAP_KALIMDOR, new Position(1320f, -4649f, 53f),
-            MAP_EASTERN_KINGDOMS, new Position(2066f, 288f, 97f),
+        new(MAP_KALIMDOR, new Position(1320.142944f, -4653.158691f, 53.891945f),
+            MAP_EASTERN_KINGDOMS, new Position(2066.911377f, 290.113708f, 97.031593f),
             TransitionType.Zeppelin, ZeppelinUndercityOrgrimmar,
             EstimatedTransitTimeSec: 60f,
             FactionRestriction: FlightPathData.Faction.Horde),

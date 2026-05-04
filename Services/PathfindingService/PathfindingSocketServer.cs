@@ -2,6 +2,7 @@ using BotCommLayer;
 using GameData.Core.Models;
 using Pathfinding;
 using PathfindingService.Repository;
+using PathfindingService.RoutePacks;
 using GameData.Core.Constants;
 using GameData.Core.Enums;
 using System.Text.Json;
@@ -65,6 +66,7 @@ namespace PathfindingService
         : ProtobufSocketServer<PathfindingRequest, PathfindingResponse>(ipAddress, port, logger)
     {
         private Navigation _navigation;
+        private StaticRoutePackCache? _mainPathCache;
         private readonly RequestScopedDynamicObjectOverlay _dynamicObjectOverlay = new(new NativeDynamicObjectOverlayRegistry());
         private volatile bool _isInitialized;
         private readonly object _initLock = new();
@@ -83,6 +85,7 @@ namespace PathfindingService
                 logger.LogInformation("Loading Navigation data and preloading maps...");
                 _navigation = new Navigation();
                 logger.LogInformation("Navigation loaded in {Elapsed:F1}s", initSw.Elapsed.TotalSeconds);
+                WarmStaticRoutePacks();
 
                 _isInitialized = true;
 
@@ -92,6 +95,31 @@ namespace PathfindingService
                 WriteStatus(true, "Ready - navigation initialized", loadedMaps);
                 logger.LogInformation("Navigation system initialized.");
             }
+        }
+
+        private void WarmStaticRoutePacks()
+        {
+            var warmSw = System.Diagnostics.Stopwatch.StartNew();
+            _mainPathCache = new StaticRoutePackCache(
+                StaticRoutePackCache.CreateDefaultSeeds(),
+                new FileSystemNavigationDataSignatureProvider(),
+                seed =>
+                {
+                    var (radius, height) = seed.Capsule;
+                    return _navigation.CalculateValidatedPath(
+                        seed.MapId,
+                        seed.StartAnchor,
+                        seed.EndAnchor,
+                        seed.SmoothPath,
+                        radius,
+                        height);
+                });
+
+            _mainPathCache.WarmUpAll(logger);
+            logger.LogInformation(
+                "[ROUTE_PACK] startup warmup completed in {ElapsedMs}ms packs={PackCount}",
+                warmSw.ElapsedMilliseconds,
+                _mainPathCache.Count);
         }
 
         private static void DiagnoseNativePathfinding(ILogger logger)
@@ -195,21 +223,59 @@ namespace PathfindingService
                 "[PATH_DIAG] id={RequestId} race={Race} gender={Gender} capsule=({Radius:F4},{Height:F4}) start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1})",
                 requestId, req.Race, req.Gender, agentRadius, agentHeight, start.X, start.Y, start.Z, end.X, end.Y, end.Z);
 
-            OverlayExecutionResult<NavigationPathResult> overlayResult;
+            NavigationPathResult pathResult;
+            StaticRoutePackMatch? routePackMatch = null;
             try
             {
-                overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
-                    req.MapId, req.NearbyObjects,
-                    () => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight, agentRadius, agentHeight),
-                    logger, operationName: "path");
+                var routePackDynamicObjects = req.NearbyObjects
+                    .Select(static obj => new StaticRoutePackDynamicObject(
+                        obj.DisplayId,
+                        new XYZ(obj.X, obj.Y, obj.Z),
+                        obj.Scale > 0f && float.IsFinite(obj.Scale) ? obj.Scale : 1f))
+                    .ToArray();
+                var routePackRequest = new StaticRoutePackRequest(
+                    req.MapId,
+                    start,
+                    end,
+                    (Race)req.Race,
+                    (Gender)req.Gender,
+                    req.Straight,
+                    StaticRoutePackCache.DefaultRoutePolicy,
+                    req.NearbyObjects.Count,
+                    routePackDynamicObjects);
+
+                if (_mainPathCache is not null &&
+                    _mainPathCache.TryGetPath(routePackRequest, agentRadius, agentHeight, out pathResult, out var match))
+                {
+                    routePackMatch = match;
+                }
+                else
+                {
+                    var overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
+                        req.MapId, req.NearbyObjects,
+                        () => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight, agentRadius, agentHeight),
+                        logger, operationName: "path");
+                    pathResult = overlayResult.Value;
+                }
             }
             finally
             {
                 slowRequestCts.Cancel();
             }
 
-            var pathResult = overlayResult.Value;
             var sanitizedPath = pathResult.Path.Where(IsFinitePoint).ToArray();
+            if (routePackMatch is StaticRoutePackMatch cacheHit)
+            {
+                logger.LogInformation(
+                    "[ROUTE_PACK] id={RequestId} hit seed={SeedId} result={Result} startSegment={StartSegment} corridorDist={CorridorDist:F2} corners={Corners} navSig={NavSig}",
+                    requestId,
+                    cacheHit.SeedId,
+                    cacheHit.Result,
+                    cacheHit.StartSegmentIndex,
+                    cacheHit.StartDistanceFromCorridor,
+                    sanitizedPath.Length,
+                    cacheHit.NavDataSignature.Length <= 12 ? cacheHit.NavDataSignature : cacheHit.NavDataSignature[..12]);
+            }
 
             logger.LogInformation(
                 "[PATH_DIAG] id={RequestId} result={Result} pathLen={PathLen} rawPathLen={RawPathLen} blockedIdx={BlockedIdx} blockedReason={BlockedReason} elapsedMs={ElapsedMs}",

@@ -51,6 +51,7 @@ internal static class PathRouteAssertions
         float maxWalkableValidationSegmentLength = 20.0f,
         int maxWalkableValidationChecks = int.MaxValue,
         float minLineOfSightValidationSegmentLength = 0.0f,
+        int maxLineOfSightValidationSegmentIndex = int.MaxValue,
         float maxResolvedWaypointZDelta = float.PositiveInfinity,
         int maxResolvedWaypointZDeltaCheckLimit = int.MaxValue,
         float agentRadius = 0.6f,
@@ -106,6 +107,7 @@ internal static class PathRouteAssertions
 
             var effectiveNext = rawNext;
             if (minLineOfSightValidationSegmentLength > 0
+                && i - 1 <= maxLineOfSightValidationSegmentIndex
                 && horizontal >= minLineOfSightValidationSegmentLength
                 && !LineOfSight(mapId, current, rawNext))
             {

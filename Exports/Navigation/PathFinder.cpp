@@ -32,6 +32,7 @@
 #include <chrono>
 #include <cstring>
 #include <algorithm>
+#include <limits>
 
 extern "C" uint32_t ValidateWalkableSegment(
     uint32_t mapId,
@@ -79,11 +80,27 @@ namespace
     constexpr float WallClearanceProbePadding = 1.25f;
     constexpr float WallClearanceMinAdjustment = 0.05f;
     constexpr float WallClearanceSampleSpacing = 2.0f;
+    constexpr float SmoothPathPreferredStaticClearance = 5.0f;
+    constexpr float WallClearanceCompletionTolerance = 0.5f;
+    constexpr int WallClearanceMaxIterations = 3;
     constexpr float MinDetourSegmentLength = 2.0f;
     constexpr float MaxDetourLengthInflation = 2.75f;
     constexpr float MinCandidateEndpointDistance = 1.0f;
+    constexpr float WallClearanceMaxSlopeRatio = 0.20f;
+    constexpr float SteepUphillMinRise = 0.75f;
+    constexpr float SteepUphillMinSlopeRatio = 0.45f;
+    constexpr float SteepUphillMaxSegmentLength = 6.0f;
+    constexpr float SteepUphillMaxDetourLengthInflation = 12.0f;
+    constexpr float SteepUphillWindowMinRise = 2.5f;
+    constexpr float SteepUphillWindowMinSlopeRatio = 0.20f;
+    constexpr float SteepUphillWindowMaxHorizontal = 16.0f;
+    constexpr float SteepUphillWindowMaxPathLength = 22.0f;
+    constexpr int SteepUphillWindowLookAheadSegments = 6;
+    constexpr int SteepUphillWindowForwardSegments = 2;
+    constexpr float SteepUphillWindowMinInteriorSeparation = 3.0f;
     constexpr float DetourAlongSamples[] = { 0.35f, 0.5f, 0.65f };
     constexpr float DetourLateralOffsets[] = { 2.0f, 4.0f, 6.0f, 8.0f, 10.0f, 12.0f };
+    constexpr float SteepUphillDetourLateralOffsets[] = { 12.0f, 10.0f, 8.0f, 6.0f, 4.0f, 2.0f };
 
     bool HasActiveDynamicObjectOverlay()
     {
@@ -101,6 +118,132 @@ namespace
         const float dx = end.x - start.x;
         const float dy = end.y - start.y;
         return std::sqrt((dx * dx) + (dy * dy));
+    }
+
+    bool IsLevelEnoughForWallClearance(const Vector3& start, const Vector3& end)
+    {
+        const float horizontal = HorizontalDistance(start, end);
+        if (horizontal < 0.01f)
+            return true;
+
+        return (std::fabs(end.z - start.z) / horizontal) <= WallClearanceMaxSlopeRatio;
+    }
+
+    bool IsSteepUphillSegment(const Vector3& start, const Vector3& end)
+    {
+        const float rise = end.z - start.z;
+        if (rise < SteepUphillMinRise)
+            return false;
+
+        const float horizontal = HorizontalDistance(start, end);
+        if (horizontal < MinDetourSegmentLength || horizontal > SteepUphillMaxSegmentLength)
+            return false;
+
+        return (rise / horizontal) >= SteepUphillMinSlopeRatio;
+    }
+
+    bool IsAbruptUphillSegment(const Vector3& start, const Vector3& end)
+    {
+        const float rise = end.z - start.z;
+        if (rise < SteepUphillMinRise)
+            return false;
+
+        const float horizontal = HorizontalDistance(start, end);
+        if (horizontal < RedundantPointDistanceThreshold || horizontal > SteepUphillWindowMaxHorizontal)
+            return false;
+
+        return (rise / horizontal) >= SteepUphillMinSlopeRatio || rise >= SteepUphillWindowMinRise;
+    }
+
+    float DistancePointToSegment2D(const Vector3& point, const Vector3& start, const Vector3& end)
+    {
+        const float vx = end.x - start.x;
+        const float vy = end.y - start.y;
+        const float wx = point.x - start.x;
+        const float wy = point.y - start.y;
+        const float lengthSq = (vx * vx) + (vy * vy);
+        float t = 0.0f;
+        if (lengthSq > 0.0001f)
+            t = std::clamp(((wx * vx) + (wy * vy)) / lengthSq, 0.0f, 1.0f);
+
+        const float closestX = start.x + (vx * t);
+        const float closestY = start.y + (vy * t);
+        const float dx = point.x - closestX;
+        const float dy = point.y - closestY;
+        return std::sqrt((dx * dx) + (dy * dy));
+    }
+
+    float PathHorizontalDistance(const PointsArray& pathPoints, size_t startIndex, size_t endIndex)
+    {
+        float distance = 0.0f;
+        for (size_t i = startIndex + 1; i <= endIndex && i < pathPoints.size(); ++i)
+            distance += HorizontalDistance(pathPoints[i - 1], pathPoints[i]);
+        return distance;
+    }
+
+    float MinInteriorSeparation(
+        const PointsArray& pathPoints,
+        size_t startIndex,
+        size_t endIndex,
+        const Vector3& candidate)
+    {
+        if (endIndex <= startIndex + 1)
+            return 0.0f;
+
+        float minDistance = std::numeric_limits<float>::max();
+        const Vector3& start = pathPoints[startIndex];
+        const Vector3& end = pathPoints[endIndex];
+        for (size_t i = startIndex + 1; i < endIndex; ++i)
+        {
+            const float firstLegDistance = DistancePointToSegment2D(pathPoints[i], start, candidate);
+            const float secondLegDistance = DistancePointToSegment2D(pathPoints[i], candidate, end);
+            minDistance = std::min(minDistance, std::min(firstLegDistance, secondLegDistance));
+        }
+
+        return minDistance;
+    }
+
+    bool TryFindUpcomingSteepUphillWindow(
+        const PointsArray& pathPoints,
+        size_t startIndex,
+        size_t* endIndex)
+    {
+        if (!endIndex || startIndex + 2 >= pathPoints.size())
+            return false;
+
+        const size_t maxScan = std::min(
+            pathPoints.size() - 1,
+            startIndex + static_cast<size_t>(SteepUphillWindowLookAheadSegments));
+
+        for (size_t scanIndex = startIndex + 1; scanIndex <= maxScan; ++scanIndex)
+        {
+            if (!IsAbruptUphillSegment(pathPoints[scanIndex - 1], pathPoints[scanIndex]))
+                continue;
+
+            size_t candidateEnd = scanIndex;
+            for (int step = 0; step < SteepUphillWindowForwardSegments && candidateEnd + 1 < pathPoints.size(); ++step)
+                ++candidateEnd;
+
+            const float directHorizontal = HorizontalDistance(pathPoints[startIndex], pathPoints[candidateEnd]);
+            if (directHorizontal < MinDetourSegmentLength || directHorizontal > SteepUphillWindowMaxHorizontal)
+                continue;
+
+            const float pathHorizontal = PathHorizontalDistance(pathPoints, startIndex, candidateEnd);
+            if (pathHorizontal > SteepUphillWindowMaxPathLength)
+                continue;
+
+            const float rise = pathPoints[candidateEnd].z - pathPoints[startIndex].z;
+            if (rise < SteepUphillWindowMinRise)
+                continue;
+
+            if ((rise / directHorizontal) < SteepUphillWindowMinSlopeRatio)
+                continue;
+
+            *endIndex = candidateEnd;
+            return true;
+        }
+
+        return false;
     }
 
     bool ValidatePathSegment(
@@ -161,6 +304,7 @@ namespace
         float alongFraction,
         float lateralOffset,
         int directionSign,
+        float maxDetourLengthInflation,
         Vector3* candidate)
     {
         if (!candidate)
@@ -197,7 +341,7 @@ namespace
         }
 
         const float detourLength = HorizontalDistance(start, detourPoint) + HorizontalDistance(detourPoint, end);
-        if (detourLength > (horizontalDistance * MaxDetourLengthInflation))
+        if (detourLength > (horizontalDistance * maxDetourLengthInflation))
             return false;
 
         *candidate = detourPoint;
@@ -266,7 +410,7 @@ namespace
                         return false;
 
                     Vector3 candidate;
-                    if (!TryBuildDetourCandidate(mapId, start, end, alongFraction, lateralOffset, directionSign, &candidate))
+                    if (!TryBuildDetourCandidate(mapId, start, end, alongFraction, lateralOffset, directionSign, MaxDetourLengthInflation, &candidate))
                         continue;
 
                     if (AppendRefinedCandidate(mapId, start, candidate, end, radius, height, depth, output, totalCalls))
@@ -276,6 +420,119 @@ namespace
         }
 
         return false;
+    }
+
+    bool TryAppendSteepUphillDetourSegment(
+        uint32_t mapId,
+        const Vector3& start,
+        const Vector3& end,
+        float radius,
+        float height,
+        int depth,
+        PointsArray& output,
+        int& totalCalls)
+    {
+        const float horizontalDistance = HorizontalDistance(start, end);
+        if (horizontalDistance < MinDetourSegmentLength)
+            return false;
+
+        for (const float alongFraction : DetourAlongSamples)
+        {
+            for (const float lateralOffset : SteepUphillDetourLateralOffsets)
+            {
+                for (int directionSign : { 1, -1 })
+                {
+                    if (totalCalls >= MaxRefinementTotalCalls)
+                        return false;
+
+                    Vector3 candidate;
+                    if (!TryBuildDetourCandidate(mapId, start, end, alongFraction, lateralOffset, directionSign, MaxDetourLengthInflation, &candidate))
+                        continue;
+
+                    if (AppendRefinedCandidate(mapId, start, candidate, end, radius, height, depth, output, totalCalls))
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    bool TryAppendSteepUphillWindowDetour(
+        uint32_t mapId,
+        const PointsArray& pathPoints,
+        size_t startIndex,
+        size_t endIndex,
+        float radius,
+        float height,
+        PointsArray& output,
+        int& totalCalls)
+    {
+        if (startIndex >= pathPoints.size() || endIndex >= pathPoints.size() || startIndex >= endIndex)
+            return false;
+
+        const Vector3& start = pathPoints[startIndex];
+        const Vector3& end = pathPoints[endIndex];
+        const float horizontalDistance = HorizontalDistance(start, end);
+        if (horizontalDistance < MinDetourSegmentLength)
+            return false;
+
+        bool found = false;
+        float bestScore = -std::numeric_limits<float>::max();
+        int bestTotalCalls = totalCalls;
+        PointsArray bestOutput;
+
+        for (const float alongFraction : DetourAlongSamples)
+        {
+            for (const float lateralOffset : SteepUphillDetourLateralOffsets)
+            {
+                for (int directionSign : { 1, -1 })
+                {
+                    if (totalCalls >= MaxRefinementTotalCalls)
+                        return found;
+
+                    Vector3 candidate;
+                    if (!TryBuildDetourCandidate(
+                        mapId,
+                        start,
+                        end,
+                        alongFraction,
+                        lateralOffset,
+                        directionSign,
+                        SteepUphillMaxDetourLengthInflation,
+                        &candidate))
+                    {
+                        continue;
+                    }
+
+                    const float interiorSeparation = MinInteriorSeparation(pathPoints, startIndex, endIndex, candidate);
+                    if (interiorSeparation < SteepUphillWindowMinInteriorSeparation)
+                        continue;
+
+                    PointsArray candidateOutput = output;
+                    int candidateTotalCalls = totalCalls;
+                    if (!AppendRefinedCandidate(mapId, start, candidate, end, radius, height, 0, candidateOutput, candidateTotalCalls))
+                        continue;
+
+                    const float detourLength = HorizontalDistance(start, candidate) + HorizontalDistance(candidate, end);
+                    const float score = interiorSeparation - (detourLength * 0.01f);
+                    if (!found || score > bestScore)
+                    {
+                        found = true;
+                        bestScore = score;
+                        bestTotalCalls = candidateTotalCalls;
+                        bestOutput.swap(candidateOutput);
+                    }
+                }
+            }
+        }
+
+        if (!found)
+            return false;
+
+        output.swap(bestOutput);
+        totalCalls = bestTotalCalls;
+        return true;
     }
 
     bool AppendRefinedSegment(
@@ -296,6 +553,13 @@ namespace
         uint32_t validation = SegmentValidationClear;
         if (ValidatePathSegment(mapId, start, end, radius, height, &adjustedEnd, &validation))
         {
+            if (IsSteepUphillSegment(start, adjustedEnd) &&
+                depth < MaxSegmentRefinementDepth &&
+                TryAppendSteepUphillDetourSegment(mapId, start, adjustedEnd, radius, height, depth, output, totalCalls))
+            {
+                return true;
+            }
+
             output.push_back(adjustedEnd);
             return true;
         }
@@ -356,6 +620,70 @@ namespace
         if (changed)
             pathPoints.swap(refined);
     }
+
+    void RefinePathForSteepUphill(uint32_t mapId, PointsArray& pathPoints, float radius, float height)
+    {
+        if (pathPoints.size() < 2)
+            return;
+
+        PointsArray refined;
+        refined.reserve(pathPoints.size() * 2);
+        refined.push_back(pathPoints.front());
+
+        bool changed = false;
+        int totalCalls = 0;
+        for (size_t i = 1; i < pathPoints.size();)
+        {
+            const Vector3 start = refined.back();
+            const Vector3 end = pathPoints[i];
+
+            size_t windowEndIndex = 0;
+            if (TryFindUpcomingSteepUphillWindow(pathPoints, i - 1, &windowEndIndex) &&
+                totalCalls < MaxRefinementTotalCalls)
+            {
+                const size_t beforeRefineSize = refined.size();
+                if (TryAppendSteepUphillWindowDetour(
+                    mapId,
+                    pathPoints,
+                    i - 1,
+                    windowEndIndex,
+                    radius,
+                    height,
+                    refined,
+                    totalCalls))
+                {
+                    changed = true;
+                    i = windowEndIndex + 1;
+                    continue;
+                }
+
+                refined.resize(beforeRefineSize);
+            }
+
+            if (!IsSteepUphillSegment(start, end) || totalCalls >= MaxRefinementTotalCalls)
+            {
+                refined.push_back(end);
+                ++i;
+                continue;
+            }
+
+            const size_t beforeRefineSize = refined.size();
+            if (TryAppendSteepUphillDetourSegment(mapId, start, end, radius, height, 0, refined, totalCalls))
+            {
+                changed = true;
+                ++i;
+                continue;
+            }
+
+            refined.resize(beforeRefineSize);
+            refined.push_back(end);
+            ++i;
+        }
+
+        if (changed)
+            pathPoints.swap(refined);
+    }
+
 
     constexpr int MaxSimplificationTotalCalls = 500;
 
@@ -443,45 +771,83 @@ namespace
         if (!std::isfinite(nearest[0]) || !std::isfinite(nearest[1]) || !std::isfinite(nearest[2]))
             return false;
 
-        float wallDistance = 0.0f;
-        float wallPos[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
-        float wallNormal[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
-        status = query->findDistanceToWall(
-            ref,
-            nearest,
-            requiredClearance + WallClearanceProbePadding,
-            &filter,
-            &wallDistance,
-            wallPos,
-            wallNormal);
-        if (dtStatusFailed(status) || !std::isfinite(wallDistance))
-            return false;
-        if (!std::isfinite(wallNormal[0]) || !std::isfinite(wallNormal[2]))
-            return false;
-
         const float targetClearance = requiredClearance + WallClearanceSafetyMargin;
-        if (wallDistance >= targetClearance)
+        bool changed = false;
+        float bestWallDistance = 0.0f;
+        for (int iteration = 0; iteration < WallClearanceMaxIterations; ++iteration)
+        {
+            float wallDistance = 0.0f;
+            float wallPos[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
+            float wallNormal[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
+            status = query->findDistanceToWall(
+                ref,
+                nearest,
+                requiredClearance + WallClearanceProbePadding,
+                &filter,
+                &wallDistance,
+                wallPos,
+                wallNormal);
+            if (dtStatusFailed(status) || !std::isfinite(wallDistance))
+                break;
+            if (!std::isfinite(wallNormal[0]) || !std::isfinite(wallNormal[2]))
+                break;
+            if (wallDistance >= targetClearance)
+                break;
+
+            const float nudge = targetClearance - wallDistance;
+            if (nudge <= WallClearanceMinAdjustment)
+                break;
+
+            float desired[VERTEX_SIZE] = {
+                nearest[0] + (wallNormal[0] * nudge),
+                nearest[1],
+                nearest[2] + (wallNormal[2] * nudge)
+            };
+            if (!std::isfinite(desired[0]) || !std::isfinite(desired[1]) || !std::isfinite(desired[2]))
+                break;
+
+            dtPolyRef adjustedRef = 0;
+            float adjusted[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
+            status = query->findNearestPoly(desired, extents, &filter, &adjustedRef, adjusted);
+            if (dtStatusFailed(status) || adjustedRef == INVALID_POLYREF)
+                break;
+            if (!std::isfinite(adjusted[0]) || !std::isfinite(adjusted[1]) || !std::isfinite(adjusted[2]))
+                break;
+
+            float adjustedWallDistance = 0.0f;
+            float adjustedWallPos[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
+            float adjustedWallNormal[VERTEX_SIZE] = { 0.0f, 0.0f, 0.0f };
+            status = query->findDistanceToWall(
+                adjustedRef,
+                adjusted,
+                requiredClearance + WallClearanceProbePadding,
+                &filter,
+                &adjustedWallDistance,
+                adjustedWallPos,
+                adjustedWallNormal);
+            if (dtStatusFailed(status) || !std::isfinite(adjustedWallDistance))
+                break;
+            if (adjustedWallDistance <= wallDistance + WallClearanceMinAdjustment)
+                break;
+
+            ref = adjustedRef;
+            dtVcopy(nearest, adjusted);
+            bestWallDistance = adjustedWallDistance;
+            changed = true;
+        }
+
+        if (!changed)
+            return false;
+        if (bestWallDistance < targetClearance - WallClearanceCompletionTolerance)
             return false;
 
-        const float nudge = targetClearance - wallDistance;
-        if (nudge <= WallClearanceMinAdjustment)
-            return false;
+        float adjustedHeight = nearest[1];
+        if (dtStatusSucceed(query->getPolyHeight(ref, nearest, &adjustedHeight)))
+            nearest[1] = adjustedHeight + 0.5f;
 
-        float adjusted[VERTEX_SIZE] = {
-            nearest[0] + (wallNormal[0] * nudge),
-            nearest[1],
-            nearest[2] + (wallNormal[2] * nudge)
-        };
-        if (!std::isfinite(adjusted[0]) || !std::isfinite(adjusted[1]) || !std::isfinite(adjusted[2]))
-            return false;
-
-        float adjustedHeight = adjusted[1];
-        if (dtStatusSucceed(query->getPolyHeight(ref, adjusted, &adjustedHeight)))
-            adjusted[1] = adjustedHeight + 0.5f;
-
-        point->x = adjusted[2];
-        point->y = adjusted[0];
-        point->z = adjusted[1];
+        point->x = nearest[2];
+        point->y = nearest[0];
+        point->z = nearest[1];
         return true;
     }
 
@@ -523,8 +889,9 @@ namespace
             const Vector3 segmentStart = adjusted.back();
             Vector3 segmentEnd = pathPoints[i];
             const float horizontal = HorizontalDistance(segmentStart, segmentEnd);
+            const bool allowWallClearance = IsLevelEnoughForWallClearance(segmentStart, segmentEnd);
 
-            if (horizontal > WallClearanceSampleSpacing && insertedPoints < MaxWallClearanceInsertedPoints)
+            if (allowWallClearance && horizontal > WallClearanceSampleSpacing && insertedPoints < MaxWallClearanceInsertedPoints)
             {
                 const int sampleCount = std::min(8, static_cast<int>(std::floor(horizontal / WallClearanceSampleSpacing)));
                 for (int sample = 1; sample < sampleCount && insertedPoints < MaxWallClearanceInsertedPoints; ++sample)
@@ -544,7 +911,8 @@ namespace
                 }
             }
 
-            if (i + 1 < pathPoints.size() &&
+            if (allowWallClearance &&
+                i + 1 < pathPoints.size() &&
                 TryPushPointAwayFromWall(query, filter, requiredClearance, &segmentEnd))
             {
                 changed = true;
@@ -983,7 +1351,12 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 		m_pathPoints[i] = Vector3(pathPoints[i * VERTEX_SIZE + 2], pathPoints[i * VERTEX_SIZE], pathPoints[i * VERTEX_SIZE + 1]);
 	}
 
-	ApplyWallClearanceToPath(m_navMeshQuery, m_filter, m_capsuleRadius, m_pathPoints);
+	const float wallClearance = m_useStraightPath
+		? m_capsuleRadius
+		: std::max(m_capsuleRadius, SmoothPathPreferredStaticClearance);
+	ApplyWallClearanceToPath(m_navMeshQuery, m_filter, wallClearance, m_pathPoints);
+	if (!m_useStraightPath)
+		RefinePathForSteepUphill(m_mapId, m_pathPoints, m_capsuleRadius, m_capsuleHeight);
 
     auto afterRefine = afterSmooth;
     auto afterSimplify = afterSmooth;

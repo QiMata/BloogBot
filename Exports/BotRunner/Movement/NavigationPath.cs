@@ -250,6 +250,7 @@ internal readonly record struct ValidatedPathResult(
     Position[] PlannedPath,
     bool UsedNearbyObjectOverlay,
     int NearbyObjectCount,
+    string? NearbyObjectSignature,
     bool SmoothPath,
     bool RejectedByDynamicBlocker);
 
@@ -263,7 +264,7 @@ public enum SegmentAffordance : byte
     Walk = 0,
     /// <summary>Upward slope or step (Z gain 1-3y, slope 15-45°).</summary>
     StepUp = 1,
-    /// <summary>Steep upward climb (Z gain or slope > 45°).</summary>
+    /// <summary>Severe upward climb beyond normal short stair/ramp risers.</summary>
     SteepClimb = 2,
     /// <summary>Moderate drop (Z loss 2-6y).</summary>
     Drop = 3,
@@ -288,6 +289,8 @@ public readonly record struct PathAffordanceInfo(
     float MaxSlopeAngleDeg)
 {
     public static PathAffordanceInfo Empty => new([], 0, 0, 0, 0, 0f, 0f, 0f);
+    private const float SevereUphillSlopeDeg = 45f;
+    private const float SevereUphillMinZDelta = 3.0f;
 
     public static PathAffordanceInfo Classify(Position[] waypoints)
     {
@@ -335,7 +338,7 @@ public readonly record struct PathAffordanceInfo(
                 affordance = SegmentAffordance.Drop;
                 dropCount++;
             }
-            else if (slopeDeg > 45f && dz > 0)
+            else if (slopeDeg > SevereUphillSlopeDeg && dz >= SevereUphillMinZDelta)
             {
                 affordance = SegmentAffordance.SteepClimb;
                 stepUpCount++;
@@ -400,9 +403,11 @@ public class NavigationPath(
     float capsuleHeight = 2.5f,
     Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? nearbyObjectProvider = null,
     Func<int>? stuckRecoveryGenerationProvider = null,
+    Action? beforePathCalculation = null,
     Race race = 0,
     Gender gender = 0,
-    bool supportsNativeLocalPhysicsQueries = true)
+    bool supportsNativeLocalPhysicsQueries = true,
+    bool tightenDenseWaypointAcceptance = false)
 {
     private readonly PathfindingClient? _pathfinding = pathfinding;
     private readonly Func<long> _tickProvider = tickProvider ?? (() => Environment.TickCount64);
@@ -418,8 +423,10 @@ public class NavigationPath(
     private readonly float _capsuleHeight = capsuleHeight;
     private readonly Func<Position, Position, IReadOnlyList<DynamicObjectProto>>? _nearbyObjectProvider = nearbyObjectProvider;
     private readonly Func<int>? _stuckRecoveryGenerationProvider = stuckRecoveryGenerationProvider;
+    private readonly Action? _beforePathCalculation = beforePathCalculation;
     private readonly Race _race = race;
     private readonly Gender _gender = gender;
+    private readonly bool _tightenDenseWaypointAcceptance = tightenDenseWaypointAcceptance;
     private Position[] _waypoints = [];
     private float[] _waypointAcceptanceRadii = [];
     private Position? _pathStartPosition;
@@ -498,18 +505,31 @@ public class NavigationPath(
     private int _losSkipCacheFarthest = -1;
     private long _losSkipCacheTick;
 
-    // Adaptive acceptance radius: turn angle at each waypoint determines how tightly
-    // the bot must follow it. Straight paths get MAX, sharp corners get MIN.
-    private const float MIN_ACCEPTANCE_RADIUS = 3.5f;     // at 90°+ corners — padded for execution tolerance
+    // Adaptive acceptance radius: turn angle and local segment density determine how tightly
+    // the bot must follow a waypoint. Dense obstacle detours need tighter commitment than
+    // broad road corners, even when probe heuristics are disabled for long travel.
+    private const float MIN_ACCEPTANCE_RADIUS = 3.5f;     // default 90°+ corner radius before dense-segment capping
     private const float MAX_ACCEPTANCE_RADIUS = 7f;       // on straight paths — wider corridor for smoother flow
     private const float SHARP_TURN_ANGLE_DEG = 90f;       // angle that maps to MIN
+    private const float DENSE_WAYPOINT_ACCEPTANCE_SEGMENT_FRACTION = 0.55f;
+    private const float DENSE_WAYPOINT_ACCEPTANCE_CAPSULE_MULTIPLIER = 3.55f;
+    private const float DENSE_STRAIGHT_TURN_ANGLE_DEG = 15f;
+    private const float DENSE_STRAIGHT_SEGMENT_CAPSULE_MULTIPLIER = 2.5f;
+    private const float DENSE_REVERSAL_TURN_ANGLE_DEG = 135f;
+    private const float DENSE_REVERSAL_MIN_SEGMENT_DISTANCE = 1.5f;
+    private const float DENSE_REVERSAL_ACCEPTANCE_CAPSULE_MULTIPLIER = 1.75f;
     private const float WAYPOINT_REACH_DISTANCE = 3.5f;   // default fallback (no radii computed)
     private const float WAYPOINT_VERTICAL_REACH_TOLERANCE = 1.25f;
     private const float WAYPOINT_VERTICAL_LAYER_DRIFT_TOLERANCE = 3.0f;
     private const float WAYPOINT_VERTICAL_LAYER_DRIFT_REACH_DISTANCE = 1.5f;
     private const float WAYPOINT_VERTICAL_LAYER_REPLAN_DISTANCE = 2.5f;
     private const float WAYPOINT_VERTICAL_LAYER_PROMOTION_MIN_2D = 6.0f;
+    private const float COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE = 2.75f;
+    private const float COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA = 0.4f;
+    private const float TIGHT_DESCENDING_TRANSITION_MAX_SEGMENT_DISTANCE = 5.5f;
+    private const float TIGHT_DESCENDING_TRANSITION_MIN_Z_DROP = 0.4f;
     private const float CORNER_COMMIT_DISTANCE = 1.25f;   // default fallback
+    private const float LONG_TRAVEL_AGENT_CORNER_COMMIT_RADIUS_MULTIPLIER = 1.75f;
     private const float WAYPOINT_OVERSHOOT_ADVANCE_EPSILON = 0.35f;
     private const float RECALCULATE_DISTANCE = 10f;
 
@@ -528,6 +548,11 @@ public class NavigationPath(
     private const float GAP_DETECTION_DEPTH_MIN = 3f;      // minimum gap depth to consider
     private const int RECALCULATE_COOLDOWN_MS = 2000;
     private const int DYNAMIC_BLOCKER_REPLAN_COOLDOWN_MS = 750;
+    private const int NEARBY_OBJECT_OVERLAY_REPLAN_COOLDOWN_MS = 2500;
+    private const int NEARBY_OBJECT_OVERLAY_REPLAN_LOOKAHEAD_SEGMENTS = 8;
+    private const float NEARBY_OBJECT_OVERLAY_REPLAN_CLEARANCE_PADDING = 2.5f;
+    private const float NEARBY_OBJECT_OVERLAY_REPLAN_MIN_CLEARANCE = 4.0f;
+    private const float NEARBY_OBJECT_OVERLAY_REPLAN_VERTICAL_PADDING = 4.0f;
     private const float STALLED_NEAR_WAYPOINT_DISTANCE = 8f;
     private const float STALLED_SAMPLE_POSITION_EPSILON = 0.15f;
     private const float STALLED_SAMPLE_DISTANCE_EPSILON = 0.1f;
@@ -571,6 +596,8 @@ public class NavigationPath(
     private readonly List<NavigationExecutionSample> _executionSamples = [];
     private bool _pendingDynamicBlockerReplan;
     private long _lastDynamicBlockerReplanTick;
+    private long _lastNearbyObjectOverlayReplanTick;
+    private string? _lastNearbyObjectOverlaySignature;
     private long _lastWaypointTick;
     private long _lastVerticalLayerReplanTick;
     private Position[] _traceServiceWaypoints = [];
@@ -699,6 +726,9 @@ public class NavigationPath(
         // Advance reached waypoints, but avoid skipping corner waypoints into blocked segments.
         AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
 
+        if (TryTriggerNearbyObjectOverlayReplan(currentPosition, destination, mapId))
+            AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+
         if (_currentIndex >= _waypoints.Length)
         {
             // If we're still not near the destination, recalculate path periodically.
@@ -804,8 +834,20 @@ public class NavigationPath(
             if (_consecutiveAvoidanceFailures >= MAX_AVOIDANCE_FAILURES
                 || _consecutiveWallHitSamples >= WALL_STUCK_THRESHOLD)
             {
-                CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.WallStuck);
-                AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+                var promotedExistingLongTravelCorridor =
+                    IsLongTravelStyleRoute()
+                    && TryPromoteLongTravelDestinationProgressWaypoint(
+                        currentPosition,
+                        destination,
+                        mapId,
+                        requireCorridorPreservation: true,
+                        traceReason: NavigationTraceReason.WallStuck);
+                if (!promotedExistingLongTravelCorridor)
+                {
+                    CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.WallStuck);
+                    AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+                }
+
                 _consecutiveWallHitSamples = 0;
                 _consecutiveAvoidanceFailures = 0;
                 _avoidanceWaypoint = null;
@@ -838,7 +880,7 @@ public class NavigationPath(
         // If the next waypoint remains near while the bot itself does not move,
         // skip it so callers don't repeatedly drive a blocked micro-corner.
         if (_lastWaypointSamplePosition != null
-            && waypointDistance <= STALLED_NEAR_WAYPOINT_DISTANCE
+            && waypointDistance <= GetStalledWaypointSampleDistanceLimit()
             && currentPosition.DistanceTo2D(_lastWaypointSamplePosition) <= STALLED_SAMPLE_POSITION_EPSILON
             && !float.IsNaN(_lastWaypointSampleDistance)
             && MathF.Abs(waypointDistance - _lastWaypointSampleDistance) <= STALLED_SAMPLE_DISTANCE_EPSILON)
@@ -846,6 +888,20 @@ public class NavigationPath(
             _stalledNearWaypointSamples++;
             if (_stalledNearWaypointSamples >= STALLED_SAMPLE_THRESHOLD)
             {
+                if (TryPromoteLongTravelDestinationProgressWaypoint(
+                    currentPosition,
+                    destination,
+                    mapId,
+                    requireCorridorPreservation: true,
+                    traceReason: NavigationTraceReason.StalledNearWaypoint))
+                {
+                    _lastWaypointSampleDistance = float.NaN;
+                    _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
+                    waypoint = _waypoints[_currentIndex];
+                    waypointDistance = currentPosition.DistanceTo2D(waypoint);
+                }
+                else
+                {
                 // In strict mode, never advance a stalled corner by index only.
                 // Recalculate so we keep following service-validated turns.
                 // Always recalculate when stalled — never advance by index alone.
@@ -873,7 +929,7 @@ public class NavigationPath(
                     }
                 }
 
-                TryPromoteLongTravelDestinationProgressWaypoint(currentPosition, destination);
+                TryPromoteLongTravelDestinationProgressWaypoint(currentPosition, destination, mapId);
 
                 if (TryStartDirectRecovery(currentPosition, destination, mapId, allowDirectRecovery, nowTick, out var directRecovery))
                 {
@@ -887,6 +943,7 @@ public class NavigationPath(
 
                 waypoint = _waypoints[_currentIndex];
                 waypointDistance = currentPosition.DistanceTo2D(waypoint);
+                }
             }
         }
         else
@@ -916,6 +973,44 @@ public class NavigationPath(
         }
 
         return RecordWaypointResult(currentPosition, destination, waypoint, usedDirectFallback: false, TRACE_RESOLUTION_WAYPOINT);
+    }
+
+    private float GetStalledWaypointSampleDistanceLimit()
+        => IsLongTravelStyleRoute()
+            ? LONG_TRAVEL_PROGRESS_PROMOTION_MAX_DISTANCE
+            : STALLED_NEAR_WAYPOINT_DISTANCE;
+
+    private bool IsLongTravelStyleRoute()
+        => !_enableProbeHeuristics && !_strictPathValidation && _requireVerticalWaypointArrival;
+
+    private float GetCornerCommitDistance()
+        => IsLongTravelStyleRoute() && _tightenDenseWaypointAcceptance
+            ? MathF.Max(CORNER_COMMIT_DISTANCE, _capsuleRadius * LONG_TRAVEL_AGENT_CORNER_COMMIT_RADIUS_MULTIPLIER)
+            : CORNER_COMMIT_DISTANCE;
+
+    public bool RecalculateAfterMovementStall(
+        Position currentPosition,
+        Position destination,
+        uint mapId,
+        float minWaypointDistance = 0f)
+    {
+        if (!_hasCalculatedPath)
+            return false;
+
+        if (TryPromoteLongTravelDestinationProgressWaypoint(
+            currentPosition,
+            destination,
+            mapId,
+            requireCorridorPreservation: true,
+            traceReason: NavigationTraceReason.StalledNearWaypoint))
+        {
+            return true;
+        }
+
+        CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.StalledNearWaypoint);
+        AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+        TryPromoteLongTravelDestinationProgressWaypoint(currentPosition, destination, mapId);
+        return _waypoints.Length > 0 && _currentIndex < _waypoints.Length;
     }
 
     /// <summary>
@@ -978,6 +1073,7 @@ public class NavigationPath(
             {
                 var d = currentPosition.DistanceTo2D(_waypoints[i]);
                 if (d < bestDist
+                    && CanSkipAheadOverDenseReversal(currentPosition, i)
                     && CanTreatWaypointAsReached(currentPosition, _waypoints[i], i)
                     && ShortcutPreservesWalkableCorridor(currentPosition, _waypoints[i], mapId))
                 {
@@ -1047,6 +1143,26 @@ public class NavigationPath(
             || upwardDelta <= WAYPOINT_VERTICAL_REACH_TOLERANCE)
         {
             return false;
+        }
+
+        if (IsUphillLayerProgression(currentPosition, activeWaypoint, _currentIndex)
+            && PreservesWalkableCorridor(currentPosition, activeWaypoint, mapId))
+        {
+            return false;
+        }
+
+        if (IsLongTravelStyleRoute()
+            && TryPromoteLongTravelDestinationProgressWaypoint(
+                currentPosition,
+                destination,
+                mapId,
+                requireCorridorPreservation: true,
+                traceReason: NavigationTraceReason.VerticalLayerMismatch))
+        {
+            waypoint = _currentIndex < _waypoints.Length
+                ? _waypoints[_currentIndex]
+                : null;
+            return true;
         }
 
         var nowTick = _tickProvider();
@@ -1145,6 +1261,18 @@ public class NavigationPath(
             if (distanceToCurrentWaypoint2D <= PATH_POINT_DEDUP_EPSILON)
                 return true;
 
+            if (distanceToCurrentWaypoint2D <= GetCornerCommitDistance())
+                return true;
+
+            if (ShouldHoldNearWaypointBeforeUphillLayerProgression(currentPosition, _currentIndex, distanceToCurrentWaypoint2D))
+                return false;
+
+            if (ShouldHoldNearWaypointBeforeCompactVerticalTransition(currentPosition, _currentIndex, distanceToCurrentWaypoint2D))
+                return false;
+
+            if (ShouldHoldNearWaypointBeforeTightDescendingTransition(currentPosition, _currentIndex, distanceToCurrentWaypoint2D))
+                return false;
+
             return ShortcutPreservesWalkableCorridor(currentPosition, _waypoints[_currentIndex + 1], mapId);
         }
 
@@ -1158,6 +1286,89 @@ public class NavigationPath(
 
         return TryGetLineOfSight(currentPosition, _waypoints[_currentIndex + 1], mapId, out var nextWaypointVisible)
             && nextWaypointVisible;
+    }
+
+    private bool ShouldHoldNearWaypointBeforeUphillLayerProgression(
+        Position currentPosition,
+        int waypointIndex,
+        float distanceToCurrentWaypoint2D)
+    {
+        if (!_requireVerticalWaypointArrival)
+            return false;
+
+        if (waypointIndex + 1 >= _waypoints.Length)
+            return false;
+
+        if (distanceToCurrentWaypoint2D <= GetCornerCommitDistance())
+            return false;
+
+        return IsUphillLayerProgression(
+            currentPosition,
+            _waypoints[waypointIndex + 1],
+            waypointIndex + 1);
+    }
+
+    private bool ShouldHoldNearWaypointBeforeCompactVerticalTransition(
+        Position currentPosition,
+        int waypointIndex,
+        float distanceToWaypoint2D)
+    {
+        if (!_requireVerticalWaypointArrival)
+            return false;
+
+        if (waypointIndex + 1 >= _waypoints.Length)
+            return false;
+
+        if (distanceToWaypoint2D <= GetCornerCommitDistance()
+            || distanceToWaypoint2D > STALLED_NEAR_WAYPOINT_DISTANCE)
+        {
+            return false;
+        }
+
+        var waypoint = _waypoints[waypointIndex];
+        if (!CanPromoteToWaypointOnCurrentLayer(currentPosition, waypoint))
+            return false;
+
+        var next = _waypoints[waypointIndex + 1];
+        if (waypoint.DistanceTo2D(next) > COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE)
+            return false;
+
+        return next.Z - waypoint.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
+    }
+
+    private bool ShouldHoldNearWaypointBeforeTightDescendingTransition(
+        Position currentPosition,
+        int waypointIndex,
+        float distanceToWaypoint2D)
+    {
+        if (!_requireVerticalWaypointArrival)
+            return false;
+
+        if (waypointIndex + 1 >= _waypoints.Length)
+            return false;
+
+        if (distanceToWaypoint2D <= GetCornerCommitDistance()
+            || distanceToWaypoint2D > STALLED_NEAR_WAYPOINT_DISTANCE)
+        {
+            return false;
+        }
+
+        var waypoint = _waypoints[waypointIndex];
+        if (!CanPromoteToWaypointOnCurrentLayer(currentPosition, waypoint))
+            return false;
+
+        var next = _waypoints[waypointIndex + 1];
+        if (waypoint.DistanceTo2D(next) > TIGHT_DESCENDING_TRANSITION_MAX_SEGMENT_DISTANCE)
+            return false;
+
+        if (waypoint.Z - next.Z < TIGHT_DESCENDING_TRANSITION_MIN_Z_DROP)
+            return false;
+
+        if (waypointIndex == 0)
+            return false;
+
+        var previous = _waypoints[waypointIndex - 1];
+        return previous.Z - waypoint.Z >= TIGHT_DESCENDING_TRANSITION_MIN_Z_DROP;
     }
 
     private bool CanAdvancePastOvershotWaypoint(Position currentPosition, uint mapId, float effectiveRadius)
@@ -1600,7 +1811,7 @@ public class NavigationPath(
         _traceRequestedDestination = ClonePosition(end);
         _traceServiceWaypoints = ClonePositions(path.RawPath);
         _tracePlannedWaypoints = ClonePositions(_waypoints);
-        _traceAffordances = PathAffordanceInfo.Classify(_waypoints);
+        _traceAffordances = ClassifyRouteAffordances(start, _waypoints);
         _traceRouteDecision = routeDecision;
         _tracePlanVersion++;
         _traceLastReplanReason = reason;
@@ -1608,6 +1819,7 @@ public class NavigationPath(
         _traceUsedDirectFallback = false;
         _traceUsedNearbyObjectOverlay = path.UsedNearbyObjectOverlay;
         _traceNearbyObjectCount = path.NearbyObjectCount;
+        _lastNearbyObjectOverlaySignature = path.NearbyObjectSignature;
         _traceSmoothPath = path.SmoothPath;
         _traceIsShortRoute = start.DistanceTo(end) <= SHORT_ROUTE_TRACE_DISTANCE;
         _traceLastPlanTick = _lastCalculationTick;
@@ -1742,6 +1954,17 @@ public class NavigationPath(
             return;
 
         UpdateStuckRecoveryStationaryCounter(currentPosition);
+
+        if (IsLongTravelStyleRoute()
+            && TryPromoteLongTravelDestinationProgressWaypoint(
+                currentPosition,
+                destination,
+                mapId,
+                requireCorridorPreservation: false,
+                traceReason: NavigationTraceReason.MovementStuckRecovery))
+        {
+            return;
+        }
 
         CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.MovementStuckRecovery);
         PromoteWaypointAfterStuckRecovery(
@@ -1925,7 +2148,12 @@ public class NavigationPath(
             usedEscalatedFallback);
     }
 
-    private bool TryPromoteLongTravelDestinationProgressWaypoint(Position currentPosition, Position destination)
+    private bool TryPromoteLongTravelDestinationProgressWaypoint(
+        Position currentPosition,
+        Position destination,
+        uint mapId,
+        bool requireCorridorPreservation = false,
+        string? traceReason = null)
     {
         if (_enableProbeHeuristics || _strictPathValidation || _waypoints.Length <= 1)
             return false;
@@ -1934,7 +2162,7 @@ public class NavigationPath(
         if (!float.IsFinite(currentDistanceToDestination))
             return false;
 
-        var scanEnd = Math.Min(_waypoints.Length - 1, LONG_TRAVEL_PROGRESS_PROMOTION_SCAN_LIMIT);
+        var scanEnd = Math.Min(_waypoints.Length - 1, _currentIndex + LONG_TRAVEL_PROGRESS_PROMOTION_SCAN_LIMIT);
         var startIndex = Math.Max(_currentIndex + 1, 1);
         var promoteIdx = -1;
         var promoteDist = float.MaxValue;
@@ -1952,6 +2180,13 @@ public class NavigationPath(
 
             if (!CanPromoteAcrossIntermediateWaypoints(currentPosition, index))
                 continue;
+
+            if (requireCorridorPreservation
+                && !PreservesWalkableCorridor(currentPosition, waypoint, mapId)
+                && !CanPromoteLongTravelWaypointByLocalPhysics(currentPosition, waypoint, mapId))
+            {
+                continue;
+            }
 
             var waypointDistanceToDestination = waypoint.DistanceTo2D(destination);
             if (!float.IsFinite(waypointDistanceToDestination)
@@ -1974,6 +2209,8 @@ public class NavigationPath(
         _stalledNearWaypointSamples = 0;
         _lastWaypointSampleDistance = float.NaN;
         _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
+        if (!string.IsNullOrWhiteSpace(traceReason))
+            _traceLastReplanReason = traceReason;
         Serilog.Log.Warning(
             "[NavigationPath] Long-travel stall promoted active waypoint to idx={Idx}/{Total} dist={Dist:F1}y destProgress={Progress:F1}y",
             _currentIndex,
@@ -1995,13 +2232,76 @@ public class NavigationPath(
             var waypoint = _waypoints[index];
             var verticalDelta = waypoint.Z - currentPosition.Z;
             if (verticalDelta <= WAYPOINT_VERTICAL_REACH_TOLERANCE)
+            {
+                var distanceToWaypoint2D = currentPosition.DistanceTo2D(waypoint);
+                if (ShouldHoldNearWaypointBeforeCompactVerticalTransition(currentPosition, index, distanceToWaypoint2D))
+                    return false;
+
+                if (ShouldHoldNearWaypointBeforeTightDescendingTransition(currentPosition, index, distanceToWaypoint2D))
+                    return false;
+
                 continue;
+            }
 
             if (IsUphillLayerProgression(currentPosition, waypoint, index))
                 return false;
+
+            if (ShouldHoldNearWaypointBeforeCompactVerticalTransition(
+                currentPosition,
+                index,
+                currentPosition.DistanceTo2D(waypoint)))
+            {
+                return false;
+            }
+
+            if (ShouldHoldNearWaypointBeforeTightDescendingTransition(
+                currentPosition,
+                index,
+                currentPosition.DistanceTo2D(waypoint)))
+            {
+                return false;
+            }
         }
 
         return true;
+    }
+
+    private bool CanPromoteLongTravelWaypointByLocalPhysics(Position currentPosition, Position waypoint, uint mapId)
+    {
+        if (_pathfinding == null || !_supportsNativeLocalPhysicsQueries)
+            return false;
+
+        var segmentDistance2D = currentPosition.DistanceTo2D(waypoint);
+        if (!float.IsFinite(segmentDistance2D)
+            || segmentDistance2D <= PATH_POINT_DEDUP_EPSILON
+            || segmentDistance2D > LONG_TRAVEL_PROGRESS_PROMOTION_MAX_DISTANCE)
+        {
+            return false;
+        }
+
+        var simulation = _pathfinding.SimulateLocalSegment(
+            mapId,
+            currentPosition,
+            waypoint,
+            _race,
+            _gender,
+            MathF.Min(LONG_TRAVEL_PROGRESS_PROMOTION_MAX_DISTANCE, segmentDistance2D + _capsuleRadius));
+
+        if (!simulation.Available || !simulation.Compatible)
+            return false;
+
+        if (simulation.MaxUpwardRouteZDelta > LOCAL_PHYSICS_ROUTE_LAYER_REJECT_Z_DELTA)
+            return false;
+
+        if (simulation.MaxLateralDistance > LOCAL_PHYSICS_ROUTE_LATERAL_REJECT_DISTANCE
+            && simulation.MaxAbsoluteRouteZDelta > LOCAL_PHYSICS_ROUTE_LAYER_REJECT_Z_DELTA)
+        {
+            return false;
+        }
+
+        var finalDistance2D = simulation.FinalPosition.DistanceTo2D(waypoint);
+        var arrivalTolerance = MathF.Max(CORNER_COMMIT_DISTANCE, _capsuleRadius * 2.5f);
+        return finalDistance2D <= arrivalTolerance;
     }
 
     private bool TryTriggerDynamicBlockerReplan(Position currentPosition, Position destination, uint mapId)
@@ -2018,6 +2318,124 @@ public class NavigationPath(
         _pendingDynamicBlockerReplan = false;
         CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.DynamicBlockerObserved);
         return true;
+    }
+
+    private bool TryTriggerNearbyObjectOverlayReplan(Position currentPosition, Position destination, uint mapId)
+    {
+        if (_nearbyObjectProvider == null || _waypoints.Length == 0 || _currentIndex >= _waypoints.Length)
+            return false;
+
+        if (IsLongTravelStyleRoute())
+            return false;
+
+        var nowTick = _tickProvider();
+        if (_lastNearbyObjectOverlayReplanTick != 0
+            && nowTick - _lastNearbyObjectOverlayReplanTick < NEARBY_OBJECT_OVERLAY_REPLAN_COOLDOWN_MS)
+        {
+            return false;
+        }
+
+        IReadOnlyList<DynamicObjectProto>? nearbyObjects;
+        try
+        {
+            nearbyObjects = _nearbyObjectProvider(currentPosition, destination);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (nearbyObjects is not { Count: > 0 })
+            return false;
+
+        var signature = BuildNearbyObjectOverlaySignature(nearbyObjects);
+        if (signature == null || string.Equals(signature, _lastNearbyObjectOverlaySignature, StringComparison.Ordinal))
+            return false;
+
+        if (!HasNearbyOverlayObjectOnActiveCorridor(currentPosition, nearbyObjects))
+            return false;
+
+        if (CanExecuteLongTravelActiveCorridorByLocalPhysics(currentPosition, mapId))
+            return false;
+
+        _lastNearbyObjectOverlayReplanTick = nowTick;
+        _lastNearbyObjectOverlaySignature = signature;
+        CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.DynamicBlockerObserved);
+        return true;
+    }
+
+    private bool CanExecuteLongTravelActiveCorridorByLocalPhysics(Position currentPosition, uint mapId)
+    {
+        if (_enableProbeHeuristics || _strictPathValidation || _waypoints.Length == 0 || _currentIndex >= _waypoints.Length)
+            return false;
+
+        var scanEnd = Math.Min(_waypoints.Length - 1, _currentIndex + 2);
+        for (var index = _currentIndex; index <= scanEnd; index++)
+        {
+            var waypoint = _waypoints[index];
+            if (currentPosition.DistanceTo2D(waypoint) <= PATH_POINT_DEDUP_EPSILON)
+                continue;
+
+            return CanPromoteLongTravelWaypointByLocalPhysics(currentPosition, waypoint, mapId);
+        }
+
+        return false;
+    }
+
+    private bool HasNearbyOverlayObjectOnActiveCorridor(Position currentPosition, IReadOnlyList<DynamicObjectProto> nearbyObjects)
+    {
+        var clearance = MathF.Max(NEARBY_OBJECT_OVERLAY_REPLAN_MIN_CLEARANCE, _capsuleRadius + NEARBY_OBJECT_OVERLAY_REPLAN_CLEARANCE_PADDING);
+        var verticalTolerance = MathF.Max(_capsuleHeight + NEARBY_OBJECT_OVERLAY_REPLAN_VERTICAL_PADDING, 8.0f);
+
+        var from = currentPosition;
+        var segmentCount = 0;
+        for (var i = _currentIndex; i < _waypoints.Length && segmentCount < NEARBY_OBJECT_OVERLAY_REPLAN_LOOKAHEAD_SEGMENTS; i++, segmentCount++)
+        {
+            var to = _waypoints[i];
+            foreach (var obj in nearbyObjects)
+            {
+                if (IsOverlayObjectNearSegment(obj, from, to, clearance, verticalTolerance))
+                    return true;
+            }
+
+            from = to;
+        }
+
+        return false;
+    }
+
+    private static bool IsOverlayObjectNearSegment(
+        DynamicObjectProto obj,
+        Position from,
+        Position to,
+        float maxDistance2D,
+        float maxVerticalDelta)
+    {
+        if (obj.DisplayId == 0
+            || !float.IsFinite(obj.X)
+            || !float.IsFinite(obj.Y)
+            || !float.IsFinite(obj.Z))
+        {
+            return false;
+        }
+
+        var dx = to.X - from.X;
+        var dy = to.Y - from.Y;
+        var lenSq = (dx * dx) + (dy * dy);
+        float t = 0.0f;
+        if (lenSq > 0.0001f)
+            t = Math.Clamp(((obj.X - from.X) * dx + (obj.Y - from.Y) * dy) / lenSq, 0.0f, 1.0f);
+
+        var projectedX = from.X + (dx * t);
+        var projectedY = from.Y + (dy * t);
+        var objectDx = obj.X - projectedX;
+        var objectDy = obj.Y - projectedY;
+        var distance2D = MathF.Sqrt((objectDx * objectDx) + (objectDy * objectDy));
+        if (distance2D > maxDistance2D)
+            return false;
+
+        var projectedZ = from.Z + ((to.Z - from.Z) * t);
+        return MathF.Abs(obj.Z - projectedZ) <= maxVerticalDelta;
     }
 
     private bool PreservesWalkableCorridor(Position from, Position to, uint mapId)
@@ -2316,6 +2734,8 @@ public class NavigationPath(
             var cappedFarthest = _nextSegmentBlocked
                 ? Math.Min(_losSkipCacheFarthest, _currentIndex + 1)
                 : _losSkipCacheFarthest;
+            while (cappedFarthest > _currentIndex && !CanSkipAheadOverDenseReversal(currentPosition, cappedFarthest))
+                cappedFarthest--;
             if (cappedFarthest > _currentIndex)
             {
                 _currentIndex = cappedFarthest;
@@ -2331,6 +2751,9 @@ public class NavigationPath(
 
         for (var candidate = _currentIndex + 1; candidate <= scanLimit; candidate++)
         {
+            if (!CanSkipAheadOverDenseReversal(currentPosition, candidate))
+                break;
+
             if (!TryGetLineOfSight(currentPosition, _waypoints[candidate], mapId, out var los) || !los)
                 break;
 
@@ -2353,6 +2776,45 @@ public class NavigationPath(
 
         _currentIndex = farthestVisible;
         return true;
+    }
+
+    private bool CanSkipAheadOverDenseReversal(Position currentPosition, int candidateIndex)
+    {
+        if (!_tightenDenseWaypointAcceptance)
+            return true;
+
+        var end = Math.Min(candidateIndex, _waypoints.Length);
+        for (var index = _currentIndex; index < end; index++)
+        {
+            if (!IsDenseReversalCommitWaypoint(index))
+                continue;
+
+            var radius = _waypointAcceptanceRadii.Length > index
+                ? _waypointAcceptanceRadii[index]
+                : CORNER_COMMIT_DISTANCE;
+            if (currentPosition.DistanceTo2D(_waypoints[index]) > MathF.Max(CORNER_COMMIT_DISTANCE, radius))
+                return false;
+        }
+
+        return true;
+    }
+
+    private bool IsDenseReversalCommitWaypoint(int index)
+    {
+        if (!_tightenDenseWaypointAcceptance
+            || index < 0
+            || index + 1 >= _waypoints.Length)
+        {
+            return false;
+        }
+
+        var prev = index == 0 ? _pathStartPosition : _waypoints[index - 1];
+        if (prev == null)
+            return false;
+
+        var curr = _waypoints[index];
+        var next = _waypoints[index + 1];
+        return IsMeaningfulDenseReversal(prev, curr, next);
     }
 
     private static bool HasDestinationProgress(Position start, Position end, IReadOnlyList<Position> path)
@@ -2523,7 +2985,7 @@ public class NavigationPath(
     private ValidatedPathResult GetValidatedPath(uint mapId, Position start, Position end, bool smoothPath)
     {
         if (_pathfinding == null)
-            return new([], [], false, 0, smoothPath, false);
+            return new([], [], false, 0, null, smoothPath, false);
 
         Metrics.IncrementPathsCalculated();
         var sw = Stopwatch.StartNew();
@@ -2544,7 +3006,10 @@ public class NavigationPath(
         var rawPathResult = usedNearbyObjectOverlay
             ? _pathfinding.GetPathResult(mapId, start, end, nearbyObjects, smoothPath, _race, _gender)
             : _pathfinding.GetPathResult(mapId, start, end, nearbyObjects: null, smoothPath, _race, _gender);
-        var rawPath = rawPathResult.Corners;
+        var serviceRejectedStaticBlock = IsServiceStaticBlock(rawPathResult);
+        var rawPath = serviceRejectedStaticBlock
+            ? Array.Empty<Position>()
+            : rawPathResult.Corners;
         var sanitizedPath = SanitizePath(rawPath);
         var prunedPath = _enableProbeHeuristics
             ? PruneProbeWaypoints(start, sanitizedPath)
@@ -2615,13 +3080,38 @@ public class NavigationPath(
         Metrics.RecordPathLength(result.Length);
         if (result.Length == 0)
             Metrics.IncrementPathsFailed();
-        return new(rawPath, result, usedNearbyObjectOverlay, nearbyObjectCount, smoothPath, rejectedByDynamicBlocker);
+        return new(rawPathResult.Corners, result, usedNearbyObjectOverlay, nearbyObjectCount, BuildNearbyObjectOverlaySignature(nearbyObjects), smoothPath, rejectedByDynamicBlocker);
     }
 
     private static bool IsServiceDynamicOverlayBlock(PathfindingRouteResult routeResult)
         => routeResult.Corners.Length == 0
             && (string.Equals(routeResult.Result, "blocked_by_dynamic_overlay", StringComparison.OrdinalIgnoreCase)
                 || routeResult.BlockedReason.StartsWith("dynamic_overlay", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsServiceStaticBlock(PathfindingRouteResult routeResult)
+        => routeResult.BlockedSegmentIndex.HasValue
+            && !routeResult.BlockedReason.StartsWith("dynamic_overlay", StringComparison.OrdinalIgnoreCase);
+
+    private static string? BuildNearbyObjectOverlaySignature(IReadOnlyList<DynamicObjectProto>? nearbyObjects)
+    {
+        if (nearbyObjects is not { Count: > 0 })
+            return null;
+
+        return string.Join(
+            "|",
+            nearbyObjects
+                .Where(obj => obj.DisplayId != 0
+                    && float.IsFinite(obj.X)
+                    && float.IsFinite(obj.Y)
+                    && float.IsFinite(obj.Z))
+                .OrderBy(obj => obj.Guid)
+                .ThenBy(obj => obj.DisplayId)
+                .Select(obj =>
+                    $"{obj.Guid:X}:{obj.DisplayId}:{QuantizeOverlayCoordinate(obj.X)}:{QuantizeOverlayCoordinate(obj.Y)}:{QuantizeOverlayCoordinate(obj.Z)}:{QuantizeOverlayCoordinate(obj.Scale)}:{obj.GoState}"));
+    }
+
+    private static int QuantizeOverlayCoordinate(float value)
+        => float.IsFinite(value) ? (int)MathF.Round(value * 10.0f) : 0;
 
     /// <summary>
     /// Phase 3a: Correct waypoint Z values using collision ground queries.
@@ -3032,6 +3522,15 @@ public class NavigationPath(
         if (force)
             Metrics.IncrementRecalculationsTriggered();
 
+        try
+        {
+            _beforePathCalculation?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Debug(ex, "[NavigationPath] before-path-calculation hook failed; continuing with path request.");
+        }
+
         _lastCalculationTick = nowTick;
         _hasCalculatedPath = true;
         _destination = end;
@@ -3058,7 +3557,7 @@ public class NavigationPath(
                 mapId,
                 start,
                 end,
-                new([], [], false, 0, _enableProbeHeuristics, false),
+                new([], [], false, 0, null, _enableProbeHeuristics, false),
                 NavigationRouteDecision.Empty,
                 reason);
             return;
@@ -3071,30 +3570,36 @@ public class NavigationPath(
             // When disabled (corpse runs), prefer non-smooth paths to avoid Detour
             // string-pulling routes through steep Z transitions that the headless
             // client can't safely descend.
-            var preferSmooth = _preferSmoothPath;
             var preferSaferAlternateOnReplan =
-                reason == NavigationTraceReason.MovementStuckRecovery
-                || reason == NavigationTraceReason.StalledNearWaypoint
-                || reason == NavigationTraceReason.VerticalLayerMismatch
-                || _stuckRecoveryStationaryCount >= STUCK_RECOVERY_STATIONARY_ESCALATION_THRESHOLD;
+                (reason == NavigationTraceReason.MovementStuckRecovery && !IsLongTravelStyleRoute())
+                || (reason == NavigationTraceReason.WallStuck && !IsLongTravelStyleRoute())
+                || reason == NavigationTraceReason.VerticalLayerMismatch;
+            var recoveryPrefersCorridorMode = _preferSmoothPath && preferSaferAlternateOnReplan;
+            var preferSmooth = _preferSmoothPath && !preferSaferAlternateOnReplan;
             var selectedPath = GetValidatedPath(mapId, start, end, smoothPath: preferSmooth);
-            var alternateEvaluated = false;
-            var alternateSelected = false;
+            var alternateEvaluated = recoveryPrefersCorridorMode;
+            var alternateSelected = recoveryPrefersCorridorMode;
             var endpointRetargeted = false;
 
-            var selectedAffordances = PathAffordanceInfo.Classify(selectedPath.PlannedPath);
+            var selectedAffordances = ClassifyRouteAffordances(start, selectedPath.PlannedPath);
+            var selectedRouteNeedsAlternateComparison =
+                !IsRouteSupported(selectedAffordances)
+                || selectedAffordances.DropCount > 0
+                || selectedAffordances.VerticalCount > 0
+                || HasSteepClimb(selectedAffordances);
+            var alternateModeAllowed =
+                _allowAlternatePathMode
+                || reason == NavigationTraceReason.VerticalLayerMismatch;
             var shouldCompareAlternate =
                 selectedPath.PlannedPath.Length == 0
-                || (_allowAlternatePathMode
-                    && (!IsRouteSupported(selectedAffordances)
-                        || selectedAffordances.DropCount > 0
-                        || selectedAffordances.VerticalCount > 0));
+                || (alternateModeAllowed && selectedRouteNeedsAlternateComparison);
             if (shouldCompareAlternate)
             {
                 alternateEvaluated = true;
                 var alternatePath = GetValidatedPath(mapId, start, end, smoothPath: !preferSmooth);
-                var alternateAffordances = PathAffordanceInfo.Classify(alternatePath.PlannedPath);
+                var alternateAffordances = ClassifyRouteAffordances(start, alternatePath.PlannedPath);
                 if (ShouldPreferAlternatePath(
+                    start,
                     selectedPath,
                     selectedAffordances,
                     alternatePath,
@@ -3122,7 +3627,7 @@ public class NavigationPath(
                 if (retargetedPath.PlannedPath.Length > 0)
                 {
                     selectedPath = retargetedPath;
-                    selectedAffordances = PathAffordanceInfo.Classify(selectedPath.PlannedPath);
+                    selectedAffordances = ClassifyRouteAffordances(start, selectedPath.PlannedPath);
                     _waypoints = selectedPath.PlannedPath;
                     endpointRetargeted = true;
                 }
@@ -3138,8 +3643,10 @@ public class NavigationPath(
             if (_enableProbeHeuristics)
             {
                 OffsetCornerWaypoints(mapId, start);
-                ComputeWaypointAcceptanceRadii(start);
             }
+
+            if (_enableProbeHeuristics || _tightenDenseWaypointAcceptance)
+                ComputeWaypointAcceptanceRadii(start);
 
             RecordCalculatedTrace(
                 mapId,
@@ -3149,6 +3656,7 @@ public class NavigationPath(
                 BuildRouteDecision(
                     selectedAffordances,
                     selectedPath.PlannedPath,
+                    start,
                     alternateEvaluated,
                     alternateSelected,
                     endpointRetargeted),
@@ -3167,13 +3675,14 @@ public class NavigationPath(
                 mapId,
                 start,
                 end,
-                new([], [], false, 0, _enableProbeHeuristics, false),
+                new([], [], false, 0, null, _enableProbeHeuristics, false),
                 NavigationRouteDecision.Empty,
                 reason);
         }
     }
 
     private static bool ShouldPreferAlternatePath(
+        Position start,
         ValidatedPathResult primaryPath,
         PathAffordanceInfo primaryAffordances,
         ValidatedPathResult alternatePath,
@@ -3197,8 +3706,8 @@ public class NavigationPath(
         if (!primarySupported && !alternateSupported)
             return false;
 
-        var primaryCost = ComputeRouteCost(primaryPath.PlannedPath, primaryAffordances);
-        var alternateCost = ComputeRouteCost(alternatePath.PlannedPath, alternateAffordances);
+        var primaryCost = ComputeRouteCost(start, primaryPath.PlannedPath, primaryAffordances);
+        var alternateCost = ComputeRouteCost(start, alternatePath.PlannedPath, alternateAffordances);
         var primarySeverity = ResolveRouteSeverity(primaryAffordances);
         var alternateSeverity = ResolveRouteSeverity(alternateAffordances);
 
@@ -3216,11 +3725,17 @@ public class NavigationPath(
     }
 
     private static bool IsRouteSupported(PathAffordanceInfo affordances)
-        => affordances.CliffCount == 0;
+        => affordances.CliffCount == 0
+            && affordances.VerticalCount == 0
+            && !HasSteepClimb(affordances);
+
+    private static bool HasSteepClimb(PathAffordanceInfo affordances)
+        => Array.IndexOf(affordances.Segments, SegmentAffordance.SteepClimb) >= 0;
 
     private static NavigationRouteDecision BuildRouteDecision(
         PathAffordanceInfo affordances,
         Position[] plannedPath,
+        Position start,
         bool alternateEvaluated,
         bool alternateSelected,
         bool endpointRetargeted)
@@ -3241,10 +3756,27 @@ public class NavigationPath(
             HasPath: true,
             IsSupported: IsRouteSupported(affordances),
             MaxAffordance: ResolveMaxAffordance(affordances),
-            EstimatedCost: ComputeRouteCost(plannedPath, affordances),
+            EstimatedCost: ComputeRouteCost(start, plannedPath, affordances),
             AlternateEvaluated: alternateEvaluated,
             AlternateSelected: alternateSelected,
             EndpointRetargeted: endpointRetargeted);
+    }
+
+    private static PathAffordanceInfo ClassifyRouteAffordances(Position start, Position[] plannedPath)
+    {
+        if (plannedPath.Length == 0)
+            return PathAffordanceInfo.Empty;
+
+        if (start.DistanceTo2D(plannedPath[0]) <= PATH_POINT_DEDUP_EPSILON
+            && MathF.Abs(start.Z - plannedPath[0].Z) <= 0.1f)
+        {
+            return PathAffordanceInfo.Classify(plannedPath);
+        }
+
+        var route = new Position[plannedPath.Length + 1];
+        route[0] = start;
+        Array.Copy(plannedPath, 0, route, 1, plannedPath.Length);
+        return PathAffordanceInfo.Classify(route);
     }
 
     private static SegmentAffordance ResolveMaxAffordance(PathAffordanceInfo affordances)
@@ -3258,7 +3790,7 @@ public class NavigationPath(
         if (affordances.DropCount > 0)
             return SegmentAffordance.Drop;
 
-        if (Array.IndexOf(affordances.Segments, SegmentAffordance.SteepClimb) >= 0)
+        if (HasSteepClimb(affordances))
             return SegmentAffordance.SteepClimb;
 
         if (affordances.StepUpCount > 0)
@@ -3279,12 +3811,12 @@ public class NavigationPath(
             _ => 0,
         };
 
-    private static float ComputeRouteCost(Position[] waypoints, PathAffordanceInfo affordances)
+    private static float ComputeRouteCost(Position start, Position[] waypoints, PathAffordanceInfo affordances)
     {
-        if (waypoints.Length <= 1)
-            return waypoints.Length;
+        if (waypoints.Length == 0)
+            return 0f;
 
-        var distance = 0f;
+        var distance = start.DistanceTo2D(waypoints[0]);
         for (var i = 0; i < waypoints.Length - 1; i++)
             distance += waypoints[i].DistanceTo2D(waypoints[i + 1]);
 
@@ -3324,9 +3856,50 @@ public class NavigationPath(
             // Map: 0° (straight) → MAX_ACCEPTANCE, ≥90° → MIN_ACCEPTANCE
             var t = Math.Clamp(turnAngleDeg / SHARP_TURN_ANGLE_DEG, 0f, 1f);
             float angleBasedRadius = MAX_ACCEPTANCE_RADIUS - t * (MAX_ACCEPTANCE_RADIUS - MIN_ACCEPTANCE_RADIUS);
-            _waypointAcceptanceRadii[i] = MathF.Max(speedBasedFloor, angleBasedRadius);
+            var baseRadius = MathF.Max(speedBasedFloor, angleBasedRadius);
+            _waypointAcceptanceRadii[i] = _tightenDenseWaypointAcceptance
+                ? MathF.Min(baseRadius, ComputeDenseWaypointAcceptanceCap(prev, curr, next, _capsuleRadius, turnAngleDeg))
+                : baseRadius;
         }
     }
+
+    private static float ComputeDenseWaypointAcceptanceCap(Position prev, Position curr, Position next, float capsuleRadius, float turnAngleDeg)
+    {
+        var inbound = prev.DistanceTo2D(curr);
+        var outbound = curr.DistanceTo2D(next);
+        if (!float.IsFinite(inbound) || !float.IsFinite(outbound))
+            return MAX_ACCEPTANCE_RADIUS;
+
+        var localSegment = MathF.Min(inbound, outbound);
+        var straightBreadcrumbLength = MathF.Max(CORNER_COMMIT_DISTANCE, capsuleRadius * DENSE_STRAIGHT_SEGMENT_CAPSULE_MULTIPLIER);
+        if (turnAngleDeg <= DENSE_STRAIGHT_TURN_ANGLE_DEG && localSegment <= straightBreadcrumbLength)
+            return MAX_ACCEPTANCE_RADIUS;
+
+        if (IsMeaningfulDenseReversal(inbound, outbound, turnAngleDeg))
+        {
+            var reversalFloor = MathF.Max(CORNER_COMMIT_DISTANCE, capsuleRadius * DENSE_REVERSAL_ACCEPTANCE_CAPSULE_MULTIPLIER);
+            return localSegment <= PATH_POINT_DEDUP_EPSILON
+                ? reversalFloor
+                : MathF.Max(reversalFloor, localSegment * DENSE_WAYPOINT_ACCEPTANCE_SEGMENT_FRACTION);
+        }
+
+        var bodySizedFloor = MathF.Max(CORNER_COMMIT_DISTANCE, capsuleRadius * DENSE_WAYPOINT_ACCEPTANCE_CAPSULE_MULTIPLIER);
+        if (localSegment <= PATH_POINT_DEDUP_EPSILON)
+            return bodySizedFloor;
+
+        return MathF.Max(bodySizedFloor, localSegment * DENSE_WAYPOINT_ACCEPTANCE_SEGMENT_FRACTION);
+    }
+
+    private static bool IsMeaningfulDenseReversal(Position prev, Position curr, Position next)
+        => IsMeaningfulDenseReversal(
+            prev.DistanceTo2D(curr),
+            curr.DistanceTo2D(next),
+            ComputeTurnAngle2D(prev, curr, next));
+
+    private static bool IsMeaningfulDenseReversal(float inbound, float outbound, float turnAngleDeg)
+        => turnAngleDeg >= DENSE_REVERSAL_TURN_ANGLE_DEG
+            && inbound >= DENSE_REVERSAL_MIN_SEGMENT_DISTANCE
+            && outbound >= DENSE_REVERSAL_MIN_SEGMENT_DISTANCE;
 
     /// <summary>
     /// Offset sharp-corner waypoints AWAY from the inner wall of the turn.
@@ -3916,6 +4489,8 @@ public class NavigationPath(
         _executionSamples.Clear();
         _pendingDynamicBlockerReplan = false;
         _lastDynamicBlockerReplanTick = 0;
+        _lastNearbyObjectOverlayReplanTick = 0;
+        _lastNearbyObjectOverlaySignature = null;
         _lastWaypointTick = 0;
         _pendingTransport = null;
         _activeTransportRide = null;

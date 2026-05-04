@@ -2091,6 +2091,87 @@ public class ObjectManagerWorldSessionTests
     }
 
     [Fact]
+    public void MoveTowardWithFacing_GroundedAfterTaxi_ClearsStaleFlightPathFlags()
+    {
+        _fixture._woWClient.Reset();
+        var sentPackets = new List<(Opcode opcode, byte[] payload)>();
+        _fixture._woWClient
+            .Setup(c => c.SendMovementOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
+            .Callback<Opcode, byte[], CancellationToken>((opcode, payload, _) => sentPackets.Add((opcode, payload)))
+            .Returns(Task.CompletedTask);
+
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12D;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        SetPrivateField(objectManager, "_isInControl", true);
+        SetPrivateField(objectManager, "_isBeingTeleported", false);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(5f, 10f, 20f);
+        player.Facing = 0.50f;
+        player.MovementFlags =
+            MovementFlags.MOVEFLAG_FORWARD |
+            MovementFlags.MOVEFLAG_SPLINE_ELEVATION |
+            MovementFlags.MOVEFLAG_HOVER;
+
+        objectManager.MoveToward(new Position(15f, 20f, 20f), 0.58f);
+
+        Assert.Empty(sentPackets);
+        Assert.Equal(0.58f, player.Facing, 3);
+        Assert.Equal(MovementFlags.MOVEFLAG_FORWARD, player.MovementFlags);
+    }
+
+    [Fact]
+    public void StopAllMovement_GroundedAfterTaxi_ClearsStaleFlightPathFlags()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12E;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(5f, 10f, 20f);
+        player.MovementFlags =
+            MovementFlags.MOVEFLAG_FORWARD |
+            MovementFlags.MOVEFLAG_SPLINE_ELEVATION |
+            MovementFlags.MOVEFLAG_HOVER;
+
+        objectManager.StopAllMovement();
+
+        Assert.Equal(MovementFlags.MOVEFLAG_NONE, player.MovementFlags);
+    }
+
+    [Fact]
+    public void StopAllMovement_ActiveSafeFallHover_DoesNotClearNonTaxiHoverState()
+    {
+        ResetObjectManager();
+
+        const ulong playerGuid = 0x12F;
+
+        var objectManager = WoWSharpObjectManager.Instance;
+        objectManager.EnterWorld(playerGuid);
+
+        var player = Assert.IsType<WoWLocalPlayer>(objectManager.Player);
+        player.Position = new Position(5f, 10f, 20f);
+        player.MovementFlags =
+            MovementFlags.MOVEFLAG_FORWARD |
+            MovementFlags.MOVEFLAG_HOVER |
+            MovementFlags.MOVEFLAG_SAFE_FALL;
+
+        objectManager.StopAllMovement();
+
+        Assert.Equal(
+            MovementFlags.MOVEFLAG_HOVER | MovementFlags.MOVEFLAG_SAFE_FALL,
+            player.MovementFlags);
+    }
+
+    [Fact]
     [Trait("Category", "MovementParity")]
     [Trait("ParityLayer", "DeterministicBgProtocol")]
     public void ForceStopImmediate_BlocksStopPacketBeforeGameObjectUse()

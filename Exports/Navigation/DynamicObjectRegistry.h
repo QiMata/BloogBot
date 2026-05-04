@@ -154,6 +154,10 @@ private:
     /// Load and cache a model by its .vmo filename. Returns nullptr on failure.
     std::shared_ptr<CachedModel> LoadModel(const std::string& modelName);
 
+    /// Create and cache a conservative fallback collision hull for display IDs
+    /// missing from temp_gameobject_models.
+    std::shared_ptr<CachedModel> CreateFallbackModel(uint32_t displayId);
+
     uint32_t AllocateRuntimeInstanceId();
 
     static DynamicObjectRegistry* s_instance;

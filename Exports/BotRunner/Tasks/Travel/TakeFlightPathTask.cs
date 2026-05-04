@@ -34,7 +34,7 @@ public class TakeFlightPathTask : BotTask, IBotTask
     private const float InteractionRange = 5.0f;
     private const int FlightTimeoutMs = 300_000; // 5 minutes
     private const int StationaryTicksForLanding = 6; // 3 seconds at 500ms poll
-    private const uint NPC_FLAG_FLIGHTMASTER = 0x2000;
+    private const uint NPC_FLAG_FLIGHTMASTER = (uint)NPCFlags.UNIT_NPC_FLAG_FLIGHTMASTER;
 
     public TakeFlightPathTask(IBotContext context, uint sourceNodeId, uint destinationNodeId)
         : base(context)

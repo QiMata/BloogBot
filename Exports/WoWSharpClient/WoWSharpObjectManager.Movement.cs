@@ -107,6 +107,33 @@ namespace WoWSharpClient
         private static bool IsPlayerAirborne(WoWLocalPlayer player)
             => (player.MovementFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
 
+        private void ClearStaleGroundFlightPathFlags(WoWLocalPlayer player)
+        {
+            const MovementFlags staleFlightPathFlags =
+                MovementFlags.MOVEFLAG_SPLINE_ELEVATION |
+                MovementFlags.MOVEFLAG_HOVER;
+            const MovementFlags activeMovementState =
+                MovementFlags.MOVEFLAG_ONTRANSPORT |
+                MovementFlags.MOVEFLAG_JUMPING |
+                MovementFlags.MOVEFLAG_FALLINGFAR |
+                MovementFlags.MOVEFLAG_SWIMMING |
+                MovementFlags.MOVEFLAG_FLYING |
+                MovementFlags.MOVEFLAG_LEVITATING |
+                MovementFlags.MOVEFLAG_FIXED_Z |
+                MovementFlags.MOVEFLAG_WATERWALKING |
+                MovementFlags.MOVEFLAG_SAFE_FALL;
+
+            if ((player.MovementFlags & staleFlightPathFlags) == 0)
+                return;
+
+            if (IsInFlight
+                || player.TransportGuid != 0
+                || (player.MovementFlags & activeMovementState) != 0)
+                return;
+
+            player.MovementFlags &= ~staleFlightPathFlags;
+        }
+
         public void StartMovement(ControlBits bits)
         {
             var player = (WoWLocalPlayer)Player;
@@ -116,6 +143,8 @@ namespace WoWSharpClient
             // Jump input is allowed (double-jump protection is elsewhere).
             if (IsPlayerAirborne(player) && (bits & (ControlBits.Front | ControlBits.Back | ControlBits.StrafeLeft | ControlBits.StrafeRight)) != 0)
                 return;
+
+            ClearStaleGroundFlightPathFlags(player);
 
             // Convert control bits to movement flags and update player state
             MovementFlags flags = ConvertControlBitsToFlags(bits, player.MovementFlags, true);
@@ -132,6 +161,8 @@ namespace WoWSharpClient
             // Clearing FORWARD mid-fall would send MSG_MOVE_STOP while airborne.
             if (IsPlayerAirborne(player) && (bits & (ControlBits.Front | ControlBits.Back | ControlBits.StrafeLeft | ControlBits.StrafeRight)) != 0)
                 return;
+
+            ClearStaleGroundFlightPathFlags(player);
 
             // Clear the corresponding movement flags.
             // MovementController (game loop, 50ms) detects the flag change
@@ -1023,6 +1054,8 @@ namespace WoWSharpClient
                 UpdateAirborneSteering(position);
                 return;
             }
+
+            ClearStaleGroundFlightPathFlags(player);
 
             // Set facing and movement flags.
             // The MovementController (running in the game loop every 50ms) handles:

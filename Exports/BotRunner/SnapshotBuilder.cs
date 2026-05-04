@@ -121,6 +121,7 @@ namespace BotRunner
             try
             {
                 var pos = player.Position;
+                var transportOffset = ResolveTransportOffset(player, pos);
                 // Optional high-rate diagnostics for snapshot-vs-heartbeat movement comparisons.
                 if (EnableSnapshotPositionDiagnostics && _tickCount % 50 == 1 && (uint)player.MovementFlags != 0)
                 {
@@ -145,6 +146,9 @@ namespace BotRunner
                     TurnRate = player.TurnRate,
                     Facing = player.Facing,
                     TransportGuid = player.TransportGuid,
+                    TransportOffsetX = transportOffset?.X ?? 0f,
+                    TransportOffsetY = transportOffset?.Y ?? 0f,
+                    TransportOffsetZ = transportOffset?.Z ?? 0f,
                     TransportOrientation = player.TransportOrientation,
                 };
                 if (pos != null)
@@ -624,6 +628,27 @@ namespace BotRunner
             }, "NearbyUnit.SplineFinalDestination");
 
             return snapshot;
+        }
+
+        private static GameData.Core.Models.Position? ResolveTransportOffset(
+            IWoWLocalPlayer player,
+            GameData.Core.Models.Position? fallbackPosition)
+        {
+            if (player.TransportGuid == 0)
+                return null;
+
+            try
+            {
+                var property = player.GetType().GetProperty("TransportOffset");
+                if (property?.GetValue(player) is GameData.Core.Models.Position offset)
+                    return offset;
+            }
+            catch (Exception ex)
+            {
+                Log.Debug("[Snapshot] TransportOffset unavailable: {Type}", ex.GetType().Name);
+            }
+
+            return fallbackPosition;
         }
 
         /// <summary>

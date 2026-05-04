@@ -34,6 +34,40 @@
 - [x] Long-travel navigation uses vertical-aware waypoint arrival and now
   refuses to promote past unsatisfied uphill ramp/corner waypoints during
   stuck recovery.
+- [x] Long-travel navigation keeps compact/tight descending support waypoints
+  through the Orgrimmar zeppelin tower rope/support chain, and scheduled
+  transport boarding waits longer for boats/zeppelins than for elevators.
+- [x] Transport identity now decodes static/moving transport GUIDs, uses the
+  GUID-derived gameobject entry before reported entry, and emits exact
+  expected entry/model/name in transport diagnostics.
+- [x] Focused live validation now fast-fails known Orgrimmar
+  object/terrain blockers before treating the zeppelin tower walk as complete.
+  - [x] Deterministic PathfindingService generated-route validation now catches
+    the Orgrimmar flight-master -> zeppelin object/corner blockers before live
+    movement starts.
+  - [x] The focused offline route gate now passes against `D:\MaNGOS\data`
+    using GO-axis route tiles plus generic affordance repair, without
+    route-specific runtime clearance or live-position workarounds.
+  - [x] Maps `0` and `1` were freshly regenerated with the current GO-aware
+    generator/data and Tauren Male Detour headers.
+  - [x] Focused live validation was rerun against the regenerated data and
+    rebuilt `pathfinding-service`.
+  - [x] Fix the current live Orgrimmar runtime stall. The latest live run
+    reaches the Orgrimmar zeppelin deck approach near
+    `(1330.7,-4653.0,53.5)` without recurring stalls near `(1546,-4430)` or
+    `(1508,-4420)`.
+  - [ ] Investigate the remaining Orgrimmar -> Undercity zeppelin
+    boarding/transfer evidence gap. Screenshot evidence has moved the
+    Orgrimmar/Undercity dock anchors to the gangplank/deck positions, but the
+    latest live evidence still ends on map `1` with `transport=0x0`.
+  - [x] Consume generated static route-pack responses through the existing
+    `PathfindingClient.GetPathResult(...)`/`NavigationPath` contract once
+    PathfindingService owns route-pack lookup. BotRunner must not ship
+    hand-authored Orgrimmar waypoint scripts.
+  - [ ] Rerun focused live validation after PathfindingService can answer the
+    lower-incline Orgrimmar recovery request without falling back to slow
+    native generation. Latest route-pack run failed before boarding near
+    `(1363.9,-4378.2,26.1)`.
 - [ ] Add and pass focused live validation for Crossroads -> Undercity.
 
 ### BR-NAV-006 Prove path ownership through combat and movement-controller handoff
@@ -49,6 +83,446 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-05-04 (stopped after screenshot-anchor cleanup)
+- Pass result: stopped before another live rerun; screenshot anchors are
+  applied and BotRunner deterministic transport gates are green.
+- Last delta:
+  - Applied repo-root screenshot evidence to the Orgrimmar/Undercity transport
+    data and cross-map graph:
+    Orgrimmar dock `(1320.142944,-4653.158691,53.891945)`,
+    Undercity dock `(2066.911377,290.113708,97.031593)`, and deck local offset
+    `(-12.580913,-7.983256,-16.398277)`.
+  - Updated long-pathing live constants, staging helper coordinates, and
+    transport diagnostics tests to match the captured dock points.
+  - Updated the configured-boarding-position deterministic test so it asserts
+    the useful invariant after the wait and boarding anchors became the same
+    screenshot-derived point: hold the configured boarding point while waiting.
+  - No live validation was launched after these changes.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CrossMapRouterTests|FullyQualifiedName~TransportWaitingLogicTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~LongPathingRouteBlockerGuardTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_zeppelin_screenshot_anchors.trx" --results-directory tmp/test-runtime/results-botrunner` -> first run failed the obsolete assertion, rerun passed `(94/94)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StaticRoutePackCacheTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=static_routepack_cache_after_nav_fixture_discovery.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (8/8)`.
+- Evidence:
+  - `tmp/test-runtime/results-botrunner/botrunner_zeppelin_screenshot_anchors.trx`
+  - `tmp/test-runtime/results-pathfinding/static_routepack_cache_after_nav_fixture_discovery.trx`
+  - Repo-root screenshots: `org-uc-boarding.jpg`, `uc-org-boarding.jpg`,
+    `zepplin-riding.jpg`.
+- Files changed in this slice:
+  - `Exports/BotRunner/Movement/TransportData.cs`
+  - `Exports/BotRunner/Movement/MapTransitionGraph.cs`
+  - `Tests/BotRunner.Tests/Movement/CrossMapRouterTests.cs`
+  - `Tests/BotRunner.Tests/Movement/TransportWaitingLogicTests.cs`
+  - `Tests/BotRunner.Tests/Travel/TravelTaskTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/AckCaptureTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/TaxiTransportParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingRouteBlockerGuard.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingRouteBlockerGuardTests.cs`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+### 2026-05-04 (scheduled zeppelin deck-offset boarding gate)
+- Pass result: deterministic transport boarding/deck-offset gates are green;
+  live manual zeppelin coordinate capture is running under the long-pathing
+  config-first fixture.
+- Last delta:
+  - Scheduled transports now require a stationary dock window before boarding;
+    the Orgrimmar/Undercity zeppelin is not treated as boardable while still
+    creeping into/out of the stop.
+  - Scheduled zeppelin riding now waits until the local transport offset is
+    near the configured deck offset before transitioning to `Riding`.
+  - WoWSharp scheduled-transport passive attach rejects the earlier below-deck
+    false positive by tightening the vertical attach range.
+  - The live fixture startup order fix is test-owned, but it is part of this
+    BotRunner transport validation flow: long-pathing tests now launch
+    StateManager directly with `LongPathing.config.json`.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TransportWaitingLogicTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~BotRunnerServiceSnapshotTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_transport_after_deck_offset_riding_gate.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (84/84)`.
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=wowsharp_movement_scheduled_transport_attach_deck_gate.trx" --results-directory tmp/test-runtime/results-wowsharp` -> `passed (76/76)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BgOnlyBotFixtureConfigurationTests|FullyQualifiedName~LongPathingRouteBlockerGuardTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=live_fixture_config_first_startup_manual_infinite_compile_check.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (9/9)`.
+- Evidence:
+  - `tmp/test-runtime/results-botrunner/botrunner_transport_after_deck_offset_riding_gate.trx`
+  - `tmp/test-runtime/results-wowsharp/wowsharp_movement_scheduled_transport_attach_deck_gate.trx`
+  - `tmp/test-runtime/results-botrunner/live_fixture_config_first_startup_manual_infinite_compile_check.trx`
+- Files changed in this slice:
+  - `Exports/BotRunner/Movement/TransportWaitingLogic.cs`
+  - `Tests/BotRunner.Tests/Movement/TransportWaitingLogicTests.cs`
+  - `Tests/BotRunner.Tests/Travel/TravelTaskTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.Snapshots.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingTests.cs`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/TASKS.md`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+### 2026-05-04 (PathfindingService route-pack prototype consumed through normal contract)
+- Pass result: PathfindingService route-pack socket contract is green and no
+  BotRunner waypoint scripting was added; focused live Crossroads ->
+  Undercity remains red on a lower-incline PathfindingService recovery gap.
+- Last delta:
+  - No BotRunner production code changed in this slice. The existing
+    `GetPathResult(...)`/`NavigationPath` flow can consume route-pack results
+    because PathfindingService returns them through the normal path contract.
+  - `PathfindingSocketServerIntegrationTests.HandlePath_OrgrimmarRoutePackRequest_ReturnsCachedPathThroughNormalContract`
+    proves the route-pack full path is returned as `route_pack_main_path`.
+  - The latest live rerun against the rebuilt Docker service failed before
+    zeppelin boarding at `map=1 pos=(1363.9,-4378.2,26.1)`. The service
+    correctly bypassed the unsafe cached suffix and the native fallback
+    request from `(1363.9,-4377.8,26.1)` to `(1341.0,-4638.6,53.5)` was
+    still-running at `25s`.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingSocketServerIntegrationTests.HandlePath_OrgrimmarRoutePackRequest_ReturnsCachedPathThroughNormalContract" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_socket_routepack_contract_after_resolved_z_guard.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (1/1)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarExteriorInclineLiveStallExactRecovery_HasWalkablePathfindingRoute|FullyQualifiedName~LongPathingRouteTests.OrgrimmarZeppelinTowerBaseToDeckBoardingPoint_ReachesUpperDeckBoardingZ|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routepack_cache_prep_after_resolved_z_guard.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (4/4)`.
+  - `docker compose -f docker-compose.vmangos-linux.yml up -d --build pathfinding-service` -> succeeded; route-pack warmup logged `packs=2`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_after_routepack_resolved_z_guard.trx" --results-directory tmp/test-runtime/results-live` -> `failed (1/1)` at `(1363.9,-4378.2,26.1)`.
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+- Evidence:
+  - `tmp/test-runtime/results-pathfinding/pathfinding_socket_routepack_contract_after_resolved_z_guard.trx`
+  - `tmp/test-runtime/results-pathfinding/long_pathing_routepack_cache_prep_after_resolved_z_guard.trx`
+  - `tmp/test-runtime/results-live/long_pathing_crossroads_undercity_after_routepack_resolved_z_guard.trx`
+- Files changed in this slice:
+  - `Exports/BotRunner/TASKS.md`
+  - `Services/PathfindingService/RoutePacks/StaticRoutePackCache.cs`
+  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `Services/PathfindingService/PathfindingSocketServer.cs`
+  - `Tests/PathfindingService.Tests/StaticRoutePackCacheTests.cs`
+  - `Tests/PathfindingService.Tests/LongPathingRouteTests.cs`
+  - `Tests/PathfindingService.Tests/PathfindingSocketServerIntegrationTests.cs`
+  - `docs/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "StaticRoutePackCache|CreateDefaultSeeds|IsSegmentWalkableForAgent|1363\\.9|-4377\\.8|CrossroadsToUndercity_UsesFlightAndZeppelin" Services/PathfindingService Tests/PathfindingService.Tests Tests/BotRunner.Tests`
+
+### 2026-05-03 (route-pack architecture direction)
+- Pass result: BotRunner deterministic boarding-position handoff passed;
+  focused live rerun failed earlier on the static Orgrimmar walk while waiting
+  for a slow service recovery. Route-pack architecture was documented for a
+  PathfindingService-owned generated-cache solution.
+- Last delta:
+  - `TravelTask` now treats the next transport stop's configured
+    `BoardingPosition` as an alternate walk-leg completion target when the
+    current walk leg hands off to a transport. The same tight horizontal and
+    vertical checks protect lower tower/pillar false positives.
+  - Added deterministic coverage for the latest live deck boarding coordinate
+    `(1330.7,-4653.0,53.5)` completing the walk leg and starting the zeppelin
+    leg.
+  - The latest live rerun did not reach this handoff; it stalled earlier at
+    `(1381.6,-4370.6,26.0)`, while the service returned a repaired static
+    route suffix after about `23690ms`.
+  - Documented generated route packs as cacheable Detour/MMAP outputs, not
+    BotRunner waypoint hacks.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TravelTaskTests.Update_LiveOrgrimmarZeppelinBoardingPosition|FullyQualifiedName~TravelTaskTests.Update_LiveOrgrimmarZeppelinDeckPosition|FullyQualifiedName~TravelTaskTests.Update_LowerOrgrimmarZeppelinTowerPosition|FullyQualifiedName~TravelTaskTests.Update_OrgrimmarZeppelinPillarPosition" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_zeppelin_boarding_position_handoff.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (4/4)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_after_boarding_position_handoff.trx" --results-directory tmp/test-runtime/results-live` -> `failed (1/1)` at `(1381.6,-4370.6,26.0)`, before zeppelin boarding handoff.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarExteriorInclineLiveStallExactRecovery_HasWalkablePathfindingRoute|FullyQualifiedName~LongPathingRouteTests.OrgrimmarZeppelinTowerBaseToDeckBoardingPoint_ReachesUpperDeckBoardingZ|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_exact_incline_deck_static_routepack_prep.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (4/4)` in `4m29s`.
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+- Files changed:
+  - `Exports/BotRunner/Tasks/Travel/TravelTask.cs`
+  - `Tests/BotRunner.Tests/Travel/TravelTaskTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingTests.cs`
+  - `docs/TRAVEL_PLANNING.md`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+- Next command: `rg -n "PathResultCache|RoutePack|GetPathResult|NavigationPath" Exports/BotRunner Services/PathfindingService Tests docs/TRAVEL_PLANNING.md`
+
+### 2026-05-03 (live walk reaches zeppelin deck approach)
+- Pass result: deterministic BotRunner movement/travel focus passed, offline
+  Orgrimmar static blocker gate stayed green, and focused live validation now
+  reaches the Orgrimmar zeppelin deck approach. End-to-end Crossroads ->
+  Undercity remains open on zeppelin boarding/transfer evidence.
+- Last delta:
+  - Added generic long-travel wall-stuck recovery that promotes along the
+    existing validated corridor before full PathfindingService replans.
+  - Kept long-travel wall recovery in smooth Detour mode; earlier live evidence
+    showed slow unsmoothed recovery service requests blocking the runner.
+  - Added generic vertical-layer handling that preserves supported uphill
+    Detour/MMAP corridor progression instead of forcing a replan.
+  - No production Orgrimmar blocker coordinates, clearance cylinders, detours,
+    waypoint exceptions, or live-position guards were added.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathFactoryTests.Create_LongTravelPolicy_KeepsSmoothDetourModeDuringWallRecovery|FullyQualifiedName~NavigationPathFactoryTests.Create_LongTravelPolicy_KeepsSmoothDetourModeDuringRecovery" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_travel_wall_recovery_existing_corridor_single.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (3/3)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TravelTaskTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~LongPathingRouteBlockerGuardTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_navigation_travel_long_travel_wall_recovery_focus.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (149/149)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelVerticalMismatchPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelReplansWhenNearWaypointIsOverheadLayer|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathFactoryTests.Create_LongTravelPolicy_EvaluatesAlternateOnVerticalLayerMismatch" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_travel_vertical_existing_corridor_single.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (4/4)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsSupportedUphillLayerProgressionWithoutReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelReplansWhenNearWaypointIsOverheadLayer|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelVerticalMismatchPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathFactoryTests.Create_LongTravelPolicy_EvaluatesAlternateOnVerticalLayerMismatch" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_long_travel_uphill_vertical_single.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (4/4)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TravelTaskTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~LongPathingRouteBlockerGuardTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_navigation_travel_long_travel_uphill_vertical_focus.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (151/151)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_static_blockers_after_long_travel_uphill_vertical.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (1/1)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_after_long_travel_uphill_vertical.trx" --results-directory tmp/test-runtime/results-live` -> `failed (1/1)` after `14m27s`; walking reached deck approach, remaining failure `transport=0x0` and no map-transfer evidence.
+- Evidence:
+  - Latest live TRX:
+    `tmp/test-runtime/results-live/long_pathing_crossroads_undercity_after_long_travel_uphill_vertical.trx`.
+  - Latest deterministic BotRunner TRX:
+    `tmp/test-runtime/results-botrunner/botrunner_navigation_travel_long_travel_uphill_vertical_focus.trx`.
+  - Latest offline static-object TRX:
+    `tmp/test-runtime/results-pathfinding/long_pathing_static_blockers_after_long_travel_uphill_vertical.trx`.
+- Files changed:
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathFactoryTests.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `docs/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `Select-String -Path tmp/test-runtime/results-live/long_pathing_crossroads_undercity_after_long_travel_uphill_vertical.trx -Pattern "\[TRAVEL_LEG\]|\[TRAVEL_TRANSPORT\]|\[TRANSPORT|Expected the bot to board|failure:"`
+
+### 2026-05-03 (stopping point after generic long-travel recovery)
+- Pass result: deterministic BotRunner movement/travel focus and offline
+  Orgrimmar static blocker gate passed; focused live validation was not rerun
+  after this latest delta.
+- Last delta:
+  - Added generic long-travel stall recovery behavior. When a walk leg stalls,
+    `NavigationPath.RecalculateAfterMovementStall` first tries to promote to a
+    forward waypoint on the already validated corridor before requesting a full
+    service replan.
+  - Tightened `TravelTask` progress observation so waypoint-index churn alone
+    no longer resets the no-movement stall timer unless the player has moved.
+  - Added deterministic coverage for the existing-corridor promotion path.
+  - This does not hardcode Orgrimmar blockers, coordinates, clearance
+    cylinders, detours, waypoint exceptions, or live-position guards in
+    production code.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TravelTaskTests.Update_WalkLegNoProgress|FullyQualifiedName~NavigationPathTests.RecalculateAfterMovementStall_LongTravelPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_walk_stall_existing_corridor_promotion_single.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (3/3)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TravelTaskTests|FullyQualifiedName~NavigationPathTests|FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~LongPathingRouteBlockerGuardTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_navigation_travel_existing_corridor_promotion_focus.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (145/145)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_static_blockers_after_existing_corridor_promotion.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (1/1)`.
+- Files changed:
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Tasks/Travel/TravelTask.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Tests/BotRunner.Tests/Travel/TravelTaskTests.cs`
+  - `docs/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_after_existing_corridor_promotion.trx" --results-directory tmp/test-runtime/results-live`
+
+### 2026-05-02 (live rerun tower approach blocker)
+- Pass result: focused live Crossroads -> Undercity rerun failed at the
+  Orgrimmar zeppelin tower approach; offline PathfindingService route gates
+  remain green.
+- Last delta:
+  - Rebuilt/relaunched `pathfinding-service` earlier in the slice and
+    confirmed this rerun used image
+    `sha256:2d7782de11432a274991b49dfd02029e284f606abd3aaad56edcedaa5d4a6ce6`
+    with `D:/MaNGOS/data` mounted at `/wwow-data`.
+  - Generic PathfindingService and BotRunner affordance behavior was adjusted
+    before the rerun: repaired splices are densified, early static repair scan
+    reaches the underpass case, and short valid risers are no longer classified
+    as severe `SteepClimb`.
+  - The latest live route still replans near the zeppelin tower base and then
+    fails the blocker guard with `afford=SteepClimb`, player
+    `(1342.4,-4652.1,24.6)`, active `(1342.1,-4652.8,24.6)`, target
+    `(1341.0,-4638.6,53.5)`.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `docker exec pathfinding-service sh -lc "cat /app/pathfinding_status.json"` -> `IsReady=true`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_routes_live_vertical_replan_green.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (15/15)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_route_static_blockers_after_live_replan_fix.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (1/1)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~LongPathingRouteBlockerGuardTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_navigation_affordance_replan_focus.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (113/113)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_rerun_current.trx" --results-directory tmp/test-runtime/results-live` -> `failed (1/1)` after `7m16s`.
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+- Files changed:
+  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/PathfindingService.Tests/LongPathingRouteTests.cs`
+  - `Tests/PathfindingService.Tests/PathRouteAssertions.cs`
+  - `docs/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "orgrimmar_zeppelin_tower|1342\\.|4652\\.|SteepClimb|native_path_alternate_mode" Tests/PathfindingService.Tests Tests/BotRunner.Tests Services/PathfindingService Exports/BotRunner -g "!**/bin/**" -g "!**/obj/**"`
+
+### 2026-05-01 (GO-axis bake and affordance route gate)
+- Pass result: PathfindingService generated-route gate is green; focused live
+  Crossroads -> Undercity remains paused until full map regeneration.
+- Last delta:
+  - Restored the focused GO-axis Orgrimmar route tiles and map `1` Tauren Male
+    config after the earlier simplification experiment.
+  - Added generic PathfindingService affordance repair for steep/blocked
+    Detour legs. The repair is not a BotRunner/live guard and does not encode
+    Orgrimmar blocker coordinates or route-specific detours.
+  - Hardened the repair scan so it keeps looking for a repairable
+    affordance break instead of stopping at the first suspicious local leg.
+  - Rebuilt the native Navigation target and reran the offline route gate.
+    No live WoW validation was run.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `Get-Process MoveMapGenerator -ErrorAction SilentlyContinue` -> no process found.
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data --build-log tmp/test-runtime/results-pathfinding/org_transposed_route_tiles_go_axisfix_regen_20260501_completed.log --tile 39,28 --tile 40,28 --tile 41,28 --tile 39,29 --tile 40,29 --tile 41,29 --tile 39,30 --tile 40,30 --tile 41,30` -> `passed`.
+  - `$MSBUILD = "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"; & $MSBUILD Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_route_static_blockers_after_affordance_scan_fix.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (1/1)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_route_static_blockers_final.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (1/1)`.
+- Files changed:
+  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `Exports/Navigation/PathFinder.cpp`
+  - `docs/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/physics/MMAP_NAVMESH_GENERATION.md`
+- Next command: `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_after_full_mmap_regen.trx" --results-directory tmp/test-runtime/results-live`
+
+### 2026-05-01 (route-specific clearance rollback)
+- Pass result: PathfindingService generated-route gate is red as intended;
+  live Crossroads -> Undercity remains paused until GO-aware mmaps make the
+  route pass without runtime blocker hacks.
+- Last delta:
+  - Removed the invalid PathfindingService static-clearance workaround that
+    hardcoded Orgrimmar blocker zones and inserted route-specific detours.
+  - Added/updated repo policy docs: BotRunner and live-validation guards may
+    diagnose or fail fast, but they must not substitute for generated mmap
+    collision for static gameobjects.
+  - No live WoW validation was run in this pass.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -v:minimal` -> `succeeded` with existing PathfindingSocketServer nullable warnings and the existing `dumpbin` applocal warning.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_route_static_blockers_mmap_required.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `failed as intended (1/1)` with seven blocker clearances.
+- Files changed:
+  - `AGENTS.md`
+  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `docs/DEVELOPMENT_GUIDE.md`
+  - `docs/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+  - `docs/physics/MMAP_NAVMESH_GENERATION.md`
+- Next command: `Push-Location D:\MaNGOS\data; D:/MaNGOS/source/bin/MoveMapGenerator.exe 0 --threads 1 --configInputPath config.json; D:/MaNGOS/source/bin/MoveMapGenerator.exe 1 --threads 1 --configInputPath config.json; Pop-Location; dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data; $env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_route_static_blockers_after_mmap_regen.trx" --results-directory tmp/test-runtime/results-pathfinding`
+
+### 2026-05-01 (generated-route blocker gate)
+- Pass result: PathfindingService generated-route gate failed as intended;
+  live Crossroads -> Undercity should remain paused until it passes.
+- Last delta:
+  - Added an offline route-generation fast-fail in
+    `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`.
+  - The test calculates the Orgrimmar flight-master -> zeppelin walking path
+    with Tauren Male dimensions and rejects the current generated route before
+    a WoW client can run into the lower bonfire, bank-front model/palm,
+    Z-hallway corners, steep incline, or rope-line support.
+  - Read-only MaNGOS lookup identified the route bonfires as
+    `guid=10975 entry=177026 display=4572` at
+    `(1665.50,-4360.83,26.66)` and `guid=10090 entry=177019 display=4572`
+    at `(1592.37,-4427.32,8.05)`.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_route_static_blockers.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `failed as intended (1/1 failed) with seven blocker clearances`.
+- Files changed:
+  - `Tests/PathfindingService.Tests/LongPathingRouteTests.cs`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/LongPathingTests.md`
+  - `docs/physics/MMAP_NAVMESH_GENERATION.md`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_route_static_blockers.trx" --results-directory tmp/test-runtime/results-pathfinding`
+
+### 2026-05-01 (Orgrimmar blocker fast-fail)
+- Pass result: deterministic blocker guard passed `8/8`; broader
+  path/travel/transport focus passed `165/165`; live validation now fails
+  fast at the first known Orgrimmar route blocker.
+- Last delta:
+  - The requested GUID-identity live run failed before transport diagnostics:
+    no `[TRAVEL_TRANSPORT]` lines were emitted because the Orgrimmar ->
+    Undercity zeppelin leg never started.
+  - The tower-base failure was `map=1 pos=(1342.7,-4641.4,24.6)
+    transport=0x0 current=null`, while the deck target is
+    `(1341.0,-4638.6,53.5)`.
+  - Added live-validation blocker detection for the bonfire/object choke,
+    palm-tree descent, steep incline diagnostics, tower support/flagpole, and
+    tower base/deck mismatch.
+  - The zeppelin tower approach now requires deck-ish Z before the test moves
+    on to transport waiting.
+  - Rerun with the guard failed in `5m23s` at
+    `Orgrimmar tower support/flagpole object collision` near
+    `(1371.2,-4439.4,30.9)`.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteBlockerGuardTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_blocker_guard_tests.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (8/8)` after fixing a compile typo from the first attempt.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~TransportWaitingLogicTests|FullyQualifiedName~LongPathingRouteBlockerGuardTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_path_travel_transport_blocker_guard_focus.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (165/165)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_guid_identity.trx" --results-directory tmp/test-runtime/results-live` -> `failed after 8m50s; no [TRAVEL_TRANSPORT], stopped at tower base`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_blocker_guard.trx" --results-directory tmp/test-runtime/results-live` -> `failed after 5m23s with named tower support/flagpole blocker`.
+- Files changed:
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingRouteBlockerGuard.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingRouteBlockerGuardTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/LongPathingTests.md`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `rg -n "1371\\.|4439\\.|SteepClimb|OrgrimmarZeppelin|CrossroadsToUndercity" Tests/PathfindingService.Tests Exports/BotRunner Services/PathfindingService docs -g "!**/bin/**" -g "!**/obj/**"`
+
+### 2026-05-01 (transport GUID identity)
+- Pass result: BotRunner transport GUID focus passed `52/52`; broader
+  path/travel/transport focus passed `157/157`.
+- Last delta:
+  - The latest live run showed the bot was in place at the Orgrimmar ->
+    Undercity wait target (`map=1`, `pos=(1341.0,-4638.5,53.5)`), but not
+    boarded (`transport=0x0`).
+  - The visible same-model zeppelin was entry `175080`, display `3031`
+    (Orgrimmar/Grom'gol); the route needs entry `164871`, display `3031`
+    (Orgrimmar/Undercity).
+  - Added `TransportObjectIdentity` to decode `0xF120` static and `0x1FC0`
+    moving transport GUIDs, canonicalize nearby object entries from GUID, and
+    prevent scheduled transports from matching by model alone when no route
+    identity is available.
+  - `[TRAVEL_TRANSPORT]` now reports
+    `expected=<entry>:<display>:<name>` and GUID-formatted nearest objects.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TransportWaitingLogicTests|FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~TravelTaskTests" --logger "trx;LogFileName=botrunner_transport_guid_identity_focus.trx"` -> `passed (52/52)`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~TransportWaitingLogicTests" --logger "trx;LogFileName=botrunner_path_travel_transport_guid_identity_focus.trx"` -> `passed (157/157)`.
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+- Files changed:
+  - `Exports/BotRunner/Movement/PathfindingOverlayBuilder.cs`
+  - `Exports/BotRunner/Movement/TransportData.cs`
+  - `Exports/BotRunner/Movement/TransportObjectIdentity.cs`
+  - `Exports/BotRunner/Movement/TransportWaitingLogic.cs`
+  - `Exports/BotRunner/Tasks/Travel/TravelTask.cs`
+  - `Tests/BotRunner.Tests/Movement/PathfindingOverlayBuilderTests.cs`
+  - `Tests/BotRunner.Tests/Movement/TransportWaitingLogicTests.cs`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_guid_identity.trx" --results-directory tmp/test-runtime/results-live`
+
+### 2026-05-01 (compact tower support and scheduled boarding)
+- Pass result: BotRunner path/travel/transport focus passed `151/151`; live
+  Crossroads -> Undercity now reaches the Orgrimmar zeppelin route target but
+  still lacks actual transport/map-transfer evidence.
+- Last delta:
+  - Added compact/tight descending waypoint guards in `NavigationPath` for the
+    Orgrimmar tower rope/support chain and made compact vertical holds
+    uphill-only after live evidence showed a downhill support step could pin
+    the route to the upper layer.
+  - Changed `TransportWaitingLogic` so scheduled transports do not abort
+    boarding after the 10-second elevator timeout while the expected
+    boat/zeppelin remains at the stop.
+  - The latest live run reached map `1` pos `(1341.0,-4638.5,53.5)`, started
+    the zeppelin leg, and waited without `TransportGuid`; transport diagnostics
+    showed `near=0` for entry `164871` and `nearestDisplay=175080:3031`.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~TransportWaitingLogicTests" --logger "trx;LogFileName=botrunner_path_travel_transport_compact_uphill_only_focus.trx"` -> `passed (151/151)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_compact_uphill_only_guard.trx" --results-directory tmp/test-runtime/results-live` -> `failed after 12m09s; reached Orgrimmar zeppelin target but no transport/map-transfer evidence`.
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests|FullyQualifiedName~NavigationPathFactoryTests|FullyQualifiedName~PathfindingOverlayBuilderTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~TransportWaitingLogicTests" --logger "trx;LogFileName=botrunner_path_travel_transport_longpath_timeout_compile_focus.trx"` -> `passed (151/151)`.
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+- Files changed:
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Movement/TransportWaitingLogic.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Tests/BotRunner.Tests/Movement/TransportWaitingLogicTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingTests.cs`
+  - `docs/TASKS.md`
+  - `Exports/BotRunner/TASKS.md`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Next command: `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_transfer_window_8min.trx" --results-directory tmp/test-runtime/results-live`
+
 ### 2026-05-01 (long-travel ramp-corner promotion guard)
 - Pass result: BotRunner focused long-pathing suite passed `116/116`.
 - Last delta:

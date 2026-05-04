@@ -47,6 +47,25 @@ namespace GameData.Core.Constants
         private static Dictionary<string, (uint id, float radius, float height)> druidFormDimensions;
         private static volatile bool isInitialized = false;
         private static readonly object _initLock = new object();
+        private static readonly Dictionary<(Race race, Gender gender), (float radius, float height)> PlayerCapsuleMinimums = new()
+        {
+            { (Race.Human, Gender.Male), (0.306f, 2.0313f) },
+            { (Race.Human, Gender.Female), (0.208f, 1.7906f) },
+            { (Race.Dwarf, Gender.Male), (0.347f, 1.4688f) },
+            { (Race.Dwarf, Gender.Female), (0.347f, 1.35f) },
+            { (Race.Gnome, Gender.Male), (0.2999f, 1.0625f) },
+            { (Race.Gnome, Gender.Female), (0.2999f, 0.9844f) },
+            { (Race.NightElf, Gender.Male), (0.306f, 2.4375f) },
+            { (Race.NightElf, Gender.Female), (0.306f, 2.3125f) },
+            { (Race.Orc, Gender.Male), (0.3718f, 2.2813f) },
+            { (Race.Orc, Gender.Female), (0.2556f, 2.0313f) },
+            { (Race.Undead, Gender.Male), (0.3836f, 1.9063f) },
+            { (Race.Undead, Gender.Female), (0.3565f, 1.6563f) },
+            { (Race.Troll, Gender.Male), (0.3718f, 2.5313f) },
+            { (Race.Troll, Gender.Female), (0.4279f, 2.1406f) },
+            { (Race.Tauren, Gender.Male), (0.9747f, 2.625f) },
+            { (Race.Tauren, Gender.Female), (0.9747f, 2.375f) },
+        };
 
         #endregion
 
@@ -70,15 +89,28 @@ namespace GameData.Core.Constants
                 Initialize();
 
             if (raceGenderCache != null && raceGenderCache.TryGetValue((race, gender), out var dimensions))
-                return dimensions;
+                return ApplyPlayerCapsuleMinimum(race, gender, dimensions);
 
             // Try opposite gender as fallback
             var oppositeGender = gender == Gender.Male ? Gender.Female : Gender.Male;
             if (raceGenderCache != null && raceGenderCache.TryGetValue((race, oppositeGender), out dimensions))
-                return dimensions;
+                return ApplyPlayerCapsuleMinimum(race, gender, dimensions);
 
             // Default fallback
             return (0.306f, 2.0313f);
+        }
+
+        private static (float radius, float height) ApplyPlayerCapsuleMinimum(
+            Race race,
+            Gender gender,
+            (float radius, float height) dimensions)
+        {
+            if (!PlayerCapsuleMinimums.TryGetValue((race, gender), out var minimum))
+                return dimensions;
+
+            return (
+                MathF.Max(dimensions.radius, minimum.radius),
+                MathF.Max(dimensions.height, minimum.height));
         }
 
         /// <summary>
@@ -184,7 +216,16 @@ namespace GameData.Core.Constants
         {
             if (!isInitialized)
                 Initialize();
-            return new Dictionary<(Race, Gender), (float, float)>(raceGenderCache ?? new Dictionary<(Race, Gender), (float, float)>());
+            var result = new Dictionary<(Race, Gender), (float, float)>();
+            if (raceGenderCache == null)
+                return result;
+
+            foreach (var kvp in raceGenderCache)
+            {
+                result[kvp.Key] = ApplyPlayerCapsuleMinimum(kvp.Key.race, kvp.Key.gender, kvp.Value);
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -300,11 +341,11 @@ namespace GameData.Core.Constants
             var result = new Dictionary<string, (float radius, float height)>();
 
             // Add gender dimensions
-            if (raceGenderCache.TryGetValue((race, Gender.Male), out var maleDims))
-                result["Male"] = maleDims;
+            if (raceGenderCache.TryGetValue((race, Gender.Male), out _))
+                result["Male"] = GetCapsuleForRace(race, Gender.Male);
 
-            if (raceGenderCache.TryGetValue((race, Gender.Female), out var femaleDims))
-                result["Female"] = femaleDims;
+            if (raceGenderCache.TryGetValue((race, Gender.Female), out _))
+                result["Female"] = GetCapsuleForRace(race, Gender.Female);
 
             // Add druid forms if applicable
             if (CanBeDruid(race))
@@ -605,42 +646,11 @@ namespace GameData.Core.Constants
         
         private static void UseHardcodedValues()
         {
-            // Fallback values for male models
-            var maleDefaults = new Dictionary<Race, (float, float)>
+            foreach (var kvp in PlayerCapsuleMinimums)
             {
-                { Race.Human, (0.306f, 2.0313f) },
-                { Race.Dwarf, (0.347f, 1.4688f) },
-                { Race.Gnome, (0.2999f, 1.0625f) },
-                { Race.NightElf, (0.306f, 2.4375f) },
-                { Race.Orc, (0.3718f, 2.2813f) },
-                { Race.Undead, (0.3836f, 1.9063f) },
-                { Race.Troll, (0.3718f, 2.5313f) },
-                { Race.Tauren, (0.9747f, 2.625f) }
-            };
-
-            // Female models are typically slightly smaller
-            var femaleDefaults = new Dictionary<Race, (float, float)>
-            {
-                { Race.Human, (0.208f, 1.7906f) },
-                { Race.Dwarf, (0.347f, 1.35f) },
-                { Race.Gnome, (0.2999f, 0.9844f) },
-                { Race.NightElf, (0.306f, 2.3125f) },
-                { Race.Orc, (0.2556f, 2.0313f) },
-                { Race.Undead, (0.3565f, 1.6563f) },
-                { Race.Troll, (0.4279f, 2.1406f) },
-                { Race.Tauren, (0.9747f, 2.375f) }
-            };
-
-            // Populate all caches
-            foreach (var kvp in maleDefaults)
-            {
-                dimensionCache[kvp.Key] = kvp.Value;
-                raceGenderCache[(kvp.Key, Gender.Male)] = kvp.Value;
-            }
-
-            foreach (var kvp in femaleDefaults)
-            {
-                raceGenderCache[(kvp.Key, Gender.Female)] = kvp.Value;
+                raceGenderCache[kvp.Key] = kvp.Value;
+                if (kvp.Key.gender == Gender.Male)
+                    dimensionCache[kvp.Key.race] = kvp.Value;
             }
 
             // Hardcoded druid form estimates

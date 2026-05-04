@@ -10,6 +10,15 @@ namespace BotRunner.Tests;
 public sealed class RaceDimensionsConcurrencyTests
 {
     [Fact]
+    public void GetCapsuleForRace_TaurenMale_UsesLargePlayerCollisionCapsule()
+    {
+        var capsule = RaceDimensions.GetCapsuleForRace(Race.Tauren, Gender.Male);
+
+        Assert.InRange(capsule.radius, 0.974f, 1.1f);
+        Assert.InRange(capsule.height, 2.62f, 2.8f);
+    }
+
+    [Fact]
     public void GetCapsuleForRace_ConcurrentFirstCalls_DoNotCorruptCaches()
     {
         // Regression guard: 20-bot battleground fixtures have each bot worker's

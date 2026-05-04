@@ -229,7 +229,8 @@ public partial class LiveBotFixture
     {
         var sw = Stopwatch.StartNew();
         var lastProgressLog = TimeSpan.Zero;
-        while (sw.Elapsed < timeout)
+        var waitIndefinitely = timeout == Timeout.InfiniteTimeSpan;
+        while (waitIndefinitely || sw.Elapsed < timeout)
         {
             await RefreshSnapshotsAsync();
             var snap = GetTrackedSnapshotForAccount(accountName) ?? await GetSnapshotAsync(accountName);
@@ -240,7 +241,8 @@ public partial class LiveBotFixture
             if (progressLabel != null && sw.Elapsed - lastProgressLog >= TimeSpan.FromSeconds(5))
             {
                 lastProgressLog = sw.Elapsed;
-                _testOutput?.WriteLine($"  [{progressLabel}] Still waiting... {sw.Elapsed.TotalSeconds:F0}s / {timeout.TotalSeconds:F0}s elapsed");
+                var timeoutText = waitIndefinitely ? "no timeout" : $"{timeout.TotalSeconds:F0}s";
+                _testOutput?.WriteLine($"  [{progressLabel}] Still waiting... {sw.Elapsed.TotalSeconds:F0}s / {timeoutText} elapsed");
             }
 
             await Task.Delay(pollIntervalMs);

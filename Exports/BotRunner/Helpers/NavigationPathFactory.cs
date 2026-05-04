@@ -1,7 +1,5 @@
 using BotRunner.Clients;
 using BotRunner.Movement;
-using GameData.Core.Constants;
-using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 
 namespace BotRunner.Helpers;
@@ -20,16 +18,14 @@ public static class NavigationPathFactory
         IWoWLocalPlayer? player,
         IObjectManager objectManager)
     {
-        var (radius, height) = player != null
-            ? RaceDimensions.GetCapsuleForRace(player.Race, player.Gender)
-            : (0.3064f, 2.0313f);
+        var capabilities = NavigationMovementCapabilities.Resolve(player);
         return new NavigationPath(client,
-            capsuleRadius: radius,
-            capsuleHeight: height,
+            capsuleRadius: capabilities.CapsuleRadius,
+            capsuleHeight: capabilities.CapsuleHeight,
             nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end),
             stuckRecoveryGenerationProvider: () => objectManager.MovementStuckRecoveryGeneration,
-            race: player?.Race ?? 0,
-            gender: player?.Gender ?? 0,
+            race: capabilities.Race,
+            gender: capabilities.Gender,
             supportsNativeLocalPhysicsQueries: LocalPhysicsSupport.SupportsReliableQueries(objectManager));
     }
 
@@ -42,19 +38,17 @@ public static class NavigationPathFactory
         IWoWLocalPlayer? player,
         IObjectManager objectManager)
     {
-        var (radius, height) = player != null
-            ? RaceDimensions.GetCapsuleForRace(player.Race, player.Gender)
-            : (0.3064f, 2.0313f);
+        var capabilities = NavigationMovementCapabilities.Resolve(player);
         return new NavigationPath(client,
             enableProbeHeuristics: false,
             enableDynamicProbeSkipping: false,
             strictPathValidation: false,
-            capsuleRadius: radius,
-            capsuleHeight: height,
+            capsuleRadius: capabilities.CapsuleRadius,
+            capsuleHeight: capabilities.CapsuleHeight,
             nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end),
             stuckRecoveryGenerationProvider: () => objectManager.MovementStuckRecoveryGeneration,
-            race: player?.Race ?? 0,
-            gender: player?.Gender ?? 0,
+            race: capabilities.Race,
+            gender: capabilities.Gender,
             supportsNativeLocalPhysicsQueries: LocalPhysicsSupport.SupportsReliableQueries(objectManager));
     }
 }

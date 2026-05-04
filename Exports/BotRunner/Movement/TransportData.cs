@@ -21,7 +21,9 @@ public static class TransportData
         string Name,              // e.g. "Undercity Upper", "Undercity Lower"
         uint MapId,
         Position WaitPosition,    // Where to stand and wait for the transport
-        float BoardingRadius);    // How close = "at the stop"
+        float BoardingRadius,     // How close = "at the stop"
+        Position? BoardingPosition = null, // Optional fixed world staging point near an offset transport deck
+        Position? TransportBoardingOffset = null); // Optional local-space point to stand on the transport model
 
     /// <summary>
     /// A transport definition with its stops.
@@ -164,8 +166,24 @@ public static class TransportData
         Type: TransportType.Zeppelin,
         Stops:
         [
-            new("Orgrimmar Zeppelin Tower", 1, new Position(1320.0f, -4649.0f, 53.0f), BoardingRadius: 15f),
-            new("Undercity Zeppelin Tower", 0, new Position(2066.0f, 288.0f, 97.0f), BoardingRadius: 15f),
+            new(
+                "Orgrimmar Zeppelin Tower",
+                1,
+                // org-uc-boarding.jpg /gps, aligned to the Orgrimmar -> Undercity gangplank.
+                new Position(1320.142944f, -4653.158691f, 53.891945f),
+                BoardingRadius: 12f,
+                BoardingPosition: new Position(1320.142944f, -4653.158691f, 53.891945f),
+                // DBC path 302 stops the model at (1318.107,-4658.047,71.860);
+                // zepplin-riding.jpg captures a stable center-deck transport-local offset.
+                TransportBoardingOffset: new Position(-12.580913f, -7.983256f, -16.398277f)),
+            new(
+                "Undercity Zeppelin Tower",
+                0,
+                // uc-org-boarding.jpg /gps, aligned to the Undercity -> Orgrimmar gangplank.
+                new Position(2066.911377f, 290.113708f, 97.031593f),
+                BoardingRadius: 12f,
+                BoardingPosition: new Position(2066.911377f, 290.113708f, 97.031593f),
+                TransportBoardingOffset: new Position(-12.580913f, -7.983256f, -16.398277f)),
         ],
         VerticalRange: 0f);
 
@@ -293,6 +311,14 @@ public static class TransportData
     public static TransportDefinition? FindByEntry(uint gameObjectEntry)
     {
         return AllTransports.FirstOrDefault(t => t.GameObjectEntry == gameObjectEntry);
+    }
+
+    /// <summary>
+    /// Find a transport by a packed transport GUID from object or movement state.
+    /// </summary>
+    public static TransportDefinition? FindByGuid(ulong guid)
+    {
+        return TransportObjectIdentity.FindTransportByGuid(guid);
     }
 
     /// <summary>

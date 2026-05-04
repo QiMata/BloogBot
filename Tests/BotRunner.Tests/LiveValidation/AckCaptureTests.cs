@@ -41,9 +41,9 @@ public sealed class AckCaptureTests
     private const float KnockbackStageY = 150.0f;
     private const float KnockbackStageZ = -18.8f;
     // MaNGOS game_tele DurotarZeppelin / transports entry "Orgrimmar and Undercity".
-    private const float OrgrimmarZeppelinTowerX = 1340.98f;
-    private const float OrgrimmarZeppelinTowerY = -4638.58f;
-    private const float OrgrimmarZeppelinTowerZ = 53.5445f;
+    private const float OrgrimmarZeppelinTowerX = 1320.142944f;
+    private const float OrgrimmarZeppelinTowerY = -4653.158691f;
+    private const float OrgrimmarZeppelinTowerZ = 53.891945f;
     private const uint OrgrimmarUndercityZeppelinEntry = 164871;
     private const uint GoTypeTransport = 11;
     private const uint GoTypeMoTransport = 15;

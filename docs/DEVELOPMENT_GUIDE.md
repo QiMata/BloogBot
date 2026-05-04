@@ -309,6 +309,12 @@ void ConfigureMyNewActivity() =>
 ### Working with Navigation (C++)
 
 The `Exports/Navigation/` project uses Detour/Recast for navmesh queries.
+Static gameobject collision must come from generated mmap data. Do not add
+route-specific blocker coordinate lists, clearance cylinders, or hardcoded
+detour waypoints in managed pathfinding/BotRunner code to make one route pass;
+when a route clips static Orgrimmar objects or corners, fix the GO-aware mmap
+export/generation and keep the offline route test red until the regenerated
+mesh avoids the objects naturally.
 
 **Key files**:
 - `MapLoader.cpp` - Loads `.mmap` navmesh files

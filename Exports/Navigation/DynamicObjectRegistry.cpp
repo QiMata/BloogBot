@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <string>
 
 namespace
 {
@@ -218,6 +219,74 @@ DynamicObjectRegistry::LoadModel(const std::string& modelName)
     return cached;
 }
 
+std::shared_ptr<DynamicObjectRegistry::CachedModel>
+DynamicObjectRegistry::CreateFallbackModel(uint32_t displayId)
+{
+    const std::string modelName = "__fallback_display_" + std::to_string(displayId);
+    auto it = m_modelCache.find(modelName);
+    if (it != m_modelCache.end())
+        return it->second;
+
+    constexpr int Segments = 12;
+    // Unknown GO displays still need a conservative world blocker. The old
+    // 0.75y x 2.0y hull was smaller than large player capsules and let
+    // unmapped city props act as visual-only obstacles during Detour routing.
+    constexpr float Radius = 1.75f;
+    constexpr float Height = 4.0f;
+    constexpr float TwoPi = 6.28318530717958647692f;
+
+    auto cached = std::make_shared<CachedModel>();
+    cached->modelName = modelName;
+    cached->localVertices.reserve((Segments * 2) + 2);
+    cached->localIndices.reserve(Segments * 12);
+
+    for (int i = 0; i < Segments; ++i)
+    {
+        const float angle = (TwoPi * static_cast<float>(i)) / static_cast<float>(Segments);
+        const float x = std::cos(angle) * Radius;
+        const float y = std::sin(angle) * Radius;
+        cached->localVertices.emplace_back(x, y, 0.0f);
+        cached->localVertices.emplace_back(x, y, Height);
+    }
+
+    const uint32_t bottomCenter = static_cast<uint32_t>(cached->localVertices.size());
+    cached->localVertices.emplace_back(0.0f, 0.0f, 0.0f);
+    const uint32_t topCenter = static_cast<uint32_t>(cached->localVertices.size());
+    cached->localVertices.emplace_back(0.0f, 0.0f, Height);
+
+    for (int i = 0; i < Segments; ++i)
+    {
+        const uint32_t b0 = static_cast<uint32_t>(i * 2);
+        const uint32_t t0 = b0 + 1;
+        const uint32_t b1 = static_cast<uint32_t>(((i + 1) % Segments) * 2);
+        const uint32_t t1 = b1 + 1;
+
+        cached->localIndices.push_back(b0);
+        cached->localIndices.push_back(b1);
+        cached->localIndices.push_back(t1);
+        cached->localIndices.push_back(b0);
+        cached->localIndices.push_back(t1);
+        cached->localIndices.push_back(t0);
+
+        cached->localIndices.push_back(bottomCenter);
+        cached->localIndices.push_back(b1);
+        cached->localIndices.push_back(b0);
+
+        cached->localIndices.push_back(topCenter);
+        cached->localIndices.push_back(t0);
+        cached->localIndices.push_back(t1);
+    }
+
+    cached->localBounds = G3D::AABox(
+        G3D::Vector3(-Radius, -Radius, 0.0f),
+        G3D::Vector3(Radius, Radius, Height));
+
+    std::cerr << "[DynObjReg] Using fallback collision hull for unknown displayId "
+              << displayId << "\n";
+    m_modelCache[modelName] = cached;
+    return cached;
+}
+
 // ==========================================================================
 // Registration
 // ==========================================================================
@@ -239,13 +308,12 @@ bool DynamicObjectRegistry::EnsureRegistered(
     if (m_objects.count(guid) > 0)
         return true;
 
-    // Look up model name from displayId
+    // Look up model name from displayId, falling back to a conservative
+    // hull for city props that are not present in temp_gameobject_models.
     auto mapIt = m_displayIdMap.find(displayId);
-    if (mapIt == m_displayIdMap.end())
-        return false;  // Unknown displayId — silently skip (avoid spam)
-
+    const bool hasMappedModel = mapIt != m_displayIdMap.end();
     // Load the model mesh (cached)
-    auto model = LoadModel(mapIt->second.modelName);
+    auto model = hasMappedModel ? LoadModel(mapIt->second.modelName) : CreateFallbackModel(displayId);
     if (!model)
         return false;
 
@@ -257,7 +325,7 @@ bool DynamicObjectRegistry::EnsureRegistered(
     obj.runtimeInstanceId = AllocateRuntimeInstanceId();
     obj.scale = scale;
     obj.model = model;
-    obj.isDoorModel = IsDoorModel(mapIt->second.modelName);
+    obj.isDoorModel = hasMappedModel && IsDoorModel(mapIt->second.modelName);
 
     m_instanceIdToGuid[obj.runtimeInstanceId] = guid;
     m_objects[guid] = std::move(obj);
@@ -270,16 +338,12 @@ bool DynamicObjectRegistry::RegisterObject(
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    // Look up model name from displayId
+    // Look up model name from displayId, falling back to a conservative
+    // hull for city props that are not present in temp_gameobject_models.
     auto mapIt = m_displayIdMap.find(displayId);
-    if (mapIt == m_displayIdMap.end())
-    {
-        std::cerr << "[DynObjReg] Unknown displayId " << displayId << " for entry " << entry << "\n";
-        return false;
-    }
-
+    const bool hasMappedModel = mapIt != m_displayIdMap.end();
     // Load the model mesh (cached)
-    auto model = LoadModel(mapIt->second.modelName);
+    auto model = hasMappedModel ? LoadModel(mapIt->second.modelName) : CreateFallbackModel(displayId);
     if (!model)
         return false;
 
@@ -291,7 +355,7 @@ bool DynamicObjectRegistry::RegisterObject(
     obj.runtimeInstanceId = AllocateRuntimeInstanceId();
     obj.scale = scale;
     obj.model = model;
-    obj.isDoorModel = IsDoorModel(mapIt->second.modelName);
+    obj.isDoorModel = hasMappedModel && IsDoorModel(mapIt->second.modelName);
 
     m_instanceIdToGuid[obj.runtimeInstanceId] = guid;
     m_objects[guid] = std::move(obj);

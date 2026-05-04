@@ -55,6 +55,7 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
     protected static WaitTracker Wait { get; } = new();
 
     private NavigationPath? _navPath;
+    private NavigationRoutePolicy _navPathPolicy = NavigationRoutePolicy.Standard;
 
     /// <summary>
     /// Exposes the cached NavigationPath for trace/diagnostic access in subclasses.
@@ -73,7 +74,12 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
     /// <summary>
     /// Move toward a destination using cached pathfinding and report whether a waypoint was found.
     /// </summary>
-    protected bool TryNavigateToward(Position destination, bool allowDirectFallback = false)
+    protected bool TryNavigateToward(
+        Position destination,
+        bool allowDirectFallback = false,
+        NavigationRoutePolicy routePolicy = NavigationRoutePolicy.Standard,
+        float minWaypointDistance = 0f,
+        bool allowDirectRecovery = false)
     {
         var player = ObjectManager.Player;
         if (player?.Position == null)
@@ -82,12 +88,13 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
             return false;
         }
 
-        if (_navPath == null)
+        if (_navPath == null || _navPathPolicy != routePolicy)
         {
             _navPath = NavigationPathFactory.Create(
                 Container.PathfindingClient,
                 ObjectManager,
-                NavigationRoutePolicy.Standard);
+                routePolicy);
+            _navPathPolicy = routePolicy;
         }
 
         var wallNormal = ObjectManager.PhysicsWallNormal2D;
@@ -96,11 +103,13 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
             destination,
             player.MapId,
             allowDirectFallback: allowDirectFallback,
+            minWaypointDistance: minWaypointDistance,
             physicsHitWall: ObjectManager.PhysicsHitWall,
             wallNormalX: wallNormal.X,
             wallNormalY: wallNormal.Y,
             blockedFraction: ObjectManager.PhysicsBlockedFraction,
-            currentTransportGuid: player.TransportGuid);
+            currentTransportGuid: player.TransportGuid,
+            allowDirectRecovery: allowDirectRecovery);
 
         if (_navPath.ShouldHoldPositionForTransport(player.Position, waypoint))
         {
@@ -112,7 +121,8 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
         {
             // BotRunner owns corridor/waypoint execution. MovementController only consumes
             // the current steering target for physics/collision parity against WoW.exe.
-            ObjectManager.MoveToward(waypoint);
+            var facing = player.GetFacingForPosition(waypoint);
+            ObjectManager.MoveToward(waypoint, facing);
 
             return true;
         }

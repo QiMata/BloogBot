@@ -29,7 +29,7 @@ services:
       - "7878:7878"
       - "8085:8085"
 
-  pathfinding-service:
+  wwow-pathfinding:
     build:
       context: .
       dockerfile: Services/PathfindingService/Dockerfile
@@ -47,7 +47,7 @@ services:
     depends_on:
       - vmangos-server
 
-  scene-data-service:
+  wwow-scene-data:
     build:
       context: .
       dockerfile: Services/SceneDataService/Dockerfile
@@ -79,13 +79,13 @@ services:
       WWOW_ACCOUNT_NAME: ${WWOW_BG_ACCOUNT_NAME:-TESTBOT2}
       WWOW_ACCOUNT_PASSWORD: ${WWOW_BG_ACCOUNT_PASSWORD:-PASSWORD}
       RealmEndpoint__IpAddress: vmangos-server
-      PathfindingService__IpAddress: pathfinding-service
+      PathfindingService__IpAddress: wwow-pathfinding
       PathfindingService__Port: "5001"
-      SceneDataService__IpAddress: scene-data-service
+      SceneDataService__IpAddress: wwow-scene-data
       SceneDataService__Port: "5003"
       CharacterStateListener__IpAddress: ${WWOW_STATE_MANAGER_HOST:-host.docker.internal}
       CharacterStateListener__Port: ${WWOW_STATE_MANAGER_PORT:-5002}
     depends_on:
       - vmangos-server
-      - pathfinding-service
-      - scene-data-service
+      - wwow-pathfinding
+      - wwow-scene-data

@@ -75,6 +75,42 @@ public class BotRunnerServiceSnapshotTests
     }
 
     [Fact]
+    public void PopulateSnapshotFromObjectManager_OnTransportCopiesLocalOffsetIntoMovementData()
+    {
+        var transportLocalPosition = new Position(6.7f, 0.1f, -18.6f);
+        var player = CreatePlayer(transportLocalPosition);
+        player.SetupGet(x => x.TransportGuid).Returns(0x1FC0000000028407UL);
+        player.SetupGet(x => x.MovementFlags).Returns(MovementFlags.MOVEFLAG_ONTRANSPORT);
+        player.SetupGet(x => x.TransportOrientation).Returns(0.25f);
+
+        var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
+        objectManager.SetupGet(x => x.EventHandler).Returns(new Mock<IWoWEventHandler>(MockBehavior.Loose).Object);
+        objectManager.SetupGet(x => x.HasEnteredWorld).Returns(true);
+        objectManager.SetupGet(x => x.IsInMapTransition).Returns(false);
+        objectManager.SetupGet(x => x.Player).Returns(player.Object);
+        objectManager.SetupGet(x => x.Objects).Returns(new IWoWObject[] { player.Object });
+        objectManager.SetupGet(x => x.Units).Returns(new IWoWUnit[] { player.Object });
+        objectManager.SetupGet(x => x.GameObjects).Returns(Array.Empty<IWoWGameObject>());
+        objectManager.SetupGet(x => x.KnownSpellIds).Returns(Array.Empty<uint>());
+        objectManager.Setup(x => x.GetContainedItems()).Returns(Array.Empty<IWoWItem>());
+
+        var service = new BotRunnerService(
+            objectManager.Object,
+            new CharacterStateUpdateClient(NullLogger.Instance),
+            new Mock<IDependencyContainer>(MockBehavior.Loose).Object);
+
+        InvokePopulateSnapshot(service);
+        var snapshot = ReadActivitySnapshot(service);
+
+        Assert.NotNull(snapshot.MovementData);
+        Assert.Equal(0x1FC0000000028407UL, snapshot.MovementData.TransportGuid);
+        Assert.Equal(transportLocalPosition.X, snapshot.MovementData.TransportOffsetX, 1);
+        Assert.Equal(transportLocalPosition.Y, snapshot.MovementData.TransportOffsetY, 1);
+        Assert.Equal(transportLocalPosition.Z, snapshot.MovementData.TransportOffsetZ, 1);
+        Assert.Equal(0.25f, snapshot.MovementData.TransportOrientation, 2);
+    }
+
+    [Fact]
     public void PopulateSnapshotFromObjectManager_SkipsNearbyEntitiesWhenTransitionStartsMidPopulate()
     {
         // Regression guard for the FG BG-transfer crash: a cross-map transfer that

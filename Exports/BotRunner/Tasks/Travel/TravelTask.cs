@@ -5,6 +5,7 @@ using GameData.Core.Enums;
 using GameData.Core.Interfaces;
 using GameData.Core.Models;
 using Microsoft.Extensions.Logging;
+using Pathfinding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,16 +22,28 @@ public class TravelTask : BotTask, IBotTask
     private const int MaxReplans = 3;
     private const float DefaultArrivalRadius = 5.0f;
     private const float WalkLegArrivalRadius = 15.0f;
+    private const float WalkLegTransportArrivalRadius = 8.0f;
+    private const float WalkLegTransportVerticalArrivalTolerance = 6.0f;
+    private const float TransportNearbyObjectRadius = 80.0f;
     private const float FlightMasterSearchRadius = 60.0f;
-    private const float FlightArrivalRadius = 200.0f;
+    private const float FlightArrivalRadius = 10.0f;
+    private const float FlightArrivalStableDistance = 1.0f;
+    private const int FlightArrivalStableTicks = 3;
     private const int FlightActivationMaxAttempts = 5;
     private const double FlightActivationRetrySeconds = 3.0;
     private const double FlightTimeoutSeconds = 360.0;
-    private const double TransportTimeoutSeconds = 300.0;
-    private const uint NpcFlagFlightMaster = 0x2000;
+    private const double TransportTimeoutSeconds = 480.0;
+    private const float WalkLegStallMovementYards = 1.5f;
+    private const float WalkLegStallActiveWaypointProgressYards = 1.0f;
+    private const float WalkLegStallFallbackMovementYards = 6.0f;
+    private const double WalkLegStallRecoverySeconds = 5.0;
+    private const double WalkLegStallRecoveryCooldownSeconds = 3.0;
+    private const float TransportExitVerticalArrivalTolerance = 25.0f;
+    private const uint NpcFlagFlightMaster = (uint)NPCFlags.UNIT_NPC_FLAG_FLIGHTMASTER;
 
     private readonly uint _targetMapId;
     private readonly TravelOptions _options;
+    private readonly Func<DateTime> _utcNow;
     private Position _targetPosition;
     private float _arrivalRadius;
 
@@ -39,14 +52,36 @@ public class TravelTask : BotTask, IBotTask
     private bool _initialized;
     private int _replanCount;
     private int _activeLegIndex = -1;
-    private DateTime _lastUpdateUtc = DateTime.UtcNow;
-    private DateTime _legStartUtc = DateTime.UtcNow;
+    private DateTime _lastUpdateUtc = DateTime.MinValue;
+    private DateTime _legStartUtc = DateTime.MinValue;
 
     private bool _flightActivated;
     private bool _flightDeparted;
     private int _flightActivationAttempts;
     private DateTime _nextFlightActivationUtc = DateTime.MinValue;
     private Position? _flightActivationStart;
+    private Position? _lastFlightArrivalCandidate;
+    private int _flightArrivalStableTicks;
+    private int _lastWalkTraceLegIndex = -1;
+    private int _lastWalkTracePlanVersion = -1;
+    private int _lastWalkTraceWaypointIndex = -1;
+    private int _lastWalkTraceStuckGeneration = -1;
+    private string? _lastWalkTraceResolution;
+    private DateTime _lastWalkTraceEmitUtc = DateTime.MinValue;
+    private Position? _walkProgressAnchor;
+    private uint _walkProgressAnchorMapId;
+    private DateTime _walkProgressAnchorUtc = DateTime.MinValue;
+    private int _walkProgressAnchorPlanVersion = -1;
+    private int _walkProgressAnchorWaypointIndex = -1;
+    private float _walkProgressAnchorActiveWaypointDistance = float.NaN;
+    private DateTime _lastWalkStallRecoveryUtc = DateTime.MinValue;
+    private int _walkStallRecoveryCount;
+    private string? _lastFlightTraceSignature;
+    private DateTime _lastFlightTraceEmitUtc = DateTime.MinValue;
+    private string? _lastTransportTraceSignature;
+    private DateTime _lastTransportTraceEmitUtc = DateTime.MinValue;
+    private Position? _scheduledTransportBoardingTarget;
+    private float? _scheduledTransportBoardingFacing;
 
     private TransportWaitingLogic? _transportLogic;
 
@@ -55,13 +90,17 @@ public class TravelTask : BotTask, IBotTask
         uint targetMapId,
         Position targetPos,
         TravelOptions? options = null,
-        float arrivalRadius = DefaultArrivalRadius)
+        float arrivalRadius = DefaultArrivalRadius,
+        Func<DateTime>? utcNowProvider = null)
         : base(context)
     {
         _targetMapId = targetMapId;
         _targetPosition = targetPos;
         _options = options ?? new TravelOptions();
         _arrivalRadius = arrivalRadius > 0f ? arrivalRadius : DefaultArrivalRadius;
+        _utcNow = utcNowProvider ?? (() => DateTime.UtcNow);
+        _lastUpdateUtc = _utcNow();
+        _legStartUtc = _lastUpdateUtc;
     }
 
     internal uint TargetMapId => _targetMapId;
@@ -87,7 +126,7 @@ public class TravelTask : BotTask, IBotTask
         if (player == null)
             return;
 
-        var now = DateTime.UtcNow;
+        var now = _utcNow();
         var elapsedSec = Math.Clamp((float)(now - _lastUpdateUtc).TotalSeconds, 0.05f, 2.0f);
         _lastUpdateUtc = now;
 
@@ -144,7 +183,7 @@ public class TravelTask : BotTask, IBotTask
         switch (leg.Type)
         {
             case TransitionType.Walk:
-                ExecuteWalkLeg(player, leg);
+                ExecuteWalkLeg(player, leg, now);
                 break;
             case TransitionType.FlightPath:
                 ExecuteFlightPathLeg(player, leg, now);
@@ -198,7 +237,7 @@ public class TravelTask : BotTask, IBotTask
                     player.Position.Y,
                     _targetPosition.X,
                     _targetPosition.Y);
-                BotContext.AddDiagnosticMessage($"[TRAVEL_PLAN] legs={_route.Count} {DescribeRoute(_route)}");
+                EmitTravelDiagnostic($"[TRAVEL_PLAN] legs={_route.Count} {DescribeRoute(_route)}");
             }
         }
         catch (Exception ex)
@@ -208,7 +247,7 @@ public class TravelTask : BotTask, IBotTask
         }
     }
 
-    private void ExecuteWalkLeg(IWoWLocalPlayer player, RouteLeg leg)
+    private void ExecuteWalkLeg(IWoWLocalPlayer player, RouteLeg leg, DateTime now)
     {
         if (player.MapId != leg.MapId)
         {
@@ -216,15 +255,26 @@ public class TravelTask : BotTask, IBotTask
             return;
         }
 
-        var walkDist = player.Position.DistanceTo2D(leg.End);
-        if (walkDist <= WalkLegArrivalRadius)
+        if (TryGetWalkLegArrival(
+            player.Position,
+            leg,
+            out var walkDist,
+            out var walkVerticalDelta,
+            out var walkArrivalRadius,
+            out var walkArrivalTarget))
         {
             ObjectManager.StopAllMovement();
-            CompleteCurrentLeg($"walk_arrived dist={walkDist:F1}");
+            CompleteCurrentLeg(
+                $"walk_arrived target={walkArrivalTarget} dist={walkDist:F1} dz={walkVerticalDelta:F1} radius={walkArrivalRadius:F1}");
             return;
         }
 
-        TryNavigateToward(leg.End);
+        var navigated = TryNavigateToward(
+            leg.End,
+            allowDirectFallback: false,
+            routePolicy: NavigationRoutePolicy.LongTravel);
+        EmitWalkNavigationTrace(player, leg, navigated, now);
+        ObserveWalkLegProgress(player, leg, navigated, now);
     }
 
     private void ExecuteFlightPathLeg(IWoWLocalPlayer player, RouteLeg leg, DateTime now)
@@ -274,7 +324,7 @@ public class TravelTask : BotTask, IBotTask
                 }
 
                 _nextFlightActivationUtc = now.AddSeconds(FlightActivationRetrySeconds);
-                BotContext.AddDiagnosticMessage(
+                EmitTravelDiagnostic(
                     $"[TRAVEL_FLIGHT_RETRY] attempt={_flightActivationAttempts} dest={leg.FlightEndNodeId.Value}");
                 return;
             }
@@ -284,7 +334,7 @@ public class TravelTask : BotTask, IBotTask
             _flightActivationStart = new Position(player.Position.X, player.Position.Y, player.Position.Z);
             _legStartUtc = now;
             ObjectManager.StopAllMovement();
-            BotContext.AddDiagnosticMessage(
+            EmitTravelDiagnostic(
                 $"[TRAVEL_FLIGHT] activated {leg.FlightStartNodeId}->{leg.FlightEndNodeId}");
             return;
         }
@@ -297,33 +347,155 @@ public class TravelTask : BotTask, IBotTask
         }
 
         var distanceToArrival = player.Position.DistanceTo2D(leg.End);
-        if (_flightDeparted && distanceToArrival <= FlightArrivalRadius && !onTransport)
+        var inFlight = ObjectManager.IsInFlight;
+        var airborne = IsAirborne(player);
+        var readyToLand = _flightDeparted
+            && distanceToArrival <= FlightArrivalRadius
+            && !onTransport
+            && !inFlight
+            && !airborne;
+
+        if (readyToLand)
         {
-            CompleteCurrentLeg($"flight_arrived dist={distanceToArrival:F1}");
-            return;
+            if (_lastFlightArrivalCandidate != null
+                && player.Position.DistanceTo(_lastFlightArrivalCandidate) <= FlightArrivalStableDistance)
+            {
+                _flightArrivalStableTicks++;
+            }
+            else
+            {
+                _flightArrivalStableTicks = 1;
+            }
+
+            _lastFlightArrivalCandidate = new Position(player.Position.X, player.Position.Y, player.Position.Z);
+            if (_flightArrivalStableTicks >= FlightArrivalStableTicks)
+            {
+                CompleteCurrentLeg($"flight_arrived dist={distanceToArrival:F1} stable={_flightArrivalStableTicks}");
+                return;
+            }
+        }
+        else
+        {
+            _lastFlightArrivalCandidate = null;
+            _flightArrivalStableTicks = 0;
+            EmitFlightStateTrace(player, leg, now, distanceToArrival, onTransport, inFlight, airborne);
         }
 
         if ((now - _legStartUtc).TotalSeconds > FlightTimeoutSeconds)
             FailOrReplan($"flight_timeout dest={leg.FlightEndNodeId.Value}");
     }
 
-    private void ExecuteTransportLeg(IWoWLocalPlayer player, RouteLeg leg, float elapsedSec, DateTime now)
+    private bool CanCompleteWalkLeg(RouteLeg leg, float verticalDelta)
     {
-        if (player.MapId != leg.MapId)
+        if (!WalkLegHandsOffToTransport(leg))
+            return true;
+
+        return verticalDelta <= WalkLegTransportVerticalArrivalTolerance;
+    }
+
+    private bool TryGetWalkLegArrival(
+        Position currentPosition,
+        RouteLeg leg,
+        out float distance,
+        out float verticalDelta,
+        out float arrivalRadius,
+        out string target)
+    {
+        distance = currentPosition.DistanceTo2D(leg.End);
+        verticalDelta = Math.Abs(currentPosition.Z - leg.End.Z);
+        arrivalRadius = GetWalkLegArrivalRadius(leg);
+        target = "end";
+        if (distance <= arrivalRadius && CanCompleteWalkLeg(leg, verticalDelta))
+            return true;
+
+        var boardStop = GetNextTransportBoardStop(leg);
+        var boardingPosition = boardStop?.BoardingPosition;
+        if (boardingPosition == null)
+            return false;
+
+        var boardingDistance = currentPosition.DistanceTo2D(boardingPosition);
+        var boardingVerticalDelta = Math.Abs(currentPosition.Z - boardingPosition.Z);
+        var boardingArrivalRadius = Math.Min(boardStop!.BoardingRadius, WalkLegTransportArrivalRadius);
+        if (boardingDistance > boardingArrivalRadius
+            || boardingVerticalDelta > WalkLegTransportVerticalArrivalTolerance)
         {
-            CompleteCurrentLeg("transport_map_changed");
-            return;
+            return false;
         }
 
+        distance = boardingDistance;
+        verticalDelta = boardingVerticalDelta;
+        arrivalRadius = boardingArrivalRadius;
+        target = "transport_boarding";
+        return true;
+    }
+
+    private float GetWalkLegArrivalRadius(RouteLeg leg)
+        => WalkLegHandsOffToTransport(leg)
+            ? WalkLegTransportArrivalRadius
+            : WalkLegArrivalRadius;
+
+    private TransportData.TransportStop? GetNextTransportBoardStop(RouteLeg leg)
+    {
+        if (!WalkLegHandsOffToTransport(leg) || _route == null)
+            return null;
+
+        return _route[_currentLegIndex + 1].BoardStop;
+    }
+
+    private bool WalkLegHandsOffToTransport(RouteLeg leg)
+    {
+        if (_route == null || _currentLegIndex + 1 >= _route.Count)
+            return false;
+
+        var nextLeg = _route[_currentLegIndex + 1];
+        return nextLeg.Start.DistanceTo2D(leg.End) <= WalkLegArrivalRadius
+            && IsTransportTransition(nextLeg.Type);
+    }
+
+    private static bool IsTransportTransition(TransitionType type)
+        => type is TransitionType.Boat
+            or TransitionType.Elevator
+            or TransitionType.Tram
+            or TransitionType.Zeppelin;
+
+    private void ExecuteTransportLeg(IWoWLocalPlayer player, RouteLeg leg, float elapsedSec, DateTime now)
+    {
         if (leg.Transport == null || leg.BoardStop == null || leg.ExitStop == null)
         {
             FailOrReplan("transport_missing_definition");
             return;
         }
 
+        if (player.MapId != leg.MapId && !IsCrossMapTransportLeg(leg))
+        {
+            CompleteCurrentLeg("transport_map_changed");
+            return;
+        }
+
         _transportLogic ??= new TransportWaitingLogic(leg.Transport, leg.BoardStop, leg.ExitStop);
-        var nearbyObjects = PathfindingOverlayBuilder.BuildNearbyObjects(ObjectManager, player.Position, leg.End);
-        var waypoint = _transportLogic.Update(player.Position, player.TransportGuid, nearbyObjects, elapsedSec);
+        var nearbyObjects = PathfindingOverlayBuilder.BuildNearbyObjects(
+            ObjectManager,
+            player.Position,
+            leg.End,
+            maxDistance: TransportNearbyObjectRadius);
+        var waypoint = _transportLogic.Update(
+            player.Position,
+            player.TransportGuid,
+            nearbyObjects,
+            elapsedSec,
+            player.MapId,
+            IsOnTransport(player));
+        EmitTransportStateTrace(player, leg, nearbyObjects, waypoint, now);
+
+        if (_transportLogic.MissedBoardingAttempt)
+        {
+            ResetScheduledTransportBoardingCommit();
+            ObjectManager.StopAllMovement();
+            EmitTravelDiagnostic(
+                $"[TRAVEL_TRANSPORT_MISSED_BOARDING] leg={_currentLegIndex} type={leg.Type} " +
+                $"player={FormatCompactPosition(player.Position)} board={FormatCompactPosition(leg.BoardStop.WaitPosition)}");
+            return;
+        }
 
         if (_transportLogic.CurrentPhase == TransportPhase.Riding && waypoint == null)
         {
@@ -333,9 +505,12 @@ public class TravelTask : BotTask, IBotTask
 
         if (_transportLogic.CurrentPhase == TransportPhase.Complete)
         {
-            if (leg.Type == TransitionType.Elevator && player.Position.DistanceTo2D(leg.End) <= WalkLegArrivalRadius)
+            if (HasReachedTransportExit(player, leg, out var exitDistance, out var exitVerticalDelta))
             {
-                CompleteCurrentLeg("elevator_complete");
+                var reason = leg.Type == TransitionType.Elevator
+                    ? "elevator_complete"
+                    : $"transport_arrived dist={exitDistance:F1} dz={exitVerticalDelta:F1}";
+                CompleteCurrentLeg(reason);
                 return;
             }
 
@@ -345,7 +520,11 @@ public class TravelTask : BotTask, IBotTask
 
         if (waypoint != null)
         {
-            if (player.Position.DistanceTo2D(waypoint) <= 1.0f)
+            if (ShouldDirectMoveOnScheduledTransport(player, leg))
+                DirectMoveOnScheduledTransport(player, waypoint);
+            else if (ShouldDirectBoardScheduledTransport(leg))
+                DirectBoardScheduledTransport(player, waypoint);
+            else if (player.Position.DistanceTo2D(waypoint) <= 1.0f)
                 ObjectManager.StopAllMovement();
             else
                 TryNavigateToward(waypoint, allowDirectFallback: true);
@@ -371,31 +550,45 @@ public class TravelTask : BotTask, IBotTask
     private void EnterLeg(int index, RouteLeg leg)
     {
         _activeLegIndex = index;
-        _legStartUtc = DateTime.UtcNow;
+        _legStartUtc = _utcNow();
         _flightActivated = false;
         _flightDeparted = false;
         _flightActivationAttempts = 0;
         _nextFlightActivationUtc = DateTime.MinValue;
         _flightActivationStart = null;
+        _lastFlightArrivalCandidate = null;
+        _flightArrivalStableTicks = 0;
         _transportLogic = null;
+        ResetScheduledTransportBoardingCommit();
         ClearNavigation();
+        ResetWalkTraceMarkers();
+        ResetWalkProgressMarkers();
+        ResetFlightTraceMarkers();
+        ResetTransportTraceMarkers();
 
-        BotContext.AddDiagnosticMessage(
+        EmitTravelDiagnostic(
             $"[TRAVEL_LEG] start index={index} type={leg.Type} map={leg.MapId} end=({leg.End.X:F1},{leg.End.Y:F1},{leg.End.Z:F1})");
     }
 
     private void CompleteCurrentLeg(string reason)
     {
-        BotContext.AddDiagnosticMessage($"[TRAVEL_LEG] complete index={_currentLegIndex} reason={reason}");
+        EmitTravelDiagnostic($"[TRAVEL_LEG] complete index={_currentLegIndex} reason={reason}");
         _currentLegIndex++;
         _activeLegIndex = -1;
         _transportLogic = null;
+        ResetScheduledTransportBoardingCommit();
+        _lastFlightArrivalCandidate = null;
+        _flightArrivalStableTicks = 0;
         ClearNavigation();
+        ResetWalkTraceMarkers();
+        ResetWalkProgressMarkers();
+        ResetFlightTraceMarkers();
+        ResetTransportTraceMarkers();
     }
 
     private void FailOrReplan(string reason)
     {
-        BotContext.AddDiagnosticMessage($"[TRAVEL_REPLAN] reason={reason} count={_replanCount}");
+        EmitTravelDiagnostic($"[TRAVEL_REPLAN] reason={reason} count={_replanCount}");
         if (_replanCount < MaxReplans)
         {
             _replanCount++;
@@ -419,8 +612,337 @@ public class TravelTask : BotTask, IBotTask
         _flightActivationAttempts = 0;
         _nextFlightActivationUtc = DateTime.MinValue;
         _flightActivationStart = null;
+        _lastFlightArrivalCandidate = null;
+        _flightArrivalStableTicks = 0;
         _transportLogic = null;
+        ResetScheduledTransportBoardingCommit();
         ClearNavigation();
+        ResetWalkTraceMarkers();
+        ResetWalkProgressMarkers();
+        ResetFlightTraceMarkers();
+        ResetTransportTraceMarkers();
+    }
+
+    private void ObserveWalkLegProgress(IWoWLocalPlayer player, RouteLeg leg, bool navigated, DateTime now)
+    {
+        if (player.MapId != leg.MapId || IsOnTransport(player))
+        {
+            ResetWalkProgressMarkers();
+            return;
+        }
+
+        var currentPosition = player.Position;
+        var trace = GetNavigationTraceSnapshot();
+        var activeWaypointDistance = GetActiveWaypointDistance(currentPosition, trace);
+        var anchor = _walkProgressAnchor;
+        if (anchor == null || _walkProgressAnchorMapId != player.MapId)
+        {
+            RecordWalkProgressAnchor(currentPosition, player.MapId, now, trace, activeWaypointDistance);
+            return;
+        }
+
+        var moved = currentPosition.DistanceTo2D(anchor);
+        var movedEnoughForWaypointProgress = moved > WalkLegStallMovementYards;
+        var planVersionChanged = trace != null
+            && trace.PlanVersion != _walkProgressAnchorPlanVersion;
+        var waypointProgressed = movedEnoughForWaypointProgress
+            && trace != null
+            && trace.CurrentWaypointIndex > _walkProgressAnchorWaypointIndex;
+        var activeWaypointProgressed =
+            movedEnoughForWaypointProgress
+            &&
+            float.IsFinite(activeWaypointDistance)
+            && float.IsFinite(_walkProgressAnchorActiveWaypointDistance)
+            && _walkProgressAnchorActiveWaypointDistance - activeWaypointDistance > WalkLegStallActiveWaypointProgressYards;
+        var fallbackPositionProgressed =
+            moved > WalkLegStallFallbackMovementYards;
+
+        if (planVersionChanged || waypointProgressed || activeWaypointProgressed || fallbackPositionProgressed)
+        {
+            RecordWalkProgressAnchor(currentPosition, player.MapId, now, trace, activeWaypointDistance);
+            return;
+        }
+
+        if (now - _walkProgressAnchorUtc < TimeSpan.FromSeconds(WalkLegStallRecoverySeconds))
+            return;
+
+        if (now - _lastWalkStallRecoveryUtc < TimeSpan.FromSeconds(WalkLegStallRecoveryCooldownSeconds))
+            return;
+
+        var replanned = NavPath?.RecalculateAfterMovementStall(currentPosition, leg.End, player.MapId) == true;
+        _lastWalkStallRecoveryUtc = now;
+        _walkStallRecoveryCount++;
+        ObjectManager.StopAllMovement();
+        EmitTravelDiagnostic(
+            $"[TRAVEL_WALK_STALL] leg={_currentLegIndex} count={_walkStallRecoveryCount} nav={navigated} replanned={replanned} " +
+            $"anchor={FormatCompactPosition(anchor)} current={FormatCompactPosition(currentPosition)} moved={moved:F1} " +
+            $"plan={trace?.PlanVersion ?? -1} idx={trace?.CurrentWaypointIndex ?? -1} " +
+            $"activeDist={activeWaypointDistance:F1}->{_walkProgressAnchorActiveWaypointDistance:F1} " +
+            $"target={FormatCompactPosition(leg.End)}");
+
+        var updatedTrace = GetNavigationTraceSnapshot();
+        RecordWalkProgressAnchor(
+            currentPosition,
+            player.MapId,
+            now,
+            updatedTrace,
+            GetActiveWaypointDistance(currentPosition, updatedTrace));
+    }
+
+    private void RecordWalkProgressAnchor(
+        Position position,
+        uint mapId,
+        DateTime now,
+        NavigationTraceSnapshot? trace,
+        float activeWaypointDistance)
+    {
+        _walkProgressAnchor = new Position(position.X, position.Y, position.Z);
+        _walkProgressAnchorMapId = mapId;
+        _walkProgressAnchorUtc = now;
+        _walkProgressAnchorPlanVersion = trace?.PlanVersion ?? -1;
+        _walkProgressAnchorWaypointIndex = trace?.CurrentWaypointIndex ?? -1;
+        _walkProgressAnchorActiveWaypointDistance = activeWaypointDistance;
+    }
+
+    private static float GetActiveWaypointDistance(Position currentPosition, NavigationTraceSnapshot? trace)
+    {
+        if (trace?.ActiveWaypoint == null)
+            return float.NaN;
+
+        return currentPosition.DistanceTo2D(trace.ActiveWaypoint);
+    }
+
+    private void EmitFlightStateTrace(
+        IWoWLocalPlayer player,
+        RouteLeg leg,
+        DateTime now,
+        float distanceToArrival,
+        bool onTransport,
+        bool inFlight,
+        bool airborne)
+    {
+        if (!_flightActivated)
+            return;
+
+        var signature =
+            $"departed={_flightDeparted};transport={onTransport};inFlight={inFlight};mounted={player.IsMounted};airborne={airborne}";
+        if (string.Equals(_lastFlightTraceSignature, signature, StringComparison.Ordinal)
+            && now - _lastFlightTraceEmitUtc < TimeSpan.FromSeconds(10))
+            return;
+
+        _lastFlightTraceSignature = signature;
+        _lastFlightTraceEmitUtc = now;
+        EmitTravelDiagnostic(
+            $"[TRAVEL_FLIGHT_WAIT] leg={_currentLegIndex} {signature} dist={distanceToArrival:F1} " +
+            $"player={FormatCompactPosition(player.Position)} target={FormatCompactPosition(leg.End)}");
+    }
+
+    private void EmitTransportStateTrace(
+        IWoWLocalPlayer player,
+        RouteLeg leg,
+        IReadOnlyList<DynamicObjectProto> nearbyObjects,
+        Position? waypoint,
+        DateTime now)
+    {
+        if (_transportLogic == null)
+            return;
+
+        var transport = leg.Transport;
+        var transportDisplayId = transport?.DisplayId ?? 0u;
+        var transportIdentity = transport == null
+            ? "none"
+            : $"{transport.GameObjectEntry}:{transport.DisplayId}:{transport.Name}";
+        DynamicObjectProto[] displayObjects = transportDisplayId == 0
+            ? Array.Empty<DynamicObjectProto>()
+            : nearbyObjects
+                .Where(obj => obj.DisplayId == transportDisplayId)
+                .OrderBy(obj => Distance2D(player.Position, obj))
+                .ToArray();
+        DynamicObjectProto[] matchingObjects = transport == null
+            ? Array.Empty<DynamicObjectProto>()
+            : displayObjects
+                .Where(obj => TransportObjectIdentity.MatchesTransport(obj, transport))
+                .ToArray();
+        var nearestObject = matchingObjects.FirstOrDefault();
+        var nearestDisplayObject = displayObjects.FirstOrDefault();
+        var nearestText = TransportObjectIdentity.Format(nearestObject);
+        var nearestDisplayText = TransportObjectIdentity.Format(nearestDisplayObject);
+        var transportOffset = IsOnTransport(player) ? player.Position : null;
+        var configuredBoardOffset = leg.BoardStop?.TransportBoardingOffset;
+        var signature =
+            $"phase={_transportLogic.CurrentPhase};transport=0x{player.TransportGuid:X};" +
+            $"map={player.MapId};expected={transportIdentity};wp={FormatCompactPosition(waypoint)};" +
+            $"offset={FormatCompactPosition(transportOffset)};" +
+            $"boardOffset={FormatCompactPosition(configuredBoardOffset)};" +
+            $"near={matchingObjects.Length};displayNear={displayObjects.Length};" +
+            $"nearest={nearestText};nearestDisplay={nearestDisplayText}";
+
+        if (string.Equals(_lastTransportTraceSignature, signature, StringComparison.Ordinal)
+            && now - _lastTransportTraceEmitUtc < TimeSpan.FromSeconds(10))
+            return;
+
+        _lastTransportTraceSignature = signature;
+        _lastTransportTraceEmitUtc = now;
+        EmitTravelDiagnostic(
+            $"[TRAVEL_TRANSPORT] leg={_currentLegIndex} {signature} player={FormatCompactPosition(player.Position)} " +
+            $"board={FormatCompactPosition(leg.BoardStop?.WaitPosition)} exit={FormatCompactPosition(leg.ExitStop?.WaitPosition)}");
+    }
+
+    private void EmitWalkNavigationTrace(IWoWLocalPlayer player, RouteLeg leg, bool navigated, DateTime now)
+    {
+        var trace = GetNavigationTraceSnapshot();
+        if (trace == null)
+            return;
+
+        var stuckGeneration = ObjectManager.MovementStuckRecoveryGeneration;
+        var resolution = trace.LastResolution ?? "none";
+        var waypointEmitThreshold = trace.PlannedWaypoints.Length >= 100 ? 5 : 20;
+        var shouldEmit =
+            _lastWalkTraceLegIndex != _currentLegIndex
+            || _lastWalkTracePlanVersion != trace.PlanVersion
+            || Math.Abs(_lastWalkTraceWaypointIndex - trace.CurrentWaypointIndex) >= waypointEmitThreshold
+            || _lastWalkTraceStuckGeneration != stuckGeneration
+            || !string.Equals(_lastWalkTraceResolution, resolution, StringComparison.Ordinal)
+            || now - _lastWalkTraceEmitUtc >= TimeSpan.FromSeconds(10);
+
+        if (!shouldEmit)
+            return;
+
+        _lastWalkTraceLegIndex = _currentLegIndex;
+        _lastWalkTracePlanVersion = trace.PlanVersion;
+        _lastWalkTraceWaypointIndex = trace.CurrentWaypointIndex;
+        _lastWalkTraceStuckGeneration = stuckGeneration;
+        _lastWalkTraceResolution = resolution;
+        _lastWalkTraceEmitUtc = now;
+
+        var wallNormal = ObjectManager.PhysicsWallNormal2D;
+        var decision = trace.RouteDecision;
+        EmitTravelDiagnostic(
+            $"[TRAVEL_WALK_NAV] leg={_currentLegIndex} nav={navigated} stuck={stuckGeneration} " +
+            $"plan={trace.PlanVersion} smooth={trace.SmoothPath} reason={trace.LastReplanReason ?? "none"} " +
+            $"resolution={resolution} idx={trace.CurrentWaypointIndex} afford={decision.MaxAffordance} " +
+            $"agent={trace.Race}/{trace.Gender} capsule=({trace.CapsuleRadius:F3},{trace.CapsuleHeight:F3}) " +
+            $"alt={decision.AlternateSelected}/{decision.AlternateEvaluated} overlay={trace.UsedNearbyObjectOverlay}:{trace.NearbyObjectCount} " +
+            $"hitWall={ObjectManager.PhysicsHitWall} blocked={ObjectManager.PhysicsBlockedFraction:F2} " +
+            $"wall=({wallNormal.X:F2},{wallNormal.Y:F2}) " +
+            $"player={FormatCompactPosition(player.Position)} target={FormatCompactPosition(leg.End)} " +
+            $"active={FormatCompactPosition(trace.ActiveWaypoint)} " +
+            $"window={FormatCompactPathWindow(trace.PlannedWaypoints, trace.CurrentWaypointIndex, 3, 7)} " +
+            $"samples={FormatCompactExecutionSamples(trace.ExecutionSamples, 3)}");
+    }
+
+    private void EmitTravelDiagnostic(string message)
+    {
+        BotContext.AddDiagnosticMessage(message);
+        BotRunnerService.DiagLog(message);
+    }
+
+    private void ResetWalkTraceMarkers()
+    {
+        _lastWalkTraceLegIndex = -1;
+        _lastWalkTracePlanVersion = -1;
+        _lastWalkTraceWaypointIndex = -1;
+        _lastWalkTraceStuckGeneration = -1;
+        _lastWalkTraceResolution = null;
+        _lastWalkTraceEmitUtc = DateTime.MinValue;
+    }
+
+    private void ResetWalkProgressMarkers()
+    {
+        _walkProgressAnchor = null;
+        _walkProgressAnchorMapId = 0;
+        _walkProgressAnchorUtc = DateTime.MinValue;
+        _walkProgressAnchorPlanVersion = -1;
+        _walkProgressAnchorWaypointIndex = -1;
+        _walkProgressAnchorActiveWaypointDistance = float.NaN;
+        _lastWalkStallRecoveryUtc = DateTime.MinValue;
+        _walkStallRecoveryCount = 0;
+    }
+
+    private void ResetFlightTraceMarkers()
+    {
+        _lastFlightTraceSignature = null;
+        _lastFlightTraceEmitUtc = DateTime.MinValue;
+    }
+
+    private void ResetTransportTraceMarkers()
+    {
+        _lastTransportTraceSignature = null;
+        _lastTransportTraceEmitUtc = DateTime.MinValue;
+    }
+
+    private static float Distance2D(Position position, DynamicObjectProto obj)
+    {
+        var dx = position.X - obj.X;
+        var dy = position.Y - obj.Y;
+        return MathF.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static string FormatCompactPosition(Position? position)
+        => position == null
+            ? "none"
+            : $"({position.X:F1},{position.Y:F1},{position.Z:F1})";
+
+    private static string FormatCompactPath(Position[] path, int limit)
+    {
+        if (path.Length == 0)
+            return "[]";
+
+        var count = Math.Min(path.Length, limit);
+        var parts = new string[count + (path.Length > limit ? 1 : 0)];
+        for (var i = 0; i < count; i++)
+            parts[i] = FormatCompactPosition(path[i]);
+
+        if (path.Length > limit)
+            parts[^1] = $"+{path.Length - limit}";
+
+        return $"[{string.Join(" ", parts)}]";
+    }
+
+    private static string FormatCompactPathWindow(Position[] path, int activeIndex, int before, int after)
+    {
+        if (path.Length == 0)
+            return "[]";
+
+        var center = Math.Clamp(activeIndex, 0, path.Length - 1);
+        var start = Math.Max(0, center - Math.Max(0, before));
+        var end = Math.Min(path.Length - 1, center + Math.Max(0, after));
+        var parts = new List<string>((end - start) + 1 + (start > 0 ? 1 : 0) + (end < path.Length - 1 ? 1 : 0));
+
+        if (start > 0)
+            parts.Add($"+{start}");
+
+        for (var i = start; i <= end; i++)
+        {
+            var marker = i == center ? "*" : "";
+            parts.Add($"{marker}{i}:{FormatCompactPosition(path[i])}");
+        }
+
+        if (end < path.Length - 1)
+            parts.Add($"+{path.Length - end - 1}");
+
+        return $"[{string.Join(" ", parts)}]";
+    }
+
+    private static string FormatCompactExecutionSamples(NavigationExecutionSample[] samples, int limit)
+    {
+        if (samples.Length == 0)
+            return "[]";
+
+        var start = Math.Max(0, samples.Length - Math.Max(1, limit));
+        var parts = new List<string>(samples.Length - start + (start > 0 ? 1 : 0));
+        if (start > 0)
+            parts.Add($"+{start}");
+
+        for (var i = start; i < samples.Length; i++)
+        {
+            var sample = samples[i];
+            var fallback = sample.UsedDirectFallback ? ":fb" : "";
+            parts.Add(
+                $"p{sample.PlanVersion}:i{sample.WaypointIndex}:{sample.Resolution}{fallback}:d{sample.DistanceToWaypoint:F1}->{FormatCompactPosition(sample.ReturnedWaypoint)}");
+        }
+
+        return $"[{string.Join(" ", parts)}]";
     }
 
     private IWoWUnit? FindNearestFlightMaster(Position playerPosition)
@@ -432,6 +954,80 @@ public class TravelTask : BotTask, IBotTask
     private static bool IsOnTransport(IWoWLocalPlayer player)
         => player.TransportGuid != 0
             || (player.MovementFlags & MovementFlags.MOVEFLAG_ONTRANSPORT) != 0;
+
+    private static bool IsCrossMapTransportLeg(RouteLeg leg)
+        => leg.Transport != null
+            && leg.BoardStop != null
+            && leg.ExitStop != null
+            && leg.Transport.Type != TransportData.TransportType.Elevator
+            && leg.BoardStop.MapId != leg.ExitStop.MapId;
+
+    private bool ShouldDirectBoardScheduledTransport(RouteLeg leg)
+        => _transportLogic?.CurrentPhase == TransportPhase.Boarding
+            && leg.Transport?.Type != TransportData.TransportType.Elevator;
+
+    private static bool ShouldDirectMoveOnScheduledTransport(IWoWLocalPlayer player, RouteLeg leg)
+        => IsOnTransport(player)
+            && leg.Transport?.Type != TransportData.TransportType.Elevator;
+
+    private void DirectMoveOnScheduledTransport(IWoWLocalPlayer player, Position waypoint)
+    {
+        if (player.Position.DistanceTo2D(waypoint) <= 1.0f)
+        {
+            ObjectManager.StopAllMovement();
+            return;
+        }
+
+        ObjectManager.MoveToward(waypoint, player.GetFacingForPosition(waypoint));
+    }
+
+    private void DirectBoardScheduledTransport(IWoWLocalPlayer player, Position waypoint)
+    {
+        if (_scheduledTransportBoardingTarget == null || !_scheduledTransportBoardingFacing.HasValue)
+        {
+            _scheduledTransportBoardingTarget = waypoint;
+            _scheduledTransportBoardingFacing = player.GetFacingForPosition(waypoint);
+        }
+
+        if (player.Position.DistanceTo2D(_scheduledTransportBoardingTarget) <= 0.75f)
+        {
+            ObjectManager.StopAllMovement();
+            return;
+        }
+
+        ObjectManager.MoveToward(_scheduledTransportBoardingTarget, _scheduledTransportBoardingFacing.Value);
+    }
+
+    private void ResetScheduledTransportBoardingCommit()
+    {
+        _scheduledTransportBoardingTarget = null;
+        _scheduledTransportBoardingFacing = null;
+    }
+
+    private static bool HasReachedTransportExit(
+        IWoWLocalPlayer player,
+        RouteLeg leg,
+        out float distance,
+        out float verticalDelta)
+    {
+        distance = float.PositiveInfinity;
+        verticalDelta = float.PositiveInfinity;
+
+        if (leg.ExitStop == null || player.MapId != leg.ExitStop.MapId)
+            return false;
+
+        distance = player.Position.DistanceTo2D(leg.ExitStop.WaitPosition);
+        verticalDelta = Math.Abs(player.Position.Z - leg.ExitStop.WaitPosition.Z);
+
+        if (leg.Type == TransitionType.Elevator)
+            return distance <= WalkLegArrivalRadius;
+
+        return distance <= Math.Max(leg.ExitStop.BoardingRadius, WalkLegArrivalRadius)
+            && verticalDelta <= TransportExitVerticalArrivalTolerance;
+    }
+
+    private static bool IsAirborne(IWoWLocalPlayer player)
+        => (player.MovementFlags & (MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) != 0;
 
     private static FlightPathData.Faction ToFlightPathFaction(TravelFaction faction)
         => faction switch

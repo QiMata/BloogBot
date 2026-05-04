@@ -20,6 +20,24 @@ Known remaining work in this owner: `0` items.
 - [x] `WSC-PAR-07` BG stop/use/cast packet trigger parity is part of the deterministic movement bundle: `ForceStopImmediate()` synchronously records `MSG_MOVE_STOP` before game-object use/cast packets, and server `0x7A` cast failure is named `TRY_AGAIN` (2026-04-15).
 
 ## Session Handoff
+### 2026-05-04 (scheduled zeppelin passive attach deck gate)
+- Pass result: focused scheduled-transport attach coverage passed `76/76`.
+- Last delta:
+  - `MovementController` now uses a tighter vertical range for passive
+    scheduled-transport attach so the Orgrimmar/Undercity zeppelin does not
+    falsely attach from the below-deck layer.
+  - The attach path still supports deck-height map-transfer evidence; the
+    rejected case is the old below-deck local offset that made boarding look
+    successful while the character was not actually standing on the deck.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=wowsharp_movement_scheduled_transport_attach_deck_gate.trx" --results-directory tmp/test-runtime/results-wowsharp` -> `passed (76/76)`.
+- Files changed:
+  - `Exports/WoWSharpClient/Movement/MovementController.cs`
+  - `Tests/WoWSharpClient.Tests/Movement/MovementControllerTests.cs`
+  - `Exports/WoWSharpClient/TASKS.md`
+  - `Tests/WoWSharpClient.Tests/TASKS.md`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
 ### 2026-04-28 (direct movement activity support)
 - Pass result: `BG jump, knockback, moving-transport object creation, and passive gameobject-transport attach support passed deterministic and live parity validation`
 - Last delta:

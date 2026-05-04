@@ -1,6 +1,8 @@
 using PathfindingService.Repository;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace PathfindingService.Tests;
 
@@ -95,28 +97,109 @@ public class NavigationFixture : IDisposable
     /// </summary>
     private static void EnsureDataDir()
     {
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WWOW_DATA_DIR")))
+        if (IsUsableNavDataRoot(Environment.GetEnvironmentVariable("WWOW_DATA_DIR")))
             return;
 
-        var candidates = new[]
+        foreach (var dir in EnumerateNavDataCandidates())
         {
-            AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-            // When test output goes to Tests/<project>/bin/<config>/net8.0/
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Debug", "net8.0")),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "Bot", "Release", "net8.0")),
-            // When test output goes to shared Bot/<config>/net8.0/ (OutputPath override)
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "Debug", "net8.0")),
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "Release", "net8.0")),
-        };
-
-        foreach (var dir in candidates)
-        {
-            if (Directory.Exists(Path.Combine(dir, "mmaps")))
+            if (IsUsableNavDataRoot(dir))
             {
-                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", dir);
+                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", Path.GetFullPath(dir!));
                 return;
             }
         }
+    }
+
+    private static IEnumerable<string?> EnumerateNavDataCandidates()
+    {
+        var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        yield return Environment.GetEnvironmentVariable("WWOW_VMANGOS_DATA_DIR");
+        yield return Path.Combine(baseDir, "Data");
+        yield return baseDir;
+
+        foreach (var ancestor in EnumerateAncestors(baseDir))
+        {
+            yield return ancestor;
+            yield return Path.Combine(ancestor, "Data");
+            yield return Path.Combine(ancestor, "Bot", "Debug", "net8.0");
+            yield return Path.Combine(ancestor, "Bot", "Release", "net8.0");
+        }
+
+        foreach (var driveRoot in EnumerateReadyDriveRoots())
+        {
+            yield return Path.Combine(driveRoot, "MaNGOS", "data");
+            yield return Path.Combine(driveRoot, "Mangos", "data");
+            yield return Path.Combine(driveRoot, "mangos", "data");
+        }
+    }
+
+    private static IEnumerable<string> EnumerateAncestors(string path)
+    {
+        DirectoryInfo? current;
+        try
+        {
+            current = new DirectoryInfo(path);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        while (current != null)
+        {
+            yield return current.FullName;
+            current = current.Parent;
+        }
+    }
+
+    private static IEnumerable<string> EnumerateReadyDriveRoots()
+    {
+        DriveInfo[] drives;
+        try
+        {
+            drives = DriveInfo.GetDrives();
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (var drive in drives)
+        {
+            bool isReady;
+            try
+            {
+                isReady = drive.IsReady;
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (isReady)
+                yield return drive.RootDirectory.FullName;
+        }
+    }
+
+    private static bool IsUsableNavDataRoot(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+            return false;
+
+        string resolved;
+        try
+        {
+            resolved = Path.GetFullPath(candidate);
+        }
+        catch
+        {
+            return false;
+        }
+
+        return Directory.Exists(Path.Combine(resolved, "maps"))
+            && Directory.Exists(Path.Combine(resolved, "vmaps"))
+            && Directory.Exists(Path.Combine(resolved, "mmaps"));
     }
 
     public void Dispose() { /* Navigation lives for the AppDomain – nothing to do. */ }

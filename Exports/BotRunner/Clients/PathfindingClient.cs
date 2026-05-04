@@ -92,7 +92,13 @@ namespace BotRunner.Clients
     /// </summary>
     public class PathfindingClient : ProtobufSocketClient<PathfindingRequest, PathfindingResponse>
     {
-        internal const int DefaultPathRequestTimeoutMs = 30_000;
+        internal const int DefaultPathRequestTimeoutMs = 90_000;
+        private const float BlockingWallProgressThreshold = 0.75f;
+
+        public static bool IsBlockingWallContact(bool hitWall, float blockedFraction)
+            => hitWall
+                && float.IsFinite(blockedFraction)
+                && blockedFraction < BlockingWallProgressThreshold;
 
         private readonly ILogger? _logger;
         private readonly int _pathRequestTimeoutMs;
@@ -314,7 +320,7 @@ namespace BotRunner.Clients
                     stepUpBaseZ = output.StepUpBaseZ;
                     stepUpAge = output.StepUpAge;
                     wasGrounded = (output.MovementFlags & (uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) == 0;
-                    hitWall |= output.HitWall && output.BlockedFraction >= 0.75f;
+                    hitWall |= IsBlockingWallContact(output.HitWall, output.BlockedFraction);
 
                     var projectionT = Math.Clamp(
                         (((pos.X - from.X) * dx) + ((pos.Y - from.Y) * dy)) / (segmentDistance2D * segmentDistance2D),

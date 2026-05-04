@@ -50,14 +50,21 @@ namespace PathfindingService.Repository
     {
         private const string DLL_NAME = "Navigation";
         private static readonly float[] RepairOffsetDistances = [2f, 4f, 6f, 8f, 10f, 12f];
-        private static readonly float[] RepairAlongSegmentSamples = [0.35f, 0.5f, 0.65f];
+        private static readonly float[] RepairAlongSegmentSamples = [0.05f, 0.12f, 0.35f, 0.5f, 0.65f];
+        private static readonly TimeSpan DynamicOverlayRepairBudget = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan EarlyStaticRepairBudget = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan PostAffordanceStaticRepairBudget = TimeSpan.FromSeconds(3);
+        private static readonly TimeSpan OverlayStraightStaticRepairBudget = TimeSpan.FromMilliseconds(750);
         private const float CombineWaypointEpsilon = 0.25f;
         private const float LongSegmentLosRepairThreshold = 35f;
         private const float LongSegmentDensifySpacing = 24f;
         private const float NativePathEndpointMaxDistance = 8.0f;
         private const float SmoothCorridorExpansionMinSegmentLength = 6f;
+        private const float SmoothFallbackAfterStraightStaticBreakMinDistance = 50f;
         private const float SmoothPathDensifySpacing = 6f;
-        private const int EarlyStaticRepairScanLimit = 24;
+        private const int EarlyStaticRepairScanLimit = 256;
+        private const int PostAffordanceStaticRepairScanLimit = 32;
+        private const int OverlayStraightStaticRepairScanLimit = 32;
         private const float EarlyStaticRepairMinSegmentLength = 0.75f;
         private const float EarlyStaticRepairLosMinSegmentLength = 2.5f;
         private const float EarlyStaticRepairValidationMaxLength = 8f;
@@ -67,11 +74,69 @@ namespace PathfindingService.Repository
         private const float EarlySupportDuplicateHorizontalDistance = 0.35f;
         private const float EarlySupportProjectionMaxDelta = 4.0f;
         private const float EarlySupportGroundClearance = 0.05f;
+        private const float ShortVerticalLayerSpikeMinDelta = 2.5f;
+        private const float ShortVerticalLayerSpikeNeighborZTolerance = 1.5f;
+        private const float ShortVerticalLayerSpikeMaxLegLength = 5.0f;
+        private const float ShortVerticalLayerSpikeMaxBridgeLength = 8.0f;
+        private const float ShortHorizontalDetourSpikeMaxLegLength = 3.0f;
+        private const float ShortHorizontalDetourSpikeMaxBridgeLength = 4.5f;
+        private const float ShortHorizontalDetourSpikeMaxBridgeZDelta = 1.5f;
+        private const float ShortHorizontalDetourSpikeMinDetourRatio = 1.8f;
+        private const int LocalStaticRepairPointCandidateLimit = 12;
+        private const int LocalStaticRepairRouteCandidateLimit = 16;
+        private const int LocalStaticRepairRouteAnchorScanLimit = 12;
+        private const int NativeSegmentRepairTailSegmentLimit = 8;
+        private const float NativeSegmentRepairMaxHorizontalDistance = 18.0f;
         private static readonly float[] LongSegmentRepairForwardDistances = [8f, 14f, 22f];
         private static readonly float[] LongSegmentRepairLateralOffsets = [8f, -8f, 14f, -14f, 22f, -22f];
         private static readonly float[] LocalStaticRepairAlongSamples = [0.35f, 0.5f, 0.65f];
         private static readonly float[] LocalStaticRepairBaseOffsets = [1.25f, 2f, 3.5f, 5f, 8f, 12f, 16f];
         private static readonly float[] LocalStaticRepairEscapeDistances = [1.75f, 2.5f, 4f, 6f, 8f];
+        private static readonly TimeSpan LongSegmentRepairBudget = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan AffordanceRepairBudget = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan AffordanceRepairNativeLegDirectSearchBudget = TimeSpan.FromSeconds(5);
+        private static readonly float[] AffordanceRepairAlongSamples = [0.25f, 0.35f, 0.5f, 0.65f, 0.75f];
+        private static readonly float[] AffordanceRepairLateralOffsets = [6f, -6f, 8f, -8f, 10f, -10f, 12f, -12f, 16f, -16f, 20f, -20f, 24f, -24f];
+        private const float AffordanceRepairLookBehindDistance = 18f;
+        private const float AffordanceRepairLookAheadDistance = 18f;
+        private const float AffordanceRepairLocalLookBehindDistance = 6f;
+        private const float AffordanceRepairLocalLookAheadDistance = 8f;
+        private const float AffordanceRepairCumulativeLookBehindDistance = AffordanceRepairLookBehindDistance;
+        private const float AffordanceRepairCumulativeLookAheadDistance = AffordanceRepairLookAheadDistance;
+        private const float AffordanceRepairMinSegmentLength = 0.5f;
+        private const float AffordanceRepairMinWindowLength = 4f;
+        private const float AffordanceRepairMinInteriorSeparation = 4f;
+        private const float AffordanceRepairMinCandidateRise = 0.75f;
+        private const float AffordanceRepairMinCandidateSlopeRatio = 0.35f;
+        private const int AffordanceRepairCumulativeMaxSegments = 6;
+        private const float AffordanceRepairCumulativeMinRise = 3.0f;
+        private const float AffordanceRepairCumulativeMinHorizontal = 3.0f;
+        private const float AffordanceRepairCumulativeMaxHorizontal = 12.0f;
+        private const float AffordanceRepairCumulativeMinSlopeRatio = 0.65f;
+        private const float AffordanceRepairNativeLegMaxWindowLength = 64.0f;
+        private const int AffordanceRepairNativeLegEndpointTrimLimit = 4;
+        private const int AffordanceRepairCumulativeSmoothScanLimit = 384;
+        private const int AffordanceRepairStraightScanLimit = 160;
+        private const int AffordanceRepairMaxRepairs = 4;
+        private const int LocalPhysicsLayerProjectionSmoothScanLimit = 128;
+        private const int LocalPhysicsLayerProjectionMaxPasses = 2;
+        private const float LocalPhysicsLayerProjectionMinSegmentLength = 0.75f;
+        private const float LocalPhysicsLayerProjectionMaxSegmentLength = 8.0f;
+        private const float LocalPhysicsLayerProjectionMinSpikeRise = 0.50f;
+        private const float LocalPhysicsLayerProjectionMinDownwardZDelta = 0.45f;
+        private const float LocalPhysicsLayerProjectionMinAppliedZDelta = 0.35f;
+        private const float LocalPhysicsLayerProjectionMaxDownwardZDelta = 4.0f;
+        private const float LocalPhysicsLayerProjectionSupportSnapTolerance = 0.25f;
+        private const float LocalPhysicsLayerProjectionMaxEndpointDistance = 0.90f;
+        private const float LocalPhysicsSimulationMaxDistance = 12.0f;
+        private const float LocalPhysicsSimulationDeltaTime = 0.05f;
+        private const float LocalPhysicsRunSpeed = 7.0f;
+        private const float LocalPhysicsRouteLayerRejectZDelta = 5.0f;
+        private const float LocalPhysicsRouteLateralRejectDistance = 3.0f;
+        private const float LocalPhysicsBlockingWallProgressThreshold = 0.75f;
+        private const uint MoveFlagForward = 0x00000001;
+        private const uint MoveFlagJumping = 0x00002000;
+        private const uint MoveFlagFallingFar = 0x00004000;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeXyz
@@ -89,6 +154,85 @@ namespace PathfindingService.Repository
 
             public XYZ ToManaged() => new(X, Y, Z);
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativePhysicsInput
+        {
+            public uint MoveFlags;
+            public float X, Y, Z;
+            public float Orientation;
+            public float Pitch;
+            public float Vx, Vy, Vz;
+            public float WalkSpeed, RunSpeed, RunBackSpeed, SwimSpeed, SwimBackSpeed;
+            public float FlightSpeed;
+            public float TurnSpeed;
+            public ulong TransportGuid;
+            public float TransportX, TransportY, TransportZ, TransportO;
+            public uint FallTime;
+            public float FallStartZ;
+            public float Height;
+            public float Radius;
+            [MarshalAs(UnmanagedType.I1)]
+            public bool HasSplinePath;
+            public float SplineSpeed;
+            public IntPtr SplinePoints;
+            public int SplinePointCount;
+            public int CurrentSplineIndex;
+            public float PrevGroundZ;
+            public float PrevGroundNx, PrevGroundNy, PrevGroundNz;
+            public float PendingDepenX, PendingDepenY, PendingDepenZ;
+            public uint StandingOnInstanceId;
+            public float StandingOnLocalX, StandingOnLocalY, StandingOnLocalZ;
+            public IntPtr NearbyObjects;
+            public int NearbyObjectCount;
+            public uint MapId;
+            public float DeltaTime;
+            public uint FrameCounter;
+            public uint PhysicsFlags;
+            public float StepUpBaseZ;
+            public uint StepUpAge;
+            public uint GroundedWallState;
+            public uint WasGrounded;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativePhysicsOutput
+        {
+            public float X, Y, Z;
+            public float Orientation;
+            public float Pitch;
+            public float Vx, Vy, Vz;
+            public uint MoveFlags;
+            public float GroundZ;
+            public float LiquidZ;
+            public uint LiquidType;
+            public float GroundNx, GroundNy, GroundNz;
+            public float PendingDepenX, PendingDepenY, PendingDepenZ;
+            public uint StandingOnInstanceId;
+            public float StandingOnLocalX, StandingOnLocalY, StandingOnLocalZ;
+            public float FallDistance;
+            public float FallStartZ;
+            public float FallTime;
+            public int CurrentSplineIndex;
+            public float SplineProgress;
+            [MarshalAs(UnmanagedType.I1)]
+            public bool HitWall;
+            public float WallNormalX, WallNormalY, WallNormalZ;
+            public float BlockedFraction;
+            public float StepUpBaseZ;
+            public uint StepUpAge;
+            public uint GroundedWallState;
+            public uint EnvironmentFlags;
+        }
+
+        private readonly record struct LocalPhysicsSimulation(
+            bool Available,
+            bool Compatible,
+            float MaxUpwardRouteZDelta,
+            float MaxAbsoluteRouteZDelta,
+            float MaxLateralDistance,
+            XYZ FinalPosition,
+            string Reason);
 
         // ── Legacy P/Invoke (used by DiagnosticFindPath, CalculatePath fallback) ──
 
@@ -135,6 +279,9 @@ namespace PathfindingService.Repository
             out uint blockingInstanceId,
             out ulong blockingGuid,
             out uint blockingDisplayId);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "GetDynamicObjectCount")]
+        private static extern int GetDynamicObjectCountNative();
 
         // ── Corridor API P/Invoke ──
 
@@ -211,6 +358,9 @@ namespace PathfindingService.Repository
             float y,
             float z,
             float maxSearchDist);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
+        private static extern NativePhysicsOutput PhysicsStepV2(ref NativePhysicsInput input);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "ClassifyPathSegmentAffordance")]
         private static extern uint ClassifyPathSegmentAffordanceNative(
@@ -345,31 +495,103 @@ namespace PathfindingService.Repository
                 resolvedEndZ);
         }
 
+        public static bool IsSegmentWalkableForAgent(
+            uint mapId,
+            XYZ start,
+            XYZ end,
+            float agentRadius = 0.6f,
+            float agentHeight = 2.0f,
+            float maxResolvedEndZDelta = 1.0f)
+        {
+            if (Distance2D(start, end) >= EarlyStaticRepairLosMinSegmentLength &&
+                !HasLineOfSightStrict(mapId, start, end))
+            {
+                return false;
+            }
+
+            var validation = ValidateSegmentForAgent(mapId, start, end, agentRadius, agentHeight);
+            if (!IsLocallyWalkable(validation, start, end))
+                return false;
+
+            if (!TryClassifyAffordance(mapId, start, end, agentRadius, agentHeight, out var affordance))
+                return false;
+
+            if (float.IsFinite(affordance.ResolvedEndZ) &&
+                affordance.ResolvedEndZ > -100000f &&
+                MathF.Abs(affordance.ResolvedEndZ - end.Z) > maxResolvedEndZDelta)
+            {
+                return false;
+            }
+
+            return affordance.Affordance is NativeSegmentAffordance.Walk
+                or NativeSegmentAffordance.StepUp
+                or NativeSegmentAffordance.SafeDrop;
+        }
+
         public NavigationPathResult CalculateValidatedPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
             float agentRadius = 0.6f, float agentHeight = 2.0f)
         {
             var preferredAttempt = EvaluateOverlayAwarePath(mapId, start, end, smoothPath, agentRadius, agentHeight, "native_path");
+            NavigationPathResult? preferredValidatedResult = null;
             if (preferredAttempt.IsUsable)
-                return BuildUsablePathResult(
+            {
+                var preferredResult = BuildUsablePathResult(
                     mapId,
+                    start,
+                    end,
                     preferredAttempt,
                     smoothPath,
                     agentRadius,
                     agentHeight);
+                preferredValidatedResult = preferredResult;
+                if (IsCompleteUsablePath(start, end, preferredResult))
+                    return preferredResult;
+            }
 
             var alternateAttempt = EvaluateOverlayAwarePath(mapId, start, end, !smoothPath, agentRadius, agentHeight, "native_path_alternate_mode");
+            NavigationPathResult? alternateValidatedResult = null;
             if (alternateAttempt.IsUsable)
-                return BuildUsablePathResult(
+            {
+                var alternateResult = BuildUsablePathResult(
                     mapId,
+                    start,
+                    end,
                     alternateAttempt,
                     !smoothPath,
                     agentRadius,
                     agentHeight);
+                alternateValidatedResult = alternateResult;
+                if (IsCompleteUsablePath(start, end, alternateResult))
+                    return alternateResult;
+            }
+
+            if (preferredValidatedResult is NavigationPathResult preferredBlockedResult &&
+                alternateValidatedResult is NavigationPathResult alternateBlockedResult)
+            {
+                return SelectMoreAdvancedBlockedResult(preferredBlockedResult, alternateBlockedResult);
+            }
+
+            if (preferredValidatedResult is NavigationPathResult onlyPreferredBlockedResult)
+                return onlyPreferredBlockedResult;
+
+            if (alternateValidatedResult is NavigationPathResult onlyAlternateBlockedResult)
+                return onlyAlternateBlockedResult;
 
             var repairSource = SelectRepairSource(preferredAttempt, alternateAttempt);
             if (repairSource.Path.Length > 1 && repairSource.BlockedSegmentIndex is int blockedSegmentIndex)
             {
-                var repairedPath = TryRepairPath(mapId, start, end, smoothPath, agentRadius, agentHeight, repairSource.Path, blockedSegmentIndex);
+                var dynamicOverlayBlock = HasActiveDynamicObjectOverlay()
+                    && IsDynamicOverlayBlockReason(repairSource.BlockedReason);
+                var repairedPath = TryRepairPath(
+                    mapId,
+                    start,
+                    end,
+                    smoothPath,
+                    agentRadius,
+                    agentHeight,
+                    repairSource.Path,
+                    blockedSegmentIndex,
+                    allowGlobalRepair: !dynamicOverlayBlock);
                 if (repairedPath.Length > 0)
                 {
                     var repairedResult = ApplyNativeSegmentValidation(
@@ -403,6 +625,18 @@ namespace PathfindingService.Repository
                 blockedAttempt.BlockedReason);
         }
 
+        private static NavigationPathResult SelectMoreAdvancedBlockedResult(
+            NavigationPathResult preferredResult,
+            NavigationPathResult alternateResult)
+        {
+            var preferredIndex = preferredResult.BlockedSegmentIndex ?? -1;
+            var alternateIndex = alternateResult.BlockedSegmentIndex ?? -1;
+            if (alternateIndex > preferredIndex)
+                return alternateResult;
+
+            return preferredResult;
+        }
+
         private NativePathResolution FindPathCorridorNative(
             uint mapId,
             XYZ start,
@@ -411,7 +645,8 @@ namespace PathfindingService.Repository
             float agentRadius,
             float agentHeight)
         {
-            if (smoothPath)
+            var dynamicOverlayActive = HasActiveDynamicObjectOverlay();
+            if (smoothPath && !dynamicOverlayActive)
             {
                 var smoothNativePath = TryFindPathNative(mapId, start, end, smoothPath: true, agentRadius, agentHeight);
                 if (smoothNativePath.Length > 0)
@@ -439,12 +674,35 @@ namespace PathfindingService.Repository
                         return NativePathResolution.FromPath(straightPath);
 
                     Console.Error.WriteLine(
-                        $"[PATH_NATIVE] map={mapId} mode=straight contains long static-LOS break; retrying corridor path.");
+                        $"[PATH_NATIVE] map={mapId} mode=straight contains long static-LOS break; retrying smooth native path.");
+                    if (Distance2D(start, end) >= SmoothFallbackAfterStraightStaticBreakMinDistance)
+                    {
+                        var smoothFallbackPath = TryFindPathNative(mapId, start, end, smoothPath: true, agentRadius, agentHeight);
+                        if (smoothFallbackPath.Length > 0)
+                        {
+                            Console.Error.WriteLine(
+                                $"[PATH_NATIVE] map={mapId} mode=smooth_after_straight_static_break path=[{FormatPathPreview(smoothFallbackPath)}]");
+                            return NativePathResolution.FromPath(smoothFallbackPath);
+                        }
+                    }
+
+                    Console.Error.WriteLine(
+                        $"[PATH_NATIVE] map={mapId} mode=smooth_after_straight_static_break unavailable; retrying corridor path.");
+                }
+            }
+            else if (smoothPath && !dynamicOverlayActive)
+            {
+                var straightFallbackPath = TryFindPathNative(mapId, start, end, smoothPath: false, agentRadius, agentHeight);
+                if (straightFallbackPath.Length > 0)
+                {
+                    Console.Error.WriteLine(
+                        $"[PATH_NATIVE] map={mapId} mode=straight_fallback path=[{FormatPathPreview(straightFallbackPath)}]");
+                    return NativePathResolution.FromPath(straightFallbackPath);
                 }
             }
 
             var corridorResolution = FindPathCorridorResolution(mapId, start, end);
-            if (smoothPath && corridorResolution.Path.Length > 1)
+            if (smoothPath && !dynamicOverlayActive && corridorResolution.Path.Length > 1)
             {
                 var expandedPath = TryExpandCorridorWithSmoothNativeSegments(mapId, corridorResolution.Path, agentRadius, agentHeight);
                 if (expandedPath.Length > 0)
@@ -452,6 +710,18 @@ namespace PathfindingService.Repository
             }
 
             return corridorResolution;
+        }
+
+        private static bool HasActiveDynamicObjectOverlay()
+        {
+            try
+            {
+                return GetDynamicObjectCountNative() > 0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private NativePathResolution FindPathCorridorResolution(uint mapId, XYZ start, XYZ end)
@@ -619,7 +889,7 @@ namespace PathfindingService.Repository
                         PathBlocked: !resolution.WasRepairedAroundBlockedSegment);
                 }
 
-                var (blockedSegmentIndex, blockedReason) = FindBlockedSegment(mapId, path);
+                var (blockedSegmentIndex, blockedReason) = FindBlockedSegment(mapId, path, agentRadius, agentHeight);
                 return new OverlayPathAttempt(
                     path,
                     successResult,
@@ -661,13 +931,40 @@ namespace PathfindingService.Repository
             return true;
         }
 
+        private static bool IsCompleteUsablePath(XYZ requestedStart, XYZ requestedEnd, NavigationPathResult result)
+            => !result.BlockedSegmentIndex.HasValue
+                && HasUsableNativeEndpointAnchors(requestedStart, requestedEnd, result.Path, out _);
+
+        private static bool IsDynamicOverlayBlockReason(string? blockedReason)
+            => !string.IsNullOrWhiteSpace(blockedReason)
+                && blockedReason.StartsWith("dynamic_overlay", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsManagedRepairResult(string? result)
+            => !string.IsNullOrWhiteSpace(result)
+                && result.StartsWith("repaired_", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsAffordanceRepairDiagnosticsEnabled()
+            => string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_AFFORDANCE_REPAIR_DIAGNOSTICS"),
+                "1",
+                StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsLocalPhysicsLayerDiagnosticsEnabled()
+            => string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_LOCAL_PHYSICS_LAYER_DIAGNOSTICS"),
+                "1",
+                StringComparison.OrdinalIgnoreCase);
+
         private NavigationPathResult BuildUsablePathResult(
             uint mapId,
+            XYZ start,
+            XYZ end,
             OverlayPathAttempt attempt,
             bool smoothPath,
             float agentRadius,
             float agentHeight)
         {
+            var dynamicOverlayActive = HasActiveDynamicObjectOverlay();
             var validatedResult = ApplyNativeSegmentValidation(
                 mapId,
                 attempt.Path,
@@ -676,8 +973,51 @@ namespace PathfindingService.Repository
                 agentHeight,
                 attempt.SuccessResult);
 
+            if (validatedResult.BlockedSegmentIndex is int staticBlockedSegmentIndex)
+            {
+                var dynamicOverlayBlock = IsDynamicOverlayBlockReason(validatedResult.BlockedReason);
+                if (dynamicOverlayActive && dynamicOverlayBlock)
+                    return validatedResult;
+
+                var repairedPath = TryRepairPath(
+                    mapId,
+                    start,
+                    end,
+                    smoothPath,
+                    agentRadius,
+                    agentHeight,
+                    validatedResult.Path,
+                    staticBlockedSegmentIndex,
+                    allowGlobalRepair: !dynamicOverlayActive || !dynamicOverlayBlock);
+
+                if (repairedPath.Length > 0)
+                {
+                    var repairedResult = ApplyNativeSegmentValidation(
+                        mapId,
+                        repairedPath,
+                        smoothPath,
+                        agentRadius,
+                        agentHeight,
+                        "repaired_segment_validation");
+
+                    if (IsCompleteUsablePath(start, end, repairedResult))
+                        return repairedResult;
+                }
+            }
+
+            if (!HasUsableNativeEndpointAnchors(start, end, validatedResult.Path, out var endpointBlockReason))
+            {
+                return new NavigationPathResult(
+                    validatedResult.Path,
+                    validatedResult.RawPath,
+                    validatedResult.Result,
+                    validatedResult.Path.Length >= 2 ? validatedResult.Path.Length - 2 : 0,
+                    endpointBlockReason);
+            }
+
             if (attempt.BlockedSegmentIndex is not int blockedSegmentIndex ||
-                validatedResult.BlockedSegmentIndex.HasValue)
+                validatedResult.BlockedSegmentIndex.HasValue ||
+                IsManagedRepairResult(validatedResult.Result))
             {
                 return validatedResult;
             }
@@ -698,17 +1038,33 @@ namespace PathfindingService.Repository
             float agentHeight,
             string successResult)
         {
-            var losRepairedPath = RepairLongLineOfSightBreaks(
-                mapId,
-                rawPath,
-                out var losRepairCount,
-                out var losBlockedIdx,
-                out var losBlockedReason);
-            var pathForValidation = losRepairedPath.Length > 0 ? losRepairedPath : rawPath;
+            var dynamicOverlayActive = HasActiveDynamicObjectOverlay();
+            var losRepairCount = 0;
+            int? losBlockedIdx = null;
+            var losBlockedReason = "none";
+            var pathForValidation = rawPath;
+            if (smoothPath)
+            {
+                var losRepairedPath = RepairLongLineOfSightBreaks(
+                    mapId,
+                    rawPath,
+                    out losRepairCount,
+                    out losBlockedIdx,
+                    out losBlockedReason);
+                pathForValidation = losRepairedPath.Length > 0 ? losRepairedPath : rawPath;
+            }
             if (smoothPath)
             {
                 pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
                 pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation);
+                pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight);
+                pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight);
+                var earlyStaticRepairScanLimit = dynamicOverlayActive
+                    ? OverlayStraightStaticRepairScanLimit
+                    : EarlyStaticRepairScanLimit;
+                var earlyStaticRepairBudget = dynamicOverlayActive
+                    ? OverlayStraightStaticRepairBudget
+                    : EarlyStaticRepairBudget;
                 pathForValidation = RepairEarlyStaticBreaks(
                     mapId,
                     pathForValidation,
@@ -716,9 +1072,139 @@ namespace PathfindingService.Repository
                     agentHeight,
                     out var earlyRepairCount,
                     out var earlyBlockedIdx,
-                    out var earlyBlockedReason);
+                    out var earlyBlockedReason,
+                    earlyStaticRepairScanLimit,
+                    earlyStaticRepairBudget,
+                    allowRouteRepair: !dynamicOverlayActive);
 
-                if (earlyBlockedIdx.HasValue && !IsNativeSegmentValidationEnabled())
+                if (earlyRepairCount > 0)
+                    successResult = "repaired_static_los";
+
+                var allowCumulativeAffordanceRepair = pathForValidation.Length >= 2;
+                var affordanceRepairScanLimit = allowCumulativeAffordanceRepair
+                    ? AffordanceRepairCumulativeSmoothScanLimit
+                    : int.MaxValue;
+                pathForValidation = RepairAffordanceBreaks(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    out var affordanceRepairCount,
+                    out var affordanceBlockedIdx,
+                    out var affordanceBlockedReason,
+                    includeCumulativeBreaks: allowCumulativeAffordanceRepair,
+                    maxScanSegments: affordanceRepairScanLimit);
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue);
+                pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight);
+                pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight);
+
+                pathForValidation = RepairAffordanceBreaks(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    out var postNormalizeAffordanceRepairCount,
+                    out var postNormalizeAffordanceBlockedIdx,
+                    out var postNormalizeAffordanceBlockedReason,
+                    includeCumulativeBreaks: allowCumulativeAffordanceRepair,
+                    maxScanSegments: affordanceRepairScanLimit);
+
+                var totalAffordanceRepairCount = affordanceRepairCount + postNormalizeAffordanceRepairCount;
+                var postAffordanceStaticRepairCount = 0;
+                int? postAffordanceStaticBlockedIdx = null;
+                var postAffordanceStaticBlockedReason = "none";
+                var localPhysicsProjectionCount = 0;
+                if (totalAffordanceRepairCount > 0)
+                {
+                    pathForValidation = RepairEarlyStaticBreaks(
+                        mapId,
+                        pathForValidation,
+                        agentRadius,
+                        agentHeight,
+                        out postAffordanceStaticRepairCount,
+                        out postAffordanceStaticBlockedIdx,
+                        out postAffordanceStaticBlockedReason,
+                        Math.Min(earlyStaticRepairScanLimit, PostAffordanceStaticRepairScanLimit),
+                        PostAffordanceStaticRepairBudget,
+                        allowRouteRepair: !dynamicOverlayActive);
+                    pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue);
+                    pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight);
+                    pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight);
+                    pathForValidation = DensifyStaticLineOfSightBreaks(mapId, pathForValidation);
+                    if (postAffordanceStaticBlockedIdx.HasValue &&
+                        FindFirstLineOfSightBreak(
+                            mapId,
+                            pathForValidation,
+                            Math.Min(earlyStaticRepairScanLimit, PostAffordanceStaticRepairScanLimit)) is null)
+                    {
+                        postAffordanceStaticBlockedIdx = null;
+                        postAffordanceStaticBlockedReason = "none";
+                        postAffordanceStaticRepairCount++;
+                    }
+                }
+
+                pathForValidation = NormalizeLocalPhysicsReachableLayers(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    out localPhysicsProjectionCount,
+                    LocalPhysicsLayerProjectionSmoothScanLimit);
+                if (localPhysicsProjectionCount > 0)
+                {
+                    pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                    pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                    pathForValidation = DensifyStaticLineOfSightBreaks(mapId, pathForValidation);
+                }
+
+                if (affordanceBlockedIdx.HasValue &&
+                    !IsNativeSegmentValidationEnabled() &&
+                    !ShouldDeferDownstreamAffordanceBlock(pathForValidation, affordanceBlockedIdx.Value))
+                {
+                    return new NavigationPathResult(
+                        pathForValidation,
+                        rawPath,
+                        affordanceRepairCount > 0 ? "repaired_affordance" : successResult,
+                        affordanceBlockedIdx,
+                        affordanceBlockedReason);
+                }
+
+                if (postNormalizeAffordanceBlockedIdx.HasValue &&
+                    !IsNativeSegmentValidationEnabled() &&
+                    !ShouldDeferDownstreamAffordanceBlock(pathForValidation, postNormalizeAffordanceBlockedIdx.Value))
+                {
+                    return new NavigationPathResult(
+                        pathForValidation,
+                        rawPath,
+                        postNormalizeAffordanceRepairCount > 0 ? "repaired_affordance" : successResult,
+                        postNormalizeAffordanceBlockedIdx,
+                        postNormalizeAffordanceBlockedReason);
+                }
+
+                if (postAffordanceStaticBlockedIdx.HasValue &&
+                    !dynamicOverlayActive &&
+                    !IsNativeSegmentValidationEnabled())
+                {
+                    return new NavigationPathResult(
+                        pathForValidation,
+                        rawPath,
+                        totalAffordanceRepairCount > 0 ? "repaired_affordance" : successResult,
+                        postAffordanceStaticBlockedIdx,
+                        postAffordanceStaticBlockedReason);
+                }
+
+                if (totalAffordanceRepairCount > 0)
+                    successResult = "repaired_affordance";
+                else if (localPhysicsProjectionCount > 0)
+                    successResult = "repaired_local_physics_layer";
+                else if (postAffordanceStaticRepairCount > 0)
+                    successResult = "repaired_static_los";
+
+                if (earlyBlockedIdx.HasValue &&
+                    affordanceRepairCount == 0 &&
+                    postNormalizeAffordanceRepairCount == 0 &&
+                    !dynamicOverlayActive &&
+                    !IsNativeSegmentValidationEnabled())
                 {
                     var blockedResult = earlyRepairCount > 0 ? "repaired_static_los" : successResult;
                     return new NavigationPathResult(
@@ -728,28 +1214,113 @@ namespace PathfindingService.Repository
                         earlyBlockedIdx,
                         earlyBlockedReason);
                 }
-
-                if (earlyRepairCount > 0)
-                    successResult = "repaired_static_los";
             }
 
             if (!smoothPath)
             {
                 // Straight-corner requests are the latency-sensitive alternate mode.
                 // Keep them on the raw corridor so the caller can fall through quickly
-                // instead of spending tens of seconds on bounded segment repair.
+                // instead of spending tens of seconds on full segment validation.
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation);
+                pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+                pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight);
+                pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight);
+                var earlyStaticRepairScanLimit = dynamicOverlayActive
+                    ? OverlayStraightStaticRepairScanLimit
+                    : EarlyStaticRepairScanLimit;
+                var earlyStaticRepairBudget = dynamicOverlayActive
+                    ? OverlayStraightStaticRepairBudget
+                    : EarlyStaticRepairBudget;
+                pathForValidation = RepairEarlyStaticBreaks(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    out var earlyRepairCount,
+                    out var earlyBlockedIdx,
+                    out var earlyBlockedReason,
+                    earlyStaticRepairScanLimit,
+                    earlyStaticRepairBudget,
+                    allowRouteRepair: !dynamicOverlayActive);
+
                 var resultTag = losRepairCount > 0 ? "repaired_static_los" : successResult;
+                if (earlyBlockedIdx.HasValue && !dynamicOverlayActive && !IsNativeSegmentValidationEnabled())
+                {
+                    return new NavigationPathResult(
+                        pathForValidation,
+                        rawPath,
+                        earlyRepairCount > 0 ? "repaired_static_los" : resultTag,
+                        earlyBlockedIdx,
+                        earlyBlockedReason);
+                }
+
+                if (earlyRepairCount > 0)
+                    resultTag = "repaired_static_los";
+
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue);
+                var routeStart = pathForValidation.Length > 0 ? pathForValidation[0] : rawPath.FirstOrDefault();
+                var routeEnd = pathForValidation.Length > 0 ? pathForValidation[^1] : rawPath.LastOrDefault();
+                var allowPrefixCumulativeRepair = Distance2D(routeStart, routeEnd) > 50.0f
+                    || MathF.Abs(routeEnd.Z - routeStart.Z) < 15.0f;
+                pathForValidation = RepairAffordanceBreaks(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    out var affordanceRepairCount,
+                    out var affordanceBlockedIdx,
+                    out var affordanceBlockedReason,
+                    includeCumulativeBreaks: allowPrefixCumulativeRepair,
+                    includeSegmentBreaks: false,
+                    maxScanSegments: 12);
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue);
+                pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+
+                if (affordanceBlockedIdx.HasValue && !IsNativeSegmentValidationEnabled())
+                {
+                    return new NavigationPathResult(
+                        pathForValidation,
+                        rawPath,
+                        affordanceRepairCount > 0 ? "repaired_affordance" : resultTag,
+                        affordanceBlockedIdx,
+                        affordanceBlockedReason);
+                }
+
+                if (affordanceRepairCount > 0)
+                    resultTag = "repaired_affordance";
+
+                var straightBlockedIdx = earlyBlockedIdx ?? affordanceBlockedIdx;
+                var straightBlockedReason = earlyBlockedIdx.HasValue
+                    ? earlyBlockedReason
+                    : affordanceBlockedReason;
+                if (!straightBlockedIdx.HasValue &&
+                    Distance2D(routeStart, routeEnd) >= SmoothFallbackAfterStraightStaticBreakMinDistance &&
+                    FindFirstStraightAffordanceBreak(
+                        mapId,
+                        pathForValidation,
+                        agentRadius,
+                        agentHeight,
+                        AffordanceRepairStraightScanLimit,
+                        out var detectedBlockedIdx,
+                        out var detectedBlockedReason))
+                {
+                    straightBlockedIdx = detectedBlockedIdx;
+                    straightBlockedReason = detectedBlockedReason;
+                }
+
                 return new NavigationPathResult(
                     pathForValidation,
                     rawPath,
                     resultTag,
-                    losBlockedIdx,
-                    losBlockedReason);
+                    straightBlockedIdx ?? losBlockedIdx,
+                    straightBlockedIdx.HasValue ? straightBlockedReason : losBlockedReason);
             }
 
             if (!IsNativeSegmentValidationEnabled())
             {
                 var resultTag = losRepairCount > 0 ? "repaired_static_los" : successResult;
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue);
                 return new NavigationPathResult(
                     pathForValidation,
                     rawPath,
@@ -765,6 +1336,9 @@ namespace PathfindingService.Repository
                 agentHeight,
                 out var blockedIdx,
                 out var blockedReason);
+            if (RequiresNativeSegmentValidation(validatedPath))
+                validatedPath = NormalizeEarlySupportLayer(mapId, validatedPath, int.MaxValue);
+
             var finalBlockedIdx = blockedIdx ?? losBlockedIdx;
             var finalBlockedReason = blockedIdx.HasValue
                 ? blockedReason
@@ -812,6 +1386,7 @@ namespace PathfindingService.Repository
                 return path;
 
             var repaired = new List<XYZ>(path.Length) { path[0] };
+            var stopwatch = Stopwatch.StartNew();
             for (var i = 0; i < path.Length - 1; i++)
             {
                 var segmentStart = repaired[^1];
@@ -824,7 +1399,8 @@ namespace PathfindingService.Repository
                     firstBlockedIdx ??= i;
                     firstBlockedReason = "static_los";
 
-                    if (TryBuildLongSegmentDetour(mapId, segmentStart, segmentEnd, out var detour))
+                    if (stopwatch.Elapsed <= LongSegmentRepairBudget
+                        && TryBuildLongSegmentDetour(mapId, segmentStart, segmentEnd, stopwatch, out var detour))
                     {
                         AppendDensifiedSegment(repaired, segmentStart, detour, LongSegmentDensifySpacing);
                         segmentStart = repaired[^1];
@@ -856,26 +1432,51 @@ namespace PathfindingService.Repository
             return densified.ToArray();
         }
 
-        private static XYZ[] NormalizeEarlySupportLayer(uint mapId, XYZ[] path)
+        private static XYZ[] DensifyStaticLineOfSightBreaks(uint mapId, XYZ[] path)
+        {
+            if (path.Length < 2)
+                return path;
+
+            var densified = new List<XYZ>(path.Length) { path[0] };
+            var spacing = EarlyStaticRepairLosMinSegmentLength * 0.8f;
+            for (var i = 0; i < path.Length - 1; i++)
+            {
+                var from = densified[^1];
+                var to = path[i + 1];
+                if (Distance2D(from, to) >= EarlyStaticRepairLosMinSegmentLength &&
+                    !HasLineOfSightStrict(mapId, from, to))
+                {
+                    AppendDensifiedSegment(densified, from, to, spacing);
+                    continue;
+                }
+
+                AppendWaypointIfDistinct(densified, to);
+            }
+
+            return densified.ToArray();
+        }
+
+        private static XYZ[] NormalizeEarlySupportLayer(uint mapId, XYZ[] path, int maxWaypointIndex = EarlySupportNormalizationLimit)
         {
             if (path.Length < 2)
                 return path;
 
             var normalized = (XYZ[])path.Clone();
-            var checkEnd = Math.Min(normalized.Length, EarlySupportNormalizationLimit + 1);
+            var checkEnd = Math.Min(normalized.Length, maxWaypointIndex + 1);
             for (var i = 1; i < checkEnd; i++)
             {
                 var candidate = normalized[i];
                 if (!TryGetNearbyGroundZ(mapId, candidate, out var groundZ))
                     continue;
 
-                var floatDelta = candidate.Z - groundZ;
+                var supportDelta = groundZ - candidate.Z;
+                var absSupportDelta = MathF.Abs(supportDelta);
                 var duplicateAnchor = Distance2D(normalized[i - 1], candidate) <= EarlySupportDuplicateHorizontalDistance;
                 var projectionThreshold = duplicateAnchor
                     ? EarlySupportDuplicateProjectionThreshold
                     : EarlySupportProjectionThreshold;
-                if (floatDelta <= projectionThreshold
-                    || floatDelta > EarlySupportProjectionMaxDelta)
+                if (absSupportDelta <= projectionThreshold
+                    || absSupportDelta > EarlySupportProjectionMaxDelta)
                 {
                     continue;
                 }
@@ -884,10 +1485,38 @@ namespace PathfindingService.Repository
                 if (duplicateAnchor && MathF.Abs(normalized[i - 1].Z - groundZ) <= EarlySupportProjectionThreshold)
                     projectedZ = normalized[i - 1].Z;
 
+                if (WouldCreateShortVerticalLayerSpikeProjection(normalized, i, projectedZ))
+                    continue;
+
                 normalized[i] = new XYZ(candidate.X, candidate.Y, projectedZ);
             }
 
             return CollapseDuplicateWaypoints(normalized);
+        }
+
+        private static bool WouldCreateShortVerticalLayerSpikeProjection(XYZ[] path, int index, float projectedZ)
+        {
+            if (index <= 0 || index >= path.Length - 1)
+                return false;
+
+            var previous = path[index - 1];
+            var current = path[index];
+            var next = path[index + 1];
+
+            if (Distance2D(previous, current) > ShortVerticalLayerSpikeMaxLegLength ||
+                Distance2D(current, next) > ShortVerticalLayerSpikeMaxLegLength ||
+                Distance2D(previous, next) > ShortVerticalLayerSpikeMaxBridgeLength)
+            {
+                return false;
+            }
+
+            if (MathF.Abs(previous.Z - next.Z) > ShortVerticalLayerSpikeNeighborZTolerance)
+                return false;
+
+            var downwardSpike = MathF.Min(previous.Z, next.Z) - projectedZ;
+            var upwardSpike = projectedZ - MathF.Max(previous.Z, next.Z);
+            return downwardSpike >= ShortVerticalLayerSpikeMinDelta ||
+                upwardSpike >= ShortVerticalLayerSpikeMinDelta;
         }
 
         private static XYZ[] CollapseDuplicateWaypoints(XYZ[] path)
@@ -900,6 +1529,148 @@ namespace PathfindingService.Repository
                 AppendWaypointIfDistinct(collapsed, waypoint);
 
             return collapsed.ToArray();
+        }
+
+        private static XYZ[] RemoveShortVerticalLayerSpikes(
+            uint mapId,
+            XYZ[] path,
+            float agentRadius,
+            float agentHeight,
+            int maxWaypointIndex = EarlyStaticRepairScanLimit)
+        {
+            if (path.Length < 3)
+                return path;
+
+            var repaired = path.ToList();
+            var scanEnd = Math.Min(repaired.Count - 1, maxWaypointIndex);
+            for (var i = 1; i < scanEnd && i < repaired.Count - 1; i++)
+            {
+                var previous = repaired[i - 1];
+                var current = repaired[i];
+                var next = repaired[i + 1];
+
+                if (Distance2D(previous, current) > ShortVerticalLayerSpikeMaxLegLength ||
+                    Distance2D(current, next) > ShortVerticalLayerSpikeMaxLegLength ||
+                    Distance2D(previous, next) > ShortVerticalLayerSpikeMaxBridgeLength)
+                {
+                    continue;
+                }
+
+                if (MathF.Abs(previous.Z - next.Z) > ShortVerticalLayerSpikeNeighborZTolerance)
+                    continue;
+
+                var downwardSpike = MathF.Min(previous.Z, next.Z) - current.Z;
+                var upwardSpike = current.Z - MathF.Max(previous.Z, next.Z);
+                if (downwardSpike < ShortVerticalLayerSpikeMinDelta && upwardSpike < ShortVerticalLayerSpikeMinDelta)
+                    continue;
+
+                if (!HasLineOfSightStrict(mapId, previous, next))
+                    continue;
+
+                var validation = ValidateSegmentForAgent(mapId, previous, next, agentRadius, agentHeight);
+                if (!IsLocallyWalkable(validation, previous, next))
+                    continue;
+
+                repaired.RemoveAt(i);
+                scanEnd = Math.Min(repaired.Count - 1, maxWaypointIndex);
+                i = Math.Max(0, i - 2);
+            }
+
+            return repaired.Count == path.Length ? path : repaired.ToArray();
+        }
+
+        private static XYZ[] RemoveShortHorizontalDetourSpikes(
+            uint mapId,
+            XYZ[] path,
+            float agentRadius,
+            float agentHeight,
+            int maxWaypointIndex = EarlyStaticRepairScanLimit)
+        {
+            if (path.Length < 3)
+                return path;
+
+            var repaired = path.ToList();
+            var scanEnd = Math.Min(repaired.Count - 1, maxWaypointIndex);
+            for (var i = 1; i < scanEnd && i < repaired.Count - 1; i++)
+            {
+                var previous = repaired[i - 1];
+                var current = repaired[i];
+                var next = repaired[i + 1];
+
+                var firstLeg = Distance2D(previous, current);
+                var secondLeg = Distance2D(current, next);
+                var bridge = Distance2D(previous, next);
+                if (firstLeg > ShortHorizontalDetourSpikeMaxLegLength
+                    || secondLeg > ShortHorizontalDetourSpikeMaxLegLength
+                    || bridge > ShortHorizontalDetourSpikeMaxBridgeLength
+                    || bridge <= 0.01f)
+                {
+                    continue;
+                }
+
+                if (MathF.Abs(next.Z - previous.Z) > ShortHorizontalDetourSpikeMaxBridgeZDelta)
+                    continue;
+
+                var detourRatio = (firstLeg + secondLeg) / bridge;
+                if (detourRatio < ShortHorizontalDetourSpikeMinDetourRatio)
+                    continue;
+
+                if (!HasLineOfSightStrict(mapId, previous, next))
+                    continue;
+
+                if (!IsDynamicOverlayBridgeClear(mapId, previous, next, agentRadius))
+                    continue;
+
+                var validation = ValidateSegmentForAgent(mapId, previous, next, agentRadius, agentHeight);
+                if (!IsLocallyWalkable(validation, previous, next))
+                    continue;
+
+                if (TryClassifyAffordance(mapId, previous, next, agentRadius, agentHeight, out var affordance)
+                    && affordance.Affordance is not (NativeSegmentAffordance.Walk
+                        or NativeSegmentAffordance.StepUp
+                        or NativeSegmentAffordance.SafeDrop))
+                {
+                    continue;
+                }
+
+                repaired.RemoveAt(i);
+                scanEnd = Math.Min(repaired.Count - 1, maxWaypointIndex);
+                i = Math.Max(0, i - 2);
+            }
+
+            return repaired.Count == path.Length ? path : repaired.ToArray();
+        }
+
+        private static bool IsDynamicOverlayBridgeClear(uint mapId, XYZ from, XYZ to, float agentRadius)
+        {
+            if (!HasActiveDynamicObjectOverlay())
+                return true;
+
+            if (SegmentIntersectsDynamicObjectsNative(mapId, from.X, from.Y, from.Z, to.X, to.Y, to.Z))
+                return false;
+
+            var dx = to.X - from.X;
+            var dy = to.Y - from.Y;
+            var horizontal = MathF.Sqrt((dx * dx) + (dy * dy));
+            if (horizontal <= 0.01f)
+                return true;
+
+            var perpX = -dy / horizontal;
+            var perpY = dx / horizontal;
+            foreach (var offset in EnumerateDynamicOverlayClearanceOffsets(agentRadius))
+            {
+                var leftFrom = new XYZ(from.X + (perpX * offset), from.Y + (perpY * offset), from.Z);
+                var leftTo = new XYZ(to.X + (perpX * offset), to.Y + (perpY * offset), to.Z);
+                if (SegmentIntersectsDynamicObjectsNative(mapId, leftFrom.X, leftFrom.Y, leftFrom.Z, leftTo.X, leftTo.Y, leftTo.Z))
+                    return false;
+
+                var rightFrom = new XYZ(from.X - (perpX * offset), from.Y - (perpY * offset), from.Z);
+                var rightTo = new XYZ(to.X - (perpX * offset), to.Y - (perpY * offset), to.Z);
+                if (SegmentIntersectsDynamicObjectsNative(mapId, rightFrom.X, rightFrom.Y, rightFrom.Z, rightTo.X, rightTo.Y, rightTo.Z))
+                    return false;
+            }
+
+            return true;
         }
 
         private static bool TryGetNearbyGroundZ(uint mapId, XYZ point, out float groundZ)
@@ -920,6 +1691,356 @@ namespace PathfindingService.Repository
             }
         }
 
+        private static XYZ[] NormalizeLocalPhysicsReachableLayers(
+            uint mapId,
+            XYZ[] path,
+            float agentRadius,
+            float agentHeight,
+            out int projectionCount,
+            int maxScanSegments)
+        {
+            projectionCount = 0;
+            if (path.Length < 2)
+                return path;
+
+            var normalized = path.ToList();
+            for (var pass = 0; pass < LocalPhysicsLayerProjectionMaxPasses; pass++)
+            {
+                var changedThisPass = false;
+                var scanEnd = Math.Min(normalized.Count - 1, Math.Max(0, maxScanSegments));
+                for (var i = 0; i < scanEnd && i < normalized.Count - 1; i++)
+                {
+                    var from = normalized[i];
+                    var to = normalized[i + 1];
+                    if (!ShouldProbeLocalPhysicsLayerProjection(normalized, i))
+                        continue;
+
+                    var simulation = SimulateLocalPhysicsSegment(mapId, from, to, agentRadius, agentHeight);
+                    if (!ShouldProjectToLocalPhysicsLayer(
+                            mapId,
+                            normalized,
+                            i,
+                            simulation,
+                            agentRadius,
+                            agentHeight,
+                            out var projected))
+                        continue;
+
+                    normalized[i + 1] = projected;
+                    projectionCount++;
+                    changedThisPass = true;
+                }
+
+                if (!changedThisPass)
+                    break;
+            }
+
+            if (projectionCount > 0)
+            {
+                Console.Error.WriteLine(
+                    $"[CORRIDOR-LOCAL-PHYSICS-LAYER] projected {projectionCount} waypoint layer(s) pathLen={path.Length}");
+            }
+
+            return projectionCount == 0
+                ? path
+                : CollapseDuplicateWaypoints(normalized.ToArray());
+        }
+
+        private static bool ShouldProbeLocalPhysicsLayerProjection(IReadOnlyList<XYZ> path, int segmentIndex)
+        {
+            if (segmentIndex < 0 || segmentIndex >= path.Count - 1)
+                return false;
+
+            var from = path[segmentIndex];
+            var to = path[segmentIndex + 1];
+            var horizontal = Distance2D(from, to);
+            if (horizontal < LocalPhysicsLayerProjectionMinSegmentLength ||
+                horizontal > LocalPhysicsLayerProjectionMaxSegmentLength)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool ShouldProjectToLocalPhysicsLayer(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            int segmentIndex,
+            LocalPhysicsSimulation simulation,
+            float agentRadius,
+            float agentHeight,
+            out XYZ projected)
+        {
+            projected = path[segmentIndex + 1];
+            var diagnostics = IsLocalPhysicsLayerDiagnosticsEnabled();
+            if (!simulation.Available)
+            {
+                if (diagnostics)
+                    Console.Error.WriteLine($"[LOCAL-LAYER-DBG] seg={segmentIndex} reject=simulation_unavailable");
+                return false;
+            }
+
+            if (!simulation.Compatible)
+            {
+                if (diagnostics)
+                    Console.Error.WriteLine($"[LOCAL-LAYER-DBG] seg={segmentIndex} reject=simulation_{simulation.Reason}");
+                return false;
+            }
+
+            var from = path[segmentIndex];
+            var to = path[segmentIndex + 1];
+            var endpointDistance = Distance2D(simulation.FinalPosition, to);
+            var downwardDelta = to.Z - simulation.FinalPosition.Z;
+            if (endpointDistance > LocalPhysicsLayerProjectionMaxEndpointDistance)
+            {
+                if (diagnostics && downwardDelta >= LocalPhysicsLayerProjectionMinDownwardZDelta)
+                {
+                    Console.Error.WriteLine(
+                        $"[LOCAL-LAYER-DBG] seg={segmentIndex} reject=endpoint_distance endpoint={endpointDistance:F2} down={downwardDelta:F2} from=({from.X:F1},{from.Y:F1},{from.Z:F1}) to=({to.X:F1},{to.Y:F1},{to.Z:F1}) final=({simulation.FinalPosition.X:F1},{simulation.FinalPosition.Y:F1},{simulation.FinalPosition.Z:F1})");
+                }
+                return false;
+            }
+
+            if (downwardDelta < LocalPhysicsLayerProjectionMinDownwardZDelta ||
+                downwardDelta > LocalPhysicsLayerProjectionMaxDownwardZDelta)
+            {
+                if (diagnostics && downwardDelta >= LocalPhysicsLayerProjectionMinDownwardZDelta * 0.5f)
+                {
+                    Console.Error.WriteLine(
+                        $"[LOCAL-LAYER-DBG] seg={segmentIndex} reject=downward_delta endpoint={endpointDistance:F2} down={downwardDelta:F2} from=({from.X:F1},{from.Y:F1},{from.Z:F1}) to=({to.X:F1},{to.Y:F1},{to.Z:F1}) final=({simulation.FinalPosition.X:F1},{simulation.FinalPosition.Y:F1},{simulation.FinalPosition.Z:F1})");
+                }
+                return false;
+            }
+
+            if (simulation.MaxUpwardRouteZDelta > LocalPhysicsRouteLayerRejectZDelta ||
+                (simulation.MaxLateralDistance > LocalPhysicsRouteLateralRejectDistance &&
+                    simulation.MaxAbsoluteRouteZDelta > LocalPhysicsRouteLayerRejectZDelta))
+            {
+                if (diagnostics)
+                {
+                    Console.Error.WriteLine(
+                        $"[LOCAL-LAYER-DBG] seg={segmentIndex} reject=route_layer_mismatch up={simulation.MaxUpwardRouteZDelta:F2} abs={simulation.MaxAbsoluteRouteZDelta:F2} lat={simulation.MaxLateralDistance:F2}");
+                }
+                return false;
+            }
+
+            var projectedZ = simulation.FinalPosition.Z + EarlySupportGroundClearance;
+            var supportProbe = new XYZ(to.X, to.Y, projectedZ);
+            if (TryGetNearbyGroundZ(mapId, supportProbe, out var supportZ) &&
+                MathF.Abs(supportZ - simulation.FinalPosition.Z) <= LocalPhysicsLayerProjectionSupportSnapTolerance)
+            {
+                projectedZ = supportZ + EarlySupportGroundClearance;
+            }
+
+            if (projectedZ >= to.Z - LocalPhysicsLayerProjectionMinAppliedZDelta)
+            {
+                if (diagnostics)
+                {
+                    Console.Error.WriteLine(
+                        $"[LOCAL-LAYER-DBG] seg={segmentIndex} reject=projected_not_lower projectedZ={projectedZ:F2} toZ={to.Z:F2} down={downwardDelta:F2}");
+                }
+                return false;
+            }
+
+            if (WouldCreateShortVerticalLayerSpikeProjection(path.ToArray(), segmentIndex + 1, projectedZ))
+            {
+                if (diagnostics)
+                    Console.Error.WriteLine($"[LOCAL-LAYER-DBG] seg={segmentIndex} reject=short_vertical_spike projectedZ={projectedZ:F2}");
+                return false;
+            }
+
+            projected = new XYZ(to.X, to.Y, projectedZ);
+            var validation = ValidateSegmentForAgent(mapId, from, projected, agentRadius, agentHeight);
+            if (!IsLocallyWalkable(validation, from, projected))
+            {
+                if (diagnostics)
+                    Console.Error.WriteLine($"[LOCAL-LAYER-DBG] seg={segmentIndex} reject=validation code={validation} projected=({projected.X:F1},{projected.Y:F1},{projected.Z:F1})");
+                return false;
+            }
+
+            if (diagnostics)
+            {
+                Console.Error.WriteLine(
+                    $"[LOCAL-LAYER-DBG] seg={segmentIndex} project down={downwardDelta:F2} endpoint={endpointDistance:F2} from=({from.X:F1},{from.Y:F1},{from.Z:F1}) to=({to.X:F1},{to.Y:F1},{to.Z:F1}) projected=({projected.X:F1},{projected.Y:F1},{projected.Z:F1})");
+            }
+
+            return true;
+        }
+
+        private static LocalPhysicsSimulation SimulateLocalPhysicsSegment(
+            uint mapId,
+            XYZ from,
+            XYZ to,
+            float agentRadius,
+            float agentHeight)
+        {
+            var dx = to.X - from.X;
+            var dy = to.Y - from.Y;
+            var dz = to.Z - from.Z;
+            var segmentDistance2D = MathF.Sqrt((dx * dx) + (dy * dy));
+            if (segmentDistance2D <= 0.05f)
+                return new LocalPhysicsSimulation(true, true, 0f, 0f, 0f, from, "compatible");
+
+            var travelDistance = MathF.Min(segmentDistance2D, MathF.Max(0.5f, LocalPhysicsSimulationMaxDistance));
+            var horizonT = travelDistance / segmentDistance2D;
+            var horizon = new XYZ(
+                from.X + (dx * horizonT),
+                from.Y + (dy * horizonT),
+                from.Z + (dz * horizonT));
+            var orientation = MathF.Atan2(dy, dx);
+            var stepCount = Math.Clamp(
+                (int)MathF.Ceiling(travelDistance / MathF.Max(LocalPhysicsRunSpeed * LocalPhysicsSimulationDeltaTime, 0.05f)) + 6,
+                4,
+                96);
+
+            var pos = new XYZ(from.X, from.Y, from.Z);
+            var velX = 0f;
+            var velY = 0f;
+            var velZ = 0f;
+            var prevGroundZ = from.Z;
+            var prevGroundNx = 0f;
+            var prevGroundNy = 0f;
+            var prevGroundNz = 1f;
+            var pendingDepenX = 0f;
+            var pendingDepenY = 0f;
+            var pendingDepenZ = 0f;
+            var standingOnInstanceId = 0u;
+            var standingOnLocalX = 0f;
+            var standingOnLocalY = 0f;
+            var standingOnLocalZ = 0f;
+            var fallTime = 0f;
+            var fallStartZ = from.Z;
+            var stepUpBaseZ = -200000f;
+            var stepUpAge = 0u;
+            var wasGrounded = true;
+            var moveFlags = MoveFlagForward;
+            var maxUpwardZDelta = 0f;
+            var maxAbsZDelta = 0f;
+            var maxLateralDistance = 0f;
+            var hitWall = false;
+
+            try
+            {
+                for (var step = 0; step < stepCount; step++)
+                {
+                    var input = new NativePhysicsInput
+                    {
+                        MoveFlags = moveFlags | MoveFlagForward,
+                        X = pos.X,
+                        Y = pos.Y,
+                        Z = pos.Z,
+                        Orientation = orientation,
+                        Pitch = 0f,
+                        Vx = velX,
+                        Vy = velY,
+                        Vz = velZ,
+                        WalkSpeed = 2.5f,
+                        RunSpeed = LocalPhysicsRunSpeed,
+                        RunBackSpeed = 4.5f,
+                        SwimSpeed = 4.722222f,
+                        SwimBackSpeed = 2.5f,
+                        FlightSpeed = LocalPhysicsRunSpeed,
+                        TurnSpeed = MathF.PI,
+                        TransportGuid = 0,
+                        TransportX = 0f,
+                        TransportY = 0f,
+                        TransportZ = 0f,
+                        TransportO = 0f,
+                        FallTime = (uint)fallTime,
+                        FallStartZ = fallStartZ != 0f ? fallStartZ : -200000f,
+                        Height = agentHeight,
+                        Radius = agentRadius,
+                        HasSplinePath = false,
+                        SplineSpeed = 0f,
+                        SplinePoints = IntPtr.Zero,
+                        SplinePointCount = 0,
+                        CurrentSplineIndex = 0,
+                        PrevGroundZ = prevGroundZ,
+                        PrevGroundNx = prevGroundNx,
+                        PrevGroundNy = prevGroundNy,
+                        PrevGroundNz = prevGroundNz,
+                        PendingDepenX = pendingDepenX,
+                        PendingDepenY = pendingDepenY,
+                        PendingDepenZ = pendingDepenZ,
+                        StandingOnInstanceId = standingOnInstanceId,
+                        StandingOnLocalX = standingOnLocalX,
+                        StandingOnLocalY = standingOnLocalY,
+                        StandingOnLocalZ = standingOnLocalZ,
+                        NearbyObjects = IntPtr.Zero,
+                        NearbyObjectCount = 0,
+                        MapId = mapId,
+                        DeltaTime = LocalPhysicsSimulationDeltaTime,
+                        FrameCounter = (uint)step,
+                        PhysicsFlags = 0,
+                        StepUpBaseZ = stepUpBaseZ,
+                        StepUpAge = stepUpAge,
+                        GroundedWallState = 0,
+                        WasGrounded = wasGrounded ? 1u : 0u,
+                    };
+
+                    var output = PhysicsStepV2(ref input);
+                    pos = new XYZ(output.X, output.Y, output.Z);
+                    velX = output.Vx;
+                    velY = output.Vy;
+                    velZ = output.Vz;
+                    moveFlags = output.MoveFlags | MoveFlagForward;
+                    fallTime = output.FallTime;
+                    fallStartZ = output.FallStartZ;
+                    prevGroundZ = output.GroundZ;
+                    prevGroundNx = output.GroundNx;
+                    prevGroundNy = output.GroundNy;
+                    prevGroundNz = output.GroundNz;
+                    pendingDepenX = output.PendingDepenX;
+                    pendingDepenY = output.PendingDepenY;
+                    pendingDepenZ = output.PendingDepenZ;
+                    standingOnInstanceId = output.StandingOnInstanceId;
+                    standingOnLocalX = output.StandingOnLocalX;
+                    standingOnLocalY = output.StandingOnLocalY;
+                    standingOnLocalZ = output.StandingOnLocalZ;
+                    stepUpBaseZ = output.StepUpBaseZ;
+                    stepUpAge = output.StepUpAge;
+                    wasGrounded = (output.MoveFlags & (MoveFlagFallingFar | MoveFlagJumping)) == 0;
+                    hitWall |= output.HitWall &&
+                        float.IsFinite(output.BlockedFraction) &&
+                        output.BlockedFraction < LocalPhysicsBlockingWallProgressThreshold;
+
+                    var projectionT = Math.Clamp(
+                        (((pos.X - from.X) * dx) + ((pos.Y - from.Y) * dy)) / (segmentDistance2D * segmentDistance2D),
+                        0f,
+                        1f);
+                    var expectedZ = from.Z + (dz * projectionT);
+                    var zDelta = pos.Z - expectedZ;
+                    maxUpwardZDelta = MathF.Max(maxUpwardZDelta, zDelta);
+                    maxAbsZDelta = MathF.Max(maxAbsZDelta, MathF.Abs(zDelta));
+
+                    var projectedX = from.X + (dx * projectionT);
+                    var projectedY = from.Y + (dy * projectionT);
+                    var lateralX = pos.X - projectedX;
+                    var lateralY = pos.Y - projectedY;
+                    maxLateralDistance = MathF.Max(
+                        maxLateralDistance,
+                        MathF.Sqrt((lateralX * lateralX) + (lateralY * lateralY)));
+
+                    if (Distance2D(pos, horizon) <= LocalPhysicsLayerProjectionMaxEndpointDistance)
+                        break;
+                }
+            }
+            catch
+            {
+                return new LocalPhysicsSimulation(false, true, 0f, 0f, 0f, from, "unavailable");
+            }
+
+            return new LocalPhysicsSimulation(
+                true,
+                !hitWall,
+                maxUpwardZDelta,
+                maxAbsZDelta,
+                maxLateralDistance,
+                pos,
+                hitWall ? "hit_wall" : "simulated");
+        }
+
         private static XYZ[] RepairEarlyStaticBreaks(
             uint mapId,
             XYZ[] path,
@@ -927,7 +2048,10 @@ namespace PathfindingService.Repository
             float agentHeight,
             out int repairCount,
             out int? firstBlockedIdx,
-            out string firstBlockedReason)
+            out string firstBlockedReason,
+            int maxScanSegments = EarlyStaticRepairScanLimit,
+            TimeSpan? repairBudgetOverride = null,
+            bool allowRouteRepair = true)
         {
             repairCount = 0;
             firstBlockedIdx = null;
@@ -936,9 +2060,15 @@ namespace PathfindingService.Repository
                 return path;
 
             var repaired = path.ToList();
-            var scanEnd = Math.Min(repaired.Count - 1, EarlyStaticRepairScanLimit);
+            var stopwatch = Stopwatch.StartNew();
+            var repairBudget = repairBudgetOverride ?? EarlyStaticRepairBudget;
+            var scanLimit = Math.Max(0, maxScanSegments);
+            var scanEnd = Math.Min(repaired.Count - 1, scanLimit);
             for (var i = 0; i < scanEnd && i < repaired.Count - 1; i++)
             {
+                if (stopwatch.Elapsed > repairBudget)
+                    break;
+
                 var from = repaired[i];
                 var to = repaired[i + 1];
                 if (!RequiresLocalStaticRepair(mapId, from, to, agentRadius, agentHeight, out var reason))
@@ -948,22 +2078,30 @@ namespace PathfindingService.Repository
                 {
                     repaired.Insert(i + 1, repairPoint);
                     repairCount++;
-                    scanEnd = Math.Min(repaired.Count - 1, EarlyStaticRepairScanLimit);
+                    scanEnd = Math.Min(repaired.Count - 1, scanLimit);
                     i++;
                     continue;
                 }
 
-                if (TryBuildLocalStaticRepairRoute(
+                if (allowRouteRepair && TryBuildLocalStaticRepairRoute(
                     mapId,
                     repaired,
                     i,
                     agentRadius,
                     agentHeight,
+                    stopwatch,
+                    repairBudget,
                     out var repairedRoute))
                 {
+                    repaired = repairedRoute.ToList();
                     repairCount++;
-                    return repairedRoute;
+                    scanEnd = Math.Min(repaired.Count - 1, scanLimit);
+                    i = Math.Max(-1, i - 1);
+                    continue;
                 }
+
+                if (stopwatch.Elapsed > repairBudget)
+                    break;
 
                 firstBlockedIdx = i;
                 firstBlockedReason = reason;
@@ -977,6 +2115,830 @@ namespace PathfindingService.Repository
             }
 
             return repaired.ToArray();
+        }
+
+        private static XYZ[] RepairAffordanceBreaks(
+            uint mapId,
+            XYZ[] path,
+            float agentRadius,
+            float agentHeight,
+            out int repairCount,
+            out int? firstBlockedIdx,
+            out string firstBlockedReason,
+            bool includeCumulativeBreaks = false,
+            bool includeSegmentBreaks = true,
+            int maxScanSegments = int.MaxValue)
+        {
+            repairCount = 0;
+            firstBlockedIdx = null;
+            firstBlockedReason = "none";
+            if (path.Length < 3)
+                return path;
+
+            var repaired = path.ToList();
+            var stopwatch = Stopwatch.StartNew();
+
+            while (repairCount < AffordanceRepairMaxRepairs &&
+                   stopwatch.Elapsed <= AffordanceRepairBudget)
+            {
+                var repairedThisPass = false;
+                int? pendingBlockedIdx = null;
+                var pendingBlockedReason = "none";
+                var scanEnd = Math.Min(repaired.Count - 1, Math.Max(0, maxScanSegments));
+                for (var i = 0; i < scanEnd && i < repaired.Count - 1 && stopwatch.Elapsed <= AffordanceRepairBudget; i++)
+                {
+                    var requiresRepair = false;
+                    var reason = "none";
+                    if (includeSegmentBreaks)
+                    {
+                        requiresRepair = RequiresAffordanceRepair(
+                            mapId,
+                            repaired[i],
+                            repaired[i + 1],
+                            agentRadius,
+                            agentHeight,
+                            out reason);
+                    }
+                    if (!requiresRepair && includeCumulativeBreaks)
+                    {
+                        requiresRepair = TryFindCumulativeAffordanceBreak(
+                            mapId,
+                            repaired,
+                            i,
+                            agentRadius,
+                            agentHeight,
+                            out reason);
+                    }
+
+                    if (!requiresRepair)
+                    {
+                        continue;
+                    }
+
+                    var cumulativeRepair = string.Equals(reason, "cumulative_steep_climb", StringComparison.Ordinal);
+                    var allowNativeAffordanceLegRepair = cumulativeRepair ||
+                        string.Equals(reason, "steep_climb", StringComparison.Ordinal) ||
+                        string.Equals(reason, "step_up_limit", StringComparison.Ordinal);
+                    var lookBehindDistance = cumulativeRepair
+                        ? AffordanceRepairCumulativeLookBehindDistance
+                        : AffordanceRepairLookBehindDistance;
+                    var lookAheadDistance = cumulativeRepair
+                        ? AffordanceRepairCumulativeLookAheadDistance
+                        : AffordanceRepairLookAheadDistance;
+                    var windowStart = FindWindowStart(repaired, i, lookBehindDistance);
+                    var windowEnd = FindWindowEnd(repaired, i + 1, lookAheadDistance);
+                    if (windowEnd <= windowStart + 1 ||
+                        Distance2D(repaired[windowStart], repaired[windowEnd]) < AffordanceRepairMinWindowLength)
+                    {
+                        pendingBlockedIdx ??= i;
+                        if (pendingBlockedReason == "none")
+                            pendingBlockedReason = reason;
+                        continue;
+                    }
+
+                    if (IsAffordanceRepairDiagnosticsEnabled())
+                    {
+                        Console.Error.WriteLine(
+                            $"[AFFORDANCE-DBG] segment={i} reason={reason} window={windowStart}->{windowEnd} allowNative={allowNativeAffordanceLegRepair} pathLen={repaired.Count} from=({repaired[windowStart].X:F1},{repaired[windowStart].Y:F1},{repaired[windowStart].Z:F1}) to=({repaired[windowEnd].X:F1},{repaired[windowEnd].Y:F1},{repaired[windowEnd].Z:F1})");
+                    }
+
+                    if (TryBuildAffordanceRepairRoute(
+                        mapId,
+                        repaired,
+                        windowStart,
+                        windowEnd,
+                        agentRadius,
+                        agentHeight,
+                        stopwatch,
+                        allowNativeLegRepair: allowNativeAffordanceLegRepair,
+                        out var repairedRoute))
+                    {
+                        repaired = repairedRoute.ToList();
+                        repairCount++;
+                        repairedThisPass = true;
+                        pendingBlockedIdx = null;
+                        pendingBlockedReason = "none";
+                        Console.Error.WriteLine(
+                            $"[CORRIDOR-AFFORDANCE-REPAIR] segment={i} reason={reason} window={windowStart}->{windowEnd} pathLen={path.Length} repairedLen={repaired.Count}");
+                        break;
+                    }
+
+                    pendingBlockedIdx ??= i;
+                    if (pendingBlockedReason == "none")
+                        pendingBlockedReason = reason;
+                }
+
+                if (!repairedThisPass && pendingBlockedIdx.HasValue)
+                {
+                    firstBlockedIdx ??= pendingBlockedIdx;
+                    firstBlockedReason = pendingBlockedReason;
+                }
+
+                if (!repairedThisPass)
+                    break;
+            }
+
+            if (repairCount > 0)
+            {
+                Console.Error.WriteLine(
+                    $"[CORRIDOR-AFFORDANCE-REPAIR] repaired {repairCount} steep/blocked segment window(s) pathLen={path.Length} repairedLen={repaired.Count}");
+            }
+
+            return repaired.ToArray();
+        }
+
+        private static bool RequiresAffordanceRepair(
+            uint mapId,
+            XYZ from,
+            XYZ to,
+            float agentRadius,
+            float agentHeight,
+            out string reason)
+        {
+            reason = "none";
+            var horizontal = Distance2D(from, to);
+            if (horizontal <= AffordanceRepairMinSegmentLength)
+                return false;
+
+            var rise = to.Z - from.Z;
+            if (rise < AffordanceRepairMinCandidateRise ||
+                rise / horizontal < AffordanceRepairMinCandidateSlopeRatio)
+            {
+                return false;
+            }
+
+            var slopeAngleDeg = MathF.Atan2(rise, horizontal) * (180f / MathF.PI);
+            if (slopeAngleDeg > 45.0f && rise >= 3.0f)
+            {
+                reason = "cumulative_steep_climb";
+                return true;
+            }
+
+            if (!TryClassifyAffordance(mapId, from, to, agentRadius, agentHeight, out var affordance))
+                return false;
+
+            var validation = (SegmentValidationCode)affordance.ValidationCode;
+            if (affordance.Affordance == NativeSegmentAffordance.SteepClimb)
+            {
+                reason = "steep_climb";
+                return true;
+            }
+
+            if (validation == SegmentValidationCode.StepUpTooHigh &&
+                affordance.ClimbHeight >= 1.0f &&
+                affordance.SlopeAngleDeg >= 45.0f)
+            {
+                reason = "step_up_limit";
+                return true;
+            }
+
+            if (affordance.Affordance == NativeSegmentAffordance.Blocked &&
+                affordance.ClimbHeight >= 1.0f &&
+                affordance.SlopeAngleDeg >= 52.0f)
+            {
+                reason = "steep_climb";
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryFindCumulativeAffordanceBreak(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            int startIndex,
+            float agentRadius,
+            float agentHeight,
+            out string reason)
+        {
+            reason = "none";
+            if (startIndex < 0 || startIndex >= path.Count - 2)
+                return false;
+
+            var start = path[startIndex];
+            var maxEndIndex = Math.Min(path.Count - 1, startIndex + AffordanceRepairCumulativeMaxSegments);
+            for (var endIndex = startIndex + 2; endIndex <= maxEndIndex; endIndex++)
+            {
+                var end = path[endIndex];
+                var rise = end.Z - start.Z;
+                if (rise < AffordanceRepairCumulativeMinRise)
+                    continue;
+
+                var horizontal = Distance2D(start, end);
+                if (horizontal < AffordanceRepairCumulativeMinHorizontal ||
+                    horizontal > AffordanceRepairCumulativeMaxHorizontal ||
+                    rise / horizontal < AffordanceRepairCumulativeMinSlopeRatio)
+                {
+                    continue;
+                }
+
+                if (HasLargeDropInsideWindow(path, startIndex, endIndex))
+                    continue;
+
+                var validation = ValidateSegmentForAgent(mapId, start, end, agentRadius, agentHeight);
+                if (!IsLocallyWalkable(validation, start, end))
+                {
+                    reason = "cumulative_steep_climb";
+                    return true;
+                }
+
+                if (TryClassifyAffordance(mapId, start, end, agentRadius, agentHeight, out var affordance) &&
+                    affordance.Affordance is NativeSegmentAffordance.SteepClimb or NativeSegmentAffordance.Blocked)
+                {
+                    reason = "cumulative_steep_climb";
+                    return true;
+                }
+
+                reason = "steep_climb";
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool HasLargeDropInsideWindow(IReadOnlyList<XYZ> path, int startIndex, int endIndex)
+        {
+            for (var i = startIndex; i < endIndex; i++)
+            {
+                if (path[i].Z - path[i + 1].Z >= AffordanceRepairMinCandidateRise)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool ShouldDeferDownstreamAffordanceBlock(IReadOnlyList<XYZ> path, int blockedSegmentIndex)
+        {
+            if (path.Count < 2 || blockedSegmentIndex <= AffordanceRepairStraightScanLimit)
+                return false;
+
+            return Distance2D(path[0], path[^1]) >= SmoothFallbackAfterStraightStaticBreakMinDistance;
+        }
+
+        private static int FindWindowStart(IReadOnlyList<XYZ> path, int segmentIndex, float lookBehindDistance)
+        {
+            var index = Math.Clamp(segmentIndex, 0, path.Count - 1);
+            var remaining = lookBehindDistance;
+            while (index > 0 && remaining > 0.0f)
+            {
+                remaining -= Distance2D(path[index - 1], path[index]);
+                index--;
+            }
+
+            return index;
+        }
+
+        private static int FindWindowEnd(IReadOnlyList<XYZ> path, int segmentEndIndex, float lookAheadDistance)
+        {
+            var index = Math.Clamp(segmentEndIndex, 0, path.Count - 1);
+            var remaining = lookAheadDistance;
+            while (index < path.Count - 1 && remaining > 0.0f)
+            {
+                remaining -= Distance2D(path[index], path[index + 1]);
+                index++;
+            }
+
+            return index;
+        }
+
+        private static bool TryBuildAffordanceRepairRoute(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            int windowStart,
+            int windowEnd,
+            float agentRadius,
+            float agentHeight,
+            Stopwatch stopwatch,
+            bool allowNativeLegRepair,
+            out XYZ[] repairedRoute)
+        {
+            repairedRoute = [];
+            var from = path[windowStart];
+            var to = path[windowEnd];
+            var dx = to.X - from.X;
+            var dy = to.Y - from.Y;
+            var length = MathF.Sqrt((dx * dx) + (dy * dy));
+            if (length <= 0.01f)
+                return false;
+
+            var perpX = -dy / length;
+            var perpY = dx / length;
+            var found = false;
+            var bestScore = float.NegativeInfinity;
+            var bestRoute = Array.Empty<XYZ>();
+            var candidateSearchBudget = allowNativeLegRepair
+                ? AffordanceRepairNativeLegDirectSearchBudget
+                : AffordanceRepairBudget;
+
+            foreach (var along in AffordanceRepairAlongSamples)
+            {
+                var basePoint = new XYZ(
+                    from.X + (dx * along),
+                    from.Y + (dy * along),
+                    from.Z + ((to.Z - from.Z) * along));
+
+                foreach (var lateral in AffordanceRepairLateralOffsets)
+                {
+                    if (stopwatch.Elapsed > candidateSearchBudget)
+                    {
+                        if (found)
+                            return FinishBestRoute(bestRoute, out repairedRoute);
+
+                        return TryBuildNativeAffordanceRepairRoute(
+                            mapId,
+                            path,
+                            windowStart,
+                            windowEnd,
+                            agentRadius,
+                            agentHeight,
+                            allowNativeLegRepair,
+                            out repairedRoute);
+                    }
+
+                    var absLateral = MathF.Abs(lateral);
+                    var desired = new XYZ(
+                        basePoint.X + (perpX * lateral),
+                        basePoint.Y + (perpY * lateral),
+                        basePoint.Z);
+
+                    if (!TryFindNearbyWalkablePoint(
+                        mapId,
+                        desired,
+                        searchRadius: MathF.Max(8f, absLateral + 4f),
+                        maxHorizontalOffset: MathF.Max(6f, absLateral + 3f),
+                        maxVerticalOffset: 12f,
+                        out var candidate))
+                    {
+                        continue;
+                    }
+
+                    if (Distance2D(from, candidate) <= agentRadius + 0.5f ||
+                        Distance2D(candidate, to) <= agentRadius + 0.5f)
+                    {
+                        continue;
+                    }
+
+                    if (!IsAffordanceRepairLegWalkable(mapId, from, candidate, agentRadius, agentHeight) ||
+                        !IsAffordanceRepairLegWalkable(mapId, candidate, to, agentRadius, agentHeight))
+                    {
+                        continue;
+                    }
+
+                    var interiorSeparation = MinimumInteriorSeparationFromDetour(path, windowStart, windowEnd, candidate);
+                    if (interiorSeparation < AffordanceRepairMinInteriorSeparation)
+                        continue;
+
+                    var detourLength = Distance2D(from, candidate) + Distance2D(candidate, to);
+                    var directLength = MathF.Max(length, 0.01f);
+                    var score = interiorSeparation - ((detourLength / directLength) * 0.15f);
+                    if (found && score <= bestScore)
+                        continue;
+
+                    var composed = new List<XYZ>(path.Count - (windowEnd - windowStart) + 8);
+                    for (var i = 0; i <= windowStart; i++)
+                        AppendWaypointIfDistinct(composed, path[i]);
+
+                    AppendDensifiedSegment(composed, path[windowStart], candidate, SmoothPathDensifySpacing);
+                    AppendDensifiedSegment(composed, composed[^1], path[windowEnd], SmoothPathDensifySpacing);
+                    for (var i = windowEnd + 1; i < path.Count; i++)
+                        AppendWaypointIfDistinct(composed, path[i]);
+
+                    found = true;
+                    bestScore = score;
+                    bestRoute = composed.ToArray();
+                }
+            }
+
+            if (!found &&
+                TryBuildNativeAffordanceRepairRoute(
+                    mapId,
+                    path,
+                    windowStart,
+                    windowEnd,
+                    agentRadius,
+                    agentHeight,
+                    allowNativeLegRepair,
+                    out repairedRoute))
+            {
+                return true;
+            }
+
+            foreach (var lateral in AffordanceRepairLateralOffsets)
+            {
+                if (stopwatch.Elapsed > candidateSearchBudget)
+                {
+                    if (found)
+                        return FinishBestRoute(bestRoute, out repairedRoute);
+
+                    return TryBuildNativeAffordanceRepairRoute(
+                        mapId,
+                        path,
+                        windowStart,
+                        windowEnd,
+                        agentRadius,
+                        agentHeight,
+                        allowNativeLegRepair,
+                        out repairedRoute);
+                }
+
+                for (var firstAlongIndex = 0; firstAlongIndex < AffordanceRepairAlongSamples.Length - 1; firstAlongIndex++)
+                {
+                    var firstAlong = AffordanceRepairAlongSamples[firstAlongIndex];
+                    for (var secondAlongIndex = firstAlongIndex + 1; secondAlongIndex < AffordanceRepairAlongSamples.Length; secondAlongIndex++)
+                    {
+                        if (stopwatch.Elapsed > candidateSearchBudget)
+                        {
+                            if (found)
+                                return FinishBestRoute(bestRoute, out repairedRoute);
+
+                            return TryBuildNativeAffordanceRepairRoute(
+                                mapId,
+                                path,
+                                windowStart,
+                                windowEnd,
+                                agentRadius,
+                                agentHeight,
+                                allowNativeLegRepair,
+                                out repairedRoute);
+                        }
+
+                        var secondAlong = AffordanceRepairAlongSamples[secondAlongIndex];
+                        if (secondAlong - firstAlong < 0.25f)
+                            continue;
+
+                        var firstDesired = BuildLateralAffordanceCandidate(from, to, perpX, perpY, lateral, firstAlong);
+                        var secondDesired = BuildLateralAffordanceCandidate(from, to, perpX, perpY, lateral, secondAlong);
+                        var absLateral = MathF.Abs(lateral);
+
+                        if (!TryFindNearbyWalkablePoint(
+                                mapId,
+                                firstDesired,
+                                searchRadius: MathF.Max(8f, absLateral + 4f),
+                                maxHorizontalOffset: MathF.Max(6f, absLateral + 3f),
+                                maxVerticalOffset: 12f,
+                                out var firstCandidate) ||
+                            !TryFindNearbyWalkablePoint(
+                                mapId,
+                                secondDesired,
+                                searchRadius: MathF.Max(8f, absLateral + 4f),
+                                maxHorizontalOffset: MathF.Max(6f, absLateral + 3f),
+                                maxVerticalOffset: 12f,
+                                out var secondCandidate))
+                        {
+                            continue;
+                        }
+
+                        if (Distance2D(from, firstCandidate) <= agentRadius + 0.5f ||
+                            Distance2D(firstCandidate, secondCandidate) <= agentRadius + 0.5f ||
+                            Distance2D(secondCandidate, to) <= agentRadius + 0.5f)
+                        {
+                            continue;
+                        }
+
+                        if (!IsAffordanceRepairLegWalkable(mapId, from, firstCandidate, agentRadius, agentHeight) ||
+                            !IsAffordanceRepairLegWalkable(mapId, firstCandidate, secondCandidate, agentRadius, agentHeight) ||
+                            !IsAffordanceRepairLegWalkable(mapId, secondCandidate, to, agentRadius, agentHeight))
+                        {
+                            continue;
+                        }
+
+                        var detour = new[] { firstCandidate, secondCandidate };
+                        var interiorSeparation = MinimumInteriorSeparationFromDetour(path, windowStart, windowEnd, detour);
+                        if (interiorSeparation < AffordanceRepairMinInteriorSeparation)
+                            continue;
+
+                        var detourLength = Distance2D(from, firstCandidate)
+                            + Distance2D(firstCandidate, secondCandidate)
+                            + Distance2D(secondCandidate, to);
+                        var directLength = MathF.Max(length, 0.01f);
+                        var score = interiorSeparation - ((detourLength / directLength) * 0.15f);
+                        if (found && score <= bestScore)
+                            continue;
+
+                        var composed = new List<XYZ>(path.Count - (windowEnd - windowStart) + 16);
+                        for (var i = 0; i <= windowStart; i++)
+                            AppendWaypointIfDistinct(composed, path[i]);
+
+                        AppendDensifiedSegment(composed, path[windowStart], firstCandidate, SmoothPathDensifySpacing);
+                        AppendDensifiedSegment(composed, composed[^1], secondCandidate, SmoothPathDensifySpacing);
+                        AppendDensifiedSegment(composed, composed[^1], path[windowEnd], SmoothPathDensifySpacing);
+                        for (var i = windowEnd + 1; i < path.Count; i++)
+                            AppendWaypointIfDistinct(composed, path[i]);
+
+                        found = true;
+                        bestScore = score;
+                        bestRoute = composed.ToArray();
+                    }
+                }
+            }
+
+            return found && FinishBestRoute(bestRoute, out repairedRoute);
+        }
+
+        private static bool TryBuildNativeAffordanceRepairRoute(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            int windowStart,
+            int windowEnd,
+            float agentRadius,
+            float agentHeight,
+            bool allowNativeLegRepair,
+            out XYZ[] repairedRoute)
+        {
+            repairedRoute = [];
+            if (!allowNativeLegRepair)
+                return false;
+
+            var maxStart = Math.Min(windowEnd - 2, windowStart + AffordanceRepairNativeLegEndpointTrimLimit);
+            for (var nativeStart = windowStart; nativeStart <= maxStart; nativeStart++)
+            {
+                if (TryBuildNativeAffordanceRepairRoute(
+                        mapId,
+                        path,
+                        nativeStart,
+                        windowEnd,
+                        agentRadius,
+                        agentHeight,
+                        out repairedRoute))
+                {
+                    return true;
+                }
+            }
+
+            var minEnd = Math.Max(windowStart + 2, windowEnd - AffordanceRepairNativeLegEndpointTrimLimit);
+            for (var nativeEnd = windowEnd - 1; nativeEnd >= minEnd; nativeEnd--)
+            {
+                if (TryBuildNativeAffordanceRepairRoute(
+                        mapId,
+                        path,
+                        windowStart,
+                        nativeEnd,
+                        agentRadius,
+                        agentHeight,
+                        out repairedRoute))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryBuildNativeAffordanceRepairRoute(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            int nativeStart,
+            int nativeEnd,
+            float agentRadius,
+            float agentHeight,
+            out XYZ[] repairedRoute)
+        {
+            repairedRoute = [];
+            var from = path[nativeStart];
+            var to = path[nativeEnd];
+            if (Distance2D(from, to) > AffordanceRepairNativeLegMaxWindowLength)
+                return false;
+
+            if (!TryBuildAffordanceRepairLeg(
+                    mapId,
+                    from,
+                    to,
+                    agentRadius,
+                    agentHeight,
+                    allowNativeRoute: true,
+                    out var nativeLeg))
+            {
+                return false;
+            }
+
+            var composed = new List<XYZ>(path.Count - (nativeEnd - nativeStart) + nativeLeg.Length);
+            for (var i = 0; i <= nativeStart; i++)
+                AppendWaypointIfDistinct(composed, path[i]);
+
+            foreach (var waypoint in nativeLeg.Skip(1))
+                AppendWaypointIfDistinct(composed, waypoint);
+
+            for (var i = nativeEnd + 1; i < path.Count; i++)
+                AppendWaypointIfDistinct(composed, path[i]);
+
+            repairedRoute = composed.ToArray();
+            return true;
+        }
+
+        private static XYZ BuildLateralAffordanceCandidate(
+            XYZ from,
+            XYZ to,
+            float perpX,
+            float perpY,
+            float lateral,
+            float along)
+            => new(
+                from.X + ((to.X - from.X) * along) + (perpX * lateral),
+                from.Y + ((to.Y - from.Y) * along) + (perpY * lateral),
+                from.Z + ((to.Z - from.Z) * along));
+
+        private static bool FinishBestRoute(XYZ[] bestRoute, out XYZ[] repairedRoute)
+        {
+            repairedRoute = bestRoute;
+            return repairedRoute.Length > 0;
+        }
+
+        private static bool TryBuildAffordanceRepairLeg(
+            uint mapId,
+            XYZ from,
+            XYZ to,
+            float agentRadius,
+            float agentHeight,
+            bool allowNativeRoute,
+            out XYZ[] leg)
+        {
+            leg = [];
+            if (IsAffordanceRepairLegWalkable(mapId, from, to, agentRadius, agentHeight))
+            {
+                leg = DensifyPath([from, to], SmoothPathDensifySpacing);
+                return true;
+            }
+
+            if (!allowNativeRoute)
+                return false;
+
+            foreach (var smoothPath in new[] { true, false })
+            {
+                var nativePath = TryFindPathNative(mapId, from, to, smoothPath, agentRadius, agentHeight);
+                if (nativePath.Length < 2)
+                    continue;
+
+                if (Distance3D(nativePath[0], from) > NativePathEndpointMaxDistance ||
+                    Distance3D(nativePath[^1], to) > NativePathEndpointMaxDistance)
+                {
+                    continue;
+                }
+
+                var normalized = NormalizeEarlySupportLayer(
+                    mapId,
+                    DensifyPath(nativePath, SmoothPathDensifySpacing),
+                    int.MaxValue);
+                normalized = RemoveShortVerticalLayerSpikes(mapId, normalized, agentRadius, agentHeight, int.MaxValue);
+
+                if (ContainsAffordanceBreak(mapId, normalized, agentRadius, agentHeight))
+                    continue;
+
+                if (!ValidateRepairSequence(mapId, normalized[0], normalized.Skip(1).ToArray(), agentRadius, agentHeight))
+                    continue;
+
+                leg = normalized;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool ContainsAffordanceBreak(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            float agentRadius,
+            float agentHeight)
+        {
+            for (var i = 0; i < path.Count - 1; i++)
+            {
+                if (RequiresAffordanceRepair(mapId, path[i], path[i + 1], agentRadius, agentHeight, out _))
+                    return true;
+
+                if (TryFindCumulativeAffordanceBreak(mapId, path, i, agentRadius, agentHeight, out _))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool FindFirstStraightAffordanceBreak(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            float agentRadius,
+            float agentHeight,
+            int maxScanSegments,
+            out int blockedSegmentIndex,
+            out string blockedReason)
+        {
+            blockedSegmentIndex = -1;
+            blockedReason = "none";
+            var scanEnd = Math.Min(path.Count - 1, Math.Max(0, maxScanSegments));
+            for (var i = 0; i < scanEnd; i++)
+            {
+                var from = path[i];
+                var to = path[i + 1];
+                if (RequiresLocalStaticRepair(mapId, from, to, agentRadius, agentHeight, out var staticReason))
+                {
+                    blockedSegmentIndex = i;
+                    blockedReason = staticReason;
+                    return true;
+                }
+
+                if (TryClassifyAffordance(mapId, from, to, agentRadius, agentHeight, out var affordance) &&
+                    affordance.Affordance is NativeSegmentAffordance.SteepClimb
+                        or NativeSegmentAffordance.Blocked
+                        or NativeSegmentAffordance.Vertical)
+                {
+                    blockedSegmentIndex = i;
+                    blockedReason = affordance.Affordance == NativeSegmentAffordance.Blocked
+                        ? "blocked_geometry"
+                        : "steep_climb";
+                    return true;
+                }
+
+                if (TryFindCumulativeAffordanceBreak(mapId, path, i, agentRadius, agentHeight, out var cumulativeReason))
+                {
+                    blockedSegmentIndex = i;
+                    blockedReason = cumulativeReason;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsAffordanceRepairLegWalkable(
+            uint mapId,
+            XYZ from,
+            XYZ to,
+            float agentRadius,
+            float agentHeight)
+        {
+            var validation = ValidateSegmentForAgent(mapId, from, to, agentRadius, agentHeight);
+            if (!IsLocallyWalkable(validation, from, to))
+                return false;
+
+            if (!TryClassifyAffordance(mapId, from, to, agentRadius, agentHeight, out var affordance))
+                return false;
+
+            return affordance.Affordance is NativeSegmentAffordance.Walk
+                or NativeSegmentAffordance.StepUp
+                or NativeSegmentAffordance.SafeDrop;
+        }
+
+        private static bool TryClassifyAffordance(
+            uint mapId,
+            XYZ from,
+            XYZ to,
+            float agentRadius,
+            float agentHeight,
+            out NativeSegmentAffordanceResult affordance)
+        {
+            try
+            {
+                affordance = ClassifySegmentAffordance(mapId, from, to, agentRadius, agentHeight);
+                return true;
+            }
+            catch
+            {
+                affordance = default;
+                return false;
+            }
+        }
+
+        private static float MinimumInteriorSeparationFromDetour(
+            IReadOnlyList<XYZ> path,
+            int windowStart,
+            int windowEnd,
+            XYZ candidate)
+        {
+            if (windowEnd <= windowStart + 1)
+                return 0.0f;
+
+            var from = path[windowStart];
+            var to = path[windowEnd];
+            var result = float.PositiveInfinity;
+            for (var i = windowStart + 1; i < windowEnd; i++)
+            {
+                var firstLeg = DistancePointToSegment2D(path[i], from, candidate);
+                var secondLeg = DistancePointToSegment2D(path[i], candidate, to);
+                result = MathF.Min(result, MathF.Min(firstLeg, secondLeg));
+            }
+
+            return float.IsPositiveInfinity(result) ? 0.0f : result;
+        }
+
+        private static float MinimumInteriorSeparationFromDetour(
+            IReadOnlyList<XYZ> path,
+            int windowStart,
+            int windowEnd,
+            IReadOnlyList<XYZ> detour)
+        {
+            if (windowEnd <= windowStart + 1 || detour.Count == 0)
+                return 0.0f;
+
+            var route = new List<XYZ>(detour.Count + 2) { path[windowStart] };
+            route.AddRange(detour);
+            route.Add(path[windowEnd]);
+
+            var result = float.PositiveInfinity;
+            for (var i = windowStart + 1; i < windowEnd; i++)
+            {
+                for (var j = 0; j < route.Count - 1; j++)
+                    result = MathF.Min(result, DistancePointToSegment2D(path[i], route[j], route[j + 1]));
+            }
+
+            return float.IsPositiveInfinity(result) ? 0.0f : result;
         }
 
         private static bool RequiresLocalStaticRepair(
@@ -998,7 +2960,7 @@ namespace PathfindingService.Repository
                 return true;
             }
 
-            if (horizontal <= EarlyStaticRepairValidationMaxLength)
+            if (horizontal <= EarlyStaticRepairValidationMaxLength && IsNativeSegmentValidationEnabled())
             {
                 var validation = ValidateSegmentForAgent(mapId, from, to, agentRadius, agentHeight);
                 if (validation is not SegmentValidationCode.Clear and not SegmentValidationCode.MissingSupport
@@ -1021,22 +2983,20 @@ namespace PathfindingService.Repository
             out XYZ repairPoint)
         {
             repairPoint = from;
+            var candidateCount = 0;
             foreach (var snapped in EnumerateLocalStaticRepairCandidates(mapId, from, to, agentRadius))
             {
+                if (++candidateCount > LocalStaticRepairPointCandidateLimit)
+                    break;
+
                 if (!HasLineOfSightStrict(mapId, from, snapped)
                     || !HasLineOfSightStrict(mapId, snapped, to))
                 {
                     continue;
                 }
 
-                var firstLeg = ValidateSegmentForAgent(mapId, from, snapped, agentRadius, agentHeight);
-                var secondLeg = ValidateSegmentForAgent(mapId, snapped, to, agentRadius, agentHeight);
-                if (IsLocallyWalkable(firstLeg, from, snapped)
-                    && IsLocallyWalkable(secondLeg, snapped, to))
-                {
-                    repairPoint = snapped;
-                    return true;
-                }
+                repairPoint = snapped;
+                return true;
             }
 
             return false;
@@ -1181,47 +3141,209 @@ namespace PathfindingService.Repository
             int blockedSegmentIndex,
             float agentRadius,
             float agentHeight,
+            Stopwatch stopwatch,
+            TimeSpan repairBudget,
             out XYZ[] repairedRoute)
         {
             repairedRoute = [];
             var from = path[blockedSegmentIndex];
             var to = path[blockedSegmentIndex + 1];
-            var finalDestination = path[^1];
+            var maxAnchorIndex = Math.Min(
+                path.Count - 1,
+                blockedSegmentIndex + LocalStaticRepairRouteAnchorScanLimit);
+            var candidateCount = 0;
 
-            foreach (var candidate in EnumerateLocalStaticRepairCandidates(mapId, from, to, agentRadius))
+            var nearRouteEndpoint = blockedSegmentIndex >= path.Count - 1 - NativeSegmentRepairTailSegmentLimit;
+            if (nearRouteEndpoint
+                && stopwatch.Elapsed <= repairBudget
+                && TryBuildNativeSegmentRepairRoute(mapId, from, to, agentRadius, agentHeight, out var nativeSegmentRepair))
             {
-                var candidateDistance = Distance2D(from, candidate);
-                if (candidateDistance > 2.5f && !HasLineOfSightStrict(mapId, from, candidate))
-                    continue;
-
-                var firstLeg = ValidateSegmentForAgent(mapId, from, candidate, agentRadius, agentHeight);
-                if (!IsLocallyWalkable(firstLeg, from, candidate))
-                    continue;
-
-                var candidatePath = TryFindPathNative(
-                    mapId,
-                    candidate,
-                    finalDestination,
-                    smoothPath: true,
-                    agentRadius,
-                    agentHeight);
-                if (candidatePath.Length < 2)
-                    continue;
-                if (Distance3D(candidatePath[^1], finalDestination) > NativePathEndpointMaxDistance)
-                    continue;
-
-                var composed = new List<XYZ>(path.Count + candidatePath.Length);
+                var composed = new List<XYZ>(path.Count + nativeSegmentRepair.Length);
                 for (var i = 0; i <= blockedSegmentIndex; i++)
                     AppendWaypointIfDistinct(composed, path[i]);
 
-                AppendWaypointIfDistinct(composed, candidate);
-                AppendPathSkippingDuplicateStart(composed, candidatePath);
-                var normalized = NormalizeEarlySupportLayer(mapId, DensifyPath(composed.ToArray(), SmoothPathDensifySpacing));
-                if (FindFirstUnrepairedEarlyBreak(mapId, normalized, agentRadius, agentHeight) is null)
+                foreach (var waypoint in nativeSegmentRepair)
+                    AppendWaypointIfDistinct(composed, waypoint);
+
+                for (var i = blockedSegmentIndex + 1; i < path.Count; i++)
+                    AppendWaypointIfDistinct(composed, path[i]);
+
+                var normalized = NormalizeEarlySupportLayer(
+                    mapId,
+                    DensifyPath(composed.ToArray(), SmoothPathDensifySpacing),
+                    int.MaxValue);
+                if (FindFirstLineOfSightBreak(mapId, normalized, GetLocalStaticRepairValidationScanLimit(blockedSegmentIndex)) is null)
                 {
                     repairedRoute = normalized;
                     return true;
                 }
+            }
+
+            if (stopwatch.Elapsed <= repairBudget
+                && TryBuildNativeStaticRepairRoute(
+                    mapId,
+                    path,
+                    blockedSegmentIndex,
+                    maxAnchorIndex,
+                    agentRadius,
+                    agentHeight,
+                    stopwatch,
+                    repairBudget,
+                    out var nativeStaticRepair))
+            {
+                repairedRoute = nativeStaticRepair;
+                return true;
+            }
+
+            foreach (var candidate in EnumerateLocalStaticRepairCandidates(mapId, from, to, agentRadius))
+            {
+                if (stopwatch.Elapsed > repairBudget)
+                    break;
+
+                if (++candidateCount > LocalStaticRepairRouteCandidateLimit)
+                    break;
+
+                var candidateDistance = Distance2D(from, candidate);
+                if (candidateDistance > 2.5f && !HasLineOfSightStrict(mapId, from, candidate))
+                    continue;
+
+                for (var anchorIndex = blockedSegmentIndex + 1; anchorIndex <= maxAnchorIndex; anchorIndex++)
+                {
+                    var anchor = path[anchorIndex];
+                    if (Distance2D(candidate, anchor) <= agentRadius)
+                        continue;
+
+                    if (!HasLineOfSightStrict(mapId, candidate, anchor))
+                        continue;
+
+                    var composed = new List<XYZ>(path.Count + 1);
+                    for (var i = 0; i <= blockedSegmentIndex; i++)
+                        AppendWaypointIfDistinct(composed, path[i]);
+
+                    AppendWaypointIfDistinct(composed, candidate);
+                    for (var i = anchorIndex; i < path.Count; i++)
+                        AppendWaypointIfDistinct(composed, path[i]);
+
+                    var normalized = NormalizeEarlySupportLayer(
+                        mapId,
+                        DensifyPath(composed.ToArray(), SmoothPathDensifySpacing));
+                    if (FindFirstLineOfSightBreak(mapId, normalized, GetLocalStaticRepairValidationScanLimit(blockedSegmentIndex)) is null)
+                    {
+                        repairedRoute = normalized;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryBuildNativeStaticRepairRoute(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            int blockedSegmentIndex,
+            int maxAnchorIndex,
+            float agentRadius,
+            float agentHeight,
+            Stopwatch stopwatch,
+            TimeSpan repairBudget,
+            out XYZ[] repairedRoute)
+        {
+            repairedRoute = [];
+            var from = path[blockedSegmentIndex];
+
+            for (var anchorIndex = blockedSegmentIndex + 2; anchorIndex <= maxAnchorIndex; anchorIndex++)
+            {
+                if (stopwatch.Elapsed > repairBudget)
+                    return false;
+
+                var anchor = path[anchorIndex];
+                if (Distance2D(from, anchor) <= agentRadius)
+                    continue;
+
+                if (Distance2D(from, anchor) > NativeSegmentRepairMaxHorizontalDistance)
+                    continue;
+
+                if (!TryBuildNativeSegmentRepairRoute(mapId, from, anchor, agentRadius, agentHeight, out var nativeRepair))
+                    continue;
+
+                var composed = new List<XYZ>(path.Count + nativeRepair.Length);
+                for (var i = 0; i <= blockedSegmentIndex; i++)
+                    AppendWaypointIfDistinct(composed, path[i]);
+
+                foreach (var waypoint in nativeRepair)
+                    AppendWaypointIfDistinct(composed, waypoint);
+
+                for (var i = anchorIndex + 1; i < path.Count; i++)
+                    AppendWaypointIfDistinct(composed, path[i]);
+
+                var normalized = NormalizeEarlySupportLayer(
+                    mapId,
+                    DensifyPath(composed.ToArray(), SmoothPathDensifySpacing),
+                    int.MaxValue);
+                if (FindFirstLineOfSightBreak(mapId, normalized, GetLocalStaticRepairValidationScanLimit(blockedSegmentIndex)) is not null)
+                    continue;
+
+                repairedRoute = normalized;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static int GetLocalStaticRepairValidationScanLimit(int blockedSegmentIndex)
+            => Math.Min(
+                EarlyStaticRepairScanLimit,
+                blockedSegmentIndex + LocalStaticRepairRouteAnchorScanLimit + 4);
+
+        private static int? FindFirstEarlyLineOfSightBreak(uint mapId, XYZ[] path)
+            => FindFirstLineOfSightBreak(mapId, path, EarlyStaticRepairScanLimit);
+
+        private static int? FindFirstLineOfSightBreak(uint mapId, XYZ[] path, int maxSegmentIndex = int.MaxValue)
+        {
+            var scanEnd = Math.Min(path.Length - 1, maxSegmentIndex);
+            for (var i = 0; i < scanEnd; i++)
+            {
+                if (Distance2D(path[i], path[i + 1]) >= EarlyStaticRepairLosMinSegmentLength
+                    && !HasLineOfSightStrict(mapId, path[i], path[i + 1]))
+                {
+                    return i;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool TryBuildNativeSegmentRepairRoute(
+            uint mapId,
+            XYZ from,
+            XYZ to,
+            float agentRadius,
+            float agentHeight,
+            out XYZ[] repairRoute)
+        {
+            repairRoute = [];
+            if (Distance2D(from, to) > NativeSegmentRepairMaxHorizontalDistance)
+                return false;
+
+            foreach (var smoothPath in new[] { true, false })
+            {
+                var candidate = TryFindPathNative(mapId, from, to, smoothPath, agentRadius, agentHeight);
+                if (candidate.Length <= 2)
+                    continue;
+
+                var normalized = NormalizeEarlySupportLayer(
+                    mapId,
+                    DensifyPath(candidate, SmoothPathDensifySpacing),
+                    int.MaxValue);
+                if (FindFirstLineOfSightBreak(mapId, normalized) is not null)
+                    continue;
+
+                if (!ValidateRepairSequence(mapId, from, normalized, agentRadius, agentHeight))
+                    continue;
+
+                repairRoute = normalized;
+                return true;
             }
 
             return false;
@@ -1272,7 +3394,12 @@ namespace PathfindingService.Repository
             => validation is SegmentValidationCode.Clear or SegmentValidationCode.MissingSupport
                 || IsInconsistentUphillStepDown(validation, from, to);
 
-        private static bool TryBuildLongSegmentDetour(uint mapId, XYZ segmentStart, XYZ segmentEnd, out XYZ detour)
+        private static bool TryBuildLongSegmentDetour(
+            uint mapId,
+            XYZ segmentStart,
+            XYZ segmentEnd,
+            Stopwatch stopwatch,
+            out XYZ detour)
         {
             detour = segmentStart;
 
@@ -1292,6 +3419,9 @@ namespace PathfindingService.Repository
             {
                 foreach (var lateral in LongSegmentRepairLateralOffsets)
                 {
+                    if (stopwatch.Elapsed > LongSegmentRepairBudget)
+                        return false;
+
                     var desired = new XYZ(
                         segmentStart.X + (dirX * forward) + (perpX * lateral),
                         segmentStart.Y + (dirY * forward) + (perpY * lateral),
@@ -1433,7 +3563,8 @@ namespace PathfindingService.Repository
             float agentRadius,
             float agentHeight,
             XYZ[] rawPath,
-            int blockedSegmentIndex)
+            int blockedSegmentIndex,
+            bool allowGlobalRepair = true)
         {
             if (rawPath.Length < 2 || blockedSegmentIndex < 0 || blockedSegmentIndex >= rawPath.Length - 1)
                 return Array.Empty<XYZ>();
@@ -1442,14 +3573,41 @@ namespace PathfindingService.Repository
             var blockedEnd = rawPath[blockedSegmentIndex + 1];
             var bestPath = Array.Empty<XYZ>();
             var bestCost = float.MaxValue;
+            var stopwatch = Stopwatch.StartNew();
 
             foreach (var candidate in BuildRepairCandidates(blockedStart, blockedEnd))
             {
+                if (stopwatch.Elapsed > DynamicOverlayRepairBudget)
+                    break;
+
+                var localRepair = TryComposeLocalRepairPath(mapId, rawPath, blockedSegmentIndex, candidate, agentRadius, agentHeight);
+                if (localRepair.Length == 0)
+                    continue;
+
+                var cost = ComputePathCost(localRepair);
+                if (cost < bestCost)
+                {
+                    bestCost = cost;
+                    bestPath = localRepair;
+                }
+            }
+
+            if (bestPath.Length > 0)
+                return bestPath;
+
+            if (!allowGlobalRepair)
+                return Array.Empty<XYZ>();
+
+            foreach (var candidate in BuildRepairCandidates(blockedStart, blockedEnd))
+            {
+                if (stopwatch.Elapsed > DynamicOverlayRepairBudget)
+                    break;
+
                 var repaired = TryComposeCandidatePath(mapId, start, end, candidate, smoothPath, agentRadius, agentHeight);
                 if (repaired.Length == 0)
                     continue;
 
-                if (FindBlockedSegment(mapId, repaired).BlockedSegmentIndex is not null)
+                if (FindBlockedSegment(mapId, repaired, agentRadius, agentHeight).BlockedSegmentIndex is not null)
                     continue;
 
                 var cost = ComputePathCost(repaired);
@@ -1461,6 +3619,48 @@ namespace PathfindingService.Repository
             }
 
             return bestPath;
+        }
+
+        private XYZ[] TryComposeLocalRepairPath(
+            uint mapId,
+            XYZ[] rawPath,
+            int blockedSegmentIndex,
+            XYZ candidate,
+            float agentRadius,
+            float agentHeight)
+        {
+            var blockedStart = rawPath[blockedSegmentIndex];
+            var blockedEnd = rawPath[blockedSegmentIndex + 1];
+            var candidateOptions = new[] { candidate };
+
+            foreach (var option in candidateOptions)
+            {
+                if (Distance2D(blockedStart, option) <= agentRadius
+                    || Distance2D(option, blockedEnd) <= agentRadius)
+                {
+                    continue;
+                }
+
+                if (SegmentBlockedByDynamicOverlayForAgent(mapId, blockedStart, option, agentRadius, agentHeight, out _)
+                    || SegmentBlockedByDynamicOverlayForAgent(mapId, option, blockedEnd, agentRadius, agentHeight, out _))
+                {
+                    continue;
+                }
+
+                var repaired = new List<XYZ>(rawPath.Length + 1);
+                for (var i = 0; i <= blockedSegmentIndex; i++)
+                    AppendWaypointIfDistinct(repaired, rawPath[i]);
+
+                AppendWaypointIfDistinct(repaired, option);
+                for (var i = blockedSegmentIndex + 1; i < rawPath.Length; i++)
+                    AppendWaypointIfDistinct(repaired, rawPath[i]);
+
+                var repairedPath = repaired.ToArray();
+                if (FindBlockedSegment(mapId, repairedPath, agentRadius, agentHeight).BlockedSegmentIndex is null)
+                    return repairedPath;
+            }
+
+            return Array.Empty<XYZ>();
         }
 
         private static IEnumerable<XYZ> BuildRepairCandidates(XYZ blockedStart, XYZ blockedEnd)
@@ -1514,6 +3714,8 @@ namespace PathfindingService.Repository
 
                 if (firstLeg.Length == 0)
                     continue;
+                if (Distance3D(firstLeg[^1], candidate) > NativePathEndpointMaxDistance)
+                    continue;
 
                 foreach (var secondLegSmooth in EnumeratePathModes(smoothPath))
                 {
@@ -1528,6 +3730,8 @@ namespace PathfindingService.Repository
                     }
 
                     if (secondLeg.Length == 0)
+                        continue;
+                    if (Distance3D(secondLeg[^1], end) > NativePathEndpointMaxDistance)
                         continue;
 
                     var combined = CombinePaths(firstLeg, secondLeg);
@@ -1560,21 +3764,84 @@ namespace PathfindingService.Repository
             return combined.ToArray();
         }
 
-        private (int? BlockedSegmentIndex, string BlockedReason) FindBlockedSegment(uint mapId, XYZ[] path)
+        private (int? BlockedSegmentIndex, string BlockedReason) FindBlockedSegment(
+            uint mapId,
+            XYZ[] path,
+            float agentRadius = 0.0f,
+            float agentHeight = 0.0f)
         {
             if (path.Length < 2)
                 return (null, "none");
 
             for (var i = 0; i < path.Length - 1; i++)
             {
-                if (_segmentBlocker(mapId, path[i], path[i + 1]))
+                if (SegmentBlockedByDynamicOverlayForAgent(mapId, path[i], path[i + 1], agentRadius, agentHeight, out var blockedReason))
                 {
-                    var reason = _segmentBlockerReasonResolver(mapId, path[i], path[i + 1]);
-                    return (i, string.IsNullOrWhiteSpace(reason) ? "dynamic_overlay" : reason);
+                    return (i, blockedReason);
                 }
             }
 
             return (null, "none");
+        }
+
+        private bool SegmentBlockedByDynamicOverlayForAgent(
+            uint mapId,
+            XYZ from,
+            XYZ to,
+            float agentRadius,
+            float agentHeight,
+            out string blockedReason)
+        {
+            if (_segmentBlocker(mapId, from, to))
+            {
+                var directReason = _segmentBlockerReasonResolver(mapId, from, to);
+                blockedReason = string.IsNullOrWhiteSpace(directReason) ? "dynamic_overlay" : directReason;
+                return true;
+            }
+
+            blockedReason = "none";
+            if (agentRadius <= 0.0f || agentHeight <= 0.0f || !HasActiveDynamicObjectOverlay())
+                return false;
+
+            var dx = to.X - from.X;
+            var dy = to.Y - from.Y;
+            var horizontal = MathF.Sqrt((dx * dx) + (dy * dy));
+            if (horizontal <= 0.01f)
+                return false;
+
+            var perpX = -dy / horizontal;
+            var perpY = dx / horizontal;
+            foreach (var offset in EnumerateDynamicOverlayClearanceOffsets(agentRadius))
+            {
+                var leftFrom = new XYZ(from.X + (perpX * offset), from.Y + (perpY * offset), from.Z);
+                var leftTo = new XYZ(to.X + (perpX * offset), to.Y + (perpY * offset), to.Z);
+                if (_segmentBlocker(mapId, leftFrom, leftTo))
+                {
+                    var reason = _segmentBlockerReasonResolver(mapId, leftFrom, leftTo);
+                    blockedReason = string.IsNullOrWhiteSpace(reason) ? "dynamic_overlay_capsule_clearance" : reason;
+                    return true;
+                }
+
+                var rightFrom = new XYZ(from.X - (perpX * offset), from.Y - (perpY * offset), from.Z);
+                var rightTo = new XYZ(to.X - (perpX * offset), to.Y - (perpY * offset), to.Z);
+                if (_segmentBlocker(mapId, rightFrom, rightTo))
+                {
+                    var reason = _segmentBlockerReasonResolver(mapId, rightFrom, rightTo);
+                    blockedReason = string.IsNullOrWhiteSpace(reason) ? "dynamic_overlay_capsule_clearance" : reason;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<float> EnumerateDynamicOverlayClearanceOffsets(float agentRadius)
+        {
+            yield return agentRadius;
+
+            var halfRadius = agentRadius * 0.5f;
+            if (halfRadius >= 0.25f)
+                yield return halfRadius;
         }
 
         private bool SegmentIntersectsDynamicObjectsInternal(uint mapId, XYZ from, XYZ to)
@@ -1651,6 +3918,23 @@ namespace PathfindingService.Repository
             var dx = to.X - from.X;
             var dy = to.Y - from.Y;
             return MathF.Sqrt((dx * dx) + (dy * dy));
+        }
+
+        private static float DistancePointToSegment2D(XYZ point, XYZ start, XYZ end)
+        {
+            var dx = end.X - start.X;
+            var dy = end.Y - start.Y;
+            var lenSq = (dx * dx) + (dy * dy);
+            if (lenSq <= 0.0001f)
+                return Distance2D(point, start);
+
+            var t = (((point.X - start.X) * dx) + ((point.Y - start.Y) * dy)) / lenSq;
+            t = Math.Clamp(t, 0.0f, 1.0f);
+            var closest = new XYZ(
+                start.X + (dx * t),
+                start.Y + (dy * t),
+                start.Z);
+            return Distance2D(point, closest);
         }
 
         private static XYZ[] ValidateCorridorSegments(

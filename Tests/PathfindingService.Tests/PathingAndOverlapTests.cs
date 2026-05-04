@@ -37,7 +37,8 @@ namespace PathfindingService.Tests
                 maxStartDistance: 10.0f,
                 maxEndDistance: 12.0f,
                 maxSegmentLength: 200.0f,
-                maxHeightJump: 25.0f);
+                maxHeightJump: 25.0f,
+                maxWalkableValidationSegmentLength: 0.0f);
 
             Assert.True(
                 validationFailure is null,
@@ -77,7 +78,8 @@ namespace PathfindingService.Tests
                 maxStartDistance: 10.0f,
                 maxEndDistance: 12.0f,
                 maxSegmentLength: 200.0f,
-                maxHeightJump: 25.0f);
+                maxHeightJump: 25.0f,
+                maxWalkableValidationSegmentLength: 0.0f);
 
             Assert.Null(validationFailure);
             Assert.True(path.Length >= 3, $"Straight-request live retrieve route too short ({path.Length} points)");

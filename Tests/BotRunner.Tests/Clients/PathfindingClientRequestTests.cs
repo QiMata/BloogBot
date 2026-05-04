@@ -1,4 +1,5 @@
 using BotRunner.Clients;
+using GameData.Core.Enums;
 using GameData.Core.Models;
 using Pathfinding;
 
@@ -6,6 +7,20 @@ namespace BotRunner.Tests.Clients;
 
 public class PathfindingClientRequestTests
 {
+    [Theory]
+    [InlineData(true, 0.10f, true)]
+    [InlineData(true, 0.74f, true)]
+    [InlineData(true, 0.75f, false)]
+    [InlineData(true, 0.99f, false)]
+    [InlineData(false, 0.10f, false)]
+    public void IsBlockingWallContact_UsesLowPhysicsProgressAsFrictionSignal(
+        bool hitWall,
+        float blockedFraction,
+        bool expected)
+    {
+        Assert.Equal(expected, PathfindingClient.IsBlockingWallContact(hitWall, blockedFraction));
+    }
+
     [Fact]
     public void GetPathResult_WithNearbyObjects_SendsOverlayAndReturnsMetadata()
     {
@@ -121,6 +136,35 @@ public class PathfindingClientRequestTests
         Assert.Equal(530u, sent.MapId);
         Assert.False(sent.Straight);
         Assert.Empty(sent.NearbyObjects);
+    }
+
+    [Fact]
+    public void GetPathResult_WithRaceAndGender_SendsAgentMetadata()
+    {
+        var client = new CapturingPathfindingClient(new PathfindingResponse
+        {
+            Path = new CalculatePathResponse
+            {
+                Result = "native_path",
+                RawCornerCount = 0,
+                BlockedReason = "none",
+                PathSupported = true,
+            }
+        });
+
+        _ = client.GetPathResult(
+            1,
+            new Position(1677.6f, -4315.7f, 61.2f),
+            new Position(1320.0f, -4649.0f, 53.0f),
+            nearbyObjects: null,
+            smoothPath: true,
+            race: Race.Tauren,
+            gender: Gender.Male);
+
+        var sent = Assert.IsType<CalculatePathRequest>(client.LastRequest?.Path);
+        Assert.Equal((uint)Race.Tauren, sent.Race);
+        Assert.Equal((uint)Gender.Male, sent.Gender);
+        Assert.True(sent.Straight);
     }
 
     private sealed class CapturingPathfindingClient(PathfindingResponse response) : PathfindingClient
