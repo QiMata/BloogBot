@@ -34,6 +34,13 @@
 
 ## Active Tasks
 
+- [x] `LIVING-SERVER-SPEC-001` - Define the final-state living-server
+  automation spec from the gameplay documentation and architecture notes. The
+  spec must quantify on-demand activities by `Activity`, `Location`, and
+  `Level Range`, and cover automated progression, StateManager topology,
+  scalable pathfinding/scene data providers, Prometheus-style metrics, and
+  Docker/service logging policy.
+
 - [ ] `LPATH-CROSSROADS-UC` - Implement staged long-pathing from Crossroads to
   Undercity. The resolver/executor must choose observable travel objectives in
   sequence: Crossroads taxi access -> flight path `25` Crossroads to `23`
@@ -119,6 +126,33 @@
     deterministic gates still need to be rerun to completion against that
     updated anchor before another live run.
   - [ ] Focused live validation remains open.
+
+---
+
+## Handoff (2026-05-04, living-server automation spec)
+
+- Completed:
+  - Committed and pushed the full long-pathing/route-pack/gameplay-doc
+    checkpoint to `origin/main` as `79e4920c`.
+  - Added `docs/LIVING_SERVER_AUTOMATION_SPEC.md`, working backward from the
+    3000-bot living-server vision into activity catalog shape, automated
+    progression, StateManager topology, human on-demand activity API,
+    pathfinding/scene-data scale, metrics registry, logging policy, data
+    products, phases, acceptance criteria, and open decisions.
+  - Linked the new spec from `docs/WESTWORLD_ARCHITECTURE.md`.
+- Research inputs:
+  - Local: `docs/WESTWORLD_ARCHITECTURE.md`,
+    `docs/leveling-guide/README.md`, `docs/leveling-guide/decision-engine/*`,
+    `docs/TRAVEL_PLANNING.md`, and `docs/TECHNICAL_NOTES.md`.
+  - External platform references: Microsoft ASP.NET Core metrics,
+    OpenTelemetry .NET metrics, and Docker logging-driver documentation.
+- Validation/tests run:
+  - Documentation-only slice; no build/test run after adding the spec.
+- Files changed:
+  - `docs/LIVING_SERVER_AUTOMATION_SPEC.md`
+  - `docs/WESTWORLD_ARCHITECTURE.md`
+  - `docs/TASKS.md`
+- Next command: `git status --short --branch`
 
 ---
 

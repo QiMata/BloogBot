@@ -4,6 +4,10 @@
 
 3000 bots distributed evenly across Horde and Alliance, covering all race/class/spec combinations. Each bot has a character build config defining its end-state goals (BiS gear, PvP rank, professions, reputation). The system operates autonomously — bots group, quest, dungeon, raid, PvP, and trade with each other AND with human players. Human players experience a full, living server where they can always find groups, always find auction house activity, and always have opponents in battlegrounds.
 
+Detailed final-state requirements for on-demand activities, automated
+progression, pathfinding/scene-data scale, metrics, and logging live in
+[LIVING_SERVER_AUTOMATION_SPEC.md](LIVING_SERVER_AUTOMATION_SPEC.md).
+
 ## Architecture Layers
 
 ```
