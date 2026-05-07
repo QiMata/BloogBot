@@ -253,6 +253,21 @@ namespace PathfindingService
                     "[ROUTE_PACK] disabled by default during pathfinding overhaul; set "
                     + "WWOW_ENABLE_STATIC_ROUTE_PACK=1 to re-enable. All path queries "
                     + "will go through live Detour without route-pack interception.");
+                if (!IsPathRepairEnabled())
+                {
+                    logger.LogWarning(
+                        "[PATH_REPAIR] disabled by default during pathfinding overhaul; "
+                        + "set WWOW_ENABLE_PATH_REPAIR=1 to re-enable. Path queries will "
+                        + "return raw Detour findPath / smoothPath output (CalculateRawPath) "
+                        + "instead of running the CalculateValidatedPath repair pipeline.");
+                }
+                else
+                {
+                    logger.LogInformation(
+                        "[PATH_REPAIR] enabled via WWOW_ENABLE_PATH_REPAIR=1. Path queries "
+                        + "will run the CalculateValidatedPath repair pipeline (localLayer / "
+                        + "steep-segment / static-LOS / affordance) on top of raw Detour output.");
+                }
                 return;
             }
 
@@ -455,9 +470,23 @@ namespace PathfindingService
                             return new RouteComputationResult(cachedPathResult, match);
                         }
 
+                        // PFS-OVERHAUL-006: by default during the pathfinding
+                        // overhaul, bypass the 5,600-line CalculateValidatedPath
+                        // repair pipeline (localLayer / steep-segment / static-LOS
+                        // / affordance repairs) and serve raw Detour findPath /
+                        // smoothPath output directly. The repair pipeline takes
+                        // ~44s per query for FlightMaster→Frezza (279 localLayer
+                        // repairs in the canonical case) and transforms paths
+                        // away from what the bake actually produced — masking
+                        // bake fidelity exactly like the static route pack did.
+                        // Set WWOW_ENABLE_PATH_REPAIR=1 to re-enable the repair
+                        // pipeline for production deploys.
+                        var pathQueryFn = IsPathRepairEnabled()
+                            ? (Func<NavigationPathResult>)(() => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight, agentRadius, agentHeight))
+                            : (() => _navigation.CalculateRawPath(req.MapId, start, end, req.Straight, agentRadius, agentHeight));
                         var overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
                             req.MapId, effectiveNearbyObjects,
-                            () => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight, agentRadius, agentHeight),
+                            pathQueryFn,
                             logger, operationName: "path");
                         return new RouteComputationResult(overlayResult.Value);
                     });
@@ -713,6 +742,17 @@ namespace PathfindingService
         private static bool IsStaticRoutePackEnabled()
             => string.Equals(
                 Environment.GetEnvironmentVariable("WWOW_ENABLE_STATIC_ROUTE_PACK"),
+                "1",
+                StringComparison.OrdinalIgnoreCase);
+
+        // PFS-OVERHAUL-006: gate the CalculateValidatedPath repair pipeline.
+        // Default OFF during overhaul so path queries return raw Detour output
+        // (CalculateRawPath) without 279 localLayer / steep-segment repairs
+        // transforming the path. Set to "1" to re-enable validation/repair
+        // for production deploys (where it currently runs in ~44s/query).
+        private static bool IsPathRepairEnabled()
+            => string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_ENABLE_PATH_REPAIR"),
                 "1",
                 StringComparison.OrdinalIgnoreCase);
 

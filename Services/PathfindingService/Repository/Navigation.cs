@@ -616,6 +616,38 @@ namespace PathfindingService.Repository
             return result;
         }
 
+        /// <summary>
+        /// PFS-OVERHAUL-006 (2026-05-07): raw Detour path with no managed
+        /// repair pipeline. Returns whatever Detour's findStraightPath /
+        /// smoothPath produced, wrapped as a NavigationPathResult with no
+        /// validation metadata. Intended for the overhaul phase where we
+        /// want path queries to honestly reflect the navmesh state, with
+        /// no localLayer / steep-segment / static-LOS / affordance repairs
+        /// transforming the path. Once bake fidelity is good enough that
+        /// raw Detour produces walkable paths on its own, the entire
+        /// CalculateValidatedPath repair pipeline can be deleted.
+        /// </summary>
+        public NavigationPathResult CalculateRawPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
+            float agentRadius = 0.6f, float agentHeight = 2.0f)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var rawPath = TryFindPathNative(mapId, start, end, smoothPath, agentRadius, agentHeight);
+            stopwatch.Stop();
+            if (rawPath.Length == 0)
+            {
+                return new NavigationPathResult(
+                    Array.Empty<XYZ>(),
+                    Array.Empty<XYZ>(),
+                    "no_path",
+                    null);
+            }
+            return new NavigationPathResult(
+                rawPath,
+                rawPath,
+                "raw_detour",
+                null);
+        }
+
         public NavigationPathResult CalculateRoutePackSeedPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
             float agentRadius = 0.6f, float agentHeight = 2.0f)
         {
