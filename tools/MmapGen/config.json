@@ -1,10 +1,10 @@
 {
   "_README": "MmapGen per-map / per-tile generator config. Top-level keys are stringified map IDs; values for that map are flat scalars (agentRadius, agentHeight, walkableRadius, walkableHeight, walkableSlopeAngle, etc.). Per-tile overrides go in nested objects under the map (the inner key is `tileX || tileY`, no separator). The `default` block at the top is read by tools/NavDataAudit only -- MmapGen itself ignores it. See docs/physics/MMAP_FORMAT.md.",
-  "_agentNotes": "Tauren Male is the largest WoW capsule (radius 1.0247, height 2.625). All continent maps must be generated for that capsule. agentRadius / agentHeight are in WoW meters. walkableRadius is in Recast cells with cs=BASE_UNIT_DIM (0.2666666m); walkableRadius=4 covers 1.066m. walkableHeight and walkableClimb were previously specified as integer cell counts tied to ch=0.25 — that's a footgun when ch changes (PFS-OVERHAUL-006: setting them to 0 lets TileWorker auto-derive cell counts from agentHeight/agentMaxClimbModelTerrainTransition divided by ch, producing correct world-unit clearance / climb regardless of ch).",
+  "_agentNotes": "Tauren Male is the largest WoW capsule (radius 1.0247, height 2.625). All continent maps must be generated for that capsule. agentRadius / agentHeight are in WoW meters. walkableRadius/walkableHeight/walkableClimb were previously specified as integer cell counts tied to ch=0.25 / cs=0.2666 — that's a footgun when ch or cs change (PFS-OVERHAUL-006: setting them to 0 lets TileWorker auto-derive cell counts from agentRadius/agentHeight/agentMaxClimbModelTerrainTransition divided by cs/ch, producing correct world-unit erosion / clearance / climb regardless of cell size).",
   "default": {
     "agentRadius": 1.0247,
     "agentHeight": 2.625,
-    "walkableRadius": 4,
+    "walkableRadius": 0,
     "walkableHeight": 0,
     "walkableClimb": 0,
     "maxAngle": 60.0
@@ -12,15 +12,19 @@
   "0": {
     "agentRadius": 1.0247,
     "agentHeight": 2.625,
-    "walkableRadius": 4,
+    "walkableRadius": 0,
     "walkableHeight": 0,
     "walkableClimb": 0
   },
   "1": {
     "agentRadius": 1.0247,
     "agentHeight": 2.625,
-    "walkableRadius": 4,
+    "walkableRadius": 0,
     "walkableHeight": 0,
-    "walkableClimb": 0
+    "walkableClimb": 0,
+    "_2940_README": "Per-tile override for tile (X=29, Y=40) — OG zeppelin tower. cs=0.1m (vs 0.2666m default) for fine horizontal resolution on thin overhanging structures (the deck edge wall). At cs=0.2666 the deck triangle's XY footprint doesn't fill the bot's voxel column, so rcFilterWalkableLowHeightSpans never sees the deck overhead and fails to mark under-deck cells as low-clearance. Tile size grows substantially with cs=0.1, but only for this one tile. PFS-OVERHAUL-006.",
+    "2940": {
+      "cs": 0.1
+    }
   }
 }

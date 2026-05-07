@@ -484,11 +484,18 @@ namespace MMAP
         // intended world-unit clearance / climb. Tile size grows ~1-3% on
         // tiles with sparse vertical structure (most continent terrain) and
         // up to ~2.5x on dense multi-floor tiles (acceptable trade for
-        // bake fidelity). Per-tile `ch` override is still honored below for
-        // tiles that need different precision (rare).
+        // bake fidelity). Per-tile `ch` and `cs` overrides honored below
+        // for tiles that need different precision (rare). cs override is
+        // critical for tiles with thin overhanging structures (e.g., the
+        // OG zeppelin tower's deck edge) where coarse 0.27m horizontal
+        // voxels miss the deck triangle's true XY footprint, causing
+        // rcFilterWalkableLowHeightSpans to NOT mark under-deck cells as
+        // unwalkable, resulting in 2D-adjacent polygons at different Z.
         config.ch = 0.1f;
         if (jsonTileConfig.contains("ch"))
             config.ch = jsonTileConfig["ch"].get<float>();
+        if (jsonTileConfig.contains("cs"))
+            config.cs = jsonTileConfig["cs"].get<float>();
         // END WWoW divergence
 
         if (config.walkableHeight == 0)
