@@ -21,6 +21,13 @@
     "agentHeight": 2.625,
     "walkableRadius": 4,
     "walkableHeight": 11,
-    "walkableClimb": 1.8
+    "walkableClimb": 1.8,
+    "_2940_README": "Per-tile override for tile (X=29, Y=40) — OG zeppelin tower spiral ramp + deck. ch=0.1m (finer Z quantization than the 0.25m continent default) AND maxSimplificationError=0.3 (much tighter than the 1.8m default) so the polymesh contour simplifier keeps every meaningful vertex along the ramp instead of merging the smooth slope into a single steep polygon. PFS-OVERHAUL-006.",
+    "2940": {
+      "ch": 0.1,
+      "maxSimplificationError": 0.8,
+      "detailSampleDist": 0.5,
+      "detailSampleMaxError": 0.1
+    }
   }
 }

@@ -480,6 +480,18 @@ namespace MMAP
         if (continent)
             config.ch = 0.25f;
 
+        // BEGIN WWoW divergence (PFS-OVERHAUL-006): allow per-tile/per-map
+        // `ch` override so tiles with non-trivial vertical structure (towers,
+        // multi-floor interiors, spiral ramps) can request finer Z
+        // quantization than the lax continent default of 0.25m. The OG
+        // zeppelin tower's deck-edge transition smooths from a single 1.75y
+        // step polygon (at ch=0.25) into multiple polygons each with
+        // dz < bot step-up tolerance (at ch=0.1). Falls back to the
+        // continent / instance default when not overridden.
+        if (jsonTileConfig.contains("ch"))
+            config.ch = jsonTileConfig["ch"].get<float>();
+        // END WWoW divergence
+
         if (config.walkableHeight == 0)
             config.walkableHeight = (int)ceilf(agentHeight / config.ch);
         if (config.walkableClimb == 0)

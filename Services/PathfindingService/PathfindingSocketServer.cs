@@ -237,6 +237,25 @@ namespace PathfindingService
 
         private void WarmStaticRoutePacks()
         {
+            // PFS-OVERHAUL-006 (2026-05-07): the static route pack is OFF by default.
+            // While the pathfinding overhaul is in flight we want every path query
+            // to exercise the live navmesh so MmapGen iteration produces visible
+            // results. The cache pre-bakes routes against the navmesh that was
+            // current at warm-up time and serves them in front of Detour, which
+            // makes mesh changes invisible (the OG zeppelin tower stall point at
+            // (1338.1, -4646.0, 51.6) was the canonical case). Set
+            // WWOW_ENABLE_STATIC_ROUTE_PACK=1 to opt back in when deploying a
+            // stable image; the seeds and warm-up logic are otherwise unchanged.
+            if (!IsStaticRoutePackEnabled())
+            {
+                _mainPathCache = null;
+                logger.LogWarning(
+                    "[ROUTE_PACK] disabled by default during pathfinding overhaul; set "
+                    + "WWOW_ENABLE_STATIC_ROUTE_PACK=1 to re-enable. All path queries "
+                    + "will go through live Detour without route-pack interception.");
+                return;
+            }
+
             var warmSw = System.Diagnostics.Stopwatch.StartNew();
             _mainPathCache = new StaticRoutePackCache(
                 StaticRoutePackCache.CreateDefaultSeeds(),
@@ -684,6 +703,16 @@ namespace PathfindingService
         private static bool IsStaticRoutePackStartupWarmupEnabled()
             => string.Equals(
                 Environment.GetEnvironmentVariable("WWOW_ROUTE_PACK_STARTUP_WARMUP"),
+                "1",
+                StringComparison.OrdinalIgnoreCase);
+
+        // PFS-OVERHAUL-006: gate StaticRoutePackCache creation. Default OFF
+        // during the pathfinding overhaul so live Detour serves every path
+        // query and MmapGen iteration is visible. Set to "1" to re-enable
+        // pre-baked route caching for production deploys.
+        private static bool IsStaticRoutePackEnabled()
+            => string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_ENABLE_STATIC_ROUTE_PACK"),
                 "1",
                 StringComparison.OrdinalIgnoreCase);
 
