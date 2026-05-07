@@ -1019,90 +1019,57 @@ public class NavigationPath(
     }
 
     /// <summary>
-    /// Calculate a new path from start to end.
+    /// PFS-OVERHAUL-006 (2026-05-07): strict in-radius waypoint advancement.
+    ///
+    /// The previous implementation had a thicket of skip / look-ahead /
+    /// overshot heuristics (CanAdvancePastOvershotWaypoint, ShouldSkipProbeWaypoint,
+    /// CanAdvanceToNextWaypoint, the look-ahead-skip window, TryLosSkipAhead).
+    /// Those were workarounds for an old broken bake — they let the bot
+    /// "auto-complete" waypoints it hadn't actually reached, by jumping the
+    /// _currentIndex forward when the bot's 2D distance to a later waypoint
+    /// happened to be smaller than the active one. With per-waypoint radii
+    /// up to 12y for transport boarding, that produced advance-without-
+    /// movement: the bot landed on its stall coord, was 7.8y from the active
+    /// waypoint AND 7.8y from the next one, and the in-radius advance fired
+    /// for both waypoints in a single tick, parking it on whichever one was
+    /// in front of the deck-edge step.
+    ///
+    /// Now that the navmesh is correct (bake-time fixes in tools/MmapGen/)
+    /// AND the PathfindingService cache + repair pipeline are disabled
+    /// (Phase 5.3.6), the bot must walk through each waypoint in sequence.
+    /// If a waypoint is unreachable, the existing stuck-guard surfaces it;
+    /// we don't paper over with skip logic.
+    ///
+    /// Helpers (CanAdvancePastOvershotWaypoint, ShouldSkipProbeWaypoint,
+    /// CanAdvanceToNextWaypoint, CanSkipAheadOverDenseReversal,
+    /// TryLosSkipAhead, ShortcutPreservesWalkableCorridor) are now dead
+    /// code; left in place for now to avoid a large unrelated diff. To be
+    /// removed in a cleanup pass once strict advancement is proven.
     /// </summary>
     private void AdvanceReachableWaypoints(Position currentPosition, uint mapId, float minWaypointDistance)
     {
         while (_currentIndex < _waypoints.Length)
         {
-            // Adaptive radius is the primary threshold; WAYPOINT_REACH_DISTANCE is
-            // only the fallback when no radii were computed. Caller's minWaypointDistance
-            // is always a floor (e.g., corpse runs need a minimum approach distance).
+            var wp = _waypoints[_currentIndex];
+
+            // Adaptive radius is the primary threshold; WAYPOINT_REACH_DISTANCE
+            // is only the fallback when no radii were computed. Caller's
+            // minWaypointDistance is always a floor.
             var effectiveRadius = _waypointAcceptanceRadii.Length > _currentIndex
                 ? MathF.Max(_waypointAcceptanceRadii[_currentIndex], minWaypointDistance)
                 : MathF.Max(WAYPOINT_REACH_DISTANCE, minWaypointDistance);
 
-            var distanceToWaypoint = currentPosition.DistanceTo2D(_waypoints[_currentIndex]);
-            if (distanceToWaypoint >= effectiveRadius)
-            {
-                if (!CanAdvancePastOvershotWaypoint(currentPosition, mapId, effectiveRadius))
-                    break;
+            var distanceToWaypoint = currentPosition.DistanceTo2D(wp);
+            if (distanceToWaypoint > effectiveRadius)
+                break; // Not yet at the waypoint — bot must walk to it.
 
-                _currentIndex++;
-                Metrics.IncrementWaypointsReached();
-                OnWaypointAdvanced(currentPosition, "overshot");
-                continue;
-            }
-
-            if (!CanTreatWaypointAsReached(currentPosition, _waypoints[_currentIndex]))
-                break;
-
-            if (_enableDynamicProbeSkipping
-                && ShouldSkipProbeWaypoint(currentPosition, mapId, effectiveRadius, distanceToWaypoint))
-            {
-                _currentIndex++;
-                Metrics.IncrementWaypointsReached();
-                OnWaypointAdvanced(currentPosition, "probe-skip");
-                continue;
-            }
-
-            if (!CanAdvanceToNextWaypoint(currentPosition, mapId, distanceToWaypoint))
-                break;
+            if (!CanTreatWaypointAsReached(currentPosition, wp))
+                break; // Within 2D radius but not on the same vertical layer.
 
             _currentIndex++;
             Metrics.IncrementWaypointsReached();
             OnWaypointAdvanced(currentPosition, "in-radius");
         }
-
-        // Look-ahead skip: if we overshot the current waypoint and are closer (2D) to
-        // a later waypoint, jump ahead. This prevents the bot from doubling back to a
-        // waypoint it already passed. Common when navmesh Z is inaccurate and the bot
-        // walks over the waypoint without triggering the radius check.
-        // Limit scan to a small window (3 waypoints) to prevent distant waypoints from
-        // pulling the bot off course and causing oscillation/jitter.
-        if (_currentIndex < _waypoints.Length - 1)
-        {
-            var distToCurrent = currentPosition.DistanceTo2D(_waypoints[_currentIndex]);
-            var bestIndex = _currentIndex;
-            var bestDist = distToCurrent;
-
-            var scanEnd = Math.Min(_currentIndex + 4, _waypoints.Length);
-            for (int i = _currentIndex + 1; i < scanEnd; i++)
-            {
-                var d = currentPosition.DistanceTo2D(_waypoints[i]);
-                if (d < bestDist
-                    && CanSkipAheadOverDenseReversal(currentPosition, i)
-                    && CanTreatWaypointAsReached(currentPosition, _waypoints[i], i)
-                    && ShortcutPreservesWalkableCorridor(currentPosition, _waypoints[i], mapId))
-                {
-                    bestDist = d;
-                    bestIndex = i;
-                }
-            }
-
-            if (bestIndex > _currentIndex)
-            {
-                var skipped = bestIndex - _currentIndex;
-                _currentIndex = bestIndex;
-                for (int s = 0; s < skipped; s++)
-                    Metrics.IncrementWaypointsReached();
-                OnWaypointAdvanced(currentPosition, $"lookahead-skip+{skipped}");
-            }
-        }
-
-        // After reaching the current waypoint, try to skip further ahead via LOS.
-        if (_enableDynamicProbeSkipping && !_strictPathValidation && _currentIndex < _waypoints.Length)
-            TryLosSkipAhead(currentPosition, mapId);
     }
 
     /// <summary>
