@@ -14,28 +14,42 @@ namespace PathfindingService
     {
         public static void Main(string[] args)
         {
+            // PFS-OVERHAUL-006 (2026-05-07): require WWOW_DATA_DIR explicitly.
+            // The previous implementation walked ancestors looking for any directory
+            // with mmaps/maps/vmaps and used the first match, which silently fell
+            // back to stale local copies (Bot/Release/net8.0/mmaps, Data/mmaps,
+            // etc.) that were leftover from March 2026 or earlier. That made it
+            // impossible to know whether tests were actually exercising the latest
+            // bake without manually inspecting file timestamps. WWOW_DATA_DIR is
+            // now the SINGLE source of truth; the service refuses to start without
+            // it. Production (Docker) sets WWOW_DATA_DIR=/wwow-data via compose.
+            // Tests set it via PathfindingTestFixture or manually before launch.
             var previousDataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
-            var resolvedDataDir = ResolveNavigationDataDirectory(previousDataDir);
 
-            if (!string.IsNullOrEmpty(resolvedDataDir))
+            if (string.IsNullOrWhiteSpace(previousDataDir))
             {
-                if (!resolvedDataDir.EndsWith(Path.DirectorySeparatorChar))
-                {
-                    resolvedDataDir += Path.DirectorySeparatorChar;
-                }
-
-                NativeProcessEnvironment.Set("WWOW_DATA_DIR", resolvedDataDir);
-                Console.WriteLine($"[PathfindingService] WWOW_DATA_DIR set to: {resolvedDataDir}");
-            }
-            else
-            {
-                Console.Error.WriteLine("[PathfindingService] FATAL: Could not find nav data root containing mmaps/maps/vmaps.");
-                if (!string.IsNullOrWhiteSpace(previousDataDir))
-                    Console.Error.WriteLine($"[PathfindingService] Existing WWOW_DATA_DIR was invalid: {previousDataDir}");
+                Console.Error.WriteLine("[PathfindingService] FATAL: WWOW_DATA_DIR is not set.");
                 Console.Error.WriteLine("[PathfindingService] Set WWOW_DATA_DIR to a directory containing mmaps/, maps/, and vmaps/ subdirectories.");
+                Console.Error.WriteLine("[PathfindingService] (Ancestor-walk fallback was removed in PFS-OVERHAUL-006 — it silently loaded stale build-output mmaps when the env var was unset.)");
                 Environment.Exit(1);
                 return;
             }
+
+            var resolvedDataDir = NormalizePath(previousDataDir);
+            if (!HasNavData(resolvedDataDir))
+            {
+                Console.Error.WriteLine($"[PathfindingService] FATAL: WWOW_DATA_DIR does not contain mmaps/, maps/, and vmaps/ subdirectories: {resolvedDataDir}");
+                Environment.Exit(1);
+                return;
+            }
+
+            if (!resolvedDataDir.EndsWith(Path.DirectorySeparatorChar))
+            {
+                resolvedDataDir += Path.DirectorySeparatorChar;
+            }
+
+            NativeProcessEnvironment.Set("WWOW_DATA_DIR", resolvedDataDir);
+            Console.WriteLine($"[PathfindingService] WWOW_DATA_DIR set to: {resolvedDataDir}");
 
             CreateHostBuilder(args)
                 .Build()
