@@ -1738,6 +1738,34 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
     }
 
     [Fact]
+    public void OrgrimmarLowerDeckStallToFrezza_PrintsPolygonCorridor()
+    {
+        // Phase 5.3.6 Cycle 5 follow-up. The corner trace showed 4 corners with
+        // a 1.75y vertical "step" from (1339,-4645,52) → (1337,-4644,53.76).
+        // FG screenshot confirms the bot is mid-ramp (not at the deck edge),
+        // so the step is a between-coil cut: bake-time walkableClimb=1.8y is
+        // letting Detour treat vertically-stacked spiral-ramp coils as
+        // polygon-connected. This test prints the polygon corridor so we can
+        // see if there are vertically-distinct polys at the stall point that
+        // shouldn't be linked.
+        var probe = NavigationInterop.QueryPathPolygons(
+            Kalimdor,
+            new XYZ(1338.13f, -4645.96f, 51.60f),
+            new XYZ(1331.11f, -4649.45f, 53.6269f),
+            TaurenMaleCapsule.Radius, TaurenMaleCapsule.Height,
+            maxOut: 64);
+
+        Assert.True(probe.Success,
+            "QueryPathPolygons returned false for stall→Frezza polygon corridor inspection.");
+
+        _output.WriteLine($"[POLYS-STALL-TO-FREZZA] count={probe.TotalPolyCount} offMesh={probe.OffMeshPolyCount}");
+        for (int i = 0; i < probe.PolyRefs.Length; i++)
+        {
+            _output.WriteLine($"  [{i:D02}] ref=0x{probe.PolyRefs[i]:X16} type={probe.PolyTypes[i]}");
+        }
+    }
+
+    [Fact]
     public void OrgrimmarLowerDeckStallToFrezza_PrintsCornerSequence()
     {
         // Phase 5.3.6 Cycle 5 diagnostic (PFS-OVERHAUL-006). Cycle 4's tighter
