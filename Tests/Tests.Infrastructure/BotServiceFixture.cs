@@ -327,10 +327,10 @@ public class BotServiceFixture : IAsyncLifetime
             // Check if PathfindingService is available on its external endpoint.
             // Tests that require pathfinding (corpse run, movement, gathering) should skip when unavailable.
             PathfindingServiceReady = await WaitForPathfindingServiceAsync();
-            Log($"  PathfindingService (5001): {PathfindingServiceReady}");
+            Log($"  PathfindingService ({_mangosFixture.Config.PathfindingServicePort}): {PathfindingServiceReady}");
             if (!PathfindingServiceReady)
             {
-                Log("  [PathfindingService] WARNING: PathfindingService is not available on port 5001.");
+                Log($"  [PathfindingService] WARNING: PathfindingService is not available on port {_mangosFixture.Config.PathfindingServicePort}.");
                 Log("  [PathfindingService] Likely cause: WWOW_DATA_DIR is not set or does not contain mmaps/, maps/, vmaps/ subdirectories.");
                 Log("  [PathfindingService] Set WWOW_DATA_DIR to your nav data directory (e.g., D:\\World of Warcraft) and rebuild.");
                 Log("  [PathfindingService] Tests requiring pathfinding will be skipped.");
@@ -411,14 +411,15 @@ public class BotServiceFixture : IAsyncLifetime
                         }
                     }
 
-                    // Check PathfindingService (port 5001) — if it crashes mid-suite,
-                    // navigation tests will fail with mysterious timeouts.
+                    // Check PathfindingService — if it crashes mid-suite, navigation
+                    // tests will fail with mysterious timeouts.
                     // Use TCP connect check instead of bind check — Docker-forwarded ports
                     // appear "free" to IsPortInUse even when the container is healthy.
-                    if (PathfindingServiceReady && !await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", 5001, 2000))
+                    var pathfindingMonitorPort = _mangosFixture.Config.PathfindingServicePort;
+                    if (PathfindingServiceReady && !await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", pathfindingMonitorPort, 2000))
                     {
                         PathfindingServiceReady = false;
-                        var msg = $"PathfindingService (port 5001) stopped responding at {DateTime.Now:HH:mm:ss}";
+                        var msg = $"PathfindingService (port {pathfindingMonitorPort}) stopped responding at {DateTime.Now:HH:mm:ss}";
                         Log($"  [CrashMonitor] {msg}");
                     }
 
@@ -839,12 +840,17 @@ public class BotServiceFixture : IAsyncLifetime
     #region External Service Readiness — Pathfinding and SceneData
 
     /// <summary>
-    /// Waits for PathfindingService to become available on port 5001.
-    /// The service is treated as an external dependency and must be launched separately.
+    /// Waits for PathfindingService to become available on its configured port.
+    /// The service is treated as an external dependency and must be launched separately
+    /// (e.g., via the Docker `wwow-pathfinding` container on port 5001, or via
+    /// `PathfindingTestFixture` on a test port like 5101 when WWOW_USE_LOCAL_PATHFINDING_SERVICE=1).
+    /// PFS-OVERHAUL-006: now honors `WWOW_TEST_PATHFINDING_PORT` (via IntegrationTestConfig)
+    /// instead of hardcoding 5001, so test fixtures can spawn their own instance on a
+    /// free port without colliding with Docker.
     /// </summary>
     private async Task<bool> WaitForPathfindingServiceAsync()
     {
-        const int pathfindingPort = 5001;
+        var pathfindingPort = _mangosFixture.Config.PathfindingServicePort;
         const int maxWaitSeconds = 30;
 
         // If port is already in use, it's ready

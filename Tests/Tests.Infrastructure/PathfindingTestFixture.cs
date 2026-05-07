@@ -1,0 +1,244 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace Tests.Infrastructure;
+
+/// <summary>
+/// PFS-OVERHAUL-006 (2026-05-07): test-spawned PathfindingService for live
+/// pathfinding tests.
+///
+/// Live tests (LongPathingTests, etc.) historically connected to whatever
+/// process happened to be listening on port 5001 — typically the
+/// `wwow-pathfinding` Docker container. That gave us a moving target: a
+/// test could pass against a stale tile cache or a stale binary build of
+/// the service, and we wouldn't know until we manually `docker compose
+/// up --build`'d. The pathfinding overhaul work needed each iteration of
+/// the navmesh / service code to be exercised honestly, and the only way
+/// to guarantee that is to spawn a fresh PathfindingService.exe per
+/// fixture lifetime, against a port the Docker container isn't using.
+///
+/// Usage:
+///   var fixture = await PathfindingTestFixture.LaunchAsync(testLog);
+///   try
+///   {
+///       // fixture.Port is the port the spawned process is listening on.
+///       // Set WWOW_TEST_PATHFINDING_PORT (or pass to your downstream
+///       // fixture explicitly) so StateManager + BotRunner connect to
+///       // this port rather than 5001.
+///   }
+///   finally
+///   {
+///       await fixture.DisposeAsync();
+///   }
+///
+/// Reads `WWOW_USE_LOCAL_PATHFINDING_SERVICE`. When unset, callers should
+/// fall back to the existing port-5001 Docker behavior. When set to "1",
+/// callers should use this fixture and route through fixture.Port.
+/// </summary>
+public sealed class PathfindingTestFixture : IAsyncDisposable
+{
+    private const string EnableEnvVar = "WWOW_USE_LOCAL_PATHFINDING_SERVICE";
+    private const string PortEnvVar = "WWOW_TEST_PATHFINDING_PORT";
+    private const int DefaultTestPort = 5101;
+    private const int MaxStartupSeconds = 600; // mmap preload can take a while
+
+    private Process? _process;
+    private readonly Action<string> _log;
+
+    public int Port { get; private set; }
+
+    private PathfindingTestFixture(int port, Action<string> log)
+    {
+        Port = port;
+        _log = log;
+    }
+
+    public static bool IsLocalPathfindingEnabled()
+    {
+        var v = Environment.GetEnvironmentVariable(EnableEnvVar);
+        return string.Equals(v, "1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(v, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static async Task<PathfindingTestFixture> LaunchAsync(Action<string> log)
+    {
+        var port = ResolveTestPort();
+        var fixture = new PathfindingTestFixture(port, log);
+        await fixture.StartAsync().ConfigureAwait(false);
+        return fixture;
+    }
+
+    private static int ResolveTestPort()
+    {
+        var configured = Environment.GetEnvironmentVariable(PortEnvVar);
+        if (int.TryParse(configured, out var p) && p > 0 && p < 65536)
+            return p;
+        return DefaultTestPort;
+    }
+
+    private async Task StartAsync()
+    {
+        var exePath = ResolvePathfindingExe()
+            ?? throw new InvalidOperationException(
+                "PathfindingService.exe not found. Build the solution first; "
+                + "the test fixture expects Bot/Release/net8.0/PathfindingService.exe.");
+        var workingDir = Path.GetDirectoryName(exePath)!;
+
+        if (IsPortInUse(Port))
+        {
+            _log($"[PathfindingTestFixture] WARNING: port {Port} already in use; "
+                + "we'll skip spawning a new process and use whatever is listening. "
+                + "Set WWOW_TEST_PATHFINDING_PORT to a free port to spawn cleanly.");
+            return;
+        }
+
+        var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR")
+            ?? throw new InvalidOperationException(
+                "WWOW_DATA_DIR not set; required for PathfindingService startup.");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = exePath,
+            WorkingDirectory = workingDir,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+
+        // The spawned process is independent of the test process's env.
+        // Forward only what's needed.
+        psi.Environment["WWOW_DATA_DIR"] = dataDir;
+        psi.Environment["PathfindingService__IpAddress"] = "127.0.0.1";
+        psi.Environment["PathfindingService__Port"] = Port.ToString();
+        psi.Environment["WWOW_NAVIGATION_PRELOAD_MAPS"] = "all";
+        psi.Environment["Navigation__PreloadMaps"] = "all";
+        psi.Environment["Navigation__RunStartupDiagnostics"] = "false";
+        psi.Environment["Navigation__EnableDynamicObjectOverlay"] = "false";
+        psi.Environment["WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY"] = "0";
+
+        // Mirror Phase 5.3.6 overhaul defaults: route pack and repair pipeline
+        // OFF unless the test explicitly opts in.
+        psi.Environment["WWOW_ENABLE_STATIC_ROUTE_PACK"] =
+            Environment.GetEnvironmentVariable("WWOW_ENABLE_STATIC_ROUTE_PACK") ?? "0";
+        psi.Environment["WWOW_ENABLE_PATH_REPAIR"] =
+            Environment.GetEnvironmentVariable("WWOW_ENABLE_PATH_REPAIR") ?? "0";
+        psi.Environment["WWOW_ROUTE_PACK_STARTUP_WARMUP"] =
+            Environment.GetEnvironmentVariable("WWOW_ROUTE_PACK_STARTUP_WARMUP") ?? "0";
+
+        _log($"[PathfindingTestFixture] launching {exePath} on port {Port} (data={dataDir})");
+        _process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Process.Start returned null for PathfindingService.exe.");
+
+        _process.OutputDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data))
+                _log($"[pf-stdout] {e.Data}");
+        };
+        _process.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data))
+                _log($"[pf-stderr] {e.Data}");
+        };
+        _process.BeginOutputReadLine();
+        _process.BeginErrorReadLine();
+
+        await WaitForReadyAsync().ConfigureAwait(false);
+        _log($"[PathfindingTestFixture] ready on port {Port} (PID {_process.Id})");
+    }
+
+    private async Task WaitForReadyAsync()
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < TimeSpan.FromSeconds(MaxStartupSeconds))
+        {
+            if (_process?.HasExited == true)
+                throw new InvalidOperationException(
+                    $"PathfindingService.exe exited prematurely (code {_process.ExitCode}) before reaching ready.");
+
+            if (await IsPortAcceptingAsync(Port, 1000).ConfigureAwait(false))
+                return;
+
+            await Task.Delay(500).ConfigureAwait(false);
+        }
+        throw new TimeoutException(
+            $"PathfindingService.exe did not become ready on port {Port} within {MaxStartupSeconds}s.");
+    }
+
+    private static string? ResolvePathfindingExe()
+    {
+        var baseDir = AppContext.BaseDirectory;
+        var direct = Path.Combine(baseDir, "PathfindingService.exe");
+        if (File.Exists(direct)) return direct;
+
+        // Walk up to the repo root and try Bot/Release/net8.0/.
+        var dir = new DirectoryInfo(baseDir);
+        while (dir != null)
+        {
+            var candidate = Path.Combine(dir.FullName, "Bot", "Release", "net8.0", "PathfindingService.exe");
+            if (File.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+        return null;
+    }
+
+    private static bool IsPortInUse(int port)
+    {
+        try
+        {
+            using var listener = new TcpListener(IPAddress.Loopback, port);
+            listener.Start();
+            listener.Stop();
+            return false;
+        }
+        catch (SocketException)
+        {
+            return true;
+        }
+    }
+
+    private static async Task<bool> IsPortAcceptingAsync(int port, int timeoutMs)
+    {
+        try
+        {
+            using var client = new TcpClient();
+            using var cts = new CancellationTokenSource(timeoutMs);
+            await client.ConnectAsync(IPAddress.Loopback, port, cts.Token).ConfigureAwait(false);
+            return client.Connected;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_process == null)
+            return;
+
+        try
+        {
+            if (!_process.HasExited)
+            {
+                _log($"[PathfindingTestFixture] stopping PID {_process.Id}");
+                _process.Kill(entireProcessTree: true);
+                await Task.Run(() => _process.WaitForExit(5000)).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            _log($"[PathfindingTestFixture] dispose error: {ex.Message}");
+        }
+        finally
+        {
+            _process.Dispose();
+            _process = null;
+        }
+    }
+}
