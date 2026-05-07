@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>PathPhysicsProbe</RootNamespace>
+    <AssemblyName>PathPhysicsProbe</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseAppHost>true</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Reuse the existing Navigation.dll P/Invoke wrapper from Navigation.Physics.Tests.
+      We share the wrapper rather than duplicating it so future Physics.dll exports
+      are picked up automatically. Local namespace is preserved for the wrapper
+      types via `Link` to prevent collision with anything in this project.
+    -->
+    <Compile Include="..\..\Tests\Navigation.Physics.Tests\NavigationInterop.cs" Link="Interop\NavigationInterop.cs" />
+  </ItemGroup>
+</Project>
