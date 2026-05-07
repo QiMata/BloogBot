@@ -6,7 +6,7 @@ namespace BotRunner.Helpers;
 
 /// <summary>
 /// Centralises NavigationPath construction so every call site uses the same
-/// capsule-dimension lookup, nearby-object provider and stuck-recovery wiring.
+/// capsule-dimension lookup, optional nearby-object provider and stuck-recovery wiring.
 /// </summary>
 public static class NavigationPathFactory
 {
@@ -22,7 +22,9 @@ public static class NavigationPathFactory
         return new NavigationPath(client,
             capsuleRadius: capabilities.CapsuleRadius,
             capsuleHeight: capabilities.CapsuleHeight,
-            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end),
+            nearbyObjectProvider: BotRunner.Movement.NavigationPathFactory.IsDynamicOverlayEnabled()
+                ? (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end)
+                : null,
             stuckRecoveryGenerationProvider: () => objectManager.MovementStuckRecoveryGeneration,
             race: capabilities.Race,
             gender: capabilities.Gender,
@@ -45,7 +47,9 @@ public static class NavigationPathFactory
             strictPathValidation: false,
             capsuleRadius: capabilities.CapsuleRadius,
             capsuleHeight: capabilities.CapsuleHeight,
-            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end),
+            nearbyObjectProvider: BotRunner.Movement.NavigationPathFactory.IsDynamicOverlayEnabled()
+                ? (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end)
+                : null,
             stuckRecoveryGenerationProvider: () => objectManager.MovementStuckRecoveryGeneration,
             race: capabilities.Race,
             gender: capabilities.Gender,

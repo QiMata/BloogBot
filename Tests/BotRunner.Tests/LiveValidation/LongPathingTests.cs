@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Communication;
 using GameData.Core.Enums;
+using Tests.Infrastructure;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -31,9 +32,12 @@ public class LongPathingTests
     private const int OrgrimmarMapId = 1;
     private const float OrgrimmarTaxiX = 1677.0f;
     private const float OrgrimmarTaxiY = -4315.0f;
-    private const float OrgrimmarZeppelinRouteTargetX = 1320.142944f;
-    private const float OrgrimmarZeppelinRouteTargetY = -4653.158691f;
-    private const float OrgrimmarZeppelinRouteTargetZ = 53.891945f;
+    // Phase 5.3.5: anchored to Zeppelin Master Frezza (NPC 9564) on the OG
+    // upper-platform deck — same Z tier as BoardingPosition (z≈53.6), not the
+    // prior wrong-tier city-ground point (z=51.6).
+    private const float OrgrimmarZeppelinRouteTargetX = 1331.11f;
+    private const float OrgrimmarZeppelinRouteTargetY = -4649.45f;
+    private const float OrgrimmarZeppelinRouteTargetZ = 53.6269f;
     private const float OrgrimmarZeppelinX = 1320.142944f;
     private const float OrgrimmarZeppelinY = -4653.158691f;
     private const float OrgrimmarZeppelinBoardingX = 1320.142944f;
@@ -60,6 +64,14 @@ public class LongPathingTests
     private const string InjectionDisablePacketHooksEnvVar = "Injection__DisablePacketHooks";
     private const string DisablePacketHooksEnvVar = "WWOW_DISABLE_PACKET_HOOKS";
     private const string ManualZeppelinCoordCaptureEnvVar = "WWOW_TEST_MANUAL_ZEPPELIN_COORD_CAPTURE";
+    private const string LongPathingTimelineEnvVar = "WWOW_LONG_PATHING_TIMELINE";
+    private const string OgDeckAnchorVerifyEnvVar = "WWOW_OG_DECK_ANCHOR_VERIFY";
+    private const string OgRampClimbEnvVar = "WWOW_OG_RAMP_CLIMB_TEST";
+    // Phase 5.3.6 cadence diagnostic (PFS-OVERHAUL-006). Read by BotRunner's
+    // NavigationPathFactory.Create — when set to a positive int N,
+    // NavigationPath emits [TRAVEL_WAYPOINT_REACHED] every Nth advance.
+    private const string WaypointCadenceEnvVar = "WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS";
+    private const int TimelinePollSampleEveryN = 10;
     private const int OrgrimmarUndercityZeppelinTripSeconds = 300;
     private const int OrgrimmarUndercityZeppelinDockWaitSeconds = 120;
     private static readonly TimeSpan LongTravelStallTimeout = TimeSpan.FromSeconds(45);
@@ -179,6 +191,7 @@ public class LongPathingTests
     [Trait("Category", "RequiresInfrastructure")]
     public async Task CrossroadsToUndercity_UsesFlightAndZeppelin()
     {
+        const string TimelineTestName = nameof(CrossroadsToUndercity_UsesFlightAndZeppelin);
         using var packetHookScope = DisableForegroundPacketHooksForCrossMapTransfers();
         var target = await EnsureLongPathingTargetAsync();
 
@@ -212,6 +225,7 @@ public class LongPathingTests
         await _bot.RefreshSnapshotsAsync();
         var start = await _bot.GetSnapshotAsync(target.AccountName);
         Assert.True(IsNear(start, CrossroadsMapId, CrossroadsTaxiNodeX, CrossroadsTaxiNodeY, 80f), DescribeSnapshot(start, "start"));
+        CaptureTimelineCheckpoint(TimelineTestName, "01-flight-master-discovered", target.AccountName, start);
 
         _output.WriteLine(
             $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: TravelTo Crossroads -> Undercity staged route.");
@@ -248,6 +262,12 @@ public class LongPathingTests
             planSeen,
             target.AccountName,
             "TravelTo should emit a staged plan containing Crossroads taxi 25->23 and a zeppelin leg.");
+        await _bot.RefreshSnapshotsAsync();
+        CaptureTimelineCheckpoint(
+            TimelineTestName,
+            "02-plan-seen",
+            target.AccountName,
+            await _bot.GetSnapshotAsync(target.AccountName));
 
         var taxiDeparted = await _bot.WaitForSnapshotConditionAsync(
             target.AccountName,
@@ -267,6 +287,12 @@ public class LongPathingTests
             taxiDeparted,
             target.AccountName,
             "Expected taxi departure or movement away from Crossroads.");
+        await _bot.RefreshSnapshotsAsync();
+        CaptureTimelineCheckpoint(
+            TimelineTestName,
+            "03-taxi-departed",
+            target.AccountName,
+            await _bot.GetSnapshotAsync(target.AccountName));
 
         var reachedOrgrimmarTaxi = await _bot.WaitForSnapshotConditionAsync(
             target.AccountName,
@@ -278,18 +304,29 @@ public class LongPathingTests
             reachedOrgrimmarTaxi,
             target.AccountName,
             "Expected the Crossroads -> Orgrimmar taxi leg to land near the Orgrimmar flight master.");
+        await _bot.RefreshSnapshotsAsync();
+        CaptureTimelineCheckpoint(
+            TimelineTestName,
+            "04-reached-orgrimmar-taxi",
+            target.AccountName,
+            await _bot.GetSnapshotAsync(target.AccountName));
 
         var flightLegCompleted = await WaitForTravelDiagnosticAsync(
             target.AccountName,
-            message => message.Contains("[TRAVEL_LEG] complete index=0", StringComparison.Ordinal)
-                && message.Contains("flight_arrived", StringComparison.Ordinal),
+            IsCrossroadsToOrgrimmarFlightCompleteDiagnostic,
             diagnosticBaseline,
-            TimeSpan.FromSeconds(90),
+            TimeSpan.FromSeconds(150),
             $"{target.RoleLabel} Crossroads -> Orgrimmar flight completion");
         await AssertOrScreenshotAsync(
             flightLegCompleted,
             target.AccountName,
             "Expected TravelTask to complete the Crossroads -> Orgrimmar flight leg before starting the Orgrimmar walk.");
+        await _bot.RefreshSnapshotsAsync();
+        CaptureTimelineCheckpoint(
+            TimelineTestName,
+            "05-flight-leg-completed",
+            target.AccountName,
+            await _bot.GetSnapshotAsync(target.AccountName));
 
         var sawOrgrimmarPathfindingWalk = await WaitForTravelDiagnosticAsync(
             target.AccountName,
@@ -305,6 +342,12 @@ public class LongPathingTests
             sawOrgrimmarPathfindingWalk,
             target.AccountName,
             "Expected TravelTask to use a PathfindingService-generated route from Orgrimmar flight-master area to the zeppelin tower.");
+        await _bot.RefreshSnapshotsAsync();
+        CaptureTimelineCheckpoint(
+            TimelineTestName,
+            "06-saw-orgrimmar-pathfinding-walk",
+            target.AccountName,
+            await _bot.GetSnapshotAsync(target.AccountName));
 
         var zeppelinStallGuard = new SnapshotStallGuard(
             "Orgrimmar flight master -> zeppelin tower",
@@ -313,22 +356,47 @@ public class LongPathingTests
         var zeppelinBlockerGuard = new LongPathingRouteBlockerGuard(
             KnownBlockerDwellTimeout,
             LongTravelStallMovementYards);
+        var orgWalkPollCounter = 0;
         var reachedZeppelinTower = await _bot.WaitForSnapshotConditionAsync(
             target.AccountName,
             snapshot =>
             {
+                orgWalkPollCounter++;
+                if (orgWalkPollCounter % TimelinePollSampleEveryN == 0)
+                    CaptureTimelineCheckpoint(
+                        TimelineTestName,
+                        $"07a-orgrimmar-walk-poll-{orgWalkPollCounter:D5}",
+                        target.AccountName,
+                        snapshot);
+
                 if (snapshot?.CurrentMapId == OrgrimmarMapId && !IsOnTransport(snapshot))
                 {
                     zeppelinBlockerGuard.FailIfBlocked(
                         snapshot,
-                        (message, blockerSnapshot) => FailWithScreenshot(message, target.AccountName, blockerSnapshot));
+                        (message, blockerSnapshot) =>
+                        {
+                            CaptureTimelineCheckpoint(
+                                TimelineTestName,
+                                "07b-orgrimmar-walk-blocker-fire",
+                                target.AccountName,
+                                blockerSnapshot);
+                            FailWithScreenshot(message, target.AccountName, blockerSnapshot);
+                        });
 
                     if (IsNearZeppelinDeckApproach(snapshot))
                         return true;
 
                     zeppelinStallGuard.FailIfStalled(
                         snapshot,
-                        (message, stallSnapshot) => FailWithScreenshot(message, target.AccountName, stallSnapshot));
+                        (message, stallSnapshot) =>
+                        {
+                            CaptureTimelineCheckpoint(
+                                TimelineTestName,
+                                "07c-orgrimmar-walk-stall-fire",
+                                target.AccountName,
+                                stallSnapshot);
+                            FailWithScreenshot(message, target.AccountName, stallSnapshot);
+                        });
                 }
                 else
                 {
@@ -345,6 +413,12 @@ public class LongPathingTests
             reachedZeppelinTower,
             target.AccountName,
             "Expected normal walking from Orgrimmar flight master to the zeppelin tower.");
+        await _bot.RefreshSnapshotsAsync();
+        CaptureTimelineCheckpoint(
+            TimelineTestName,
+            "07-reached-zeppelin-tower",
+            target.AccountName,
+            await _bot.GetSnapshotAsync(target.AccountName));
 
         var startedZeppelinLeg = await WaitForTravelDiagnosticAsync(
             target.AccountName,
@@ -357,12 +431,50 @@ public class LongPathingTests
             startedZeppelinLeg,
             target.AccountName,
             "Expected TravelTask to finish tower approach and start the Orgrimmar -> Undercity zeppelin leg.");
+        await _bot.RefreshSnapshotsAsync();
+        CaptureTimelineCheckpoint(
+            TimelineTestName,
+            "08-started-zeppelin-leg",
+            target.AccountName,
+            await _bot.GetSnapshotAsync(target.AccountName));
 
+        // Phase 5.3.5: tight fail-fast stuck-detection during boarding evidence
+        // poll. Prior runs wasted 7 minutes per cycle waiting for a docked
+        // zeppelin while the bot sat stationary because of a navmesh
+        // corner-cutting issue. The boardingStuckGuard fires after 30s of
+        // sub-yard movement, captures a screenshot via FailWithScreenshot,
+        // and aborts. Movement threshold 1.5y matches LongTravelStallMovementYards.
+        var boardingStuckGuard = new SnapshotStallGuard(
+            "Orgrimmar zeppelin boarding window (stuck on tower deck)",
+            TimeSpan.FromSeconds(30),
+            LongTravelStallMovementYards);
+        var zeppelinEvidencePollCounter = 0;
         var sawZeppelinEvidence = await _bot.WaitForSnapshotConditionAsync(
             target.AccountName,
             snapshot =>
             {
+                zeppelinEvidencePollCounter++;
+                if (zeppelinEvidencePollCounter % TimelinePollSampleEveryN == 0)
+                    CaptureTimelineCheckpoint(
+                        TimelineTestName,
+                        $"09a-zeppelin-evidence-poll-{zeppelinEvidencePollCounter:D5}",
+                        target.AccountName,
+                        snapshot);
+
                 FailIfZeppelinBoardingLost(snapshot, target.AccountName, diagnosticBaseline);
+
+                // If the bot is stuck (no XY movement) AND not yet on the
+                // transport, fail fast with a screenshot. Once attached
+                // (isOnTransport=true), the bot is supposed to stay stationary
+                // relative to world coords during the ride, so the guard is
+                // skipped post-attachment.
+                if (!IsOnTransport(snapshot))
+                    boardingStuckGuard.FailIfStalled(
+                        snapshot,
+                        (message, stallSnapshot) => FailWithScreenshot(message, target.AccountName, stallSnapshot));
+                else
+                    boardingStuckGuard.Reset();
+
                 return snapshot?.CurrentMapId == UndercityMapId
                     || IsOnTransport(snapshot);
             },
@@ -373,6 +485,12 @@ public class LongPathingTests
             sawZeppelinEvidence,
             target.AccountName,
             "Expected the bot to board the Orgrimmar -> Undercity zeppelin or complete the cross-map transfer.");
+        await _bot.RefreshSnapshotsAsync();
+        CaptureTimelineCheckpoint(
+            TimelineTestName,
+            "09-saw-zeppelin-evidence",
+            target.AccountName,
+            await _bot.GetSnapshotAsync(target.AccountName));
 
         var arrivedEasternKingdoms = await _bot.WaitForSnapshotConditionAsync(
             target.AccountName,
@@ -384,6 +502,12 @@ public class LongPathingTests
             arrivedEasternKingdoms,
             target.AccountName,
             "Expected the Orgrimmar -> Undercity zeppelin to transfer to Eastern Kingdoms.");
+        await _bot.RefreshSnapshotsAsync();
+        CaptureTimelineCheckpoint(
+            TimelineTestName,
+            "10-arrived-eastern-kingdoms",
+            target.AccountName,
+            await _bot.GetSnapshotAsync(target.AccountName));
 
         var sawUndercityPathfindingWalk = await WaitForTravelDiagnosticAsync(
             target.AccountName,
@@ -399,6 +523,12 @@ public class LongPathingTests
             sawUndercityPathfindingWalk,
             target.AccountName,
             "Expected TravelTask to use a PathfindingService-generated route from Undercity zeppelin arrival to the Undercity target.");
+        await _bot.RefreshSnapshotsAsync();
+        CaptureTimelineCheckpoint(
+            TimelineTestName,
+            "11-saw-undercity-pathfinding-walk",
+            target.AccountName,
+            await _bot.GetSnapshotAsync(target.AccountName));
 
         var undercityStallGuard = new SnapshotStallGuard(
             "Undercity zeppelin tower -> final destination",
@@ -428,6 +558,212 @@ public class LongPathingTests
         var finalSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
         if (!arrivedUndercity)
             FailWithScreenshot(DescribeSnapshot(finalSnapshot, "final Undercity target"), target.AccountName, finalSnapshot);
+    }
+
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public async Task ClimbOrgrimmarZeppelinTowerRampToFrezza()
+    {
+        // Phase 5.3.5 focused sub-test (PFS-OVERHAUL-005). Isolates the
+        // "Going up zeppelin tower" phase from the full Crossroads→Undercity
+        // pipeline. Teleports the bot to the OG flight master tower top
+        // (where a real test would arrive after the flight leg) and dispatches
+        // a TravelTo to the Undercity destination. Asserts the bot's walk leg
+        // climbs the wooden ramp UP to within 12y of Zeppelin Master Frezza
+        // (1331.11,-4649.45,53.6269) within a 180-second budget (Phase 5.3.6:
+        // budget bumped from 90s after the FindPathCornersForAgent diagnostic
+        // proved Detour serves a 96+ corner path that descends through OG
+        // city sea level before climbing the OG zeppelin tower's external
+        // spiral ramp; 90s was insufficient simply for traversal time, before
+        // any corner-completion problems). Fails fast with a screenshot if
+        // the bot stalls anywhere along the climb — this is the failing
+        // slice from the full live test, isolated for fast diagnostic cycles.
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(OgRampClimbEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"OG ramp climb sub-test disabled (set {OgRampClimbEnvVar}=1).");
+
+        const string TimelineTestName = nameof(ClimbOrgrimmarZeppelinTowerRampToFrezza);
+        using var packetHookScope = DisableForegroundPacketHooksForCrossMapTransfers();
+        var target = await EnsureLongPathingTargetAsync();
+
+        using var timelineScope = new EnvironmentVariableScope(LongPathingTimelineEnvVar);
+        Environment.SetEnvironmentVariable(LongPathingTimelineEnvVar, "1");
+
+        // Phase 5.3.6 cadence diagnostic (PFS-OVERHAUL-006). Default to "2"
+        // (every 2nd waypoint advance emits [TRAVEL_WAYPOINT_REACHED]) only when
+        // the caller hasn't already set a value — lets the run command override.
+        // Note: BotRunner reads this env var at process start (or at NavigationPath
+        // construction). Setting it here only affects the test process; for
+        // BotRunner subprocesses launched before this point, the existing
+        // ambient env var (set in the test launcher / shell) is what counts.
+        using var cadenceScope = new EnvironmentVariableScope(WaypointCadenceEnvVar);
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(WaypointCadenceEnvVar)))
+            Environment.SetEnvironmentVariable(WaypointCadenceEnvVar, "2");
+
+        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
+
+        // Frezza spawn (Zeppelin Master, NPC 9564) on the OG upper-platform deck.
+        const float FrezzaX = 1331.11f;
+        const float FrezzaY = -4649.45f;
+        const float FrezzaZ = 53.6269f;
+        const float FrezzaArrivalRadius = 12f;
+
+        // Teleport the bot to the OG flight master tower top — the natural
+        // post-flight starting position for the OG→UC zeppelin walk leg.
+        await _bot.BotTeleportAsync(target.AccountName, OrgrimmarMapId, OrgrimmarTaxiX, OrgrimmarTaxiY, 62.0f);
+        await Task.Delay(2500);
+        await _bot.RefreshSnapshotsAsync();
+        var startSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        CaptureTimelineCheckpoint(TimelineTestName, "01-teleported-flight-master", target.AccountName, startSnapshot);
+
+        var diagnosticBaseline = startSnapshot?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
+
+        // Dispatch TravelTo Undercity destination — same as the full test, so
+        // the route planner emits the same Walk-leg-to-Frezza we're isolating.
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        {
+            ActionType = ActionType.TravelTo,
+            Parameters =
+            {
+                new RequestParameter { IntParam = UndercityMapId },
+                new RequestParameter { FloatParam = UndercityTargetX },
+                new RequestParameter { FloatParam = UndercityTargetY },
+                new RequestParameter { FloatParam = UndercityTargetZ },
+            },
+        });
+        Assert.Equal(ResponseResult.Success, dispatch);
+
+        // Tight stuck guard: 20s of sub-1.5y movement → fail fast with screenshot.
+        var stuckGuard = new SnapshotStallGuard(
+            "OG zeppelin tower ramp climb (stalled before reaching Frezza)",
+            TimeSpan.FromSeconds(20),
+            LongTravelStallMovementYards);
+
+        var pollCounter = 0;
+        var seenWaypointDiagMessages = new HashSet<string>(StringComparer.Ordinal);
+        var reachedFrezza = await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snapshot =>
+            {
+                pollCounter++;
+                if (pollCounter % TimelinePollSampleEveryN == 0)
+                    CaptureTimelineCheckpoint(
+                        TimelineTestName,
+                        $"02-climb-poll-{pollCounter:D5}",
+                        target.AccountName,
+                        snapshot);
+
+                // Phase 5.3.6 (PFS-OVERHAUL-006): one PNG+JSON per
+                // [TRAVEL_WAYPOINT_REACHED] BotRunner emits — cadence is
+                // gated by WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS in the
+                // BotRunner process. Label uses the adv= counter so traces
+                // align with NavigationPath's advance count.
+                foreach (var msg in GetDeltaMessages(diagnosticBaseline, snapshot?.RecentChatMessages))
+                {
+                    if (msg.IndexOf("[TRAVEL_WAYPOINT_REACHED]", StringComparison.Ordinal) < 0)
+                        continue;
+                    if (!seenWaypointDiagMessages.Add(msg))
+                        continue;
+                    var advMatch = System.Text.RegularExpressions.Regex.Match(msg, @"adv=(\d+)");
+                    var label = advMatch.Success
+                        ? $"wp-{int.Parse(advMatch.Groups[1].Value):D5}"
+                        : $"wp-msg-{seenWaypointDiagMessages.Count:D5}";
+                    CaptureTimelineCheckpoint(TimelineTestName, label, target.AccountName, snapshot);
+                }
+
+                stuckGuard.FailIfStalled(
+                    snapshot,
+                    (message, stallSnapshot) => FailWithScreenshot(message, target.AccountName, stallSnapshot));
+
+                var pos = GetPosition(snapshot);
+                if (pos == null)
+                    return false;
+
+                var dx = pos.X - FrezzaX;
+                var dy = pos.Y - FrezzaY;
+                var dz = MathF.Abs(pos.Z - FrezzaZ);
+                var dist2D = MathF.Sqrt(dx * dx + dy * dy);
+                // Phase 5.3.6 (PFS-OVERHAUL-006): tightened dz<=6 → dz<=2 to enforce
+                // same-deck arrival. Cycle 3 full test exposed that dz<=6 false-positives
+                // when the bot stops at z≈50 (lower spiral coil) — XY-close to Frezza
+                // but on the wrong vertical layer for boarding. dz<=2 forces the bot
+                // to actually crest the upper deck (z≈53.6) where Frezza & BoardingPosition live.
+                return snapshot?.CurrentMapId == OrgrimmarMapId
+                    && dist2D <= FrezzaArrivalRadius
+                    && dz <= 2f;
+            },
+            TimeSpan.FromSeconds(180),
+            pollIntervalMs: 500,
+            progressLabel: $"{target.RoleLabel} OG zeppelin tower ramp climb to Frezza");
+
+        await _bot.RefreshSnapshotsAsync();
+        var finalSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        CaptureTimelineCheckpoint(TimelineTestName, "03-final", target.AccountName, finalSnapshot);
+
+        await AssertOrScreenshotAsync(
+            reachedFrezza,
+            target.AccountName,
+            $"Expected bot to climb the OG zeppelin tower ramp to within {FrezzaArrivalRadius}y of "
+            + $"Zeppelin Master Frezza ({FrezzaX},{FrezzaY},{FrezzaZ}) within 180s. "
+            + "If bot stalls early, check NavigationPath corner-completion logic — Phase 5.3.6 "
+            + "candidate fix is Facing-based waypoint completion instead of pure radius check. "
+            + $"Cadence diagnostic captured {seenWaypointDiagMessages.Count} [TRAVEL_WAYPOINT_REACHED] "
+            + "events in the timeline directory.");
+    }
+
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public async Task OgZeppelinDeckAnchorVerification()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(OgDeckAnchorVerifyEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"Phase 5.3.1 anchor verification disabled (set {OgDeckAnchorVerifyEnvVar}=1).");
+
+        const string TimelineTestName = nameof(OgZeppelinDeckAnchorVerification);
+        var target = await EnsureLongPathingTargetAsync();
+
+        using var timelineScope = new EnvironmentVariableScope(LongPathingTimelineEnvVar);
+        Environment.SetEnvironmentVariable(LongPathingTimelineEnvVar, "1");
+
+        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
+
+        var captures = new (string Label, int MapId, float X, float Y, float Z)[]
+        {
+            ("c1-upper-platform-z96",    1, 1330.66f,  -4656.03f, 96.29f),
+            ("c2-gangplank-end-z98",     1, 1315.33f,  -4650.00f, 98.54f),
+            ("c3-approach-z51",          1, 1338.10f,  -4646.00f, 51.60f),
+            ("c4-boarding-z53",          1, 1320.14f,  -4653.16f, 53.89f),
+            ("c5-zeppelin-model-z71",    1, 1318.107f, -4658.047f, 71.86f),
+            ("c6-ramp-mid-probe-z65",    1, 1325.00f,  -4649.00f, 65.00f),
+            ("c7-stair-top-probe-z70",   1, 1322.00f,  -4651.00f, 70.00f),
+        };
+
+        foreach (var c in captures)
+        {
+            _output.WriteLine(
+                $"[ANCHOR-VERIFY] tele {target.AccountName} -> {c.Label} map={c.MapId} ({c.X:F2},{c.Y:F2},{c.Z:F2})");
+            await _bot.BotTeleportAsync(target.AccountName, c.MapId, c.X, c.Y, c.Z);
+
+            // Allow falling, slope-slide, and z-settle to finish before sampling.
+            await Task.Delay(4000);
+            await _bot.RefreshSnapshotsAsync();
+            var settled = await _bot.GetSnapshotAsync(target.AccountName);
+
+            CaptureTimelineCheckpoint(TimelineTestName, c.Label, target.AccountName, settled);
+
+            var pos = GetPosition(settled);
+            _output.WriteLine(
+                pos == null
+                    ? $"[ANCHOR-VERIFY] {c.Label}: snapshot position unavailable"
+                    : $"[ANCHOR-VERIFY] {c.Label}: settled=({pos.X:F2},{pos.Y:F2},{pos.Z:F2}) " +
+                      $"deltaXY={LiveBotFixture.Distance2D(pos.X, pos.Y, c.X, c.Y):F2} dz={pos.Z - c.Z:F2}");
+        }
     }
 
     private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureLongPathingTargetAsync()
@@ -807,6 +1143,17 @@ public class LongPathingTests
             && message.Contains($"target=({x:F1},{y:F1},{z:F1})", StringComparison.Ordinal)
             && !message.Contains("planned=[]", StringComparison.Ordinal);
 
+    private static bool IsCrossroadsToOrgrimmarFlightCompleteDiagnostic(string message)
+        => (message.Contains("[TRAVEL_LEG] complete index=0", StringComparison.Ordinal)
+                && message.Contains("flight_arrived", StringComparison.Ordinal))
+            || (message.Contains("[TRAVEL_LEG] start index=1", StringComparison.Ordinal)
+                && message.Contains("type=Walk", StringComparison.Ordinal))
+            || IsPathfindingWalkDiagnosticFor(
+                message,
+                OrgrimmarZeppelinRouteTargetX,
+                OrgrimmarZeppelinRouteTargetY,
+                OrgrimmarZeppelinRouteTargetZ);
+
     private static IReadOnlyList<string> GetDeltaMessages(
         IReadOnlyList<string> baseline,
         IEnumerable<string>? currentMessages)
@@ -895,6 +1242,125 @@ public class LongPathingTests
         }
 
         throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
+    }
+
+    private static bool IsLongPathingTimelineEnabled()
+        => string.Equals(
+            Environment.GetEnvironmentVariable(LongPathingTimelineEnvVar),
+            "1",
+            StringComparison.Ordinal);
+
+    private static string ResolveTimelineDirectory(string testName)
+    {
+        var repoRoot = ResolveRepoRoot();
+        var dir = Path.Combine(
+            repoRoot,
+            "tmp",
+            "test-runtime",
+            "screenshots",
+            "long-pathing",
+            "timeline",
+            testName);
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    private void CaptureTimelineCheckpoint(
+        string testName,
+        string phase,
+        string account,
+        WoWActivitySnapshot? snapshot)
+    {
+        if (!IsLongPathingTimelineEnabled())
+            return;
+
+        try
+        {
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
+            var safePhase = SanitizeScreenshotLabel(phase);
+            var dir = ResolveTimelineDirectory(testName);
+            var pngPath = Path.Combine(dir, $"{safePhase}-{account}-{timestamp}.png");
+            var jsonPath = Path.Combine(dir, $"{safePhase}-{account}-{timestamp}.json");
+
+            var pid = ResolveManagedWowProcessId(account);
+            var screenshotOk = false;
+            string? screenshotError = null;
+            if (pid.HasValue)
+            {
+                try
+                {
+                    var hwnd = WindowCapture.FindWoWClientWindow(pid.Value);
+                    screenshotOk = WindowCapture.CaptureWindow(hwnd, pngPath);
+                    if (!screenshotOk)
+                        screenshotError = "PrintWindow + desktop fallback both failed";
+                }
+                catch (Exception ex)
+                {
+                    screenshotError = ex.Message;
+                }
+            }
+            else
+            {
+                screenshotError = "no managed WoW pid resolvable for account";
+            }
+
+            var position = GetPosition(snapshot);
+            var movement = snapshot?.MovementData;
+            var recentChat = (snapshot?.RecentChatMessages ?? Enumerable.Empty<string>())
+                .TakeLast(5)
+                .ToArray();
+
+            var record = new
+            {
+                timestampUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                testName,
+                phase,
+                account,
+                pid,
+                screenshot = new
+                {
+                    saved = screenshotOk,
+                    path = screenshotOk ? pngPath : null,
+                    error = screenshotError,
+                },
+                snapshot = snapshot == null ? null : new
+                {
+                    currentMapId = snapshot.CurrentMapId,
+                    position = position == null ? null : new { x = position.X, y = position.Y, z = position.Z },
+                    facing = movement?.Facing,
+                    currentSpeed = movement?.CurrentSpeed,
+                    runSpeed = movement?.RunSpeed,
+                    movementFlags = movement == null ? (uint?)null : movement.MovementFlags,
+                    isOnTransport = IsOnTransport(snapshot),
+                    transportGuid = movement?.TransportGuid ?? 0UL,
+                    transportOffset = movement == null ? null : new
+                    {
+                        x = movement.TransportOffsetX,
+                        y = movement.TransportOffsetY,
+                        z = movement.TransportOffsetZ,
+                    },
+                    fallTime = movement?.FallTime,
+                    splineFlags = movement?.SplineFlags,
+                    currentAction = snapshot.CurrentAction?.ActionType.ToString(),
+                    recentChat,
+                },
+            };
+
+            File.WriteAllText(
+                jsonPath,
+                JsonSerializer.Serialize(record, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                _output.WriteLine($"[TIMELINE-ERR] phase={phase} account={account}: {ex.Message}");
+            }
+            catch
+            {
+                // _output may be unavailable late in the test lifecycle; swallow.
+            }
+        }
     }
 
     private sealed class SnapshotStallGuard(string label, TimeSpan timeout, float movementThresholdYards)

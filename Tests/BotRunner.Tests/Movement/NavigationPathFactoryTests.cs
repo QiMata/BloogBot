@@ -362,6 +362,59 @@ public class NavigationPathFactoryTests
     }
 
     [Fact]
+    public void Create_DefaultsToBakedMMapOnlyRoutingWithoutNearbyObjectOverlay()
+    {
+        using var overlayEnv = new EnvironmentVariableScope(NavigationPathFactory.DynamicOverlayEnvironmentVariable, null);
+        var objectManager = new Mock<IObjectManager>();
+        objectManager.SetupGet(x => x.Player).Returns((IWoWLocalPlayer?)null!);
+        objectManager.SetupGet(x => x.GameObjects).Returns(
+        [
+            CreateGameObject(0x1001, (uint)GameObjectType.Door, 17, new Position(5f, 0f, 0f)).Object
+        ]);
+
+        var pathfinding = new CapturingPathfindingClient(_ => [new Position(5f, 0f, 0f), new Position(10f, 0f, 0f)]);
+        var navPath = NavigationPathFactory.Create(pathfinding, objectManager.Object, NavigationRoutePolicy.LongTravel);
+
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(12f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.False(navPath.TraceSnapshot.UsedNearbyObjectOverlay);
+        Assert.Equal(0, navPath.TraceSnapshot.NearbyObjectCount);
+        Assert.Null(pathfinding.LastNearbyObjects);
+    }
+
+    [Fact]
+    public void Create_CanOptIntoDiagnosticNearbyObjectOverlay()
+    {
+        using var overlayEnv = new EnvironmentVariableScope(NavigationPathFactory.DynamicOverlayEnvironmentVariable, "1");
+        var objectManager = new Mock<IObjectManager>();
+        objectManager.SetupGet(x => x.Player).Returns((IWoWLocalPlayer?)null!);
+        objectManager.SetupGet(x => x.GameObjects).Returns(
+        [
+            CreateGameObject(0x1001, (uint)GameObjectType.Door, 17, new Position(5f, 0f, 0f)).Object
+        ]);
+
+        var pathfinding = new CapturingPathfindingClient(_ => [new Position(5f, 0f, 0f), new Position(10f, 0f, 0f)]);
+        var navPath = NavigationPathFactory.Create(pathfinding, objectManager.Object, NavigationRoutePolicy.Standard);
+
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(12f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.True(navPath.TraceSnapshot.UsedNearbyObjectOverlay);
+        Assert.Equal(1, navPath.TraceSnapshot.NearbyObjectCount);
+        var overlayObject = Assert.Single(pathfinding.LastNearbyObjects!);
+        Assert.Equal(0x1001UL, overlayObject.Guid);
+    }
+
+    [Fact]
     public void Create_WithNullPlayer_UsesDefaultMovementCapabilities()
     {
         using var env = new CharacterEnvironmentScope();
@@ -575,5 +628,39 @@ public class NavigationPathFactoryTests
             Environment.SetEnvironmentVariable("WWOW_CHARACTER_RACE", _previousRace);
             Environment.SetEnvironmentVariable("WWOW_CHARACTER_GENDER", _previousGender);
         }
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _previousValue;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _previousValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+            => Environment.SetEnvironmentVariable(_name, _previousValue);
+    }
+
+    private static Mock<IWoWGameObject> CreateGameObject(
+        ulong guid,
+        uint typeId,
+        uint displayId,
+        Position position)
+    {
+        var gameObject = new Mock<IWoWGameObject>();
+        gameObject.SetupGet(x => x.Guid).Returns(guid);
+        gameObject.SetupGet(x => x.Entry).Returns(17001u);
+        gameObject.SetupGet(x => x.TypeId).Returns(typeId);
+        gameObject.SetupGet(x => x.DisplayId).Returns(displayId);
+        gameObject.SetupGet(x => x.Position).Returns(position);
+        gameObject.SetupGet(x => x.Facing).Returns(0f);
+        gameObject.SetupGet(x => x.ScaleX).Returns(1f);
+        gameObject.SetupGet(x => x.GoState).Returns(GOState.Active);
+        return gameObject;
     }
 }

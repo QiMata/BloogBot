@@ -407,7 +407,9 @@ public class NavigationPath(
     Race race = 0,
     Gender gender = 0,
     bool supportsNativeLocalPhysicsQueries = true,
-    bool tightenDenseWaypointAcceptance = false)
+    bool tightenDenseWaypointAcceptance = false,
+    Action<string>? diagnosticSink = null,
+    int waypointDiagnosticCadence = 0)
 {
     private readonly PathfindingClient? _pathfinding = pathfinding;
     private readonly Func<long> _tickProvider = tickProvider ?? (() => Environment.TickCount64);
@@ -427,6 +429,9 @@ public class NavigationPath(
     private readonly Race _race = race;
     private readonly Gender _gender = gender;
     private readonly bool _tightenDenseWaypointAcceptance = tightenDenseWaypointAcceptance;
+    private readonly Action<string>? _diagnosticSink = diagnosticSink;
+    private readonly int _waypointDiagnosticCadence = waypointDiagnosticCadence;
+    private long _waypointAdvanceCount;
     private Position[] _waypoints = [];
     private float[] _waypointAcceptanceRadii = [];
     private Position? _pathStartPosition;
@@ -1035,6 +1040,7 @@ public class NavigationPath(
 
                 _currentIndex++;
                 Metrics.IncrementWaypointsReached();
+                OnWaypointAdvanced(currentPosition, "overshot");
                 continue;
             }
 
@@ -1046,6 +1052,7 @@ public class NavigationPath(
             {
                 _currentIndex++;
                 Metrics.IncrementWaypointsReached();
+                OnWaypointAdvanced(currentPosition, "probe-skip");
                 continue;
             }
 
@@ -1054,6 +1061,7 @@ public class NavigationPath(
 
             _currentIndex++;
             Metrics.IncrementWaypointsReached();
+            OnWaypointAdvanced(currentPosition, "in-radius");
         }
 
         // Look-ahead skip: if we overshot the current waypoint and are closer (2D) to
@@ -1088,12 +1096,41 @@ public class NavigationPath(
                 _currentIndex = bestIndex;
                 for (int s = 0; s < skipped; s++)
                     Metrics.IncrementWaypointsReached();
+                OnWaypointAdvanced(currentPosition, $"lookahead-skip+{skipped}");
             }
         }
 
         // After reaching the current waypoint, try to skip further ahead via LOS.
         if (_enableDynamicProbeSkipping && !_strictPathValidation && _currentIndex < _waypoints.Length)
             TryLosSkipAhead(currentPosition, mapId);
+    }
+
+    /// <summary>
+    /// Diagnostic hook for Phase 5.3.6 cadence capture (PFS-OVERHAUL-006). Emits
+    /// a [TRAVEL_WAYPOINT_REACHED] line every Nth advance, where N is configured
+    /// via the diagnostic sink + cadence count passed in at construction. Default
+    /// off (cadence=0 or sink=null). The reason tag distinguishes the four
+    /// advance flavours so traces can show which path AdvanceReachableWaypoints
+    /// took on each tick (overshot vs in-radius vs probe-skip vs lookahead-skip).
+    /// </summary>
+    private void OnWaypointAdvanced(Position currentPosition, string reason)
+    {
+        _waypointAdvanceCount++;
+        if (_diagnosticSink == null)
+            return;
+        var cadence = _waypointDiagnosticCadence;
+        if (cadence <= 0)
+            return;
+        if (_waypointAdvanceCount % cadence != 0)
+            return;
+
+        var wpCount = _waypoints.Length;
+        var idx = _currentIndex;
+        var wp = (idx >= 0 && idx < wpCount) ? _waypoints[idx] : default;
+        _diagnosticSink(
+            $"[TRAVEL_WAYPOINT_REACHED] adv={_waypointAdvanceCount} idx={idx}/{wpCount} reason={reason} "
+            + $"player=({currentPosition.X:F1},{currentPosition.Y:F1},{currentPosition.Z:F1}) "
+            + $"waypoint=({wp.X:F1},{wp.Y:F1},{wp.Z:F1})");
     }
 
     private bool CanTreatWaypointAsReached(Position currentPosition, Position waypoint, int? waypointIndex = null)

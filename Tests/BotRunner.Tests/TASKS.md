@@ -56,15 +56,15 @@
   - [x] PathfindingService route-pack responses are returned through the
     normal socket/path result contract, so BotRunner does not need
     hand-authored Orgrimmar waypoint scripts to consume them.
-  - [ ] Close the latest lower-incline live recovery gap before re-testing
-    boarding. The route-pack run failed near `(1363.9,-4378.2,26.1)` after
-    PathfindingService correctly bypassed an unsafe cached suffix and the
-    native fallback request was still-running past the live stall window.
+  - [x] Close the latest lower-incline live recovery gap before re-testing
+    boarding. The fresh preserved-service live rerun reached the Orgrimmar
+    zeppelin/dock area and no longer failed on the prior lower-incline native
+    fallback near `(1363.9,-4378.2,26.1)`.
   - [ ] Investigate the remaining Orgrimmar -> Undercity zeppelin
-    boarding/transfer evidence gap. Screenshot evidence has moved the
-    configured Orgrimmar/Undercity dock anchors to the gangplank/deck
-    positions, but latest live evidence still ends on map `1` with
-    `transport=0x0`.
+    boarding/transfer evidence gap. The deterministic boarding-target refresh
+    coverage is green, but the latest live run still detected the zeppelin at
+    the dock and missed client attachment before departure; final snapshot was
+    `map=1 pos=(1336.7,-4658.3,49.3)`, `transport=0x0`.
   - [ ] Add focused live validation for `TravelTo` executing the staged route.
 
 0. Shodan test-director migration (started 2026-04-24)
@@ -140,6 +140,34 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-05-06 (boarding target refresh green, live still misses transport)
+- Pass result: deterministic BotRunner boarding-target refresh coverage is
+  green; focused live Crossroads -> Undercity still blocks on client transport
+  attachment, not PathfindingService route generation.
+- Last delta:
+  - Refreshed `TransportWaitingLogic` boarding waypoints while the scheduled
+    zeppelin remains at the stop, instead of keeping the first observed
+    world-space target forever.
+  - Refreshed `TravelTask` direct scheduled-transport boarding target/facing
+    when the live transport origin moves within the dock window.
+  - Reused the rebuilt, healthy `wwow-pathfinding` Docker service with
+    `WWOW_TEST_PRESERVE_EXISTING_PATHFINDING=1`.
+  - Focused Crossroads -> Undercity validation still reached the Orgrimmar
+    zeppelin/dock area and detected the Orgrimmar -> Undercity zeppelin, but
+    the client never gained `TransportGuid` / `ONTRANSPORT` before departure.
+    Failure snapshot: `map=1 pos=(1336.7,-4658.3,49.3)`,
+    `distToUndercity=4906.5`, `transport=0x0`, `current=null`.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TransportWaitingLogicTests|FullyQualifiedName~TravelTaskTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_transport_boarding_refresh_green2.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (68/68)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; $env:VMAP_PHYS_LOG_MASK='0'; $env:VMAP_PHYS_LOG_LEVEL='0'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_after_boarding_refresh.trx" --results-directory tmp/test-runtime/results-live -- RunConfiguration.TestSessionTimeout=1500000` -> `failed (1/1)` after `8m26s` with `The Orgrimmar -> Undercity zeppelin was detected at the dock, but the bot missed boarding before the transport left.`
+- Evidence:
+  - `tmp/test-runtime/results-botrunner/botrunner_transport_boarding_refresh_green2.trx`
+  - `tmp/test-runtime/results-live/long_pathing_crossroads_undercity_after_boarding_refresh.trx`
+  - `tmp/test-runtime/screenshots/long-pathing/The-Orgrimmar---Undercity-zeppelin-was-detected-at-the-dock-but-the-bot-missed-b-LPATHFG1-client-6048-win0-20260506_010905.png`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
 ### 2026-05-04 (stopped after screenshot-anchor cleanup)
 - Pass result: stopped before another live run; BotRunner deterministic
   screenshot-anchor gates passed.

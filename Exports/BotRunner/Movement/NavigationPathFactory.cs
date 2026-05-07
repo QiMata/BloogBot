@@ -99,16 +99,21 @@ public readonly record struct NavigationRoutePolicySettings(
 
 public static class NavigationPathFactory
 {
+    public const string DynamicOverlayEnvironmentVariable = "WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY";
+    public const string WaypointScreenshotCadenceEnvironmentVariable = "WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS";
+
     public static NavigationPath Create(
         PathfindingClient? pathfindingClient,
         IObjectManager objectManager,
         NavigationRoutePolicy routePolicy = NavigationRoutePolicy.Standard,
-        Func<int>? stuckRecoveryGenerationProvider = null)
+        Func<int>? stuckRecoveryGenerationProvider = null,
+        Action<string>? diagnosticSink = null)
     {
         ArgumentNullException.ThrowIfNull(objectManager);
 
         var capabilities = NavigationMovementCapabilities.Resolve(objectManager.Player);
         var policy = NavigationRoutePolicySettings.Resolve(routePolicy);
+        var cadence = ResolveWaypointDiagnosticCadence();
 
         return new NavigationPath(
             pathfindingClient,
@@ -121,12 +126,45 @@ public static class NavigationPathFactory
             validateLocalPhysicsSegments: policy.ValidateLocalPhysicsSegments,
             capsuleRadius: capabilities.CapsuleRadius,
             capsuleHeight: capabilities.CapsuleHeight,
-            nearbyObjectProvider: (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end),
+            nearbyObjectProvider: IsDynamicOverlayEnabled()
+                ? (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end)
+                : null,
             stuckRecoveryGenerationProvider: stuckRecoveryGenerationProvider ?? (() => objectManager.MovementStuckRecoveryGeneration),
             beforePathCalculation: routePolicy == NavigationRoutePolicy.LongTravel ? objectManager.StopAllMovement : null,
             race: capabilities.Race,
             gender: capabilities.Gender,
             supportsNativeLocalPhysicsQueries: LocalPhysicsSupport.SupportsReliableQueries(objectManager),
-            tightenDenseWaypointAcceptance: policy.TightenDenseWaypointAcceptance);
+            tightenDenseWaypointAcceptance: policy.TightenDenseWaypointAcceptance,
+            diagnosticSink: cadence > 0 ? diagnosticSink : null,
+            waypointDiagnosticCadence: cadence);
     }
+
+    public static bool IsDynamicOverlayEnabled()
+    {
+        var configured = Environment.GetEnvironmentVariable(DynamicOverlayEnvironmentVariable);
+        return IsTruthy(configured);
+    }
+
+    /// <summary>
+    /// Phase 5.3.6 cadence diagnostic (PFS-OVERHAUL-006). Reads
+    /// `WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS`. Returns 0 (off) if unset, blank,
+    /// or unparseable. Returns the parsed positive int otherwise. Default off
+    /// preserves zero behavior change for production / legacy test runs.
+    /// </summary>
+    public static int ResolveWaypointDiagnosticCadence()
+    {
+        var configured = Environment.GetEnvironmentVariable(WaypointScreenshotCadenceEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(configured))
+            return 0;
+        if (int.TryParse(configured.Trim(), out var n) && n > 0)
+            return n;
+        return 0;
+    }
+
+    private static bool IsTruthy(string? configured)
+        => !string.IsNullOrWhiteSpace(configured)
+            && (string.Equals(configured.Trim(), "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(configured.Trim(), "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(configured.Trim(), "yes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(configured.Trim(), "on", StringComparison.OrdinalIgnoreCase));
 }

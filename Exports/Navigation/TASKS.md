@@ -75,6 +75,78 @@
 5. `rg --line-number "TODO|FIXME|NotImplemented|not implemented|stub" Exports/Navigation`
 
 ## Session Handoff
+- Last updated: 2026-05-05
+- Pass result: `delta shipped; Navigation.dll mmap preload is config-driven`
+- Active task: `Detour/mmap v6 migration support; real route gate remains open upstream`
+- Last delta:
+  - Added `WWOW_NAVIGATION_PRELOAD_MAPS` support in native `Navigation.dll`.
+    Accepted values are disabled (`none`, `false`, `off`, `0`), explicit map
+    IDs (`0,1,389`), or `all`/`*` to discover `.mmap` files under
+    `WWOW_DATA_DIR/mmaps`.
+  - Preserved on-demand loading: exports that pass a map ID still call the
+    same requested-map load path when that map was not preloaded.
+- Validation:
+  - `$MSBUILD = "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"; & $MSBUILD Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded`.
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DetourCompatibilityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=detour_after_configurable_preload.trx" --results-directory tmp/test-runtime/results-navigation` -> `passed (2/2)`.
+- Next command:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
+- Last updated: 2026-05-05
+- Pass result: `delta shipped; strict Detour/mmap v6 loader contract and lazy map-load init shipped`
+- Active task: `Detour/mmap v6 migration slice; real Orgrimmar route gate remains open upstream`
+- Last delta:
+  - Set the source mmap wrapper contract to `MMAP_VERSION = 6` with a
+    20-byte uint32 `MmapTileHeader` matching the current GO-aware generator.
+  - Made `MMapManager::loadMap(...)` reject mismatched wrapper magic/version,
+    wrapper Detour version, undersized payloads, Detour payload magic, and
+    Detour payload version before handing tile memory to Detour.
+  - Changed `Navigation::Initialize()` to create the mmap manager without
+    eagerly loading maps `0`, `1`, and `389`; the existing requested-map path
+    now performs the load on demand.
+  - Extended `GetDetourCompatibilityInfo(...)` and
+    `ProbeMMapTileCompatibility(...)` to expose mmap header size, native
+    pointer size, 64-bit ref bit split, `usesLiquids`, and strict header
+    compatibility.
+  - Kept `DT_POLYREF64` and Detour tile version `7`; no 32-bit-ref migration
+    was attempted in production.
+- Validation:
+  - `$MSBUILD = "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"; & $MSBUILD Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded` with existing warnings.
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DetourCompatibilityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=detour_mmap_v6_regenerated_tiles.trx" --results-directory tmp/test-runtime/results-navigation` -> `passed (2/2)`.
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+- Next command:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
+- Last updated: 2026-05-04
+- Pass result: `delta shipped; Detour compatibility baseline green, current ABI remains 64-bit refs`
+- Active task: `Detour vendor-migration baseline before mmap regeneration`
+- Last delta:
+  - Added native compatibility exports in `DllMain.cpp`:
+    `GetDetourCompatibilityInfo(...)` reports the compiled Detour ABI and
+    preserved local features, while `ProbeMMapTileCompatibility(...)` loads a
+    selected `.mmtile` through `MMapManager` and reports wrapper/header
+    evidence.
+  - Confirmed the current native build still uses `DT_POLYREF64`, so
+    `dtPolyRef` and `dtTileRef` are 64-bit, while loaded Detour tiles remain
+    `DT_NAVMESH_VERSION = 7`.
+  - Tried a 32-bit-ref build locally; the Orgrimmar flight-master route gate
+    returned `no_path`, so `DT_POLYREF64` was restored. Future mmap
+    regeneration can choose a better versioned data/ref format, but that
+    choice must be explicit and covered by the compatibility probes.
+  - Documented the Detour vendor surface to preserve in
+    `docs/physics/DETOUR_UPGRADE_BASELINE.md`.
+- Validation:
+  - `$MSBUILD = "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"; & $MSBUILD Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded` with existing native warnings.
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DetourCompatibilityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=detour_compatibility_baseline.trx" --results-directory tmp/test-runtime/results-navigation` -> `passed (2/2)`.
+  - Diagnostic 32-bit-ref route trial failed with `result=no_path blocked=none`; that build was not retained.
+- Next command:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
 - Last updated: 2026-05-01
 - Pass result: `delta shipped; focused Orgrimmar and Undercity MMAP tiles regenerated and audited with Tauren clearance`
 - Active task: `LPATH-CROSSROADS-UC` navmesh generation source-of-truth slice

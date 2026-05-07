@@ -787,6 +787,76 @@ public static partial class NavigationInterop
     [DllImport(NavigationDll, EntryPoint = "PathArrFree", CallingConvention = CallingConvention.Cdecl)]
     private static extern void PathArrFree(IntPtr pathArr);
 
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct DetourCompatibilityInfo
+    {
+        public uint StructSize;
+        public uint MmapMagic;
+        public uint MmapVersion;
+        public uint DetourNavMeshMagic;
+        public uint DetourNavMeshVersion;
+        public uint DetourNavMeshStateVersion;
+        public uint DtStatusSize;
+        public uint DtPolyRefSize;
+        public uint DtTileRefSize;
+        public uint DtLinkSize;
+        public uint DtPolySize;
+        public uint DtMeshHeaderSize;
+        public uint DtNavMeshParamsSize;
+        public uint MmapTileHeaderSize;
+        public uint NativePointerSize;
+        public uint MaxVertsPerPolygon;
+        public uint MaxAreas;
+        public uint DtSaltBits;
+        public uint DtTileBits;
+        public uint DtPolyBits;
+        public uint PolyRef64Enabled;
+        public uint SupportsSlicedPathfinding;
+        public uint SupportsPathCorridor;
+        public uint SupportsAnyAngle;
+        public uint SupportsRaycastCosts;
+        public uint SupportsDistanceToWall;
+        public uint SupportsLocalNeighbourhood;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 4)]
+    public struct MMapTileCompatibilityInfo
+    {
+        public uint StructSize;
+        public uint MapId;
+        public int TileX;
+        public int TileY;
+        public uint FileFound;
+        public uint FileMmapMagic;
+        public uint FileMmapVersion;
+        public uint FileDetourVersion;
+        public uint FileTileDataSize;
+        public uint FileUsesLiquids;
+        public uint HeaderCompatible;
+        public uint LoadSucceeded;
+        public uint LoadedTileCountAtGrid;
+        public ulong LoadedTileRef;
+        public int DetourHeaderMagic;
+        public int DetourHeaderVersion;
+        public int DetourHeaderPolyCount;
+        public int DetourHeaderVertCount;
+        public float DetourHeaderWalkableRadius;
+        public float DetourHeaderWalkableHeight;
+        public float DetourHeaderWalkableClimb;
+    }
+
+    [DllImport(NavigationDll, EntryPoint = "GetDetourCompatibilityInfo", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool GetDetourCompatibilityInfo(out DetourCompatibilityInfo info);
+
+    [DllImport(NavigationDll, EntryPoint = "ProbeMMapTileCompatibility", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool ProbeMMapTileCompatibility(
+        uint mapId,
+        int tileX,
+        int tileY,
+        out MMapTileCompatibilityInfo info);
+
     public const int CorridorMaxCorners = 96;
     public const uint CorridorResultFlagOverlayRepaired = 0x00000001u;
 

@@ -472,16 +472,22 @@ void dtNavMesh::connectExtOffMeshLinks(dtMeshTile* tile, dtMeshTile* target, int
 			continue;
 		
 		const float ext[3] = { targetCon->rad, target->header->walkableClimb, targetCon->rad };
-		
+
 		// Find polygon to connect to.
 		const float* p = &targetCon->pos[3];
 		float nearestPt[3];
 		dtPolyRef ref = findNearestPolyInTile(tile, p, ext, nearestPt);
-		if (!ref)
+		fprintf(stderr, "[OFFLINK] ext  tile=(%d,%d) target=(%d,%d) con=%d side=0x%02x p1=(%.2f,%.2f,%.2f) -> ref=0x%llx nearest=(%.2f,%.2f,%.2f)\n",
+		        tile->header->x, tile->header->y, target->header->x, target->header->y,
+		        i, targetCon->side, p[0], p[1], p[2], (unsigned long long)ref,
+		        nearestPt[0], nearestPt[1], nearestPt[2]);
+		if (!ref) { fprintf(stderr, "[OFFLINK]   ext SKIP no poly\n"); continue; }
+		const float dxz = dtSqr(nearestPt[0]-p[0])+dtSqr(nearestPt[2]-p[2]);
+		if (dxz > dtSqr(targetCon->rad)) {
+			fprintf(stderr, "[OFFLINK]   ext SKIP XZ dist^2=%.2f > rad^2=%.2f\n", dxz, dtSqr(targetCon->rad));
 			continue;
-		// findNearestPoly may return too optimistic results, further check to make sure. 
-		if (dtSqr(nearestPt[0]-p[0])+dtSqr(nearestPt[2]-p[2]) > dtSqr(targetCon->rad))
-			continue;
+		}
+		fprintf(stderr, "[OFFLINK]   ext LINKED dxz^2=%.2f\n", dxz);
 		// Make sure the location is on current mesh.
 		float* v = &target->verts[targetPoly->verts[1]*3];
 		dtVcopy(v, nearestPt);
@@ -572,15 +578,22 @@ void dtNavMesh::baseOffMeshLinks(dtMeshTile* tile)
 		dtPoly* poly = &tile->polys[con->poly];
 	
 		const float ext[3] = { con->rad, tile->header->walkableClimb, con->rad };
-		
+
 		// Find polygon to connect to.
 		const float* p = &con->pos[0]; // First vertex
 		float nearestPt[3];
 		dtPolyRef ref = findNearestPolyInTile(tile, p, ext, nearestPt);
-		if (!ref) continue;
-		// findNearestPoly may return too optimistic results, further check to make sure. 
-		if (dtSqr(nearestPt[0]-p[0])+dtSqr(nearestPt[2]-p[2]) > dtSqr(con->rad))
+		fprintf(stderr, "[OFFLINK] base tile=(%d,%d) con=%d p=(%.2f,%.2f,%.2f) rad=%.2f -> ref=0x%llx nearest=(%.2f,%.2f,%.2f)\n",
+		        tile->header->x, tile->header->y, i, p[0], p[1], p[2], con->rad,
+		        (unsigned long long)ref, nearestPt[0], nearestPt[1], nearestPt[2]);
+		if (!ref) { fprintf(stderr, "[OFFLINK]   SKIP no poly within extent\n"); continue; }
+		// findNearestPoly may return too optimistic results, further check to make sure.
+		const float dxz = dtSqr(nearestPt[0]-p[0])+dtSqr(nearestPt[2]-p[2]);
+		if (dxz > dtSqr(con->rad)) {
+			fprintf(stderr, "[OFFLINK]   SKIP XZ dist^2=%.2f > rad^2=%.2f\n", dxz, dtSqr(con->rad));
 			continue;
+		}
+		fprintf(stderr, "[OFFLINK]   LINKED dxz^2=%.2f\n", dxz);
 		// Make sure the location is on current mesh.
 		float* v = &tile->verts[poly->verts[0]*3];
 		dtVcopy(v, nearestPt);

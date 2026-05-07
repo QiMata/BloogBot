@@ -11,12 +11,19 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace PathfindingService.RoutePacks;
 
 public interface INavigationDataSignatureProvider
 {
     string GetSignature(uint mapId);
+}
+
+public enum StaticRoutePackGenerationMode
+{
+    ValidatedPath,
+    CorridorSeedPath
 }
 
 public sealed class FileSystemNavigationDataSignatureProvider : INavigationDataSignatureProvider
@@ -101,8 +108,15 @@ public sealed record StaticRoutePackSeed(
     float CorridorProjectionRadius,
     float MaxProjectionZDrift,
     float MaxSegmentLength,
-    int SchemaVersion = 1)
+    bool WarmAtStartup = true,
+    bool WarmOnDemand = false,
+    int SchemaVersion = 1,
+    TimeSpan? GenerationTimeout = null,
+    StaticRoutePackGenerationMode GenerationMode = StaticRoutePackGenerationMode.ValidatedPath,
+    float MinSuffixRemainingDistance = 0f)
 {
+    public TimeSpan EffectiveGenerationTimeout => GenerationTimeout ?? TimeSpan.FromSeconds(30);
+
     public (float Radius, float Height) Capsule
         => RaceDimensions.GetCapsuleForRace(Race, Gender);
 }
@@ -133,16 +147,20 @@ public readonly record struct StaticRoutePackMatch(
 public sealed class StaticRoutePackCache
 {
     public const string DefaultRoutePolicy = "default";
-    public const string RouteAlgorithmSignature = "PathfindingService.StaticRoutePack.v2";
+    public const string RouteAlgorithmSignature = "PathfindingService.StaticRoutePack.v10";
 
     private const float PointEpsilon = 0.25f;
     private const float CapsuleTolerance = 0.001f;
-    private const int MaxAttachmentProbePoints = 6;
+    private const int MaxAttachmentProbePoints = 12;
+    private const int MaxSuffixSupportValidationSegments = 12;
+    private static readonly TimeSpan FailedWarmUpRetryInterval = TimeSpan.FromMinutes(5);
     private readonly IReadOnlyList<StaticRoutePackSeed> _seeds;
     private readonly INavigationDataSignatureProvider _signatureProvider;
     private readonly Func<StaticRoutePackSeed, NavigationPathResult> _routeGenerator;
     private readonly Func<uint, XYZ, XYZ, float, float, bool> _segmentProbe;
+    private readonly bool _usesDefaultSegmentProbe;
     private readonly ConcurrentDictionary<StaticRoutePackKey, StaticRoutePack> _packs = new();
+    private readonly ConcurrentDictionary<StaticRoutePackKey, DateTime> _failedWarmUps = new();
 
     public StaticRoutePackCache(
         IEnumerable<StaticRoutePackSeed> seeds,
@@ -154,6 +172,7 @@ public sealed class StaticRoutePackCache
         _seeds = seeds.ToArray();
         _signatureProvider = signatureProvider ?? throw new ArgumentNullException(nameof(signatureProvider));
         _routeGenerator = routeGenerator ?? throw new ArgumentNullException(nameof(routeGenerator));
+        _usesDefaultSegmentProbe = segmentProbe is null;
         _segmentProbe = segmentProbe ?? DefaultSegmentProbe;
     }
 
@@ -161,60 +180,96 @@ public sealed class StaticRoutePackCache
 
     public static IReadOnlyList<StaticRoutePackSeed> CreateDefaultSeeds()
     {
+        var orgrimmarUndercityGangplank = new XYZ(1320.142944f, -4653.158691f, 53.891945f);
         return
         [
             new StaticRoutePackSeed(
                 Id: "kalimdor_orgrimmar_lower_incline_recovery_to_undercity_zeppelin",
                 MapId: 1,
                 StartAnchor: new XYZ(1363.9f, -4377.8f, 26.1f),
-                EndAnchor: new XYZ(1320.142944f, -4653.158691f, 53.891945f),
+                EndAnchor: orgrimmarUndercityGangplank,
                 Race: Race.Tauren,
                 Gender: Gender.Male,
                 SmoothPath: true,
                 RoutePolicy: DefaultRoutePolicy,
-                AllowsDynamicOverlay: true,
+                AllowsDynamicOverlay: false,
                 StartAnchorRadius: 4.0f,
                 EndAnchorRadius: 10.0f,
                 CorridorProjectionRadius: 4.0f,
                 MaxProjectionZDrift: 4.0f,
-                MaxSegmentLength: 12.0f),
+                MaxSegmentLength: 12.0f,
+                WarmAtStartup: false,
+                WarmOnDemand: true,
+                GenerationMode: StaticRoutePackGenerationMode.CorridorSeedPath),
             new StaticRoutePackSeed(
                 Id: "kalimdor_orgrimmar_exterior_incline_to_undercity_zeppelin",
                 MapId: 1,
                 StartAnchor: new XYZ(1381.3f, -4370.6f, 26.0f),
-                EndAnchor: new XYZ(1320.142944f, -4653.158691f, 53.891945f),
+                EndAnchor: orgrimmarUndercityGangplank,
                 Race: Race.Tauren,
                 Gender: Gender.Male,
                 SmoothPath: true,
                 RoutePolicy: DefaultRoutePolicy,
-                AllowsDynamicOverlay: true,
+                AllowsDynamicOverlay: false,
                 StartAnchorRadius: 4.0f,
                 EndAnchorRadius: 10.0f,
                 CorridorProjectionRadius: 6.0f,
                 MaxProjectionZDrift: 5.0f,
-                MaxSegmentLength: 12.0f),
+                MaxSegmentLength: 12.0f,
+                WarmAtStartup: false,
+                WarmOnDemand: true,
+                GenerationMode: StaticRoutePackGenerationMode.CorridorSeedPath),
             new StaticRoutePackSeed(
-                Id: "kalimdor_orgrimmar_flight_master_to_undercity_zeppelin",
+                Id: "kalimdor_orgrimmar_hallway_wall_stall_to_undercity_zeppelin",
                 MapId: 1,
-                StartAnchor: new XYZ(1677.6f, -4315.7f, 61.2f),
-                EndAnchor: new XYZ(1320.142944f, -4653.158691f, 53.891945f),
+                StartAnchor: new XYZ(1518.2f, -4419.8f, 17.1f),
+                EndAnchor: orgrimmarUndercityGangplank,
                 Race: Race.Tauren,
                 Gender: Gender.Male,
                 SmoothPath: true,
                 RoutePolicy: DefaultRoutePolicy,
-                AllowsDynamicOverlay: true,
+                AllowsDynamicOverlay: false,
+                StartAnchorRadius: 4.0f,
+                EndAnchorRadius: 10.0f,
+                CorridorProjectionRadius: 5.0f,
+                MaxProjectionZDrift: 5.0f,
+                MaxSegmentLength: 12.0f,
+                WarmAtStartup: false,
+                WarmOnDemand: true),
+            new StaticRoutePackSeed(
+                Id: "kalimdor_orgrimmar_flight_master_to_undercity_zeppelin",
+                MapId: 1,
+                StartAnchor: new XYZ(1677.6f, -4315.7f, 61.2f),
+                EndAnchor: orgrimmarUndercityGangplank,
+                Race: Race.Tauren,
+                Gender: Gender.Male,
+                SmoothPath: true,
+                RoutePolicy: DefaultRoutePolicy,
+                AllowsDynamicOverlay: false,
                 StartAnchorRadius: 8.0f,
                 EndAnchorRadius: 10.0f,
                 CorridorProjectionRadius: 6.0f,
                 MaxProjectionZDrift: 5.0f,
-                MaxSegmentLength: 12.0f)
+                MaxSegmentLength: 12.0f,
+                WarmAtStartup: false,
+                WarmOnDemand: true)
         ];
     }
 
     public void WarmUpAll(ILogger? logger = null)
     {
         foreach (var seed in _seeds)
+        {
+            if (!seed.WarmAtStartup)
+            {
+                logger?.LogWarning(
+                    "[ROUTE_PACK] seed={SeedId} startup warmup skipped; route-pack remains unavailable until explicitly warmed",
+                    seed.Id);
+                continue;
+            }
+
             WarmUp(seed, logger);
+        }
     }
 
     public bool WarmUp(StaticRoutePackSeed seed, ILogger? logger = null)
@@ -225,9 +280,15 @@ public sealed class StaticRoutePackCache
 
         try
         {
-            var generated = _routeGenerator(seed);
+            if (!TryGenerateRoute(seed, logger, out var generated))
+            {
+                _failedWarmUps[key] = DateTime.UtcNow;
+                return false;
+            }
+
             if (!TryCreatePack(seed, key, generated, out var pack, out var reason))
             {
+                _failedWarmUps[key] = DateTime.UtcNow;
                 logger?.LogWarning(
                     "[ROUTE_PACK] seed={SeedId} skipped reason={Reason} result={Result} corners={Corners} rawCorners={RawCorners}",
                     seed.Id,
@@ -239,6 +300,7 @@ public sealed class StaticRoutePackCache
             }
 
             _packs[key] = pack;
+            _failedWarmUps.TryRemove(key, out _);
             logger?.LogInformation(
                 "[ROUTE_PACK] seed={SeedId} warmed map={MapId} policy={Policy} race={Race} gender={Gender} corners={Corners} rawCorners={RawCorners} navSig={NavSig}",
                 seed.Id,
@@ -253,9 +315,37 @@ public sealed class StaticRoutePackCache
         }
         catch (Exception ex)
         {
+            _failedWarmUps[key] = DateTime.UtcNow;
             logger?.LogWarning(ex, "[ROUTE_PACK] seed={SeedId} warmup failed", seed.Id);
             return false;
         }
+    }
+
+    private bool TryGenerateRoute(
+        StaticRoutePackSeed seed,
+        ILogger? logger,
+        out NavigationPathResult generated)
+    {
+        generated = default;
+        var timeout = seed.EffectiveGenerationTimeout;
+        if (timeout <= TimeSpan.Zero)
+        {
+            generated = _routeGenerator(seed);
+            return true;
+        }
+
+        var task = Task.Run(() => _routeGenerator(seed));
+        if (task.Wait(timeout))
+        {
+            generated = task.GetAwaiter().GetResult();
+            return true;
+        }
+
+        logger?.LogWarning(
+            "[ROUTE_PACK] seed={SeedId} generation timed out after {TimeoutMs}ms; route-pack remains unavailable",
+            seed.Id,
+            (long)timeout.TotalMilliseconds);
+        return false;
     }
 
     public bool TryGetPath(
@@ -274,6 +364,13 @@ public sealed class StaticRoutePackCache
                 continue;
 
             var key = CreateKey(seed);
+            if (!_packs.ContainsKey(key) &&
+                seed.WarmOnDemand &&
+                ShouldAttemptOnDemandWarmUp(key))
+            {
+                WarmUp(seed);
+            }
+
             if (!_packs.TryGetValue(key, out var pack))
                 continue;
 
@@ -287,6 +384,14 @@ public sealed class StaticRoutePackCache
         }
 
         return false;
+    }
+
+    private bool ShouldAttemptOnDemandWarmUp(StaticRoutePackKey key)
+    {
+        if (!_failedWarmUps.TryGetValue(key, out var lastFailureUtc))
+            return true;
+
+        return DateTime.UtcNow - lastFailureUtc >= FailedWarmUpRetryInterval;
     }
 
     private bool TryCreatePack(
@@ -309,7 +414,7 @@ public sealed class StaticRoutePackCache
 
         if (generated.BlockedSegmentIndex.HasValue || !string.Equals(generated.BlockedReason, "none", StringComparison.OrdinalIgnoreCase))
         {
-            reason = $"blocked:{generated.BlockedReason}";
+            reason = FormatBlockedGeneratedPathReason(generated);
             return false;
         }
 
@@ -334,7 +439,36 @@ public sealed class StaticRoutePackCache
             }
         }
 
+        if (!TryFindUnsupportedSegment(seed, path, out var unsupportedSegment, out var unsupportedReason))
+        {
+            reason = $"unsupported_segment:{unsupportedSegment}:{unsupportedReason}";
+            return false;
+        }
+
         pack = new StaticRoutePack(seed, key, path, rawPath, generated.Result);
+        return true;
+    }
+
+    private bool TryFindUnsupportedSegment(
+        StaticRoutePackSeed seed,
+        IReadOnlyList<XYZ> path,
+        out int unsupportedSegment,
+        out string unsupportedReason)
+    {
+        unsupportedSegment = -1;
+        unsupportedReason = "none";
+        var (agentRadius, agentHeight) = seed.Capsule;
+        var scanEnd = Math.Min(path.Count - 1, MaxSuffixSupportValidationSegments);
+        for (var i = 0; i < scanEnd; i++)
+        {
+            if (IsInternalRouteSegmentSupported(seed.MapId, path[i], path[i + 1], agentRadius, agentHeight))
+                continue;
+
+            unsupportedSegment = i;
+            unsupportedReason = FormatSegment(path[i], path[i + 1]);
+            return false;
+        }
+
         return true;
     }
 
@@ -411,6 +545,9 @@ public sealed class StaticRoutePackCache
         if (Distance3D(request.Start, seed.StartAnchor) <= PointEpsilon &&
             Distance3D(request.End, seed.EndAnchor) <= PointEpsilon)
         {
+            if (!IsSuffixSupported(seed.MapId, pack.Path, agentRadius, agentHeight, validateFirstSegmentWithAttachmentProbe: false))
+                return false;
+
             result = new NavigationPathResult(
                 pack.Path.ToArray(),
                 pack.RawPath.ToArray(),
@@ -429,66 +566,71 @@ public sealed class StaticRoutePackCache
         if (!TryFindCorridorProjection(seed, pack.Path, request.Start, out var projection))
             return false;
 
+        if (seed.MinSuffixRemainingDistance > 0f &&
+            Distance2D(request.Start, seed.EndAnchor) < seed.MinSuffixRemainingDistance)
+        {
+            return false;
+        }
+
         if (projection.Distance2D > seed.CorridorProjectionRadius ||
             MathF.Abs(request.Start.Z - projection.Point.Z) > seed.MaxProjectionZDrift)
         {
             return false;
         }
 
-        if (!TryFindSupportedAttachment(
-            seed,
-            pack.Path,
-            request.Start,
-            projection,
-            agentRadius,
-            agentHeight,
-            out var attachmentIndex,
-            out var attachmentPoint))
+        foreach (var candidate in EnumerateSupportedAttachments(
+                     seed,
+                     pack.Path,
+                     request.Start,
+                     projection,
+                     agentRadius,
+                     agentHeight))
         {
-            return false;
+            var suffix = new List<XYZ>(pack.Path.Length - candidate.AttachmentIndex + 2);
+            AppendDistinct(suffix, request.Start);
+            AppendDistinct(suffix, candidate.AttachmentPoint);
+            for (var i = candidate.AttachmentIndex + 1; i < pack.Path.Length; i++)
+                AppendDistinct(suffix, pack.Path[i]);
+
+            if (suffix.Count < 2)
+                continue;
+
+            if (!IsSuffixSupported(seed.MapId, suffix, agentRadius, agentHeight, validateFirstSegmentWithAttachmentProbe: true))
+                continue;
+
+            result = new NavigationPathResult(
+                suffix.ToArray(),
+                suffix.ToArray(),
+                "route_pack_suffix",
+                null,
+                "none");
+            match = new StaticRoutePackMatch(
+                seed.Id,
+                result.Result,
+                candidate.AttachmentIndex,
+                projection.Distance2D,
+                pack.Key.NavDataSignature);
+            return true;
         }
 
-        var suffix = new List<XYZ>(pack.Path.Length - attachmentIndex + 2);
-        AppendDistinct(suffix, request.Start);
-        AppendDistinct(suffix, attachmentPoint);
-        for (var i = attachmentIndex + 1; i < pack.Path.Length; i++)
-            AppendDistinct(suffix, pack.Path[i]);
-
-        if (suffix.Count < 2)
-            return false;
-
-        result = new NavigationPathResult(
-            suffix.ToArray(),
-            suffix.ToArray(),
-            "route_pack_suffix",
-            null,
-            "none");
-        match = new StaticRoutePackMatch(
-            seed.Id,
-            result.Result,
-            attachmentIndex,
-            projection.Distance2D,
-            pack.Key.NavDataSignature);
-        return true;
+        return false;
     }
 
-    private bool TryFindSupportedAttachment(
+    private IEnumerable<RoutePackAttachmentCandidate> EnumerateSupportedAttachments(
         StaticRoutePackSeed seed,
         IReadOnlyList<XYZ> path,
         XYZ start,
         CorridorProjection projection,
         float agentRadius,
-        float agentHeight,
-        out int attachmentIndex,
-        out XYZ attachmentPoint)
+        float agentHeight)
     {
-        attachmentIndex = projection.SegmentIndex;
-        attachmentPoint = projection.Point;
+        var seen = new HashSet<int>();
 
         if (IsPlausibleAttachmentStep(start, projection.Point) &&
             IsSegmentSupported(seed.MapId, start, projection.Point, agentRadius, agentHeight))
         {
-            return true;
+            seen.Add(projection.SegmentIndex);
+            yield return new RoutePackAttachmentCandidate(projection.SegmentIndex, projection.Point);
         }
 
         var firstCandidate = Math.Clamp(projection.SegmentIndex + 1, 0, path.Count - 1);
@@ -496,22 +638,64 @@ public sealed class StaticRoutePackCache
         for (var i = firstCandidate; i <= lastCandidate; i++)
         {
             var candidate = path[i];
-            if (!IsPlausibleAttachmentStep(start, candidate) ||
-                Distance2D(start, candidate) > seed.MaxSegmentLength ||
-                MathF.Abs(start.Z - candidate.Z) > seed.MaxProjectionZDrift)
-            {
-                continue;
-            }
-
-            if (!IsSegmentSupported(seed.MapId, start, candidate, agentRadius, agentHeight))
+            if (!seen.Add(i))
                 continue;
 
-            attachmentIndex = i;
-            attachmentPoint = candidate;
-            return true;
+            if (!CanUseAttachmentCandidate(seed, start, candidate, agentRadius, agentHeight))
+                continue;
+
+            yield return new RoutePackAttachmentCandidate(i, candidate);
         }
 
-        return false;
+        var lastBacktrackCandidate = Math.Max(0, projection.SegmentIndex - MaxAttachmentProbePoints);
+        for (var i = projection.SegmentIndex; i >= lastBacktrackCandidate; i--)
+        {
+            var candidate = path[i];
+            if (!seen.Add(i))
+                continue;
+
+            if (!CanUseAttachmentCandidate(seed, start, candidate, agentRadius, agentHeight))
+                continue;
+
+            yield return new RoutePackAttachmentCandidate(i, candidate);
+        }
+    }
+
+    private bool CanUseAttachmentCandidate(
+        StaticRoutePackSeed seed,
+        XYZ start,
+        XYZ candidate,
+        float agentRadius,
+        float agentHeight)
+    {
+        if (!IsPlausibleAttachmentStep(start, candidate) ||
+            Distance2D(start, candidate) > seed.MaxSegmentLength ||
+            MathF.Abs(start.Z - candidate.Z) > seed.MaxProjectionZDrift)
+        {
+            return false;
+        }
+
+        return IsSegmentSupported(seed.MapId, start, candidate, agentRadius, agentHeight);
+    }
+
+    private bool IsSuffixSupported(
+        uint mapId,
+        IReadOnlyList<XYZ> suffix,
+        float agentRadius,
+        float agentHeight,
+        bool validateFirstSegmentWithAttachmentProbe)
+    {
+        var scanEnd = Math.Min(suffix.Count - 1, MaxSuffixSupportValidationSegments);
+        for (var i = 0; i < scanEnd; i++)
+        {
+            var supported = i == 0 && validateFirstSegmentWithAttachmentProbe
+                ? IsSegmentSupported(mapId, suffix[i], suffix[i + 1], agentRadius, agentHeight)
+                : IsInternalRouteSegmentSupported(mapId, suffix[i], suffix[i + 1], agentRadius, agentHeight);
+            if (!supported)
+                return false;
+        }
+
+        return true;
     }
 
     private static bool IsPlausibleAttachmentStep(XYZ from, XYZ to)
@@ -534,6 +718,19 @@ public sealed class StaticRoutePackCache
             return true;
 
         return _segmentProbe(mapId, from, to, agentRadius, agentHeight);
+    }
+
+    private bool IsInternalRouteSegmentSupported(
+        uint mapId,
+        XYZ from,
+        XYZ to,
+        float agentRadius,
+        float agentHeight)
+    {
+        if (!_usesDefaultSegmentProbe)
+            return IsSegmentSupported(mapId, from, to, agentRadius, agentHeight);
+
+        return Navigation.IsSegmentLocallyReachableForAgent(mapId, from, to, agentRadius, agentHeight);
     }
 
     private StaticRoutePackKey CreateKey(StaticRoutePackSeed seed)
@@ -617,7 +814,8 @@ public sealed class StaticRoutePackCache
     {
         try
         {
-            return Navigation.IsSegmentWalkableForAgent(mapId, from, to, agentRadius, agentHeight);
+            return Navigation.IsSegmentWalkableForAgent(mapId, from, to, agentRadius, agentHeight) &&
+                Navigation.IsSegmentLocallyReachableForAgent(mapId, from, to, agentRadius, agentHeight);
         }
         catch
         {
@@ -654,6 +852,26 @@ public sealed class StaticRoutePackCache
     private static string TruncateSignature(string signature)
         => signature.Length <= 12 ? signature : signature[..12];
 
+    private static string FormatBlockedGeneratedPathReason(NavigationPathResult generated)
+    {
+        var index = generated.BlockedSegmentIndex;
+        var reason = $"blocked:{generated.BlockedReason}:idx={index?.ToString(CultureInfo.InvariantCulture) ?? "none"}";
+        if (index is not int blockedIndex ||
+            blockedIndex < 0 ||
+            blockedIndex + 1 >= generated.Path.Length)
+        {
+            return reason;
+        }
+
+        return $"{reason}:from={FormatPoint(generated.Path[blockedIndex])}:to={FormatPoint(generated.Path[blockedIndex + 1])}";
+    }
+
+    private static string FormatPoint(XYZ point)
+        => FormattableString.Invariant($"({point.X:F1},{point.Y:F1},{point.Z:F1})");
+
+    private static string FormatSegment(XYZ from, XYZ to)
+        => FormattableString.Invariant($"from={FormatPoint(from)}:to={FormatPoint(to)}");
+
     private readonly record struct StaticRoutePackKey(
         string SeedId,
         int SchemaVersion,
@@ -676,4 +894,8 @@ public sealed class StaticRoutePackCache
         int SegmentIndex,
         XYZ Point,
         float Distance2D);
+
+    private readonly record struct RoutePackAttachmentCandidate(
+        int AttachmentIndex,
+        XYZ AttachmentPoint);
 }

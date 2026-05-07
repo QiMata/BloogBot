@@ -119,7 +119,7 @@ public class TransportWaitingLogicTests
     }
 
     [Fact]
-    public void WaitingForArrival_ZeppelinWithoutOverlay_StaysAtWaitPositionBeforeDwell()
+    public void WaitingForArrival_ZeppelinWithoutOverlay_PrepositionsAtBoardingWaypointBeforeArrival()
     {
         var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
         var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
@@ -130,17 +130,30 @@ public class TransportWaitingLogicTests
 
         Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
         Assert.NotNull(target);
-        Assert.Equal(boardingStop.WaitPosition.X, target!.X, 1);
-        Assert.Equal(boardingStop.WaitPosition.Y, target.Y, 1);
-        Assert.Equal(boardingStop.WaitPosition.Z, target.Z, 1);
+        Assert.NotNull(boardingStop.BoardingPosition);
+        Assert.Equal(boardingStop.BoardingPosition!.X, target!.X, 1);
+        Assert.Equal(boardingStop.BoardingPosition.Y, target.Y, 1);
+        Assert.Equal(boardingStop.BoardingPosition.Z, target.Z, 1);
     }
 
     [Fact]
-    public void Approaching_ZeppelinAtConfiguredBoardingPosition_HoldsConfiguredBoardingPoint()
+    public void Approaching_ZeppelinAtConfiguredBoardingPosition_TransitionsToWaitingOnTheDeck()
     {
+        // Phase 5.3.5: with OG.ApproachPosition anchored to Zeppelin Master Frezza
+        // (z=53.6, same deck tier as BoardingPosition z=53.89), the bot teleported
+        // to BoardingPosition is within BoardingRadius=12f of NavigationPosition
+        // (~11.6y XY apart, identical Z tier). The early `dist <= BoardingRadius`
+        // branch fires and returns NavigationPosition. Pre-Phase-5.3.5 (when
+        // ApproachPosition was at the wrong-tier z=51.6 city ground), the bot at
+        // BoardingPosition was OUTSIDE BoardingRadius of NavigationPosition and the
+        // `IsAtConfiguredBoardingPosition` fallback returned BoardingPosition.
+        // Both branches transition to WaitingForArrival; only the returned waypoint
+        // differs. The new geometry consolidates these cases since both points are
+        // on the same deck within attachment distance of the docked zeppelin.
         var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
         var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
         var boardingPosition = boardingStop.BoardingPosition!;
+        var navigationPosition = boardingStop.NavigationPosition;
         var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
 
         var firstTarget = logic.Update(boardingPosition, 0, null, DT);
@@ -149,12 +162,20 @@ public class TransportWaitingLogicTests
         Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
         Assert.NotNull(firstTarget);
         Assert.NotNull(secondTarget);
-        Assert.Equal(boardingPosition.X, firstTarget!.X, 1);
-        Assert.Equal(boardingPosition.Y, firstTarget.Y, 1);
-        Assert.Equal(boardingPosition.Z, firstTarget.Z, 1);
-        Assert.Equal(boardingPosition.X, secondTarget!.X, 1);
-        Assert.Equal(boardingPosition.Y, secondTarget.Y, 1);
-        Assert.Equal(boardingPosition.Z, secondTarget.Z, 1);
+        // Returned waypoint must be on the deck — either the NPC-anchored
+        // NavigationPosition (Frezza) or BoardingPosition (gangplank attach point).
+        // Both are valid wait points on the same elevation.
+        Assert.True(
+            (Math.Abs(firstTarget!.X - navigationPosition.X) < 0.5f && Math.Abs(firstTarget.Y - navigationPosition.Y) < 0.5f)
+            || (Math.Abs(firstTarget.X - boardingPosition.X) < 0.5f && Math.Abs(firstTarget.Y - boardingPosition.Y) < 0.5f),
+            $"Expected firstTarget on deck near Frezza({navigationPosition.X:F2},{navigationPosition.Y:F2}) "
+            + $"or BoardingPosition({boardingPosition.X:F2},{boardingPosition.Y:F2}); "
+            + $"got ({firstTarget.X:F2},{firstTarget.Y:F2},{firstTarget.Z:F2}).");
+        Assert.Equal(navigationPosition.Z, firstTarget.Z, 1);
+        Assert.True(
+            (Math.Abs(secondTarget!.X - navigationPosition.X) < 0.5f && Math.Abs(secondTarget.Y - navigationPosition.Y) < 0.5f)
+            || (Math.Abs(secondTarget.X - boardingPosition.X) < 0.5f && Math.Abs(secondTarget.Y - boardingPosition.Y) < 0.5f),
+            $"Expected secondTarget on deck.");
     }
 
     [Fact]
@@ -259,18 +280,14 @@ public class TransportWaitingLogicTests
 
         Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
         Assert.NotNull(target);
-        Assert.NotNull(boardingStop.TransportBoardingOffset);
-        var expected = LocalToWorld(
-            boardingStop.TransportBoardingOffset!,
-            new Position(1318.1f, -4658.0f, 71.9f),
-            orientation: 0f);
-        Assert.Equal(expected.X, target!.X, 3);
-        Assert.Equal(expected.Y, target.Y, 3);
-        Assert.Equal(expected.Z, target.Z, 3);
+        Assert.NotNull(boardingStop.BoardingPosition);
+        Assert.Equal(boardingStop.BoardingPosition!.X, target!.X, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Y, target.Y, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Z, target.Z, 3);
     }
 
     [Fact]
-    public void WaitingForArrival_ZeppelinAtStopStable_UsesTransportLocalBoardingOffset()
+    public void WaitingForArrival_ZeppelinAtStopStable_HoldsConfiguredBoardingPositionBeforeTransportAttachment()
     {
         var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
         var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
@@ -289,14 +306,11 @@ public class TransportWaitingLogicTests
                 71.9f,
                 orientation));
 
-        var expected = LocalToWorld(
-            boardingStop.TransportBoardingOffset!,
-            new Position(1318.1f, -4658.0f, 71.9f),
-            orientation);
         Assert.NotNull(target);
-        Assert.Equal(expected.X, target!.X, 3);
-        Assert.Equal(expected.Y, target.Y, 3);
-        Assert.Equal(expected.Z, target.Z, 3);
+        Assert.NotNull(boardingStop.BoardingPosition);
+        Assert.Equal(boardingStop.BoardingPosition!.X, target!.X, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Y, target.Y, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Z, target.Z, 3);
     }
 
     [Fact]
@@ -405,14 +419,10 @@ public class TransportWaitingLogicTests
 
         Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
         Assert.NotNull(target);
-        Assert.NotNull(boardingStop.TransportBoardingOffset);
-        var expected = LocalToWorld(
-            boardingStop.TransportBoardingOffset!,
-            new Position(1318.1f, -4658.0f, 71.9f),
-            orientation: 0f);
-        Assert.Equal(expected.X, target!.X, 3);
-        Assert.Equal(expected.Y, target.Y, 3);
-        Assert.Equal(expected.Z, target.Z, 3);
+        Assert.NotNull(boardingStop.BoardingPosition);
+        Assert.Equal(boardingStop.BoardingPosition!.X, target!.X, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Y, target.Y, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Z, target.Z, 3);
     }
 
     [Fact]
@@ -429,31 +439,41 @@ public class TransportWaitingLogicTests
         Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
         Assert.True(logic.MissedBoardingAttempt);
         Assert.NotNull(target);
-        Assert.Equal(boardingStop.WaitPosition.X, target!.X, 1);
-        Assert.Equal(boardingStop.WaitPosition.Y, target.Y, 1);
+        Assert.Equal(boardingStop.NavigationPosition.X, target!.X, 1);
+        Assert.Equal(boardingStop.NavigationPosition.Y, target.Y, 1);
     }
 
     [Fact]
-    public void Boarding_ZeppelinObjectMovesWithinStop_KeepsInitialBoardingWaypoint()
+    public void Boarding_ZeppelinObjectMovesWithinStop_HoldsConfiguredBoardingPositionBeforeTransportAttachment()
     {
         var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
         var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
         var logic = new TransportWaitingLogic(ZeppelinUndercityOrgrimmar, boardingStop, destinationStop);
+        var updatedTransportPosition = new Position(1338f, -4639f, 71.9f);
 
         logic.Update(boardingStop.WaitPosition, 0, null, DT);
         var initialTarget = AdvanceStableZeppelinAtDock(logic, boardingStop.WaitPosition);
         var movingObjectTarget = logic.Update(
             boardingStop.WaitPosition,
             0,
-            MakeZeppelinAtDock(0, ZeppelinUndercityOrgrimmar.GameObjectEntry, 1338f, -4639f, 71.9f),
+            MakeZeppelinAtDock(
+                0,
+                ZeppelinUndercityOrgrimmar.GameObjectEntry,
+                updatedTransportPosition.X,
+                updatedTransportPosition.Y,
+                updatedTransportPosition.Z),
             DT);
 
         Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
         Assert.NotNull(initialTarget);
         Assert.NotNull(movingObjectTarget);
-        Assert.Equal(initialTarget!.X, movingObjectTarget!.X, 3);
-        Assert.Equal(initialTarget.Y, movingObjectTarget.Y, 3);
-        Assert.Equal(initialTarget.Z, movingObjectTarget.Z, 3);
+        Assert.NotNull(boardingStop.BoardingPosition);
+        Assert.Equal(boardingStop.BoardingPosition!.X, initialTarget!.X, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Y, initialTarget.Y, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Z, initialTarget.Z, 3);
+        Assert.Equal(boardingStop.BoardingPosition.X, movingObjectTarget!.X, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Y, movingObjectTarget.Y, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Z, movingObjectTarget.Z, 3);
     }
 
     [Fact]
@@ -474,8 +494,8 @@ public class TransportWaitingLogicTests
         Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
         Assert.True(logic.MissedBoardingAttempt);
         Assert.NotNull(target);
-        Assert.Equal(boardingStop.WaitPosition.X, target!.X, 1);
-        Assert.Equal(boardingStop.WaitPosition.Y, target.Y, 1);
+        Assert.Equal(boardingStop.NavigationPosition.X, target!.X, 1);
+        Assert.Equal(boardingStop.NavigationPosition.Y, target.Y, 1);
     }
 
     [Fact]
@@ -768,7 +788,7 @@ public class TransportWaitingLogicTests
     }
 
     [Fact]
-    public void WaitingForArrival_ZeppelinObjectOriginOffset_ReturnsTransportLocalDeckBoardingWaypoint()
+    public void WaitingForArrival_ZeppelinObjectOriginOffset_ReturnsConfiguredBoardingPositionBeforeAttachment()
     {
         var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
         var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
@@ -779,20 +799,16 @@ public class TransportWaitingLogicTests
 
         Assert.Equal(TransportPhase.Boarding, logic.CurrentPhase);
         Assert.NotNull(target);
-        Assert.NotNull(boardingStop.TransportBoardingOffset);
-        var expected = LocalToWorld(
-            boardingStop.TransportBoardingOffset!,
-            new Position(1318.1f, -4658.0f, 71.9f),
-            orientation: 0f);
-        Assert.Equal(expected.X, target!.X, 3);
-        Assert.Equal(expected.Y, target.Y, 3);
-        Assert.Equal(expected.Z, target.Z, 3);
+        Assert.NotNull(boardingStop.BoardingPosition);
+        Assert.Equal(boardingStop.BoardingPosition!.X, target!.X, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Y, target.Y, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Z, target.Z, 3);
         Assert.True(
-            boardingStop.TransportBoardingOffset.Y <= -3.0f,
-            "The zeppelin boarding offset should be inside the lower deck surface, not at the side contact edge.");
+            boardingStop.TransportBoardingOffset!.Y <= -3.0f,
+            "The zeppelin boarding offset should remain a post-attachment lower deck settle point.");
         Assert.True(
-            DistanceXY(target, boardingStop.BoardingPosition!) > 2.0f,
-            "Active boarding waypoint should advance beyond the configured staging point once the stopped zeppelin is present.");
+            DistanceXY(target, boardingStop.BoardingPosition!) <= 0.1f,
+            "Active pre-attachment boarding should hold the configured gangplank point instead of steering into deck-local space.");
     }
 
     [Fact]
@@ -1021,16 +1037,6 @@ public class TransportWaitingLogicTests
         var dx = a.X - b.X;
         var dy = a.Y - b.Y;
         return MathF.Sqrt(dx * dx + dy * dy);
-    }
-
-    private static Position LocalToWorld(Position localPosition, Position transportPosition, float orientation)
-    {
-        var cos = MathF.Cos(orientation);
-        var sin = MathF.Sin(orientation);
-        return new Position(
-            transportPosition.X + (localPosition.X * cos) - (localPosition.Y * sin),
-            transportPosition.Y + (localPosition.X * sin) + (localPosition.Y * cos),
-            transportPosition.Z + localPosition.Z);
     }
 
     private static List<DynamicObjectProto> MakeElevatorAtZ(float z)

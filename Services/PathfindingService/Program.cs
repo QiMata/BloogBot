@@ -7,30 +7,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 
 namespace PathfindingService
 {
     public class Program
     {
-        private static class NativeEnvironment
-        {
-            [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-            private static extern int _putenv(string envString);
-
-            public static void Set(string key, string value)
-            {
-                try
-                {
-                    _ = _putenv($"{key}={value}");
-                }
-                catch
-                {
-                    // Best-effort only; managed environment is still set below.
-                }
-            }
-        }
-
         public static void Main(string[] args)
         {
             var previousDataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
@@ -43,8 +24,7 @@ namespace PathfindingService
                     resolvedDataDir += Path.DirectorySeparatorChar;
                 }
 
-                Environment.SetEnvironmentVariable("WWOW_DATA_DIR", resolvedDataDir);
-                NativeEnvironment.Set("WWOW_DATA_DIR", resolvedDataDir);
+                NativeProcessEnvironment.Set("WWOW_DATA_DIR", resolvedDataDir);
                 Console.WriteLine($"[PathfindingService] WWOW_DATA_DIR set to: {resolvedDataDir}");
             }
             else
@@ -256,7 +236,7 @@ namespace PathfindingService
                         var ipAddress = configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
                         var port = int.Parse(configuration["PathfindingService:Port"] ?? "5000");
 
-                        return new PathfindingSocketServer(ipAddress, port, logger);
+                        return new PathfindingSocketServer(ipAddress, port, logger, configuration);
                     });
 
                     // Register the hosted service

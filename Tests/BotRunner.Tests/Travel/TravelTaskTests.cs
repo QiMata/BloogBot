@@ -105,14 +105,17 @@ public class TravelTaskTests
     }
 
     [Fact]
-    public void Update_LiveOrgrimmarZeppelinDeckPosition_CompletesWalkLegAndStartsTransportLeg()
+    public void Update_LiveOrgrimmarZeppelinApproachPosition_CompletesWalkLegAndStartsTransportLeg()
     {
         var taskStack = new Stack<IBotTask>();
         var diagnostics = new List<string>();
 
         var crossroads = new Position(-437.0f, -2596.0f, 96.0f);
         var orgrimmarFlightMaster = new Position(1677.0f, -4315.0f, 62.0f);
-        var liveBoardingPosition = new Position(1320.142944f, -4653.158691f, 53.891945f);
+        // Phase 5.3.5: ApproachPosition is now anchored to Zeppelin Master Frezza
+        // (NPC 9564) at the upper-platform deck (z=53.63), not the prior
+        // wrong-tier city-ground point (z=51.6).
+        var liveApproachPosition = new Position(1331.11f, -4649.45f, 53.6269f);
         var undercityTarget = new Position(1584.0f, 242.0f, -52.0f);
         var playerPosition = crossroads;
         var mapId = 1u;
@@ -185,7 +188,7 @@ public class TravelTaskTests
         task.Update();
         task.Update();
 
-        playerPosition = liveBoardingPosition;
+        playerPosition = liveApproachPosition;
         mounted = false;
         task.Update();
         task.Update();
@@ -549,20 +552,21 @@ public class TravelTaskTests
         transportGuid = 0UL;
         task.Update();
 
-        Assert.Contains(diagnostics, message => message.Contains("start index=0 type=Zeppelin", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("start index=1 type=Zeppelin", StringComparison.Ordinal));
         Assert.Contains(diagnostics, message => message.Contains("phase=Riding", StringComparison.Ordinal));
         Assert.DoesNotContain(diagnostics, message => message.Contains("transport_map_changed", StringComparison.Ordinal));
-        Assert.DoesNotContain(diagnostics, message => message.Contains("complete index=0", StringComparison.Ordinal));
-        Assert.DoesNotContain(diagnostics, message => message.Contains("start index=1 type=Walk", StringComparison.Ordinal));
+        Assert.DoesNotContain(diagnostics, message => message.Contains("complete index=1", StringComparison.Ordinal));
+        Assert.DoesNotContain(diagnostics, message => message.Contains("start index=2 type=Walk", StringComparison.Ordinal));
         Assert.Same(task, taskStack.Peek());
     }
 
     [Fact]
-    public void Update_ScheduledZeppelinAtDock_DirectlyBoardsFromConfiguredDeckPosition()
+    public void Update_ScheduledZeppelinAtDock_DirectsToConfiguredBoardingPositionBeforeDeckOffset()
     {
         var taskStack = new Stack<IBotTask>();
         var diagnostics = new List<string>();
         var gameObjects = new List<IWoWGameObject>();
+        var pathRequests = new List<(Position Start, Position End)>();
         var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
         var boardingStop = TransportData.ZeppelinUndercityOrgrimmar.Stops[0];
@@ -611,7 +615,10 @@ public class TravelTaskTests
                 It.IsAny<Race>(),
                 It.IsAny<Gender>()))
             .Returns((uint _, Position start, Position end, IReadOnlyList<DynamicObjectProto>? _, bool _, Race _, Gender _) =>
-                CreateSupportedPathResult(start, end));
+            {
+                pathRequests.Add((start, end));
+                return CreateSupportedPathResult(start, end);
+            });
         var container = new Mock<IDependencyContainer>(MockBehavior.Loose);
         container.SetupGet(c => c.PathfindingClient).Returns(pathfinding.Object);
         context.SetupGet(c => c.Container).Returns(container.Object);
@@ -628,13 +635,13 @@ public class TravelTaskTests
         task.Update();
 
         var stagingPoint = boardingStop.BoardingPosition!;
+        var preAttachmentPosition = new Position(
+            stagingPoint.X + 3f,
+            stagingPoint.Y,
+            stagingPoint.Z);
         var transportFacing = -MathF.PI / 2f;
         var transportOrigin = new Position(1318.1f, -4658.0f, 71.9f);
-        var expectedBoardingTarget = LocalToWorld(
-            boardingStop.TransportBoardingOffset!,
-            transportOrigin,
-            transportFacing);
-        playerPosition = stagingPoint;
+        playerPosition = preAttachmentPosition;
         gameObjects.Add(CreateTransportGameObject(
             0x164871UL,
             TransportData.ZeppelinUndercityOrgrimmar.GameObjectEntry,
@@ -647,12 +654,37 @@ public class TravelTaskTests
         objectManager.Invocations.Clear();
         moveCalls.Clear();
 
-        AdvanceTask(task, ref now, 6);
-        Assert.NotEmpty(moveCalls);
+        AdvanceTask(task, ref now, 8);
+        Assert.True(
+            moveCalls.Count > 0,
+            "Expected pre-attachment boarding movement. "
+            + $"pathRequests={FormatPathRequests(pathRequests)} "
+            + $"trace={FormatTrace(task.GetNavigationTraceSnapshot())} "
+            + $"diagnostics={string.Join(" | ", diagnostics)}");
         var firstMove = moveCalls[0];
-        Assert.Equal(expectedBoardingTarget.X, firstMove.Position.X, 3);
-        Assert.Equal(expectedBoardingTarget.Y, firstMove.Position.Y, 3);
-        Assert.Equal(expectedBoardingTarget.Z, firstMove.Position.Z, 3);
+        Assert.Equal(stagingPoint.X, firstMove.Position.X, 3);
+        Assert.Equal(stagingPoint.Y, firstMove.Position.Y, 3);
+        Assert.Equal(stagingPoint.Z, firstMove.Position.Z, 3);
+
+        var updatedTransportOrigin = new Position(1319.1f, -4657.5f, 71.9f);
+        gameObjects.Clear();
+        gameObjects.Add(CreateTransportGameObject(
+            0x164871UL,
+            TransportData.ZeppelinUndercityOrgrimmar.GameObjectEntry,
+            TransportData.ZeppelinUndercityOrgrimmar.DisplayId,
+            updatedTransportOrigin,
+            transportFacing).Object);
+        objectManager.Invocations.Clear();
+        moveCalls.Clear();
+
+        now = now.AddSeconds(1);
+        task.Update();
+
+        Assert.NotEmpty(moveCalls);
+        var updatedMove = moveCalls[0];
+        Assert.Equal(stagingPoint.X, updatedMove.Position.X, 3);
+        Assert.Equal(stagingPoint.Y, updatedMove.Position.Y, 3);
+        Assert.Equal(stagingPoint.Z, updatedMove.Position.Z, 3);
 
         playerPosition = new Position(6.7f, 0.1f, -18.6f);
         transportGuid = 0x164871UL;
@@ -679,6 +711,115 @@ public class TravelTaskTests
         objectManager.Verify(o => o.StopAllMovement(), Times.AtLeastOnce);
         Assert.Contains(diagnostics, message => message.Contains("phase=Boarding", StringComparison.Ordinal));
         Assert.Contains(diagnostics, message => message.Contains("phase=Riding", StringComparison.Ordinal));
+        Assert.Same(task, taskStack.Peek());
+    }
+
+    [Fact]
+    public void Update_ScheduledZeppelinBoardingFromLiveMissPosition_UsesPathfindingToConfiguredBoardingPoint()
+    {
+        var taskStack = new Stack<IBotTask>();
+        var diagnostics = new List<string>();
+        var gameObjects = new List<IWoWGameObject>();
+        var pathRequests = new List<(Position Start, Position End)>();
+        var moveCalls = new List<(Position Position, float Facing)>();
+        var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var boardingStop = TransportData.ZeppelinUndercityOrgrimmar.Stops[0];
+        var destinationStop = TransportData.ZeppelinUndercityOrgrimmar.Stops[1];
+        var target = new Position(1584.0f, 242.0f, -52.0f);
+        var playerPosition = boardingStop.BoardingPosition!;
+        var mapId = boardingStop.MapId;
+        var missedLiveBoardingPosition = new Position(1336.7f, -4658.3f, 49.3f);
+
+        var player = new Mock<IWoWLocalPlayer>(MockBehavior.Loose);
+        player.SetupGet(p => p.MapId).Returns(() => mapId);
+        player.SetupGet(p => p.Position).Returns(() => playerPosition);
+        player.SetupGet(p => p.MovementFlags).Returns(MovementFlags.MOVEFLAG_NONE);
+        player.SetupGet(p => p.TransportGuid).Returns(0UL);
+        player.SetupGet(p => p.IsMounted).Returns(false);
+        player.SetupGet(p => p.Race).Returns(Race.Tauren);
+        player.SetupGet(p => p.Gender).Returns(Gender.Male);
+        player.Setup(p => p.GetFacingForPosition(It.IsAny<Position>()))
+            .Returns((Position position) => FacingXY(playerPosition, position));
+
+        var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
+        objectManager.SetupGet(o => o.Player).Returns(player.Object);
+        objectManager.SetupGet(o => o.Objects).Returns(() => gameObjects.Cast<IWoWObject>());
+        objectManager.SetupGet(o => o.GameObjects).Returns(() => gameObjects);
+        objectManager.SetupGet(o => o.Units).Returns([]);
+        objectManager.SetupGet(o => o.IsInFlight).Returns(false);
+        objectManager
+            .Setup(o => o.MoveToward(It.IsAny<Position>(), It.IsAny<float>()))
+            .Callback<Position, float>((position, facing) => moveCalls.Add((position, facing)));
+
+        var context = new Mock<IBotContext>(MockBehavior.Loose);
+        context.SetupGet(c => c.ObjectManager).Returns(objectManager.Object);
+        context.SetupGet(c => c.BotTasks).Returns(taskStack);
+        context.SetupGet(c => c.Config).Returns(new BotBehaviorConfig());
+        context.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(diagnostics.Add);
+
+        var pathfinding = new Mock<PathfindingClient>(MockBehavior.Loose);
+        pathfinding
+            .Setup(p => p.GetPathResult(
+                It.IsAny<uint>(),
+                It.IsAny<Position>(),
+                It.IsAny<Position>(),
+                It.IsAny<IReadOnlyList<DynamicObjectProto>?>(),
+                It.IsAny<bool>(),
+                It.IsAny<Race>(),
+                It.IsAny<Gender>()))
+            .Returns((uint _, Position start, Position end, IReadOnlyList<DynamicObjectProto>? _, bool _, Race _, Gender _) =>
+            {
+                pathRequests.Add((start, end));
+                return CreateSupportedPathResult(start, end);
+            });
+        var container = new Mock<IDependencyContainer>(MockBehavior.Loose);
+        container.SetupGet(c => c.PathfindingClient).Returns(pathfinding.Object);
+        context.SetupGet(c => c.Container).Returns(container.Object);
+
+        var task = new TravelTask(
+            context.Object,
+            destinationStop.MapId,
+            target,
+            new TravelOptions { PlayerFaction = TravelFaction.Horde },
+            arrivalRadius: 15f,
+            utcNowProvider: () => now);
+        taskStack.Push(task);
+
+        task.Update();
+        now = now.AddSeconds(1);
+        task.Update();
+
+        gameObjects.Add(CreateTransportGameObject(
+            0x164871UL,
+            TransportData.ZeppelinUndercityOrgrimmar.GameObjectEntry,
+            TransportData.ZeppelinUndercityOrgrimmar.DisplayId,
+            new Position(1318.1f, -4658.0f, 71.9f)).Object);
+        playerPosition = missedLiveBoardingPosition;
+        pathRequests.Clear();
+        moveCalls.Clear();
+
+        now = now.AddSeconds(1);
+        task.Update();
+
+        Assert.Contains(pathRequests, request =>
+            DistanceXY(request.Start, missedLiveBoardingPosition) <= 0.1f
+            && DistanceXY(request.End, boardingStop.BoardingPosition!) <= 0.1f
+            && Math.Abs(request.End.Z - boardingStop.BoardingPosition!.Z) <= 0.1f);
+        Assert.NotEmpty(moveCalls);
+        Assert.Equal(boardingStop.BoardingPosition!.X, moveCalls[0].Position.X, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Y, moveCalls[0].Position.Y, 3);
+        Assert.Equal(boardingStop.BoardingPosition.Z, moveCalls[0].Position.Z, 3);
+        Assert.DoesNotContain(diagnostics, message =>
+            message.Contains("[TRAVEL_TRANSPORT_MISSED_BOARDING]", StringComparison.Ordinal));
+
+        diagnostics.Clear();
+        AdvanceTask(task, ref now, 6);
+
+        Assert.Contains(diagnostics, message =>
+            message.Contains("[TRAVEL_TRANSPORT_BOARDING_STALL]", StringComparison.Ordinal)
+            && message.Contains("replanned=", StringComparison.Ordinal));
         Assert.Same(task, taskStack.Peek());
     }
 
@@ -752,7 +893,7 @@ public class TravelTaskTests
             new Position(1318.1f, -4658.0f, 71.9f)).Object);
         now = now.AddSeconds(1);
         task.Update();
-        AdvanceTask(task, ref now, 6);
+        AdvanceTask(task, ref now, 8);
 
         gameObjects.Clear();
         objectManager.Invocations.Clear();
@@ -839,7 +980,7 @@ public class TravelTaskTests
             new Position(1318.1f, -4658.0f, 71.9f)).Object);
         now = now.AddSeconds(1);
         task.Update();
-        AdvanceTask(task, ref now, 6);
+        AdvanceTask(task, ref now, 8);
 
         playerPosition = new Position(playerPosition.X, playerPosition.Y, playerPosition.Z - 20f);
         objectManager.Invocations.Clear();
@@ -1022,6 +1163,27 @@ public class TravelTaskTests
         }
     }
 
+    private static string FormatPathRequests(IReadOnlyList<(Position Start, Position End)> pathRequests)
+        => pathRequests.Count == 0
+            ? "[]"
+            : "["
+                + string.Join(
+                    " ",
+                    pathRequests.Select(request =>
+                        $"{FormatPosition(request.Start)}->{FormatPosition(request.End)}"))
+                + "]";
+
+    private static string FormatTrace(NavigationTraceSnapshot? trace)
+        => trace == null
+            ? "null"
+            : $"reason={trace.LastReplanReason} resolution={trace.LastResolution} idx={trace.CurrentWaypointIndex} "
+                + $"active={FormatPosition(trace.ActiveWaypoint)} planned={trace.PlannedWaypoints.Length}";
+
+    private static string FormatPosition(Position? position)
+        => position == null
+            ? "none"
+            : $"({position.X:F1},{position.Y:F1},{position.Z:F1})";
+
     private static PathfindingRouteResult CreateSupportedPathResult(Position start, Position end)
         => new(
             Corners: [start, end],
@@ -1057,16 +1219,6 @@ public class TravelTaskTests
     {
         var facing = MathF.Atan2(to.Y - from.Y, to.X - from.X);
         return facing < 0f ? facing + (MathF.PI * 2f) : facing;
-    }
-
-    private static Position LocalToWorld(Position localPosition, Position transportPosition, float orientation)
-    {
-        var cos = MathF.Cos(orientation);
-        var sin = MathF.Sin(orientation);
-        return new Position(
-            transportPosition.X + (localPosition.X * cos) - (localPosition.Y * sin),
-            transportPosition.Y + (localPosition.X * sin) + (localPosition.Y * cos),
-            transportPosition.Z + localPosition.Z);
     }
 
     private static Mock<IWoWGameObject> CreateTransportGameObject(

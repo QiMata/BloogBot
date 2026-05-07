@@ -54,11 +54,12 @@ objects. The current data root has the required inputs:
 - `gameobject_spawns.json`
 - `map1_build.log` with `[GO] map=1 tile=... loaded ... gameobject meshes`
 
-The currently available local generator source under `D:/MaNGOS/source` does
-not contain the historical gameobject-spawn bake patch, even though
-`D:/MaNGOS/data/map1_build.log` proves a patched generator was previously used.
-Restore that patch before regenerating tiles; otherwise the next generation
-will drop the object geometry.
+The currently available local generator source under `D:/MaNGOS/source`
+contains the required gameobject-spawn bake patch. Before regenerating tiles,
+verify `contrib/mmap/src/TileWorker.cpp` still reads
+`vmaps/temp_gameobject_models`, reads `gameobject_spawns.json`, applies the
+WoW-to-Recast axis conversion for GO bounds, and logs
+`[GO] map=... tile=...: marked ... gameobject span boxes`.
 
 Refresh the spawn file with the read-only exporter:
 
@@ -89,7 +90,7 @@ those locations naturally.
 Run the repo-owned audit before and after any mmap regeneration:
 
 ```powershell
-dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --no-restore -- D:/MaNGOS/data
+dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -- D:/MaNGOS/data --map 1 --build-log <focused-generation-log> --write-manifest tmp/test-runtime/results-navigation/detour_mmap_map1_org_crossroads_manifest.json
 ```
 
 Then run the route-level clearance gate before any live Crossroads ->
@@ -116,6 +117,9 @@ The audit checks:
 
 - `config.json` contains Tauren Male `agentRadius`, `agentHeight`, and Recast
   cell settings for the audited map.
+- Audited `.mmtile` wrappers are exact mmap schema version `6`, Detour
+  wrapper version `7`, Detour payload version `7`, and 20-byte wrapper
+  headers with uint32 `usesLiquids`.
 - Audited `.mmtile` Detour headers were actually generated with Tauren-sized
   `walkableRadius` and `walkableHeight`.
 - `temp_gameobject_models` and `gameobject_spawns.json` contain model-backed
@@ -123,9 +127,34 @@ The audit checks:
 - The selected build log proves the audited tiles loaded or marked baked GO
   geometry. Use `--build-log <path>` when auditing a focused regeneration log
   instead of the default `map<N>_build.log`.
+- When `--write-manifest <path>` is supplied, the audit writes a manifest with
+  schema version, source data root, generator path, Detour/mmap versions,
+  ref width, agent dimensions, per-tile hashes, and a combined nav-data
+  signature.
 
 MaNGOS writes tile files as `mapId + tileY + tileX`; for example generator
 tile `28,40` is `mmaps/0014028.mmtile`.
+
+Focused Detour/mmap migration result on 2026-05-05:
+
+- Regenerated map `1` tiles `28,39` through `30,41` with
+  `D:/MaNGOS/source/bin/MoveMapGenerator.exe`, `--threads 1`, `--silent`, and
+  `--configInputPath config.json`.
+- Backup of the previous focused tiles:
+  `D:/MaNGOS/data/mmaps/detour-migration-backup-20260504-201741`.
+- Generation log:
+  `tmp/test-runtime/results-navigation/mmap_regen_map1_org_crossroads_20260504-201741.log`.
+- Audit/manifest:
+  `tmp/test-runtime/results-navigation/detour_mmap_map1_org_crossroads_manifest.json`.
+- Manifest nav-data signature:
+  `F9CE41288735205E8504D476D38C425C196177512DC18E71C5BFB0E9E2678E69`.
+- Every focused tile audited as mmap wrapper version `6`, Detour wrapper
+  version `7`, Detour payload version `7`, `usesLiquids=1`,
+  `walkableRadius=1.0247`, `walkableHeight=2.6250`, and
+  `walkableClimb=1.8000`.
+- GO marking counts in the focused log:
+  `28,39=56`, `28,40=13`, `28,41=71`, `29,39=22`, `29,40=38`,
+  `29,41=16`, `30,39=20`, `30,40=23`, `30,41=12`.
 
 Current audit result after the full fresh map `0` and map `1` regeneration on
 2026-05-01:

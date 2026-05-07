@@ -9,6 +9,10 @@
 #include <stdio.h>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
+#include <limits>
+#include <set>
+#include <sstream>
 
 #if defined(_WIN32)
 #define NOMINMAX
@@ -24,6 +28,139 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
 Navigation* Navigation::s_singletonInstance = NULL;
 
+namespace
+{
+	std::string Trim(std::string value)
+	{
+		const auto first = value.find_first_not_of(" \t\r\n");
+		if (first == std::string::npos)
+			return {};
+
+		const auto last = value.find_last_not_of(" \t\r\n");
+		return value.substr(first, last - first + 1);
+	}
+
+	std::string ToLower(std::string value)
+	{
+		for (char& c : value)
+			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		return value;
+	}
+
+	bool TryParseUnsigned(const std::string& token, unsigned int& value)
+	{
+		if (token.empty())
+			return false;
+
+		unsigned long parsed = 0;
+		for (char c : token)
+		{
+			if (c < '0' || c > '9')
+				return false;
+
+			parsed = (parsed * 10) + static_cast<unsigned long>(c - '0');
+			if (parsed > std::numeric_limits<unsigned int>::max())
+				return false;
+		}
+
+		value = static_cast<unsigned int>(parsed);
+		return true;
+	}
+
+	std::vector<unsigned int> DiscoverAvailableMapIds(const std::string& mmapsPath)
+	{
+		std::set<unsigned int> ids;
+		if (!std::filesystem::exists(mmapsPath))
+			return {};
+
+		for (const auto& entry : std::filesystem::directory_iterator(mmapsPath))
+		{
+			if (!entry.is_regular_file())
+				continue;
+
+			const auto& path = entry.path();
+			if (path.extension() != ".mmap")
+				continue;
+
+			unsigned int mapId = 0;
+			if (TryParseUnsigned(path.stem().string(), mapId))
+				ids.insert(mapId);
+		}
+
+		if (ids.empty())
+		{
+			for (const auto& entry : std::filesystem::directory_iterator(mmapsPath))
+			{
+				if (!entry.is_regular_file())
+					continue;
+
+				const auto& path = entry.path();
+				if (path.extension() != ".mmtile")
+					continue;
+
+				const auto stem = path.stem().string();
+				if (stem.size() < 3)
+					continue;
+
+				unsigned int mapId = 0;
+				if (TryParseUnsigned(stem.substr(0, 3), mapId))
+					ids.insert(mapId);
+			}
+		}
+
+		return std::vector<unsigned int>(ids.begin(), ids.end());
+	}
+
+	std::vector<unsigned int> ParseConfiguredMapIds(const std::string& rawValue, const std::string& mmapsPath)
+	{
+		const auto normalized = ToLower(Trim(rawValue));
+		if (normalized.empty()
+			|| normalized == "0"
+			|| normalized == "false"
+			|| normalized == "off"
+			|| normalized == "none")
+		{
+			return {};
+		}
+
+		if (normalized == "all" || normalized == "*")
+			return DiscoverAvailableMapIds(mmapsPath);
+
+		std::string separated = rawValue;
+		for (char& c : separated)
+		{
+			if (c == ';' || c == '|' || c == ' ' || c == '\t' || c == '\r' || c == '\n')
+				c = ',';
+		}
+
+		std::set<unsigned int> ids;
+		std::stringstream stream(separated);
+		std::string token;
+		while (std::getline(stream, token, ','))
+		{
+			token = Trim(token);
+			const auto lower = ToLower(token);
+			if (lower.empty())
+				continue;
+
+			if (lower == "all" || lower == "*")
+				return DiscoverAvailableMapIds(mmapsPath);
+
+			unsigned int mapId = 0;
+			if (TryParseUnsigned(token, mapId))
+			{
+				ids.insert(mapId);
+			}
+			else
+			{
+				printf("[Navigation] Ignoring invalid WWOW_NAVIGATION_PRELOAD_MAPS token: %s\n", token.c_str());
+			}
+		}
+
+		return std::vector<unsigned int>(ids.begin(), ids.end());
+	}
+}
+
 Navigation* Navigation::GetInstance()
 {
 	if (s_singletonInstance == NULL)
@@ -35,11 +172,8 @@ void Navigation::Initialize()
 {
 	dtAllocSetCustom(dtCustomAlloc, dtCustomFree);
 
-	MMAP::MMapManager* manager = MMAP::MMapFactory::createOrGetMMapManager();
-
-	InitializeMapsForContinent(manager, 0);
-	InitializeMapsForContinent(manager, 1);
-	InitializeMapsForContinent(manager, 389);
+	MMAP::MMapFactory::createOrGetMMapManager();
+	PreloadConfiguredMaps();
 }
 
 void Navigation::Release()
@@ -60,6 +194,28 @@ const dtNavMeshQuery* Navigation::GetQueryForMap(uint32_t mapId)
 	const dtNavMeshQuery* query = manager->GetNavMeshQuery(mapId, 0);
 
 	return query;
+}
+
+void Navigation::PreloadConfiguredMaps()
+{
+	const char* configuredMaps = std::getenv("WWOW_NAVIGATION_PRELOAD_MAPS");
+	if (!configuredMaps || !configuredMaps[0])
+		return;
+
+	const auto mmapsPath = GetMmapsPath();
+	const auto mapIds = ParseConfiguredMapIds(configuredMaps, mmapsPath);
+	PreloadMaps(mapIds);
+}
+
+void Navigation::PreloadMaps(const std::vector<unsigned int>& mapIds)
+{
+	if (mapIds.empty())
+		return;
+
+	MMAP::MMapManager* manager = MMAP::MMapFactory::createOrGetMMapManager();
+	printf("[Navigation] Configured map preload count=%zu\n", mapIds.size());
+	for (const auto mapId : mapIds)
+		InitializeMapsForContinent(manager, mapId);
 }
 
 XYZ* Navigation::CalculatePath(unsigned int mapId, XYZ start, XYZ end, bool smoothPath, int* length)

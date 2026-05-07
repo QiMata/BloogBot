@@ -1,13 +1,16 @@
 using BotCommLayer;
 using GameData.Core.Models;
 using Pathfinding;
+using PathfindingService.RouteCaching;
 using PathfindingService.Repository;
 using PathfindingService.RoutePacks;
 using GameData.Core.Constants;
 using GameData.Core.Enums;
+using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 using System.Collections.Generic;
 using System;
+using System.Globalization;
 using System.IO;
 using Microsoft.Extensions.Logging;
 using System.Linq;
@@ -62,16 +65,24 @@ namespace PathfindingService
     /// Physics, GroundZ, LOS, and navmesh queries are handled locally by the bot's
     /// in-process Navigation.dll.
     /// </summary>
-    public class PathfindingSocketServer(string ipAddress, int port, ILogger logger)
+    public class PathfindingSocketServer(string ipAddress, int port, ILogger logger, IConfiguration? configuration = null)
         : ProtobufSocketServer<PathfindingRequest, PathfindingResponse>(ipAddress, port, logger)
     {
+        private const string NativePreloadMapsEnvironmentVariable = "WWOW_NAVIGATION_PRELOAD_MAPS";
+        private const string DynamicObjectOverlayEnvironmentVariable = "WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY";
+
         private Navigation _navigation;
+        private readonly IConfiguration? _configuration = configuration;
         private StaticRoutePackCache? _mainPathCache;
+        private readonly INavigationDataSignatureProvider _navigationDataSignatureProvider = new FileSystemNavigationDataSignatureProvider();
+        private readonly RouteResultCache _routeResultCache = new();
         private readonly RequestScopedDynamicObjectOverlay _dynamicObjectOverlay = new(new NativeDynamicObjectOverlayRegistry());
         private volatile bool _isInitialized;
         private readonly object _initLock = new();
 
         public bool IsInitialized => _isInitialized;
+        public RouteResultCacheSnapshot RouteCacheStats => _routeResultCache.Snapshot;
+        public NavigationPerformanceSnapshot NavigationPerformanceStats => NavigationPerformanceMetrics.Snapshot;
 
         public void InitializeNavigation()
         {
@@ -82,19 +93,146 @@ namespace PathfindingService
                 WriteStatus(false, "Loading navigation data...", []);
 
                 var initSw = System.Diagnostics.Stopwatch.StartNew();
-                logger.LogInformation("Loading Navigation data and preloading maps...");
+                logger.LogInformation("Loading Navigation data...");
                 _navigation = new Navigation();
+                var loadedMaps = PreloadConfiguredMaps(_navigation);
                 logger.LogInformation("Navigation loaded in {Elapsed:F1}s", initSw.Elapsed.TotalSeconds);
                 WarmStaticRoutePacks();
 
                 _isInitialized = true;
 
-                DiagnoseNativePathfinding(logger);
+                if (IsStartupDiagnosticsEnabled())
+                    DiagnoseNativePathfinding(logger);
+                else
+                    logger.LogInformation("[Navigation] startup diagnostics disabled; set Navigation:RunStartupDiagnostics=true to run native sample paths");
 
-                var loadedMaps = new List<uint>();
                 WriteStatus(true, "Ready - navigation initialized", loadedMaps);
                 logger.LogInformation("Navigation system initialized.");
             }
+        }
+
+        private IReadOnlyList<uint> PreloadConfiguredMaps(Navigation navigation)
+        {
+            var configuredValue = ResolveConfiguredPreloadMapSetting(_configuration);
+            var mapIds = ParsePreloadMapIds(configuredValue, Environment.GetEnvironmentVariable("WWOW_DATA_DIR"));
+            if (mapIds.Count == 0)
+            {
+                logger.LogInformation("[Navigation] startup mmap preload disabled");
+                return mapIds;
+            }
+
+            logger.LogInformation(
+                "[Navigation] preloading {Count} configured map(s): {Maps}",
+                mapIds.Count,
+                string.Join(",", mapIds));
+
+            foreach (var mapId in mapIds)
+                navigation.PreloadMap(mapId);
+
+            return mapIds;
+        }
+
+        private bool IsStartupDiagnosticsEnabled()
+        {
+            var configured = _configuration?["Navigation:RunStartupDiagnostics"]
+                ?? _configuration?["PathfindingService:Navigation:RunStartupDiagnostics"];
+            return bool.TryParse(configured, out var enabled) && enabled;
+        }
+
+        public static string ResolveConfiguredPreloadMapSetting(IConfiguration? configuration)
+        {
+            var nativeEnvironmentValue = Environment.GetEnvironmentVariable(NativePreloadMapsEnvironmentVariable);
+            if (!string.IsNullOrWhiteSpace(nativeEnvironmentValue))
+                return nativeEnvironmentValue;
+
+            return configuration?["Navigation:PreloadMaps"]
+                ?? configuration?["PathfindingService:Navigation:PreloadMaps"]
+                ?? "none";
+        }
+
+        public static IReadOnlyList<uint> ParsePreloadMapIds(string? configuredValue, string? dataRoot)
+        {
+            var value = configuredValue?.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+                return [];
+
+            if (value.Equals("none", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("off", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("false", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("0", StringComparison.OrdinalIgnoreCase))
+            {
+                return [];
+            }
+
+            if (value.Equals("all", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("*", StringComparison.OrdinalIgnoreCase))
+            {
+                return DiscoverAvailableMMapIds(dataRoot);
+            }
+
+            var normalized = value
+                .Replace(';', ',')
+                .Replace('|', ',')
+                .Replace(' ', ',')
+                .Replace('\t', ',')
+                .Replace('\r', ',')
+                .Replace('\n', ',');
+
+            var result = new SortedSet<uint>();
+            foreach (var token in normalized.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (token.Equals("all", StringComparison.OrdinalIgnoreCase)
+                    || token.Equals("*", StringComparison.OrdinalIgnoreCase))
+                {
+                    return DiscoverAvailableMMapIds(dataRoot);
+                }
+
+                if (uint.TryParse(token, NumberStyles.None, CultureInfo.InvariantCulture, out var mapId))
+                    result.Add(mapId);
+            }
+
+            return result.ToArray();
+        }
+
+        private static IReadOnlyList<uint> DiscoverAvailableMMapIds(string? dataRoot)
+        {
+            if (string.IsNullOrWhiteSpace(dataRoot))
+                return [];
+
+            string mmapsDir;
+            try
+            {
+                mmapsDir = Path.Combine(Path.GetFullPath(dataRoot), "mmaps");
+            }
+            catch
+            {
+                return [];
+            }
+
+            if (!Directory.Exists(mmapsDir))
+                return [];
+
+            var ids = new SortedSet<uint>();
+            foreach (var path in Directory.EnumerateFiles(mmapsDir, "*.mmap"))
+            {
+                if (uint.TryParse(Path.GetFileNameWithoutExtension(path), NumberStyles.None, CultureInfo.InvariantCulture, out var mapId))
+                    ids.Add(mapId);
+            }
+
+            if (ids.Count == 0)
+            {
+                foreach (var path in Directory.EnumerateFiles(mmapsDir, "*.mmtile"))
+                {
+                    var stem = Path.GetFileNameWithoutExtension(path);
+                    if (stem.Length >= 3
+                        && uint.TryParse(stem[..3], NumberStyles.None, CultureInfo.InvariantCulture, out var mapId))
+                    {
+                        ids.Add(mapId);
+                    }
+                }
+            }
+
+            return ids.ToArray();
         }
 
         private void WarmStaticRoutePacks()
@@ -102,20 +240,37 @@ namespace PathfindingService
             var warmSw = System.Diagnostics.Stopwatch.StartNew();
             _mainPathCache = new StaticRoutePackCache(
                 StaticRoutePackCache.CreateDefaultSeeds(),
-                new FileSystemNavigationDataSignatureProvider(),
+                _navigationDataSignatureProvider,
                 seed =>
                 {
                     var (radius, height) = seed.Capsule;
-                    return _navigation.CalculateValidatedPath(
-                        seed.MapId,
-                        seed.StartAnchor,
-                        seed.EndAnchor,
-                        seed.SmoothPath,
-                        radius,
-                        height);
+                    return seed.GenerationMode == StaticRoutePackGenerationMode.CorridorSeedPath
+                        ? _navigation.CalculateRoutePackSeedPath(
+                            seed.MapId,
+                            seed.StartAnchor,
+                            seed.EndAnchor,
+                            seed.SmoothPath,
+                            radius,
+                            height)
+                        : _navigation.CalculateStaticRoutePackPath(
+                            seed.MapId,
+                            seed.StartAnchor,
+                            seed.EndAnchor,
+                            seed.SmoothPath,
+                            radius,
+                            height);
                 });
 
-            _mainPathCache.WarmUpAll(logger);
+            if (IsStaticRoutePackStartupWarmupEnabled())
+            {
+                _mainPathCache.WarmUpAll(logger);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "[ROUTE_PACK] startup warmup disabled; set WWOW_ROUTE_PACK_STARTUP_WARMUP=1 to pre-generate route packs during service initialization");
+            }
+
             logger.LogInformation(
                 "[ROUTE_PACK] startup warmup completed in {ElapsedMs}ms packs={PackCount}",
                 warmSw.ElapsedMilliseconds,
@@ -134,7 +289,7 @@ namespace PathfindingService
                 logger.LogError("[DIAG] BOTH maps returned no path — mmaps may not be loaded.");
         }
 
-        private void WriteStatus(bool isReady, string message, List<uint> loadedMaps)
+        private void WriteStatus(bool isReady, string message, IEnumerable<uint> loadedMaps)
         {
             try
             {
@@ -142,7 +297,7 @@ namespace PathfindingService
                 {
                     IsReady = isReady,
                     StatusMessage = message,
-                    LoadedMaps = loadedMaps,
+                    LoadedMaps = loadedMaps.ToList(),
                     Timestamp = DateTime.UtcNow,
                     ProcessId = Environment.ProcessId
                 }.WriteToFile();
@@ -219,15 +374,29 @@ namespace PathfindingService
                 }
             }
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "[PATH_DIAG] id={RequestId} race={Race} gender={Gender} capsule=({Radius:F4},{Height:F4}) start=({SX:F1},{SY:F1},{SZ:F1}) end=({EX:F1},{EY:F1},{EZ:F1})",
                 requestId, req.Race, req.Gender, agentRadius, agentHeight, start.X, start.Y, start.Z, end.X, end.Y, end.Z);
 
             NavigationPathResult pathResult;
             StaticRoutePackMatch? routePackMatch = null;
+            RouteResultCacheStatus routeCacheStatus;
             try
             {
-                var routePackDynamicObjects = req.NearbyObjects
+                var dynamicOverlayEnabled = IsDynamicObjectOverlayEnabled();
+                IReadOnlyList<DynamicObjectProto> effectiveNearbyObjects = dynamicOverlayEnabled
+                    ? req.NearbyObjects
+                    : Array.Empty<DynamicObjectProto>();
+
+                if (!dynamicOverlayEnabled && req.NearbyObjects.Count > 0 && dist2D >= 100f)
+                {
+                    logger.LogInformation(
+                        "[PATH_REQ] id={RequestId} ignored {OverlayCount} nearby object overlay(s); static mmap navigation is authoritative unless dynamic overlay is explicitly enabled",
+                        requestId,
+                        req.NearbyObjects.Count);
+                }
+
+                var routePackDynamicObjects = effectiveNearbyObjects
                     .Select(static obj => new StaticRoutePackDynamicObject(
                         obj.DisplayId,
                         new XYZ(obj.X, obj.Y, obj.Z),
@@ -241,21 +410,44 @@ namespace PathfindingService
                     (Gender)req.Gender,
                     req.Straight,
                     StaticRoutePackCache.DefaultRoutePolicy,
-                    req.NearbyObjects.Count,
+                    effectiveNearbyObjects.Count,
                     routePackDynamicObjects);
+                var routeCacheRequest = new RouteResultCacheRequest(
+                    req.MapId,
+                    start,
+                    end,
+                    req.Race,
+                    req.Gender,
+                    agentRadius,
+                    agentHeight,
+                    req.Straight,
+                    StaticRoutePackCache.DefaultRoutePolicy,
+                    _navigationDataSignatureProvider.GetSignature(req.MapId),
+                    RouteResultCache.RouteAlgorithmSignature,
+                    CreateDynamicOverlaySignature(effectiveNearbyObjects.Count));
 
-                if (_mainPathCache is not null &&
-                    _mainPathCache.TryGetPath(routePackRequest, agentRadius, agentHeight, out pathResult, out var match))
+                var lookup = _routeResultCache.GetOrAdd(
+                    routeCacheRequest,
+                    () =>
+                    {
+                        if (_mainPathCache is not null &&
+                            _mainPathCache.TryGetPath(routePackRequest, agentRadius, agentHeight, out var cachedPathResult, out var match))
+                        {
+                            return new RouteComputationResult(cachedPathResult, match);
+                        }
+
+                        var overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
+                            req.MapId, effectiveNearbyObjects,
+                            () => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight, agentRadius, agentHeight),
+                            logger, operationName: "path");
+                        return new RouteComputationResult(overlayResult.Value);
+                    });
+
+                routeCacheStatus = lookup.Status;
+                pathResult = lookup.Result.PathResult;
+                if (lookup.Result.MatchMetadata is StaticRoutePackMatch match)
                 {
                     routePackMatch = match;
-                }
-                else
-                {
-                    var overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
-                        req.MapId, req.NearbyObjects,
-                        () => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight, agentRadius, agentHeight),
-                        logger, operationName: "path");
-                    pathResult = overlayResult.Value;
                 }
             }
             finally
@@ -277,12 +469,64 @@ namespace PathfindingService
                     cacheHit.NavDataSignature.Length <= 12 ? cacheHit.NavDataSignature : cacheHit.NavDataSignature[..12]);
             }
 
-            logger.LogInformation(
-                "[PATH_DIAG] id={RequestId} result={Result} pathLen={PathLen} rawPathLen={RawPathLen} blockedIdx={BlockedIdx} blockedReason={BlockedReason} elapsedMs={ElapsedMs}",
-                requestId, pathResult.Result, sanitizedPath.Length, pathResult.RawPath.Length,
-                pathResult.BlockedSegmentIndex?.ToString() ?? "none",
-                pathResult.BlockedReason,
-                requestSw.ElapsedMilliseconds);
+            if (ShouldLogRouteCacheStatus(routeCacheStatus, dist2D, requestId))
+            {
+                var cacheStats = _routeResultCache.Snapshot;
+                logger.LogInformation(
+                    "[ROUTE_CACHE] id={RequestId} status={Status} entries={Entries} inFlight={InFlight} hits={Hits} misses={Misses} coalesced={Coalesced} expired={Expired} bypassed={Bypassed} negativeStores={NegativeStores} slow={Slow}",
+                    requestId,
+                    routeCacheStatus,
+                    cacheStats.EntryCount,
+                    cacheStats.InFlightCount,
+                    cacheStats.HitCount,
+                    cacheStats.MissCount,
+                    cacheStats.CoalescedCount,
+                    cacheStats.ExpiredCount,
+                    cacheStats.BypassCount,
+                    cacheStats.StoredNegativeCount,
+                    cacheStats.SlowRequestCount);
+            }
+
+            if (ShouldLogPathResultDiagnostic(routeCacheStatus, pathResult, requestSw.ElapsedMilliseconds, dist2D, requestId))
+            {
+                logger.LogInformation(
+                    "[PATH_DIAG] id={RequestId} result={Result} pathLen={PathLen} rawPathLen={RawPathLen} blockedIdx={BlockedIdx} blockedReason={BlockedReason} elapsedMs={ElapsedMs}",
+                    requestId, pathResult.Result, sanitizedPath.Length, pathResult.RawPath.Length,
+                    pathResult.BlockedSegmentIndex?.ToString() ?? "none",
+                    pathResult.BlockedReason,
+                    requestSw.ElapsedMilliseconds);
+            }
+
+            if (ShouldLogNavigationMetrics(routeCacheStatus, pathResult, requestSw.ElapsedMilliseconds, dist2D, requestId))
+            {
+                var navStats = NavigationPerformanceMetrics.Snapshot;
+                logger.LogInformation(
+                    "[NAV_METRICS] id={RequestId} validated={Validated} avgValidatedMs={AvgValidatedMs:F1} maxValidatedMs={MaxValidatedMs} resolver={Resolver} avgResolverMs={AvgResolverMs:F1} nativeFind={NativeFind} avgNativeFindMs={AvgNativeFindMs:F1} maxNativeFindMs={MaxNativeFindMs} corridor={Corridor} avgCorridorMs={AvgCorridorMs:F1} managedValidation={ManagedValidation} avgValidationMs={AvgValidationMs:F1} repairs(los={LosRepairs},wall={WallRepairs},steep={SteepRepairs},localLayer={LocalLayerRepairs},segment={SegmentRepairs},dynamic={DynamicRepairs}) blocked={Blocked} noPath={NoPath} slow(path={SlowPath},native={SlowNative},validation={SlowValidation})",
+                    requestId,
+                    navStats.ValidatedPathRequests,
+                    navStats.AverageValidatedPathMs,
+                    navStats.ValidatedPathMaxMs,
+                    navStats.PathResolverAttempts,
+                    navStats.AveragePathResolverMs,
+                    navStats.NativeFindPathAttempts,
+                    navStats.AverageNativeFindPathMs,
+                    navStats.NativeFindPathMaxMs,
+                    navStats.CorridorQueryAttempts,
+                    navStats.AverageCorridorQueryMs,
+                    navStats.ManagedValidationRuns,
+                    navStats.AverageManagedValidationMs,
+                    navStats.LongLineOfSightRepairCount,
+                    navStats.StaticWallRepairCount,
+                    navStats.SteepAffordanceRepairCount,
+                    navStats.LocalPhysicsLayerRepairCount,
+                    navStats.SegmentValidationRepairCount,
+                    navStats.DynamicOverlayRepairCount,
+                    navStats.BlockedPathResults,
+                    navStats.NoPathResults,
+                    navStats.SlowValidatedPathCount,
+                    navStats.SlowNativeFindPathCount,
+                    navStats.SlowManagedValidationCount);
+            }
 
             if (dist2D >= 100f)
             {
@@ -375,6 +619,73 @@ namespace PathfindingService
 
         private static bool IsFinitePoint(XYZ p)
             => float.IsFinite(p.X) && float.IsFinite(p.Y) && float.IsFinite(p.Z);
+
+        private static bool ShouldLogRouteCacheStatus(RouteResultCacheStatus status, float dist2D, long requestId)
+            => status != RouteResultCacheStatus.Miss
+                || dist2D >= 100f
+                || requestId % 100 == 0;
+
+        private static bool ShouldLogNavigationMetrics(
+            RouteResultCacheStatus routeCacheStatus,
+            NavigationPathResult pathResult,
+            long elapsedMs,
+            float dist2D,
+            long requestId)
+            => elapsedMs >= 1_000
+                || dist2D >= 100f
+                || requestId % 100 == 0
+                || routeCacheStatus is RouteResultCacheStatus.Bypassed or RouteResultCacheStatus.Coalesced or RouteResultCacheStatus.Expired
+                || string.Equals(pathResult.Result, "no_path", StringComparison.OrdinalIgnoreCase)
+                || pathResult.Result.StartsWith("repaired_", StringComparison.OrdinalIgnoreCase)
+                || pathResult.BlockedSegmentIndex.HasValue
+                || !string.Equals(pathResult.BlockedReason, "none", StringComparison.OrdinalIgnoreCase);
+
+        private static bool ShouldLogPathResultDiagnostic(
+            RouteResultCacheStatus routeCacheStatus,
+            NavigationPathResult pathResult,
+            long elapsedMs,
+            float dist2D,
+            long requestId)
+            => elapsedMs >= 1_000
+                || dist2D >= 100f
+                || requestId % 100 == 0
+                || routeCacheStatus is RouteResultCacheStatus.Bypassed or RouteResultCacheStatus.Coalesced or RouteResultCacheStatus.Expired
+                || string.Equals(pathResult.Result, "no_path", StringComparison.OrdinalIgnoreCase)
+                || pathResult.Result.StartsWith("repaired_", StringComparison.OrdinalIgnoreCase)
+                || pathResult.BlockedSegmentIndex.HasValue
+                || !string.Equals(pathResult.BlockedReason, "none", StringComparison.OrdinalIgnoreCase);
+
+        public static bool IsDynamicObjectOverlayEnabled(IConfiguration? configuration = null)
+        {
+            var configured = Environment.GetEnvironmentVariable(DynamicObjectOverlayEnvironmentVariable)
+                ?? configuration?["Navigation:EnableDynamicObjectOverlay"]
+                ?? configuration?["PathfindingService:Navigation:EnableDynamicObjectOverlay"];
+            return IsTruthy(configured);
+        }
+
+        private bool IsDynamicObjectOverlayEnabled()
+            => IsDynamicObjectOverlayEnabled(_configuration);
+
+        private static bool IsTruthy(string? configured)
+            => !string.IsNullOrWhiteSpace(configured)
+                && (string.Equals(configured.Trim(), "1", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(configured.Trim(), "true", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(configured.Trim(), "yes", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(configured.Trim(), "on", StringComparison.OrdinalIgnoreCase));
+
+        private static string CreateDynamicOverlaySignature(int nearbyObjectCount)
+        {
+            if (nearbyObjectCount == 0)
+                return RouteResultCache.StaticOverlaySignature;
+
+            return $"dynamic:{nearbyObjectCount}";
+        }
+
+        private static bool IsStaticRoutePackStartupWarmupEnabled()
+            => string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_ROUTE_PACK_STARTUP_WARMUP"),
+                "1",
+                StringComparison.OrdinalIgnoreCase);
 
         private static PathfindingResponse ErrorResponse(string msg)
             => new() { Error = new Error { Message = msg } };

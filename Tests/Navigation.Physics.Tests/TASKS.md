@@ -35,6 +35,55 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
+- Last updated: `2026-05-05`
+- Pass result: `delta shipped; Detour v7/mmap v6 regenerated-tile contract green`
+- Last delta:
+  - Extended the managed Detour ABI structs for mmap wrapper header size,
+    native pointer size, 64-bit ref bit split, file `usesLiquids`, and strict
+    header compatibility.
+  - Updated `DetourCompatibilityTests` to require mmap wrapper version `6`,
+    Detour tile/payload version `7`, 64-bit `dtPolyRef`/`dtTileRef`, and the
+    local `salt=16`, `tile=28`, `poly=20` split.
+  - Re-ran the compatibility tests after regenerating the focused map `1`
+    tiles `28,39` through `30,41`; the native probe loaded the v6/v7 tile
+    data through `Navigation.dll`.
+- Validation:
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DetourCompatibilityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=detour_mmap_v6_contract.trx" --results-directory tmp/test-runtime/results-navigation` -> `passed (2/2)`.
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DetourCompatibilityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=detour_mmap_v6_regenerated_tiles.trx" --results-directory tmp/test-runtime/results-navigation` -> `passed (2/2)`.
+- Practical implication:
+  - Any Detour vendor refresh or mmap schema change must update the native
+    probe, managed struct, and exact version assertions in one change.
+- Exact next command:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
+- Last updated: `2026-05-04`
+- Pass result: `delta shipped; Detour compatibility tests green`
+- Last delta:
+  - Added managed interop structs and P/Invokes for
+    `GetDetourCompatibilityInfo(...)` and
+    `ProbeMMapTileCompatibility(...)`.
+  - Added `DetourCompatibilityTests` to pin the current Detour ABI before any
+    vendor refresh: `DT_NAVMESH_VERSION = 7`, compiled 64-bit
+    `dtPolyRef`/`dtTileRef` through `DT_POLYREF64`, current mmap wrapper
+    evidence, successful native tile load, and preserved local Detour feature
+    surface.
+  - Recorded that a local 32-bit-ref native build made the Orgrimmar static
+    route gate return `no_path`, so future mmap regeneration should pick its
+    target format explicitly instead of inheriting current flags by accident.
+- Validation:
+  - `$MSBUILD = "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"; & $MSBUILD Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded` with existing native warnings.
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DetourCompatibilityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=detour_compatibility_baseline.trx" --results-directory tmp/test-runtime/results-navigation` -> `passed (2/2)`.
+- Practical implication:
+  - Detour upgrade work now has a deterministic ABI/data probe before vendor
+    replacement. The current green baseline preserves 64-bit refs and Detour
+    tile version `7`; any regenerated mmap format change should update these
+    probes and rerun route gates.
+- Exact next command:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+- Previous handoff:
 - Last updated: `2026-04-15`
 - Pass result: `master D4 elevator deferral revalidated green`
 - Last delta:

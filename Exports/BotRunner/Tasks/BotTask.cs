@@ -93,7 +93,8 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
             _navPath = NavigationPathFactory.Create(
                 Container.PathfindingClient,
                 ObjectManager,
-                routePolicy);
+                routePolicy,
+                diagnosticSink: BotContext.AddDiagnosticMessage);
             _navPathPolicy = routePolicy;
         }
 

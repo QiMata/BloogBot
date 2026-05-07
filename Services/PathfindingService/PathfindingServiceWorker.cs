@@ -30,7 +30,8 @@ namespace PathfindingService
             _pathfindingSocketServer = new PathfindingSocketServer(
                 ipAddress,
                 port,
-                _loggerFactory.CreateLogger<PathfindingSocketServer>()
+                _loggerFactory.CreateLogger<PathfindingSocketServer>(),
+                _configuration
             );
 
             _logger.LogInformation($"PathfindingService socket server started. Now loading navigation and physics data...");

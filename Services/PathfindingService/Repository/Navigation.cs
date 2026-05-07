@@ -14,13 +14,27 @@ namespace PathfindingService.Repository
         int? BlockedSegmentIndex,
         string BlockedReason = "none");
 
+    public enum NativePathResolutionKind
+    {
+        Native,
+        Corridor,
+        CorridorFallback,
+        CorridorFirst,
+        CorridorFirstExpanded,
+        SmoothFallbackAfterStraightStaticBreak
+    }
+
     public readonly record struct NativePathResolution(
         XYZ[] Path,
         int? BlockedSegmentIndex = null,
         string BlockedReason = "none",
-        bool WasRepairedAroundBlockedSegment = false)
+        bool WasRepairedAroundBlockedSegment = false,
+        NativePathResolutionKind Kind = NativePathResolutionKind.Native)
     {
-        public static NativePathResolution FromPath(XYZ[] path) => new(path, null, "none", false);
+        public static NativePathResolution FromPath(
+            XYZ[] path,
+            NativePathResolutionKind kind = NativePathResolutionKind.Native)
+            => new(path, null, "none", false, kind);
     }
 
     public enum NativeSegmentAffordance : uint
@@ -53,11 +67,22 @@ namespace PathfindingService.Repository
         private static readonly float[] RepairAlongSegmentSamples = [0.05f, 0.12f, 0.35f, 0.5f, 0.65f];
         private static readonly TimeSpan DynamicOverlayRepairBudget = TimeSpan.FromSeconds(2);
         private static readonly TimeSpan EarlyStaticRepairBudget = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan StaticRoutePackRepairBudget = TimeSpan.FromSeconds(15);
         private static readonly TimeSpan PostAffordanceStaticRepairBudget = TimeSpan.FromSeconds(3);
         private static readonly TimeSpan OverlayStraightStaticRepairBudget = TimeSpan.FromMilliseconds(750);
         private const float CombineWaypointEpsilon = 0.25f;
         private const float LongSegmentLosRepairThreshold = 35f;
         private const float LongSegmentDensifySpacing = 24f;
+        private const float CorridorFirstPathMinDistance = 80f;
+        private const float CorridorFirstPathMaxDistance = 450f;
+        private const float CorridorFirstHighVerticalPathMaxDistance = 650f;
+        private const float CorridorFirstHighVerticalMinDelta = 50f;
+        private const int BoundedCorridorStaticRepairScanLimit = 96;
+        private const int BoundedCorridorLocalPhysicsLayerProjectionScanLimit = 32;
+        private const int BoundedCorridorLocalPhysicsRepairScanLimit = 48;
+        private const int BoundedCorridorFloatingSupportProjectionLimit = 32;
+        private const float FloatingSupportProjectionMinDrop = 1.0f;
+        private const float FloatingSupportProjectionMaxDrop = 6.0f;
         private const float NativePathEndpointMaxDistance = 8.0f;
         private const float SmoothCorridorExpansionMinSegmentLength = 6f;
         private const float SmoothFallbackAfterStraightStaticBreakMinDistance = 50f;
@@ -74,6 +99,9 @@ namespace PathfindingService.Repository
         private const float EarlySupportDuplicateHorizontalDistance = 0.35f;
         private const float EarlySupportProjectionMaxDelta = 4.0f;
         private const float EarlySupportGroundClearance = 0.05f;
+        private const float EarlySupportProjectionReachabilityMaxRouteDistance = 500.0f;
+        private const float EarlySupportProjectionReachableMaxEndpointDistance = 0.90f;
+        private const float EarlySupportProjectionReachableMaxZDelta = 0.75f;
         private const float ShortVerticalLayerSpikeMinDelta = 2.5f;
         private const float ShortVerticalLayerSpikeNeighborZTolerance = 1.5f;
         private const float ShortVerticalLayerSpikeMaxLegLength = 5.0f;
@@ -82,6 +110,10 @@ namespace PathfindingService.Repository
         private const float ShortHorizontalDetourSpikeMaxBridgeLength = 4.5f;
         private const float ShortHorizontalDetourSpikeMaxBridgeZDelta = 1.5f;
         private const float ShortHorizontalDetourSpikeMinDetourRatio = 1.8f;
+        private const int LargeVerticalLayerExcursionMaxInteriorWaypoints = 12;
+        private const float LargeVerticalLayerExcursionMinDelta = 12.0f;
+        private const float LargeVerticalLayerExcursionMaxBridgeLength = 12.0f;
+        private const float LargeVerticalLayerExcursionMaxEndpointZDelta = 8.0f;
         private const int LocalStaticRepairPointCandidateLimit = 12;
         private const int LocalStaticRepairRouteCandidateLimit = 16;
         private const int LocalStaticRepairRouteAnchorScanLimit = 12;
@@ -93,7 +125,7 @@ namespace PathfindingService.Repository
         private static readonly float[] LocalStaticRepairBaseOffsets = [1.25f, 2f, 3.5f, 5f, 8f, 12f, 16f];
         private static readonly float[] LocalStaticRepairEscapeDistances = [1.75f, 2.5f, 4f, 6f, 8f];
         private static readonly TimeSpan LongSegmentRepairBudget = TimeSpan.FromSeconds(2);
-        private static readonly TimeSpan AffordanceRepairBudget = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan AffordanceRepairBudget = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan AffordanceRepairNativeLegDirectSearchBudget = TimeSpan.FromSeconds(5);
         private static readonly float[] AffordanceRepairAlongSamples = [0.25f, 0.35f, 0.5f, 0.65f, 0.75f];
         private static readonly float[] AffordanceRepairLateralOffsets = [6f, -6f, 8f, -8f, 10f, -10f, 12f, -12f, 16f, -16f, 20f, -20f, 24f, -24f];
@@ -117,8 +149,8 @@ namespace PathfindingService.Repository
         private const int AffordanceRepairNativeLegEndpointTrimLimit = 4;
         private const int AffordanceRepairCumulativeSmoothScanLimit = 384;
         private const int AffordanceRepairStraightScanLimit = 160;
-        private const int AffordanceRepairMaxRepairs = 4;
-        private const int LocalPhysicsLayerProjectionSmoothScanLimit = 128;
+        private const int AffordanceRepairMaxRepairs = 8;
+        private const int LocalPhysicsLayerProjectionSmoothScanLimit = 384;
         private const int LocalPhysicsLayerProjectionMaxPasses = 2;
         private const float LocalPhysicsLayerProjectionMinSegmentLength = 0.75f;
         private const float LocalPhysicsLayerProjectionMaxSegmentLength = 8.0f;
@@ -134,6 +166,27 @@ namespace PathfindingService.Repository
         private const float LocalPhysicsRouteLayerRejectZDelta = 5.0f;
         private const float LocalPhysicsRouteLateralRejectDistance = 3.0f;
         private const float LocalPhysicsBlockingWallProgressThreshold = 0.75f;
+        private const float LocalPhysicsLowDisplacementRatio = 0.50f;
+        private const float LocalPhysicsMovementStallAverageRatio = 0.45f;
+        private const int LocalPhysicsMovementStallMinWallSteps = 4;
+        private const int LocalPhysicsMovementStallMinLowDisplacementWallSteps = 4;
+        private const int LocalPhysicsMovementStallMinConsecutiveLowProgressSteps = 3;
+        private const float LocalPhysicsMovementStallProgressEpsilon = 0.01f;
+        private static readonly TimeSpan LocalPhysicsReachabilityRepairBudget = TimeSpan.FromSeconds(3);
+        private const int LocalPhysicsReachabilityRepairMaxRepairs = 8;
+        private const float LocalPhysicsReachabilityRepairMaxDistance = 8.0f;
+        private static readonly float[] LocalPhysicsReachabilityBridgeSamples = [0.35f, 0.5f, 0.65f];
+        private static readonly float[] LocalPhysicsReachabilityBridgeLateralOffsets = [0.75f, -0.75f, 1.5f, -1.5f, 2.5f, -2.5f, 3.5f, -3.5f];
+        private static readonly float[] LocalPhysicsReachabilityRepairDistances = [2.0f, 4.0f, 6.0f, 8.0f];
+        private static readonly float[] LocalPhysicsReachabilityProgressDistances = [0.75f, 1.25f, 1.75f, 2.5f, 3.5f];
+        private const float LocalPhysicsReachabilityProgressMinRise = 0.30f;
+        private const float LocalPhysicsReachabilityProgressMaxOvershoot = 0.35f;
+        private const float LocalPhysicsReachabilityProgressMaxLateralDeviation = 4.0f;
+        private const float LocalPhysicsReachabilityProgressMaxBacktrack = 0.75f;
+        private const float LocalPhysicsReachabilityRouteProgressMinAdvance = 0.75f;
+        private const float LocalPhysicsReachabilityRouteProgressMinImprovement = 0.50f;
+        private const float LocalPhysicsReachabilityRouteProgressMaxOvershoot = 1.50f;
+        private const float LocalPhysicsReachabilityRouteProgressMaxZDelta = 2.0f;
         private const uint MoveFlagForward = 0x00000001;
         private const uint MoveFlagJumping = 0x00002000;
         private const uint MoveFlagFallingFar = 0x00004000;
@@ -231,6 +284,10 @@ namespace PathfindingService.Repository
             float MaxUpwardRouteZDelta,
             float MaxAbsoluteRouteZDelta,
             float MaxLateralDistance,
+            float AverageDisplacementRatio,
+            int WallContactSteps,
+            int LowDisplacementWallSteps,
+            int MaxConsecutiveLowProgressSteps,
             XYZ FinalPosition,
             string Reason);
 
@@ -260,6 +317,9 @@ namespace PathfindingService.Repository
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern void PathArrFree(IntPtr pathArr);
+
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "PreloadMap")]
+        private static extern void PreloadMapNative(uint mapId);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "SegmentIntersectsDynamicObjects")]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -390,7 +450,8 @@ namespace PathfindingService.Repository
             string SuccessResult,
             int? BlockedSegmentIndex,
             string BlockedReason,
-            bool PathBlocked)
+            bool PathBlocked,
+            NativePathResolutionKind ResolutionKind)
         {
             public bool HasPath => Path.Length > 0;
             public bool IsUsable => HasPath && !PathBlocked;
@@ -465,6 +526,9 @@ namespace PathfindingService.Repository
         public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
             => CalculateValidatedPath(mapId, start, end, smoothPath).Path;
 
+        public void PreloadMap(uint mapId)
+            => PreloadMapNative(mapId);
+
         public static NativeSegmentAffordanceResult ClassifySegmentAffordance(
             uint mapId,
             XYZ start,
@@ -501,7 +565,8 @@ namespace PathfindingService.Repository
             XYZ end,
             float agentRadius = 0.6f,
             float agentHeight = 2.0f,
-            float maxResolvedEndZDelta = 1.0f)
+            float maxResolvedEndZDelta = 1.0f,
+            bool requireLocalPhysicsReachability = true)
         {
             if (Distance2D(start, end) >= EarlyStaticRepairLosMinSegmentLength &&
                 !HasLineOfSightStrict(mapId, start, end))
@@ -523,13 +588,433 @@ namespace PathfindingService.Repository
                 return false;
             }
 
+            if (requireLocalPhysicsReachability &&
+                IsLocalPhysicsReachabilityBreak(mapId, start, end, agentRadius, agentHeight))
+            {
+                return false;
+            }
+
             return affordance.Affordance is NativeSegmentAffordance.Walk
                 or NativeSegmentAffordance.StepUp
                 or NativeSegmentAffordance.SafeDrop;
         }
 
+        public static bool IsSegmentLocallyReachableForAgent(
+            uint mapId,
+            XYZ start,
+            XYZ end,
+            float agentRadius = 0.6f,
+            float agentHeight = 2.0f)
+            => !IsLocalPhysicsReachabilityBreak(mapId, start, end, agentRadius, agentHeight);
+
         public NavigationPathResult CalculateValidatedPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
             float agentRadius = 0.6f, float agentHeight = 2.0f)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var result = CalculateValidatedPathCore(mapId, start, end, smoothPath, agentRadius, agentHeight);
+            NavigationPerformanceMetrics.RecordValidatedPath(stopwatch.Elapsed, result);
+            return result;
+        }
+
+        public NavigationPathResult CalculateRoutePackSeedPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
+            float agentRadius = 0.6f, float agentHeight = 2.0f)
+        {
+            var resolution = FindPathCorridorResolution(mapId, start, end);
+            var rawPath = resolution.Path ?? Array.Empty<XYZ>();
+            if (rawPath.Length == 0)
+                return new NavigationPathResult(Array.Empty<XYZ>(), Array.Empty<XYZ>(), "no_path", null);
+
+            var pathForPack = rawPath;
+            var resultTag = "route_pack_corridor";
+
+            return BuildBoundedCorridorValidationResult(
+                mapId,
+                rawPath,
+                pathForPack,
+                smoothPath,
+                agentRadius,
+                agentHeight,
+                resultTag,
+                "route_pack_corridor_static_los",
+                "route_pack_corridor_local_physics_layer",
+                resolution.BlockedSegmentIndex,
+                resolution.BlockedReason);
+        }
+
+        public NavigationPathResult CalculateStaticRoutePackPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
+            float agentRadius = 0.6f, float agentHeight = 2.0f)
+        {
+            var generated = CalculateValidatedPath(mapId, start, end, smoothPath, agentRadius, agentHeight);
+            return EnforceStaticRoutePackSupport(mapId, generated, smoothPath, agentRadius, agentHeight);
+        }
+
+        private static NavigationPathResult EnforceStaticRoutePackSupport(
+            uint mapId,
+            NavigationPathResult generated,
+            bool smoothPath,
+            float agentRadius,
+            float agentHeight)
+        {
+            var rawPath = generated.RawPath.Length > 0 ? generated.RawPath : generated.Path;
+            if (generated.Path.Length < 2 ||
+                generated.BlockedSegmentIndex.HasValue ||
+                !string.Equals(generated.BlockedReason, "none", StringComparison.OrdinalIgnoreCase))
+            {
+                return generated;
+            }
+
+            var pathForValidation = generated.Path;
+            var resultTag = generated.Result;
+            var repairCount = 0;
+
+            if (smoothPath)
+            {
+                pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
+                pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+            }
+
+            pathForValidation = RepairEarlyStaticBreaks(
+                mapId,
+                pathForValidation,
+                agentRadius,
+                agentHeight,
+                out var staticRepairCount,
+                out var staticBlockedIdx,
+                out var staticBlockedReason,
+                maxScanSegments: int.MaxValue,
+                repairBudgetOverride: StaticRoutePackRepairBudget,
+                allowRouteRepair: true);
+            if (staticRepairCount > 0)
+            {
+                repairCount += staticRepairCount;
+                resultTag = "route_pack_static_los";
+            }
+
+            pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
+            pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+            pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+            pathForValidation = RepairAffordanceBreaks(
+                mapId,
+                pathForValidation,
+                agentRadius,
+                agentHeight,
+                out var affordanceRepairCount,
+                out var affordanceBlockedIdx,
+                out var affordanceBlockedReason,
+                includeCumulativeBreaks: true,
+                maxScanSegments: int.MaxValue,
+                includeLocalPhysicsReachabilityBreaks: true);
+            if (affordanceRepairCount > 0)
+            {
+                repairCount += affordanceRepairCount;
+                resultTag = "route_pack_local_physics";
+            }
+
+            pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
+            pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+            pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+            pathForValidation = NormalizeLocalPhysicsReachableLayers(
+                mapId,
+                pathForValidation,
+                agentRadius,
+                agentHeight,
+                out var localPhysicsProjectionCount,
+                int.MaxValue);
+            if (localPhysicsProjectionCount > 0)
+            {
+                repairCount += localPhysicsProjectionCount;
+                resultTag = "route_pack_local_physics";
+            }
+
+            pathForValidation = RepairAffordanceBreaks(
+                mapId,
+                pathForValidation,
+                agentRadius,
+                agentHeight,
+                out var finalRepairCount,
+                out var finalBlockedIdx,
+                out var finalBlockedReason,
+                includeCumulativeBreaks: true,
+                maxScanSegments: int.MaxValue,
+                includeLocalPhysicsReachabilityBreaks: true);
+            if (finalRepairCount > 0)
+            {
+                repairCount += finalRepairCount;
+                resultTag = "route_pack_local_physics";
+            }
+
+            if (staticBlockedIdx.HasValue)
+            {
+                return new NavigationPathResult(pathForValidation, rawPath, resultTag, staticBlockedIdx, staticBlockedReason);
+            }
+
+            if (affordanceBlockedIdx.HasValue)
+            {
+                return new NavigationPathResult(pathForValidation, rawPath, resultTag, affordanceBlockedIdx, affordanceBlockedReason);
+            }
+
+            if (finalBlockedIdx.HasValue)
+            {
+                return new NavigationPathResult(pathForValidation, rawPath, resultTag, finalBlockedIdx, finalBlockedReason);
+            }
+
+            pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+
+            if (FindFirstLineOfSightBreak(mapId, pathForValidation) is int losBlockedIdx)
+            {
+                return new NavigationPathResult(pathForValidation, rawPath, resultTag, losBlockedIdx, "static_los");
+            }
+
+            if (FindFirstLocalPhysicsReachabilityBreak(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    int.MaxValue,
+                    out var localPhysicsBlockedIdx))
+            {
+                return new NavigationPathResult(pathForValidation, rawPath, resultTag, localPhysicsBlockedIdx, "local_physics_layer");
+            }
+
+            if (FindFirstStraightAffordanceBreak(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    int.MaxValue,
+                    out var straightBlockedIdx,
+                    out var straightBlockedReason))
+            {
+                return new NavigationPathResult(pathForValidation, rawPath, resultTag, straightBlockedIdx, straightBlockedReason);
+            }
+
+            return repairCount > 0
+                ? new NavigationPathResult(pathForValidation, rawPath, resultTag, null, "none")
+                : generated;
+        }
+
+        private static NavigationPathResult BuildBoundedCorridorValidationResult(
+            uint mapId,
+            XYZ[] rawPath,
+            XYZ[] initialPath,
+            bool smoothPath,
+            float agentRadius,
+            float agentHeight,
+            string successResult,
+            string staticRepairResult,
+            string localPhysicsResult,
+            int? blockedIdx,
+            string? blockedReason)
+        {
+            if (initialPath.Length == 0)
+                return new NavigationPathResult(Array.Empty<XYZ>(), rawPath, "no_path", null);
+
+            var pathForValidation = initialPath;
+            var resultTag = successResult;
+            var normalizedBlockedReason = NormalizeBlockReason(blockedReason);
+
+            if (smoothPath)
+            {
+                var losRepairedPath = RepairLongLineOfSightBreaks(
+                    mapId,
+                    pathForValidation,
+                    out var losRepairCount,
+                    out _,
+                    out _);
+
+                if (losRepairedPath.Length > 0)
+                    pathForValidation = losRepairedPath;
+
+                if (losRepairCount > 0)
+                    resultTag = staticRepairResult;
+            }
+
+            pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+            pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
+            pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+            pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+            pathForValidation = RepairEarlyStaticBreaks(
+                mapId,
+                pathForValidation,
+                agentRadius,
+                agentHeight,
+                out var earlyStaticRepairCount,
+                out _,
+                out _,
+                maxScanSegments: BoundedCorridorStaticRepairScanLimit,
+                repairBudgetOverride: TimeSpan.FromSeconds(3),
+                allowRouteRepair: true);
+            if (earlyStaticRepairCount > 0)
+                resultTag = staticRepairResult;
+
+            pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
+            pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+            pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+            pathForValidation = RemoveLargeVerticalLayerExcursions(
+                mapId,
+                pathForValidation,
+                agentRadius,
+                agentHeight,
+                int.MaxValue,
+                out var largeLayerExcursionRepairCount);
+            if (largeLayerExcursionRepairCount > 0)
+                resultTag = localPhysicsResult;
+            pathForValidation = NormalizeFloatingSupportLayers(
+                mapId,
+                pathForValidation,
+                BoundedCorridorFloatingSupportProjectionLimit,
+                out var floatingSupportProjectionCount);
+            if (floatingSupportProjectionCount > 0)
+                resultTag = localPhysicsResult;
+
+            if (smoothPath)
+            {
+                pathForValidation = NormalizeLocalPhysicsReachableLayers(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    out var localPhysicsProjectionCount,
+                    BoundedCorridorLocalPhysicsLayerProjectionScanLimit);
+                if (localPhysicsProjectionCount > 0)
+                {
+                    resultTag = localPhysicsResult;
+                    pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                    pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                    pathForValidation = RemoveLargeVerticalLayerExcursions(
+                        mapId,
+                        pathForValidation,
+                        agentRadius,
+                        agentHeight,
+                        int.MaxValue,
+                        out var postLocalLayerExcursionRepairCount);
+                    if (postLocalLayerExcursionRepairCount > 0)
+                        resultTag = localPhysicsResult;
+                    pathForValidation = NormalizeFloatingSupportLayers(
+                        mapId,
+                        pathForValidation,
+                        BoundedCorridorFloatingSupportProjectionLimit,
+                        out var postLocalFloatingSupportProjectionCount);
+                    if (postLocalFloatingSupportProjectionCount > 0)
+                        resultTag = localPhysicsResult;
+                }
+            }
+
+            if (FindFirstLineOfSightBreak(mapId, pathForValidation).HasValue)
+            {
+                pathForValidation = DensifyStaticLineOfSightBreaks(mapId, pathForValidation);
+                pathForValidation = RemoveLargeVerticalLayerExcursions(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    int.MaxValue,
+                    out var postLosLayerExcursionRepairCount);
+                if (postLosLayerExcursionRepairCount > 0)
+                    resultTag = localPhysicsResult;
+                if (FindFirstLineOfSightBreak(mapId, pathForValidation) is null)
+                    resultTag = staticRepairResult;
+            }
+
+            if (smoothPath && ShouldProbeLocalPhysicsReachability(pathForValidation))
+            {
+                pathForValidation = RepairAffordanceBreaks(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    out var localPhysicsRepairCount,
+                    out _,
+                    out _,
+                    includeCumulativeBreaks: false,
+                    maxScanSegments: BoundedCorridorLocalPhysicsRepairScanLimit,
+                    includeLocalPhysicsReachabilityBreaks: true);
+
+                if (localPhysicsRepairCount > 0)
+                {
+                    resultTag = localPhysicsResult;
+                    pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
+                    pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                    pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                    pathForValidation = RemoveLargeVerticalLayerExcursions(
+                        mapId,
+                        pathForValidation,
+                        agentRadius,
+                        agentHeight,
+                        int.MaxValue,
+                        out var postRepairLayerExcursionCount);
+                    if (postRepairLayerExcursionCount > 0)
+                        resultTag = localPhysicsResult;
+                    pathForValidation = DensifyStaticLineOfSightBreaks(mapId, pathForValidation);
+                }
+            }
+
+            pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+            if (smoothPath && ShouldProbeLocalPhysicsReachability(pathForValidation))
+            {
+                pathForValidation = RepairLocalPhysicsReachabilityBreaks(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    out var finalDensifiedLocalPhysicsRepairCount,
+                    BoundedCorridorLocalPhysicsRepairScanLimit);
+
+                if (finalDensifiedLocalPhysicsRepairCount > 0)
+                {
+                    resultTag = localPhysicsResult;
+                    pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
+                    pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                    pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                    pathForValidation = RemoveLargeVerticalLayerExcursions(
+                        mapId,
+                        pathForValidation,
+                        agentRadius,
+                        agentHeight,
+                        int.MaxValue,
+                        out var finalDensifiedLayerExcursionCount);
+                    if (finalDensifiedLayerExcursionCount > 0)
+                        resultTag = localPhysicsResult;
+                    pathForValidation = DensifyStaticLineOfSightBreaks(mapId, pathForValidation);
+                }
+            }
+            pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+
+            if (smoothPath &&
+                blockedIdx is null &&
+                FindFirstLineOfSightBreak(mapId, pathForValidation) is int finalLosBlockedIdx)
+            {
+                blockedIdx = finalLosBlockedIdx;
+                normalizedBlockedReason = "static_los";
+            }
+
+            if (smoothPath &&
+                blockedIdx is null &&
+                ShouldProbeLocalPhysicsReachability(pathForValidation) &&
+                FindFirstLocalPhysicsReachabilityBreak(
+                    mapId,
+                    pathForValidation,
+                    agentRadius,
+                    agentHeight,
+                    BoundedCorridorLocalPhysicsRepairScanLimit,
+                    out var localPhysicsBlockedIdx))
+            {
+                blockedIdx = localPhysicsBlockedIdx;
+                normalizedBlockedReason = "local_physics_layer";
+            }
+
+            return new NavigationPathResult(
+                pathForValidation,
+                rawPath,
+                resultTag,
+                blockedIdx,
+                blockedIdx.HasValue ? normalizedBlockedReason : "none");
+        }
+
+        private NavigationPathResult CalculateValidatedPathCore(uint mapId, XYZ start, XYZ end, bool smoothPath,
+            float agentRadius, float agentHeight)
         {
             var preferredAttempt = EvaluateOverlayAwarePath(mapId, start, end, smoothPath, agentRadius, agentHeight, "native_path");
             NavigationPathResult? preferredValidatedResult = null;
@@ -544,6 +1029,7 @@ namespace PathfindingService.Repository
                     agentRadius,
                     agentHeight);
                 preferredValidatedResult = preferredResult;
+                LogPathSelectionCandidate("preferred", preferredResult);
                 if (IsCompleteUsablePath(start, end, preferredResult))
                     return preferredResult;
             }
@@ -561,21 +1047,56 @@ namespace PathfindingService.Repository
                     agentRadius,
                     agentHeight);
                 alternateValidatedResult = alternateResult;
+                LogPathSelectionCandidate("alternate", alternateResult);
                 if (IsCompleteUsablePath(start, end, alternateResult))
                     return alternateResult;
             }
 
-            if (preferredValidatedResult is NavigationPathResult preferredBlockedResult &&
-                alternateValidatedResult is NavigationPathResult alternateBlockedResult)
+            var corridorFallbackResolution = FindPathCorridorResolution(
+                mapId,
+                start,
+                end,
+                NativePathResolutionKind.CorridorFallback);
+            var corridorFallbackAttempt = BuildOverlayPathAttempt(
+                mapId,
+                start,
+                end,
+                corridorFallbackResolution,
+                agentRadius,
+                agentHeight,
+                "native_path_corridor_fallback");
+            NavigationPathResult? corridorFallbackValidatedResult = null;
+            if (corridorFallbackAttempt.IsUsable)
             {
-                return SelectMoreAdvancedBlockedResult(preferredBlockedResult, alternateBlockedResult);
+                var corridorFallbackResult = BuildUsablePathResult(
+                    mapId,
+                    start,
+                    end,
+                    corridorFallbackAttempt,
+                    smoothPath,
+                    agentRadius,
+                    agentHeight);
+                corridorFallbackValidatedResult = corridorFallbackResult;
+                LogPathSelectionCandidate("corridor_fallback", corridorFallbackResult);
+                if (IsCompleteUsablePath(start, end, corridorFallbackResult))
+                    return corridorFallbackResult;
             }
 
-            if (preferredValidatedResult is NavigationPathResult onlyPreferredBlockedResult)
-                return onlyPreferredBlockedResult;
-
-            if (alternateValidatedResult is NavigationPathResult onlyAlternateBlockedResult)
-                return onlyAlternateBlockedResult;
+            var blockedResults = new[]
+                {
+                    preferredValidatedResult,
+                    alternateValidatedResult,
+                    corridorFallbackValidatedResult,
+                }
+                .Where(static result => result.HasValue)
+                .Select(static result => result!.Value)
+                .ToArray();
+            if (blockedResults.Length > 0)
+            {
+                var selectedBlockedResult = SelectMoreAdvancedBlockedResult(blockedResults);
+                LogPathSelectionCandidate("selected_blocked", selectedBlockedResult);
+                return selectedBlockedResult;
+            }
 
             var repairSource = SelectRepairSource(preferredAttempt, alternateAttempt);
             if (repairSource.Path.Length > 1 && repairSource.BlockedSegmentIndex is int blockedSegmentIndex)
@@ -591,7 +1112,8 @@ namespace PathfindingService.Repository
                     agentHeight,
                     repairSource.Path,
                     blockedSegmentIndex,
-                    allowGlobalRepair: !dynamicOverlayBlock);
+                    allowGlobalRepair: !dynamicOverlayBlock,
+                    recordDynamicOverlayRepair: dynamicOverlayBlock);
                 if (repairedPath.Length > 0)
                 {
                     var repairedResult = ApplyNativeSegmentValidation(
@@ -626,15 +1148,22 @@ namespace PathfindingService.Repository
         }
 
         private static NavigationPathResult SelectMoreAdvancedBlockedResult(
-            NavigationPathResult preferredResult,
-            NavigationPathResult alternateResult)
+            IReadOnlyList<NavigationPathResult> results)
         {
-            var preferredIndex = preferredResult.BlockedSegmentIndex ?? -1;
-            var alternateIndex = alternateResult.BlockedSegmentIndex ?? -1;
-            if (alternateIndex > preferredIndex)
-                return alternateResult;
+            var selected = results[0];
+            var selectedIndex = selected.BlockedSegmentIndex ?? -1;
+            for (var i = 1; i < results.Count; i++)
+            {
+                var candidate = results[i];
+                var candidateIndex = candidate.BlockedSegmentIndex ?? -1;
+                if (candidateIndex <= selectedIndex)
+                    continue;
 
-            return preferredResult;
+                selected = candidate;
+                selectedIndex = candidateIndex;
+            }
+
+            return selected;
         }
 
         private NativePathResolution FindPathCorridorNative(
@@ -646,6 +1175,37 @@ namespace PathfindingService.Repository
             float agentHeight)
         {
             var dynamicOverlayActive = HasActiveDynamicObjectOverlay();
+            var routeDistance2D = Distance2D(start, end);
+            var routeVerticalDelta = MathF.Abs(end.Z - start.Z);
+            var useCorridorFirst = routeDistance2D >= CorridorFirstPathMinDistance &&
+                (routeDistance2D <= CorridorFirstPathMaxDistance ||
+                    (routeDistance2D <= CorridorFirstHighVerticalPathMaxDistance &&
+                        routeVerticalDelta >= CorridorFirstHighVerticalMinDelta));
+            if (useCorridorFirst)
+            {
+                var mediumCorridorResolution = FindPathCorridorResolution(
+                    mapId,
+                    start,
+                    end,
+                    NativePathResolutionKind.CorridorFirst);
+                Console.Error.WriteLine(
+                    $"[PATH_NATIVE] map={mapId} mode=corridor_first_medium_long dist2D={routeDistance2D:F1} path=[{FormatPathPreview(mediumCorridorResolution.Path)}]");
+                if (smoothPath && !dynamicOverlayActive && mediumCorridorResolution.Path.Length > 1)
+                {
+                    var expandedPath = TryExpandCorridorWithSmoothNativeSegments(
+                        mapId,
+                        mediumCorridorResolution.Path,
+                        agentRadius,
+                        agentHeight);
+                    if (expandedPath.Length > 0)
+                        return NativePathResolution.FromPath(
+                            expandedPath,
+                            NativePathResolutionKind.CorridorFirstExpanded);
+                }
+
+                return mediumCorridorResolution;
+            }
+
             if (smoothPath && !dynamicOverlayActive)
             {
                 var smoothNativePath = TryFindPathNative(mapId, start, end, smoothPath: true, agentRadius, agentHeight);
@@ -682,7 +1242,9 @@ namespace PathfindingService.Repository
                         {
                             Console.Error.WriteLine(
                                 $"[PATH_NATIVE] map={mapId} mode=smooth_after_straight_static_break path=[{FormatPathPreview(smoothFallbackPath)}]");
-                            return NativePathResolution.FromPath(smoothFallbackPath);
+                            return NativePathResolution.FromPath(
+                                smoothFallbackPath,
+                                NativePathResolutionKind.SmoothFallbackAfterStraightStaticBreak);
                         }
                     }
 
@@ -701,12 +1263,18 @@ namespace PathfindingService.Repository
                 }
             }
 
-            var corridorResolution = FindPathCorridorResolution(mapId, start, end);
+            var corridorResolution = FindPathCorridorResolution(
+                mapId,
+                start,
+                end,
+                NativePathResolutionKind.CorridorFallback);
             if (smoothPath && !dynamicOverlayActive && corridorResolution.Path.Length > 1)
             {
                 var expandedPath = TryExpandCorridorWithSmoothNativeSegments(mapId, corridorResolution.Path, agentRadius, agentHeight);
                 if (expandedPath.Length > 0)
-                    return NativePathResolution.FromPath(expandedPath);
+                    return NativePathResolution.FromPath(
+                        expandedPath,
+                        NativePathResolutionKind.CorridorFallback);
             }
 
             return corridorResolution;
@@ -724,19 +1292,25 @@ namespace PathfindingService.Repository
             }
         }
 
-        private NativePathResolution FindPathCorridorResolution(uint mapId, XYZ start, XYZ end)
+        private NativePathResolution FindPathCorridorResolution(
+            uint mapId,
+            XYZ start,
+            XYZ end,
+            NativePathResolutionKind kind = NativePathResolutionKind.Corridor)
         {
             var nativeStart = new NativeXyz(start);
             var nativeEnd = new NativeXyz(end);
-            var corridorResult = FindPathCorridor(mapId, nativeStart, nativeEnd);
+            var stopwatch = Stopwatch.StartNew();
+            CorridorResultNative corridorResult = default;
 
             try
             {
+                corridorResult = FindPathCorridor(mapId, nativeStart, nativeEnd);
                 if (corridorResult.Handle == 0 || corridorResult.CornerCount == 0)
                 {
                     Console.Error.WriteLine(
                         $"[CORRIDOR] No corridor path found for map={mapId} start=({start.X:F1},{start.Y:F1},{start.Z:F1}) end=({end.X:F1},{end.Y:F1},{end.Z:F1})");
-                    return NativePathResolution.FromPath(Array.Empty<XYZ>());
+                    return NativePathResolution.FromPath(Array.Empty<XYZ>(), kind);
                 }
 
                 var waypoints = new List<XYZ>(corridorResult.CornerCount + 1) { start };
@@ -765,10 +1339,11 @@ namespace PathfindingService.Repository
                     : "none";
                 var repaired = (corridorResult.Flags & CorridorResultFlagOverlayRepaired) != 0;
 
-                return new NativePathResolution(rawPath, blockedSegmentIndex, blockedReason, repaired);
+                return new NativePathResolution(rawPath, blockedSegmentIndex, blockedReason, repaired, kind);
             }
             finally
             {
+                NavigationPerformanceMetrics.RecordCorridorQuery(stopwatch.Elapsed);
                 if (corridorResult.Handle != 0)
                 {
                     try { CorridorDestroy(corridorResult.Handle); } catch { }
@@ -862,46 +1437,78 @@ namespace PathfindingService.Repository
             float agentHeight,
             string successResult)
         {
+            var stopwatch = Stopwatch.StartNew();
             try
             {
                 var resolution = _findPathResolver(mapId, start, end, smoothPath, agentRadius, agentHeight);
-                var path = resolution.Path ?? Array.Empty<XYZ>();
-                if (path.Length == 0)
-                    return new OverlayPathAttempt(Array.Empty<XYZ>(), successResult, null, "none", PathBlocked: false);
-
-                if (!HasUsableNativeEndpointAnchors(start, end, path, out var endpointBlockReason))
-                {
-                    return new OverlayPathAttempt(
-                        path,
-                        successResult,
-                        0,
-                        endpointBlockReason,
-                        PathBlocked: true);
-                }
-
-                if (resolution.BlockedSegmentIndex is int nativeBlockedSegmentIndex)
-                {
-                    return new OverlayPathAttempt(
-                        path,
-                        resolution.WasRepairedAroundBlockedSegment ? "repaired_dynamic_overlay" : successResult,
-                        nativeBlockedSegmentIndex,
-                        NormalizeBlockReason(resolution.BlockedReason),
-                        PathBlocked: !resolution.WasRepairedAroundBlockedSegment);
-                }
-
-                var (blockedSegmentIndex, blockedReason) = FindBlockedSegment(mapId, path, agentRadius, agentHeight);
-                return new OverlayPathAttempt(
-                    path,
-                    successResult,
-                    blockedSegmentIndex,
-                    blockedReason,
-                    PathBlocked: blockedSegmentIndex.HasValue);
+                NavigationPerformanceMetrics.RecordPathResolverAttempt(smoothPath, stopwatch.Elapsed);
+                return BuildOverlayPathAttempt(mapId, start, end, resolution, agentRadius, agentHeight, successResult);
             }
             catch (Exception ex)
             {
+                NavigationPerformanceMetrics.RecordPathResolverAttempt(smoothPath, stopwatch.Elapsed);
                 Console.Error.WriteLine($"[CORRIDOR] Native path resolver failed: {ex.Message}");
-                return new OverlayPathAttempt(Array.Empty<XYZ>(), successResult, null, "none", PathBlocked: false);
+                return new OverlayPathAttempt(
+                    Array.Empty<XYZ>(),
+                    successResult,
+                    null,
+                    "none",
+                    PathBlocked: false,
+                    ResolutionKind: NativePathResolutionKind.Native);
             }
+        }
+
+        private OverlayPathAttempt BuildOverlayPathAttempt(
+            uint mapId,
+            XYZ start,
+            XYZ end,
+            NativePathResolution resolution,
+            float agentRadius,
+            float agentHeight,
+            string successResult)
+        {
+            var path = resolution.Path ?? Array.Empty<XYZ>();
+            if (path.Length == 0)
+            {
+                return new OverlayPathAttempt(
+                    Array.Empty<XYZ>(),
+                    successResult,
+                    null,
+                    "none",
+                    PathBlocked: false,
+                    ResolutionKind: resolution.Kind);
+            }
+
+            if (!HasUsableNativeEndpointAnchors(start, end, path, out var endpointBlockReason))
+            {
+                return new OverlayPathAttempt(
+                    path,
+                    successResult,
+                    0,
+                    endpointBlockReason,
+                    PathBlocked: true,
+                    ResolutionKind: resolution.Kind);
+            }
+
+            if (resolution.BlockedSegmentIndex is int nativeBlockedSegmentIndex)
+            {
+                return new OverlayPathAttempt(
+                    path,
+                    resolution.WasRepairedAroundBlockedSegment ? "repaired_dynamic_overlay" : successResult,
+                    nativeBlockedSegmentIndex,
+                    NormalizeBlockReason(resolution.BlockedReason),
+                    PathBlocked: !resolution.WasRepairedAroundBlockedSegment,
+                    ResolutionKind: resolution.Kind);
+            }
+
+            var (blockedSegmentIndex, blockedReason) = FindBlockedSegment(mapId, path, agentRadius, agentHeight);
+            return new OverlayPathAttempt(
+                path,
+                successResult,
+                blockedSegmentIndex,
+                blockedReason,
+                PathBlocked: blockedSegmentIndex.HasValue,
+                ResolutionKind: resolution.Kind);
         }
 
         private static bool HasUsableNativeEndpointAnchors(
@@ -943,11 +1550,38 @@ namespace PathfindingService.Repository
             => !string.IsNullOrWhiteSpace(result)
                 && result.StartsWith("repaired_", StringComparison.OrdinalIgnoreCase);
 
+        private static bool IsBoundedCorridorFirstResolution(NativePathResolutionKind resolutionKind)
+            => resolutionKind is NativePathResolutionKind.CorridorFirst
+                or NativePathResolutionKind.CorridorFirstExpanded;
+
+        private static bool ShouldUseSmoothValidation(
+            bool requestedSmoothPath,
+            NativePathResolutionKind resolutionKind)
+            => requestedSmoothPath ||
+                resolutionKind is NativePathResolutionKind.SmoothFallbackAfterStraightStaticBreak;
+
         private static bool IsAffordanceRepairDiagnosticsEnabled()
             => string.Equals(
                 Environment.GetEnvironmentVariable("WWOW_AFFORDANCE_REPAIR_DIAGNOSTICS"),
                 "1",
                 StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsPathSelectionDiagnosticsEnabled()
+            => string.Equals(
+                Environment.GetEnvironmentVariable("WWOW_PATH_SELECTION_DIAGNOSTICS"),
+                "1",
+                StringComparison.OrdinalIgnoreCase);
+
+        private static void LogPathSelectionCandidate(string label, NavigationPathResult result)
+        {
+            if (!IsPathSelectionDiagnosticsEnabled())
+                return;
+
+            Console.Error.WriteLine(
+                $"[PATH-SELECT] {label} result={result.Result} pathLen={result.Path.Length} rawLen={result.RawPath.Length} " +
+                $"blockedIdx={(result.BlockedSegmentIndex.HasValue ? result.BlockedSegmentIndex.Value.ToString() : "none")} " +
+                $"blockedReason={result.BlockedReason}");
+        }
 
         private static bool IsLocalPhysicsLayerDiagnosticsEnabled()
             => string.Equals(
@@ -965,13 +1599,15 @@ namespace PathfindingService.Repository
             float agentHeight)
         {
             var dynamicOverlayActive = HasActiveDynamicObjectOverlay();
+            var validationSmoothPath = ShouldUseSmoothValidation(smoothPath, attempt.ResolutionKind);
             var validatedResult = ApplyNativeSegmentValidation(
                 mapId,
                 attempt.Path,
-                smoothPath,
+                validationSmoothPath,
                 agentRadius,
                 agentHeight,
-                attempt.SuccessResult);
+                attempt.SuccessResult,
+                attempt.ResolutionKind);
 
             if (validatedResult.BlockedSegmentIndex is int staticBlockedSegmentIndex)
             {
@@ -983,19 +1619,20 @@ namespace PathfindingService.Repository
                     mapId,
                     start,
                     end,
-                    smoothPath,
+                    validationSmoothPath,
                     agentRadius,
                     agentHeight,
                     validatedResult.Path,
                     staticBlockedSegmentIndex,
-                    allowGlobalRepair: !dynamicOverlayActive || !dynamicOverlayBlock);
+                    allowGlobalRepair: !dynamicOverlayActive || !dynamicOverlayBlock,
+                    recordDynamicOverlayRepair: dynamicOverlayActive && dynamicOverlayBlock);
 
                 if (repairedPath.Length > 0)
                 {
                     var repairedResult = ApplyNativeSegmentValidation(
                         mapId,
                         repairedPath,
-                        smoothPath,
+                        validationSmoothPath,
                         agentRadius,
                         agentHeight,
                         "repaired_segment_validation");
@@ -1036,9 +1673,48 @@ namespace PathfindingService.Repository
             bool smoothPath,
             float agentRadius,
             float agentHeight,
-            string successResult)
+            string successResult,
+            NativePathResolutionKind resolutionKind = NativePathResolutionKind.Native)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var result = ApplyNativeSegmentValidationCore(
+                mapId,
+                rawPath,
+                smoothPath,
+                agentRadius,
+                agentHeight,
+                successResult,
+                resolutionKind);
+            NavigationPerformanceMetrics.RecordManagedValidation(stopwatch.Elapsed);
+            return result;
+        }
+
+        private NavigationPathResult ApplyNativeSegmentValidationCore(
+            uint mapId,
+            XYZ[] rawPath,
+            bool smoothPath,
+            float agentRadius,
+            float agentHeight,
+            string successResult,
+            NativePathResolutionKind resolutionKind)
         {
             var dynamicOverlayActive = HasActiveDynamicObjectOverlay();
+            if (!dynamicOverlayActive && IsBoundedCorridorFirstResolution(resolutionKind))
+            {
+                return BuildBoundedCorridorValidationResult(
+                    mapId,
+                    rawPath,
+                    rawPath,
+                    smoothPath,
+                    agentRadius,
+                    agentHeight,
+                    successResult,
+                    "repaired_static_los",
+                    "repaired_local_physics_layer",
+                    blockedIdx: null,
+                    blockedReason: "none");
+            }
+
             var losRepairCount = 0;
             int? losBlockedIdx = null;
             var losBlockedReason = "none";
@@ -1056,7 +1732,7 @@ namespace PathfindingService.Repository
             if (smoothPath)
             {
                 pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
-                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation);
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, EarlySupportNormalizationLimit, agentRadius, agentHeight);
                 pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight);
                 pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight);
                 var earlyStaticRepairScanLimit = dynamicOverlayActive
@@ -1093,8 +1769,9 @@ namespace PathfindingService.Repository
                     out var affordanceBlockedIdx,
                     out var affordanceBlockedReason,
                     includeCumulativeBreaks: allowCumulativeAffordanceRepair,
-                    maxScanSegments: affordanceRepairScanLimit);
-                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue);
+                    maxScanSegments: affordanceRepairScanLimit,
+                    includeLocalPhysicsReachabilityBreaks: false);
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
                 pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight);
                 pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight);
 
@@ -1107,7 +1784,8 @@ namespace PathfindingService.Repository
                     out var postNormalizeAffordanceBlockedIdx,
                     out var postNormalizeAffordanceBlockedReason,
                     includeCumulativeBreaks: allowCumulativeAffordanceRepair,
-                    maxScanSegments: affordanceRepairScanLimit);
+                    maxScanSegments: affordanceRepairScanLimit,
+                    includeLocalPhysicsReachabilityBreaks: false);
 
                 var totalAffordanceRepairCount = affordanceRepairCount + postNormalizeAffordanceRepairCount;
                 var postAffordanceStaticRepairCount = 0;
@@ -1127,7 +1805,7 @@ namespace PathfindingService.Repository
                         Math.Min(earlyStaticRepairScanLimit, PostAffordanceStaticRepairScanLimit),
                         PostAffordanceStaticRepairBudget,
                         allowRouteRepair: !dynamicOverlayActive);
-                    pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue);
+                    pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
                     pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight);
                     pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight);
                     pathForValidation = DensifyStaticLineOfSightBreaks(mapId, pathForValidation);
@@ -1155,6 +1833,46 @@ namespace PathfindingService.Repository
                     pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
                     pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
                     pathForValidation = DensifyStaticLineOfSightBreaks(mapId, pathForValidation);
+                }
+
+                var finalLocalPhysicsRepairCount = 0;
+                int? finalLocalPhysicsBlockedIdx = null;
+                var finalLocalPhysicsBlockedReason = "none";
+                if (ShouldProbeLocalPhysicsReachability(pathForValidation))
+                {
+                    pathForValidation = RepairAffordanceBreaks(
+                        mapId,
+                        pathForValidation,
+                        agentRadius,
+                        agentHeight,
+                        out finalLocalPhysicsRepairCount,
+                        out finalLocalPhysicsBlockedIdx,
+                        out finalLocalPhysicsBlockedReason,
+                        includeCumulativeBreaks: false,
+                        maxScanSegments: LocalPhysicsLayerProjectionSmoothScanLimit,
+                        includeLocalPhysicsReachabilityBreaks: true);
+
+                    if (finalLocalPhysicsRepairCount > 0)
+                    {
+                        pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
+                        pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                        pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+                        pathForValidation = DensifyStaticLineOfSightBreaks(mapId, pathForValidation);
+                    }
+
+                    pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+
+                    if (FindFirstLocalPhysicsReachabilityBreak(
+                            mapId,
+                            pathForValidation,
+                            agentRadius,
+                            agentHeight,
+                            LocalPhysicsLayerProjectionSmoothScanLimit,
+                            out var localPhysicsBlockedIdx))
+                    {
+                        finalLocalPhysicsBlockedIdx ??= localPhysicsBlockedIdx;
+                        finalLocalPhysicsBlockedReason = "local_physics_layer";
+                    }
                 }
 
                 if (affordanceBlockedIdx.HasValue &&
@@ -1193,7 +1911,18 @@ namespace PathfindingService.Repository
                         postAffordanceStaticBlockedReason);
                 }
 
-                if (totalAffordanceRepairCount > 0)
+                if (finalLocalPhysicsBlockedIdx.HasValue &&
+                    !IsNativeSegmentValidationEnabled())
+                {
+                    return new NavigationPathResult(
+                        pathForValidation,
+                        rawPath,
+                        finalLocalPhysicsRepairCount > 0 ? "repaired_affordance" : successResult,
+                        finalLocalPhysicsBlockedIdx,
+                        finalLocalPhysicsBlockedReason);
+                }
+
+                if (totalAffordanceRepairCount > 0 || finalLocalPhysicsRepairCount > 0)
                     successResult = "repaired_affordance";
                 else if (localPhysicsProjectionCount > 0)
                     successResult = "repaired_local_physics_layer";
@@ -1221,7 +1950,7 @@ namespace PathfindingService.Repository
                 // Straight-corner requests are the latency-sensitive alternate mode.
                 // Keep them on the raw corridor so the caller can fall through quickly
                 // instead of spending tens of seconds on full segment validation.
-                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation);
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, EarlySupportNormalizationLimit, agentRadius, agentHeight);
                 pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
                 pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight);
                 pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight);
@@ -1244,7 +1973,38 @@ namespace PathfindingService.Repository
                     allowRouteRepair: !dynamicOverlayActive);
 
                 var resultTag = losRepairCount > 0 ? "repaired_static_los" : successResult;
-                if (earlyBlockedIdx.HasValue && !dynamicOverlayActive && !IsNativeSegmentValidationEnabled())
+                var earlyLocalPhysicsReachabilityRepairCount = 0;
+                if (ShouldProbeLocalPhysicsReachability(pathForValidation))
+                {
+                    pathForValidation = RepairLocalPhysicsReachabilityBreaks(
+                        mapId,
+                        pathForValidation,
+                        agentRadius,
+                        agentHeight,
+                        out earlyLocalPhysicsReachabilityRepairCount,
+                        maxScanSegments: 12);
+
+                    if (earlyLocalPhysicsReachabilityRepairCount > 0)
+                    {
+                        resultTag = "repaired_local_physics_layer";
+
+                        if (FindFirstLineOfSightBreak(mapId, pathForValidation, earlyStaticRepairScanLimit) is int recomputedStaticBlockedIdx)
+                        {
+                            earlyBlockedIdx = recomputedStaticBlockedIdx;
+                            earlyBlockedReason = "static_los";
+                        }
+                        else if (string.Equals(earlyBlockedReason, "static_los", StringComparison.Ordinal))
+                        {
+                            earlyBlockedIdx = null;
+                            earlyBlockedReason = "none";
+                        }
+                    }
+                }
+
+                if (earlyBlockedIdx.HasValue &&
+                    earlyLocalPhysicsReachabilityRepairCount == 0 &&
+                    !dynamicOverlayActive &&
+                    !IsNativeSegmentValidationEnabled())
                 {
                     return new NavigationPathResult(
                         pathForValidation,
@@ -1257,7 +2017,7 @@ namespace PathfindingService.Repository
                 if (earlyRepairCount > 0)
                     resultTag = "repaired_static_los";
 
-                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue);
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
                 var routeStart = pathForValidation.Length > 0 ? pathForValidation[0] : rawPath.FirstOrDefault();
                 var routeEnd = pathForValidation.Length > 0 ? pathForValidation[^1] : rawPath.LastOrDefault();
                 var allowPrefixCumulativeRepair = Distance2D(routeStart, routeEnd) > 50.0f
@@ -1272,10 +2032,67 @@ namespace PathfindingService.Repository
                     out var affordanceBlockedReason,
                     includeCumulativeBreaks: allowPrefixCumulativeRepair,
                     includeSegmentBreaks: false,
-                    maxScanSegments: 12);
-                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue);
+                    maxScanSegments: 12,
+                    includeLocalPhysicsReachabilityBreaks: ShouldProbeLocalPhysicsReachability(pathForValidation));
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
                 pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
                 pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
+
+                var localPhysicsReachabilityRepairCount = 0;
+                if (IsLocalPhysicsLayerDiagnosticsEnabled())
+                {
+                    Console.Error.WriteLine(
+                        $"[LOCAL-REPAIR-DBG] straight_probe pathLen={pathForValidation.Length} route=({pathForValidation[0].X:F1},{pathForValidation[0].Y:F1},{pathForValidation[0].Z:F1})->({pathForValidation[^1].X:F1},{pathForValidation[^1].Y:F1},{pathForValidation[^1].Z:F1}) shouldProbe={ShouldProbeLocalPhysicsReachability(pathForValidation)}");
+                }
+
+                if (ShouldProbeLocalPhysicsReachability(pathForValidation))
+                {
+                    pathForValidation = RepairLocalPhysicsReachabilityBreaks(
+                        mapId,
+                        pathForValidation,
+                        agentRadius,
+                        agentHeight,
+                        out localPhysicsReachabilityRepairCount,
+                        maxScanSegments: 12);
+
+                    if (localPhysicsReachabilityRepairCount > 0)
+                    {
+                        resultTag = "repaired_local_physics_layer";
+
+                        if (FindFirstLineOfSightBreak(mapId, pathForValidation, earlyStaticRepairScanLimit) is int recomputedStaticBlockedIdx)
+                        {
+                            earlyBlockedIdx = recomputedStaticBlockedIdx;
+                            earlyBlockedReason = "static_los";
+                        }
+                        else if (string.Equals(earlyBlockedReason, "static_los", StringComparison.Ordinal))
+                        {
+                            earlyBlockedIdx = null;
+                            earlyBlockedReason = "none";
+                        }
+
+                        if (affordanceBlockedIdx.HasValue &&
+                            (string.Equals(affordanceBlockedReason, "local_physics_layer", StringComparison.Ordinal) ||
+                                string.Equals(affordanceBlockedReason, "local_physics_movement", StringComparison.Ordinal)))
+                        {
+                            if (FindFirstLocalPhysicsReachabilityBreak(
+                                    mapId,
+                                    pathForValidation,
+                                    agentRadius,
+                                    agentHeight,
+                                    12,
+                                    out var remainingLocalPhysicsBlockedIdx))
+                            {
+                                affordanceBlockedIdx = remainingLocalPhysicsBlockedIdx;
+                                affordanceBlockedReason = "local_physics_layer";
+                            }
+                            else
+                            {
+                                affordanceBlockedIdx = null;
+                                affordanceBlockedReason = "none";
+                            }
+                        }
+                    }
+                }
 
                 if (affordanceBlockedIdx.HasValue && !IsNativeSegmentValidationEnabled())
                 {
@@ -1320,7 +2137,24 @@ namespace PathfindingService.Repository
             if (!IsNativeSegmentValidationEnabled())
             {
                 var resultTag = losRepairCount > 0 ? "repaired_static_los" : successResult;
-                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue);
+                pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
+                if (ShouldProbeLocalPhysicsReachability(pathForValidation) &&
+                    FindFirstLocalPhysicsReachabilityBreak(
+                        mapId,
+                        pathForValidation,
+                        agentRadius,
+                        agentHeight,
+                        LocalPhysicsLayerProjectionSmoothScanLimit,
+                        out var localPhysicsBlockedIdx))
+                {
+                    return new NavigationPathResult(
+                        pathForValidation,
+                        rawPath,
+                        resultTag,
+                        localPhysicsBlockedIdx,
+                        "local_physics_layer");
+                }
+
                 return new NavigationPathResult(
                     pathForValidation,
                     rawPath,
@@ -1337,7 +2171,7 @@ namespace PathfindingService.Repository
                 out var blockedIdx,
                 out var blockedReason);
             if (RequiresNativeSegmentValidation(validatedPath))
-                validatedPath = NormalizeEarlySupportLayer(mapId, validatedPath, int.MaxValue);
+                validatedPath = NormalizeEarlySupportLayer(mapId, validatedPath, int.MaxValue, agentRadius, agentHeight);
 
             var finalBlockedIdx = blockedIdx ?? losBlockedIdx;
             var finalBlockedReason = blockedIdx.HasValue
@@ -1413,6 +2247,7 @@ namespace PathfindingService.Repository
 
             if (repairCount > 0)
             {
+                NavigationPerformanceMetrics.RecordLongLineOfSightRepair(repairCount);
                 Console.Error.WriteLine(
                     $"[CORRIDOR-LOS-REPAIR] repaired {repairCount} long static-LOS segment(s) pathLen={path.Length} repairedLen={repaired.Count}");
             }
@@ -1456,13 +2291,19 @@ namespace PathfindingService.Repository
             return densified.ToArray();
         }
 
-        private static XYZ[] NormalizeEarlySupportLayer(uint mapId, XYZ[] path, int maxWaypointIndex = EarlySupportNormalizationLimit)
+        private static XYZ[] NormalizeEarlySupportLayer(
+            uint mapId,
+            XYZ[] path,
+            int maxWaypointIndex = EarlySupportNormalizationLimit,
+            float agentRadius = 0f,
+            float agentHeight = 0f)
         {
             if (path.Length < 2)
                 return path;
 
             var normalized = (XYZ[])path.Clone();
             var checkEnd = Math.Min(normalized.Length, maxWaypointIndex + 1);
+            var probeProjectedSupportReachability = ShouldProbeLocalPhysicsReachability(normalized);
             for (var i = 1; i < checkEnd; i++)
             {
                 var candidate = normalized[i];
@@ -1488,10 +2329,107 @@ namespace PathfindingService.Repository
                 if (WouldCreateShortVerticalLayerSpikeProjection(normalized, i, projectedZ))
                     continue;
 
-                normalized[i] = new XYZ(candidate.X, candidate.Y, projectedZ);
+                var projected = new XYZ(candidate.X, candidate.Y, projectedZ);
+                if (probeProjectedSupportReachability &&
+                    projectedZ > candidate.Z + EarlySupportProjectionThreshold &&
+                    agentRadius > 0f &&
+                    agentHeight > 0f &&
+                    !CanReachEarlySupportProjection(mapId, normalized, i, projected, agentRadius, agentHeight))
+                {
+                    continue;
+                }
+
+                normalized[i] = projected;
             }
 
             return CollapseDuplicateWaypoints(normalized);
+        }
+
+        private static bool CanReachEarlySupportProjection(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            int index,
+            XYZ projected,
+            float agentRadius,
+            float agentHeight)
+        {
+            if (index <= 0 || index >= path.Count)
+                return false;
+
+            var previous = path[index - 1];
+            var validation = ValidateSegmentForAgent(mapId, previous, projected, agentRadius, agentHeight);
+            if (!IsLocallyWalkable(validation, previous, projected))
+                return false;
+
+            if (Distance2D(previous, projected) <= LocalPhysicsLayerProjectionMaxSegmentLength)
+            {
+                var simulation = SimulateLocalPhysicsSegment(mapId, previous, projected, agentRadius, agentHeight);
+                if (!simulation.Available || !simulation.Compatible)
+                    return false;
+
+                if (Distance2D(simulation.FinalPosition, projected) > EarlySupportProjectionReachableMaxEndpointDistance)
+                    return false;
+
+                if (MathF.Abs(simulation.FinalPosition.Z - projected.Z) > EarlySupportProjectionReachableMaxZDelta)
+                    return false;
+            }
+
+            if (index < path.Count - 1)
+            {
+                var next = path[index + 1];
+                if (Distance2D(projected, next) <= LocalPhysicsLayerProjectionMaxSegmentLength)
+                {
+                    validation = ValidateSegmentForAgent(mapId, projected, next, agentRadius, agentHeight);
+                    if (!IsLocallyWalkable(validation, projected, next))
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool ShouldProbeLocalPhysicsReachability(IReadOnlyList<XYZ> path)
+            => path.Count >= 2 &&
+                Distance2D(path[0], path[^1]) <= EarlySupportProjectionReachabilityMaxRouteDistance;
+
+        private static XYZ[] NormalizeFloatingSupportLayers(
+            uint mapId,
+            XYZ[] path,
+            int maxWaypointIndex,
+            out int projectionCount)
+        {
+            projectionCount = 0;
+            if (path.Length < 2)
+                return path;
+
+            var normalized = (XYZ[])path.Clone();
+            var checkEnd = Math.Min(normalized.Length, maxWaypointIndex + 1);
+            for (var i = 1; i < checkEnd; i++)
+            {
+                var candidate = normalized[i];
+                if (!TryGetNearbyGroundZ(mapId, candidate, out var groundZ))
+                    continue;
+
+                var unsupportedDrop = candidate.Z - groundZ;
+                if (unsupportedDrop < FloatingSupportProjectionMinDrop ||
+                    unsupportedDrop > FloatingSupportProjectionMaxDrop)
+                {
+                    continue;
+                }
+
+                normalized[i] = new XYZ(candidate.X, candidate.Y, groundZ + EarlySupportGroundClearance);
+                projectionCount++;
+            }
+
+            if (projectionCount > 0)
+            {
+                Console.Error.WriteLine(
+                    $"[CORRIDOR-FLOATING-SUPPORT] projected {projectionCount} unsupported waypoint(s) pathLen={path.Length}");
+            }
+
+            return projectionCount == 0
+                ? path
+                : CollapseDuplicateWaypoints(normalized);
         }
 
         private static bool WouldCreateShortVerticalLayerSpikeProjection(XYZ[] path, int index, float projectedZ)
@@ -1641,6 +2579,87 @@ namespace PathfindingService.Repository
             return repaired.Count == path.Length ? path : repaired.ToArray();
         }
 
+        private static XYZ[] RemoveLargeVerticalLayerExcursions(
+            uint mapId,
+            XYZ[] path,
+            float agentRadius,
+            float agentHeight,
+            int maxWaypointIndex,
+            out int repairCount)
+        {
+            repairCount = 0;
+            if (path.Length < 4)
+                return path;
+
+            var repaired = path.ToList();
+            var scanEnd = Math.Min(repaired.Count - 1, maxWaypointIndex);
+            for (var i = 0; i < scanEnd - 2 && i < repaired.Count - 2; i++)
+            {
+                var start = repaired[i];
+                var maxEnd = Math.Min(
+                    Math.Min(repaired.Count - 1, scanEnd),
+                    i + LargeVerticalLayerExcursionMaxInteriorWaypoints + 1);
+
+                for (var endIndex = i + 2; endIndex <= maxEnd; endIndex++)
+                {
+                    var end = repaired[endIndex];
+                    if (Distance2D(start, end) > LargeVerticalLayerExcursionMaxBridgeLength)
+                        continue;
+
+                    if (MathF.Abs(end.Z - start.Z) > LargeVerticalLayerExcursionMaxEndpointZDelta)
+                        continue;
+
+                    if (!ContainsLargeVerticalLayerExcursion(repaired, i, endIndex))
+                        continue;
+
+                    if (!HasLineOfSightStrict(mapId, start, end))
+                        continue;
+
+                    if (!IsAffordanceRepairLegWalkable(mapId, start, end, agentRadius, agentHeight))
+                        continue;
+
+                    repaired.RemoveRange(i + 1, endIndex - i - 1);
+                    repairCount++;
+                    scanEnd = Math.Min(repaired.Count - 1, maxWaypointIndex);
+                    i = Math.Max(-1, i - 2);
+                    break;
+                }
+            }
+
+            if (repairCount > 0)
+            {
+                Console.Error.WriteLine(
+                    $"[CORRIDOR-LAYER-EXCURSION] removed {repairCount} stacked-layer excursion(s) pathLen={path.Length} repairedLen={repaired.Count}");
+            }
+
+            return repairCount == 0
+                ? path
+                : CollapseDuplicateWaypoints(repaired.ToArray());
+        }
+
+        private static bool ContainsLargeVerticalLayerExcursion(
+            IReadOnlyList<XYZ> path,
+            int startIndex,
+            int endIndex)
+        {
+            var start = path[startIndex];
+            var end = path[endIndex];
+            var lowerEndpoint = MathF.Min(start.Z, end.Z);
+            var upperEndpoint = MathF.Max(start.Z, end.Z);
+
+            for (var i = startIndex + 1; i < endIndex; i++)
+            {
+                var z = path[i].Z;
+                if (z - upperEndpoint >= LargeVerticalLayerExcursionMinDelta ||
+                    lowerEndpoint - z >= LargeVerticalLayerExcursionMinDelta)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static bool IsDynamicOverlayBridgeClear(uint mapId, XYZ from, XYZ to, float agentRadius)
         {
             if (!HasActiveDynamicObjectOverlay())
@@ -1737,6 +2756,7 @@ namespace PathfindingService.Repository
 
             if (projectionCount > 0)
             {
+                NavigationPerformanceMetrics.RecordLocalPhysicsLayerRepair(projectionCount);
                 Console.Error.WriteLine(
                     $"[CORRIDOR-LOCAL-PHYSICS-LAYER] projected {projectionCount} waypoint layer(s) pathLen={path.Length}");
             }
@@ -1880,7 +2900,7 @@ namespace PathfindingService.Repository
             var dz = to.Z - from.Z;
             var segmentDistance2D = MathF.Sqrt((dx * dx) + (dy * dy));
             if (segmentDistance2D <= 0.05f)
-                return new LocalPhysicsSimulation(true, true, 0f, 0f, 0f, from, "compatible");
+                return new LocalPhysicsSimulation(true, true, 0f, 0f, 0f, 1f, 0, 0, 0, from, "compatible");
 
             var travelDistance = MathF.Min(segmentDistance2D, MathF.Max(0.5f, LocalPhysicsSimulationMaxDistance));
             var horizonT = travelDistance / segmentDistance2D;
@@ -1919,11 +2939,20 @@ namespace PathfindingService.Repository
             var maxAbsZDelta = 0f;
             var maxLateralDistance = 0f;
             var hitWall = false;
+            var wallContactSteps = 0;
+            var lowDisplacementWallSteps = 0;
+            var consecutiveLowProgressSteps = 0;
+            var maxConsecutiveLowProgressSteps = 0;
+            var totalRequestedDistance = 0f;
+            var totalAchievedDistance = 0f;
+            var bestProjectionT = 0f;
 
             try
             {
                 for (var step = 0; step < stepCount; step++)
                 {
+                    var previousPos = pos;
+                    var previousProjectionT = bestProjectionT;
                     var input = new NativePhysicsInput
                     {
                         MoveFlags = moveFlags | MoveFlagForward,
@@ -2004,11 +3033,40 @@ namespace PathfindingService.Repository
                     hitWall |= output.HitWall &&
                         float.IsFinite(output.BlockedFraction) &&
                         output.BlockedFraction < LocalPhysicsBlockingWallProgressThreshold;
+                    if (output.HitWall)
+                        wallContactSteps++;
+
+                    var requestedDistance = LocalPhysicsRunSpeed * LocalPhysicsSimulationDeltaTime;
+                    var achievedDistance = Distance2D(previousPos, pos);
+                    totalRequestedDistance += requestedDistance;
+                    totalAchievedDistance += achievedDistance;
+                    if (output.HitWall &&
+                        requestedDistance > 0.001f &&
+                        achievedDistance / requestedDistance < LocalPhysicsLowDisplacementRatio)
+                    {
+                        lowDisplacementWallSteps++;
+                    }
 
                     var projectionT = Math.Clamp(
                         (((pos.X - from.X) * dx) + ((pos.Y - from.Y) * dy)) / (segmentDistance2D * segmentDistance2D),
                         0f,
                         1f);
+                    if (projectionT > bestProjectionT)
+                        bestProjectionT = projectionT;
+
+                    var forwardProgress = MathF.Max(0f, projectionT - previousProjectionT) * segmentDistance2D;
+                    if (forwardProgress <= LocalPhysicsMovementStallProgressEpsilon)
+                    {
+                        consecutiveLowProgressSteps++;
+                        maxConsecutiveLowProgressSteps = Math.Max(
+                            maxConsecutiveLowProgressSteps,
+                            consecutiveLowProgressSteps);
+                    }
+                    else
+                    {
+                        consecutiveLowProgressSteps = 0;
+                    }
+
                     var expectedZ = from.Z + (dz * projectionT);
                     var zDelta = pos.Z - expectedZ;
                     maxUpwardZDelta = MathF.Max(maxUpwardZDelta, zDelta);
@@ -2028,18 +3086,41 @@ namespace PathfindingService.Repository
             }
             catch
             {
-                return new LocalPhysicsSimulation(false, true, 0f, 0f, 0f, from, "unavailable");
+                return new LocalPhysicsSimulation(false, true, 0f, 0f, 0f, 1f, 0, 0, 0, from, "unavailable");
             }
+
+            var averageDisplacementRatio = totalRequestedDistance > 0.001f
+                ? totalAchievedDistance / totalRequestedDistance
+                : 1f;
+            var movementStall = IsSustainedLocalPhysicsMovementStall(
+                averageDisplacementRatio,
+                wallContactSteps,
+                lowDisplacementWallSteps,
+                maxConsecutiveLowProgressSteps);
 
             return new LocalPhysicsSimulation(
                 true,
-                !hitWall,
+                !hitWall && !movementStall,
                 maxUpwardZDelta,
                 maxAbsZDelta,
                 maxLateralDistance,
+                averageDisplacementRatio,
+                wallContactSteps,
+                lowDisplacementWallSteps,
+                maxConsecutiveLowProgressSteps,
                 pos,
-                hitWall ? "hit_wall" : "simulated");
+                hitWall ? "hit_wall" : movementStall ? "movement_stall" : "simulated");
         }
+
+        private static bool IsSustainedLocalPhysicsMovementStall(
+            float averageDisplacementRatio,
+            int wallContactSteps,
+            int lowDisplacementWallSteps,
+            int maxConsecutiveLowProgressSteps)
+            => wallContactSteps >= LocalPhysicsMovementStallMinWallSteps &&
+                lowDisplacementWallSteps >= LocalPhysicsMovementStallMinLowDisplacementWallSteps &&
+                maxConsecutiveLowProgressSteps >= LocalPhysicsMovementStallMinConsecutiveLowProgressSteps &&
+                averageDisplacementRatio < LocalPhysicsMovementStallAverageRatio;
 
         private static XYZ[] RepairEarlyStaticBreaks(
             uint mapId,
@@ -2110,6 +3191,7 @@ namespace PathfindingService.Repository
 
             if (repairCount > 0)
             {
+                NavigationPerformanceMetrics.RecordStaticWallRepair(repairCount);
                 Console.Error.WriteLine(
                     $"[CORRIDOR-STATIC-REPAIR] repaired {repairCount} early static/capsule segment(s) pathLen={path.Length} repairedLen={repaired.Count}");
             }
@@ -2127,7 +3209,8 @@ namespace PathfindingService.Repository
             out string firstBlockedReason,
             bool includeCumulativeBreaks = false,
             bool includeSegmentBreaks = true,
-            int maxScanSegments = int.MaxValue)
+            int maxScanSegments = int.MaxValue,
+            bool includeLocalPhysicsReachabilityBreaks = false)
         {
             repairCount = 0;
             firstBlockedIdx = null;
@@ -2157,7 +3240,8 @@ namespace PathfindingService.Repository
                             repaired[i + 1],
                             agentRadius,
                             agentHeight,
-                            out reason);
+                            out reason,
+                            includeLocalPhysicsReachabilityBreaks);
                     }
                     if (!requiresRepair && includeCumulativeBreaks)
                     {
@@ -2176,14 +3260,21 @@ namespace PathfindingService.Repository
                     }
 
                     var cumulativeRepair = string.Equals(reason, "cumulative_steep_climb", StringComparison.Ordinal);
+                    var localPhysicsRepair = string.Equals(reason, "local_physics_layer", StringComparison.Ordinal) ||
+                        string.Equals(reason, "local_physics_movement", StringComparison.Ordinal);
                     var allowNativeAffordanceLegRepair = cumulativeRepair ||
                         string.Equals(reason, "steep_climb", StringComparison.Ordinal) ||
-                        string.Equals(reason, "step_up_limit", StringComparison.Ordinal);
+                        string.Equals(reason, "step_up_limit", StringComparison.Ordinal) ||
+                        localPhysicsRepair;
                     var lookBehindDistance = cumulativeRepair
                         ? AffordanceRepairCumulativeLookBehindDistance
+                        : localPhysicsRepair
+                            ? AffordanceRepairLocalLookBehindDistance
                         : AffordanceRepairLookBehindDistance;
                     var lookAheadDistance = cumulativeRepair
                         ? AffordanceRepairCumulativeLookAheadDistance
+                        : localPhysicsRepair
+                            ? AffordanceRepairLocalLookAheadDistance
                         : AffordanceRepairLookAheadDistance;
                     var windowStart = FindWindowStart(repaired, i, lookBehindDistance);
                     var windowEnd = FindWindowEnd(repaired, i + 1, lookAheadDistance);
@@ -2213,6 +3304,14 @@ namespace PathfindingService.Repository
                         allowNativeLegRepair: allowNativeAffordanceLegRepair,
                         out var repairedRoute))
                     {
+                        if (!IsMeaningfullyDifferentPath(repaired, repairedRoute))
+                        {
+                            pendingBlockedIdx ??= i;
+                            if (pendingBlockedReason == "none")
+                                pendingBlockedReason = reason;
+                            continue;
+                        }
+
                         repaired = repairedRoute.ToList();
                         repairCount++;
                         repairedThisPass = true;
@@ -2240,6 +3339,7 @@ namespace PathfindingService.Repository
 
             if (repairCount > 0)
             {
+                NavigationPerformanceMetrics.RecordSteepAffordanceRepair(repairCount);
                 Console.Error.WriteLine(
                     $"[CORRIDOR-AFFORDANCE-REPAIR] repaired {repairCount} steep/blocked segment window(s) pathLen={path.Length} repairedLen={repaired.Count}");
             }
@@ -2253,12 +3353,20 @@ namespace PathfindingService.Repository
             XYZ to,
             float agentRadius,
             float agentHeight,
-            out string reason)
+            out string reason,
+            bool includeLocalPhysicsReachabilityBreak = false)
         {
             reason = "none";
             var horizontal = Distance2D(from, to);
             if (horizontal <= AffordanceRepairMinSegmentLength)
                 return false;
+
+            if (includeLocalPhysicsReachabilityBreak &&
+                IsLocalPhysicsReachabilityBreak(mapId, from, to, agentRadius, agentHeight))
+            {
+                reason = "local_physics_movement";
+                return true;
+            }
 
             var rise = to.Z - from.Z;
             if (rise < AffordanceRepairMinCandidateRise ||
@@ -2301,6 +3409,828 @@ namespace PathfindingService.Repository
             }
 
             return false;
+        }
+
+        private static bool IsLocalPhysicsReachabilityBreak(
+            uint mapId,
+            XYZ from,
+            XYZ to,
+            float agentRadius,
+            float agentHeight)
+        {
+            if (agentRadius <= 0f || agentHeight <= 0f)
+                return false;
+
+            var horizontal = Distance2D(from, to);
+            if (horizontal < LocalPhysicsLayerProjectionMinSegmentLength ||
+                horizontal > LocalPhysicsLayerProjectionMaxSegmentLength)
+            {
+                return false;
+            }
+
+            var rise = to.Z - from.Z;
+            if (horizontal <= 1.25f && rise >= 1.5f)
+                return true;
+
+            if (rise < AffordanceRepairMinCandidateRise)
+                return false;
+
+            var simulation = SimulateLocalPhysicsSegment(mapId, from, to, agentRadius, agentHeight);
+            if (!simulation.Available || !simulation.Compatible)
+                return true;
+
+            if (Distance2D(simulation.FinalPosition, to) > LocalPhysicsLayerProjectionMaxEndpointDistance)
+                return true;
+
+            return MathF.Abs(simulation.FinalPosition.Z - to.Z) > EarlySupportProjectionReachableMaxZDelta;
+        }
+
+        private static bool FindFirstLocalPhysicsReachabilityBreak(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            float agentRadius,
+            float agentHeight,
+            int maxScanSegments,
+            out int blockedSegmentIndex)
+        {
+            blockedSegmentIndex = -1;
+            if (path.Count < 2)
+                return false;
+
+            var scanEnd = Math.Min(path.Count - 1, Math.Max(0, maxScanSegments));
+            for (var i = 0; i < scanEnd; i++)
+            {
+                if (!IsLocalPhysicsReachabilityBreak(mapId, path[i], path[i + 1], agentRadius, agentHeight))
+                    continue;
+
+                blockedSegmentIndex = i;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static XYZ[] RepairLocalPhysicsReachabilityBreaks(
+            uint mapId,
+            XYZ[] path,
+            float agentRadius,
+            float agentHeight,
+            out int repairCount,
+            int maxScanSegments)
+        {
+            repairCount = 0;
+            if (path.Length < 3)
+                return path;
+
+            var repaired = path.ToList();
+            var stopwatch = Stopwatch.StartNew();
+            var diagnostics = IsLocalPhysicsLayerDiagnosticsEnabled();
+            var scanEnd = Math.Min(repaired.Count - 1, Math.Max(0, maxScanSegments));
+            for (var i = 0; i < scanEnd && i < repaired.Count - 1; i++)
+            {
+                if (repairCount >= LocalPhysicsReachabilityRepairMaxRepairs ||
+                    stopwatch.Elapsed > LocalPhysicsReachabilityRepairBudget)
+                {
+                    break;
+                }
+
+                var from = repaired[i];
+                var to = repaired[i + 1];
+                if (!IsLocalPhysicsReachabilityBreak(mapId, from, to, agentRadius, agentHeight))
+                    continue;
+
+                if (diagnostics)
+                {
+                    Console.Error.WriteLine(
+                        $"[LOCAL-REPAIR-DBG] seg={i} from=({from.X:F1},{from.Y:F1},{from.Z:F1}) to=({to.X:F1},{to.Y:F1},{to.Z:F1}) pathLen={repaired.Count}");
+                }
+
+                var next = i + 2 < repaired.Count ? repaired[i + 2] : (XYZ?)null;
+                if (TryBuildLocalPhysicsReachabilityProgressPoint(
+                        mapId,
+                        from,
+                        to,
+                        next,
+                        agentRadius,
+                        agentHeight,
+                        out var progressPoint))
+                {
+                    if (diagnostics)
+                    {
+                        Console.Error.WriteLine(
+                            $"[LOCAL-REPAIR-DBG] seg={i} insert_progress=({progressPoint.X:F1},{progressPoint.Y:F1},{progressPoint.Z:F1})");
+                    }
+
+                    repaired.Insert(i + 1, progressPoint);
+                    repairCount++;
+                    scanEnd = Math.Min(repaired.Count - 1, Math.Max(0, maxScanSegments));
+                    i = Math.Max(-1, i - 2);
+                    continue;
+                }
+
+                if (TryBuildLocalPhysicsReachabilityLateralBridgePoint(
+                        mapId,
+                        from,
+                        to,
+                        agentRadius,
+                        agentHeight,
+                        out var lateralBridgePoint))
+                {
+                    if (diagnostics)
+                    {
+                        Console.Error.WriteLine(
+                            $"[LOCAL-REPAIR-DBG] seg={i} insert_lateral_bridge=({lateralBridgePoint.X:F1},{lateralBridgePoint.Y:F1},{lateralBridgePoint.Z:F1})");
+                    }
+
+                    repaired.Insert(i + 1, lateralBridgePoint);
+                    repairCount++;
+                    scanEnd = Math.Min(repaired.Count - 1, Math.Max(0, maxScanSegments));
+                    i = Math.Max(-1, i - 2);
+                    continue;
+                }
+
+                if (TryBuildLocalPhysicsReachabilityRouteProgressPoint(
+                        mapId,
+                        from,
+                        to,
+                        next,
+                        agentRadius,
+                        agentHeight,
+                        out var routeProgressPoint))
+                {
+                    if (diagnostics)
+                    {
+                        Console.Error.WriteLine(
+                            $"[LOCAL-REPAIR-DBG] seg={i} insert_route_progress=({routeProgressPoint.X:F1},{routeProgressPoint.Y:F1},{routeProgressPoint.Z:F1})");
+                    }
+
+                    repaired.Insert(i + 1, routeProgressPoint);
+                    repairCount++;
+                    scanEnd = Math.Min(repaired.Count - 1, Math.Max(0, maxScanSegments));
+                    i = Math.Max(-1, i - 2);
+                    continue;
+                }
+
+                if (TryBuildLocalPhysicsReachabilityBridgePoint(
+                        mapId,
+                        from,
+                        to,
+                        agentRadius,
+                        agentHeight,
+                        out var bridgePoint))
+                {
+                    if (diagnostics)
+                    {
+                        Console.Error.WriteLine(
+                            $"[LOCAL-REPAIR-DBG] seg={i} insert_bridge=({bridgePoint.X:F1},{bridgePoint.Y:F1},{bridgePoint.Z:F1})");
+                    }
+
+                    repaired.Insert(i + 1, bridgePoint);
+                    repairCount++;
+                    scanEnd = Math.Min(repaired.Count - 1, Math.Max(0, maxScanSegments));
+                    i = Math.Max(-1, i - 2);
+                    continue;
+                }
+
+                if (TryFindLocalPhysicsReachableDownstreamAnchor(
+                        mapId,
+                        repaired,
+                        i,
+                        agentRadius,
+                        agentHeight,
+                        out var downstreamAnchorIndex))
+                {
+                    if (diagnostics)
+                        Console.Error.WriteLine($"[LOCAL-REPAIR-DBG] seg={i} remove_to_anchor={downstreamAnchorIndex}");
+
+                    repaired.RemoveRange(i + 1, downstreamAnchorIndex - i - 1);
+                    repairCount++;
+                    scanEnd = Math.Min(repaired.Count - 1, Math.Max(0, maxScanSegments));
+                    i = Math.Max(-1, i - 2);
+                    continue;
+                }
+
+                if (!next.HasValue)
+                {
+                    if (diagnostics)
+                        Console.Error.WriteLine($"[LOCAL-REPAIR-DBG] seg={i} reject=no_next_anchor");
+
+                    continue;
+                }
+
+                if (!TryBuildLocalPhysicsReachabilityRepairPoint(
+                        mapId,
+                        from,
+                        to,
+                        next,
+                        agentRadius,
+                        agentHeight,
+                        out var replacement))
+                {
+                    if (diagnostics)
+                        Console.Error.WriteLine($"[LOCAL-REPAIR-DBG] seg={i} reject=no_repair_candidate");
+
+                    continue;
+                }
+
+                if (diagnostics)
+                {
+                    Console.Error.WriteLine(
+                        $"[LOCAL-REPAIR-DBG] seg={i} replace=({replacement.X:F1},{replacement.Y:F1},{replacement.Z:F1})");
+                }
+
+                repaired[i + 1] = replacement;
+                repairCount++;
+                scanEnd = Math.Min(repaired.Count - 1, Math.Max(0, maxScanSegments));
+                i = Math.Max(-1, i - 2);
+            }
+
+            if (repairCount > 0)
+            {
+                NavigationPerformanceMetrics.RecordLocalPhysicsLayerRepair(repairCount);
+                Console.Error.WriteLine(
+                    $"[CORRIDOR-LOCAL-PHYSICS-REPAIR] repaired {repairCount} local-physics segment(s) pathLen={path.Length} repairedLen={repaired.Count}");
+            }
+
+            return repairCount == 0
+                ? path
+                : CollapseDuplicateWaypoints(repaired.ToArray());
+        }
+
+        private static bool TryBuildLocalPhysicsReachabilityProgressPoint(
+            uint mapId,
+            XYZ from,
+            XYZ rejectedTo,
+            XYZ? next,
+            float agentRadius,
+            float agentHeight,
+            out XYZ progressPoint)
+        {
+            progressPoint = from;
+            var horizontal = Distance2D(from, rejectedTo);
+            var rise = rejectedTo.Z - from.Z;
+            if (horizontal < LocalPhysicsLayerProjectionMinSegmentLength ||
+                horizontal > LocalPhysicsLayerProjectionMaxSegmentLength ||
+                rise < AffordanceRepairMinCandidateRise)
+            {
+                return false;
+            }
+
+            foreach (var desired in EnumerateLocalPhysicsReachabilityProgressCandidates(from, rejectedTo, next))
+            {
+                if (!TryFindNearbyWalkablePoint(
+                        mapId,
+                        desired,
+                        searchRadius: MathF.Max(3.0f, agentRadius + 2.0f),
+                        maxHorizontalOffset: 2.5f,
+                        maxVerticalOffset: MathF.Max(2.0f, rise + 1.0f),
+                        out var snapped))
+                {
+                    continue;
+                }
+
+                if (Distance2D(from, snapped) <= CombineWaypointEpsilon ||
+                    Distance2D(rejectedTo, snapped) <= CombineWaypointEpsilon ||
+                    Distance2D(rejectedTo, snapped) > LocalPhysicsReachabilityRepairMaxDistance)
+                {
+                    continue;
+                }
+
+                var alongRejectedSegment = (((snapped.X - from.X) * (rejectedTo.X - from.X)) +
+                    ((snapped.Y - from.Y) * (rejectedTo.Y - from.Y))) / horizontal;
+                if (!next.HasValue && alongRejectedSegment < -LocalPhysicsReachabilityProgressMaxBacktrack)
+                    continue;
+
+                if (next.HasValue)
+                {
+                    var routeHorizontal = Distance2D(from, next.Value);
+                    if (routeHorizontal > 0.001f)
+                    {
+                        var alongRoute = (((snapped.X - from.X) * (next.Value.X - from.X)) +
+                            ((snapped.Y - from.Y) * (next.Value.Y - from.Y))) / routeHorizontal;
+                        if (alongRoute < -LocalPhysicsReachabilityProgressMaxBacktrack)
+                            continue;
+                    }
+                }
+
+                if (snapped.Z - from.Z < LocalPhysicsReachabilityProgressMinRise ||
+                    snapped.Z > rejectedTo.Z + LocalPhysicsReachabilityProgressMaxOvershoot)
+                {
+                    continue;
+                }
+
+                var routeAnchor = next ?? rejectedTo;
+                if (DistancePointToSegment2D(snapped, from, routeAnchor) > LocalPhysicsReachabilityProgressMaxLateralDeviation)
+                    continue;
+
+                if (Distance2D(from, snapped) >= EarlyStaticRepairLosMinSegmentLength &&
+                    !HasLineOfSightStrict(mapId, from, snapped))
+                {
+                    continue;
+                }
+
+                if (Distance2D(snapped, rejectedTo) >= EarlyStaticRepairLosMinSegmentLength &&
+                    !HasLineOfSightStrict(mapId, snapped, rejectedTo))
+                {
+                    continue;
+                }
+
+                if (!IsAffordanceRepairLegWalkable(mapId, from, snapped, agentRadius, agentHeight))
+                    continue;
+
+                progressPoint = snapped;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<XYZ> EnumerateLocalPhysicsReachabilityProgressCandidates(
+            XYZ from,
+            XYZ rejectedTo,
+            XYZ? next)
+        {
+            var (dirX, dirY) = ResolveLocalPhysicsReachabilityRepairDirection(from, rejectedTo, null);
+            var perpX = -dirY;
+            var perpY = dirX;
+            var rise = MathF.Max(0.0f, rejectedTo.Z - from.Z);
+
+            foreach (var sample in LocalPhysicsReachabilityBridgeSamples)
+            {
+                yield return new XYZ(
+                    from.X + ((rejectedTo.X - from.X) * sample),
+                    from.Y + ((rejectedTo.Y - from.Y) * sample),
+                    from.Z + (rise * sample));
+            }
+
+            foreach (var distance in LocalPhysicsReachabilityProgressDistances)
+            {
+                var desiredZ = from.Z + MathF.Min(rise, MathF.Max(LocalPhysicsReachabilityProgressMinRise, distance * 0.4f));
+                foreach (var (offsetX, offsetY) in EnumerateLocalPhysicsReachabilityProgressOffsets(dirX, dirY, perpX, perpY))
+                {
+                    yield return new XYZ(
+                        from.X + (offsetX * distance),
+                        from.Y + (offsetY * distance),
+                        desiredZ);
+                }
+            }
+
+            if (next.HasValue)
+            {
+                var (routeDirX, routeDirY) = ResolveLocalPhysicsReachabilityRepairDirection(from, rejectedTo, next);
+                var routePerpX = -routeDirY;
+                var routePerpY = routeDirX;
+                foreach (var distance in LocalPhysicsReachabilityProgressDistances)
+                {
+                    var desiredZ = from.Z + MathF.Min(rise, MathF.Max(LocalPhysicsReachabilityProgressMinRise, distance * 0.4f));
+                    yield return new XYZ(from.X + (routePerpX * distance), from.Y + (routePerpY * distance), desiredZ);
+                    yield return new XYZ(from.X - (routePerpX * distance), from.Y - (routePerpY * distance), desiredZ);
+                }
+            }
+        }
+
+        private static IEnumerable<(float X, float Y)> EnumerateLocalPhysicsReachabilityProgressOffsets(
+            float dirX,
+            float dirY,
+            float perpX,
+            float perpY)
+        {
+            yield return (perpX, perpY);
+            yield return (-perpX, -perpY);
+            yield return (dirX, dirY);
+            yield return (-dirX, -dirY);
+
+            var diagonalScale = 0.70710677f;
+            yield return ((dirX + perpX) * diagonalScale, (dirY + perpY) * diagonalScale);
+            yield return ((dirX - perpX) * diagonalScale, (dirY - perpY) * diagonalScale);
+            yield return ((-dirX + perpX) * diagonalScale, (-dirY + perpY) * diagonalScale);
+            yield return ((-dirX - perpX) * diagonalScale, (-dirY - perpY) * diagonalScale);
+        }
+
+        private static bool TryBuildLocalPhysicsReachabilityLateralBridgePoint(
+            uint mapId,
+            XYZ from,
+            XYZ rejectedTo,
+            float agentRadius,
+            float agentHeight,
+            out XYZ bridgePoint)
+        {
+            bridgePoint = from;
+            var horizontal = Distance2D(from, rejectedTo);
+            if (horizontal < LocalPhysicsLayerProjectionMinSegmentLength ||
+                horizontal > LocalPhysicsLayerProjectionMaxSegmentLength)
+            {
+                return false;
+            }
+
+            var dirX = (rejectedTo.X - from.X) / horizontal;
+            var dirY = (rejectedTo.Y - from.Y) / horizontal;
+            var perpX = -dirY;
+            var perpY = dirX;
+
+            foreach (var sample in LocalPhysicsReachabilityBridgeSamples)
+            {
+                var along = new XYZ(
+                    from.X + ((rejectedTo.X - from.X) * sample),
+                    from.Y + ((rejectedTo.Y - from.Y) * sample),
+                    from.Z + ((rejectedTo.Z - from.Z) * sample));
+
+                foreach (var lateralOffset in LocalPhysicsReachabilityBridgeLateralOffsets)
+                {
+                    var desired = new XYZ(
+                        along.X + (perpX * lateralOffset),
+                        along.Y + (perpY * lateralOffset),
+                        along.Z);
+                    if (!TryFindNearbyWalkablePoint(
+                            mapId,
+                            desired,
+                            searchRadius: MathF.Max(4.0f, MathF.Abs(lateralOffset) + 1.5f),
+                            maxHorizontalOffset: MathF.Max(2.0f, MathF.Abs(lateralOffset) + 0.75f),
+                            maxVerticalOffset: 3.0f,
+                            out var snapped))
+                    {
+                        continue;
+                    }
+
+                    if (Distance2D(from, snapped) <= CombineWaypointEpsilon ||
+                        Distance2D(rejectedTo, snapped) <= CombineWaypointEpsilon)
+                    {
+                        continue;
+                    }
+
+                    if (Distance2D(from, snapped) >= EarlyStaticRepairLosMinSegmentLength &&
+                        !HasLineOfSightStrict(mapId, from, snapped))
+                    {
+                        continue;
+                    }
+
+                    if (Distance2D(snapped, rejectedTo) >= EarlyStaticRepairLosMinSegmentLength &&
+                        !HasLineOfSightStrict(mapId, snapped, rejectedTo))
+                    {
+                        continue;
+                    }
+
+                    if (!IsAffordanceRepairLegWalkable(mapId, from, snapped, agentRadius, agentHeight) ||
+                        !IsAffordanceRepairLegWalkable(mapId, snapped, rejectedTo, agentRadius, agentHeight))
+                    {
+                        continue;
+                    }
+
+                    bridgePoint = snapped;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryBuildLocalPhysicsReachabilityRouteProgressPoint(
+            uint mapId,
+            XYZ from,
+            XYZ rejectedTo,
+            XYZ? next,
+            float agentRadius,
+            float agentHeight,
+            out XYZ progressPoint)
+        {
+            progressPoint = from;
+            var rejectedHorizontal = Distance2D(from, rejectedTo);
+            if (rejectedHorizontal < LocalPhysicsLayerProjectionMinSegmentLength ||
+                rejectedHorizontal > LocalPhysicsLayerProjectionMaxSegmentLength)
+            {
+                return false;
+            }
+
+            var routeAnchor = next ?? rejectedTo;
+            var routeHorizontal = Distance2D(from, routeAnchor);
+            if (routeHorizontal < LocalPhysicsLayerProjectionMinSegmentLength)
+                return false;
+
+            foreach (var desired in EnumerateLocalPhysicsReachabilityRouteProgressCandidates(from, rejectedTo, routeAnchor))
+            {
+                if (!TryFindNearbyWalkablePoint(
+                        mapId,
+                        desired,
+                        searchRadius: MathF.Max(4.0f, agentRadius + 2.0f),
+                        maxHorizontalOffset: 2.75f,
+                        maxVerticalOffset: MathF.Max(2.0f, LocalPhysicsReachabilityRouteProgressMaxZDelta),
+                        out var snapped))
+                {
+                    continue;
+                }
+
+                if (Distance2D(from, snapped) <= CombineWaypointEpsilon ||
+                    Distance2D(rejectedTo, snapped) <= CombineWaypointEpsilon ||
+                    (next.HasValue && Distance2D(next.Value, snapped) <= CombineWaypointEpsilon))
+                {
+                    continue;
+                }
+
+                var snappedDistance = Distance2D(from, snapped);
+                if (snappedDistance > LocalPhysicsSimulationMaxDistance ||
+                    MathF.Abs(snapped.Z - from.Z) > LocalPhysicsReachabilityRouteProgressMaxZDelta)
+                {
+                    continue;
+                }
+
+                var alongRoute = (((snapped.X - from.X) * (routeAnchor.X - from.X)) +
+                    ((snapped.Y - from.Y) * (routeAnchor.Y - from.Y))) / routeHorizontal;
+                if (alongRoute < LocalPhysicsReachabilityRouteProgressMinAdvance ||
+                    alongRoute > routeHorizontal + LocalPhysicsReachabilityRouteProgressMaxOvershoot)
+                {
+                    continue;
+                }
+
+                if (Distance2D(snapped, routeAnchor) >
+                    routeHorizontal - LocalPhysicsReachabilityRouteProgressMinImprovement)
+                {
+                    continue;
+                }
+
+                if (DistancePointToSegment2D(snapped, from, routeAnchor) >
+                    LocalPhysicsReachabilityProgressMaxLateralDeviation)
+                {
+                    continue;
+                }
+
+                if (snappedDistance >= EarlyStaticRepairLosMinSegmentLength &&
+                    !HasLineOfSightStrict(mapId, from, snapped))
+                {
+                    continue;
+                }
+
+                if (!IsAffordanceRepairLegWalkable(mapId, from, snapped, agentRadius, agentHeight))
+                    continue;
+
+                progressPoint = snapped;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<XYZ> EnumerateLocalPhysicsReachabilityRouteProgressCandidates(
+            XYZ from,
+            XYZ rejectedTo,
+            XYZ routeAnchor)
+        {
+            var rejectedHorizontal = Distance2D(from, rejectedTo);
+            if (rejectedHorizontal > 0.001f)
+            {
+                var rejectedDirX = (rejectedTo.X - from.X) / rejectedHorizontal;
+                var rejectedDirY = (rejectedTo.Y - from.Y) / rejectedHorizontal;
+                var rejectedPerpX = -rejectedDirY;
+                var rejectedPerpY = rejectedDirX;
+
+                foreach (var sample in LocalPhysicsReachabilityBridgeSamples)
+                {
+                    var along = new XYZ(
+                        from.X + ((rejectedTo.X - from.X) * sample),
+                        from.Y + ((rejectedTo.Y - from.Y) * sample),
+                        from.Z + ((rejectedTo.Z - from.Z) * sample));
+                    yield return along;
+
+                    foreach (var lateralOffset in LocalPhysicsReachabilityBridgeLateralOffsets)
+                    {
+                        yield return new XYZ(
+                            along.X + (rejectedPerpX * lateralOffset),
+                            along.Y + (rejectedPerpY * lateralOffset),
+                            along.Z);
+                    }
+                }
+            }
+
+            var routeHorizontal = Distance2D(from, routeAnchor);
+            if (routeHorizontal <= 0.001f)
+                yield break;
+
+            var routeDirX = (routeAnchor.X - from.X) / routeHorizontal;
+            var routeDirY = (routeAnchor.Y - from.Y) / routeHorizontal;
+            var routePerpX = -routeDirY;
+            var routePerpY = routeDirX;
+
+            foreach (var sample in LocalPhysicsReachabilityBridgeSamples)
+            {
+                if (routeHorizontal * sample >
+                    LocalPhysicsSimulationMaxDistance + LocalPhysicsReachabilityRouteProgressMaxOvershoot)
+                {
+                    continue;
+                }
+
+                yield return new XYZ(
+                    from.X + ((routeAnchor.X - from.X) * sample),
+                    from.Y + ((routeAnchor.Y - from.Y) * sample),
+                    from.Z + ((routeAnchor.Z - from.Z) * sample));
+            }
+
+            foreach (var distance in LocalPhysicsReachabilityProgressDistances)
+            {
+                var clampedDistance = MathF.Min(
+                    distance,
+                    routeHorizontal + LocalPhysicsReachabilityRouteProgressMaxOvershoot);
+                var t = Math.Clamp(clampedDistance / routeHorizontal, 0.0f, 1.0f);
+                var center = new XYZ(
+                    from.X + (routeDirX * clampedDistance),
+                    from.Y + (routeDirY * clampedDistance),
+                    from.Z + ((routeAnchor.Z - from.Z) * t));
+                yield return center;
+
+                foreach (var lateralOffset in LocalPhysicsReachabilityBridgeLateralOffsets)
+                {
+                    yield return new XYZ(
+                        center.X + (routePerpX * lateralOffset),
+                        center.Y + (routePerpY * lateralOffset),
+                        center.Z);
+                }
+            }
+        }
+
+        private static bool TryBuildLocalPhysicsReachabilityBridgePoint(
+            uint mapId,
+            XYZ from,
+            XYZ rejectedTo,
+            float agentRadius,
+            float agentHeight,
+            out XYZ bridgePoint)
+        {
+            bridgePoint = from;
+            foreach (var sample in LocalPhysicsReachabilityBridgeSamples)
+            {
+                var desired = new XYZ(
+                    from.X + ((rejectedTo.X - from.X) * sample),
+                    from.Y + ((rejectedTo.Y - from.Y) * sample),
+                    from.Z + ((rejectedTo.Z - from.Z) * sample));
+                var query = new XYZ(desired.X, desired.Y, from.Z);
+                if (!TryFindNearbyWalkablePoint(
+                        mapId,
+                        query,
+                        searchRadius: MathF.Max(4.0f, agentRadius + 2.0f),
+                        maxHorizontalOffset: 3.0f,
+                        maxVerticalOffset: 8.0f,
+                        out var snapped))
+                {
+                    continue;
+                }
+
+                if (Distance2D(from, snapped) <= agentRadius + 0.5f ||
+                    Distance2D(snapped, rejectedTo) <= agentRadius + 0.5f)
+                {
+                    continue;
+                }
+
+                if (!IsAffordanceRepairLegWalkable(mapId, from, snapped, agentRadius, agentHeight) ||
+                    !IsAffordanceRepairLegWalkable(mapId, snapped, rejectedTo, agentRadius, agentHeight))
+                {
+                    continue;
+                }
+
+                bridgePoint = snapped;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryFindLocalPhysicsReachableDownstreamAnchor(
+            uint mapId,
+            IReadOnlyList<XYZ> path,
+            int blockedSegmentIndex,
+            float agentRadius,
+            float agentHeight,
+            out int downstreamAnchorIndex)
+        {
+            downstreamAnchorIndex = -1;
+            var from = path[blockedSegmentIndex];
+            var maxAnchorIndex = Math.Min(path.Count - 1, blockedSegmentIndex + 4);
+            for (var anchorIndex = blockedSegmentIndex + 2; anchorIndex <= maxAnchorIndex; anchorIndex++)
+            {
+                var anchor = path[anchorIndex];
+                if (Distance2D(from, anchor) > LocalPhysicsSimulationMaxDistance)
+                    continue;
+
+                if (Distance2D(from, anchor) >= EarlyStaticRepairLosMinSegmentLength &&
+                    !HasLineOfSightStrict(mapId, from, anchor))
+                {
+                    continue;
+                }
+
+                if (!IsAffordanceRepairLegWalkable(mapId, from, anchor, agentRadius, agentHeight))
+                    continue;
+
+                downstreamAnchorIndex = anchorIndex;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryBuildLocalPhysicsReachabilityRepairPoint(
+            uint mapId,
+            XYZ from,
+            XYZ rejectedTo,
+            XYZ? next,
+            float agentRadius,
+            float agentHeight,
+            out XYZ replacement)
+        {
+            replacement = rejectedTo;
+            foreach (var desired in EnumerateLocalPhysicsReachabilityRepairCandidates(from, rejectedTo, next))
+            {
+                var query = new XYZ(desired.X, desired.Y, from.Z);
+                if (!TryFindNearbyWalkablePoint(
+                        mapId,
+                        query,
+                        searchRadius: MathF.Max(LocalPhysicsReachabilityRepairMaxDistance, agentRadius + 2.0f),
+                        maxHorizontalOffset: LocalPhysicsReachabilityRepairMaxDistance,
+                        maxVerticalOffset: 8.0f,
+                        out var snapped))
+                {
+                    continue;
+                }
+
+                if (Distance2D(from, snapped) <= agentRadius + 0.5f ||
+                    Distance2D(rejectedTo, snapped) > LocalPhysicsReachabilityRepairMaxDistance)
+                {
+                    continue;
+                }
+
+                if (Distance2D(from, snapped) >= EarlyStaticRepairLosMinSegmentLength &&
+                    !HasLineOfSightStrict(mapId, from, snapped))
+                {
+                    continue;
+                }
+
+                if (!IsAffordanceRepairLegWalkable(mapId, from, snapped, agentRadius, agentHeight))
+                    continue;
+
+                if (next.HasValue)
+                {
+                    var nextValue = next.Value;
+                    if (Distance2D(snapped, nextValue) <= agentRadius + 0.5f)
+                        continue;
+
+                    if (Distance2D(snapped, nextValue) >= EarlyStaticRepairLosMinSegmentLength &&
+                        !HasLineOfSightStrict(mapId, snapped, nextValue))
+                    {
+                        continue;
+                    }
+
+                    if (!IsAffordanceRepairLegWalkable(mapId, snapped, nextValue, agentRadius, agentHeight))
+                        continue;
+                }
+
+                replacement = snapped;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<XYZ> EnumerateLocalPhysicsReachabilityRepairCandidates(
+            XYZ from,
+            XYZ rejectedTo,
+            XYZ? next)
+        {
+            var (dirX, dirY) = ResolveLocalPhysicsReachabilityRepairDirection(from, rejectedTo, next);
+            var perpX = -dirY;
+            var perpY = dirX;
+
+            foreach (var distance in LocalPhysicsReachabilityRepairDistances)
+            {
+                yield return new XYZ(rejectedTo.X + (perpX * distance), rejectedTo.Y + (perpY * distance), rejectedTo.Z);
+                yield return new XYZ(rejectedTo.X - (perpX * distance), rejectedTo.Y - (perpY * distance), rejectedTo.Z);
+                yield return new XYZ(rejectedTo.X + (dirX * distance), rejectedTo.Y + (dirY * distance), rejectedTo.Z);
+                yield return new XYZ(rejectedTo.X - (dirX * distance), rejectedTo.Y - (dirY * distance), rejectedTo.Z);
+
+                var diagonal = distance * 0.70710677f;
+                yield return new XYZ(rejectedTo.X + ((dirX + perpX) * diagonal), rejectedTo.Y + ((dirY + perpY) * diagonal), rejectedTo.Z);
+                yield return new XYZ(rejectedTo.X + ((dirX - perpX) * diagonal), rejectedTo.Y + ((dirY - perpY) * diagonal), rejectedTo.Z);
+                yield return new XYZ(rejectedTo.X + ((-dirX + perpX) * diagonal), rejectedTo.Y + ((-dirY + perpY) * diagonal), rejectedTo.Z);
+                yield return new XYZ(rejectedTo.X + ((-dirX - perpX) * diagonal), rejectedTo.Y + ((-dirY - perpY) * diagonal), rejectedTo.Z);
+            }
+        }
+
+        private static (float X, float Y) ResolveLocalPhysicsReachabilityRepairDirection(
+            XYZ from,
+            XYZ rejectedTo,
+            XYZ? next)
+        {
+            var dx = next.HasValue ? next.Value.X - from.X : rejectedTo.X - from.X;
+            var dy = next.HasValue ? next.Value.Y - from.Y : rejectedTo.Y - from.Y;
+            var length = MathF.Sqrt((dx * dx) + (dy * dy));
+            if (length > 0.001f)
+                return (dx / length, dy / length);
+
+            if (next.HasValue)
+            {
+                dx = next.Value.X - rejectedTo.X;
+                dy = next.Value.Y - rejectedTo.Y;
+                length = MathF.Sqrt((dx * dx) + (dy * dy));
+                if (length > 0.001f)
+                    return (dx / length, dy / length);
+            }
+
+            return (1.0f, 0.0f);
         }
 
         private static bool TryFindCumulativeAffordanceBreak(
@@ -2777,10 +4707,12 @@ namespace PathfindingService.Repository
                 var normalized = NormalizeEarlySupportLayer(
                     mapId,
                     DensifyPath(nativePath, SmoothPathDensifySpacing),
-                    int.MaxValue);
+                    int.MaxValue,
+                    agentRadius,
+                    agentHeight);
                 normalized = RemoveShortVerticalLayerSpikes(mapId, normalized, agentRadius, agentHeight, int.MaxValue);
 
-                if (ContainsAffordanceBreak(mapId, normalized, agentRadius, agentHeight))
+                if (ContainsAffordanceBreak(mapId, normalized, agentRadius, agentHeight, includeLocalPhysicsReachabilityBreaks: true))
                     continue;
 
                 if (!ValidateRepairSequence(mapId, normalized[0], normalized.Skip(1).ToArray(), agentRadius, agentHeight))
@@ -2797,12 +4729,22 @@ namespace PathfindingService.Repository
             uint mapId,
             IReadOnlyList<XYZ> path,
             float agentRadius,
-            float agentHeight)
+            float agentHeight,
+            bool includeLocalPhysicsReachabilityBreaks = false)
         {
             for (var i = 0; i < path.Count - 1; i++)
             {
-                if (RequiresAffordanceRepair(mapId, path[i], path[i + 1], agentRadius, agentHeight, out _))
+                if (RequiresAffordanceRepair(
+                        mapId,
+                        path[i],
+                        path[i + 1],
+                        agentRadius,
+                        agentHeight,
+                        out _,
+                        includeLocalPhysicsReachabilityBreaks))
+                {
                     return true;
+                }
 
                 if (TryFindCumulativeAffordanceBreak(mapId, path, i, agentRadius, agentHeight, out _))
                     return true;
@@ -2868,6 +4810,9 @@ namespace PathfindingService.Repository
             if (!IsLocallyWalkable(validation, from, to))
                 return false;
 
+            if (IsLocalPhysicsReachabilityBreak(mapId, from, to, agentRadius, agentHeight))
+                return false;
+
             if (!TryClassifyAffordance(mapId, from, to, agentRadius, agentHeight, out var affordance))
                 return false;
 
@@ -2894,6 +4839,22 @@ namespace PathfindingService.Repository
                 affordance = default;
                 return false;
             }
+        }
+
+        private static bool IsMeaningfullyDifferentPath(
+            IReadOnlyList<XYZ> originalPath,
+            IReadOnlyList<XYZ> candidatePath)
+        {
+            if (originalPath.Count != candidatePath.Count)
+                return true;
+
+            for (var i = 0; i < originalPath.Count; i++)
+            {
+                if (Distance3D(originalPath[i], candidatePath[i]) > CombineWaypointEpsilon)
+                    return true;
+            }
+
+            return false;
         }
 
         private static float MinimumInteriorSeparationFromDetour(
@@ -3171,7 +5132,9 @@ namespace PathfindingService.Repository
                 var normalized = NormalizeEarlySupportLayer(
                     mapId,
                     DensifyPath(composed.ToArray(), SmoothPathDensifySpacing),
-                    int.MaxValue);
+                    int.MaxValue,
+                    agentRadius,
+                    agentHeight);
                 if (FindFirstLineOfSightBreak(mapId, normalized, GetLocalStaticRepairValidationScanLimit(blockedSegmentIndex)) is null)
                 {
                     repairedRoute = normalized;
@@ -3226,7 +5189,10 @@ namespace PathfindingService.Repository
 
                     var normalized = NormalizeEarlySupportLayer(
                         mapId,
-                        DensifyPath(composed.ToArray(), SmoothPathDensifySpacing));
+                        DensifyPath(composed.ToArray(), SmoothPathDensifySpacing),
+                        EarlySupportNormalizationLimit,
+                        agentRadius,
+                        agentHeight);
                     if (FindFirstLineOfSightBreak(mapId, normalized, GetLocalStaticRepairValidationScanLimit(blockedSegmentIndex)) is null)
                     {
                         repairedRoute = normalized;
@@ -3280,7 +5246,9 @@ namespace PathfindingService.Repository
                 var normalized = NormalizeEarlySupportLayer(
                     mapId,
                     DensifyPath(composed.ToArray(), SmoothPathDensifySpacing),
-                    int.MaxValue);
+                    int.MaxValue,
+                    agentRadius,
+                    agentHeight);
                 if (FindFirstLineOfSightBreak(mapId, normalized, GetLocalStaticRepairValidationScanLimit(blockedSegmentIndex)) is not null)
                     continue;
 
@@ -3335,7 +5303,9 @@ namespace PathfindingService.Repository
                 var normalized = NormalizeEarlySupportLayer(
                     mapId,
                     DensifyPath(candidate, SmoothPathDensifySpacing),
-                    int.MaxValue);
+                    int.MaxValue,
+                    agentRadius,
+                    agentHeight);
                 if (FindFirstLineOfSightBreak(mapId, normalized) is not null)
                     continue;
 
@@ -3564,7 +5534,8 @@ namespace PathfindingService.Repository
             float agentHeight,
             XYZ[] rawPath,
             int blockedSegmentIndex,
-            bool allowGlobalRepair = true)
+            bool allowGlobalRepair = true,
+            bool recordDynamicOverlayRepair = false)
         {
             if (rawPath.Length < 2 || blockedSegmentIndex < 0 || blockedSegmentIndex >= rawPath.Length - 1)
                 return Array.Empty<XYZ>();
@@ -3593,7 +5564,11 @@ namespace PathfindingService.Repository
             }
 
             if (bestPath.Length > 0)
+            {
+                if (recordDynamicOverlayRepair)
+                    NavigationPerformanceMetrics.RecordDynamicOverlayRepair();
                 return bestPath;
+            }
 
             if (!allowGlobalRepair)
                 return Array.Empty<XYZ>();
@@ -3617,6 +5592,9 @@ namespace PathfindingService.Repository
                     bestPath = repaired;
                 }
             }
+
+            if (bestPath.Length > 0 && recordDynamicOverlayRepair)
+                NavigationPerformanceMetrics.RecordDynamicOverlayRepair();
 
             return bestPath;
         }
@@ -4100,7 +6078,10 @@ namespace PathfindingService.Repository
             }
 
             if (repairCount > 0)
+            {
+                NavigationPerformanceMetrics.RecordSegmentValidationRepair(repairCount);
                 Console.Error.WriteLine($"[CORRIDOR-VALIDATE] {repairCount} segments repaired out of {path.Length - 1} ({sw.ElapsedMilliseconds}ms)");
+            }
 
             AppendWaypointIfDistinct(result, path[^1]);
             return result.ToArray();
@@ -4221,6 +6202,9 @@ namespace PathfindingService.Repository
                 if (validation is not SegmentValidationCode.Clear and not SegmentValidationCode.MissingSupport)
                     return false;
 
+                if (IsLocalPhysicsReachabilityBreak(mapId, current, waypoint, radius, height))
+                    return false;
+
                 current = waypoint;
             }
 
@@ -4283,6 +6267,8 @@ namespace PathfindingService.Repository
             float agentHeight)
         {
             IntPtr pathPtr = IntPtr.Zero;
+            var stopwatch = Stopwatch.StartNew();
+            var length = 0;
             try
             {
                 pathPtr = FindPathForAgent(
@@ -4292,7 +6278,7 @@ namespace PathfindingService.Repository
                     smoothPath,
                     agentRadius,
                     agentHeight,
-                    out int length);
+                    out length);
 
                 if (pathPtr == IntPtr.Zero || length <= 0)
                     return Array.Empty<XYZ>();
@@ -4308,6 +6294,7 @@ namespace PathfindingService.Repository
             }
             finally
             {
+                NavigationPerformanceMetrics.RecordNativeFindPath(smoothPath, stopwatch.Elapsed, length);
                 if (pathPtr != IntPtr.Zero)
                     PathArrFree(pathPtr);
             }

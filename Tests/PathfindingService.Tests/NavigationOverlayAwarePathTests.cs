@@ -36,6 +36,32 @@ public class NavigationOverlayAwarePathTests
     }
 
     [Fact]
+    public void CalculateValidatedPath_RecordsResolverAndManagedValidationMetrics()
+    {
+        var before = NavigationPerformanceMetrics.Snapshot;
+        var alternateMid = new XYZ(5f, 3f, 0f);
+        var navigation = new Navigation(
+            (mapId, start, end, smoothPath) =>
+            {
+                if (smoothPath)
+                    return [Start, End];
+
+                return [Start, alternateMid, End];
+            },
+            (mapId, from, to) => IntersectsFlatCorridor(from, to));
+
+        var result = navigation.CalculateValidatedPath(1, Start, End, smoothPath: true);
+        var stats = NavigationPerformanceMetrics.Snapshot;
+
+        Assert.Equal("native_path_alternate_mode", result.Result);
+        Assert.True(stats.ValidatedPathRequests >= before.ValidatedPathRequests + 1);
+        Assert.True(stats.PathResolverAttempts >= before.PathResolverAttempts + 2);
+        Assert.True(stats.SmoothPathResolverAttempts >= before.SmoothPathResolverAttempts + 1);
+        Assert.True(stats.StraightPathResolverAttempts >= before.StraightPathResolverAttempts + 1);
+        Assert.True(stats.ManagedValidationRuns >= before.ManagedValidationRuns + 1);
+    }
+
+    [Fact]
     public void CalculateValidatedPath_RepairsBlockedPath_WithDetourCandidate()
     {
         var navigation = new Navigation(

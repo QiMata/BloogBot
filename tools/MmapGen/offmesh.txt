@@ -1,0 +1,114 @@
+// MmapGen off-mesh connections for Westworld of Warcraft
+// ----------------------------------------------------------------------------
+// Format (one connection per line, exactly as vmangos contrib/mmap/offmesh.txt):
+//   mapID tileX,tileY (start_x start_y start_z) (end_x end_y end_z) size  // optional comment
+//
+// Notes:
+//   - Coordinates are WoW (X, Y, Z) in continent units.
+//   - tileX / tileY are MaNGOS tile coordinates (see docs/physics/MMAP_FORMAT.md).
+//   - "size" is the connection radius in WoW units. 2.5 is typical for a
+//     single-character footpath; 4.0+ for wider boarding ramps.
+//   - Comments are anything after `//`.
+//   - One connection is bidirectional unless flagged otherwise (see vmangos
+//     generator.cpp for the bidirectional flag handling).
+//
+// Authoring rules:
+//   - Add an entry only when the source/target polygons are in the navmesh
+//     but Recast cannot connect them (because the geometry between them is
+//     non-walkable: a gangplank, an elevator shaft, a teleport pad, a fall
+//     drop with no walkable slope).
+//   - Do NOT add entries to "patch around" missing static collision; fix the
+//     mesh in tools/MmapGen/ instead.
+//   - Tile regeneration after editing this file is required for the affected
+//     map. Tiles outside the affected map are unchanged.
+//
+// Source notes:
+//   - Inherited entries from upstream vmangos contrib/mmap/offmesh.txt are
+//     preserved below the divider.
+//   - Westworld-of-Warcraft-specific entries appear above the divider with a
+//     `// WWoW:` tag.
+// ============================================================================
+
+// WWoW: Orgrimmar -> Undercity zeppelin gangplank (map 1, Kalimdor side dock)
+// Original screenshot-derived anchors (2026-05-06):
+//   ApproachPosition cluster:  (1338.10, -4646.00, 51.60)
+//   BoardingPosition (deck):   (1320.142944, -4653.158691, 53.891945)
+// These were the bot's recorded positions when stalled, not the actual
+// walkable upper-platform / gangplank elevations. Snapping to the existing
+// walkable detail verts in tile (1, 29, 40) — see Phase 3 follow-up:
+//   approach (closest walkable to (1338,-4646)): (1330.66, -4656.03, 96.29)
+//   deck     (closest walkable to (1320,-4653)): (1315.33, -4650.00, 98.54)
+// XY distance ~16 units — plausible OG zeppelin gangplank length. Detour
+// requires both endpoints to lie within walkableClimb of an actual
+// walkable polygon at the seed Z; the original z=51-54 anchors fell below
+// the tile's walkable mesh floor (hmin=72.29) and Detour silently dropped
+// the connection at dtCreateNavMeshData::classifyOffMeshPoint's height
+// check (DetourNavMeshBuilder.cpp:344-348). See memory note
+// project_mmapgen_offmesh_axis_swap.md for the full diagnosis.
+1 29,40 (1330.66 -4656.03 96.29) (1315.33 -4650.00 98.54) 4.0 // WWoW: OG upper platform -> OG-UC zeppelin gangplank end (proof-test anchor)
+1 29,40 (1315.33 -4650.00 98.54) (1330.66 -4656.03 96.29) 4.0 // WWoW: reverse (won't bake — start z=98.54 IS walkable but redundant given bidir flag on forward)
+// Bridge from walkable upper platform to BotRunner's existing ApproachPosition + BoardingPosition
+// (TransportData.cs lines 179, 186). The forward entry's start is on walkable mesh; the end is
+// at the bot's expected boarding/approach Z, so the path query "navigate to (1338.10,-4646.00,51.60)"
+// finds the off-mesh poly via dtNavMeshQuery::findNearestPoly and routes through it. The DT_OFFMESH_CON_BIDIR
+// flag (set by default for offmesh.txt entries with dir=1) lets the bot traverse the link in both
+// directions without needing a reverse entry — and a reverse entry would be silently dropped at
+// dtCreateNavMeshData::classifyOffMeshPoint's height check (start z=51.60 below the tile's walkable
+// mesh floor at hmin=72.29).
+1 29,40 (1330.66 -4656.03 96.29) (1338.10 -4646.00 51.60) 4.0 // WWoW: OG upper platform -> ApproachPosition (BotRunner staging point)
+1 29,40 (1330.66 -4656.03 96.29) (1320.14 -4653.16 53.89) 4.0 // WWoW: OG upper platform -> BoardingPosition (gangplank/deck — final boarding XYZ before TransportWaitingLogic attaches the zeppelin)
+// ----------------------------------------------------------------------------
+// Phase 4 experiment matrix outcomes (PFS-OVERHAUL-004, 2026-05-06):
+//   H1 (radius 4.0 → 12.0 on all four entries): NO EFFECT. PROOF C still
+//   failed with maxZ=62.15 across 477 corners; the path stayed at sea level.
+//   This rules out "radius too narrow for Detour's findNearestPoly" as the
+//   blocker.
+//   H2b (FindPathPolygonsForAgent helper, this session): the smoke test
+//   between the upper-platform and gangplank-end anchors (i.e. the EXACT
+//   off-mesh anchor pair) returns polyCount=5 with offMeshPolyCount=0.
+//   Detour's findPath does not traverse the off-mesh polygon EVEN BETWEEN
+//   ITS OWN ANCHORS. PROOF C (flight master → ApproachPosition) likewise
+//   returns polyCount=296 offMeshPolyCount=0. Diagnosis: the upper-platform
+//   anchor at z=96 is too far above the nearest walkable polygon (which is
+//   at z≈54 on the dock) for dtNavMesh::connectExtOffMeshLinks's
+//   findNearestPoly snap to bridge — the off-mesh polygon is dangling in
+//   the tile, present in offMeshConCount but not linked into the navmesh
+//   graph. Adding a sea-level anchor pair (H2a below) is the next test.
+// ----------------------------------------------------------------------------
+
+// WWoW: H2a sea-level shortcut (PFS-OVERHAUL-004 Phase 4, 2026-05-06).
+// Bridges the canonical OG-city walkable point (1604.8, -4425.6, 10.36) — the
+// start of the existing orgrimmar_flight_master_tower_descent walkable-leg
+// test — directly to BoardingPosition (1320.14, -4653.16, 53.89). Both
+// endpoints are confirmed walkable: the start by an existing walkable-leg
+// test, the end by the live CrossroadsToUndercity test trace where the bot
+// reached (1338.1, -4646.0, 51.6) at z=51.6 (within walkableClimb of 53.89).
+// Tile coordinate: tileX = 32 - ceil(1604.8/533.33) = 28; tileY = 32 -
+// ceil(-4425.6/533.33) = 40 → 1 28,40 → mmtile filename 0014028.mmtile
+// (sprintf order is mapID, tileY, tileX per project_pathfinding_tile_coords.md).
+1 28,40 (1604.8 -4425.6 10.36) (1320.14 -4653.16 53.89) 4.0 // WWoW: OG city sea-level walk -> BoardingPosition (Phase 4 H2a)
+// ----------------------------------------------------------------------------
+
+// WWoW: H2c intra-tile off-mesh proof (PFS-OVERHAUL-004 Phase 4, 2026-05-06).
+// Both endpoints inside tile (29, 40) bounds (Recast X 1066.67..1600.0,
+// Recast Z -4800..-4266.67). Eliminates the cross-tile linkage variable that
+// H2a leaves open. Start coord is the canonical intermediate from
+// orgrimmar_city_to_zeppelin_tower_lower_approach walkable-leg test
+// (LongPathingRouteTests.cs:71); end coord is BoardingPosition.
+1 29,40 (1356.8 -4501.3 29.44) (1320.14 -4653.16 53.89) 4.0 // WWoW: H2c intra-tile off-mesh proof
+// ----------------------------------------------------------------------------
+
+// WWoW: Undercity zeppelin elevator (map 0, Tirisfal side)
+// TODO[overhaul]: replace placeholder coordinates with measured anchors. The
+// elevator descends from the upper Tirisfal platform to the Undercity sewer
+// entrance and is currently navigated via PathfindingService managed repair.
+// Until measurements land, leave commented out so the regen is unaffected.
+// 0 ??,?? (X1 Y1 Z1) (X2 Y2 Z2) 4.0 // WWoW: UC zeppelin elevator (PLACEHOLDER)
+
+// ============================================================================
+// Inherited from vmangos contrib/mmap/offmesh.txt (verbatim):
+30 32,33 (-759.16 -350.45 68.96) (-758.2 -348.56 67.56) 2.5                          // AV - Tower entrance
+30 32,33 (-761.69 -349.45 69.0) (-761 -347.83 67.61) 2.5                             // AV - Tower entrance
+30 32,33 (-765.1 -348 69) (-764.53 -346.58 67.66) 2.5                                // AV - Tower entrance
+189 29,28 (1827.839478 1315.610962 17.235508) (1830.25244 1315.189697 19.016930) 2.5 // Scarlet Monastery Graveyard - path out of spawn position
+36 33,32 (-23.427919 -797.150940 20.145432) (-23.941082 -797.715393 19.456278) 2.5   // The Deadmines - Mr. Smite ship -> bridge

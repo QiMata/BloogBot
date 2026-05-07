@@ -2,6 +2,16 @@
 
 This file is the operational guide for coding agents in this repository.
 
+## Monorepo Shared Contract
+
+- Also follow the root monorepo rules in [../AGENTS.md](../AGENTS.md) and [../CLAUDE.md](../CLAUDE.md).
+- Runtime StateManager/BotRunner traffic is protobuf/TCP with length framing.
+- ActivitySnapshot should carry major state deltas, not full enemy/object payloads.
+- FG work must be state-gated and should not steal focus or capture the cursor.
+- BG work must be validated against FG packet/event recordings when parity matters.
+- Live tests must poll StateManager APIs, fail fast on disconnect/crash, and capture latest screenshots/state dumps.
+- See [../docs/TEST_PATTERNS.md](../docs/TEST_PATTERNS.md), [../docs/TEST_SCREENSHOTS.md](../docs/TEST_SCREENSHOTS.md), and [../docs/SKILL_DEVELOPMENT_PLAN.md](../docs/SKILL_DEVELOPMENT_PLAN.md).
+
 ## 1. Project Snapshot
 
 - Project names in repo/docs may use both `Westworld of Warcraft`, `WWoW`, and legacy `BloogBot`.
@@ -19,6 +29,7 @@ This file is the operational guide for coding agents in this repository.
 ## 2. First-Minute Checklist
 
 - Read [docs/TASKS.md](docs/TASKS.md) before starting implementation work that is task-tracked.
+- **If the work touches pathfinding** (`Services/PathfindingService`, `Exports/Navigation`, `Exports/BotRunner` movement/transport code, `Tests/PathfindingService.Tests`, `tools/NavDataAudit`): read [docs/physics/PATHFINDING_OVERHAUL.md](docs/physics/PATHFINDING_OVERHAUL.md) **before editing**. The stack is in a 2026-05-06 architectural freeze; mesh fixes go in [tools/MmapGen/](tools/MmapGen/) instead of new managed repair logic.
 - Identify the relevant local `TASKS.md` and `TASKS_ARCHIVE.md` in the subsystem you touch.
 - Preserve existing uncommitted work; do not revert unrelated changes.
 - Choose smallest-scope validation commands that prove your change.

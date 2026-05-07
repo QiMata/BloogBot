@@ -1,0 +1,26 @@
+{
+  "_README": "MmapGen per-map / per-tile generator config. Top-level keys are stringified map IDs; values for that map are flat scalars (agentRadius, agentHeight, walkableRadius, walkableHeight, walkableSlopeAngle, etc.). Per-tile overrides go in nested objects under the map (the inner key is `tileX || tileY`, no separator). The `default` block at the top is read by tools/NavDataAudit only -- MmapGen itself ignores it. See docs/physics/MMAP_FORMAT.md.",
+  "_agentNotes": "Tauren Male is the largest WoW capsule (radius 1.0247, height 2.625). All continent maps must be generated for that capsule. agentRadius / agentHeight are in WoW meters; walkableRadius / walkableHeight are in Recast cells (cellSize 0.13m for MmapGen continents -> walkableRadius=8 covers 1.04 m and walkableHeight=11 covers 2.75 m). MmapGen.exe reads agentRadius / agentHeight from this file via a WWoW source patch in tools/MmapGen/contrib/mmap/src/TileWorker.cpp -- see PATHFINDING_OVERHAUL.md.",
+  "default": {
+    "agentRadius": 1.0247,
+    "agentHeight": 2.625,
+    "walkableRadius": 4,
+    "walkableHeight": 11,
+    "walkableClimb": 1.8,
+    "maxAngle": 60.0
+  },
+  "0": {
+    "agentRadius": 1.0247,
+    "agentHeight": 2.625,
+    "walkableRadius": 4,
+    "walkableHeight": 11,
+    "walkableClimb": 1.8
+  },
+  "1": {
+    "agentRadius": 1.0247,
+    "agentHeight": 2.625,
+    "walkableRadius": 4,
+    "walkableHeight": 11,
+    "walkableClimb": 1.8
+  }
+}

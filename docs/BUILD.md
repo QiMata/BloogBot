@@ -183,6 +183,7 @@ BloogBot/
 | `WWOW_SETTINGS_OVERRIDE` | *(unset)* | Path to override StateManagerSettings.json |
 | `WWOW_SHOW_WINDOWS` | *(unset)* | Set to `1` to show child process windows (StateManager, PathfindingService, etc.) |
 | `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` | *(unset)* | Set to `1` to enable native path segment validation in PathfindingService |
+| `WWOW_NAVIGATION_PRELOAD_MAPS` | *(unset / `none`)* | Native `Navigation.dll` mmap preload setting. Use `0,1,389` for an explicit map list or `all` to preload every `.mmap` discovered under `WWOW_DATA_DIR/mmaps`. PathfindingService also supports `Navigation:PreloadMaps` / `Navigation__PreloadMaps`. |
 
 #### Testing
 

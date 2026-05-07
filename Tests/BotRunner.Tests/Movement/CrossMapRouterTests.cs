@@ -9,6 +9,9 @@ namespace BotRunner.Tests.Movement;
 public class CrossMapRouterTests
 {
     private readonly CrossMapRouter _router = new();
+    // Phase 5.3.5: anchored to Zeppelin Master Frezza (NPC 9564) on the OG
+    // upper-platform deck — same Z tier as BoardingPosition (z≈53.6).
+    private static readonly Position OrgrimmarUndercityZeppelinApproachPoint = new(1331.11f, -4649.45f, 53.6269f);
     private static readonly Position OrgrimmarUndercityZeppelinBoardingPoint = new(1320.142944f, -4653.158691f, 53.891945f);
 
     [Fact]
@@ -37,7 +40,7 @@ public class CrossMapRouterTests
             leg =>
             {
                 Assert.Equal(TransitionType.Walk, leg.Type);
-                AssertNear(OrgrimmarUndercityZeppelinBoardingPoint, leg.End, xyTolerance: 2f, zTolerance: 1f);
+                AssertNear(OrgrimmarUndercityZeppelinApproachPoint, leg.End, xyTolerance: 2f, zTolerance: 1f);
             },
             leg =>
             {
@@ -45,9 +48,10 @@ public class CrossMapRouterTests
                 Assert.NotNull(leg.Transport);
                 Assert.Contains("Orgrimmar", leg.Transport!.Name);
                 Assert.Contains("Undercity", leg.Transport.Name);
-                AssertNear(OrgrimmarUndercityZeppelinBoardingPoint, leg.Start, xyTolerance: 2f, zTolerance: 1f);
+                AssertNear(OrgrimmarUndercityZeppelinApproachPoint, leg.Start, xyTolerance: 2f, zTolerance: 1f);
                 Assert.NotNull(leg.BoardStop);
                 AssertNear(OrgrimmarUndercityZeppelinBoardingPoint, leg.BoardStop!.WaitPosition, xyTolerance: 2f, zTolerance: 1f);
+                AssertNear(OrgrimmarUndercityZeppelinApproachPoint, leg.BoardStop.NavigationPosition, xyTolerance: 2f, zTolerance: 1f);
             },
             leg => Assert.Equal(TransitionType.Walk, leg.Type));
 

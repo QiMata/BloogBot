@@ -3,6 +3,9 @@ using GameData.Core.Enums;
 using GameData.Core.Models;
 using PathfindingService.Repository;
 using PathfindingService.RoutePacks;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 
 namespace PathfindingService.Tests;
 
@@ -26,6 +29,12 @@ public sealed class StaticRoutePackCacheTests
 
     private static readonly (float Radius, float Height) TaurenMaleCapsule =
         RaceDimensions.GetCapsuleForRace(Race.Tauren, Gender.Male);
+
+    [Fact]
+    public void RouteAlgorithmSignature_TracksStrictAttachmentContract()
+    {
+        Assert.Contains("StaticRoutePack.v10", StaticRoutePackCache.RouteAlgorithmSignature, StringComparison.Ordinal);
+    }
 
     [Fact]
     public void WarmUp_GeneratesRoutePackFromNavigationOutput()
@@ -69,6 +78,128 @@ public sealed class StaticRoutePackCacheTests
     }
 
     [Fact]
+    public void WarmUp_RejectsGeneratedPathWithUnsupportedSegment()
+    {
+        var generatedPath = new[]
+        {
+            new XYZ(0f, 0f, 0f),
+            new XYZ(10f, 0f, 0f),
+            new XYZ(20f, 0f, 0f),
+        };
+        var cache = new StaticRoutePackCache(
+            [Seed],
+            new MutableSignatureProvider("sig-a"),
+            _ => new NavigationPathResult(generatedPath, generatedPath, "native_path", null, "none"),
+            (_, from, _, _, _) => from.X < 10f);
+
+        Assert.False(cache.WarmUp(Seed));
+        Assert.False(TryHit(cache, CreateRequest(Seed.StartAnchor, Seed.EndAnchor)));
+    }
+
+    [Fact]
+    public void WarmUpAll_SkipsSeedsNotMarkedForStartup()
+    {
+        var startupSeed = Seed with { Id = "startup" };
+        var deferredSeed = Seed with
+        {
+            Id = "deferred",
+            StartAnchor = new XYZ(40f, 0f, 0f),
+            EndAnchor = new XYZ(60f, 0f, 0f),
+            WarmAtStartup = false,
+        };
+        var warmedSeeds = new List<string>();
+        var cache = new StaticRoutePackCache(
+            [startupSeed, deferredSeed],
+            new MutableSignatureProvider("sig-a"),
+            seed =>
+            {
+                warmedSeeds.Add(seed.Id);
+                var path = new[]
+                {
+                    seed.StartAnchor,
+                    new XYZ((seed.StartAnchor.X + seed.EndAnchor.X) * 0.5f, seed.StartAnchor.Y, seed.StartAnchor.Z),
+                    seed.EndAnchor,
+                };
+                return new NavigationPathResult(path, path, "native_path", null, "none");
+            },
+            SegmentAlwaysSupported);
+
+        cache.WarmUpAll();
+
+        Assert.Equal(["startup"], warmedSeeds);
+        Assert.True(TryHit(cache, CreateRequest(startupSeed, startupSeed.StartAnchor, startupSeed.EndAnchor)));
+        Assert.False(TryHit(cache, CreateRequest(deferredSeed, deferredSeed.StartAnchor, deferredSeed.EndAnchor)));
+    }
+
+    [Fact]
+    public void TryGetPath_WarmsDeferredSeedOnDemandWhenEnabled()
+    {
+        var onDemandSeed = Seed with
+        {
+            Id = "on_demand",
+            WarmAtStartup = false,
+            WarmOnDemand = true,
+        };
+        var generatorCalls = 0;
+        var cache = new StaticRoutePackCache(
+            [onDemandSeed],
+            new MutableSignatureProvider("sig-a"),
+            seed =>
+            {
+                generatorCalls++;
+                return new NavigationPathResult(
+                    [seed.StartAnchor, new XYZ(10f, 0f, 0f), seed.EndAnchor],
+                    [seed.StartAnchor, new XYZ(10f, 0f, 0f), seed.EndAnchor],
+                    "native_path",
+                    null,
+                    "none");
+            },
+            SegmentAlwaysSupported);
+
+        Assert.Equal(0, cache.Count);
+        Assert.True(TryHit(cache, CreateRequest(onDemandSeed, onDemandSeed.StartAnchor, onDemandSeed.EndAnchor)));
+        Assert.Equal(1, generatorCalls);
+        Assert.Equal(1, cache.Count);
+    }
+
+    [Fact]
+    public void WarmUp_ReturnsFalseWhenGenerationExceedsSeedTimeout()
+    {
+        var timeoutSeed = Seed with
+        {
+            Id = "timeout",
+            GenerationTimeout = TimeSpan.FromMilliseconds(30),
+        };
+        using var generatorEntered = new ManualResetEventSlim();
+        using var releaseGenerator = new ManualResetEventSlim();
+        var cache = new StaticRoutePackCache(
+            [timeoutSeed],
+            new MutableSignatureProvider("sig-a"),
+            seed =>
+            {
+                generatorEntered.Set();
+                Assert.True(releaseGenerator.Wait(TimeSpan.FromSeconds(5)));
+                return new NavigationPathResult(
+                    [seed.StartAnchor, seed.EndAnchor],
+                    [seed.StartAnchor, seed.EndAnchor],
+                    "native_path",
+                    null,
+                    "none");
+            },
+            SegmentAlwaysSupported);
+
+        var stopwatch = Stopwatch.StartNew();
+        var warmed = cache.WarmUp(timeoutSeed);
+        stopwatch.Stop();
+        releaseGenerator.Set();
+
+        Assert.True(generatorEntered.IsSet);
+        Assert.False(warmed);
+        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(2));
+        Assert.False(TryHit(cache, CreateRequest(timeoutSeed, timeoutSeed.StartAnchor, timeoutSeed.EndAnchor)));
+    }
+
+    [Fact]
     public void TryGetPath_StartProjectedOntoCorridor_ReturnsGeneratedSuffix()
     {
         var generatedPath = new[]
@@ -95,6 +226,30 @@ public sealed class StaticRoutePackCacheTests
         Assert.Equal(new XYZ(9f, 0f, 0f), cached.Path[1]);
         Assert.Equal(new XYZ(10f, 0f, 0f), cached.Path[2]);
         Assert.Equal(new XYZ(20f, 0f, 0f), cached.Path[^1]);
+    }
+
+    [Fact]
+    public void TryGetPath_ShortRemainingSuffixBypassesRoutePackButMainPathStillHits()
+    {
+        var generatedPath = new[]
+        {
+            new XYZ(0f, 0f, 0f),
+            new XYZ(10f, 0f, 0f),
+            new XYZ(20f, 0f, 0f),
+        };
+        var seed = Seed with { MinSuffixRemainingDistance = 12f };
+        var cache = CreateWarmedCache(generatedPath, new MutableSignatureProvider("sig-a"), seed);
+
+        var mainHit = cache.TryGetPath(
+            CreateRequest(seed, seed.StartAnchor, seed.EndAnchor),
+            TaurenMaleCapsule.Radius,
+            TaurenMaleCapsule.Height,
+            out var cached,
+            out _);
+
+        Assert.True(mainHit);
+        Assert.Equal("route_pack_main_path", cached.Result);
+        Assert.False(TryHit(cache, CreateRequest(seed, new XYZ(10f, 1f, 0f), seed.EndAnchor)));
     }
 
     [Fact]
@@ -167,7 +322,8 @@ public sealed class StaticRoutePackCacheTests
         var cache = CreateWarmedCache(
             generatedPath,
             new MutableSignatureProvider("sig-a"),
-            segmentProbe: (_, _, _, _, _) => false);
+            segmentProbe: (_, from, to, _, _) =>
+                MathF.Abs(from.Y) <= 0.01f && MathF.Abs(to.Y) <= 0.01f);
 
         Assert.False(TryHit(cache, CreateRequest(new XYZ(9f, 1f, 0f), Seed.EndAnchor)));
     }

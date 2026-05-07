@@ -1,6 +1,25 @@
 # BloogBot (Westworld of Warcraft) - Claude Code Instructions
 
+## Monorepo Shared Contract
+
+- Also follow the root monorepo rules in [../CLAUDE.md](../CLAUDE.md) and [../AGENTS.md](../AGENTS.md).
+- Runtime StateManager/BotRunner traffic is protobuf/TCP with length framing.
+- ActivitySnapshot should carry major state deltas, not full enemy/object payloads.
+- FG work must be state-gated and should not steal focus or capture the cursor.
+- BG work must be validated against FG packet/event recordings when parity matters.
+- Live tests must poll StateManager APIs, fail fast on disconnect/crash, and capture latest screenshots/state dumps.
+- See [../docs/TEST_PATTERNS.md](../docs/TEST_PATTERNS.md), [../docs/TEST_SCREENSHOTS.md](../docs/TEST_SCREENSHOTS.md), and [../docs/SKILL_DEVELOPMENT_PLAN.md](../docs/SKILL_DEVELOPMENT_PLAN.md).
+
 ## Architecture Overview
+
+> **Pathfinding Overhaul Active (2026-05-06).** The pathfinding stack is in an
+> architectural freeze while we move authority for routes from the
+> ~5,600-line managed repair pipeline (`Services/PathfindingService/Repository/Navigation.cs`)
+> to the in-tree [tools/MmapGen](tools/MmapGen/) navmesh generator. Read
+> [docs/physics/PATHFINDING_OVERHAUL.md](docs/physics/PATHFINDING_OVERHAUL.md)
+> before editing anything in `Services/PathfindingService`, `Exports/Navigation`,
+> the BotRunner movement/transport code, or the pathfinding tests. Mesh fixes
+> belong in `tools/MmapGen/`; new managed repair logic does not.
 
 Layered microservices with a shared core library layer. Two execution modes: **ForegroundBotRunner** (DLL injection into WoW.exe, direct memory access) and **BackgroundBotRunner** (headless pure-C# protocol emulation, no game client needed).
 

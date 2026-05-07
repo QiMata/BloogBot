@@ -93,7 +93,9 @@ namespace BotCommLayer
                 {
                     // Read incoming message length (includes compression flag)
                     byte[] lengthBuffer = new byte[4];
-                    ReadExact(stream, lengthBuffer);
+                    if (!TryReadExact(stream, lengthBuffer, allowCleanEndOfStream: true))
+                        break;
+
                     int length = BitConverter.ToInt32(lengthBuffer, 0);
 
                     // Read wire payload (flag + protobuf data)
@@ -113,23 +115,67 @@ namespace BotCommLayer
                     stream.Write(encodedResponse, 0, encodedResponse.Length);
                 }
             }
+            catch (Exception ex) when (IsExpectedClientDisconnect(ex))
+            {
+                _logger.LogDebug("Client disconnected.");
+            }
             catch (Exception ex)
             {
-                _logger.LogWarning($"Client connection closed or error occurred: {ex.Message}");
+                _logger.LogWarning("Client connection error: {Error}", ex.Message);
             }
         }
 
         private static void ReadExact(NetworkStream stream, byte[] buffer)
         {
+            _ = TryReadExact(stream, buffer, allowCleanEndOfStream: false);
+        }
+
+        private static bool TryReadExact(NetworkStream stream, byte[] buffer, bool allowCleanEndOfStream)
+        {
             int totalRead = 0;
             while (totalRead < buffer.Length)
             {
-                int bytesRead = stream.Read(buffer, totalRead, buffer.Length - totalRead);
+                int bytesRead;
+                try
+                {
+                    bytesRead = stream.Read(buffer, totalRead, buffer.Length - totalRead);
+                }
+                catch (Exception ex) when (allowCleanEndOfStream && totalRead == 0 && IsExpectedClientDisconnect(ex))
+                {
+                    return false;
+                }
+
                 if (bytesRead == 0)
+                {
+                    if (allowCleanEndOfStream && totalRead == 0)
+                        return false;
+
                     throw new IOException("Unexpected EOF");
+                }
+
                 totalRead += bytesRead;
             }
+
+            return true;
         }
+
+        private static bool IsExpectedClientDisconnect(Exception ex)
+        {
+            if (ex is ObjectDisposedException)
+                return true;
+
+            if (ex is IOException { InnerException: SocketException socketException })
+                return IsExpectedDisconnectSocketError(socketException.SocketErrorCode);
+
+            return ex is SocketException directSocketException &&
+                IsExpectedDisconnectSocketError(directSocketException.SocketErrorCode);
+        }
+
+        private static bool IsExpectedDisconnectSocketError(SocketError error)
+            => error is SocketError.ConnectionReset
+                or SocketError.ConnectionAborted
+                or SocketError.Shutdown
+                or SocketError.NotConnected;
 
         public void Stop()
         {

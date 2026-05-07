@@ -1,5 +1,18 @@
 # Master Tasks - Test & Validate Everything
 
+> **2026-05-06 — Pathfinding Overhaul In Flight.** The pathfinding stack is in
+> an architectural freeze while we move authority for routes from the
+> ~5,600-line managed repair pipeline (`Services/PathfindingService/Repository/Navigation.cs`)
+> to the in-tree [tools/MmapGen](../tools/MmapGen/) navmesh generator.
+>
+> Read [docs/physics/PATHFINDING_OVERHAUL.md](physics/PATHFINDING_OVERHAUL.md)
+> before opening any pathfinding work, and observe the freeze contract there.
+> Active overhaul tasks live in
+> [Services/PathfindingService/TASKS.md](../Services/PathfindingService/TASKS.md)
+> under `PFS-OVERHAUL-001..006`. The older `LPATH-CROSSROADS-UC` remaining
+> bullet (Orgrimmar -> Undercity zeppelin attachment gap) is superseded by
+> Phase 3 of the overhaul.
+
 ## Rules
 1. **Use ONE continuous session.** Auto-compaction handles context limits.
 2. Execute tasks in priority order.
@@ -9,6 +22,7 @@
 6. **No runtime GM-mode toggles in tests** - `.gm on` corrupts UnitReaction bits. Use account-level GM access only.
 7. **Clear repo-scoped WoW/test processes before building.** DLL injection locks output files.
 8. **Previous phases archived** - see `docs/ARCHIVE.md` and `docs/TASKS_ARCHIVE.md`.
+9. **Pathfinding freeze (2026-05-06).** Don't extend `Navigation.cs` repair phases, route-packs, per-spot `LongPathingRouteTests`, or BotRunner boarding-position constants. Fix at the mesh in `tools/MmapGen/`. See `docs/physics/PATHFINDING_OVERHAUL.md`.
 
 ---
 
@@ -103,6 +117,10 @@
   - [x] Regenerated maps `0` and `1` with GO-aware generator source and
     Tauren Male `agentRadius=1.0247`, `agentHeight=2.625`, then rerun the
     audit until it passes for the full data set.
+  - [x] Pinned the Detour/mmap migration contract to Detour tile version `7`,
+    mmap wrapper version `6`, 20-byte uint32 wrapper headers, and 64-bit
+    `dtPolyRef`/`dtTileRef`; regenerated the focused map `1` Orgrimmar route
+    tiles `28,39` through `30,41` and wrote a nav-data manifest/signature.
   - [x] Fix the current live Orgrimmar flight-master -> zeppelin runtime
     execution blocker. The regenerated data and rebuilt `pathfinding-service`
     are in use, the offline generated-route static-object gate is green, and
@@ -110,23 +128,444 @@
     near `(1330.7,-4653.0,53.5)` without recurring Z-hallway stalls near
     `(1546,-4430)` or `(1508,-4420)`.
   - [ ] Investigate the remaining Orgrimmar -> Undercity zeppelin
-    boarding/transfer evidence gap. The latest focused live run reached the
-    deck approach but still failed with `transport=0x0` and no map-transfer
-    evidence.
+    boarding/transfer evidence gap. The deterministic boarding-target refresh
+    coverage is green, but the latest focused live run still reached the
+    Orgrimmar dock, detected the Orgrimmar -> Undercity zeppelin, and missed
+    client transport attachment before it left; final snapshot was
+    `map=1 pos=(1336.7,-4658.3,49.3) transport=0x0`.
   - [x] Design and prototype generated static route packs for repeated long
     static legs. Route packs must be produced from Navigation.dll/Detour/MMAP
     output, keyed by nav-data signature, race/gender capsule, route policy,
     and dynamic-overlay compatibility; they must not become hand-authored
     BotRunner waypoint scripts.
-  - [ ] Close the lower-incline live route-pack recovery gap. The current
-    PathfindingService cache now avoids unsafe vertical suffix attachment, but
-    the focused live run stalls near `(1363.9,-4378.2,26.1)`. The original
-    lower-layer recovery target was `(1341.0,-4638.6,53.5)`; the latest
-    screenshot-derived Orgrimmar -> Undercity gangplank target is
-    `(1320.142944,-4653.158691,53.891945)`, and the route-pack/navigation
-    deterministic gates still need to be rerun to completion against that
-    updated anchor before another live run.
+  - [x] Add PathfindingService-owned static route result caching with fuzzy
+    quantized keys, nav-data/algorithm signatures, short negative TTLs,
+    in-flight request coalescing, conservative dynamic-overlay bypass, and
+    cache/coalescing metrics. BotRunner still consumes the normal path
+    contract.
+  - [x] Add PathfindingService Navigation performance metrics/logging for
+    resolver attempts, native `FindPathForAgent`, corridor queries, managed
+    validation, repair counts, slow requests, blocked results, and `no_path`
+    outcomes.
+  - [x] Fix normal socket disconnect logging so clean client EOF after a
+    completed protobuf request no longer floods `pathfinding-service` warnings;
+    truncated mid-frame payloads still warn.
+  - [x] Make static route-pack startup warmup opt-in with
+    `WWOW_ROUTE_PACK_STARTUP_WARMUP=1` and defer the known lower-incline seed
+    from startup warmup until the native route-pack generation gate is fixed.
+  - [x] Bound static route-pack generation with a per-seed timeout so native
+    route-pack failures become fast unavailable packs instead of 20-minute
+    service/test hangs.
+  - [x] Close the lower-incline live route-pack recovery gap. The deterministic
+    on-demand route-pack gate now warms and answers the live lower-incline
+    request near `(1363.9,-4378.2,26.1)` toward the screenshot-derived
+    Orgrimmar -> Undercity gangplank
+    `(1320.142944,-4653.158691,53.891945)` in a bounded focused test, and the
+    fresh live rerun now moves past that area to the Orgrimmar dock/zeppelin
+    boarding blocker.
+  - [x] Close the direct upper-deck local-physics recovery gate near
+    `(1339.2,-4645.6,52.0)` -> `(1337.6,-4644.5,53.8)` without adding a
+    route-specific production detour.
   - [ ] Focused live validation remains open.
+
+---
+
+## Handoff (2026-05-06, boarding target refresh green but live still misses transport)
+
+- Completed:
+  - Kept the PathfindingService route proof closed for this slice:
+    deterministic route gates are green, Docker `wwow-pathfinding` is rebuilt
+    and healthy, and focused live pathing reaches the Orgrimmar dock/zeppelin
+    area instead of failing at the prior lower-incline route blocker.
+  - Added a BotRunner boarding-target refresh: `TransportWaitingLogic`
+    refreshes the boarding waypoint while the scheduled zeppelin remains at
+    the stop, and `TravelTask` refreshes direct scheduled-transport target and
+    facing when the observed transport origin moves.
+  - Added/updated deterministic BotRunner tests for the moving zeppelin
+    boarding waypoint and scheduled direct-board target refresh.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~TransportWaitingLogicTests|FullyQualifiedName~TravelTaskTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_transport_boarding_refresh_green2.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (68/68)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; $env:VMAP_PHYS_LOG_MASK='0'; $env:VMAP_PHYS_LOG_LEVEL='0'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_after_boarding_refresh.trx" --results-directory tmp/test-runtime/results-live -- RunConfiguration.TestSessionTimeout=1500000` -> failed after `8m26s`: zeppelin detected at the dock, but the bot missed boarding before departure. Final snapshot `map=1 pos=(1336.7,-4658.3,49.3) distToUndercity=4906.5 transport=0x0 current=null`.
+- Evidence:
+  - `tmp/test-runtime/results-botrunner/botrunner_transport_boarding_refresh_green2.trx`
+  - `tmp/test-runtime/results-live/long_pathing_crossroads_undercity_after_boarding_refresh.trx`
+  - `tmp/test-runtime/screenshots/long-pathing/The-Orgrimmar---Undercity-zeppelin-was-detected-at-the-dock-but-the-bot-missed-b-LPATHFG1-client-6048-win0-20260506_010905.png`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
+## Handoff (2026-05-06, PathfindingService route proof moved blocker to boarding)
+
+- Completed:
+  - Closed the PathfindingService side of the lower-incline/live route
+    recovery gap. The latest live Crossroads -> Undercity run no longer fails
+    at the prior lower-incline request and reaches the Orgrimmar dock area.
+  - Kept the generic route fixes in `Navigation.cs`: smooth native fallback
+    gets smooth validation, local-physics layer classification now requires
+    meaningful upward rise before probing, and the restored affordance/static
+    scan keeps the route off the known static clips without route-specific
+    production coordinates.
+  - Added deterministic flight-master -> zeppelin approach blocker coverage
+    and kept the route-pack/lower-friction regression slice green.
+  - Rebuilt/redeployed Docker `wwow-pathfinding`; the new image digest is
+    `sha256:1fa40d9cc8b50021f7043d3a114310b1752139f6ea8f17ed313593f48c50e8ae`,
+    and the service reported ready with `maps=41`.
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=flightmaster_static_blockers_restore_affordance_scan.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=420000` -> `passed (1/1)`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinApproachRoute_AvoidsKnownLiveBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=flightmaster_zeppelin_approach_restore_affordance_scan.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (1/1)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarZeppelinTowerFrictionRecovery_PathFirstSegmentsAreLocallyReachable|FullyQualifiedName~StaticRoutePackCacheTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_routepack_lower_friction_regressions.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (16/16)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_after_affordance_restore.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> row results `passed (13/13)`, but VSTest exited `1` after the session shutdown timeout.
+  - `docker compose -f docker-compose.vmangos-linux.yml build wwow-pathfinding` and `docker compose -f docker-compose.vmangos-linux.yml up -d wwow-pathfinding` -> `passed`; service became healthy/ready with `maps=41`.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_after_affordance_restore.trx" --results-directory tmp/test-runtime/results-live -- RunConfiguration.TestSessionTimeout=1500000` -> failed after reaching the dock area: zeppelin detected, boarding missed, final snapshot `map=1 pos=(1336.6,-4658.1,49.3) transport=0x0`.
+- Evidence:
+  - `tmp/test-runtime/results-pathfinding/flightmaster_static_blockers_restore_affordance_scan.trx`
+  - `tmp/test-runtime/results-pathfinding/flightmaster_zeppelin_approach_restore_affordance_scan.trx`
+  - `tmp/test-runtime/results-pathfinding/pathfinding_routepack_lower_friction_regressions.trx`
+  - `tmp/test-runtime/results-pathfinding/critical_walk_legs_after_affordance_restore.trx`
+  - `tmp/test-runtime/results-live/long_pathing_crossroads_undercity_after_affordance_restore.trx`
+  - `tmp/test-runtime/screenshots/long-pathing/The-Orgrimmar---Undercity-zeppelin-was-detected-at-the-dock-but-the-bot-missed-b-LPATHFG1-client-41528-win0-20260506_004545.png`
+- Pass result: `delta shipped; PathfindingService route gates green; live validation remains open on zeppelin boarding`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
+## Handoff (2026-05-06, direct upper-deck local-physics gate closed)
+
+- Completed:
+  - Added bounded route-progress local-physics repair in
+    `Services/PathfindingService/Repository/Navigation.cs`. It inserts a
+    support point only when the current waypoint can locally walk to the
+    snapped candidate, the candidate advances toward the downstream route
+    anchor, it stays near the route corridor, and the new leg passes static
+    LOS.
+  - Kept route-pack attachment strict: the endpoint guard remains in place,
+    and the suffix safety regression still passes after the new repair.
+  - Closed the deterministic direct Orgrimmar tower friction gate against
+    `D:\MaNGOS\data`.
+- Validation/tests run:
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `passed` with known `PathfindingSocketServer` warnings and benign missing `dumpbin` applocal output.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarZeppelinTowerFrictionRecovery_PathFirstSegmentsAreLocallyReachable" --logger "console;verbosity=minimal" --logger "trx;LogFileName=orgrimmar_tower_deck_friction_route_progress.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=240000` -> `passed (1/1)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StaticRoutePackCacheTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=static_routepack_cache_route_progress.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=240000` -> `passed (14/14)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarLowerInclineRecoveryRoutePack_OnDemandWarmsGangplankPath" --logger "console;verbosity=minimal" --logger "trx;LogFileName=lower_incline_routepack_route_progress.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=180000` -> `passed (1/1)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarZeppelinTowerFrictionRecovery_RoutePackSuffixDoesNotAttachToUnreachableLayer" --logger "console;verbosity=minimal" --logger "trx;LogFileName=orgrimmar_routepack_suffix_route_progress.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=240000` -> `passed (1/1)`.
+- Evidence:
+  - `tmp/test-runtime/results-pathfinding/orgrimmar_tower_deck_friction_route_progress.trx`
+  - `tmp/test-runtime/results-pathfinding/static_routepack_cache_route_progress.trx`
+  - `tmp/test-runtime/results-pathfinding/lower_incline_routepack_route_progress.trx`
+  - `tmp/test-runtime/results-pathfinding/orgrimmar_routepack_suffix_route_progress.trx`
+- Pass result: `delta shipped; direct upper-deck local-physics gate green; live validation remains open`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
+## Handoff (2026-05-05, lower-incline route-pack deterministic recovery)
+
+- Follow-up (2026-05-05, direct upper-deck local-physics gate):
+  - Reconfirmed the remaining deterministic red gate:
+    `OrgrimmarZeppelinTowerFrictionRecovery_PathFirstSegmentsAreLocallyReachable`
+    still returns the straight alternate path with an early local-physics break
+    at segment `1->2`, `(1339.2,-4645.6,52.0)` ->
+    `(1337.6,-4644.5,53.8)`, result `native_path_alternate_mode`,
+    blocked reason `static_los`.
+  - Verified the lower-layer prefix is the core issue: probing a nearby upper
+    layer removes the first jump but exposes additional deck collision pockets,
+    so a one-off layer trim or sampled micro-route is not a safe fix.
+  - Kept only the generic endpoint-safety guard in local-physics repair so the
+    helper cannot replace the requested final endpoint with a lateral support
+    point; speculative alternate-start/micro-route experiments were removed.
+  - Re-tested a bounded micro-route search for the compact deck step. It could
+    repair the first jump in one diagnostic path but then exposed the next deck
+    pocket and added too much latency, so the speculative code was removed.
+  - Current validation:
+    `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false`
+    -> `passed` with known `PathfindingSocketServer` warnings and benign
+    missing `dumpbin` applocal output.
+  - Current failing evidence:
+    `tmp/test-runtime/results-pathfinding/orgrimmar_tower_deck_friction_current_open_after_micro_revert.trx`.
+  - Endpoint-guard regression evidence:
+    `tmp/test-runtime/results-pathfinding/static_routepack_cache_endpoint_guard.trx`
+    (`passed 14/14`),
+    `tmp/test-runtime/results-pathfinding/lower_incline_routepack_endpoint_guard.trx`
+    (`passed 1/1`), and
+    `tmp/test-runtime/results-pathfinding/orgrimmar_routepack_suffix_endpoint_guard.trx`
+    (`passed 1/1`).
+  - Next implementation should target a generic deck/support-layer strategy
+    that keeps route-pack suffix attachment strict and proves every returned
+    direct segment with the local physics probe.
+
+- Completed:
+  - Replayed the prior handoff command:
+    `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - Changed Orgrimmar route-pack seeds to target the screenshot-derived
+    Undercity zeppelin gangplank and stay startup-deferred/on-demand.
+  - Added bounded on-demand warming for deferred route packs, including
+    failed-warm retry throttling and a route algorithm signature bump to
+    `PathfindingService.StaticRoutePack.v10`.
+  - Added a corridor-seed generation mode for the lower/exterior Orgrimmar
+    recovery seeds so route-pack generation uses bounded Detour corridor
+    output instead of the slow live native path.
+  - Split route-pack attachment validation from internal generated-corridor
+    validation. Attachments still use the strict segment probe; internal
+    generated-corridor prefix validation follows the bounded local-reachability
+    contract used by runtime suffix validation.
+  - Added focused lower-incline route-pack coverage proving on-demand warmup
+    hits the gangplank target and returns a bounded route-pack suffix for the
+    live start.
+- Validation/tests run:
+  - `dotnet build Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false` -> `passed` with known `PathfindingSocketServer` warnings and benign missing `dumpbin` applocal output.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarLowerInclineRecoveryRoutePack_OnDemandWarmsGangplankPath" --logger "console;verbosity=minimal" --logger "trx;LogFileName=lower_incline_routepack_on_demand_gangplank_final_focus.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=180000` -> `passed (1/1)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StaticRoutePackCacheTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=static_routepack_cache_final.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=240000` -> `passed (14/14)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarStaticRoutePackSeeds_TargetGangplankAndDeferStartupWarmup|FullyQualifiedName~LongPathingRouteTests.OrgrimmarZeppelinTowerBaseToDeckBoardingPoint_ReachesUpperDeckBoardingZ" --logger "console;verbosity=minimal" --logger "trx;LogFileName=orgrimmar_routepack_contract_final.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=240000` -> `passed (3/3)`.
+  - Safety probe:
+    `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarZeppelinTowerFrictionRecovery_PathFirstSegmentsAreLocallyReachable|FullyQualifiedName~LongPathingRouteTests.OrgrimmarZeppelinTowerFrictionRecovery_RoutePackSuffixDoesNotAttachToUnreachableLayer" --logger "console;verbosity=minimal" --logger "trx;LogFileName=orgrimmar_tower_suffix_safety_final.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=240000` -> `failed 1/2`; suffix safety passed, direct tower friction recovery still fails on local physics segment `1->2` from `(1339.2,-4645.6,52.0)` to `(1337.6,-4644.5,53.8)`.
+- Evidence:
+  - `tmp/test-runtime/results-pathfinding/lower_incline_routepack_on_demand_gangplank_final_focus.trx`
+  - `tmp/test-runtime/results-pathfinding/static_routepack_cache_final.trx`
+  - `tmp/test-runtime/results-pathfinding/orgrimmar_routepack_contract_final.trx`
+  - `tmp/test-runtime/results-pathfinding/orgrimmar_tower_suffix_safety_final.trx`
+- Pass result: `delta shipped; lower-incline route-pack deterministic recovery green; live validation and upper-deck direct local-physics repair remain open`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
+## Handoff (2026-05-05, configurable Navigation mmap preload)
+
+- Completed:
+  - Added native `Navigation.dll` startup preload control through
+    `WWOW_NAVIGATION_PRELOAD_MAPS`. Values: `none`/`false`/`off`/`0` for no
+    eager preload, explicit map lists such as `0,1,389`, or `all`/`*` to
+    discover every `.mmap` under `WWOW_DATA_DIR/mmaps`.
+  - Kept normal on-demand behavior: any map passed into path/query exports
+    still loads through the existing requested-map path if it was not already
+    preloaded.
+  - Added PathfindingService config `Navigation:PreloadMaps` with the same
+    value grammar, plus `Navigation:RunStartupDiagnostics=false` by default so
+    tests do not implicitly load map `0`/`1` unless requested.
+  - PathfindingService status now reports the configured preloaded map IDs.
+  - Updated the Linux compose `wwow-pathfinding` service to run with
+    `WWOW_NAVIGATION_PRELOAD_MAPS=all`, `Navigation__PreloadMaps=all`, and
+    `Navigation__RunStartupDiagnostics=false`; widened its healthcheck
+    startup period to cover full-map preload.
+  - Rebuilt and redeployed the Docker image with preload-all enabled. The live
+    `wwow-pathfinding` container reported `IsReady=true` after loading all 41
+    discovered maps.
+  - Documented the setting in `Services/PathfindingService/README.md`,
+    `docs/DOCKER_STACK.md`, and `docs/BUILD.md`.
+- Validation/tests run:
+  - `$MSBUILD = "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"; & $MSBUILD Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingSocketServerPreloadConfigTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_preload_config_tests.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (3/3)`.
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DetourCompatibilityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=detour_after_configurable_preload.trx" --results-directory tmp/test-runtime/results-navigation` -> `passed (2/2)`.
+  - Diagnostic attempt:
+    `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingSocketServerIntegrationTests.HandlePath_LiveCorpseRunRoute_ReturnsValidatedPathWithinBudget" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_socket_live_corpse_preload_config.trx" --results-directory tmp/test-runtime/results-pathfinding` -> failed at the existing `10s` response-budget assertion after spending `44s` in the long corpse-run route path. Logs showed map `1` and map `0` loaded; treat this as the existing long-route boundedness issue, not a preload config failure.
+  - `docker compose -f .\docker-compose.vmangos-linux.yml up -d --build wwow-pathfinding` -> succeeded; rebuilt `world-of-warcraft-wwow-pathfinding:latest` and recreated `wwow-pathfinding`.
+  - `docker inspect wwow-pathfinding --format '{{range .Config.Env}}{{println .}}{{end}}'` -> confirmed `WWOW_NAVIGATION_PRELOAD_MAPS=all`, `Navigation__PreloadMaps=all`, and `Navigation__RunStartupDiagnostics=false`.
+  - `docker logs --since 5m wwow-pathfinding` -> reported `[Navigation] preloading 41 configured map(s)` and `Navigation loaded in 117.7s`; startup diagnostics stayed disabled.
+  - `docker exec wwow-pathfinding cat /app/pathfinding_status.json` -> `IsReady=true`, `StatusMessage="Ready - navigation initialized"`, and `LoadedMaps` contained all 41 discovered map IDs.
+- Files changed:
+  - `Exports/Navigation/Navigation.cpp`
+  - `Exports/Navigation/Navigation.h`
+  - `Services/PathfindingService/NativeProcessEnvironment.cs`
+  - `Services/PathfindingService/Program.cs`
+  - `Services/PathfindingService/PathfindingServiceWorker.cs`
+  - `Services/PathfindingService/PathfindingSocketServer.cs`
+  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `Services/PathfindingService/appsettings.PathfindingService.json`
+  - `Services/PathfindingService/appsettings.PathfindingService.Docker.json`
+  - `Tests/PathfindingService.Tests/PathfindingSocketServerPreloadConfigTests.cs`
+  - `docker-compose.vmangos-linux.yml`
+  - docs and task files.
+- Next command:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
+## Handoff (2026-05-05, Detour/mmap v6 migration slice)
+
+- Completed:
+  - Preserved existing dirty work, including `.env`; no unrelated changes were
+    reverted.
+  - Chose the forward-compatible schema for this migration: Detour tile
+    payload version `7`, mmap wrapper version `6`, 20-byte uint32
+    `MmapTileHeader`, and 64-bit `dtPolyRef`/`dtTileRef` through
+    `DT_POLYREF64`.
+  - Changed `Navigation.dll` initialization to create the mmap manager without
+    eagerly loading maps `0`, `1`, and `389`; maps now load on first request
+    through the existing per-map load path.
+  - Made native `.mmtile` loading reject mismatched wrapper magic/version,
+    wrapper Detour version, payload size, Detour payload magic, and Detour
+    payload version before `dtNavMesh::addTile(...)`.
+  - Extended native/managed Detour compatibility probes to assert mmap header
+    size, pointer size, 64-bit ref bit split, file `usesLiquids`, and strict
+    header compatibility.
+  - Extended `tools/NavDataAudit` with exact wrapper/payload version checks and
+    `--write-manifest` output with per-tile hashes and a combined nav-data
+    signature.
+  - Regenerated focused map `1` tiles `28,39` through `30,41` with
+    `D:/MaNGOS/source/bin/MoveMapGenerator.exe`; previous files were moved to
+    `D:/MaNGOS/data/mmaps/detour-migration-backup-20260504-201741`.
+  - Documented the migration contract and focused regeneration evidence in
+    `docs/physics/DETOUR_UPGRADE_BASELINE.md` and
+    `docs/physics/MMAP_NAVMESH_GENERATION.md`.
+- Evidence:
+  - Regeneration log:
+    `tmp/test-runtime/results-navigation/mmap_regen_map1_org_crossroads_20260504-201741.log`.
+  - Manifest:
+    `tmp/test-runtime/results-navigation/detour_mmap_map1_org_crossroads_manifest.json`.
+  - Manifest nav-data signature:
+    `F9CE41288735205E8504D476D38C425C196177512DC18E71C5BFB0E9E2678E69`.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `$MSBUILD = "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"; & $MSBUILD Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded` with existing warnings.
+  - `dotnet build tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -v:minimal` -> `succeeded`.
+  - Focused `MoveMapGenerator.exe` regeneration for map `1` tiles `28,39`
+    through `30,41` -> `succeeded`; GO marking counts were
+    `56,13,71,22,38,16,20,23,12`.
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -- D:/MaNGOS/data --map 1 --build-log "tmp/test-runtime/results-navigation/mmap_regen_map1_org_crossroads_20260504-201741.log" --write-manifest "tmp/test-runtime/results-navigation/detour_mmap_map1_org_crossroads_manifest.json"` -> `passed`.
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DetourCompatibilityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=detour_mmap_v6_contract.trx" --results-directory tmp/test-runtime/results-navigation` -> `passed (2/2)`.
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DetourCompatibilityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=detour_mmap_v6_regenerated_tiles.trx" --results-directory tmp/test-runtime/results-navigation` -> `passed (2/2)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~StaticRoutePackCacheTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_static_route_pack_cache_detour_mmap_v6.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (10/10)`.
+  - Combined Orgrimmar route/cache gate
+    `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|...RoutePack_CachesMainPathAndRecoveryAnchor|...CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes`
+    -> aborted at the runsettings `10m` timeout.
+  - Single Orgrimmar static blocker gate
+    `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+    -> aborted at the extended `20m` timeout. Treat the real route gate as
+    red/open; no live validation was launched.
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+- Files changed:
+  - `Exports/Navigation/MoveMapSharedDefines.h`
+  - `Exports/Navigation/MoveMap.cpp`
+  - `Exports/Navigation/Navigation.cpp`
+  - `Exports/Navigation/DllMain.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/DetourCompatibilityTests.cs`
+  - `tools/NavDataAudit/Program.cs`
+  - `docs/physics/DETOUR_UPGRADE_BASELINE.md`
+  - `docs/physics/MMAP_NAVMESH_GENERATION.md`
+  - `docs/physics/README.md`
+  - `docs/TASKS.md`
+  - impacted local `TASKS.md` files.
+- Next command:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
+## Handoff (2026-05-04, Detour compatibility baseline)
+
+- Completed:
+  - Preserved the existing dirty `.env` and previous PathfindingService
+    cache/socket/route-pack dirty work.
+  - Added native Detour compatibility probes in `DllMain.cpp`:
+    `GetDetourCompatibilityInfo(...)` reports the compiled Detour ABI and
+    feature surface, and `ProbeMMapTileCompatibility(...)` loads a real
+    `.mmtile` through `MMapManager` and reports wrapper/header compatibility.
+  - Added managed `DetourCompatibilityTests` covering the current compiled
+    ABI, Detour tile version, mmap wrapper evidence, native tile loading, and
+    local Detour features before any vendor refresh.
+  - Documented the baseline and local Detour customizations in
+    `docs/physics/DETOUR_UPGRADE_BASELINE.md`, then linked it from
+    `docs/physics/README.md`.
+  - Confirmed the current working ABI is `DT_POLYREF64` with 64-bit
+    `dtPolyRef`/`dtTileRef` while Detour tiles remain
+    `DT_NAVMESH_VERSION = 7`. The source `MMAP_VERSION` is `4`, but current
+    generated data can report wrapper version `6`; the probe records this
+    instead of silently assuming the source constant matches local data.
+  - Tried a local 32-bit-ref build by removing `DT_POLYREF64`; the
+    Orgrimmar flight-master route gate quickly returned `no_path`, so the flag
+    was restored. Treat any 32-bit-ref move or new packed tile layout as an
+    explicit mmap regeneration/migration decision, not a mechanical cleanup.
+  - No route-specific production pathing hacks were added and no live
+    validation was launched.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `$MSBUILD = "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe"; & $MSBUILD Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> `succeeded` with existing native warnings.
+  - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DetourCompatibilityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=detour_compatibility_baseline.trx" --results-directory tmp/test-runtime/results-navigation` -> `passed (2/2)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RouteResultCacheTests|FullyQualifiedName~StaticRoutePackCacheTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_cache_pack_detour_baseline_unit.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=240000` -> `passed (14/14)`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~StaticRoutePackCacheTests|FullyQualifiedName~RouteResultCacheTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_detour_baseline_route_cache.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> shell timeout after `20m`; TRX counters stayed `0`, so do not treat this route gate as green.
+  - Diagnostic 32-bit-ref trial before restoring `DT_POLYREF64`: `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers` failed in about `22s` with `result=no_path blocked=none`.
+- Evidence:
+  - `tmp/test-runtime/results-navigation/detour_compatibility_baseline.trx`
+  - `tmp/test-runtime/results-pathfinding/pathfinding_cache_pack_detour_baseline_unit.trx`
+  - `tmp/test-runtime/results-pathfinding/pathfinding_detour_baseline_route_cache.trx`
+- Files changed:
+  - `Exports/Navigation/DllMain.cpp`
+  - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
+  - `Tests/Navigation.Physics.Tests/DetourCompatibilityTests.cs`
+  - `docs/physics/DETOUR_UPGRADE_BASELINE.md`
+  - `docs/physics/README.md`
+  - `docs/TASKS.md`
+  - `Exports/Navigation/TASKS.md`
+  - `Tests/Navigation.Physics.Tests/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+---
+
+## Handoff (2026-05-04, PathfindingService cache/instrumentation/socket logging)
+
+- Completed:
+  - Preserved existing dirty `.env` config and made no native Navigation
+    changes.
+  - Added `RouteResultCache`, a PathfindingService-owned cache for static
+    overlay route results. Keys include map, quantized start/end, race/gender,
+    capsule, smooth flag, policy, nav-data signature, route algorithm
+    signature, and dynamic-overlay signature.
+  - Added in-flight coalescing so equivalent concurrent static route requests
+    share one calculation.
+  - Added short-TTL negative caching for `no_path`/blocked results and exposed
+    cache metrics for hits, misses, coalescing, bypass, expiry, invalidation,
+    positive/negative stores, slow requests, entry count, and in-flight count.
+  - Wired `PathfindingSocketServer` so route-pack hits and native validated
+    results pass through the service cache while dynamic overlays bypass it
+    conservatively.
+  - Added deterministic `RouteResultCacheTests` for quantized hits,
+    dynamic-overlay bypass, concurrent coalescing, and negative TTL expiry.
+  - Added `NavigationPerformanceMetrics` and low-noise `[NAV_METRICS]` socket
+    logging for resolver attempts, native `FindPathForAgent`, corridor query
+    timing, managed validation timing, static/LOS/steep/local-layer/segment/
+    dynamic repair counts, blocked outcomes, `no_path`, and slow counters.
+  - Fixed `ProtobufSocketServer` clean disconnect handling so a client closing
+    after a full request/response no longer logs `Unexpected EOF`; incomplete
+    payloads still surface as warnings.
+  - Made route-pack startup warmup opt-in via
+    `WWOW_ROUTE_PACK_STARTUP_WARMUP=1` and marked the current lower-incline
+    recovery seed `WarmAtStartup=false` so service initialization is not held
+    hostage by the known slow native route-pack generation gap.
+  - Added a per-seed static route-pack generation timeout. The real
+    Navigation-backed route-pack proof now fails in about `30s` when a startup
+    seed misses its generation budget instead of exhausting the `20m` test
+    session.
+  - Reworked the socket route-cache integration proof to use a deterministic
+    generated route-pack fixture through the normal protobuf contract; the
+    repeat request now asserts `server.RouteCacheStats.HitCount`.
+- Validation/tests run:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RouteResultCacheTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=route_result_cache_tests.trx" --results-directory tmp/test-runtime/results-pathfinding` -> `passed (4/4)` with the existing benign `dumpbin` applocal warning.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ProtobufSocketServerLoggingTests|FullyQualifiedName~StaticRoutePackCacheTests|FullyQualifiedName~RouteResultCacheTests|FullyQualifiedName~NavigationOverlayAwarePathTests.CalculateValidatedPath_RecordsResolverAndManagedValidationMetrics|FullyQualifiedName~PathfindingSocketServerIntegrationTests.HandlePath_RepeatedStaticRequest_UsesServiceRouteCacheThroughNormalContract" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_cache_socket_logging_metrics_timeout_bundle_after_assertion.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (18/18)` with the existing benign `dumpbin` applocal warning.
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoutePack_CachesMainPathAndRecoveryAnchor" --logger "console;verbosity=minimal" --logger "trx;LogFileName=routepack_real_after_warmup_timeout_guard.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=240000` -> failed bounded at `30s` on route-pack seed warmup; keep `PFS-ROUTEPACK-002` red.
+  - `git diff --check` -> no whitespace errors; line-ending warnings only.
+- Evidence:
+  - `tmp/test-runtime/results-pathfinding/pathfinding_cache_socket_logging_metrics_timeout_bundle_after_assertion.trx`
+  - `tmp/test-runtime/results-pathfinding/pathfinding_metrics_cache_socket_eof.trx`
+  - `tmp/test-runtime/results-pathfinding/routepack_real_after_warmup_timeout_guard.trx`
+- Files changed:
+  - `Exports/BotCommLayer/ProtobufSocketServer.cs`
+  - `Services/PathfindingService/RouteCaching/RouteResultCache.cs`
+  - `Services/PathfindingService/Repository/NavigationPerformanceMetrics.cs`
+  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `Services/PathfindingService/PathfindingSocketServer.cs`
+  - `Services/PathfindingService/RoutePacks/StaticRoutePackCache.cs`
+  - `Tests/PathfindingService.Tests/ProtobufSocketServerLoggingTests.cs`
+  - `Tests/PathfindingService.Tests/RouteResultCacheTests.cs`
+  - `Tests/PathfindingService.Tests/NavigationOverlayAwarePathTests.cs`
+  - `Tests/PathfindingService.Tests/StaticRoutePackCacheTests.cs`
+  - `Tests/PathfindingService.Tests/LongPathingRouteTests.cs`
+  - `Tests/PathfindingService.Tests/PathfindingSocketServerIntegrationTests.cs`
+  - `docs/TASKS.md`
+  - `Services/PathfindingService/TASKS.md`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
 
 ---
 

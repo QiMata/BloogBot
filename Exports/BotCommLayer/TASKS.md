@@ -112,6 +112,24 @@
 4. `powershell -ExecutionPolicy Bypass -File .\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-05-04 (Protobuf socket clean EOF)
+- Last delta:
+  - Updated `ProtobufSocketServer<TRequest,TResponse>` so a client closing the
+    connection after a complete request/response is treated as normal socket
+    lifecycle instead of logging `Unexpected EOF`.
+  - Payload reads still require the advertised frame length, so truncated
+    mid-frame payloads continue to warn.
+  - Added deterministic PathfindingService tests because that service was the
+    noisy runtime owner for this socket behavior.
+- Pass result: `delta shipped`
+- Validation/tests run:
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ProtobufSocketServerLoggingTests|FullyQualifiedName~StaticRoutePackCacheTests|FullyQualifiedName~RouteResultCacheTests|FullyQualifiedName~NavigationOverlayAwarePathTests.CalculateValidatedPath_RecordsResolverAndManagedValidationMetrics|FullyQualifiedName~PathfindingSocketServerIntegrationTests.HandlePath_RepeatedStaticRequest_UsesServiceRouteCacheThroughNormalContract" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_cache_socket_logging_metrics_timeout_bundle_after_assertion.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (18/18)` with the existing benign `dumpbin` applocal warning.
+- Files changed:
+  - `Exports/BotCommLayer/ProtobufSocketServer.cs`
+  - `Tests/PathfindingService.Tests/ProtobufSocketServerLoggingTests.cs`
+  - `Exports/BotCommLayer/TASKS.md`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
 ### 2026-04-28 (Jump action contract)
 - Last delta:
   - Added protobuf `ActionType.JUMP = 81` and regenerated

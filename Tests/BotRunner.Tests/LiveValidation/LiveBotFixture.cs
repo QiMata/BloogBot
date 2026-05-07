@@ -957,10 +957,12 @@ public partial class LiveBotFixture : IAsyncLifetime
                 newFg = snap;
             else if (string.Equals(snap.AccountName, BgAccountName, StringComparison.OrdinalIgnoreCase))
                 newBg = snap;
-            else if (newFg == null && !snap.AccountName.Equals(CombatTestAccount, StringComparison.OrdinalIgnoreCase)
+            else if (FgAccountName == null
+                     && newFg == null && !snap.AccountName.Equals(CombatTestAccount, StringComparison.OrdinalIgnoreCase)
                      && snap.AccountName.EndsWith("1", StringComparison.OrdinalIgnoreCase))
                 newFg = snap;
-            else if (newBg == null && !snap.AccountName.Equals(CombatTestAccount, StringComparison.OrdinalIgnoreCase))
+            else if (BgAccountName == null
+                     && newBg == null && !snap.AccountName.Equals(CombatTestAccount, StringComparison.OrdinalIgnoreCase))
                 newBg = snap;
         }
 
@@ -999,11 +1001,21 @@ public partial class LiveBotFixture : IAsyncLifetime
         }
 
         // Fallback: if only one bot and neither role was matched, assign it as BG
-        if (newBg == null && newFg == null && newCombat == null && inWorldBots.Count >= 1)
+        if (BgAccountName == null
+            && FgAccountName == null
+            && newBg == null
+            && newFg == null
+            && newCombat == null
+            && inWorldBots.Count >= 1)
         {
-            BackgroundBot = inWorldBots[0];
-            BgAccountName = BackgroundBot.AccountName;
-            BgCharacterName = BackgroundBot.CharacterName;
+            var fallback = inWorldBots.FirstOrDefault(snapshot =>
+                !snapshot.AccountName.Equals(ShodanAccount, StringComparison.OrdinalIgnoreCase));
+            if (fallback != null)
+            {
+                BackgroundBot = fallback;
+                BgAccountName = BackgroundBot.AccountName;
+                BgCharacterName = BackgroundBot.CharacterName;
+            }
         }
     }
 
@@ -1051,6 +1063,12 @@ public partial class LiveBotFixture : IAsyncLifetime
             ExpectedBotCount = configuredBotCount;
             _logger.LogInformation("[FIXTURE] Settings specify {Count} bot(s).", configuredBotCount);
 
+            string? configuredFgAccount = null;
+            string? configuredBgAccount = null;
+            string? configuredCombatAccount = null;
+            string? configuredShodanAccount = null;
+            string? configuredShodanCharacterName = null;
+
             foreach (var element in charactersElement.EnumerateArray())
             {
                 if (element.TryGetProperty("ShouldRun", out var shouldRunProperty)
@@ -1072,32 +1090,43 @@ public partial class LiveBotFixture : IAsyncLifetime
                 var runnerType = runnerTypeProperty.GetString();
                 if (string.Equals(accountName, ShodanAccount, StringComparison.OrdinalIgnoreCase))
                 {
-                    ShodanAccountName ??= accountName;
+                    configuredShodanAccount = accountName;
                     if (element.TryGetProperty("CharacterName", out var shodanCharNameProp)
                         && shodanCharNameProp.ValueKind == JsonValueKind.String)
                     {
                         var shodanCharName = shodanCharNameProp.GetString();
                         if (!string.IsNullOrWhiteSpace(shodanCharName))
-                            ShodanExpectedCharacterName ??= shodanCharName.Trim();
+                            configuredShodanCharacterName = shodanCharName.Trim();
                     }
                     continue; // Shodan is GM-admin only; do not assign FG/BG.
                 }
 
                 if (string.Equals(accountName, CombatTestAccount, StringComparison.OrdinalIgnoreCase))
                 {
-                    CombatTestAccountName ??= accountName;
+                    configuredCombatAccount = accountName;
                     // COMBATTEST can also be FG or BG — fall through to assign runner role
                 }
 
                 if (string.Equals(runnerType, "Foreground", StringComparison.OrdinalIgnoreCase))
                 {
-                    FgAccountName ??= accountName;
+                    configuredFgAccount = accountName;
                 }
                 else if (string.Equals(runnerType, "Background", StringComparison.OrdinalIgnoreCase))
                 {
-                    BgAccountName ??= accountName;
+                    configuredBgAccount = accountName;
                 }
             }
+
+            if (!string.IsNullOrWhiteSpace(configuredFgAccount))
+                FgAccountName = configuredFgAccount;
+            if (!string.IsNullOrWhiteSpace(configuredBgAccount))
+                BgAccountName = configuredBgAccount;
+            if (!string.IsNullOrWhiteSpace(configuredCombatAccount))
+                CombatTestAccountName = configuredCombatAccount;
+            if (!string.IsNullOrWhiteSpace(configuredShodanAccount))
+                ShodanAccountName = configuredShodanAccount;
+            if (!string.IsNullOrWhiteSpace(configuredShodanCharacterName))
+                ShodanExpectedCharacterName = configuredShodanCharacterName;
         }
         catch (Exception ex)
         {

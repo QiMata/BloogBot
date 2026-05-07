@@ -28,7 +28,7 @@
 #include "DetourNavMesh.h"
 
 #define MMAP_MAGIC 0x4d4d4150   // 'MMAP'
-#define MMAP_VERSION 4
+#define MMAP_VERSION 6
 #define SIZE_OF_GRIDS 533.33333f
 
 struct MmapTileHeader
@@ -37,11 +37,13 @@ struct MmapTileHeader
 	unsigned int dtVersion;
 	unsigned int mmapVersion;
 	unsigned int size;
-	bool usesLiquids : 1;
+	unsigned int usesLiquids;
 
 	MmapTileHeader() : mmapMagic(MMAP_MAGIC), dtVersion(DT_NAVMESH_VERSION),
-		mmapVersion(MMAP_VERSION), size(0), usesLiquids(false) {}//usesLiquids(true) {} //Remove liquid in paths (not 100% with current maps)
+		mmapVersion(MMAP_VERSION), size(0), usesLiquids(0) {}//usesLiquids(true) {} //Remove liquid in paths (not 100% with current maps)
 };
+
+static_assert(sizeof(MmapTileHeader) == 20, "MmapTileHeader must match the generated mmap wrapper schema.");
 
 enum NavTerrain
 {

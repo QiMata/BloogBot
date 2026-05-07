@@ -23,15 +23,15 @@ docker compose up -d
 Start all game + split navigation services:
 
 ```powershell
-docker compose -f .\docker-compose.vmangos-linux.yml up -d --build realmd mangosd pathfinding-service scene-data-service
+docker compose -f .\docker-compose.vmangos-linux.yml up -d --build wow-realmd wow-mangosd wwow-pathfinding wwow-scene-data
 ```
 
 Follow logs:
 
 ```powershell
-docker compose -f .\docker-compose.vmangos-linux.yml logs -f mangosd
-docker compose -f .\docker-compose.vmangos-linux.yml logs -f pathfinding-service
-docker compose -f .\docker-compose.vmangos-linux.yml logs -f scene-data-service
+docker compose -f .\docker-compose.vmangos-linux.yml logs -f wow-mangosd
+docker compose -f .\docker-compose.vmangos-linux.yml logs -f wwow-pathfinding
+docker compose -f .\docker-compose.vmangos-linux.yml logs -f wwow-scene-data
 ```
 
 Stop the stack:
@@ -42,8 +42,13 @@ docker compose -f .\docker-compose.vmangos-linux.yml down
 
 ## Runtime Configuration
 
-- `pathfinding-service` loads nav data from `WWOW_DATA_DIR=/wwow-data`.
-- `scene-data-service` loads collision/scene data from `WWOW_DATA_DIR=/wwow-data` and listens on `0.0.0.0:5003`.
+- `wwow-pathfinding` loads nav data from `WWOW_DATA_DIR=/wwow-data`.
+- `wwow-pathfinding` mmap preload is config-driven. The Linux compose service
+  currently sets `Navigation__PreloadMaps=all` and
+  `WWOW_NAVIGATION_PRELOAD_MAPS=all` so the Docker runtime loads every
+  available `.mmap` once at startup. Use `none` for focused test or fast
+  iteration overrides.
+- `wwow-scene-data` loads collision/scene data from `WWOW_DATA_DIR=/wwow-data` and listens on `0.0.0.0:5003`.
 - Both services mount `${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}` read-only.
 - Published ports:
   - `realmd`: `3724`
@@ -52,13 +57,14 @@ docker compose -f .\docker-compose.vmangos-linux.yml down
   - `pathfinding-service`: `5001`
   - `scene-data-service`: `5003`
 
-## Current Validation (2026-04-03)
+## Current Validation (2026-05-05)
 
 - `docker ps` confirms both split services are live:
-  - `pathfinding-service` -> `0.0.0.0:5001->5001/tcp`
-  - `scene-data-service` -> `0.0.0.0:5003->5003/tcp`
-- `docker logs --tail 80 pathfinding-service` shows active map preload from mounted `/wwow-data`.
-- `docker logs --tail 80 scene-data-service` shows ready state (`Ready and listening on 0.0.0.0:5003`) and initialized map coverage.
+  - `wwow-pathfinding` -> `0.0.0.0:5001->5001/tcp`
+  - `wwow-scene-data` -> `0.0.0.0:5003->5003/tcp`
+- `docker logs --since 5m wwow-pathfinding` shows `[Navigation] preloading 41 configured map(s)` from mounted `/wwow-data`, `Navigation loaded in 117.7s`, and the service ready message.
+- `docker exec wwow-pathfinding cat /app/pathfinding_status.json` reports `IsReady=true` with all 41 discovered map IDs in `LoadedMaps`.
+- `docker logs --tail 80 wwow-scene-data` shows ready state and initialized map coverage.
 
 ## Host-Side WoWStateManager
 
@@ -80,8 +86,8 @@ $env:MangosServer__MangosDirectory='C:\Mangos\server'
 
 Validation signals:
 
-- `pathfinding-service` listening on `127.0.0.1:5001`
-- `scene-data-service` listening on `127.0.0.1:5003`
+- `wwow-pathfinding` listening on `127.0.0.1:5001`
+- `wwow-scene-data` listening on `127.0.0.1:5003`
 - `WoWStateManager` listening on `127.0.0.1:5002` and `127.0.0.1:8088`
 
 ## Migration Marker Sync
@@ -93,4 +99,4 @@ powershell -ExecutionPolicy Bypass -File .\docker\linux\vmangos\Sync-MigrationMa
 ## Notes
 
 - `WoWStateManager` only manages WoW client instances; it does not launch/stop `PathfindingService` or `SceneDataService`.
-- Split service endpoints are still `pathfinding-service:5001` and `scene-data-service:5003`.
+- Split service endpoints are still `wwow-pathfinding:5001` and `wwow-scene-data:5003` on the compose network.

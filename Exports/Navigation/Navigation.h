@@ -55,12 +55,14 @@ public:
     XYZ* CalculatePathForAgent(unsigned int mapId, XYZ start, XYZ end, bool smoothPath, float agentRadius, float agentHeight, int* length);
     void FreePathArr(XYZ* length);
     std::string GetMmapsPath();
+    void PreloadConfiguredMaps();
     bool IsLineOfSight(uint32_t mapId, const XYZ& a, const XYZ& b);
     std::vector<NavPoly> CapsuleOverlap(uint32_t mapId, const XYZ& pos, float radius, float height);
     float GetLiquidHeight(uint32_t mapId, float x, float y, float z, uint32_t liquidTypeMask);
     const dtNavMeshQuery* GetQueryForMap(uint32_t mapId);
     OverlayRepairedSegmentMetadata GetLastOverlayRepairedSegment() const { return m_lastOverlayRepairedSegment; }
 private:
+    void PreloadMaps(const std::vector<unsigned int>& mapIds);
     void InitializeMapsForContinent(MMAP::MMapManager* manager, unsigned int mapId);
     static Navigation* s_singletonInstance;
     XYZ* currentPath;

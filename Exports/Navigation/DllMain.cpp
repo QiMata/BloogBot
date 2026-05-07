@@ -2,6 +2,7 @@
 #include "Navigation.h"
 #include "VMapManager2.h"
 #include "VMapFactory.h"
+#include "MoveMapSharedDefines.h"
 #include "PhysicsEngine.h"
 #include "PhysicsBridge.h"
 #include "PhysicsGroundSnap.h"
@@ -21,6 +22,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <filesystem>
+#include <fstream>
 #include <vector>
 #include <cstdio>
 #include <csignal>
@@ -393,6 +395,239 @@ extern "C" __declspec(dllexport) void SetDataDirectory(const char* dataDir)
 }
 
 #ifndef PHYSICS_DLL_ONLY
+// ABI probe used by managed tests before a Detour vendor refresh. Keep this
+// export data-only so it cannot change pathfinding behavior.
+#pragma pack(push, 4)
+struct DetourCompatibilityInfo
+{
+    uint32_t structSize;
+    uint32_t mmapMagic;
+    uint32_t mmapVersion;
+    uint32_t detourNavMeshMagic;
+    uint32_t detourNavMeshVersion;
+    uint32_t detourNavMeshStateVersion;
+    uint32_t dtStatusSize;
+    uint32_t dtPolyRefSize;
+    uint32_t dtTileRefSize;
+    uint32_t dtLinkSize;
+    uint32_t dtPolySize;
+    uint32_t dtMeshHeaderSize;
+    uint32_t dtNavMeshParamsSize;
+    uint32_t mmapTileHeaderSize;
+    uint32_t nativePointerSize;
+    uint32_t maxVertsPerPolygon;
+    uint32_t maxAreas;
+    uint32_t dtSaltBits;
+    uint32_t dtTileBits;
+    uint32_t dtPolyBits;
+    uint32_t polyRef64Enabled;
+    uint32_t supportsSlicedPathfinding;
+    uint32_t supportsPathCorridor;
+    uint32_t supportsAnyAngle;
+    uint32_t supportsRaycastCosts;
+    uint32_t supportsDistanceToWall;
+    uint32_t supportsLocalNeighbourhood;
+};
+
+struct MMapTileCompatibilityInfo
+{
+    uint32_t structSize;
+    uint32_t mapId;
+    int32_t tileX;
+    int32_t tileY;
+    uint32_t fileFound;
+    uint32_t fileMmapMagic;
+    uint32_t fileMmapVersion;
+    uint32_t fileDetourVersion;
+    uint32_t fileTileDataSize;
+    uint32_t fileUsesLiquids;
+    uint32_t headerCompatible;
+    uint32_t loadSucceeded;
+    uint32_t loadedTileCountAtGrid;
+    uint64_t loadedTileRef;
+    int32_t detourHeaderMagic;
+    int32_t detourHeaderVersion;
+    int32_t detourHeaderPolyCount;
+    int32_t detourHeaderVertCount;
+    float detourHeaderWalkableRadius;
+    float detourHeaderWalkableHeight;
+    float detourHeaderWalkableClimb;
+};
+#pragma pack(pop)
+
+static std::string BuildMMapTilePath(uint32_t mapId, int32_t tileX, int32_t tileY)
+{
+    const auto mmapsPath = Navigation::GetInstance()->GetMmapsPath();
+
+    char fileName[32] = {};
+    std::snprintf(
+        fileName,
+        sizeof(fileName),
+        "%03u%02d%02d.mmtile",
+        mapId,
+        tileX,
+        tileY);
+
+    return (std::filesystem::path(mmapsPath) / fileName).string();
+}
+
+extern "C" __declspec(dllexport) bool GetDetourCompatibilityInfo(DetourCompatibilityInfo* info)
+{
+    if (!info)
+        return false;
+
+    DetourCompatibilityInfo result = {};
+    result.structSize = sizeof(DetourCompatibilityInfo);
+    result.mmapMagic = MMAP_MAGIC;
+    result.mmapVersion = MMAP_VERSION;
+    result.detourNavMeshMagic = DT_NAVMESH_MAGIC;
+    result.detourNavMeshVersion = DT_NAVMESH_VERSION;
+    result.detourNavMeshStateVersion = DT_NAVMESH_STATE_VERSION;
+    result.dtStatusSize = sizeof(dtStatus);
+    result.dtPolyRefSize = sizeof(dtPolyRef);
+    result.dtTileRefSize = sizeof(dtTileRef);
+    result.dtLinkSize = sizeof(dtLink);
+    result.dtPolySize = sizeof(dtPoly);
+    result.dtMeshHeaderSize = sizeof(dtMeshHeader);
+    result.dtNavMeshParamsSize = sizeof(dtNavMeshParams);
+    result.mmapTileHeaderSize = sizeof(MmapTileHeader);
+    result.nativePointerSize = sizeof(void*);
+    result.maxVertsPerPolygon = DT_VERTS_PER_POLYGON;
+    result.maxAreas = DT_MAX_AREAS;
+#ifdef DT_POLYREF64
+    result.dtSaltBits = DT_SALT_BITS;
+    result.dtTileBits = DT_TILE_BITS;
+    result.dtPolyBits = DT_POLY_BITS;
+#else
+    result.dtSaltBits = 0;
+    result.dtTileBits = 0;
+    result.dtPolyBits = 0;
+#endif
+#ifdef DT_POLYREF64
+    result.polyRef64Enabled = 1;
+#else
+    result.polyRef64Enabled = 0;
+#endif
+    result.supportsSlicedPathfinding = 1;
+    result.supportsPathCorridor = 1;
+    result.supportsAnyAngle = 1;
+    result.supportsRaycastCosts = 1;
+    result.supportsDistanceToWall = 1;
+    result.supportsLocalNeighbourhood = 1;
+
+    *info = result;
+    return true;
+}
+
+extern "C" __declspec(dllexport) bool ProbeMMapTileCompatibility(
+    uint32_t mapId,
+    int32_t tileX,
+    int32_t tileY,
+    MMapTileCompatibilityInfo* info)
+{
+    if (!info)
+        return false;
+
+    MMapTileCompatibilityInfo result = {};
+    result.structSize = sizeof(MMapTileCompatibilityInfo);
+    result.mapId = mapId;
+    result.tileX = tileX;
+    result.tileY = tileY;
+
+    try
+    {
+        const auto tilePath = BuildMMapTilePath(mapId, tileX, tileY);
+        std::ifstream tileFile(tilePath, std::ios::binary);
+        if (tileFile)
+        {
+            MmapTileHeader fileHeader;
+            tileFile.read(reinterpret_cast<char*>(&fileHeader), sizeof(fileHeader));
+            if (tileFile.gcount() == sizeof(fileHeader))
+            {
+                result.fileFound = 1;
+                result.fileMmapMagic = fileHeader.mmapMagic;
+                result.fileMmapVersion = fileHeader.mmapVersion;
+                result.fileDetourVersion = fileHeader.dtVersion;
+                result.fileTileDataSize = fileHeader.size;
+                result.fileUsesLiquids = fileHeader.usesLiquids;
+                result.headerCompatible =
+                    fileHeader.mmapMagic == MMAP_MAGIC
+                    && fileHeader.mmapVersion == MMAP_VERSION
+                    && fileHeader.dtVersion == DT_NAVMESH_VERSION
+                    && fileHeader.size >= sizeof(dtMeshHeader)
+                    ? 1u
+                    : 0u;
+            }
+        }
+
+        dtAllocSetCustom(dtCustomAlloc, dtCustomFree);
+        auto* manager = MMAP::MMapFactory::createOrGetMMapManager();
+        if (manager && manager->getMmapsBasePath().empty())
+            manager->setMmapsBasePath(Navigation::GetInstance()->GetMmapsPath());
+
+        if (manager && manager->loadMap(mapId, tileX, tileY))
+        {
+            result.loadSucceeded = 1;
+
+            const dtNavMesh* navMesh = manager->GetNavMesh(mapId);
+            if (navMesh)
+            {
+                const dtMeshTile* tiles[16] = {};
+                int tileCount = navMesh->getTilesAt(tileX, tileY, tiles, 16);
+                if (tileCount <= 0 && tileX != tileY)
+                    tileCount = navMesh->getTilesAt(tileY, tileX, tiles, 16);
+
+                result.loadedTileCountAtGrid = static_cast<uint32_t>(std::max(tileCount, 0));
+                const dtMeshTile* selectedTile = nullptr;
+                for (int i = 0; i < tileCount; ++i)
+                {
+                    selectedTile = tiles[i];
+                    if (selectedTile && selectedTile->header)
+                        break;
+                }
+
+                if (!selectedTile || !selectedTile->header)
+                {
+                    uint32_t loadedTileCount = 0;
+                    for (int i = 0; i < navMesh->getMaxTiles(); ++i)
+                    {
+                        const dtMeshTile* tile = navMesh->getTile(i);
+                        if (!tile || !tile->header)
+                            continue;
+
+                        ++loadedTileCount;
+                        if ((tile->header->x == tileX && tile->header->y == tileY)
+                            || (tile->header->x == tileY && tile->header->y == tileX)
+                            || selectedTile == nullptr)
+                        {
+                            selectedTile = tile;
+                        }
+                    }
+
+                    result.loadedTileCountAtGrid = std::max(result.loadedTileCountAtGrid, loadedTileCount);
+                }
+
+                if (selectedTile && selectedTile->header)
+                {
+                    const dtMeshTile* tile = selectedTile;
+                    result.loadedTileRef = static_cast<uint64_t>(navMesh->getTileRef(tile));
+                    result.detourHeaderMagic = tile->header->magic;
+                    result.detourHeaderVersion = tile->header->version;
+                    result.detourHeaderPolyCount = tile->header->polyCount;
+                    result.detourHeaderVertCount = tile->header->vertCount;
+                    result.detourHeaderWalkableRadius = tile->header->walkableRadius;
+                    result.detourHeaderWalkableHeight = tile->header->walkableHeight;
+                    result.detourHeaderWalkableClimb = tile->header->walkableClimb;
+                }
+            }
+        }
+    }
+    catch (...) {}
+
+    *info = result;
+    return result.fileFound != 0 || result.loadSucceeded != 0;
+}
+
 extern "C" __declspec(dllexport) XYZ* FindPath(uint32_t mapId, XYZ start, XYZ end, bool smoothPath, int* length)
 {
     try
@@ -1879,6 +2114,321 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
     }
 
     return result;
+}
+
+// Test-only diagnostic export (PFS-OVERHAUL-004 H2b): returns the polygon-ref
+// list Detour's findPath produces between (start, end) for the given map AND
+// a per-poly type byte (0=DT_POLYTYPE_GROUND, 1=DT_POLYTYPE_OFFMESH_CONNECTION).
+// The agent capsule is accepted for API symmetry with FindPathForAgent and
+// future filter customization, but is currently advisory only — the navmesh
+// itself is already built for a specific capsule, and the dtQueryFilter here
+// uses default include flags. Mirrors FindPathCorridor's findNearestPoly /
+// findPath / coord-swap pattern; does NOT allocate a CorridorInstance and is
+// safe to call freely. Returns false on findNearestPoly / findPath failure or
+// null/zero buffers. On success, *outCount is the full polyCount produced by
+// findPath; if outCount > maxOut, only the first maxOut polys were written
+// into the caller's buffers (caller can resize and retry).
+extern "C" __declspec(dllexport) bool FindPathPolygonsForAgent(
+    uint32_t mapId,
+    XYZ start,
+    XYZ end,
+    float agentRadius,
+    float agentHeight,
+    uint64_t* outPolyRefs,
+    uint8_t* outPolyTypes,
+    int maxOut,
+    int* outCount)
+{
+    (void)agentRadius;
+    (void)agentHeight;
+
+    if (outCount)
+        *outCount = 0;
+
+    if (!outPolyRefs || !outPolyTypes || maxOut <= 0 || !outCount)
+    {
+        fprintf(stderr, "[POLYLIST] invalid args: refs=%p types=%p max=%d count=%p\n",
+                (void*)outPolyRefs, (void*)outPolyTypes, maxOut, (void*)outCount);
+        return false;
+    }
+
+    try
+    {
+        if (!g_initialized)
+            InitializeAllSystems();
+
+        auto* navigation = Navigation::GetInstance();
+        if (!navigation) { fprintf(stderr, "[POLYLIST] no Navigation instance\n"); return false; }
+
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+        dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
+        if (!query) { fprintf(stderr, "[POLYLIST] no query for map %u\n", mapId); return false; }
+
+        const dtNavMesh* navMesh = query->getAttachedNavMesh();
+        if (!navMesh) { fprintf(stderr, "[POLYLIST] no navMesh for map %u\n", mapId); return false; }
+
+        dtQueryFilter filter;
+        filter.setIncludeFlags(0xFFFF);
+        filter.setExcludeFlags(0);
+
+        // WoW (X,Y,Z) → Detour (Y,Z,X) — matches FindPathCorridor convention
+        float startPos[3] = { start.Y, start.Z, start.X };
+        float endPos[3]   = { end.Y,   end.Z,   end.X   };
+        float extents[3]  = { 4.0f, 5.0f, 4.0f };
+
+        dtPolyRef startRef = 0, endRef = 0;
+        float nearestStart[3], nearestEnd[3];
+
+        dtStatus st = query->findNearestPoly(startPos, extents, &filter, &startRef, nearestStart);
+        if (dtStatusFailed(st) || startRef == 0)
+        {
+            float bigExtents[3] = { 8.0f, 200.0f, 8.0f };
+            st = query->findNearestPoly(startPos, bigExtents, &filter, &startRef, nearestStart);
+            if (dtStatusFailed(st) || startRef == 0)
+            {
+                fprintf(stderr, "[POLYLIST] findNearestPoly failed for START (%.1f,%.1f,%.1f) st=0x%x\n",
+                        start.X, start.Y, start.Z, st);
+                return false;
+            }
+        }
+
+        st = query->findNearestPoly(endPos, extents, &filter, &endRef, nearestEnd);
+        if (dtStatusFailed(st) || endRef == 0)
+        {
+            float bigExtents[3] = { 8.0f, 200.0f, 8.0f };
+            st = query->findNearestPoly(endPos, bigExtents, &filter, &endRef, nearestEnd);
+            if (dtStatusFailed(st) || endRef == 0)
+            {
+                fprintf(stderr, "[POLYLIST] findNearestPoly failed for END (%.1f,%.1f,%.1f) st=0x%x\n",
+                        end.X, end.Y, end.Z, st);
+                return false;
+            }
+        }
+
+        dtPolyRef polyPath[CORRIDOR_MAX_PATH];
+        int polyCount = 0;
+        st = query->findPath(startRef, endRef, nearestStart, nearestEnd,
+                             &filter, polyPath, &polyCount, CORRIDOR_MAX_PATH);
+        if (dtStatusFailed(st) || polyCount == 0)
+        {
+            fprintf(stderr, "[POLYLIST] findPath failed: st=0x%x polyCount=%d\n", st, polyCount);
+            return false;
+        }
+
+        *outCount = polyCount;
+        const int writeCount = (polyCount < maxOut) ? polyCount : maxOut;
+
+        int offMeshSeen = 0;
+        for (int i = 0; i < writeCount; ++i)
+        {
+            outPolyRefs[i] = (uint64_t)polyPath[i];
+
+            const dtMeshTile* tile = nullptr;
+            const dtPoly* poly = nullptr;
+            dtStatus refSt = navMesh->getTileAndPolyByRef(polyPath[i], &tile, &poly);
+            if (dtStatusFailed(refSt) || tile == nullptr || poly == nullptr)
+            {
+                outPolyTypes[i] = 0xFF;
+                continue;
+            }
+
+            const unsigned char polyType = poly->getType();
+            outPolyTypes[i] = polyType;
+            if (polyType == DT_POLYTYPE_OFFMESH_CONNECTION)
+                ++offMeshSeen;
+        }
+
+        fprintf(stderr, "[POLYLIST] map=%u polyCount=%d written=%d offMesh=%d partial=%s\n",
+                mapId, polyCount, writeCount, offMeshSeen,
+                dtStatusDetail(st, DT_PARTIAL_RESULT) ? "yes" : "no");
+        return true;
+    }
+    catch (...)
+    {
+        fprintf(stderr, "[Navigation.dll] SEH exception in FindPathPolygonsForAgent (code=0x%08lx)\n",
+                0);
+        if (outCount) *outCount = 0;
+        return false;
+    }
+}
+
+// Test-only diagnostic export (PFS-OVERHAUL-006 / Phase 5.3.6): returns
+// Detour's full string-pulled corner sequence for a (start, end) path on
+// the given map. Mirrors FindPathPolygonsForAgent's lock + WoW→Detour
+// coord-swap + findNearestPoly retry, but writes corner XYZs (in WoW frame)
+// instead of polygon refs. Lets PathfindingService.Tests inspect the actual
+// route Detour serves before the bot follows it — the FlightMaster→Frezza
+// trace is needed to diagnose the wrong-direction walk in the OG ramp climb.
+//
+// Returns false on findNearestPoly / findPath / findStraightPath failure or
+// invalid args. On success, *outCount is the corner count written into
+// outCorners (capped at maxCorners and the internal CORRIDOR_MAX_CORNERS).
+extern "C" __declspec(dllexport) bool FindPathCornersForAgent(
+    uint32_t mapId,
+    XYZ start,
+    XYZ end,
+    float agentRadius,
+    float agentHeight,
+    XYZ* outCorners,
+    int maxCorners,
+    int* outCount)
+{
+    (void)agentRadius;
+    (void)agentHeight;
+
+    if (outCount)
+        *outCount = 0;
+
+    if (!outCorners || maxCorners <= 0 || !outCount)
+    {
+        fprintf(stderr, "[CORNERS] invalid args: corners=%p max=%d count=%p\n",
+                (void*)outCorners, maxCorners, (void*)outCount);
+        return false;
+    }
+
+    try
+    {
+        if (!g_initialized)
+            InitializeAllSystems();
+
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+        dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
+        if (!query) { fprintf(stderr, "[CORNERS] no query for map %u\n", mapId); return false; }
+
+        dtQueryFilter filter;
+        filter.setIncludeFlags(0xFFFF);
+        filter.setExcludeFlags(0);
+
+        // WoW (X,Y,Z) → Detour (Y,Z,X) — matches FindPathCorridor convention
+        float startPos[3] = { start.Y, start.Z, start.X };
+        float endPos[3]   = { end.Y,   end.Z,   end.X   };
+        float extents[3]  = { 4.0f, 5.0f, 4.0f };
+
+        dtPolyRef startRef = 0, endRef = 0;
+        float nearestStart[3], nearestEnd[3];
+
+        dtStatus st = query->findNearestPoly(startPos, extents, &filter, &startRef, nearestStart);
+        if (dtStatusFailed(st) || startRef == 0)
+        {
+            float bigExtents[3] = { 8.0f, 200.0f, 8.0f };
+            st = query->findNearestPoly(startPos, bigExtents, &filter, &startRef, nearestStart);
+            if (dtStatusFailed(st) || startRef == 0)
+            {
+                fprintf(stderr, "[CORNERS] findNearestPoly failed for START (%.1f,%.1f,%.1f) st=0x%x\n",
+                        start.X, start.Y, start.Z, st);
+                return false;
+            }
+        }
+
+        st = query->findNearestPoly(endPos, extents, &filter, &endRef, nearestEnd);
+        if (dtStatusFailed(st) || endRef == 0)
+        {
+            float bigExtents[3] = { 8.0f, 200.0f, 8.0f };
+            st = query->findNearestPoly(endPos, bigExtents, &filter, &endRef, nearestEnd);
+            if (dtStatusFailed(st) || endRef == 0)
+            {
+                fprintf(stderr, "[CORNERS] findNearestPoly failed for END (%.1f,%.1f,%.1f) st=0x%x\n",
+                        end.X, end.Y, end.Z, st);
+                return false;
+            }
+        }
+
+        dtPolyRef polyPath[CORRIDOR_MAX_PATH];
+        int polyCount = 0;
+        st = query->findPath(startRef, endRef, nearestStart, nearestEnd,
+                             &filter, polyPath, &polyCount, CORRIDOR_MAX_PATH);
+        if (dtStatusFailed(st) || polyCount == 0)
+        {
+            fprintf(stderr, "[CORNERS] findPath failed: st=0x%x polyCount=%d\n", st, polyCount);
+            return false;
+        }
+
+        const int cap = (maxCorners < CORRIDOR_MAX_CORNERS) ? maxCorners : CORRIDOR_MAX_CORNERS;
+        float straightPath[CORRIDOR_MAX_CORNERS * 3];
+        unsigned char straightFlags[CORRIDOR_MAX_CORNERS];
+        dtPolyRef straightPolys[CORRIDOR_MAX_CORNERS];
+        int straightCount = 0;
+
+        st = query->findStraightPath(nearestStart, nearestEnd, polyPath, polyCount,
+                                     straightPath, straightFlags, straightPolys,
+                                     &straightCount, cap);
+        if (dtStatusFailed(st))
+        {
+            fprintf(stderr, "[CORNERS] findStraightPath failed: st=0x%x\n", st);
+            return false;
+        }
+
+        // Convert Detour (Y,Z,X) → WoW (X,Y,Z) for each corner
+        const int writeCount = (straightCount < cap) ? straightCount : cap;
+        for (int i = 0; i < writeCount; ++i)
+        {
+            outCorners[i].X = straightPath[i * 3 + 2]; // Detour[2] = WoW X
+            outCorners[i].Y = straightPath[i * 3 + 0]; // Detour[0] = WoW Y
+            outCorners[i].Z = straightPath[i * 3 + 1]; // Detour[1] = WoW Z
+        }
+        *outCount = writeCount;
+
+        fprintf(stderr, "[CORNERS] map=%u corners=%d polyCount=%d partial=%s\n",
+                mapId, writeCount, polyCount,
+                dtStatusDetail(st, DT_PARTIAL_RESULT) ? "yes" : "no");
+        return true;
+    }
+    catch (...)
+    {
+        fprintf(stderr, "[Navigation.dll] SEH exception in FindPathCornersForAgent (code=0x%08lx)\n",
+                0);
+        if (outCount) *outCount = 0;
+        return false;
+    }
+}
+
+// Test-only diagnostic export (PFS-OVERHAUL-004 H2d): walks every loaded
+// tile of the given map and counts (a) off-mesh connection polygons and
+// (b) those off-mesh polys whose firstLink chain is non-empty (i.e., the
+// runtime navmesh's connectExt/baseOffMeshLinks successfully linked them).
+// Used by the H2d gate test to prove the off-mesh link infrastructure is
+// working end-to-end without depending on findPath route preference (which
+// is sensitive to ground-corridor cost competitiveness).
+extern "C" __declspec(dllexport) bool CountLinkedOffMeshPolysOnMap(
+    uint32_t mapId,
+    int* outTotalOffMeshPolys,
+    int* outLinkedOffMeshPolys)
+{
+    if (outTotalOffMeshPolys) *outTotalOffMeshPolys = 0;
+    if (outLinkedOffMeshPolys) *outLinkedOffMeshPolys = 0;
+    if (!outTotalOffMeshPolys || !outLinkedOffMeshPolys) return false;
+
+    try
+    {
+        if (!g_initialized) InitializeAllSystems();
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+        dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
+        if (!query) { fprintf(stderr, "[OMLINK] no query for map %u\n", mapId); return false; }
+        const dtNavMesh* navMesh = query->getAttachedNavMesh();
+        if (!navMesh) { fprintf(stderr, "[OMLINK] no navMesh for map %u\n", mapId); return false; }
+
+        int total = 0, linked = 0;
+        const int maxTiles = navMesh->getMaxTiles();
+        for (int t = 0; t < maxTiles; ++t)
+        {
+            const dtMeshTile* tile = navMesh->getTile(t);
+            if (!tile || !tile->header) continue;
+            for (int p = 0; p < tile->header->polyCount; ++p)
+            {
+                const dtPoly* poly = &tile->polys[p];
+                if (poly->getType() != DT_POLYTYPE_OFFMESH_CONNECTION) continue;
+                ++total;
+                if (poly->firstLink != DT_NULL_LINK) ++linked;
+            }
+        }
+        *outTotalOffMeshPolys = total;
+        *outLinkedOffMeshPolys = linked;
+        fprintf(stderr, "[OMLINK] map=%u total=%d linked=%d\n", mapId, total, linked);
+        return true;
+    }
+    catch (...) { return false; }
 }
 
 /// Feed the agent's current position into the corridor. The corridor slides

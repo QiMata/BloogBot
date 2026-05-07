@@ -253,6 +253,10 @@ Configure via `appsettings.json`:
     "IpAddress": "127.0.0.1",
     "Port": 5000
   },
+  "Navigation": {
+    "PreloadMaps": "none",
+    "RunStartupDiagnostics": false
+  },
   "Logging": {
     "LogLevel": {
       "PathfindingService": "Debug",
@@ -261,6 +265,23 @@ Configure via `appsettings.json`:
   }
 }
 ```
+
+`Navigation:PreloadMaps` controls startup mmap loading:
+
+- `none`, `false`, `off`, or `0`: do not preload maps; maps still load on first native request.
+- comma/semicolon/space-separated map IDs such as `0,1,389`: preload those maps during service initialization.
+- `all` or `*`: discover every `.mmap` under `WWOW_DATA_DIR/mmaps` and preload each map once.
+
+The native DLL also honors `WWOW_NAVIGATION_PRELOAD_MAPS` with the same values,
+which is useful for tests or non-service hosts. `Navigation:RunStartupDiagnostics`
+is opt-in; when false, startup does not run sample native paths that would
+implicitly load map `0` and map `1`.
+
+The Linux Docker compose service currently enables preload-all for production
+validation with both `Navigation__PreloadMaps=all` and
+`WWOW_NAVIGATION_PRELOAD_MAPS=all`. The service healthcheck startup period is
+long enough for full mmap loading; the readiness file records the loaded map
+IDs after initialization.
 
 ## Request Types
 

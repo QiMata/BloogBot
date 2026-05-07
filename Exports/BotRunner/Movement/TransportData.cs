@@ -23,7 +23,11 @@ public static class TransportData
         Position WaitPosition,    // Where to stand and wait for the transport
         float BoardingRadius,     // How close = "at the stop"
         Position? BoardingPosition = null, // Optional fixed world staging point near an offset transport deck
-        Position? TransportBoardingOffset = null); // Optional local-space point to stand on the transport model
+        Position? TransportBoardingOffset = null, // Optional post-attachment local-space point to stand on the transport model
+        Position? ApproachPosition = null) // Optional generated-navigation staging point before final boarding
+    {
+        public Position NavigationPosition => ApproachPosition ?? WaitPosition;
+    }
 
     /// <summary>
     /// A transport definition with its stops.
@@ -174,8 +178,18 @@ public static class TransportData
                 BoardingRadius: 12f,
                 BoardingPosition: new Position(1320.142944f, -4653.158691f, 53.891945f),
                 // DBC path 302 stops the model at (1318.107,-4658.047,71.860);
-                // zepplin-riding.jpg captures a stable center-deck transport-local offset.
-                TransportBoardingOffset: new Position(-12.580913f, -7.983256f, -16.398277f)),
+                // zepplin-riding.jpg captures a stable post-attachment center-deck transport-local offset.
+                TransportBoardingOffset: new Position(-12.580913f, -7.983256f, -16.398277f),
+                // Phase 5.3.5 (PFS-OVERHAUL-005): anchored to Zeppelin Master NPC
+                // 9564 "Frezza" spawn (mangos.creature guid=3464, map=1) at the
+                // top of the OG zeppelin tower's wooden ramp — same Z tier as
+                // BoardingPosition (z=53.89), unlike the prior staging point at
+                // z=51.6 (city ground tier) which forced Detour through the
+                // tier-edge lip and stalled the boarding leg. Frezza stands on
+                // the upper-platform deck where the docked zeppelin's gangplank
+                // attaches, so the walk leg now terminates on the same elevation
+                // as the boarding zone.
+                ApproachPosition: new Position(1331.11f, -4649.45f, 53.6269f)),
             new(
                 "Undercity Zeppelin Tower",
                 0,

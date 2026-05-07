@@ -208,11 +208,35 @@ namespace MMAP
 		MmapTileHeader fileHeader;
 		size_t file_read = fread(&fileHeader, sizeof(MmapTileHeader), 1, file);
 		if (file_read != 1) { fclose(file); return false; }
+
+		if (fileHeader.mmapMagic != MMAP_MAGIC
+			|| fileHeader.dtVersion != DT_NAVMESH_VERSION
+			|| fileHeader.mmapVersion != MMAP_VERSION
+			|| fileHeader.size < sizeof(dtMeshHeader))
+		{
+			fclose(file);
+			return false;
+		}
+
 		unsigned char* data = (unsigned char*)dtAlloc(fileHeader.size, DT_ALLOC_PERM);
+		if (!data) { fclose(file); return false; }
 		size_t result = fread(data, fileHeader.size, 1, file);
 		fclose(file);
+		if (result != 1)
+		{
+			dtFree(data);
+			return false;
+		}
 
 		dtMeshHeader* header = (dtMeshHeader*)data;
+		if (!header
+			|| header->magic != DT_NAVMESH_MAGIC
+			|| header->version != DT_NAVMESH_VERSION)
+		{
+			dtFree(data);
+			return false;
+		}
+
 		dtTileRef tileRef = 0;
 		dtStatus dtResult = mmap->navMesh->addTile(data, fileHeader.size, DT_TILE_FREE_DATA, 0, &tileRef);
 		if (dtStatusFailed(dtResult))

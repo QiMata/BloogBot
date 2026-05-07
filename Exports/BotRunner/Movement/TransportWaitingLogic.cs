@@ -40,7 +40,6 @@ public class TransportWaitingLogic
     private const float DISEMBARK_TIMEOUT_SEC = 10f; // 10s to step off
     private const float SCHEDULED_TRANSPORT_EXIT_Z_TOLERANCE = 25f;
     private const float SCHEDULED_TRANSPORT_BOARDING_APPROACH_DISTANCE = 8f;
-    private const float SCHEDULED_TRANSPORT_PROVISIONAL_BOARDING_DELAY_SEC = 20f;
     private const float SCHEDULED_TRANSPORT_BOARDING_LOST_Z_DROP = 12f;
     private const float SCHEDULED_TRANSPORT_BOARDING_LOST_DISTANCE = 60f;
     private const float SCHEDULED_TRANSPORT_DOCK_STABLE_TIME_SEC = 5f;
@@ -52,6 +51,17 @@ public class TransportWaitingLogic
     private const float BOAT_AT_STOP_DISTANCE = 20f;
     private const float ZEPPELIN_AT_STOP_DISTANCE = 45f;
     private const uint ELEVATOR_STOP_MARKER_DISPLAY_ID = 462;
+
+    private const string NativeOffMeshBoardingEnvVar = "WWOW_OFFMESH_NATIVE_BOARDING";
+
+    // PFS-OVERHAUL-005 Phase 5: when set, suppress the hand-tuned BoardingPosition
+    // nudges so navigation flows through the baked Detour off-mesh edges instead
+    // of short-circuiting straight to the gangplank deck.
+    internal static bool IsNativeOffMeshBoardingEnabled()
+        => string.Equals(
+            Environment.GetEnvironmentVariable(NativeOffMeshBoardingEnvVar),
+            "1",
+            StringComparison.Ordinal);
 
     private readonly TransportDefinition _transport;
     private readonly TransportStop _boardingStop;
@@ -202,11 +212,12 @@ public class TransportWaitingLogic
 
     private Position? HandleApproaching(Position currentPosition)
     {
-        float dist = DistanceXY(currentPosition, _boardingStop.WaitPosition);
+        var navigationPosition = _boardingStop.NavigationPosition;
+        float dist = DistanceXY(currentPosition, navigationPosition);
         if (dist <= _boardingStop.BoardingRadius)
         {
             TransitionTo(TransportPhase.WaitingForArrival);
-            return _boardingStop.WaitPosition;
+            return navigationPosition;
         }
 
         if (IsAtConfiguredBoardingPosition(currentPosition))
@@ -215,7 +226,7 @@ public class TransportWaitingLogic
             return _boardingStop.BoardingPosition;
         }
 
-        return _boardingStop.WaitPosition;
+        return navigationPosition;
     }
 
     private Position? HandleWaitingForArrival(
@@ -258,7 +269,11 @@ public class TransportWaitingLogic
         if (TryFindTransportAtStop(nearbyObjects, _boardingStop, out var transportObject))
         {
             if (!IsTransportReadyToBoard(transportObject, elapsedSec))
-                return _boardingStop.BoardingPosition ?? _boardingStop.WaitPosition;
+            {
+                return IsNativeOffMeshBoardingEnabled()
+                    ? _boardingStop.NavigationPosition
+                    : _boardingStop.BoardingPosition ?? _boardingStop.NavigationPosition;
+            }
 
             _boardingWaypoint = CreateBoardingWaypoint(transportObject, _boardingStop);
             ResetDockStability();
@@ -268,14 +283,11 @@ public class TransportWaitingLogic
 
         ResetDockStability();
 
-        if (IsAtConfiguredBoardingPosition(currentPosition))
-            return _boardingStop.BoardingPosition;
-
-        if (ShouldUseProvisionalBoardingWaypoint())
+        if (ShouldUseConfiguredBoardingWaypoint())
             return _boardingStop.BoardingPosition;
 
         // Stay at the waiting position
-        return _boardingStop.WaitPosition;
+        return _boardingStop.NavigationPosition;
     }
 
     private Position? HandleBoarding(
@@ -289,7 +301,7 @@ public class TransportWaitingLogic
             _boardingWaypoint = null;
             MissedBoardingAttempt = true;
             TransitionTo(TransportPhase.WaitingForArrival);
-            return _boardingStop.WaitPosition;
+            return _boardingStop.NavigationPosition;
         }
 
         if (!isOnTransport && ShouldAbortBoarding(TryFindTransportAtStop(nearbyObjects, _boardingStop, out _)))
@@ -298,7 +310,7 @@ public class TransportWaitingLogic
             _boardingWaypoint = null;
             MissedBoardingAttempt = true;
             TransitionTo(TransportPhase.WaitingForArrival);
-            return _boardingStop.WaitPosition;
+            return _boardingStop.NavigationPosition;
         }
 
         // We're on the transport — start riding
@@ -317,11 +329,11 @@ public class TransportWaitingLogic
             return null; // Don't move while riding
         }
 
-        if (_boardingWaypoint == null && TryFindTransportAtStop(nearbyObjects, _boardingStop, out var transportObject))
+        if (TryFindTransportAtStop(nearbyObjects, _boardingStop, out var transportObject))
             _boardingWaypoint = CreateBoardingWaypoint(transportObject, _boardingStop);
 
         // Move toward the transport object while preserving the known stop height.
-        return _boardingWaypoint ?? _boardingStop.WaitPosition;
+        return _boardingWaypoint ?? _boardingStop.NavigationPosition;
     }
 
     private Position? HandleRiding(
@@ -391,10 +403,10 @@ public class TransportWaitingLogic
         => _transport.Type != TransportType.Elevator
             && _boardingStop.MapId != _destinationStop.MapId;
 
-    private bool ShouldUseProvisionalBoardingWaypoint()
+    private bool ShouldUseConfiguredBoardingWaypoint()
         => _transport.Type != TransportType.Elevator
             && _boardingStop.BoardingPosition != null
-            && _phaseElapsed >= SCHEDULED_TRANSPORT_PROVISIONAL_BOARDING_DELAY_SEC;
+            && !IsNativeOffMeshBoardingEnabled();
 
     private bool IsTransportReadyToBoard(DynamicObjectProto transportObject, float elapsedSec)
     {
@@ -455,12 +467,13 @@ public class TransportWaitingLogic
     private bool IsAtConfiguredBoardingPosition(Position currentPosition)
         => _transport.Type != TransportType.Elevator
             && _boardingStop.BoardingPosition != null
+            && !IsNativeOffMeshBoardingEnabled()
             && DistanceXY(currentPosition, _boardingStop.BoardingPosition) <= _boardingStop.BoardingRadius;
 
     private bool IsScheduledTransportBoardingLost(Position currentPosition)
         => _transport.Type != TransportType.Elevator
-            && (currentPosition.Z < _boardingStop.WaitPosition.Z - SCHEDULED_TRANSPORT_BOARDING_LOST_Z_DROP
-                || DistanceXY(currentPosition, _boardingStop.WaitPosition) > SCHEDULED_TRANSPORT_BOARDING_LOST_DISTANCE);
+            && (currentPosition.Z < _boardingStop.NavigationPosition.Z - SCHEDULED_TRANSPORT_BOARDING_LOST_Z_DROP
+                || DistanceXY(currentPosition, _boardingStop.NavigationPosition) > SCHEDULED_TRANSPORT_BOARDING_LOST_DISTANCE);
 
     private bool TryGetScheduledTransportBoardingOffset(out Position boardingOffset)
     {
@@ -512,10 +525,15 @@ public class TransportWaitingLogic
         if (_transport.Type == TransportType.Elevator)
             return stop.WaitPosition;
 
-        if (stop.TransportBoardingOffset is { } transportOffset)
-            return TransportLocalToWorld(transportOffset, transportObject);
-
         var anchor = stop.BoardingPosition ?? stop.WaitPosition;
+        if (stop.TransportBoardingOffset != null)
+        {
+            // The local deck offset only becomes meaningful after the client has
+            // a transport GUID. Before attachment, hold the fixed gangplank point
+            // so the foreground client can acquire transport state naturally.
+            return anchor;
+        }
+
         var dx = transportObject.X - anchor.X;
         var dy = transportObject.Y - anchor.Y;
         var distance = MathF.Sqrt(dx * dx + dy * dy);

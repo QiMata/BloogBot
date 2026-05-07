@@ -22,8 +22,18 @@ public class TravelTask : BotTask, IBotTask
     private const int MaxReplans = 3;
     private const float DefaultArrivalRadius = 5.0f;
     private const float WalkLegArrivalRadius = 15.0f;
-    private const float WalkLegTransportArrivalRadius = 8.0f;
+    private const float WalkLegTransportArrivalRadius = 4.0f;
     private const float WalkLegTransportVerticalArrivalTolerance = 6.0f;
+    // Phase 5.3.6 (PFS-OVERHAUL-006): under WWOW_OFFMESH_NATIVE_BOARDING, the
+    // walk leg ends at ApproachPosition (Frezza, z=53.6 for OG zeppelin) which
+    // sits on the upper deck. The legacy 6y tolerance accepted arrival on the
+    // LOWER spiral coil (z≈50) where the bot is XY-close but vertically wrong
+    // — boarding cascade then can't bridge the 3y Z gap because Detour's path
+    // from there leads through the OG tower's central pillar (Phase 5.3.4
+    // "Detour-walkable but physically-blocked" geometry). 1.5y matches
+    // NavigationPath's WAYPOINT_VERTICAL_REACH_TOLERANCE=1.25f plus a quantum,
+    // forcing same-deck arrival before walk_arrived fires.
+    private const float WalkLegNativeOffMeshTransportVerticalArrivalTolerance = 1.5f;
     private const float TransportNearbyObjectRadius = 80.0f;
     private const float FlightMasterSearchRadius = 60.0f;
     private const float FlightArrivalRadius = 10.0f;
@@ -80,6 +90,11 @@ public class TravelTask : BotTask, IBotTask
     private DateTime _lastFlightTraceEmitUtc = DateTime.MinValue;
     private string? _lastTransportTraceSignature;
     private DateTime _lastTransportTraceEmitUtc = DateTime.MinValue;
+    private Position? _transportBoardingProgressAnchor;
+    private uint _transportBoardingProgressAnchorMapId;
+    private DateTime _transportBoardingProgressAnchorUtc = DateTime.MinValue;
+    private DateTime _lastTransportBoardingStallRecoveryUtc = DateTime.MinValue;
+    private int _transportBoardingStallRecoveryCount;
     private Position? _scheduledTransportBoardingTarget;
     private float? _scheduledTransportBoardingFacing;
 
@@ -390,7 +405,10 @@ public class TravelTask : BotTask, IBotTask
         if (!WalkLegHandsOffToTransport(leg))
             return true;
 
-        return verticalDelta <= WalkLegTransportVerticalArrivalTolerance;
+        var tolerance = TransportWaitingLogic.IsNativeOffMeshBoardingEnabled()
+            ? WalkLegNativeOffMeshTransportVerticalArrivalTolerance
+            : WalkLegTransportVerticalArrivalTolerance;
+        return verticalDelta <= tolerance;
     }
 
     private bool TryGetWalkLegArrival(
@@ -416,8 +434,11 @@ public class TravelTask : BotTask, IBotTask
         var boardingDistance = currentPosition.DistanceTo2D(boardingPosition);
         var boardingVerticalDelta = Math.Abs(currentPosition.Z - boardingPosition.Z);
         var boardingArrivalRadius = Math.Min(boardStop!.BoardingRadius, WalkLegTransportArrivalRadius);
+        var boardingVerticalTolerance = TransportWaitingLogic.IsNativeOffMeshBoardingEnabled()
+            ? WalkLegNativeOffMeshTransportVerticalArrivalTolerance
+            : WalkLegTransportVerticalArrivalTolerance;
         if (boardingDistance > boardingArrivalRadius
-            || boardingVerticalDelta > WalkLegTransportVerticalArrivalTolerance)
+            || boardingVerticalDelta > boardingVerticalTolerance)
         {
             return false;
         }
@@ -430,9 +451,29 @@ public class TravelTask : BotTask, IBotTask
     }
 
     private float GetWalkLegArrivalRadius(RouteLeg leg)
-        => WalkLegHandsOffToTransport(leg)
-            ? WalkLegTransportArrivalRadius
-            : WalkLegArrivalRadius;
+    {
+        if (!WalkLegHandsOffToTransport(leg))
+            return WalkLegArrivalRadius;
+
+        // Phase 5.3.5: when native off-mesh boarding is active, the walk-leg
+        // target is anchored to the transport's NPC spawn (e.g. OG Zeppelin
+        // Master Frezza). The bot's natural ramp-top arrival point sits within
+        // the configured BoardingRadius but typically outside the legacy 4y
+        // WalkLegTransportArrivalRadius. Use BoardingRadius as the arrival
+        // tolerance so the walk-leg completes when the bot is within the
+        // transport's normal boarding zone.
+        if (TransportWaitingLogic.IsNativeOffMeshBoardingEnabled())
+        {
+            var nextLeg = (_route != null && _currentLegIndex + 1 < _route.Count)
+                ? _route[_currentLegIndex + 1]
+                : null;
+            var radius = nextLeg?.BoardStop?.BoardingRadius;
+            if (radius.HasValue && radius.Value > 0f)
+                return radius.Value;
+        }
+
+        return WalkLegTransportArrivalRadius;
+    }
 
     private TransportData.TransportStop? GetNextTransportBoardStop(RouteLeg leg)
     {
@@ -521,13 +562,42 @@ public class TravelTask : BotTask, IBotTask
         if (waypoint != null)
         {
             if (ShouldDirectMoveOnScheduledTransport(player, leg))
+            {
+                ResetTransportBoardingProgressMarkers();
                 DirectMoveOnScheduledTransport(player, waypoint);
-            else if (ShouldDirectBoardScheduledTransport(leg))
+            }
+            else if (ShouldDirectCommitToConfiguredScheduledTransportBoarding(player, leg, waypoint))
+            {
                 DirectBoardScheduledTransport(player, waypoint);
+                ObserveTransportBoardingProgress(player, waypoint, navigated: true, now);
+            }
+            else if (ShouldNavigateToConfiguredScheduledTransportBoarding(player, leg, waypoint))
+            {
+                var navigated = TryNavigateToward(
+                    waypoint,
+                    allowDirectFallback: false,
+                    routePolicy: NavigationRoutePolicy.LongTravel);
+                ObserveTransportBoardingProgress(player, waypoint, navigated, now);
+            }
+            else if (ShouldDirectBoardScheduledTransport(leg))
+            {
+                ResetTransportBoardingProgressMarkers();
+                DirectBoardScheduledTransport(player, waypoint);
+            }
             else if (player.Position.DistanceTo2D(waypoint) <= 1.0f)
+            {
+                ResetTransportBoardingProgressMarkers();
                 ObjectManager.StopAllMovement();
+            }
             else
+            {
+                ResetTransportBoardingProgressMarkers();
                 TryNavigateToward(waypoint, allowDirectFallback: true);
+            }
+        }
+        else
+        {
+            ResetTransportBoardingProgressMarkers();
         }
 
         if ((now - _legStartUtc).TotalSeconds > TransportTimeoutSeconds)
@@ -565,6 +635,7 @@ public class TravelTask : BotTask, IBotTask
         ResetWalkProgressMarkers();
         ResetFlightTraceMarkers();
         ResetTransportTraceMarkers();
+        ResetTransportBoardingProgressMarkers();
 
         EmitTravelDiagnostic(
             $"[TRAVEL_LEG] start index={index} type={leg.Type} map={leg.MapId} end=({leg.End.X:F1},{leg.End.Y:F1},{leg.End.Z:F1})");
@@ -584,6 +655,7 @@ public class TravelTask : BotTask, IBotTask
         ResetWalkProgressMarkers();
         ResetFlightTraceMarkers();
         ResetTransportTraceMarkers();
+        ResetTransportBoardingProgressMarkers();
     }
 
     private void FailOrReplan(string reason)
@@ -621,6 +693,7 @@ public class TravelTask : BotTask, IBotTask
         ResetWalkProgressMarkers();
         ResetFlightTraceMarkers();
         ResetTransportTraceMarkers();
+        ResetTransportBoardingProgressMarkers();
     }
 
     private void ObserveWalkLegProgress(IWoWLocalPlayer player, RouteLeg leg, bool navigated, DateTime now)
@@ -702,6 +775,60 @@ public class TravelTask : BotTask, IBotTask
         _walkProgressAnchorPlanVersion = trace?.PlanVersion ?? -1;
         _walkProgressAnchorWaypointIndex = trace?.CurrentWaypointIndex ?? -1;
         _walkProgressAnchorActiveWaypointDistance = activeWaypointDistance;
+    }
+
+    private void ObserveTransportBoardingProgress(
+        IWoWLocalPlayer player,
+        Position boardingTarget,
+        bool navigated,
+        DateTime now)
+    {
+        if (IsOnTransport(player))
+        {
+            ResetTransportBoardingProgressMarkers();
+            return;
+        }
+
+        var currentPosition = player.Position;
+        var anchor = _transportBoardingProgressAnchor;
+        if (anchor == null || _transportBoardingProgressAnchorMapId != player.MapId)
+        {
+            RecordTransportBoardingProgressAnchor(currentPosition, player.MapId, now);
+            return;
+        }
+
+        var moved = currentPosition.DistanceTo2D(anchor);
+        var targetProgress = anchor.DistanceTo2D(boardingTarget) - currentPosition.DistanceTo2D(boardingTarget);
+        if (targetProgress > WalkLegStallActiveWaypointProgressYards
+            || moved > WalkLegStallFallbackMovementYards)
+        {
+            RecordTransportBoardingProgressAnchor(currentPosition, player.MapId, now);
+            return;
+        }
+
+        if (now - _transportBoardingProgressAnchorUtc < TimeSpan.FromSeconds(WalkLegStallRecoverySeconds))
+            return;
+
+        if (now - _lastTransportBoardingStallRecoveryUtc < TimeSpan.FromSeconds(WalkLegStallRecoveryCooldownSeconds))
+            return;
+
+        var replanned = NavPath?.RecalculateAfterMovementStall(currentPosition, boardingTarget, player.MapId) == true;
+        _lastTransportBoardingStallRecoveryUtc = now;
+        _transportBoardingStallRecoveryCount++;
+        ObjectManager.StopAllMovement();
+        EmitTravelDiagnostic(
+            $"[TRAVEL_TRANSPORT_BOARDING_STALL] count={_transportBoardingStallRecoveryCount} nav={navigated} replanned={replanned} " +
+            $"anchor={FormatCompactPosition(anchor)} current={FormatCompactPosition(currentPosition)} moved={moved:F1} " +
+            $"targetProgress={targetProgress:F1} target={FormatCompactPosition(boardingTarget)}");
+
+        RecordTransportBoardingProgressAnchor(currentPosition, player.MapId, now);
+    }
+
+    private void RecordTransportBoardingProgressAnchor(Position position, uint mapId, DateTime now)
+    {
+        _transportBoardingProgressAnchor = new Position(position.X, position.Y, position.Z);
+        _transportBoardingProgressAnchorMapId = mapId;
+        _transportBoardingProgressAnchorUtc = now;
     }
 
     private static float GetActiveWaypointDistance(Position currentPosition, NavigationTraceSnapshot? trace)
@@ -871,6 +998,15 @@ public class TravelTask : BotTask, IBotTask
         _lastTransportTraceEmitUtc = DateTime.MinValue;
     }
 
+    private void ResetTransportBoardingProgressMarkers()
+    {
+        _transportBoardingProgressAnchor = null;
+        _transportBoardingProgressAnchorMapId = 0;
+        _transportBoardingProgressAnchorUtc = DateTime.MinValue;
+        _lastTransportBoardingStallRecoveryUtc = DateTime.MinValue;
+        _transportBoardingStallRecoveryCount = 0;
+    }
+
     private static float Distance2D(Position position, DynamicObjectProto obj)
     {
         var dx = position.X - obj.X;
@@ -964,11 +1100,66 @@ public class TravelTask : BotTask, IBotTask
 
     private bool ShouldDirectBoardScheduledTransport(RouteLeg leg)
         => _transportLogic?.CurrentPhase == TransportPhase.Boarding
-            && leg.Transport?.Type != TransportData.TransportType.Elevator;
+            && leg.Transport?.Type != TransportData.TransportType.Elevator
+            && !TransportWaitingLogic.IsNativeOffMeshBoardingEnabled();
 
     private static bool ShouldDirectMoveOnScheduledTransport(IWoWLocalPlayer player, RouteLeg leg)
         => IsOnTransport(player)
             && leg.Transport?.Type != TransportData.TransportType.Elevator;
+
+    private static bool ShouldNavigateToConfiguredScheduledTransportBoarding(
+        IWoWLocalPlayer player,
+        RouteLeg leg,
+        Position waypoint)
+    {
+        if (IsOnTransport(player) || leg.Transport?.Type == TransportData.TransportType.Elevator)
+            return false;
+
+        // Phase 5.3.5: previously this predicate was suppressed when native
+        // off-mesh boarding was enabled to avoid the legacy "BoardingPosition
+        // nudge" short-circuit. But the natural cascade fallback uses the
+        // Standard route policy, which enables dynamic probe-skipping and
+        // corner-cutting in NavigationPath.AdvanceReachableWaypoints — and
+        // that lets the bot skip ahead off the OG zeppelin tower's wooden
+        // ramp before fully cresting onto the upper-platform deck (live test
+        // showed snag at z=51.6, 2y short of Frezza). Re-enabling this
+        // predicate routes the boarding nav through LongTravel policy
+        // (EnableDynamicProbeSkipping=false, RequireVerticalWaypointArrival=
+        // true, TightenDenseWaypointAcceptance=true) so the bot follows
+        // every corner the navmesh returns and won't shortcut over the
+        // platform-edge geometry.
+
+        var boardingPosition = leg.BoardStop?.BoardingPosition;
+        if (boardingPosition == null)
+            return false;
+
+        if (IsDifferentScheduledTransportBoardingTarget(boardingPosition, waypoint))
+            return false;
+
+        return IsDifferentScheduledTransportBoardingTarget(player.Position, boardingPosition);
+    }
+
+    private static bool ShouldDirectCommitToConfiguredScheduledTransportBoarding(
+        IWoWLocalPlayer player,
+        RouteLeg leg,
+        Position waypoint)
+    {
+        if (IsOnTransport(player) || leg.Transport?.Type == TransportData.TransportType.Elevator)
+            return false;
+
+        if (TransportWaitingLogic.IsNativeOffMeshBoardingEnabled())
+            return false;
+
+        var boardingPosition = leg.BoardStop?.BoardingPosition;
+        if (boardingPosition == null)
+            return false;
+
+        if (IsDifferentScheduledTransportBoardingTarget(boardingPosition, waypoint))
+            return false;
+
+        return player.Position.DistanceTo2D(boardingPosition) <= WalkLegTransportArrivalRadius
+            && IsDifferentScheduledTransportBoardingTarget(player.Position, boardingPosition);
+    }
 
     private void DirectMoveOnScheduledTransport(IWoWLocalPlayer player, Position waypoint)
     {
@@ -983,7 +1174,9 @@ public class TravelTask : BotTask, IBotTask
 
     private void DirectBoardScheduledTransport(IWoWLocalPlayer player, Position waypoint)
     {
-        if (_scheduledTransportBoardingTarget == null || !_scheduledTransportBoardingFacing.HasValue)
+        if (_scheduledTransportBoardingTarget == null
+            || !_scheduledTransportBoardingFacing.HasValue
+            || IsDifferentScheduledTransportBoardingTarget(_scheduledTransportBoardingTarget, waypoint))
         {
             _scheduledTransportBoardingTarget = waypoint;
             _scheduledTransportBoardingFacing = player.GetFacingForPosition(waypoint);
@@ -997,6 +1190,11 @@ public class TravelTask : BotTask, IBotTask
 
         ObjectManager.MoveToward(_scheduledTransportBoardingTarget, _scheduledTransportBoardingFacing.Value);
     }
+
+    private static bool IsDifferentScheduledTransportBoardingTarget(Position? current, Position next)
+        => current == null
+            || current.DistanceTo2D(next) > 0.5f
+            || Math.Abs(current.Z - next.Z) > 0.5f;
 
     private void ResetScheduledTransportBoardingCommit()
     {

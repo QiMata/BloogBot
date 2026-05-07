@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -10,18 +11,26 @@ const float TaurenMaleRadius = 0.9747f;
 const float TaurenMaleHeight = 2.625f;
 const float CapsulePadding = 0.05f;
 const uint MapKalimdor = 1;
+const uint MmapMagic = 0x4D4D4150; // MMAP
+const int MmapWrapperVersion = 6;
+const int DetourNavMeshMagic = 0x444E4156; // DNAV
+const int DetourNavMeshVersion = 7;
+const int MmapTileHeaderSize = 20;
+const int RefWidthBits = 64;
 
 var dataRoot = ResolveDataRoot(args);
 var mapId = GetUIntOption(args, "--map", MapKalimdor);
 var buildLogPath = ResolveBuildLogPath(args, dataRoot, mapId);
+var manifestPath = GetStringOption(args, "--write-manifest");
 var tiles = GetTileOptions(args);
 if (tiles.Count == 0)
 {
     tiles.AddRange(
     [
-        new Tile(28, 39), new Tile(28, 40), new Tile(28, 41),
-        new Tile(29, 39), new Tile(29, 40), new Tile(29, 41),
-        new Tile(30, 39), new Tile(30, 40), new Tile(30, 41),
+        new Tile(28, 39), new Tile(28, 40), new Tile(28, 41), new Tile(28, 42),
+        new Tile(29, 39), new Tile(29, 40), new Tile(29, 41), new Tile(29, 42),
+        new Tile(30, 39), new Tile(30, 40), new Tile(30, 41), new Tile(30, 42),
+        new Tile(31, 39), new Tile(31, 40), new Tile(31, 41), new Tile(31, 42),
     ]);
 }
 
@@ -39,8 +48,10 @@ Console.WriteLine($"Required Recast cells: walkableRadius >= {requiredRadiusCell
 Console.WriteLine();
 
 AuditConfig(dataRoot, mapId, requiredRadius, requiredHeight, requiredRadiusCells, requiredHeightCells, failures);
-AuditTileHeaders(dataRoot, mapId, tiles, requiredRadius, requiredHeight, failures);
+var tileAudits = AuditTileHeaders(dataRoot, mapId, tiles, requiredRadius, requiredHeight, failures);
 AuditGameObjectInputs(dataRoot, mapId, tiles, buildLogPath, failures);
+if (!string.IsNullOrWhiteSpace(manifestPath))
+    WriteManifest(manifestPath, dataRoot, mapId, buildLogPath, requiredRadius, requiredHeight, requiredRadiusCells, requiredHeightCells, tileAudits);
 
 Console.WriteLine();
 if (failures.Count == 0)
@@ -90,6 +101,17 @@ static string ResolveBuildLogPath(string[] args, string dataRoot, uint mapId)
     }
 
     return Path.Combine(dataRoot, $"map{mapId}_build.log");
+}
+
+static string? GetStringOption(string[] args, string name)
+{
+    for (var i = 0; i < args.Length - 1; i++)
+    {
+        if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+            return Path.GetFullPath(args[i + 1]);
+    }
+
+    return null;
 }
 
 static List<Tile> GetTileOptions(string[] args)
@@ -150,8 +172,9 @@ static void AuditConfig(
         Info($"config map {mapId} walkableHeight not set; generator must derive >= {requiredHeightCells} from agentHeight.");
 }
 
-static void AuditTileHeaders(string dataRoot, uint mapId, List<Tile> tiles, float requiredRadius, float requiredHeight, List<string> failures)
+static List<MMapTileAudit> AuditTileHeaders(string dataRoot, uint mapId, List<Tile> tiles, float requiredRadius, float requiredHeight, List<string> failures)
 {
+    var audited = new List<MMapTileAudit>();
     var mmaps = Path.Combine(dataRoot, "mmaps");
     foreach (var tile in tiles)
     {
@@ -170,35 +193,60 @@ static void AuditTileHeaders(string dataRoot, uint mapId, List<Tile> tiles, floa
         }
 
         var prefix = $"{Path.GetFileName(path)} Detour header";
+        if (header.Value.MmapVersion != MmapWrapperVersion)
+            Fail(failures, $"{Path.GetFileName(path)} mmap wrapper version {header.Value.MmapVersion} != required {MmapWrapperVersion}");
+        if (header.Value.FileDetourVersion != DetourNavMeshVersion)
+            Fail(failures, $"{Path.GetFileName(path)} wrapper Detour version {header.Value.FileDetourVersion} != required {DetourNavMeshVersion}");
+        if (header.Value.DetourVersion != DetourNavMeshVersion)
+            Fail(failures, $"{Path.GetFileName(path)} payload Detour version {header.Value.DetourVersion} != required {DetourNavMeshVersion}");
+        if (header.Value.UsesLiquids != 0u && header.Value.UsesLiquids != 1u)
+            Fail(failures, $"{Path.GetFileName(path)} usesLiquids value {header.Value.UsesLiquids} is not a uint boolean.");
+        if (header.Value.TileDataSize <= 0)
+            Fail(failures, $"{Path.GetFileName(path)} has an empty Detour tile payload.");
+
         CheckFloat(failures, $"{prefix} walkableRadius", header.Value.WalkableRadius, requiredRadius);
         CheckFloat(failures, $"{prefix} walkableHeight", header.Value.WalkableHeight, requiredHeight);
-        Info($"{Path.GetFileName(path)}: radius={header.Value.WalkableRadius:F4}, height={header.Value.WalkableHeight:F4}, climb={header.Value.WalkableClimb:F4}");
+        Info($"{Path.GetFileName(path)}: mmapVersion={header.Value.MmapVersion}, wrapperDetourVersion={header.Value.FileDetourVersion}, payloadDetourVersion={header.Value.DetourVersion}, usesLiquids={header.Value.UsesLiquids}, radius={header.Value.WalkableRadius:F4}, height={header.Value.WalkableHeight:F4}, climb={header.Value.WalkableClimb:F4}");
+        audited.Add(new MMapTileAudit(tile, path, header.Value));
     }
+
+    return audited;
 }
 
 static DetourTileHeader? ReadTileHeader(string path)
 {
-    const int mmapTileHeaderSize = 20;
     const int detourWalkableHeightOffset = 60;
     const int detourWalkableRadiusOffset = 64;
     const int detourWalkableClimbOffset = 68;
 
     var bytes = File.ReadAllBytes(path);
-    if (bytes.Length < mmapTileHeaderSize + detourWalkableClimbOffset + sizeof(float))
+    if (bytes.Length < MmapTileHeaderSize + detourWalkableClimbOffset + sizeof(float))
         return null;
 
     var mmapMagic = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(0, sizeof(uint)));
-    if (mmapMagic != 0x4D4D4150) // MMAP
+    if (mmapMagic != MmapMagic)
         return null;
 
-    var detourMagic = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(mmapTileHeaderSize, sizeof(int)));
-    if (detourMagic != 0x444E4156) // DNAV
+    var detourMagic = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(MmapTileHeaderSize, sizeof(int)));
+    if (detourMagic != DetourNavMeshMagic)
         return null;
+
+    var dtVersion = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(4, sizeof(int)));
+    var mmapVersion = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(8, sizeof(int)));
+    var tileDataSize = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(12, sizeof(int)));
+    var usesLiquids = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(16, sizeof(uint)));
+    var detourVersion = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(MmapTileHeaderSize + 4, sizeof(int)));
 
     return new DetourTileHeader(
-        BitConverter.ToSingle(bytes, mmapTileHeaderSize + detourWalkableHeightOffset),
-        BitConverter.ToSingle(bytes, mmapTileHeaderSize + detourWalkableRadiusOffset),
-        BitConverter.ToSingle(bytes, mmapTileHeaderSize + detourWalkableClimbOffset));
+        dtVersion,
+        mmapVersion,
+        tileDataSize,
+        usesLiquids,
+        detourVersion,
+        BitConverter.ToSingle(bytes, MmapTileHeaderSize + detourWalkableHeightOffset),
+        BitConverter.ToSingle(bytes, MmapTileHeaderSize + detourWalkableRadiusOffset),
+        BitConverter.ToSingle(bytes, MmapTileHeaderSize + detourWalkableClimbOffset),
+        Convert.ToHexString(SHA256.HashData(bytes)));
 }
 
 static void AuditGameObjectInputs(string dataRoot, uint mapId, List<Tile> tiles, string buildLogPath, List<string> failures)
@@ -211,11 +259,12 @@ static void AuditGameObjectInputs(string dataRoot, uint mapId, List<Tile> tiles,
         Pass($"temp_gameobject_models contains {modelDisplayIds.Count} displayId model mappings.");
 
     var spawnsPath = Path.Combine(dataRoot, "gameobject_spawns.json");
-    var modeledTileSpawns = CountModeledTileSpawns(spawnsPath, mapId, tiles, modelDisplayIds);
-    if (modeledTileSpawns <= 0)
+    var modeledTileSpawns = CountModeledTileSpawnsByTile(spawnsPath, mapId, tiles, modelDisplayIds);
+    var modeledSpawnTotal = modeledTileSpawns.Values.Sum();
+    if (modeledSpawnTotal <= 0)
         Fail(failures, $"no modeled gameobject spawns found in audited tiles for map {mapId} in {spawnsPath}");
     else
-        Pass($"gameobject_spawns.json has {modeledTileSpawns} modeled gameobject spawns in audited tiles on map {mapId}.");
+        Pass($"gameobject_spawns.json has {modeledSpawnTotal} modeled gameobject spawns in audited tiles on map {mapId}.");
 
     if (!File.Exists(buildLogPath))
     {
@@ -231,17 +280,20 @@ static void AuditGameObjectInputs(string dataRoot, uint mapId, List<Tile> tiles,
 
     foreach (var tile in tiles)
     {
-        var line = FindGameObjectBakeLine(log, mapId, tile, out var verb, out var count);
+        var expectedOriginSpawns = modeledTileSpawns.GetValueOrDefault(tile);
+        var line = FindGameObjectBakeLine(log, mapId, tile, out var bakedCount, out var candidateCount);
         if (line is null)
         {
-            Fail(failures, $"{Path.GetFileName(buildLogPath)} has no GO bake/mark line for tile {tile.X},{tile.Y}");
+            Fail(failures, $"{Path.GetFileName(buildLogPath)} has no GO geometry bake line for tile {tile.X},{tile.Y}");
             continue;
         }
 
-        if (count <= 0)
-            Fail(failures, $"tile {tile.X},{tile.Y} GO bake line {verb} {count}: {line.Trim()}");
+        if (expectedOriginSpawns > 0 && candidateCount <= 0)
+            Fail(failures, $"tile {tile.X},{tile.Y} has {expectedOriginSpawns} modeled spawn origins but GO bake line reports candidates={candidateCount}: {line.Trim()}");
+        else if (candidateCount > 0 && bakedCount <= 0)
+            Fail(failures, $"tile {tile.X},{tile.Y} GO geometry bake found candidates={candidateCount} but baked {bakedCount}: {line.Trim()}");
         else
-            Pass($"tile {tile.X},{tile.Y} GO bake line {verb} {count}.");
+            Pass($"tile {tile.X},{tile.Y} GO geometry bake line baked={bakedCount}, candidates={candidateCount}, modeledOriginSpawns={expectedOriginSpawns}.");
     }
 }
 
@@ -272,17 +324,17 @@ static HashSet<uint> ReadGameObjectModelDisplayIds(string path)
     return result;
 }
 
-static int CountModeledTileSpawns(string path, uint mapId, List<Tile> tiles, HashSet<uint> modelDisplayIds)
+static Dictionary<Tile, int> CountModeledTileSpawnsByTile(string path, uint mapId, List<Tile> tiles, HashSet<uint> modelDisplayIds)
 {
+    var result = tiles.Distinct().ToDictionary(tile => tile, _ => 0);
     if (!File.Exists(path) || modelDisplayIds.Count == 0)
-        return 0;
+        return result;
 
     var tileSet = tiles.ToHashSet();
     using var doc = JsonDocument.Parse(File.ReadAllText(path));
     if (!doc.RootElement.TryGetProperty(mapId.ToString(CultureInfo.InvariantCulture), out var mapSpawns))
-        return 0;
+        return result;
 
-    var count = 0;
     foreach (var spawn in mapSpawns.EnumerateArray())
     {
         var displayId = spawn.GetProperty("displayId").GetUInt32();
@@ -291,11 +343,12 @@ static int CountModeledTileSpawns(string path, uint mapId, List<Tile> tiles, Has
 
         var x = spawn.GetProperty("x").GetSingle();
         var y = spawn.GetProperty("y").GetSingle();
-        if (tileSet.Contains(new Tile(ToMmapTile(x), ToMmapTile(y))))
-            count++;
+        var tile = new Tile(ToMmapTile(x), ToMmapTile(y));
+        if (tileSet.Contains(tile))
+            result[tile]++;
     }
 
-    return count;
+    return result;
 }
 
 static int ToMmapTile(float coordinate) => (int)(32.0f - coordinate / MmapTileSize);
@@ -313,29 +366,20 @@ static string? FindLine(string text, string marker)
     return null;
 }
 
-static string? FindGameObjectBakeLine(string text, uint mapId, Tile tile, out string verb, out int count)
+static string? FindGameObjectBakeLine(string text, uint mapId, Tile tile, out int bakedCount, out int candidateCount)
 {
-    var loadedMarker = $"[GO] map={mapId} tile={tile.X},{tile.Y}: loaded ";
-    var markedMarker = $"[GO] map={mapId} tile={tile.X},{tile.Y}: marked ";
+    var bakedMarker = $"[GO] map={mapId} tile={tile.X},{tile.Y}: baked ";
 
-    var loadedLine = FindLine(text, loadedMarker);
-    if (loadedLine is not null)
+    var bakedLine = FindLine(text, bakedMarker);
+    if (bakedLine is not null)
     {
-        verb = "loaded";
-        count = ParseCountAfterMarker(loadedLine, loadedMarker);
-        return loadedLine;
+        bakedCount = ParseCountAfterMarker(bakedLine, bakedMarker);
+        candidateCount = ParseNamedCount(bakedLine, "candidates=");
+        return bakedLine;
     }
 
-    var markedLine = FindLine(text, markedMarker);
-    if (markedLine is not null)
-    {
-        verb = "marked";
-        count = ParseCountAfterMarker(markedLine, markedMarker);
-        return markedLine;
-    }
-
-    verb = "found";
-    count = -1;
+    bakedCount = -1;
+    candidateCount = -1;
     return null;
 }
 
@@ -353,6 +397,111 @@ static int ParseCountAfterMarker(string line, string marker)
     return int.TryParse(line[start..end], NumberStyles.Integer, CultureInfo.InvariantCulture, out var loaded)
         ? loaded
         : -1;
+}
+
+static int ParseNamedCount(string line, string marker)
+{
+    var start = line.IndexOf(marker, StringComparison.Ordinal);
+    if (start < 0)
+        return -1;
+
+    start += marker.Length;
+    var end = start;
+    while (end < line.Length && char.IsDigit(line[end]))
+        end++;
+
+    return end > start && int.TryParse(line[start..end], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+        ? value
+        : -1;
+}
+
+static void WriteManifest(
+    string manifestPath,
+    string dataRoot,
+    uint mapId,
+    string buildLogPath,
+    float requiredRadius,
+    float requiredHeight,
+    int requiredRadiusCells,
+    int requiredHeightCells,
+    List<MMapTileAudit> tileAudits)
+{
+    Directory.CreateDirectory(Path.GetDirectoryName(manifestPath) ?? ".");
+
+    var orderedTiles = tileAudits
+        .OrderBy(tile => tile.Tile.X)
+        .ThenBy(tile => tile.Tile.Y)
+        .ToArray();
+
+    var manifest = new
+    {
+        schemaVersion = 2,
+        createdAtUtc = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+        dataRoot,
+        mapId,
+        buildLogPath,
+        configPath = Path.Combine(dataRoot, "config.json"),
+        generatorPath = ResolveKnownGeneratorPath(),
+        detourNavMeshVersion = DetourNavMeshVersion,
+        mmapWrapperVersion = MmapWrapperVersion,
+        refWidthBits = RefWidthBits,
+        mmapTileHeaderBytes = MmapTileHeaderSize,
+        mmapSchema = $"MMAP_VERSION={MmapWrapperVersion};DT_NAVMESH_VERSION={DetourNavMeshVersion};DT_POLYREF={RefWidthBits};GO_BAKE=model-geometry",
+        gameObjectBake = new
+        {
+            mode = "model-geometry-with-aabb-fallback",
+            sourceModels = Path.Combine(dataRoot, "vmaps", "temp_gameobject_models"),
+            sourceSpawns = Path.Combine(dataRoot, "gameobject_spawns.json"),
+            requiredLogMarker = "[GO] map=<map> tile=<x>,<y>: baked <count> gameobject model(s), triangles=<n> vertices=<n> candidates=<n> missing=<n>"
+        },
+        agent = new
+        {
+            radius = requiredRadius,
+            height = requiredHeight,
+            walkableRadiusCells = requiredRadiusCells,
+            walkableHeightCells = requiredHeightCells,
+            source = "Tauren Male radius plus capsule padding"
+        },
+        navDataSignature = ComputeSignature(mapId, requiredRadius, requiredHeight, orderedTiles),
+        tiles = orderedTiles.Select(tile => new
+        {
+            fileName = Path.GetFileName(tile.Path),
+            tileX = tile.Tile.X,
+            tileY = tile.Tile.Y,
+            mmapVersion = tile.Header.MmapVersion,
+            wrapperDetourVersion = tile.Header.FileDetourVersion,
+            payloadDetourVersion = tile.Header.DetourVersion,
+            usesLiquids = tile.Header.UsesLiquids,
+            tileDataSize = tile.Header.TileDataSize,
+            walkableRadius = tile.Header.WalkableRadius,
+            walkableHeight = tile.Header.WalkableHeight,
+            walkableClimb = tile.Header.WalkableClimb,
+            sha256 = tile.Header.Sha256
+        })
+    };
+
+    var options = new JsonSerializerOptions { WriteIndented = true };
+    File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest, options), Encoding.UTF8);
+    Pass($"wrote mmap manifest {manifestPath}");
+}
+
+static string? ResolveKnownGeneratorPath()
+{
+    var path = Path.GetFullPath("D:/MaNGOS/source/bin/MoveMapGenerator.exe");
+    return File.Exists(path) ? path : null;
+}
+
+static string ComputeSignature(uint mapId, float requiredRadius, float requiredHeight, IEnumerable<MMapTileAudit> tiles)
+{
+    var builder = new StringBuilder();
+    builder.Append(CultureInfo.InvariantCulture, $"map={mapId};mmap={MmapWrapperVersion};detour={DetourNavMeshVersion};ref={RefWidthBits};");
+    builder.Append(CultureInfo.InvariantCulture, $"radius={requiredRadius:R};height={requiredHeight:R};");
+    foreach (var tile in tiles)
+    {
+        builder.Append(CultureInfo.InvariantCulture, $"{Path.GetFileName(tile.Path)}:{tile.Header.Sha256};");
+    }
+
+    return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
 }
 
 static float? TryGetSingle(JsonElement element, string property)
@@ -409,4 +558,15 @@ static void Fail(List<string> failures, string message)
 
 readonly record struct Tile(int X, int Y);
 
-readonly record struct DetourTileHeader(float WalkableHeight, float WalkableRadius, float WalkableClimb);
+readonly record struct DetourTileHeader(
+    int FileDetourVersion,
+    int MmapVersion,
+    int TileDataSize,
+    uint UsesLiquids,
+    int DetourVersion,
+    float WalkableHeight,
+    float WalkableRadius,
+    float WalkableClimb,
+    string Sha256);
+
+readonly record struct MMapTileAudit(Tile Tile, string Path, DetourTileHeader Header);

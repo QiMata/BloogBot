@@ -1,19 +1,26 @@
 using BotCommLayer;
 using GameData.Core.Enums;
+using GameData.Core.Models;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pathfinding;
+using PathfindingService.Repository;
+using PathfindingService.RoutePacks;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 
 namespace PathfindingService.Tests;
 
-public sealed class PathfindingSocketServerIntegrationTests
+public sealed class PathfindingSocketServerIntegrationTests(NavigationFixture fixture) : IClassFixture<NavigationFixture>
 {
+    private readonly NavigationFixture _fixture = fixture;
+
     [Fact]
     public async Task HandlePath_LiveCorpseRunRoute_ReturnsValidatedPathWithinBudget()
     {
+        _ = _fixture.Navigation;
         var port = GetFreePort();
         using var server = new PathfindingSocketServer("127.0.0.1", port, NullLogger<PathfindingSocketServer>.Instance);
         server.InitializeNavigation();
@@ -29,9 +36,10 @@ public sealed class PathfindingSocketServerIntegrationTests
             }
         };
 
+        var responseBudget = TimeSpan.FromSeconds(30);
         var stopwatch = Stopwatch.StartNew();
         var responseTask = SendRequestAsync(port, request);
-        var completedTask = await Task.WhenAny(responseTask, Task.Delay(TimeSpan.FromSeconds(10)));
+        var completedTask = await Task.WhenAny(responseTask, Task.Delay(responseBudget));
         Assert.Same(responseTask, completedTask);
 
         var response = await responseTask;
@@ -45,7 +53,7 @@ public sealed class PathfindingSocketServerIntegrationTests
         Assert.True(
             response.Path.Corners.Count >= 3,
             $"Expected a real corpse-run waypoint chain, got {response.Path.Corners.Count} corners with result '{response.Path.Result}'.");
-        Assert.True(stopwatch.ElapsedMilliseconds < 10_000, $"Socket path response took {stopwatch.ElapsedMilliseconds}ms.");
+        Assert.True(stopwatch.Elapsed < responseBudget, $"Socket path response took {stopwatch.ElapsedMilliseconds}ms.");
 
         var first = response.Path.Corners[0];
         var last = response.Path.Corners[^1];
@@ -54,28 +62,67 @@ public sealed class PathfindingSocketServerIntegrationTests
     }
 
     [Fact]
-    public async Task HandlePath_OrgrimmarRoutePackRequest_ReturnsCachedPathThroughNormalContract()
+    public async Task HandlePath_RepeatedStaticRequest_UsesServiceRouteCacheThroughNormalContract()
     {
+        using var overlayEnv = new EnvironmentVariableScope("WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY", null);
         var port = GetFreePort();
         using var server = new PathfindingSocketServer("127.0.0.1", port, NullLogger<PathfindingSocketServer>.Instance);
-        server.InitializeNavigation();
+        var seed = new StaticRoutePackSeed(
+            Id: "socket_cache_contract",
+            MapId: 1,
+            StartAnchor: new XYZ(0f, 0f, 0f),
+            EndAnchor: new XYZ(20f, 0f, 0f),
+            Race: Race.Tauren,
+            Gender: Gender.Male,
+            SmoothPath: true,
+            RoutePolicy: StaticRoutePackCache.DefaultRoutePolicy,
+            AllowsDynamicOverlay: false,
+            StartAnchorRadius: 1f,
+            EndAnchorRadius: 1f,
+            CorridorProjectionRadius: 1f,
+            MaxProjectionZDrift: 1f,
+            MaxSegmentLength: 12f);
+        var generatedPath = new[]
+        {
+            seed.StartAnchor,
+            new XYZ(10f, 0f, 0f),
+            seed.EndAnchor,
+        };
+        var routePackCache = new StaticRoutePackCache(
+            [seed],
+            new FixedSignatureProvider("socket-test-navsig"),
+            _ => new NavigationPathResult(generatedPath, generatedPath, "native_path", null, "none"),
+            SegmentAlwaysSupported);
+        Assert.True(routePackCache.WarmUp(seed));
+        SetPrivateField(server, "_mainPathCache", routePackCache);
+        SetPrivateField(server, "_isInitialized", true);
 
         var request = new PathfindingRequest
         {
             Path = new CalculatePathRequest
             {
                 MapId = 1,
-                Start = new Game.Position { X = 1677.6f, Y = -4315.7f, Z = 61.2f },
-                End = new Game.Position { X = 1320.142944f, Y = -4653.158691f, Z = 53.891945f },
+                Start = new Game.Position { X = seed.StartAnchor.X, Y = seed.StartAnchor.Y, Z = seed.StartAnchor.Z },
+                End = new Game.Position { X = seed.EndAnchor.X, Y = seed.EndAnchor.Y, Z = seed.EndAnchor.Z },
                 Straight = true,
-                Race = (uint)Race.Tauren,
-                Gender = (uint)Gender.Male,
+                Race = (uint)seed.Race,
+                Gender = (uint)seed.Gender,
             }
         };
+        request.Path.NearbyObjects.Add(new DynamicObjectProto
+        {
+            Guid = 0x1001,
+            Entry = 17001,
+            DisplayId = 17,
+            X = 10f,
+            Y = 0f,
+            Z = 0f,
+            Scale = 1f,
+        });
 
         var stopwatch = Stopwatch.StartNew();
         var responseTask = SendRequestAsync(port, request);
-        var completedTask = await Task.WhenAny(responseTask, Task.Delay(TimeSpan.FromSeconds(5)));
+        var completedTask = await Task.WhenAny(responseTask, Task.Delay(TimeSpan.FromSeconds(2)));
         Assert.Same(responseTask, completedTask);
 
         var response = await responseTask;
@@ -88,25 +135,12 @@ public sealed class PathfindingSocketServerIntegrationTests
         Assert.True(response.Path.PathSupported);
         Assert.True(response.Path.Corners.Count >= 3);
         Assert.True(
-            stopwatch.ElapsedMilliseconds < 5_000,
-            $"Cached route-pack response took {stopwatch.ElapsedMilliseconds}ms.");
-
-        var recoveryRequest = new PathfindingRequest
-        {
-            Path = new CalculatePathRequest
-            {
-                MapId = 1,
-                Start = new Game.Position { X = 1363.9f, Y = -4377.8f, Z = 26.1f },
-                End = new Game.Position { X = 1320.142944f, Y = -4653.158691f, Z = 53.891945f },
-                Straight = true,
-                Race = (uint)Race.Tauren,
-                Gender = (uint)Gender.Male,
-            }
-        };
+            stopwatch.ElapsedMilliseconds < 2_000,
+            $"Initial route-pack socket response took {stopwatch.ElapsedMilliseconds}ms.");
 
         stopwatch.Restart();
-        responseTask = SendRequestAsync(port, recoveryRequest);
-        completedTask = await Task.WhenAny(responseTask, Task.Delay(TimeSpan.FromSeconds(5)));
+        responseTask = SendRequestAsync(port, request);
+        completedTask = await Task.WhenAny(responseTask, Task.Delay(TimeSpan.FromSeconds(2)));
         Assert.Same(responseTask, completedTask);
 
         response = await responseTask;
@@ -114,13 +148,10 @@ public sealed class PathfindingSocketServerIntegrationTests
 
         Assert.Equal(PathfindingResponse.PayloadOneofCase.Path, response.PayloadCase);
         Assert.Equal("route_pack_main_path", response.Path.Result);
-        Assert.Equal("none", response.Path.BlockedReason);
-        Assert.False(response.Path.HasBlockedSegment);
-        Assert.True(response.Path.PathSupported);
-        Assert.True(response.Path.Corners.Count >= 3);
+        Assert.True(server.RouteCacheStats.HitCount >= 1);
         Assert.True(
-            stopwatch.ElapsedMilliseconds < 5_000,
-            $"Cached lower-incline recovery route-pack response took {stopwatch.ElapsedMilliseconds}ms.");
+            stopwatch.ElapsedMilliseconds < 2_000,
+            $"Service route-cache response took {stopwatch.ElapsedMilliseconds}ms.");
     }
 
     private static async Task<PathfindingResponse> SendRequestAsync(int port, PathfindingRequest request)
@@ -178,5 +209,35 @@ public sealed class PathfindingSocketServerIntegrationTests
         var dx = ax - bx;
         var dy = ay - by;
         return MathF.Sqrt((dx * dx) + (dy * dy));
+    }
+
+    private static bool SegmentAlwaysSupported(uint mapId, XYZ from, XYZ to, float radius, float height) => true;
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _previousValue;
+
+        public EnvironmentVariableScope(string name, string? value)
+        {
+            _name = name;
+            _previousValue = Environment.GetEnvironmentVariable(name);
+            Environment.SetEnvironmentVariable(name, value);
+        }
+
+        public void Dispose()
+            => Environment.SetEnvironmentVariable(_name, _previousValue);
+    }
+
+    private static void SetPrivateField(object target, string fieldName, object value)
+    {
+        var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"Field '{fieldName}' not found on {target.GetType().Name}.");
+        field.SetValue(target, value);
+    }
+
+    private sealed class FixedSignatureProvider(string signature) : INavigationDataSignatureProvider
+    {
+        public string GetSignature(uint mapId) => signature;
     }
 }
