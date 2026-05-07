@@ -83,7 +83,17 @@ services:
     ports:
       - "5001:5001"
     volumes:
-      - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}:/wwow-data:ro
+      # PFS-OVERHAUL-006: three separate mounts compose the bot's nav-data view.
+      # The MaNGOS server's maps/ + vmaps/ are read-only client geometry (shared
+      # source of truth, never written by the bot pipeline). The bot's mmaps/
+      # are independently promoted from tests/test-data/mmaps via
+      # tools/MmapGen/promote-mmaps.ps1 once a release is signed off. Three
+      # separate bind mounts (rather than a single mount with junctions inside)
+      # because Docker Desktop on Windows can't traverse NTFS junctions across
+      # the mount boundary. See docs/physics/MMAP_DATA_FLOW.md.
+      - ${WWOW_BOT_PROD_DATA_DIR:-D:/wwow-bot/prod-data}/mmaps:/wwow-data/mmaps:ro
+      - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}/maps:/wwow-data/maps:ro
+      - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}/vmaps:/wwow-data/vmaps:ro
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/5001' || exit 1"]
       interval: 30s
@@ -107,7 +117,11 @@ services:
     ports:
       - "5003:5003"
     volumes:
-      - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}:/wwow-data:ro
+      # PFS-OVERHAUL-006: three separate mounts (same as wwow-pathfinding).
+      # See docs/physics/MMAP_DATA_FLOW.md.
+      - ${WWOW_BOT_PROD_DATA_DIR:-D:/wwow-bot/prod-data}/mmaps:/wwow-data/mmaps:ro
+      - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}/maps:/wwow-data/maps:ro
+      - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}/vmaps:/wwow-data/vmaps:ro
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/5003' || exit 1"]
       interval: 30s
