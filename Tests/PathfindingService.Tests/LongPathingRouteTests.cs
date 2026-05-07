@@ -1789,6 +1789,13 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
             new XYZ(1331.11f, -4649.45f, 53.6269f),
             TaurenMaleCapsule.Radius, TaurenMaleCapsule.Height);
 
+        var crossings = NavigationInterop.QueryPathCorners(
+            Kalimdor,
+            new XYZ(1338.13f, -4645.96f, 51.60f),
+            new XYZ(1331.11f, -4649.45f, 53.6269f),
+            TaurenMaleCapsule.Radius, TaurenMaleCapsule.Height,
+            options: NavigationInterop.StraightPathOptions.AllCrossings);
+
         Assert.True(corners.Success,
             "FindPathCornersForAgent returned false for stall→Frezza. "
             + "Detour can't even FIND a path from the stall point to Frezza, "
@@ -1799,6 +1806,12 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         for (int i = 0; i < corners.CornerCount; i++)
         {
             var c = corners.Corners[i];
+            _output.WriteLine($"  [{i:D3}] ({c.X:F2},{c.Y:F2},{c.Z:F2})");
+        }
+        _output.WriteLine($"[CROSSINGS-STALL-TO-FREZZA] count={crossings.CornerCount}");
+        for (int i = 0; i < crossings.CornerCount; i++)
+        {
+            var c = crossings.Corners[i];
             _output.WriteLine($"  [{i:D3}] ({c.X:F2},{c.Y:F2},{c.Z:F2})");
         }
     }

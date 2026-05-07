@@ -2272,7 +2272,8 @@ extern "C" __declspec(dllexport) bool FindPathCornersForAgent(
     float agentHeight,
     XYZ* outCorners,
     int maxCorners,
-    int* outCount)
+    int* outCount,
+    int straightPathOptions)
 {
     (void)agentRadius;
     (void)agentHeight;
@@ -2353,7 +2354,7 @@ extern "C" __declspec(dllexport) bool FindPathCornersForAgent(
 
         st = query->findStraightPath(nearestStart, nearestEnd, polyPath, polyCount,
                                      straightPath, straightFlags, straightPolys,
-                                     &straightCount, cap);
+                                     &straightCount, cap, straightPathOptions);
         if (dtStatusFailed(st))
         {
             fprintf(stderr, "[CORNERS] findStraightPath failed: st=0x%x\n", st);

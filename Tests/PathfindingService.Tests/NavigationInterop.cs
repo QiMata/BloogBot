@@ -116,7 +116,16 @@ internal static class NavigationInterop
         float agentHeight,
         [Out] XYZ[] outCorners,
         int maxCorners,
-        out int outCount);
+        out int outCount,
+        int straightPathOptions);
+
+    [Flags]
+    public enum StraightPathOptions
+    {
+        None = 0,
+        AreaCrossings = 0x01,
+        AllCrossings = 0x02,
+    }
 
     public readonly record struct CornerPathResult(
         bool Success,
@@ -129,14 +138,15 @@ internal static class NavigationInterop
         XYZ end,
         float agentRadius,
         float agentHeight,
-        int maxCorners = 96)
+        int maxCorners = 96,
+        StraightPathOptions options = StraightPathOptions.None)
     {
         if (maxCorners <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxCorners));
 
         var corners = new XYZ[maxCorners];
         bool ok = FindPathCornersForAgent(
-            mapId, start, end, agentRadius, agentHeight, corners, maxCorners, out int count);
+            mapId, start, end, agentRadius, agentHeight, corners, maxCorners, out int count, (int)options);
 
         if (!ok)
             return new CornerPathResult(false, 0, Array.Empty<XYZ>());
