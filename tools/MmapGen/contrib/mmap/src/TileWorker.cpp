@@ -474,20 +474,19 @@ namespace MMAP
             agentHeight = jsonTileConfig["agentHeight"].get<float>();
         // END WWoW divergence
 
+        // BEGIN WWoW divergence (PFS-OVERHAUL-006): unified ch=0.1m for both
+        // continents and instances. The 0.25m continent default was producing
+        // coarse Z quantization on multi-floor structures (zeppelin towers,
+        // multi-floor inns, spiral ramps), forcing per-tile overrides. With
+        // walkableHeight / walkableClimb auto-derived from agentHeight /
+        // agentMaxClimbModelTerrainTransition divided by ch (lines 483-486),
+        // changing ch automatically rescales those filters to preserve the
+        // intended world-unit clearance / climb. Tile size grows ~1-3% on
+        // tiles with sparse vertical structure (most continent terrain) and
+        // up to ~2.5x on dense multi-floor tiles (acceptable trade for
+        // bake fidelity). Per-tile `ch` override is still honored below for
+        // tiles that need different precision (rare).
         config.ch = 0.1f;
-        // .go xyz 9612 410 1328
-        // Prevent z overflow at big heights. We need at least 0.16 to handle teldrassil.
-        if (continent)
-            config.ch = 0.25f;
-
-        // BEGIN WWoW divergence (PFS-OVERHAUL-006): allow per-tile/per-map
-        // `ch` override so tiles with non-trivial vertical structure (towers,
-        // multi-floor interiors, spiral ramps) can request finer Z
-        // quantization than the lax continent default of 0.25m. The OG
-        // zeppelin tower's deck-edge transition smooths from a single 1.75y
-        // step polygon (at ch=0.25) into multiple polygons each with
-        // dz < bot step-up tolerance (at ch=0.1). Falls back to the
-        // continent / instance default when not overridden.
         if (jsonTileConfig.contains("ch"))
             config.ch = jsonTileConfig["ch"].get<float>();
         // END WWoW divergence
