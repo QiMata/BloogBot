@@ -49,6 +49,7 @@ public sealed class PathfindingTestFixture : IAsyncDisposable
 
     private Process? _process;
     private readonly Action<string> _log;
+    private volatile bool _preloadComplete;
 
     public int Port { get; private set; }
 
@@ -155,8 +156,17 @@ public sealed class PathfindingTestFixture : IAsyncDisposable
 
         _process.OutputDataReceived += (_, e) =>
         {
-            if (!string.IsNullOrEmpty(e.Data))
-                _log($"[pf-stdout] {e.Data}");
+            if (string.IsNullOrEmpty(e.Data)) return;
+            _log($"[pf-stdout] {e.Data}");
+            // PFS-OVERHAUL-006: the spawned PathfindingService.exe emits
+            // "[PathfindingService] PRELOAD_COMPLETE ready_to_serve=true ..."
+            // after mmap preload + route-pack warmup finish. Polling the
+            // TCP port alone is not enough — the listener accepts before
+            // preload completes, so the first path request blocks behind a
+            // cold mmap load (30s+ on test-data with NTFS junctions or a
+            // cold OS file cache).
+            if (e.Data.Contains("PRELOAD_COMPLETE", StringComparison.Ordinal))
+                _preloadComplete = true;
         };
         _process.ErrorDataReceived += (_, e) =>
         {
@@ -172,20 +182,44 @@ public sealed class PathfindingTestFixture : IAsyncDisposable
 
     private async Task WaitForReadyAsync()
     {
+        // PFS-OVERHAUL-006: ready means BOTH (a) TCP port accepts connections
+        // AND (b) the PRELOAD_COMPLETE marker fired in stdout. (a) alone fires
+        // before mmap preload finishes, so the first path request would block
+        // ~30s waiting for cold mmap load to complete -- past most tests'
+        // stuck-guard window.
         var sw = Stopwatch.StartNew();
+        var portAcceptedAt = TimeSpan.Zero;
         while (sw.Elapsed < TimeSpan.FromSeconds(MaxStartupSeconds))
         {
             if (_process?.HasExited == true)
                 throw new InvalidOperationException(
                     $"PathfindingService.exe exited prematurely (code {_process.ExitCode}) before reaching ready.");
 
-            if (await IsPortAcceptingAsync(Port, 1000).ConfigureAwait(false))
-                return;
+            if (portAcceptedAt == TimeSpan.Zero)
+            {
+                if (await IsPortAcceptingAsync(Port, 1000).ConfigureAwait(false))
+                {
+                    portAcceptedAt = sw.Elapsed;
+                    _log($"[PathfindingTestFixture] port {Port} accepting at {portAcceptedAt.TotalSeconds:F1}s; waiting for PRELOAD_COMPLETE...");
+                }
+                else
+                {
+                    await Task.Delay(500).ConfigureAwait(false);
+                    continue;
+                }
+            }
 
-            await Task.Delay(500).ConfigureAwait(false);
+            if (_preloadComplete)
+            {
+                _log($"[PathfindingTestFixture] PRELOAD_COMPLETE seen at {sw.Elapsed.TotalSeconds:F1}s (port-accept->preload {(sw.Elapsed - portAcceptedAt).TotalSeconds:F1}s)");
+                return;
+            }
+
+            await Task.Delay(250).ConfigureAwait(false);
         }
+        var phase = _preloadComplete ? "post-preload" : (portAcceptedAt == TimeSpan.Zero ? "port-accept" : "preload");
         throw new TimeoutException(
-            $"PathfindingService.exe did not become ready on port {Port} within {MaxStartupSeconds}s.");
+            $"PathfindingService.exe did not become ready (phase={phase}) on port {Port} within {MaxStartupSeconds}s.");
     }
 
     private static string? ResolvePathfindingExe()

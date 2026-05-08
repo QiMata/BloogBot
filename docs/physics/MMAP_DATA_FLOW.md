@@ -105,9 +105,94 @@ results.
 | Env var | Default | Used by |
 |---|---|---|
 | `WWOW_TEST_DATA_DIR` | `D:/wwow-bot/test-data` | `PathfindingTestFixture` |
+| `WWOW_VALIDATION_DATA_DIR` | `D:/wwow-bot/test-data` | `PathfindingValidationFixture` (waypoint-correctness suite) |
 | `WWOW_DATA_DIR` | (must be set explicitly) | `PathfindingService.exe` runtime |
 | `WWOW_BOT_PROD_DATA_DIR` | `D:/wwow-bot/prod-data` | `docker-compose.vmangos-linux.yml` for `wwow-pathfinding` + `wwow-scene-data` mounts |
 | `WWOW_VMANGOS_DATA_DIR` | `D:/MaNGOS/data` | the MaNGOS `wow-mangosd` container only — **don't reuse for bot services** |
+
+## Pathfinding service port allocation (PFS-OVERHAUL-006 / Phase 6)
+
+| Port | Purpose | Owner |
+|---|---|---|
+| `5001` | Production Docker (`wwow-pathfinding` container) | docker compose |
+| `5101` | Live-bot test fixture (`PathfindingTestFixture`) | `BotRunner.Tests` LiveValidation |
+| `5111` | Waypoint-correctness fixture (`PathfindingValidationFixture`) | `PathfindingService.Tests/WaypointGeneration/*` |
+
+The validation fixture exists to keep the bake-fidelity gate (`WaypointGenerationTests`)
+reading from `D:/wwow-bot/test-data` regardless of what the live live-bot fixture is
+doing. Both can run in parallel without contention. Override the validation port via
+`WWOW_VALIDATION_PATHFINDING_PORT`. The fixture only spawns `PathfindingService.exe`
+when `WWOW_USE_VALIDATION_PATHFINDING_SERVICE=1` is set; the default code path is
+direct P/Invoke into `Navigation.dll` loaded into the test process, with the fixture
+ensuring `WWOW_DATA_DIR` is set to test-data before any P/Invoke fires.
+
+## Tile-coord convention disagreement (PFS-OVERHAUL-006 Cycle 15, 2026-05-07)
+
+`MmapGen.exe --tile X,Y` interprets its first argument as MmapGen's `tileX` and the
+second as `tileY`. The *filename* it writes is `<map>_<tileY>_<tileX>.mmtile` — the
+two are swapped. Concretely:
+
+- OG zeppelin coords (1338, -4646, 51.6) live in MmapGen's tile **(tileX=40, tileY=29)**
+  and the runtime loader reads them from file **`0012940.mmtile`**.
+- `MmapGen.exe --tile 40,29` writes to `0012940.mmtile` — the right tile for OG.
+- `MmapGen.exe --tile 29,40` writes to `0014029.mmtile` — a *different* tile on the
+  west coast of Kalimdor (WoW X around -4500), nothing to do with OG zeppelin.
+- `tools/MmapGen/offmesh.txt` uses the *opposite* convention from `--tile`:
+  the line `1 29,40 (1338.10 -4646.00 51.60) ...` correctly attaches that anchor to
+  the OG zeppelin tile, even though the same coords require `--tile 40,29` to rebake.
+
+This disagreement is between vendored vmangos heritage code and is not safe to
+"fix" piecemeal. When in doubt, bake one variant, hash-compare the resulting
+`0012940.mmtile` against the snapshot (`tmp/bake-sweeps/<variant>/snapshot/`), and
+trust the file diff over either CLI label. Memory entry
+`project_pathfinding_tile_coords` records this. The route manifest at
+`tools/scripts/routes/og-zeppelin.json` also lists `tilesAffected: [[29,40], [28,40]]`
+— **those are MmapGen-CLI tile coords for offmesh.txt**, not the runtime filename
+order. Pass them as-is to `iterate-pathfinding.ps1 -Tiles "40,29"` (swapped) when
+rebaking the tile that contains those WoW coords.
+
+## Temporary fallback for live tests (PFS-OVERHAUL-006 Cycle 14, 2026-05-07)
+
+The structural separation works, but the first path request against
+`D:/wwow-bot/test-data` is ~30 seconds slower than against
+`D:/MaNGOS/data` despite bit-identical mmtile content (verified via
+`fc /b` and `Get-FileHash`). The climb sub-test's 20-second
+`SnapshotStallGuard` fires before the path arrives, so the bot can't
+move. Likely causes (uninvestigated yet): NTFS junction reparse
+overhead on the `vmaps/` and `maps/` symlinks, cold OS file cache on
+the test-data dir, or `WWOW_NAVIGATION_PRELOAD_MAPS=all` blocking the
+first request behind a cold preload.
+
+Until that is rooted-out, **set `WWOW_DATA_DIR=D:/MaNGOS/data` on
+live BotRunner.Tests runs** (and `WWOW_TEST_DATA_DIR` to match). The
+canonical Phase 5.3.6 stall reproduces (`flags=0x1=WALK`, ~470 waypoints
+walked, ending at `(1338.1,-4646.0,51.6)`). Pathfinding unit/smoke tests
+in `Tests/PathfindingService.Tests` are unaffected and can keep using
+the test-data dir.
+
+When the latency is fixed, delete this section and switch the climb
+runs back to `D:/wwow-bot/test-data`.
+
+## Strict `WWOW_DATA_DIR` gate (PFS-OVERHAUL-006 Cycle 14, 2026-05-07)
+
+`Navigation.dll` now mirrors `PathfindingService.exe`'s `Program.cs` strictness:
+- `Exports/Navigation/DllMain.cpp::InitializeAllSystems` `std::exit(1)` if
+  `WWOW_DATA_DIR` is unset OR doesn't contain `mmaps/`+`maps/`+`vmaps/`.
+- `Exports/Navigation/Navigation.cpp::GetMmapsPath` and
+  `Exports/Navigation/VMapFactory.cpp::getVMapsPath` removed their
+  cwd / DLL-relative / DLL-parent / last-resort fallbacks; they `std::exit(1)`
+  on a missing env var or missing subdir.
+- The previous fallbacks silently picked up stale build-output dirs
+  (`Bot/Release/net8.0/mmaps/`, `Data/mmaps/`, etc.) that hadn't been
+  regenerated since March 2026 — bake-parameter experiments looked like
+  no-ops because tests were exercising 2-month-old tile data.
+
+The escape hatch for in-process consumers (e.g. ForegroundBotRunner injected
+into WoW.exe) is the existing `extern "C" SetDataDirectory(const char*)`
+P/Invoke, which writes the env var natively — `WoWSharpClient`'s
+`NativeLocalPhysics.EnsureInitialized` calls it before any other Navigation
+export, so FG-injection still works as long as the C# resolver finds a Data
+dir at injection time.
 
 ## Why this matters
 

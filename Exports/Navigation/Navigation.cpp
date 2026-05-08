@@ -526,6 +526,10 @@ std::vector<NavPoly> Navigation::CapsuleOverlapSweep(uint32_t mapId,
 
 string Navigation::GetMmapsPath()
 {
+	// PFS-OVERHAUL-006 strict gate: WWOW_DATA_DIR must be set and mmaps/ must
+	// exist. The cwd / DLL-relative fallbacks were removed because they
+	// silently loaded stale build-output mmaps mirrors. See
+	// docs/physics/MMAP_DATA_FLOW.md.
 	const auto sep = std::filesystem::path::preferred_separator;
 	const auto normalizeWithSeparator = [sep](std::string value)
 	{
@@ -534,42 +538,22 @@ string Navigation::GetMmapsPath()
 		return value;
 	};
 
-	// Check WWOW_DATA_DIR first.
-	if (const char* envDataRoot = std::getenv("WWOW_DATA_DIR"))
+	const char* envDataRoot = std::getenv("WWOW_DATA_DIR");
+	if (!envDataRoot || !envDataRoot[0])
 	{
-		std::string dataRoot = normalizeWithSeparator(envDataRoot);
-		std::string mmapsPath = dataRoot + "mmaps";
-		mmapsPath = normalizeWithSeparator(mmapsPath);
-		if (std::filesystem::exists(mmapsPath))
-			return mmapsPath;
+		fprintf(stderr, "[Navigation.dll] FATAL: GetMmapsPath: WWOW_DATA_DIR is not set.\n");
+		std::fflush(stderr);
+		std::exit(1);
 	}
 
-	// Prefer current working directory if mmaps is present there.
+	std::string dataRoot = normalizeWithSeparator(envDataRoot);
+	std::string mmapsPath = dataRoot + "mmaps";
+	mmapsPath = normalizeWithSeparator(mmapsPath);
+	if (!std::filesystem::exists(mmapsPath))
 	{
-		std::string cwdMmaps = (std::filesystem::current_path() / "mmaps").string();
-		cwdMmaps = normalizeWithSeparator(cwdMmaps);
-		if (std::filesystem::exists(cwdMmaps))
-			return cwdMmaps;
+		fprintf(stderr, "[Navigation.dll] FATAL: GetMmapsPath: %s does not exist.\n", mmapsPath.c_str());
+		std::fflush(stderr);
+		std::exit(1);
 	}
-
-#if defined(_WIN32)
-	// Fall back to DLL-relative path on Windows.
-	WCHAR dllPath[MAX_PATH] = { 0 };
-	GetModuleFileNameW((HINSTANCE)&__ImageBase, dllPath, _countof(dllPath));
-	std::wstring ws(dllPath);
-	std::string pathAndFile(ws.begin(), ws.end());
-	char* c = const_cast<char*>(pathAndFile.c_str());
-	int strLength = strlen(c);
-	int lastOccur = 0;
-	for (int i = 0; i < strLength; i++)
-	{
-		if (c[i] == '\\') lastOccur = i;
-	}
-
-	string pathToMmap = pathAndFile.substr(0, lastOccur + 1);
-	pathToMmap.append("mmaps\\");
-	return pathToMmap;
-#else
-	return std::string("mmaps") + sep;
-#endif
+	return mmapsPath;
 }

@@ -138,6 +138,16 @@ namespace WoWSharpClient.Movement
         public bool LastHitWall { get; private set; }
         public Vector3 LastWallNormal { get; private set; } = new Vector3(0, 0, 1);
         public float LastBlockedFraction { get; private set; } = 1.0f;
+        // PFS-OVERHAUL-006 Phase 5.3.7 — physics-frozen diagnostic. When bot has
+        // horizontal intent (FORWARD/BACK/STRAFE) but physics returns ~zero
+        // displacement, accumulate a tick counter and surface a structured
+        // string with input/output pos, velocity, blockedFraction, ground Z,
+        // and steering target. Read by TravelTask via IObjectManager.
+        public string? LastPhysicsFrozenInfo { get; private set; }
+        private int _physicsFrozenTickCount;
+        private int _physicsTickCount60;
+        private float _physicsAccumulatedDisplacement60;
+        private float _physicsLastSecondDisplacement;
         public SceneEnvironmentFlags LastEnvironmentFlags { get; private set; } = SceneEnvironmentFlags.None;
         private SceneEnvironmentFlags _lastResolvedEnvironmentFlags = SceneEnvironmentFlags.None;
         private uint _lastResolvedEnvironmentMapId = player.MapId;
@@ -1196,6 +1206,46 @@ namespace WoWSharpClient.Movement
         /// </summary>
         private void ApplyPhysicsResult(PhysicsOutput output, float deltaSec)
         {
+            // PFS-OVERHAUL-006 Phase 5.3.7 — physics-frozen diagnostic. Captured
+            // BEFORE _player.Position is overwritten by physics output. Surfaces
+            // the per-tick state when bot has horizontal intent but physics
+            // returned no displacement (lip stuck, collision dead-stop, etc.).
+            var preInputX = _player.Position.X;
+            var preInputY = _player.Position.Y;
+            var preInputZ = _player.Position.Z;
+            var dxFrozen = output.NewPosX - preInputX;
+            var dyFrozen = output.NewPosY - preInputY;
+            var dzFrozen = output.NewPosZ - preInputZ;
+            var displacement = MathF.Sqrt(dxFrozen * dxFrozen + dyFrozen * dyFrozen + dzFrozen * dzFrozen);
+            // Track 60-tick (~1s) accumulated displacement so we catch low-speed
+            // oscillation too (per-tick can be 0.05y-0.15y while the bot's net
+            // 1s position drift is near zero — classic dead-stop oscillation).
+            _physicsTickCount60++;
+            _physicsAccumulatedDisplacement60 += displacement;
+            if (_physicsTickCount60 >= 60)
+            {
+                _physicsLastSecondDisplacement = _physicsAccumulatedDisplacement60;
+                _physicsTickCount60 = 0;
+                _physicsAccumulatedDisplacement60 = 0f;
+            }
+
+            // Frozen ALWAYS refreshes the snapshot so reads from
+            // ObserveWalkLegProgress see fresh data — distinguish per-tick
+            // displacement (instantaneous) from 1s accumulated (oscillation).
+            // No threshold gating: surface every tick. Cost is one short string
+            // per ApplyPhysicsResult, only consumed when stall recovery emits.
+            var steerStr = _steeringTarget != null
+                ? $"({_steeringTarget.X:F1},{_steeringTarget.Y:F1},{_steeringTarget.Z:F1}) tDz={(_steeringTarget.Z - preInputZ):F2}"
+                : "null";
+            LastPhysicsFrozenInfo =
+                $"d={displacement:F3} d1s={_physicsLastSecondDisplacement:F2} "
+                + $"pos=({preInputX:F2},{preInputY:F2},{preInputZ:F2}) "
+                + $"out=({output.NewPosX:F2},{output.NewPosY:F2},{output.NewPosZ:F2}) "
+                + $"vel=({output.NewVelX:F2},{output.NewVelY:F2},{output.NewVelZ:F2}) "
+                + $"flg=0x{(uint)_player.MovementFlags:X} blk={output.BlockedFraction:F2} "
+                + $"hw={(output.HitWall ? 1 : 0)} gnd={output.GroundZ:F2} env=0x{output.EnvironmentFlags:X} "
+                + $"st={steerStr}";
+
             // Wall contact feedback for path layer
             LastHitWall = output.HitWall;
             LastWallNormal = new Vector3(output.WallNormalX, output.WallNormalY, output.WallNormalZ);

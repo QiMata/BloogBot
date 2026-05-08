@@ -22,9 +22,17 @@
     "walkableRadius": 0,
     "walkableHeight": 0,
     "walkableClimb": 0,
-    "_2940_README": "Per-tile override for tile (X=29, Y=40) — OG zeppelin tower. cs=0.1m (vs 0.2666m default) for fine horizontal resolution on thin overhanging structures (the deck edge wall). At cs=0.2666 the deck triangle's XY footprint doesn't fill the bot's voxel column, so rcFilterWalkableLowHeightSpans never sees the deck overhead and fails to mark under-deck cells as low-clearance. Tile size grows substantially with cs=0.1, but only for this one tile. PFS-OVERHAUL-006.",
-    "2940": {
-      "cs": 0.1
+    "_4029_README": "Per-tile override for OG zeppelin tower tile. CLI invocation is `MmapGen.exe --tile 40,29` (writes mmaps/0012940.mmtile via filename swap). The tile-config key uses the CLI convention `tileX || tileY` = \"4029\". Earlier `\"2940\"` key never fired (looked up via tileX=40 tileY=29 → key \"4029\", not \"2940\"). PFS-OVERHAUL-006 Cycle 16, 2026-05-08.",
+    "_4029_README_cs": "cs=0.1m (vs 0.2666m default) for fine horizontal resolution on thin overhanging structures (the deck edge wall + railing). At cs=0.2666, voxel col=(27,61) at WoW(1337.25,-4645.11) collected three stacked spans at worldY 51.5/52.3/53.5 with only 0.6-0.9y between them; rcFilterWalkableLowHeightSpans then zeroed the deck-floor span (51.5..51.7) because it had less than walkableHeight=2.625y of overhead — leaving no walkable poly at the deck height that the live tests need. Cycle-16 diagnostic confirmed via --debug-heightfield. Tile size grows with cs=0.1, but only for this one tile.",
+    "_4029_README_ledgefilter": "PFS-OVERHAUL-006 / Phase 6 per-tile ledge-filter overrides. treatOobNeighborAsCliff=false: dock cells whose voxel-column neighbors are out-of-tile-bounds (OG harbor edge) stop counting OOB as an infinite drop, so the ledge filter doesn't reject them. mixedAreaUsesTerrainClimb=true: dock-edge cells transitioning to model decorations on top (Burningmidtree, Cage03, Stormwindcrate, Darnassusstreetlamp) keep using the 1.8y terrain climb instead of the tighter ~1.2y model-transition climb. Both flags default to legacy behavior in getDefaultConfig() so non-opted tiles are unaffected. See TileWorker.cpp::filterLedgeSpans.",
+    "_4029_README_climb": "PFS-OVERHAUL-006 Cycle 17 / Intervention 3 (2026-05-08): per-tile climb override required to disconnect the polygon corridor's lower-platform → upper-deck shortcut at the OG zeppelin tower deck-lip. Combined with the smooth-path Z-delta interpolation in Exports/Navigation/PathFinder.cpp (max-Z-delta=0.5y), this produces a clean spiral-ramp ascent without the bot hitting the 1.84y deck-lip wall. Default walkableClimbTerrain=1.8y is the harvested-from-client baseline; here we tighten to 0.2y for tile (40,29) ONLY. See memory project_pfs_overhaul_006_intra_tile_disconnect.",
+    "4029": {
+      "cs": 0.1,
+      "tileSize": 213,
+      "treatOobNeighborAsCliff": false,
+      "mixedAreaUsesTerrainClimb": true,
+      "agentMaxClimbTerrain": 0.2,
+      "agentMaxClimbModelTerrainTransition": 0.2
     }
   }
 }

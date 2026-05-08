@@ -110,12 +110,18 @@ namespace MMAP
     class TileWorker
     {
     public:
-        TileWorker(MapBuilder* mapBuilder, bool skipLiquid, bool quick, bool enableDebug, json& jsonConfig) :
+        // [WWoW-DIVERGENCE] 2026-05-07: debugWoW{X,Y,Set} added for --debug-heightfield diagnostic.
+        // debugWoWSet=false disables. See generator.cpp / MapBuilder for the wiring.
+        TileWorker(MapBuilder* mapBuilder, bool skipLiquid, bool quick, bool enableDebug, json& jsonConfig,
+                   float debugWoWX = 0.0f, float debugWoWY = 0.0f, bool debugWoWSet = false) :
             m_mapBuilder(mapBuilder),
             m_terrainBuilder(nullptr),
             m_rcContext(nullptr),
             m_quick(quick),
             m_debug(enableDebug),
+            m_debugWoWX(debugWoWX),
+            m_debugWoWY(debugWoWY),
+            m_debugWoWSet(debugWoWSet),
             m_config(jsonConfig),
             m_threadStarted(false)
         {
@@ -170,6 +176,9 @@ namespace MMAP
         rcContext*        m_rcContext;
         bool              m_quick;
         bool              m_debug;
+        float             m_debugWoWX;
+        float             m_debugWoWY;
+        bool              m_debugWoWSet;
         json              m_config;
     };
 }

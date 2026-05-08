@@ -1147,6 +1147,7 @@ namespace WoWSharpClient
         /// Fraction of intended horizontal movement that was completed (0 = fully blocked, 1 = unblocked).
         /// </summary>
         public float PhysicsBlockedFraction => _movementController?.LastBlockedFraction ?? 1.0f;
+        public string? PhysicsFrozenDebugInfo => _movementController?.LastPhysicsFrozenInfo;
 
         public SceneEnvironmentFlags PhysicsEnvironmentFlags =>
             ResolveCurrentEnvironmentFlags();

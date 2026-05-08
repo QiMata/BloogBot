@@ -93,6 +93,7 @@ void printUsage()
     printf("--offMeshInput [file.*] : Path to file containing off mesh connections data.\n\n");
     printf("--configInputPath [file.*] : Path to json configuration file.\n\n");
     printf("--onlyGO : builds only gameobject models for transports\n\n");
+    printf("--debug-heightfield wowX,wowY : dump heightfield/compact-heightfield span flags at the WoW (X,Y) column after each Recast filter stage. Diagnostic-only; use with --tile. Coords are WoW world units (floats).\n\n");
     printf("Example:\nmovemapgen (generate all mmap with default arg\n"
            "movemapgen 0 (generate map 0)\n"
            "movemapgen 0 --tile 34,46 (builds only tile 34,46 of map 0)\n\n");
@@ -113,7 +114,10 @@ bool handleArgs(int argc, char** argv,
                 bool& buildOnlyGameobjectModels,
                 char const*& offMeshInputPath,
                 char const*& configInputPath,
-                int& threads)
+                int& threads,
+                float& debugWoWX,
+                float& debugWoWY,
+                bool& debugWoWSet)
 {
     char* param = nullptr;
     for (int i = 1; i < argc; ++i)
@@ -196,6 +200,29 @@ bool handleArgs(int argc, char** argv,
 
             configInputPath = param;
         }
+        else if (strcmp(argv[i], "--debug-heightfield") == 0)
+        {
+            // [WWoW-DIVERGENCE] 2026-05-07: --debug-heightfield wowX,wowY diagnostic.
+            // Adds optional per-column span dump after each Recast filter stage to
+            // localize AREA_GROUND -> RC_NULL_AREA flips during baking. WoW XY is
+            // converted per-sub-tile to a recast cell index; only the sub-tile that
+            // contains the requested column emits dumps. Diagnostic-only; default
+            // (debugWoWSet=false) preserves upstream behavior.
+            param = argv[++i];
+            if (!param)
+                return false;
+
+            char* sx = strtok(param, ",");
+            char* sy = strtok(nullptr, ",");
+            if (!sx || !sy)
+            {
+                printf("invalid --debug-heightfield args (expected wowX,wowY)\n");
+                return false;
+            }
+            debugWoWX = (float)atof(sx);
+            debugWoWY = (float)atof(sy);
+            debugWoWSet = true;
+        }
         else if ((strcmp(argv[i], "-?") == 0) || (strcmp(argv[i], "/?") == 0) || (strcmp(argv[i], "-h") == 0))
         {
             printUsage();
@@ -239,11 +266,14 @@ int main(int argc, char** argv)
     bool buildOnlyGameobjectModels = false;
     bool quick = false;
     int threads = 0;
+    float debugWoWX = 0.0f;
+    float debugWoWY = 0.0f;
+    bool debugWoWSet = false;
 
     char const* offMeshInputPath = "offmesh.txt";
     char const* configInputPath = "config.json";
 
-    bool validParam = handleArgs(argc, argv, mapId, tileX, tileY, skipLiquid, skipContinents, skipJunkMaps, skipBattlegrounds, debug, silent, quick, buildOnlyGameobjectModels, offMeshInputPath, configInputPath, threads);
+    bool validParam = handleArgs(argc, argv, mapId, tileX, tileY, skipLiquid, skipContinents, skipJunkMaps, skipBattlegrounds, debug, silent, quick, buildOnlyGameobjectModels, offMeshInputPath, configInputPath, threads, debugWoWX, debugWoWY, debugWoWSet);
 
     if (!validParam)
         return silent ? EXIT_FAILURE : finish("You have specified invalid parameters (use -? for more help)", EXIT_FAILURE);
@@ -290,7 +320,7 @@ int main(int argc, char** argv)
         std::cin.get();
     }
 
-    MapBuilder builder(configInputPath, skipLiquid, skipContinents, skipJunkMaps, skipBattlegrounds, debug, quick, offMeshInputPath, uint8(threads));
+    MapBuilder builder(configInputPath, skipLiquid, skipContinents, skipJunkMaps, skipBattlegrounds, debug, quick, offMeshInputPath, uint8(threads), debugWoWX, debugWoWY, debugWoWSet);
 
     if (buildOnlyGameobjectModels)
         builder.buildTransports();

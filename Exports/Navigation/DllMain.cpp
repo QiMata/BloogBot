@@ -28,6 +28,8 @@
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
+#include <limits>
 
 #if defined(_WIN32)
 #define NOMINMAX
@@ -119,52 +121,57 @@ void InitializeAllSystems()
     // PhysicsEngine::Initialize() was skipped, leaving physics permanently
     // broken (groundZ=0 for every frame, no horizontal movement).
 
-    // --- Data root ---
+    // --- Data root (PFS-OVERHAUL-006 strict gate) ---
+    // WWOW_DATA_DIR must be set (directly via env, or indirectly via a prior
+    // SetDataDirectory P/Invoke — that helper writes the env var natively).
+    // The previous cwd / DLL-relative / "maps\\" fallbacks were removed because
+    // they silently picked up stale build-output mirrors, masking which data
+    // dir tests were actually exercising. See docs/physics/MMAP_DATA_FLOW.md.
     std::string dataRoot = ReadDataRootFromEnvironment();
+    if (dataRoot.empty())
+    {
+        fprintf(stderr, "[Navigation.dll] FATAL: WWOW_DATA_DIR is not set.\n");
+        fprintf(stderr, "[Navigation.dll] Set WWOW_DATA_DIR (or call SetDataDirectory before any other export) to a directory containing mmaps/, maps/, and vmaps/ subdirectories.\n");
+        fprintf(stderr, "[Navigation.dll] (Cwd / DLL-relative fallbacks were removed in PFS-OVERHAUL-006 — they silently loaded stale build-output data when the env var was unset.)\n");
+        std::fflush(stderr);
+        std::exit(1);
+    }
 
-    // --- MapLoader (optional, for terrain data) ---
+    const std::string mapsDir  = dataRoot + "maps/";
+    const std::string mmapsDir = dataRoot + "mmaps/";
+    const std::string vmapsDir = dataRoot + "vmaps/";
+    const bool mapsExists  = std::filesystem::exists(mapsDir);
+    const bool mmapsExists = std::filesystem::exists(mmapsDir);
+    const bool vmapsExists = std::filesystem::exists(vmapsDir);
+    if (!mapsExists || !mmapsExists || !vmapsExists)
+    {
+        fprintf(stderr, "[Navigation.dll] FATAL: WWOW_DATA_DIR='%s' does not contain mmaps/, maps/, and vmaps/ subdirectories.\n", dataRoot.c_str());
+        fprintf(stderr, "[Navigation.dll]   maps/  exists=%d (%s)\n",  mapsExists  ? 1 : 0, mapsDir.c_str());
+        fprintf(stderr, "[Navigation.dll]   mmaps/ exists=%d (%s)\n",  mmapsExists ? 1 : 0, mmapsDir.c_str());
+        fprintf(stderr, "[Navigation.dll]   vmaps/ exists=%d (%s)\n",  vmapsExists ? 1 : 0, vmapsDir.c_str());
+        std::fflush(stderr);
+        std::exit(1);
+    }
+
+    // --- MapLoader (terrain data) ---
     try
     {
         g_mapLoader = std::make_unique<MapLoader>();
-        std::vector<std::string> mapPaths;
-        if (!dataRoot.empty())
-            mapPaths.push_back(dataRoot + "maps/");
-        mapPaths.push_back("maps/");
-
-        for (const auto& path : mapPaths)
-        {
-            if (std::filesystem::exists(path))
-            {
-                if (g_mapLoader->Initialize(path))
-                    break;
-            }
-        }
+        g_mapLoader->Initialize(mapsDir);
     }
     catch (...) {}
 
     // --- VMAP system ---
     try
     {
-        std::vector<std::string> vmapPaths;
-        if (!dataRoot.empty())
-            vmapPaths.push_back(dataRoot + "vmaps/");
-        vmapPaths.push_back("vmaps/");
+        g_vmapManager = static_cast<VMAP::VMapManager2*>(
+            VMAP::VMapFactory::createOrGetVMapManager());
 
-        for (const auto& path : vmapPaths)
+        if (g_vmapManager)
         {
-            if (std::filesystem::exists(path))
-            {
-                g_vmapManager = static_cast<VMAP::VMapManager2*>(
-                    VMAP::VMapFactory::createOrGetVMapManager());
-
-                if (g_vmapManager)
-                {
-                    VMAP::VMapFactory::initialize();
-                    g_vmapManager->setBasePath(path);
-                    DynamicObjectRegistry::Instance()->LoadDisplayIdMapping(path);
-                    break;
-                }
-            }
+            VMAP::VMapFactory::initialize();
+            g_vmapManager->setBasePath(vmapsDir);
+            DynamicObjectRegistry::Instance()->LoadDisplayIdMapping(vmapsDir);
         }
     }
     catch (...) {}
@@ -173,12 +180,7 @@ void InitializeAllSystems()
     try
     {
         if (SceneQuery::GetScenesDir().empty())
-        {
-            if (!dataRoot.empty())
-                SceneQuery::SetScenesDir(dataRoot + "scenes/");
-            else
-                SceneQuery::SetScenesDir("scenes/");
-        }
+            SceneQuery::SetScenesDir(dataRoot + "scenes/");
     }
     catch (...) {}
 
@@ -2381,6 +2383,132 @@ extern "C" __declspec(dllexport) bool FindPathCornersForAgent(
         fprintf(stderr, "[Navigation.dll] SEH exception in FindPathCornersForAgent (code=0x%08lx)\n",
                 0);
         if (outCount) *outCount = 0;
+        return false;
+    }
+}
+
+// Test-only diagnostic export (PFS-OVERHAUL-006 / Phase 6 bake-fidelity):
+// returns the navmesh polygon nearest to a WoW (X,Y,Z) coord, plus that
+// polygon's surface Z at the requested (X,Y) horizontal. Used by
+// WaypointGenerationTests to prove that every smooth-path corner returned
+// by FindPathCornersForAgent sits on a real walkable polygon (rather than
+// being a synthetic interpolation between dangling off-mesh anchors at
+// coords that have no walkable terrain underneath).
+//
+// Validation contract:
+//   - Tight searchExtentXY (~agentRadius) limits horizontal nearest-poly
+//     selection to polys whose 2D footprint contains or hugs the corner.
+//   - searchExtentZ (~walkableClimb, 1.8y) caps vertical search; corners
+//     more than walkableClimb above/below any poly are "in space."
+//   - On success with outPolyRef!=0, getPolyHeight returns the surface Z;
+//     the test compares |coord.Z - surfaceZ| against walkableClimb to
+//     decide whether the corner is on (or barely above) a real surface.
+//   - outPolyRef==0 with return=true means: the call succeeded but no
+//     poly was found within the given extent. That is a validation
+//     failure for the test; it is NOT a runtime error.
+//   - outPolyType lets the test reject DT_POLYTYPE_OFFMESH_CONNECTION
+//     (1) when the corner is supposed to be on walkable ground.
+//
+// Returns false only on true infrastructure failure (no query/navmesh,
+// invalid args, SEH).
+extern "C" __declspec(dllexport) bool GetPolyAtCoord(
+    uint32_t mapId,
+    XYZ coord,
+    float searchExtentXY,
+    float searchExtentZ,
+    uint64_t* outPolyRef,
+    uint8_t* outPolyType,
+    XYZ* outNearestPoint,
+    float* outSurfaceZ)
+{
+    if (outPolyRef) *outPolyRef = 0;
+    if (outPolyType) *outPolyType = 0xFF;
+    if (outNearestPoint) { outNearestPoint->X = 0.0f; outNearestPoint->Y = 0.0f; outNearestPoint->Z = 0.0f; }
+    if (outSurfaceZ) *outSurfaceZ = std::numeric_limits<float>::quiet_NaN();
+
+    if (!outPolyRef)
+    {
+        fprintf(stderr, "[POLYAT] invalid args: outPolyRef=null\n");
+        return false;
+    }
+    if (searchExtentXY <= 0.0f || searchExtentZ <= 0.0f)
+    {
+        fprintf(stderr, "[POLYAT] invalid extents: xy=%.3f z=%.3f (must be positive)\n",
+                searchExtentXY, searchExtentZ);
+        return false;
+    }
+
+    try
+    {
+        if (!g_initialized)
+            InitializeAllSystems();
+
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+        dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
+        if (!query) { fprintf(stderr, "[POLYAT] no query for map %u\n", mapId); return false; }
+
+        const dtNavMesh* navMesh = query->getAttachedNavMesh();
+        if (!navMesh) { fprintf(stderr, "[POLYAT] no navMesh for map %u\n", mapId); return false; }
+
+        dtQueryFilter filter;
+        filter.setIncludeFlags(0xFFFF);
+        filter.setExcludeFlags(0);
+
+        // WoW (X,Y,Z) -> Detour (Y,Z,X). Detour Y is vertical.
+        float pos[3]     = { coord.Y, coord.Z, coord.X };
+        float extents[3] = { searchExtentXY, searchExtentZ, searchExtentXY };
+
+        dtPolyRef polyRef = 0;
+        float nearest[3] = { 0.0f, 0.0f, 0.0f };
+        dtStatus st = query->findNearestPoly(pos, extents, &filter, &polyRef, nearest);
+        if (dtStatusFailed(st))
+        {
+            fprintf(stderr, "[POLYAT] findNearestPoly failed for (%.2f,%.2f,%.2f) ext=(%.2f,%.2f) st=0x%x\n",
+                    coord.X, coord.Y, coord.Z, searchExtentXY, searchExtentZ, st);
+            return false;
+        }
+
+        if (polyRef == 0)
+        {
+            // Success, but no poly within the requested extents — a valid
+            // (and important) "no walkable surface here" signal for the
+            // caller. Out args remain in their initialized sentinel state.
+            return true;
+        }
+
+        *outPolyRef = static_cast<uint64_t>(polyRef);
+
+        const dtMeshTile* tile = nullptr;
+        const dtPoly* poly = nullptr;
+        if (dtStatusSucceed(navMesh->getTileAndPolyByRef(polyRef, &tile, &poly)) && poly)
+        {
+            if (outPolyType) *outPolyType = poly->getType();
+        }
+
+        if (outNearestPoint)
+        {
+            // Detour (X,Y,Z) -> WoW (Z,X,Y).
+            outNearestPoint->X = nearest[2];
+            outNearestPoint->Y = nearest[0];
+            outNearestPoint->Z = nearest[1];
+        }
+
+        if (outSurfaceZ)
+        {
+            float height = 0.0f;
+            dtStatus hSt = query->getPolyHeight(polyRef, pos, &height);
+            if (dtStatusSucceed(hSt))
+                *outSurfaceZ = height; // Detour Y == WoW Z
+            // else: leave NaN sentinel — the caller treats that as "poly
+            // does not cover (X,Y)" which is its own validation failure.
+        }
+
+        return true;
+    }
+    catch (...)
+    {
+        fprintf(stderr, "[Navigation.dll] SEH exception in GetPolyAtCoord (code=0x%08lx)\n", 0UL);
         return false;
     }
 }

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "description": "Canonical pathfinding routes for the Phase 5 OG to UC zeppelin scenario. Used by tools/scripts/probe-routes.ps1 and the iterate-pathfinding orchestrator.",
+  "agent": {
+    "race": "TaurenMale",
+    "radius": 1.0247,
+    "height": 2.625
+  },
+  "routes": [
+    {
+      "name": "ClimbOrgrimmarTowerToFrezza",
+      "description": "Phase 5.3.6 climb: OG flight master tower top to Frezza zeppelin master. The deck-lip step-up at corner [001]->[002] (1.75y vertical over 1.7y horizontal) is the open Phase 6 mesh-fidelity blocker.",
+      "map": 1,
+      "start": [1677.0, -4315.0, 61.4],
+      "end":   [1331.11, -4649.45, 53.6269],
+      "tilesAffected": [[29, 40], [28, 40]],
+      "expectedCorners": "470-490",
+      "expectedStallCoord": [1338.1, -4646.0, 51.6],
+      "expectedStallReason": "deck-lip 1.75y step-up exceeds Tauren capsule runtime step-up tolerance"
+    },
+    {
+      "name": "FlightMasterDescentControl",
+      "description": "Walk leg used by the orgrimmar_flight_master_tower_descent test. Known-good walkable from flight-master tower top to OG city ground. Use as a control to verify a regen did not regress healthy routes.",
+      "map": 1,
+      "start": [1677.0, -4315.0, 61.4],
+      "end":   [1604.8, -4425.6, 10.36],
+      "tilesAffected": [[29, 40]],
+      "expectedCorners": "60-100",
+      "expectedAffordance": "Walk"
+    },
+    {
+      "name": "OgApproachToBoardingPosition",
+      "description": "PROOF C short-hop. Same-tile traversal from ApproachPosition to BoardingPosition (the final 18 yards of the climb). Detour returns 11 polys but bot physics fails; phase 5.3.4 fix landed but the underlying step-up still applies.",
+      "map": 1,
+      "start": [1338.1, -4646.0, 51.6],
+      "end":   [1320.14, -4653.16, 53.89],
+      "tilesAffected": [[29, 40]],
+      "expectedCorners": "11",
+      "expectedAffordance": "StepUp or Blocked"
+    },
+    {
+      "name": "OgFrezzaToBoardingPosition",
+      "description": "Short-hop control between the two Phase 5.3.5 anchors at the same Z tier. Should be a clean 5-poly Detour traversal with no step-ups.",
+      "map": 1,
+      "start": [1331.11, -4649.45, 53.6269],
+      "end":   [1320.14, -4653.16, 53.89],
+      "tilesAffected": [[29, 40]],
+      "expectedCorners": "5",
+      "expectedAffordance": "Walk"
+    },
+    {
+      "name": "DeckLipStallToFrezza",
+      "description": "Phase 5.3.6 Cycle 5 corner diagnostic. Stall coord (1338,-4646,51.6) to Frezza spawn (1331,-4649,53.6) -- 4 corners, the [001]->[002] segment is the failure point.",
+      "map": 1,
+      "start": [1338.13, -4645.96, 51.60],
+      "end":   [1331.11, -4649.45, 53.6269],
+      "tilesAffected": [[29, 40]],
+      "expectedCorners": "4",
+      "expectedFailureSegment": "1->2 (1339.20,-4645.60,52.01) -> (1337.60,-4644.53,53.76) vertical=1.75y horizontal=1.7y"
+    }
+  ]
+}

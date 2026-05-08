@@ -1822,6 +1822,47 @@ dtStatus PathFinder::findSmoothPath(const float* startPos, const float* endPos,
 		}
 
 		// Store results.
+		// PFS-OVERHAUL-006 Cycle 17e (2026-05-08): if the new corner's Z exceeds
+		// the previous corner's by more than MAX_SMOOTH_PATH_SEGMENT_Z_DELTA,
+		// emit interpolated corners between them so the bot doesn't see a
+		// vertical waypoint jump it can't physically traverse via auto-step.
+		// The polygon corridor handles the actual ascent (each cell-step ≤
+		// walkableClimb); this only densifies the WAYPOINT representation so
+		// NavigationPath's WAYPOINT_VERTICAL_REACH_TOLERANCE checks succeed.
+		static const float MAX_SMOOTH_PATH_SEGMENT_Z_DELTA = 0.5f;
+		if (nsmoothPath > 0 && nsmoothPath < maxSmoothPathSize)
+		{
+			const float prevZ = smoothPath[(nsmoothPath - 1) * VERTEX_SIZE + 1];
+			const float newZ = iterPos[1];
+			const float dz = newZ - prevZ;
+			if (dz > MAX_SMOOTH_PATH_SEGMENT_Z_DELTA || -dz > MAX_SMOOTH_PATH_SEGMENT_Z_DELTA)
+			{
+				const float prevX = smoothPath[(nsmoothPath - 1) * VERTEX_SIZE + 0];
+				const float prevY = smoothPath[(nsmoothPath - 1) * VERTEX_SIZE + 2];
+				const float dx = iterPos[0] - prevX;
+				const float dy = iterPos[2] - prevY;
+				const int extraSteps = (int)ceilf(dtAbs(dz) / MAX_SMOOTH_PATH_SEGMENT_Z_DELTA);
+				// Cycle 17f: project each interpolated waypoint onto the
+				// actual surface via getPolyHeight() on the current corridor
+				// polygon. Linear 3D interpolation landed corners "in space"
+				// between polygons (Layer B's smooth-path validation flagged
+				// them as off-surface). Surface projection ensures every
+				// emitted corner sits on real walkable terrain.
+				for (int i = 1; i < extraSteps && nsmoothPath < maxSmoothPathSize; ++i)
+				{
+					const float t = (float)i / (float)extraSteps;
+					float interp[3] = { prevX + dx * t, prevZ + dz * t, prevY + dy * t };
+					if (npolys > 0)
+					{
+						float surfaceY = 0.0f;
+						if (dtStatusSucceed(m_navMeshQuery->getPolyHeight(polys[0], interp, &surfaceY)))
+							interp[1] = surfaceY + 0.5f;
+					}
+					dtVcopy(&smoothPath[nsmoothPath * VERTEX_SIZE], interp);
+					++nsmoothPath;
+				}
+			}
+		}
 		if (nsmoothPath < maxSmoothPathSize)
 		{
 			dtVcopy(&smoothPath[nsmoothPath * VERTEX_SIZE], iterPos);

@@ -38,9 +38,15 @@ namespace MMAP
                            bool debug,
                            bool quick,
                            char const* offMeshFilePath,
-                           uint8 threads) :
+                           uint8 threads,
+                           float debugWoWX,
+                           float debugWoWY,
+                           bool debugWoWSet) :
         m_terrainBuilder(nullptr),
         m_debug(debug),
+        m_debugWoWX(debugWoWX),
+        m_debugWoWY(debugWoWY),
+        m_debugWoWSet(debugWoWSet),
         m_offMeshFilePath(offMeshFilePath),
         m_skipContinents(skipContinents),
         m_skipJunkMaps(skipJunkMaps),
@@ -172,7 +178,7 @@ namespace MMAP
         std::vector<std::unique_ptr<TileWorker>> workers;
         for (uint8 i = 0; i < m_threads; ++i)
         {
-            workers.emplace_back(std::make_unique<TileWorker>(this, false, m_quick, m_debug, m_config));
+            workers.emplace_back(std::make_unique<TileWorker>(this, false, m_quick, m_debug, m_config, m_debugWoWX, m_debugWoWY, m_debugWoWSet));
         }
 
         while (!m_tileQueue.Empty() && !m_cancel.load())

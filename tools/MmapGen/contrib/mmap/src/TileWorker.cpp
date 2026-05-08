@@ -1,6 +1,52 @@
 #include "TileWorker.h"
 #include "MapBuilder.h"
 #include "Maps/GridMapDefines.h"
+#include <cmath>
+
+// [WWoW-DIVERGENCE] 2026-05-07: --debug-heightfield X,Y diagnostic helpers.
+// Dump per-stage span flags for one heightfield column. Both helpers are
+// no-ops unless cx,cy are non-negative AND inside the heightfield bounds.
+// The output goes to stdout, prefixed with [DBG-HF] for grep-friendliness.
+inline static void dumpHeightfieldColumn(const char* stage, int cx, int cy, const rcHeightfield& hf)
+{
+    if (cx < 0 || cy < 0 || cx >= hf.width || cy >= hf.height)
+        return;
+    rcSpan* s = hf.spans[cx + cy * hf.width];
+    if (!s)
+    {
+        printf("[DBG-HF] stage=%-16s col=(%d,%d) EMPTY\n", stage, cx, cy);
+        return;
+    }
+    int idx = 0;
+    for (; s; s = s->next, ++idx)
+    {
+        const float worldBot = hf.bmin[1] + (float)s->smin * hf.ch;
+        const float worldTop = hf.bmin[1] + (float)s->smax * hf.ch;
+        printf("[DBG-HF] stage=%-16s col=(%d,%d) span#=%d bot=%u top=%u area=%u (worldY=%.3f..%.3f)\n",
+               stage, cx, cy, idx, (unsigned)s->smin, (unsigned)s->smax, (unsigned)s->area, worldBot, worldTop);
+    }
+}
+
+inline static void dumpCompactHeightfieldColumn(const char* stage, int cx, int cy, const rcCompactHeightfield& chf)
+{
+    if (cx < 0 || cy < 0 || cx >= chf.width || cy >= chf.height)
+        return;
+    const rcCompactCell& cell = chf.cells[cx + cy * chf.width];
+    if (cell.count == 0)
+    {
+        printf("[DBG-HF] stage=%-16s col=(%d,%d) EMPTY (chf)\n", stage, cx, cy);
+        return;
+    }
+    for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+    {
+        const rcCompactSpan& s = chf.spans[i];
+        const unsigned char area = chf.areas[i];
+        const float worldBot = chf.bmin[1] + (float)s.y * chf.ch;
+        const float worldTop = chf.bmin[1] + (float)(s.y + s.h) * chf.ch;
+        printf("[DBG-HF] stage=%-16s col=(%d,%d) span#=%u bot=%u top=%u area=%u (worldY=%.3f..%.3f)\n",
+               stage, cx, cy, (unsigned)(i - cell.index), (unsigned)s.y, (unsigned)(s.y + s.h), (unsigned)area, worldBot, worldTop);
+    }
+}
 
 inline static void calcTriNormal(const float* v0, const float* v1, const float* v2, float* norm)
 {
@@ -93,8 +139,32 @@ static bool IsModelArea(int area)
     return false;
 }
 
+// PFS-OVERHAUL-006 / Phase 6 (2026-05-07) — two per-tile knobs:
+//
+//   treatOobNeighborAsCliff (default true):
+//     Legacy behavior treated an out-of-tile-bounds neighbor as a span at
+//     -infinity, forcing minNeighborHeight to a value that always triggers
+//     ledge rejection. That's correct for terrain whose far-side really does
+//     drop off (Thousand Needles bridges), but wrong for thin shelf terrain
+//     bordering OOB water (the OG zeppelin dock). Setting this to false
+//     leaves OOB neighbors as "no constraint": the dock cell's in-tile
+//     neighbors decide its fate. Only opt in for tiles that are not at the
+//     real map perimeter (water/voids around an interior tile are fine).
+//
+//   mixedAreaUsesTerrainClimb (default false):
+//     Legacy behavior used the tighter ~1.2y model-transition climb whenever
+//     a span's neighbors mixed terrain and model areas. Decorations on top
+//     of the dock (Burningmidtree, Cage03, Stormwindcrate, Darnassusstreetlamp)
+//     flip IsModelArea on the neighbor side and force the dock-edge cell to
+//     fail ledge filtering even though the agent walks ON terrain. Setting
+//     this to true keeps using terrain climb (1.8y) when the CURRENT span is
+//     terrain — agent feet are on the dock, decorations sit above. Wall-top
+//     model spans keep the legacy transition climb (the guard checks the
+//     current span's area, not just the transition flag).
 static void filterLedgeSpans(const int walkableHeight, const int walkableClimbTransition, const int walkableClimbTerrain,
-    rcHeightfield& heightfield)
+    rcHeightfield& heightfield,
+    bool treatOobNeighborAsCliff = true,
+    bool mixedAreaUsesTerrainClimb = false)
 {
     const int w = heightfield.width;
     const int h = heightfield.height;
@@ -129,9 +199,13 @@ static void filterLedgeSpans(const int walkableHeight, const int walkableClimbTr
                     // Skip neighbours which are out of bounds.
                     if (dx < 0 || dy < 0 || dx >= w || dy >= h)
                     {
-                        // This was commented out previously. It's supposed to prevent adjacent terrain polys from having
-                        // radically different vert height values due to bad model design. Smooths out many paths like Thousand Needles bridges
-                        minNeighborHeight = rcMin(minNeighborHeight, -walkableClimbTerrain - bot);
+                        // Legacy: treat OOB as a span at -infinity (Thousand Needles bridges
+                        // safety). When treatOobNeighborAsCliff=false the OOB direction
+                        // contributes nothing — the cell's in-tile neighbors decide the cliff
+                        // verdict. Used for thin shelf terrain like the OG zeppelin dock that
+                        // borders OOB water columns.
+                        if (treatOobNeighborAsCliff)
+                            minNeighborHeight = rcMin(minNeighborHeight, -walkableClimbTerrain - bot);
                         continue;
                     }
 
@@ -173,7 +247,12 @@ static void filterLedgeSpans(const int walkableHeight, const int walkableClimbTr
                 bool modelToTerrainTransition = (IsModelArea(span->area) && !hasAllNbModel) || (!IsModelArea(span->area) && !hasAllNbTerrain);
                 int currentMaxClimb = walkableClimbTerrain;
                 // Model -> Terrain or Terrain -> Model
-                if (modelToTerrainTransition)
+                // Legacy: tighter transition climb whenever neighbors mix areas. With
+                // mixedAreaUsesTerrainClimb=true, a TERRAIN-current span keeps the
+                // 1.8y terrain climb even when neighbors include models — the agent
+                // walks on terrain, decorations only sit above. Wall-top model spans
+                // (IsModelArea(span->area)) still get the tighter transition climb.
+                if (modelToTerrainTransition && !(mixedAreaUsesTerrainClimb && !IsModelArea(span->area)))
                     currentMaxClimb = walkableClimbTransition;
                 if (minNeighborHeight < -currentMaxClimb)
                     span->area = RC_NULL_AREA;
@@ -454,8 +533,19 @@ namespace MMAP
         float agentHeight = 1.5f;
         float agentRadius = 0.2f; // Check here: .go xyz -4985 -861 501 0
         // Fences should not be passable
-        static const float agentMaxClimbModelTerrainTransition = 1.2f;
-        static const float agentMaxClimbTerrain = 1.8f;
+        // PFS-OVERHAUL-006 Cycle 17d (2026-05-08): made these per-tile-overridable
+        // via JSON ("agentMaxClimbModelTerrainTransition", "agentMaxClimbTerrain")
+        // so individual tiles can tighten the cell-connectivity step-up limit when
+        // the bake's claim (1.8y) exceeds what runtime physics can actually traverse
+        // without a jump (e.g., the OG zeppelin tower's 1.84y deck-lip wall).
+        // Default values match the harvested-from-client baseline; do not lower
+        // globally — only per-tile when the geometry is provably runtime-impassable.
+        float agentMaxClimbModelTerrainTransition = 1.2f;
+        float agentMaxClimbTerrain = 1.8f;
+        if (jsonTileConfig.contains("agentMaxClimbModelTerrainTransition"))
+            agentMaxClimbModelTerrainTransition = jsonTileConfig["agentMaxClimbModelTerrainTransition"].get<float>();
+        if (jsonTileConfig.contains("agentMaxClimbTerrain"))
+            agentMaxClimbTerrain = jsonTileConfig["agentMaxClimbTerrain"].get<float>();
 
         if (!continent)
             agentRadius = 0.3f;
@@ -496,6 +586,14 @@ namespace MMAP
             config.ch = jsonTileConfig["ch"].get<float>();
         if (jsonTileConfig.contains("cs"))
             config.cs = jsonTileConfig["cs"].get<float>();
+        // PFS-OVERHAUL-006 Cycle 16 (2026-05-08): when `cs` is overridden small (e.g. 0.1)
+        // the bake must keep TILES_PER_MAP*tileSize*cs >= 533.33y to cover the full map-tile.
+        // Default tileSize=80 with cs=0.2666 yields 25*80*0.2666 = 533.2y. With cs=0.1 the
+        // same tileSize=80 only covers 200y, leaving the rest of the tile unbaked. The
+        // per-tile override `tileSize` lets a fine-cs tile compensate (e.g. tileSize=213
+        // with cs=0.1 → 25*213*0.1 = 532.5y).
+        if (jsonTileConfig.contains("tileSize"))
+            config.tileSize = jsonTileConfig["tileSize"].get<int>();
         // END WWoW divergence
 
         if (config.walkableHeight == 0)
@@ -552,6 +650,32 @@ namespace MMAP
                 {
                     printf("%s Failed building heightfield!                       \n", tileString);
                     continue;
+                }
+
+                // [WWoW-DIVERGENCE] 2026-05-07: --debug-heightfield diagnostic.
+                // Convert WoW (X, Y) to a recast cell index for THIS sub-tile. The
+                // recast frame swaps axes: recast.x = WoW.y, recast.z = WoW.x. Only
+                // sub-tiles whose heightfield contains the requested column will emit
+                // any per-stage dumps below; out-of-range columns become no-ops.
+                int dbgCellX = -1, dbgCellY = -1;
+                if (m_debugWoWSet)
+                {
+                    const float recastX = m_debugWoWY;
+                    const float recastZ = m_debugWoWX;
+                    dbgCellX = (int)std::floor((recastX - tile.solid->bmin[0]) / tileCfg.cs);
+                    dbgCellY = (int)std::floor((recastZ - tile.solid->bmin[2]) / tileCfg.cs);
+                    const bool inRange = (dbgCellX >= 0 && dbgCellX < tile.solid->width &&
+                                          dbgCellY >= 0 && dbgCellY < tile.solid->height);
+                    printf("[DBG-HF] tile=(%u,%u) sub=(%d,%d) wow=(%.3f,%.3f) cell=(%d,%d) inRange=%d bmin=(%.3f,%.3f,%.3f) bmax=(%.3f,%.3f,%.3f) cs=%.4f ch=%.4f w=%d h=%d border=%d\n",
+                           tileX, tileY, x, y,
+                           m_debugWoWX, m_debugWoWY, dbgCellX, dbgCellY, inRange ? 1 : 0,
+                           tile.solid->bmin[0], tile.solid->bmin[1], tile.solid->bmin[2],
+                           tile.solid->bmax[0], tile.solid->bmax[1], tile.solid->bmax[2],
+                           tileCfg.cs, tileCfg.ch, tile.solid->width, tile.solid->height, tileCfg.borderSize);
+                    if (!inRange)
+                    {
+                        dbgCellX = -1; dbgCellY = -1; // helpers no-op on negative
+                    }
                 }
 
                 /// 2. Generate heightfield for water. Put all liquid geometry there
@@ -631,6 +755,7 @@ namespace MMAP
                 /// 4. Every triangle is correctly marked now, we can rasterize everything
                 SortAndRasterizeTriangles(m_rcContext, tVerts, tVertCount, tTris, areas, tTriCount, *tile.solid, 0);
                 delete[] areas;
+                dumpHeightfieldColumn("rasterize", dbgCellX, dbgCellY, *tile.solid);
 
                 /// 5. Don't walk over too high Obstacles.
                 // We can pass higher terrain obstacles, or model obstacles.
@@ -638,16 +763,25 @@ namespace MMAP
                 // (Why? No idea, ask Blizzard. Empirically confirmed on retail)
                 // 5.1 walkableClimbTerrain >= walkableClimbModelTransition so do it first
                 rcFilterLowHangingWalkableObstacles(m_rcContext, walkableClimbTerrain, *tile.solid);
+                dumpHeightfieldColumn("filterLowHanging", dbgCellX, dbgCellY, *tile.solid);
                 // 5.2 maps <-> vmaps transition
-                filterLedgeSpans(tileCfg.walkableHeight, walkableClimbModelTransition, walkableClimbTerrain, *tile.solid);
+                // PFS-OVERHAUL-006 / Phase 6: pull per-tile ledge-filter knobs from JSON.
+                // Defaults (true / false) preserve legacy on tiles that don't opt in.
+                const bool treatOobNeighborAsCliff   = jsonTileConfig["treatOobNeighborAsCliff"].get<bool>();
+                const bool mixedAreaUsesTerrainClimb = jsonTileConfig["mixedAreaUsesTerrainClimb"].get<bool>();
+                filterLedgeSpans(tileCfg.walkableHeight, walkableClimbModelTransition, walkableClimbTerrain, *tile.solid,
+                                 treatOobNeighborAsCliff, mixedAreaUsesTerrainClimb);
                 //rcFilterLedgeSpans(m_rcContext, tileCfg.walkableHeight, walkableClimbTerrain, *tile.solid); // Default recast code
+                dumpHeightfieldColumn("filterLedge", dbgCellX, dbgCellY, *tile.solid);
 
                 /// 6. Now we are happy because we have the correct flags.
                 // Set's cleanup tmp flags used by the generator, so we don't have a too
                 // complicated navmesh in the end.
                 // (We dont care if a poly comes from Terrain or Model at runtime)
                 filterRemoveUselessAreas(*tile.solid);
+                dumpHeightfieldColumn("removeUseless", dbgCellX, dbgCellY, *tile.solid);
                 rcFilterWalkableLowHeightSpans(m_rcContext, tileCfg.walkableHeight, *tile.solid);
+                dumpHeightfieldColumn("filterLowHeight", dbgCellX, dbgCellY, *tile.solid);
 
                 /// 7. Let's process water now.
                 // When water is not deep, we have a transition area (AREA_WATER_TRANSITION)
@@ -663,6 +797,7 @@ namespace MMAP
                     printf("%s Failed compacting heightfield!                     \n", tileString);
                     continue;
                 }
+                dumpCompactHeightfieldColumn("buildCHF", dbgCellX, dbgCellY, *tile.chf);
 
                 // build polymesh intermediates
                 if (!rcErodeWalkableArea(m_rcContext, config.walkableRadius, *tile.chf))
@@ -670,6 +805,7 @@ namespace MMAP
                     printf("%s Failed eroding area!                               \n", tileString);
                     continue;
                 }
+                dumpCompactHeightfieldColumn("erode", dbgCellX, dbgCellY, *tile.chf);
 
                 if (!rcMedianFilterWalkableArea(m_rcContext, *tile.chf))
                 {
@@ -967,6 +1103,11 @@ namespace MMAP
             { "walkableSlopeAngle",      75.0f }, // slope terrain
             { "walkableSlopeAngleVMaps", 61.0f }, // slope model (WMO...)
             { "quick",                   -1    }, // skip 'undermesh removal'
+            // PFS-OVERHAUL-006 / Phase 6: per-tile filterLedgeSpans overrides.
+            // Defaults preserve legacy behavior on every tile that does not opt in.
+            // See filterLedgeSpans for what each flag controls.
+            { "treatOobNeighborAsCliff",  true  },
+            { "mixedAreaUsesTerrainClimb", false },
         };
     }
 

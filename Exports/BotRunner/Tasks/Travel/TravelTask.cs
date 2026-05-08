@@ -716,8 +716,17 @@ public class TravelTask : BotTask, IBotTask
 
         var moved = currentPosition.DistanceTo2D(anchor);
         var movedEnoughForWaypointProgress = moved > WalkLegStallMovementYards;
+        // PFS-OVERHAUL-006 Phase 5.3.7: plan-version churn alone is not progress.
+        // NavigationPath's stalled_near_waypoint detector force-replans when the
+        // bot stops at a corner; with the authoritative navmesh, replans are
+        // idempotent and the bot can churn through 250+ replans at the same
+        // physical pos. Earlier this branch reset the stall anchor on every
+        // plan-version bump, hiding the underlying stuck state from the 5s
+        // recovery + 20s test stuck guard. Require physical movement before
+        // a plan-version change counts as forward progress.
         var planVersionChanged = trace != null
-            && trace.PlanVersion != _walkProgressAnchorPlanVersion;
+            && trace.PlanVersion != _walkProgressAnchorPlanVersion
+            && movedEnoughForWaypointProgress;
         var waypointProgressed = movedEnoughForWaypointProgress
             && trace != null
             && trace.CurrentWaypointIndex > _walkProgressAnchorWaypointIndex;
@@ -746,12 +755,14 @@ public class TravelTask : BotTask, IBotTask
         _lastWalkStallRecoveryUtc = now;
         _walkStallRecoveryCount++;
         ObjectManager.StopAllMovement();
+        var physicsFrozen = ObjectManager.PhysicsFrozenDebugInfo;
         EmitTravelDiagnostic(
             $"[TRAVEL_WALK_STALL] leg={_currentLegIndex} count={_walkStallRecoveryCount} nav={navigated} replanned={replanned} " +
             $"anchor={FormatCompactPosition(anchor)} current={FormatCompactPosition(currentPosition)} moved={moved:F1} " +
             $"plan={trace?.PlanVersion ?? -1} idx={trace?.CurrentWaypointIndex ?? -1} " +
             $"activeDist={activeWaypointDistance:F1}->{_walkProgressAnchorActiveWaypointDistance:F1} " +
-            $"target={FormatCompactPosition(leg.End)}");
+            $"target={FormatCompactPosition(leg.End)}"
+            + (physicsFrozen != null ? $" physics[{physicsFrozen}]" : ""));
 
         var updatedTrace = GetNavigationTraceSnapshot();
         RecordWalkProgressAnchor(

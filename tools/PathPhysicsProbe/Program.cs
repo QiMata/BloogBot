@@ -128,6 +128,7 @@ internal static class Program
             Console.WriteLine(JsonSerializer.Serialize(doc, new JsonSerializerOptions
             {
                 WriteIndented = true,
+                IncludeFields = true,
                 Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
             }));
             return;

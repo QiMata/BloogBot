@@ -39,69 +39,51 @@ namespace VMAP
 
     std::string VMapFactory::getVMapsPath()
     {
-        std::string vmapsPath;
+        // PFS-OVERHAUL-006 strict gate: WWOW_DATA_DIR must be set and vmaps/
+        // must exist. The cwd / DLL-relative / DLL-parent / last-resort
+        // fallbacks were removed because they silently loaded stale
+        // build-output vmaps mirrors. See docs/physics/MMAP_DATA_FLOW.md.
 #ifdef _WIN32
-        // Check WWOW_DATA_DIR using process environment first so vmaps matches mmaps/maps root.
+        char envDataRoot[1024] = { 0 };
+        DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", envDataRoot, sizeof(envDataRoot));
+        if (len == 0 || len >= sizeof(envDataRoot))
         {
-            char envDataRoot[1024] = { 0 };
-            DWORD len = GetEnvironmentVariableA("WWOW_DATA_DIR", envDataRoot, sizeof(envDataRoot));
-            if (len > 0 && len < sizeof(envDataRoot))
-            {
-                std::string dataRoot = envDataRoot;
-                if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
-                    dataRoot += '\\';
-
-                vmapsPath = dataRoot + "vmaps\\";
-                if (std::filesystem::exists(vmapsPath))
-                    return vmapsPath;
-            }
+            fprintf(stderr, "[Navigation.dll] FATAL: VMapFactory::getVMapsPath: WWOW_DATA_DIR is not set.\n");
+            std::fflush(stderr);
+            std::exit(1);
         }
 
-        // Prefer current working directory when vmaps is present there.
+        std::string dataRoot = envDataRoot;
+        if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+            dataRoot += '\\';
+
+        std::string vmapsPath = dataRoot + "vmaps\\";
+        if (!std::filesystem::exists(vmapsPath))
         {
-            vmapsPath = (std::filesystem::current_path() / "vmaps").string();
-            if (!vmapsPath.empty() && vmapsPath.back() != '/' && vmapsPath.back() != '\\')
-                vmapsPath += '\\';
-            if (std::filesystem::exists(vmapsPath))
-                return vmapsPath;
+            fprintf(stderr, "[Navigation.dll] FATAL: VMapFactory::getVMapsPath: %s does not exist.\n", vmapsPath.c_str());
+            std::fflush(stderr);
+            std::exit(1);
         }
-
-        // Get the DLL/EXE path
-        WCHAR dllPath[MAX_PATH] = { 0 };
-        GetModuleFileNameW((HINSTANCE)&__ImageBase, dllPath, _countof(dllPath));
-
-        // Convert to string and find directory
-        std::wstring ws(dllPath);
-        std::string pathAndFile(ws.begin(), ws.end());
-
-        size_t lastSlash = pathAndFile.find_last_of("\\/");
-        if (lastSlash != std::string::npos)
-        {
-            std::string dirPath = pathAndFile.substr(0, lastSlash + 1);
-            vmapsPath = dirPath + "vmaps\\";
-
-            // Check if the directory exists
-            if (std::filesystem::exists(vmapsPath))
-            {
-                return vmapsPath;
-            }
-
-            // Try parent directory
-            size_t parentSlash = pathAndFile.find_last_of("\\/", lastSlash - 1);
-            if (parentSlash != std::string::npos)
-            {
-                dirPath = pathAndFile.substr(0, parentSlash + 1);
-                vmapsPath = dirPath + "vmaps\\";
-                if (std::filesystem::exists(vmapsPath))
-                {
-                    return vmapsPath;
-                }
-            }
-        }
-        // Last-resort fallback keeps prior behavior for legacy layouts.
-        return "vmaps\\";
+        return vmapsPath;
 #else
-        return "vmaps/";
+        const char* envDataRoot = std::getenv("WWOW_DATA_DIR");
+        if (!envDataRoot || !envDataRoot[0])
+        {
+            fprintf(stderr, "[Navigation.dll] FATAL: VMapFactory::getVMapsPath: WWOW_DATA_DIR is not set.\n");
+            std::fflush(stderr);
+            std::exit(1);
+        }
+        std::string dataRoot = envDataRoot;
+        if (!dataRoot.empty() && dataRoot.back() != '/' && dataRoot.back() != '\\')
+            dataRoot += '/';
+        std::string vmapsPath = dataRoot + "vmaps/";
+        if (!std::filesystem::exists(vmapsPath))
+        {
+            fprintf(stderr, "[Navigation.dll] FATAL: VMapFactory::getVMapsPath: %s does not exist.\n", vmapsPath.c_str());
+            std::fflush(stderr);
+            std::exit(1);
+        }
+        return vmapsPath;
 #endif
     }
 

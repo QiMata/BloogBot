@@ -108,6 +108,14 @@ namespace PathfindingService
 
                 WriteStatus(true, "Ready - navigation initialized", loadedMaps);
                 logger.LogInformation("Navigation system initialized.");
+                // PFS-OVERHAUL-006: explicit machine-parseable marker for
+                // PathfindingTestFixture to poll. Goes through stdout, gets
+                // captured by Process.OutputDataReceived. Format is stable;
+                // tools/scripts and the test fixture grep for the literal
+                // prefix "[PathfindingService] PRELOAD_COMPLETE".
+                logger.LogInformation(
+                    "[PathfindingService] PRELOAD_COMPLETE ready_to_serve=true maps={MapCount}",
+                    loadedMaps.Count);
             }
         }
 

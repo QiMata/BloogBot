@@ -78,7 +78,10 @@ namespace MMAP
                        bool debug               = false,
                        bool quick               = false,
                        const char* offMeshFilePath = nullptr,
-                       uint8 threads = 1);
+                       uint8 threads = 1,
+                       float debugWoWX = 0.0f,
+                       float debugWoWY = 0.0f,
+                       bool debugWoWSet = false);
 
             ~MapBuilder();
 
@@ -114,6 +117,11 @@ namespace MMAP
             TileList m_tiles;
 
             bool m_debug;
+            // [WWoW-DIVERGENCE] 2026-05-07: --debug-heightfield wowX,wowY diagnostic.
+            // m_debugWoWSet=false (default) = disabled (upstream behavior).
+            float m_debugWoWX;
+            float m_debugWoWY;
+            bool  m_debugWoWSet;
 
             const char* m_offMeshFilePath;
             bool m_skipContinents;

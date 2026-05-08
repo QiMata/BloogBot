@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "description": "Short-routes subset of og-zeppelin.json for fast bake-sweep iteration. Skips the 132s ClimbOrgrimmarTowerToFrezza long route. Use the full manifest for end-to-end validation.",
+  "agent": {
+    "race": "TaurenMale",
+    "radius": 1.0247,
+    "height": 2.625
+  },
+  "routes": [
+    {
+      "name": "OgApproachToBoardingPosition",
+      "description": "PROOF C short-hop. Same-tile traversal from ApproachPosition to BoardingPosition. Detour returns 11 polys; first-failure is the deck-lip 1.75y step.",
+      "map": 1,
+      "start": [1338.1, -4646.0, 51.6],
+      "end":   [1320.14, -4653.16, 53.89],
+      "tilesAffected": [[29, 40]],
+      "expectedCorners": "11",
+      "expectedAffordance": "StepUp"
+    },
+    {
+      "name": "OgFrezzaToBoardingPosition",
+      "description": "Short-hop control. Should remain clean Walk across all sweeps -- a regression here means the variant broke same-deck traversal.",
+      "map": 1,
+      "start": [1331.11, -4649.45, 53.6269],
+      "end":   [1320.14, -4653.16, 53.89],
+      "tilesAffected": [[29, 40]],
+      "expectedCorners": "5",
+      "expectedAffordance": "Walk"
+    },
+    {
+      "name": "DeckLipStallToFrezza",
+      "description": "Phase 5.3.6 corner diagnostic. Stall coord -> Frezza spawn. The [001]->[002] segment is the canonical 1.75y deck-lip step-up.",
+      "map": 1,
+      "start": [1338.13, -4645.96, 51.60],
+      "end":   [1331.11, -4649.45, 53.6269],
+      "tilesAffected": [[29, 40]],
+      "expectedCorners": "4",
+      "expectedFailureSegment": "1->2 vertical=1.75y horizontal=1.92y slope=38.6deg"
+    }
+  ]
+}

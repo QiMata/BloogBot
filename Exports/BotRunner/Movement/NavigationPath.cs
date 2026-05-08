@@ -461,6 +461,12 @@ public class NavigationPath(
     private Position? _lastWaypointSamplePosition;
     private float _lastWaypointSampleDistance = float.NaN;
     private int _stalledNearWaypointSamples;
+    // PFS-OVERHAUL-006 Phase 5.3.7 — replan-loop diagnostic. Tracks consecutive
+    // force-replans that returned the same active corner (bot is stuck and
+    // replans are idempotent). Emits [NAV_REPLAN_REDUNDANT] on milestone counts
+    // so traces show whether the bot is in a no-op replan loop.
+    private int _redundantStrictReplanCount;
+    private Position _redundantStrictReplanCorner;
     private Position? _directRecoveryDestination;
     private long _directRecoveryUntilTick;
     private int _consecutiveWallHitSamples;
@@ -912,8 +918,12 @@ public class NavigationPath(
                 // Always recalculate when stalled — never advance by index alone.
                 // Index-only advance bypasses path validation and can push the bot
                 // into invalid geometry. If recalculation fails, mark path as exhausted.
+                var cornerBeforeReplan = _currentIndex < _waypoints.Length
+                    ? _waypoints[_currentIndex]
+                    : default;
                 CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.StalledNearWaypoint);
                 AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+                EmitReplanLoopDiagnostic(currentPosition, cornerBeforeReplan);
                 _stalledNearWaypointSamples = 0;
                 _lastWaypointSampleDistance = float.NaN;
                 _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
@@ -1098,6 +1108,45 @@ public class NavigationPath(
             $"[TRAVEL_WAYPOINT_REACHED] adv={_waypointAdvanceCount} idx={idx}/{wpCount} reason={reason} "
             + $"player=({currentPosition.X:F1},{currentPosition.Y:F1},{currentPosition.Z:F1}) "
             + $"waypoint=({wp.X:F1},{wp.Y:F1},{wp.Z:F1})");
+    }
+
+    /// <summary>
+    /// PFS-OVERHAUL-006 Phase 5.3.7: emit [NAV_REPLAN_REDUNDANT] when a force-replan
+    /// returned the same active corner (bot is at a corner Detour reaches but
+    /// runtime physics can't advance past — typically a deck-lip / step-edge).
+    /// Surfaces what was previously a silent 250+ replan churn loop. Emit on
+    /// first detection and on milestones (10, 50, 100, 250, ...) to avoid
+    /// log spam while still showing growth.
+    /// </summary>
+    private void EmitReplanLoopDiagnostic(Position currentPosition, Position cornerBeforeReplan)
+    {
+        if (_diagnosticSink == null)
+            return;
+        if (_currentIndex >= _waypoints.Length)
+        {
+            _redundantStrictReplanCount = 0;
+            return;
+        }
+        var cornerAfterReplan = _waypoints[_currentIndex];
+        var sameCorner = MathF.Abs(cornerBeforeReplan.X - cornerAfterReplan.X) < 0.01f
+            && MathF.Abs(cornerBeforeReplan.Y - cornerAfterReplan.Y) < 0.01f
+            && MathF.Abs(cornerBeforeReplan.Z - cornerAfterReplan.Z) < 0.01f;
+        if (!sameCorner)
+        {
+            _redundantStrictReplanCount = 0;
+            return;
+        }
+        _redundantStrictReplanCount++;
+        _redundantStrictReplanCorner = cornerAfterReplan;
+        var c = _redundantStrictReplanCount;
+        var milestone = c == 1 || c == 10 || c == 50 || c == 100 || c == 250 || c == 500 || c == 1000;
+        if (!milestone)
+            return;
+        _diagnosticSink(
+            $"[NAV_REPLAN_REDUNDANT] count={c} bot=({currentPosition.X:F1},{currentPosition.Y:F1},{currentPosition.Z:F1}) "
+            + $"corner=({cornerAfterReplan.X:F1},{cornerAfterReplan.Y:F1},{cornerAfterReplan.Z:F1}) "
+            + $"dz={cornerAfterReplan.Z - currentPosition.Z:F2} "
+            + $"hDist={currentPosition.DistanceTo2D(cornerAfterReplan):F2}");
     }
 
     private bool CanTreatWaypointAsReached(Position currentPosition, Position waypoint, int? waypointIndex = null)

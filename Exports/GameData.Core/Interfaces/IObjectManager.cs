@@ -193,6 +193,7 @@ namespace GameData.Core.Interfaces
         bool PhysicsHitWall => false;
         (float X, float Y) PhysicsWallNormal2D => (0f, 0f);
         float PhysicsBlockedFraction => 1.0f;
+        string? PhysicsFrozenDebugInfo => null;
         SceneEnvironmentFlags PhysicsEnvironmentFlags => SceneEnvironmentFlags.None;
         bool PhysicsIsIndoors => PhysicsEnvironmentFlags.IsIndoors();
         bool PhysicsAllowsMountByEnvironment => PhysicsEnvironmentFlags.AllowsMountByEnvironment();

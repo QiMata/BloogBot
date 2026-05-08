@@ -67,6 +67,9 @@ public class LongPathingTests
     private const string LongPathingTimelineEnvVar = "WWOW_LONG_PATHING_TIMELINE";
     private const string OgDeckAnchorVerifyEnvVar = "WWOW_OG_DECK_ANCHOR_VERIFY";
     private const string OgRampClimbEnvVar = "WWOW_OG_RAMP_CLIMB_TEST";
+    private const string OgRampWaypointInspectEnvVar = "WWOW_OG_RAMP_WAYPOINT_INSPECT";
+    private const string OgDeckLipVerifyEnvVar = "WWOW_OG_DECK_LIP_VERIFY";
+    private const string DeckLipClimbEnvVar = "WWOW_DECKLIP_CLIMB_TEST";
     // Phase 5.3.6 cadence diagnostic (PFS-OVERHAUL-006). Read by BotRunner's
     // NavigationPathFactory.Create — when set to a positive int N,
     // NavigationPath emits [TRAVEL_WAYPOINT_REACHED] every Nth advance.
@@ -644,7 +647,14 @@ public class LongPathingTests
 
         var pollCounter = 0;
         var seenWaypointDiagMessages = new HashSet<string>(StringComparer.Ordinal);
-        var reachedFrezza = await _bot.WaitForSnapshotConditionAsync(
+        // Phase 5.3.7 (PFS-OVERHAUL-006): test evaluates BEHAVIOR by observing
+        // TravelTask's own walk-leg completion signal, not a test-defined
+        // distance/dz tolerance. TravelTask owns the arrival rules
+        // (WalkLegNativeOffMeshTransportVerticalArrivalTolerance=1.5y,
+        // BoardingRadius=12y XY); the test just checks "did the production
+        // code consider this leg complete?" via the [TRAVEL_LEG] complete
+        // reason=walk_arrived chat emit.
+        var walkLegCompleted = await _bot.WaitForSnapshotConditionAsync(
             target.AccountName,
             snapshot =>
             {
@@ -678,22 +688,22 @@ public class LongPathingTests
                     snapshot,
                     (message, stallSnapshot) => FailWithScreenshot(message, target.AccountName, stallSnapshot));
 
-                var pos = GetPosition(snapshot);
-                if (pos == null)
+                if (snapshot?.RecentChatMessages == null)
                     return false;
-
-                var dx = pos.X - FrezzaX;
-                var dy = pos.Y - FrezzaY;
-                var dz = MathF.Abs(pos.Z - FrezzaZ);
-                var dist2D = MathF.Sqrt(dx * dx + dy * dy);
-                // Phase 5.3.6 (PFS-OVERHAUL-006): tightened dz<=6 → dz<=2 to enforce
-                // same-deck arrival. Cycle 3 full test exposed that dz<=6 false-positives
-                // when the bot stops at z≈50 (lower spiral coil) — XY-close to Frezza
-                // but on the wrong vertical layer for boarding. dz<=2 forces the bot
-                // to actually crest the upper deck (z≈53.6) where Frezza & BoardingPosition live.
-                return snapshot?.CurrentMapId == OrgrimmarMapId
-                    && dist2D <= FrezzaArrivalRadius
-                    && dz <= 2f;
+                // Walk leg leg=0 (the OG-tower-to-Frezza walk) reports completion
+                // via this exact diagnostic when TravelTask's TryGetWalkLegArrival
+                // accepts the bot's position. reason=walk_arrived is the success
+                // path; reason=walk_map_changed/walk_stall_*/etc would indicate
+                // a different completion path that the test should flag.
+                foreach (var msg in snapshot.RecentChatMessages)
+                {
+                    if (msg.IndexOf("[TRAVEL_LEG] complete index=0 reason=walk_arrived",
+                        StringComparison.Ordinal) >= 0)
+                    {
+                        return true;
+                    }
+                }
+                return false;
             },
             TimeSpan.FromSeconds(180),
             pollIntervalMs: 500,
@@ -704,14 +714,154 @@ public class LongPathingTests
         CaptureTimelineCheckpoint(TimelineTestName, "03-final", target.AccountName, finalSnapshot);
 
         await AssertOrScreenshotAsync(
-            reachedFrezza,
+            walkLegCompleted,
             target.AccountName,
-            $"Expected bot to climb the OG zeppelin tower ramp to within {FrezzaArrivalRadius}y of "
-            + $"Zeppelin Master Frezza ({FrezzaX},{FrezzaY},{FrezzaZ}) within 180s. "
-            + "If bot stalls early, check NavigationPath corner-completion logic — Phase 5.3.6 "
-            + "candidate fix is Facing-based waypoint completion instead of pure radius check. "
+            $"Expected TravelTask to emit [TRAVEL_LEG] complete index=0 reason=walk_arrived for "
+            + $"the OG-flight-master-to-Frezza walk leg within 180s. The walk-leg arrival rules "
+            + $"are owned by TravelTask (WalkLegNativeOffMeshTransportVerticalArrivalTolerance=1.5y, "
+            + $"BoardingRadius=12y XY). If walk_arrived never fires, the bot did not physically "
+            + $"reach the boarding zone — investigate the corridor + native collision path. "
             + $"Cadence diagnostic captured {seenWaypointDiagMessages.Count} [TRAVEL_WAYPOINT_REACHED] "
             + "events in the timeline directory.");
+    }
+
+    /// <summary>
+    /// Cycle 17c isolation: tests the OG-zeppelin-tower ramp climb from base
+    /// (z=24) to Frezza (z=53.6) WITHOUT the upstream FM-tower-descent +
+    /// OG-city traversal that the full ClimbOrgrimmarZeppelinTowerRampToFrezza
+    /// requires. Teleports directly to an Orgrimmar Grunt position at the
+    /// tower base (creature.guid=3462 entry 3296, FG-verified at
+    /// (1332.76,-4633.40,24.0783)) and dispatches TravelTo Undercity. The
+    /// route planner emits the same Walk-leg-to-Frezza, but the bot only has
+    /// to climb the spiral ramp (~30s walk) instead of the full 3-minute
+    /// route. Use to diagnose deck-lip step-up failures without the upstream
+    /// WoW.exe crash that currently blocks the full climb test.
+    ///
+    /// Memory: project_pfs_overhaul_006_intra_tile_disconnect (Cycle 17c).
+    /// </summary>
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public async Task DeckLipClimbFromGruntToFrezza()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(DeckLipClimbEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"Deck-lip climb sub-test disabled (set {DeckLipClimbEnvVar}=1).");
+
+        const string TimelineTestName = nameof(DeckLipClimbFromGruntToFrezza);
+        using var packetHookScope = DisableForegroundPacketHooksForCrossMapTransfers();
+        var target = await EnsureLongPathingTargetAsync();
+
+        using var timelineScope = new EnvironmentVariableScope(LongPathingTimelineEnvVar);
+        Environment.SetEnvironmentVariable(LongPathingTimelineEnvVar, "1");
+
+        using var cadenceScope = new EnvironmentVariableScope(WaypointCadenceEnvVar);
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(WaypointCadenceEnvVar)))
+            Environment.SetEnvironmentVariable(WaypointCadenceEnvVar, "2");
+
+        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
+
+        // Orgrimmar Grunt #1 spawn — tower base lower platform (FG-verified
+        // bot settles at z=24.08 with movementFlags=0).
+        const float Grunt1X = 1332.76f;
+        const float Grunt1Y = -4633.40f;
+        const float Grunt1Z = 24.0783f;
+
+        await _bot.BotTeleportAsync(target.AccountName, OrgrimmarMapId, Grunt1X, Grunt1Y, Grunt1Z);
+        await Task.Delay(2500);
+        await _bot.RefreshSnapshotsAsync();
+        var startSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        CaptureTimelineCheckpoint(TimelineTestName, "01-teleported-tower-base", target.AccountName, startSnapshot);
+
+        var diagnosticBaseline = startSnapshot?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
+
+        // Same TravelTo Undercity dispatch as the full climb test — exercises
+        // the same Walk-leg-to-Frezza decision in the route planner.
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        {
+            ActionType = ActionType.TravelTo,
+            Parameters =
+            {
+                new RequestParameter { IntParam = UndercityMapId },
+                new RequestParameter { FloatParam = UndercityTargetX },
+                new RequestParameter { FloatParam = UndercityTargetY },
+                new RequestParameter { FloatParam = UndercityTargetZ },
+            },
+        });
+        Assert.Equal(ResponseResult.Success, dispatch);
+
+        var stuckGuard = new SnapshotStallGuard(
+            "OG zeppelin tower ramp climb from base to Frezza",
+            TimeSpan.FromSeconds(20),
+            LongTravelStallMovementYards);
+
+        var pollCounter = 0;
+        var seenWaypointDiagMessages = new HashSet<string>(StringComparer.Ordinal);
+        // 90s budget — should be ample for a ~30s ramp climb. If walk_arrived
+        // doesn't fire by 90s, the bot is genuinely stuck on the ramp (most
+        // likely at the deck-lip step-up).
+        var walkLegCompleted = await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snapshot =>
+            {
+                pollCounter++;
+                if (pollCounter % TimelinePollSampleEveryN == 0)
+                    CaptureTimelineCheckpoint(
+                        TimelineTestName,
+                        $"02-climb-poll-{pollCounter:D5}",
+                        target.AccountName,
+                        snapshot);
+
+                foreach (var msg in GetDeltaMessages(diagnosticBaseline, snapshot?.RecentChatMessages))
+                {
+                    if (msg.IndexOf("[TRAVEL_WAYPOINT_REACHED]", StringComparison.Ordinal) < 0)
+                        continue;
+                    if (!seenWaypointDiagMessages.Add(msg))
+                        continue;
+                    var advMatch = System.Text.RegularExpressions.Regex.Match(msg, @"adv=(\d+)");
+                    var label = advMatch.Success
+                        ? $"wp-{int.Parse(advMatch.Groups[1].Value):D5}"
+                        : $"wp-msg-{seenWaypointDiagMessages.Count:D5}";
+                    CaptureTimelineCheckpoint(TimelineTestName, label, target.AccountName, snapshot);
+                }
+
+                stuckGuard.FailIfStalled(
+                    snapshot,
+                    (message, stallSnapshot) => FailWithScreenshot(message, target.AccountName, stallSnapshot));
+
+                if (snapshot?.RecentChatMessages == null)
+                    return false;
+                foreach (var msg in snapshot.RecentChatMessages)
+                {
+                    if (msg.IndexOf("[TRAVEL_LEG] complete index=0 reason=walk_arrived",
+                        StringComparison.Ordinal) >= 0)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            },
+            TimeSpan.FromSeconds(90),
+            pollIntervalMs: 500,
+            progressLabel: $"{target.RoleLabel} OG zeppelin tower ramp climb from base to Frezza");
+
+        await _bot.RefreshSnapshotsAsync();
+        var finalSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        CaptureTimelineCheckpoint(TimelineTestName, "03-final", target.AccountName, finalSnapshot);
+
+        await AssertOrScreenshotAsync(
+            walkLegCompleted,
+            target.AccountName,
+            $"Expected TravelTask to emit [TRAVEL_LEG] complete index=0 reason=walk_arrived for "
+            + $"the Grunt-base-to-Frezza walk leg within 90s. The bot teleported to the OG zeppelin "
+            + $"tower's lower platform (z=24) and should walk up the spiral ramp to Frezza (z=53.6). "
+            + $"If walk_arrived never fires, the bot stalled mid-ramp — most likely at the deck-lip "
+            + $"step-up where the smooth path emits a 1.84y vertical step (lower platform → upper deck) "
+            + $"that exceeds NavigationPath's WAYPOINT_VERTICAL_REACH_TOLERANCE=1.25y. "
+            + $"Cadence diagnostic captured {seenWaypointDiagMessages.Count} [TRAVEL_WAYPOINT_REACHED] "
+            + "events.");
     }
 
     [SkippableFact]
@@ -763,6 +913,191 @@ public class LongPathingTests
                     ? $"[ANCHOR-VERIFY] {c.Label}: snapshot position unavailable"
                     : $"[ANCHOR-VERIFY] {c.Label}: settled=({pos.X:F2},{pos.Y:F2},{pos.Z:F2}) " +
                       $"deltaXY={LiveBotFixture.Distance2D(pos.X, pos.Y, c.X, c.Y):F2} dz={pos.Z - c.Z:F2}");
+        }
+    }
+
+    /// <summary>
+    /// Phase 5.3.7 (PFS-OVERHAUL-006) — teleport the bot to each waypoint of
+    /// the actual failing climb-path corridor, capture a screenshot + settled
+    /// position at each. This validates the BAKED NAVMESH (where Detour says
+    /// the path goes) against ACTUAL GAME GEOMETRY (where the bot can stand).
+    /// If teleporting to WP[2] (1335.2,-4644.4,53.5) — the lip-top corner —
+    /// settles at z=51.6 (the lip-foot), the navmesh waypoint is INSIDE
+    /// unbaked GO collision and Detour produced a corridor through a wall.
+    ///
+    /// Gated on WWOW_OG_RAMP_WAYPOINT_INSPECT=1. Diagnostic-only — no
+    /// production behavior assertions. Outputs: paired PNG+JSON in
+    /// tmp/test-runtime/screenshots/long-pathing/timeline/OgRampWaypointInspect/.
+    /// </summary>
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public async Task OgRampWaypointInspect()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(OgRampWaypointInspectEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"OG ramp waypoint inspect disabled (set {OgRampWaypointInspectEnvVar}=1).");
+
+        const string TimelineTestName = nameof(OgRampWaypointInspect);
+        var target = await EnsureLongPathingTargetAsync();
+
+        using var timelineScope = new EnvironmentVariableScope(LongPathingTimelineEnvVar);
+        Environment.SetEnvironmentVariable(LongPathingTimelineEnvVar, "1");
+
+        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
+
+        // Smooth-path corridor window from the failing climb test
+        // (climb-20260508T001423Z trace, idx=2 stall):
+        //   window=[0:(1339.1,-4646.1,51.9) 1:(1337.3,-4645.1,51.7)
+        //           *2:(1335.2,-4644.4,53.5) 3:(1337.2,-4643.0,53.5)
+        //           4:(1339.4,-4644.1,53.5) 5:(1337.5,-4644.6,54.3)
+        //           6:(1329.1,-4648.6,54.8) 7:(1330.9,-4649.5,54.6)
+        //           8:(1330.4,-4649.3,54.7) 9:(1330.7,-4649.4,54.6)]
+        // Plus reference points: stall coord, ApproachPosition, BoardingPosition,
+        // Frezza spawn — to compare bake-claimed walkable points to actual settle.
+        var captures = new (string Label, int MapId, float X, float Y, float Z)[]
+        {
+            ("a-stall-coord-z51.6",     1, 1338.13f, -4645.96f, 51.60f),
+            ("a-approach-pos-z51.6",    1, 1338.10f, -4646.00f, 51.60f),
+            ("smooth-wp00-z51.9",       1, 1339.1f,  -4646.1f,  51.9f),
+            ("smooth-wp01-z51.7",       1, 1337.3f,  -4645.1f,  51.7f),
+            ("smooth-wp02-z53.5-LIP",   1, 1335.2f,  -4644.4f,  53.5f),
+            ("smooth-wp03-z53.5",       1, 1337.2f,  -4643.0f,  53.5f),
+            ("smooth-wp04-z53.5",       1, 1339.4f,  -4644.1f,  53.5f),
+            ("smooth-wp05-z54.3",       1, 1337.5f,  -4644.6f,  54.3f),
+            ("smooth-wp06-z54.8",       1, 1329.1f,  -4648.6f,  54.8f),
+            ("smooth-wp07-z54.6-FRZ",   1, 1330.9f,  -4649.5f,  54.6f),
+            ("z-frezza-spawn-z53.6",    1, 1331.11f, -4649.45f, 53.6269f),
+            ("z-boarding-pos-z53.9",    1, 1320.14f, -4653.16f, 53.89f),
+        };
+
+        foreach (var c in captures)
+        {
+            _output.WriteLine(
+                $"[WP-INSPECT] tele {target.AccountName} -> {c.Label} map={c.MapId} ({c.X:F2},{c.Y:F2},{c.Z:F2})");
+            await _bot.BotTeleportAsync(target.AccountName, c.MapId, c.X, c.Y, c.Z);
+
+            // Allow falling, slope-slide, and z-settle to finish before sampling.
+            await Task.Delay(4000);
+            await _bot.RefreshSnapshotsAsync();
+            var settled = await _bot.GetSnapshotAsync(target.AccountName);
+
+            CaptureTimelineCheckpoint(TimelineTestName, c.Label, target.AccountName, settled);
+
+            var pos = GetPosition(settled);
+            _output.WriteLine(
+                pos == null
+                    ? $"[WP-INSPECT] {c.Label}: snapshot position unavailable"
+                    : $"[WP-INSPECT] {c.Label}: settled=({pos.X:F2},{pos.Y:F2},{pos.Z:F2}) " +
+                      $"deltaXY={LiveBotFixture.Distance2D(pos.X, pos.Y, c.X, c.Y):F2} dz={pos.Z - c.Z:F2}");
+        }
+    }
+
+    /// <summary>
+    /// PFS-OVERHAUL-006 deck-lip ground-truth verification. The bake at smooth-path
+    /// WP 53 claims a walkable surface at z=53.61 at (1337.64,-4643.14) but the
+    /// smooth path emits WP Z=51.72 (in the air at the lip foot). Teleport the
+    /// bot to each candidate point, settle for 1.5s, capture screenshot + settled
+    /// position so we can SEE what is actually at those XY/Z coordinates and
+    /// where the bot lands.
+    ///
+    /// Gated on WWOW_OG_DECK_LIP_VERIFY=1 (independent of OG_DECK_ANCHOR_VERIFY).
+    /// Diagnostic-only — no production behavior assertions. Outputs: paired
+    /// PNG+JSON via CaptureTimelineCheckpoint plus a per-point summary JSON
+    /// containing claimed Z, settled Z, and dz delta in
+    /// tmp/test-runtime/screenshots/long-pathing/timeline/OgDeckLipAnchorVerification/.
+    /// </summary>
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public async Task OgDeckLipAnchorVerification()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(OgDeckLipVerifyEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"OG deck-lip anchor verification disabled (set {OgDeckLipVerifyEnvVar}=1).");
+
+        const string TimelineTestName = nameof(OgDeckLipAnchorVerification);
+        var target = await EnsureLongPathingTargetAsync();
+
+        using var timelineScope = new EnvironmentVariableScope(LongPathingTimelineEnvVar);
+        Environment.SetEnvironmentVariable(LongPathingTimelineEnvVar, "1");
+
+        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
+
+        // Deck-lip step-up coords from the failing climb-path corridor.
+        // DL1/DL2: claimed smooth-path WPs 53/54 (lower/upper deck).
+        // DL3: where the bake says the actual walkable surface sits at WP 53 XY.
+        // DL4: the manifest's "deck-lip stall" coord (lower-deck mid-ramp).
+        // DL5/DL6: reference NPCs (Frezza on upper deck, base-of-tower Grunt).
+        // DL7: high-altitude probe (drop the bot from above to see what surface
+        //      it lands on at the deck-lip XY).
+        var captures = new (string Label, int MapId, float X, float Y, float Z)[]
+        {
+            ("dl1-smoothwp53-claimed-z51.72",   1, 1337.64f, -4643.14f, 51.72f),
+            ("dl2-smoothwp54-claimed-z54.22",   1, 1336.20f, -4644.53f, 54.22f),
+            ("dl3-poly-surface-wp53xy-z53.61",  1, 1337.64f, -4643.14f, 53.61f),
+            ("dl4-deck-lip-stall-z51.60",       1, 1338.13f, -4645.96f, 51.60f),
+            ("dl5-frezza-z53.6269",             1, 1331.11f, -4649.45f, 53.6269f),
+            ("dl6-grunt-base-z24.0783",         1, 1332.76f, -4633.40f, 24.0783f),
+            ("dl7-above-deck-drop-z55.0",       1, 1336.92f, -4643.83f, 55.00f),
+        };
+
+        var summaryDir = ResolveTimelineDirectory(TimelineTestName);
+
+        foreach (var c in captures)
+        {
+            _output.WriteLine(
+                $"[DECK-LIP-VERIFY] tele {target.AccountName} -> {c.Label} map={c.MapId} ({c.X:F2},{c.Y:F2},{c.Z:F2})");
+            await _bot.BotTeleportAsync(target.AccountName, c.MapId, c.X, c.Y, c.Z);
+
+            // 1.5s settlement — enough for fall/slope-slide for deck-height drops.
+            await Task.Delay(1500);
+            await _bot.RefreshSnapshotsAsync();
+            var settled = await _bot.GetSnapshotAsync(target.AccountName);
+
+            CaptureTimelineCheckpoint(TimelineTestName, c.Label, target.AccountName, settled);
+
+            var pos = GetPosition(settled);
+            var deltaXY = pos == null
+                ? float.NaN
+                : LiveBotFixture.Distance2D(pos.X, pos.Y, c.X, c.Y);
+            var dz = pos == null ? float.NaN : pos.Z - c.Z;
+
+            _output.WriteLine(
+                pos == null
+                    ? $"[DECK-LIP-VERIFY] {c.Label}: snapshot position unavailable"
+                    : $"[DECK-LIP-VERIFY] {c.Label}: settled=({pos.X:F2},{pos.Y:F2},{pos.Z:F2}) " +
+                      $"deltaXY={deltaXY:F2} dz={dz:F2}");
+
+            // Per-point claimed-vs-settled summary JSON beside the CaptureTimelineCheckpoint outputs.
+            try
+            {
+                var safeLabel = SanitizeScreenshotLabel(c.Label);
+                var summaryPath = Path.Combine(summaryDir, $"{safeLabel}-summary.json");
+                var summary = new
+                {
+                    label = c.Label,
+                    timestampUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                    account = target.AccountName,
+                    claimed = new { mapId = c.MapId, x = c.X, y = c.Y, z = c.Z },
+                    settled = pos == null
+                        ? null
+                        : new { mapId = (int)settled!.CurrentMapId, x = pos.X, y = pos.Y, z = pos.Z },
+                    deltaXY = float.IsNaN(deltaXY) ? (float?)null : deltaXY,
+                    dz = float.IsNaN(dz) ? (float?)null : dz,
+                };
+                File.WriteAllText(
+                    summaryPath,
+                    JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch (Exception ex)
+            {
+                _output.WriteLine($"[DECK-LIP-VERIFY-ERR] summary write failed for {c.Label}: {ex.Message}");
+            }
         }
     }
 
