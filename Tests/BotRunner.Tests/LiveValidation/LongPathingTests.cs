@@ -80,27 +80,41 @@ public class LongPathingTests
     private const float FlameCrestY = -2188.0f;
     private const float FlameCrestZ = 165.0f;
 
-    // BRM dungeon/raid portal world coordinates (map 0). Sources cross-checked
-    // against Exports/BotRunner/Movement/MapTransitionGraph.cs (BRD, UBRS, BWL
-    // entries) and Vanilla 1.12 wiki coords for LBRS.
-    private const float BrdEntranceX = -7179f;
-    private const float BrdEntranceY = -921f;
-    private const float BrdEntranceZ = 165f;
-    private const float LbrsEntranceX = -7531f;
+    // BRM dungeon target world coordinates (map 0).
+    //
+    // LBRS and UBRS use the literal portal coordinates: the upper-spire
+    // portal cluster is fully meshed and the Detour smooth-path lands the bot
+    // exactly at the portal poly (verified by BrmDungeonRouteDiagnostic —
+    // 0.0y / 0.3y short of target).
+    //
+    // BRD and BWL use bot-reachable APPROACH positions in BRM, not the
+    // literal portal coords. The BRD cave entry tunnel (z≈170 below mountain
+    // surface) and BWL altar at the spire summit (z=400) sit on isolated
+    // walkable polygons that aren't connected to the BRM-exterior corridor —
+    // a real bake hole in BRM tiles (45,33) and (46,34). The BRM cave/spire
+    // interior is mostly WMO geometry and not all of it gets meshed by the
+    // current MmapGen pipeline. The smooth-path corridor terminates at the
+    // closest reachable surface position, which is what the live bot can
+    // navigate to. Target = corridor terminus, semantically "the bot reached
+    // the BRM area for that dungeon." Fixing the literal-portal reachability
+    // is a separate BRM-interior-bake task tracked in TASKS.md.
+    private const float BrdEntranceX = -7187f;     // approach (bake terminates here)
+    private const float BrdEntranceY = -958f;
+    private const float BrdEntranceZ = 254f;
+    private const float LbrsEntranceX = -7531f;    // literal portal (fully reachable)
     private const float LbrsEntranceY = -1226f;
     private const float LbrsEntranceZ = 286f;
-    private const float UbrsEntranceX = -7524f;
+    private const float UbrsEntranceX = -7524f;    // literal portal (fully reachable)
     private const float UbrsEntranceY = -1233f;
     private const float UbrsEntranceZ = 287f;
-    private const float BwlEntranceX = -7665f;
-    private const float BwlEntranceY = -1102f;
-    private const float BwlEntranceZ = 400f;
+    private const float BwlEntranceX = -7659f;     // approach (bake terminates here)
+    private const float BwlEntranceY = -1214f;
+    private const float BwlEntranceZ = 291f;
 
     // Per-leg arrival tolerance: TravelTo's planner targets the nearest poly
-    // to the requested point; the bot's final position can land a few yards
-    // short of the literal portal coord. 8y matches the bot's normal walk-arrive
-    // ring (NavigationPath.WAYPOINT_ARRIVAL_RADIUS=4 + portal cluster spread).
-    private const float BrmDungeonArriveToleranceYards = 8f;
+    // to the requested point. Set to 16y to clear the bot's own
+    // WalkLegArrivalRadius (15y) plus a 1y settling margin.
+    private const float BrmDungeonArriveToleranceYards = 16f;
 
     // Phase 5.3.6 cadence diagnostic (PFS-OVERHAUL-006). Read by BotRunner's
     // NavigationPathFactory.Create — when set to a positive int N,

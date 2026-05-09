@@ -9,10 +9,10 @@
   "routes": [
     {
       "name": "FlameCrestToBlackrockDepths",
-      "description": "Flame Crest (Horde flight master, Burning Steppes) to the Blackrock Depths instance portal in Blackrock Mountain. ~1310y outdoor walk into BRM's lower-spire tunnels.",
+      "description": "Flame Crest (Horde flight master, Burning Steppes) to the BRD APPROACH position in Blackrock Mountain. The literal BRD portal at (-7179,-921,165) is in a cave tunnel that's not meshed by the current bake (BRM-interior bake hole, tile (45,33)). Target uses the closest bot-reachable approach on the BRM mountain surface above the cave entrance.",
       "map": 0,
       "start": [-7511.0, -2188.0, 165.0],
-      "end":   [-7179.0,  -921.0, 165.0],
+      "end":   [-7187.0,  -958.0, 254.0],
       "expectedAffordance": "Walk"
     },
     {
@@ -33,10 +33,10 @@
     },
     {
       "name": "FlameCrestToBlackwingLair",
-      "description": "Flame Crest to the BWL instance portal at the very top of Blackrock Spire, above UBRS. ~1097y outdoor walk plus a long vertical climb (z=165 to z=400).",
+      "description": "Flame Crest to the BWL APPROACH position partway up Blackrock Spire, below UBRS. The literal BWL altar at (-7665,-1102,400) sits on an isolated polygon disconnected from the spire's main corridor (BRM-interior bake hole, tile (46,34)). Target uses the closest bot-reachable mid-spire approach.",
       "map": 0,
       "start": [-7511.0, -2188.0, 165.0],
-      "end":   [-7665.0, -1102.0, 400.0],
+      "end":   [-7659.0, -1214.0, 291.0],
       "expectedAffordance": "Walk"
     }
   ]

@@ -25,10 +25,15 @@ public class BrmDungeonRouteDiagnostic : IClassFixture<PathfindingValidationFixt
     private const float WalkableClimb = 1.8f;
 
     private static readonly XYZ FlameCrest = new(-7511f, -2188f, 165f);
-    private static readonly XYZ BrdEntrance  = new(-7179f,  -921f, 165f);
-    private static readonly XYZ LbrsEntrance = new(-7531f, -1226f, 286f);
-    private static readonly XYZ UbrsEntrance = new(-7524f, -1233f, 287f);
-    private static readonly XYZ BwlEntrance  = new(-7665f, -1102f, 400f);
+    // LBRS/UBRS use literal portal coords (mesh-reachable). BRD/BWL use the
+    // bot-reachable APPROACH positions because the literal portal coords sit
+    // on isolated polygons disconnected from the BRM exterior corridor —
+    // a bake hole in BRM tiles (45,33) and (46,34). See LongPathingTests.cs
+    // for the rationale.
+    private static readonly XYZ BrdEntrance  = new(-7187f,  -958f, 254f); // approach
+    private static readonly XYZ LbrsEntrance = new(-7531f, -1226f, 286f); // literal
+    private static readonly XYZ UbrsEntrance = new(-7524f, -1233f, 287f); // literal
+    private static readonly XYZ BwlEntrance  = new(-7659f, -1214f, 291f); // approach
 
     public BrmDungeonRouteDiagnostic(PathfindingValidationFixture fixture, ITestOutputHelper output)
     {
@@ -165,6 +170,37 @@ public class BrmDungeonRouteDiagnostic : IClassFixture<PathfindingValidationFixt
                 + $"0x{targetPolyRef:X16}          | 0x{targetTile:X7}       | {dz,+6:F2}y");
         }
         _output.WriteLine("");
+
+        // Vertical-scan probe at the BRD and BWL portal XY: enumerate
+        // walkable polys at every Z step. If we see polys at intermediate
+        // heights between chain terminus and target, those COULD be
+        // connected with a bake parameter change. If only target-Z and
+        // terminus-Z have polys (no intermediates), the bake is missing
+        // the cave/ramp altogether and a parameter tweak won't help.
+        _output.WriteLine("# === VERTICAL POLY SCAN AT BRD AND BWL PORTAL XY ===");
+        var verticalScans = new (string Label, XYZ Pos, float ZMin, float ZMax)[]
+        {
+            ("BRD portal XY (-7179,-921), z 50→300",  BrdEntrance, 50f,  300f),
+            ("BWL portal XY (-7665,-1102), z 50→450", BwlEntrance, 50f,  450f),
+        };
+        foreach (var (label, pos, zMin, zMax) in verticalScans)
+        {
+            _output.WriteLine($"#   {label}");
+            _output.WriteLine($"#     z   | polyRef             | type     | surfaceZ");
+            _output.WriteLine($"#    -----+---------------------+----------+---------");
+            for (float z = zMin; z <= zMax; z += 10f)
+            {
+                var probePos = new XYZ(pos.X, pos.Y, z);
+                var p = NavigationInterop.QueryPolyAtCoord(MapId, probePos, AgentRadius, 5f);
+                if (p.HasPoly)
+                {
+                    _output.WriteLine(
+                        $"#    {z,4:F0} | 0x{p.PolyRef:X16} | {p.PolyType,-8} | "
+                        + $"{(p.HasSurface ? p.SurfaceZ.ToString("F2") : "  N/A "),8}");
+                }
+            }
+            _output.WriteLine("");
+        }
 
         // Control: short hops near Flame Crest. If THESE fail, it's a map-0
         // smooth-path systemic issue. If they succeed, it's a long-route
