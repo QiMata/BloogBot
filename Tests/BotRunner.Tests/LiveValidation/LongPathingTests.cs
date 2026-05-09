@@ -70,6 +70,38 @@ public class LongPathingTests
     private const string OgRampWaypointInspectEnvVar = "WWOW_OG_RAMP_WAYPOINT_INSPECT";
     private const string OgDeckLipVerifyEnvVar = "WWOW_OG_DECK_LIP_VERIFY";
     private const string DeckLipClimbEnvVar = "WWOW_DECKLIP_CLIMB_TEST";
+    private const string BrmDungeonTravelEnvVar = "WWOW_BRM_DUNGEON_TRAVEL_TEST";
+
+    // Flame Crest — closest Horde flight master to Blackrock Mountain
+    // (Burning Steppes, ~1000y south of the BRM mountain entrance). Used as
+    // the start position for the BRM dungeon-portal travel theory.
+    private const int FlameCrestMapId = 0;
+    private const float FlameCrestX = -7511.0f;
+    private const float FlameCrestY = -2188.0f;
+    private const float FlameCrestZ = 165.0f;
+
+    // BRM dungeon/raid portal world coordinates (map 0). Sources cross-checked
+    // against Exports/BotRunner/Movement/MapTransitionGraph.cs (BRD, UBRS, BWL
+    // entries) and Vanilla 1.12 wiki coords for LBRS.
+    private const float BrdEntranceX = -7179f;
+    private const float BrdEntranceY = -921f;
+    private const float BrdEntranceZ = 165f;
+    private const float LbrsEntranceX = -7531f;
+    private const float LbrsEntranceY = -1226f;
+    private const float LbrsEntranceZ = 286f;
+    private const float UbrsEntranceX = -7524f;
+    private const float UbrsEntranceY = -1233f;
+    private const float UbrsEntranceZ = 287f;
+    private const float BwlEntranceX = -7665f;
+    private const float BwlEntranceY = -1102f;
+    private const float BwlEntranceZ = 400f;
+
+    // Per-leg arrival tolerance: TravelTo's planner targets the nearest poly
+    // to the requested point; the bot's final position can land a few yards
+    // short of the literal portal coord. 8y matches the bot's normal walk-arrive
+    // ring (NavigationPath.WAYPOINT_ARRIVAL_RADIUS=4 + portal cluster spread).
+    private const float BrmDungeonArriveToleranceYards = 8f;
+
     // Phase 5.3.6 cadence diagnostic (PFS-OVERHAUL-006). Read by BotRunner's
     // NavigationPathFactory.Create — when set to a positive int N,
     // NavigationPath emits [TRAVEL_WAYPOINT_REACHED] every Nth advance.
@@ -862,6 +894,146 @@ public class LongPathingTests
             + $"that exceeds NavigationPath's WAYPOINT_VERTICAL_REACH_TOLERANCE=1.25y. "
             + $"Cadence diagnostic captured {seenWaypointDiagMessages.Count} [TRAVEL_WAYPOINT_REACHED] "
             + "events.");
+    }
+
+    /// <summary>
+    /// Travels from Flame Crest (the closest Horde flight master to Blackrock
+    /// Mountain) to each BRM dungeon/raid portal in the world. Exercises long
+    /// outdoor paths into BRM's interior tunnels and the vertical climb to the
+    /// upper-spire portal cluster — the natural follow-up to the OG zeppelin
+    /// deck-lip fix (PFS-OVERHAUL-006 Cycle 17e).
+    ///
+    /// One [InlineData] per dungeon entrance reachable from BRM's exterior:
+    ///   - BRD  (-7179, -921, 165)   lower spire
+    ///   - LBRS (-7531, -1226, 286)  upper spire portal cluster
+    ///   - UBRS (-7524, -1233, 287)  upper spire portal cluster
+    ///   - BWL  (-7665, -1102, 400)  top of spire, above UBRS
+    ///
+    /// MC is excluded — its portal sits inside BRD instance, not the world.
+    /// Each iteration teleports to Flame Crest (clean slate), dispatches
+    /// TravelTo to the portal coords, and asserts arrival within
+    /// BrmDungeonArriveToleranceYards. Gated on <c>WWOW_BRM_DUNGEON_TRAVEL_TEST=1</c>.
+    /// </summary>
+    [SkippableTheory]
+    [Trait("Category", "RequiresInfrastructure")]
+    [InlineData("BRD",  BrdEntranceX,  BrdEntranceY,  BrdEntranceZ)]
+    [InlineData("LBRS", LbrsEntranceX, LbrsEntranceY, LbrsEntranceZ)]
+    [InlineData("UBRS", UbrsEntranceX, UbrsEntranceY, UbrsEntranceZ)]
+    [InlineData("BWL",  BwlEntranceX,  BwlEntranceY,  BwlEntranceZ)]
+    public async Task FlameCrestToBrmDungeonEntrance(string dungeon, float targetX, float targetY, float targetZ)
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(BrmDungeonTravelEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"BRM dungeon travel test disabled (set {BrmDungeonTravelEnvVar}=1).");
+
+        var timelineTestName = $"{nameof(FlameCrestToBrmDungeonEntrance)}-{dungeon}";
+        using var packetHookScope = DisableForegroundPacketHooksForCrossMapTransfers();
+        var target = await EnsureLongPathingTargetAsync();
+
+        using var timelineScope = new EnvironmentVariableScope(LongPathingTimelineEnvVar);
+        Environment.SetEnvironmentVariable(LongPathingTimelineEnvVar, "1");
+
+        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
+
+        // Drop the bot at Flame Crest's flight master pad.
+        await _bot.BotTeleportAsync(target.AccountName, FlameCrestMapId, FlameCrestX, FlameCrestY, FlameCrestZ);
+        await Task.Delay(2500);
+        await _bot.RefreshSnapshotsAsync();
+        var startSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        CaptureTimelineCheckpoint(timelineTestName, "01-teleported-flame-crest", target.AccountName, startSnapshot);
+
+        var diagnosticBaseline = startSnapshot?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
+
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        {
+            ActionType = ActionType.TravelTo,
+            Parameters =
+            {
+                new RequestParameter { IntParam = FlameCrestMapId },
+                new RequestParameter { FloatParam = targetX },
+                new RequestParameter { FloatParam = targetY },
+                new RequestParameter { FloatParam = targetZ },
+            },
+        });
+        Assert.Equal(ResponseResult.Success, dispatch);
+
+        var stuckGuard = new SnapshotStallGuard(
+            $"Flame Crest → {dungeon} portal",
+            LongTravelStallTimeout,
+            LongTravelStallMovementYards);
+
+        var pollCounter = 0;
+        // Flame Crest → BRM portals is ~1000-1700y of outdoor walking plus the
+        // BRM tunnel ascent. 360s is generous; cancel earlier if the bot
+        // arrives, stalls, or the planner reports walk_arrived.
+        var travelTimeout = TimeSpan.FromSeconds(360);
+        var arrived = await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snapshot =>
+            {
+                pollCounter++;
+                if (pollCounter % TimelinePollSampleEveryN == 0)
+                    CaptureTimelineCheckpoint(
+                        timelineTestName,
+                        $"02-travel-poll-{pollCounter:D5}",
+                        target.AccountName,
+                        snapshot);
+
+                stuckGuard.FailIfStalled(
+                    snapshot,
+                    (message, stallSnapshot) => FailWithScreenshot(message, target.AccountName, stallSnapshot));
+
+                if (snapshot?.RecentChatMessages != null)
+                {
+                    foreach (var msg in snapshot.RecentChatMessages)
+                    {
+                        if (msg.IndexOf("[TRAVEL_LEG] complete", StringComparison.Ordinal) >= 0
+                            && msg.IndexOf("reason=walk_arrived", StringComparison.Ordinal) >= 0)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                var pos = GetPosition(snapshot);
+                if (pos != null && snapshot?.CurrentMapId == FlameCrestMapId)
+                {
+                    var dist2d = LiveBotFixture.Distance2D(pos.X, pos.Y, targetX, targetY);
+                    if (dist2d <= BrmDungeonArriveToleranceYards
+                        && Math.Abs(pos.Z - targetZ) <= BrmDungeonArriveToleranceYards)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            },
+            travelTimeout,
+            pollIntervalMs: 1000,
+            progressLabel: $"{target.RoleLabel} Flame Crest → {dungeon}");
+
+        await _bot.RefreshSnapshotsAsync();
+        var finalSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        CaptureTimelineCheckpoint(timelineTestName, "03-final", target.AccountName, finalSnapshot);
+
+        var finalPos = GetPosition(finalSnapshot);
+        var finalDist = finalPos != null
+            ? LiveBotFixture.Distance2D(finalPos.X, finalPos.Y, targetX, targetY)
+            : float.NaN;
+
+        await AssertOrScreenshotAsync(
+            arrived,
+            target.AccountName,
+            $"Expected bot to walk from Flame Crest ({FlameCrestX:F0},{FlameCrestY:F0},{FlameCrestZ:F0}) "
+            + $"to the {dungeon} portal at ({targetX:F0},{targetY:F0},{targetZ:F0}) within "
+            + $"{travelTimeout.TotalSeconds:F0}s. Final position: "
+            + $"({finalPos?.X:F1},{finalPos?.Y:F1},{finalPos?.Z:F1}) "
+            + $"map={finalSnapshot?.CurrentMapId} dist2D={finalDist:F1}y. "
+            + $"Arrival is met by either [TRAVEL_LEG] complete reason=walk_arrived in chat, OR final "
+            + $"2D-distance ≤ {BrmDungeonArriveToleranceYards:F0}y AND |dz| ≤ {BrmDungeonArriveToleranceYards:F0}y.");
     }
 
     [SkippableFact]

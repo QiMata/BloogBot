@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "description": "PFS-OVERHAUL-006 follow-up: travel from Flame Crest (the closest Horde flight master to Blackrock Mountain) to each BRM dungeon/raid portal in the world. Used by tools/scripts/probe-routes.ps1, the BotRunner.Tests.LiveValidation.LongPathingTests.FlameCrestToBrmDungeonEntrance theory, and the WaypointGeneration Layer B suite.",
+  "agent": {
+    "race": "TaurenMale",
+    "radius": 1.0247,
+    "height": 2.625
+  },
+  "routes": [
+    {
+      "name": "FlameCrestToBlackrockDepths",
+      "description": "Flame Crest (Horde flight master, Burning Steppes) to the Blackrock Depths instance portal in Blackrock Mountain. ~1310y outdoor walk into BRM's lower-spire tunnels.",
+      "map": 0,
+      "start": [-7511.0, -2188.0, 165.0],
+      "end":   [-7179.0,  -921.0, 165.0],
+      "expectedAffordance": "Walk"
+    },
+    {
+      "name": "FlameCrestToLowerBlackrockSpire",
+      "description": "Flame Crest to the LBRS instance portal at the upper-spire portal cluster. ~962y outdoor walk plus the vertical climb up the BRM spire.",
+      "map": 0,
+      "start": [-7511.0, -2188.0, 165.0],
+      "end":   [-7531.0, -1226.0, 286.0],
+      "expectedAffordance": "Walk"
+    },
+    {
+      "name": "FlameCrestToUpperBlackrockSpire",
+      "description": "Flame Crest to the UBRS instance portal — adjacent to LBRS in the upper-spire portal cluster. ~955y outdoor walk plus the spire climb.",
+      "map": 0,
+      "start": [-7511.0, -2188.0, 165.0],
+      "end":   [-7524.0, -1233.0, 287.0],
+      "expectedAffordance": "Walk"
+    },
+    {
+      "name": "FlameCrestToBlackwingLair",
+      "description": "Flame Crest to the BWL instance portal at the very top of Blackrock Spire, above UBRS. ~1097y outdoor walk plus a long vertical climb (z=165 to z=400).",
+      "map": 0,
+      "start": [-7511.0, -2188.0, 165.0],
+      "end":   [-7665.0, -1102.0, 400.0],
+      "expectedAffordance": "Walk"
+    }
+  ]
+}
