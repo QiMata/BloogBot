@@ -24,7 +24,9 @@ public class BrmDungeonRouteDiagnostic : IClassFixture<PathfindingValidationFixt
     private const float AgentHeight = 2.625f;
     private const float WalkableClimb = 1.8f;
 
-    private static readonly XYZ FlameCrest = new(-7511f, -2188f, 165f);
+    // Flame Crest start — ground level near the FM tower foot (the literal
+    // pad at z=165 caused the bot to fall and stall in live runs).
+    private static readonly XYZ FlameCrest = new(-7518.7f, -2159.9f, 131.9f);
     // LBRS/UBRS use literal portal coords (mesh-reachable). BRD/BWL use the
     // bot-reachable APPROACH positions because the literal portal coords sit
     // on isolated polygons disconnected from the BRM exterior corridor —

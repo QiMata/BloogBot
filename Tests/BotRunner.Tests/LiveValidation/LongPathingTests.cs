@@ -73,12 +73,20 @@ public class LongPathingTests
     private const string BrmDungeonTravelEnvVar = "WWOW_BRM_DUNGEON_TRAVEL_TEST";
 
     // Flame Crest — closest Horde flight master to Blackrock Mountain
-    // (Burning Steppes, ~1000y south of the BRM mountain entrance). Used as
-    // the start position for the BRM dungeon-portal travel theory.
+    // (Burning Steppes, ~1000y south of the BRM mountain entrance).
+    //
+    // The flight master's literal NPC pad is on top of a stone tower at
+    // z=165, but bots teleporting there fall ~33y to ground (z=132) and
+    // their MovementController gets wedged at the post-fall position
+    // (observed BRD/LBRS stall coord (-7518.7, -2159.9, 131.9) — same lockup
+    // for both routes). Use a ground-level XYZ near the tower foot so the
+    // bot starts on solid terrain. Semantically this is still "the Flame
+    // Crest flight point" — the same area a freshly-dismounted bot would
+    // walk from.
     private const int FlameCrestMapId = 0;
-    private const float FlameCrestX = -7511.0f;
-    private const float FlameCrestY = -2188.0f;
-    private const float FlameCrestZ = 165.0f;
+    private const float FlameCrestX = -7518.7f;
+    private const float FlameCrestY = -2159.9f;
+    private const float FlameCrestZ = 131.9f;
 
     // BRM dungeon target world coordinates (map 0).
     //

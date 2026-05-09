@@ -46,14 +46,15 @@ using Movement::PointsArray;
 // MAX_PATH_LENGTH: max polygon-corridor length (dtPolyRef[]). BRM long routes
 // land at ~340 polys, OG zeppelin at <40 — 740 has comfortable headroom.
 #define MAX_PATH_LENGTH         740//74
-// MAX_POINT_PATH_LENGTH: max smooth-path waypoint count. With the Cycle 17e
+// MAX_POINT_PATH_LENGTH: max smooth-path waypoint count. With Cycle 17e
 // Z-delta interpolation, a single horizontal step can emit up to
-// dtAbs(dz)/0.5 extra waypoints, so hilly long routes (Burning Steppes →
-// BRM, ~1100y + 235y climb) need ~1500-1800 waypoints. The findSmoothPath
-// loop-detector at PathFinder.cpp:1876 returns DT_FAILURE when the buffer
-// fills exactly, so this cap doubles as the loop bound — keep it generous
-// to support long outdoor routes without triggering false-positive failures.
-#define MAX_POINT_PATH_LENGTH   2400
+// dtAbs(dz)/MAX_SMOOTH_PATH_SEGMENT_Z_DELTA extra waypoints. Keep this
+// modest — long outdoor routes truncate gracefully (findSmoothPath now
+// returns DT_SUCCESS on buffer-full instead of DT_FAILURE; the bot's
+// NavigationPath replans the next chunk when it nears truncation).
+// 1024 covers ~600y of hilly outdoor walking; longer routes plan in
+// 600y chunks via replans.
+#define MAX_POINT_PATH_LENGTH   1024
 
 #define SMOOTH_PATH_STEP_SIZE   2.0f
 #define SMOOTH_PATH_SLOP        0.3f

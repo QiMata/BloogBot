@@ -1872,8 +1872,16 @@ dtStatus PathFinder::findSmoothPath(const float* startPos, const float* endPos,
 
 	*smoothPathSize = nsmoothPath;
 
-	// this is most likely a loop
-	return nsmoothPath < MAX_POINT_PATH_LENGTH ? DT_SUCCESS : DT_FAILURE;
+	// PFS-OVERHAUL-006 follow-up (2026-05-08): treat buffer-full as a
+	// successful TRUNCATED path. The original heuristic returned DT_FAILURE
+	// when nsmoothPath reached MAX_POINT_PATH_LENGTH on the assumption that
+	// such a long emission must be a stuck loop, but with the Cycle 17e
+	// Z-delta interpolation a legitimate long outdoor route easily emits
+	// 1000+ waypoints. Truncating-and-replanning is correct: BotRunner's
+	// NavigationPath replans when it nears the path end and is still far
+	// from destination, so the next chunk will be computed fresh from the
+	// new origin.
+	return DT_SUCCESS;
 }
 
 bool PathFinder::inRangeYZX(const float* v1, const float* v2, float r, float h) const
