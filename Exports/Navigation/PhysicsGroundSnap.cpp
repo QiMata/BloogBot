@@ -278,11 +278,18 @@ float ApplyHorizontalDepenetration(
     G3D::Vector3 playerFwd(std::cos(st.orientation), std::sin(st.orientation), 0.0f);
     SceneQuery::SweepCapsule(mapId, capHere, G3D::Vector3(0,0,0), 0.0f, overlaps, playerFwd);
     
-    G3D::Vector3 depen(0,0,0); 
+    G3D::Vector3 depen(0,0,0);
     int penCount = 0;
     for (const auto& oh : overlaps) {
         if (!oh.startPenetrating) continue;
-        if (walkableOnly && std::fabs(oh.normal.z) < PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) continue;
+        // walkableOnly=true means "only push against true lateral blockers (walls/
+        // steep cliffs); walkable ground contacts on sloped terrain are resolved
+        // vertically by ApplyVerticalDepenetration instead." This matches the
+        // documented intent at PhysicsEngine.cpp:5605-5610. The historic condition
+        // (skip-if-NOT-walkable) was inverted from the intent and accumulated a
+        // downhill XY push on long descents — the BRM south-face drift class
+        // localized by the codex H2 hypothesis on 2026-05-09.
+        if (walkableOnly && std::fabs(oh.normal.z) >= PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z) continue;
         if (oh.region != SceneHit::CapsuleRegion::Side) continue;
         G3D::Vector3 nH(oh.normal.x, oh.normal.y, 0.0f);
         if (nH.magnitude() <= 1e-6f) continue;
