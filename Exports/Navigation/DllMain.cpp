@@ -176,6 +176,46 @@ void InitializeAllSystems()
     }
     catch (...) {}
 
+    // --- Phase 4: variant scene-cache auto-load ---
+    // After LoadDisplayIdMapping, scan <dataRoot>/scene-cache/ and ingest every
+    // <mapId>_*.base.scenecache file. Phase A only loads variant="base"
+    // (always-on GameObject collision). Missing dir is graceful so installs
+    // without scene-cache content keep running.
+    try
+    {
+        const std::string sceneRoot = dataRoot + "scene-cache/";
+        if (std::filesystem::exists(sceneRoot)
+            && std::filesystem::is_directory(sceneRoot))
+        {
+            int loaded = 0;
+            std::error_code ec;
+            for (const auto& entry : std::filesystem::directory_iterator(sceneRoot, ec))
+            {
+                if (!entry.is_regular_file()) continue;
+                if (entry.path().extension() != ".scenecache") continue;
+                const std::string stem = entry.path().stem().string();
+                const auto dot = stem.find('.');
+                if (dot == std::string::npos || dot != 7) continue;
+
+                uint32_t fileMapId = 0;
+                try { fileMapId = static_cast<uint32_t>(std::stoul(stem.substr(0, 3))); }
+                catch (...) { continue; }
+
+                const std::string variant = stem.substr(dot + 1);
+                if (variant != "base") continue;   // Phase A: only base variant
+
+                const std::string fullPath = entry.path().string();
+                if (DynamicObjectRegistry::Instance()->LoadVariantSceneCache(
+                        fileMapId, variant, fullPath))
+                    ++loaded;
+            }
+            if (loaded > 0)
+                std::cout << "[Navigation.dll] Loaded " << loaded
+                          << " base scene-cache tile files from " << sceneRoot << "\n";
+        }
+    }
+    catch (...) {}
+
     // --- Scenes directory ---
     try
     {

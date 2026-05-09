@@ -325,6 +325,13 @@ class SceneQuery
         // walkable triangles when getHeight's downward ray misses (e.g. WMO interiors).
         static float GetGroundZByBIH(const VMAP::StaticMapTree* map, float x, float y, float z, float maxSearchDist);
 
+        // Dynamic object ground Z: vertical ray against DynamicObjectRegistry triangles
+        // (per-instance objects + Phase 4 variant pools). Caller specifies the search
+        // window. Returns -200000 when no dynamic surface is within the window.
+        // Public so the diagnostic export GetDynamicGroundZDirect can drive it from
+        // PhysicsTestExports.
+        static float GetDynamicGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist);
+
     private:
         inline static VMAP::VMapManager2* m_vmapManager = nullptr;
         inline static MapLoader* m_mapLoader = nullptr;
@@ -338,7 +345,4 @@ class SceneQuery
         inline static std::recursive_mutex m_sceneCachesMutex;
         inline static std::unordered_map<uint32_t, SceneCache*> m_sceneCaches;
 
-        // Dynamic object ground Z: vertical ray against DynamicObjectRegistry triangles
-        // (elevators, doors, etc.) that aren't in the pre-cached SceneCache or VMAP data.
-        static float GetDynamicGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist);
 };

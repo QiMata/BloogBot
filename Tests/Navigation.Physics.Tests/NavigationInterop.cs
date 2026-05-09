@@ -975,6 +975,22 @@ public static partial class NavigationInterop
         out float vmapZ, out float adtZ, out float bihZ, out float sceneCacheZ);
 
     /// <summary>
+    /// Phase 4 — sample DynamicObjectRegistry's contribution to ground-Z
+    /// (covers per-instance dynamic objects + bulk variant pool triangles).
+    /// Returns -200000 if no dynamic surface is within the search window.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "GetDynamicGroundZDirect", CallingConvention = CallingConvention.Cdecl)]
+    public static extern float GetDynamicGroundZDirect(
+        uint mapId, float x, float y, float z, float maxSearchDist);
+
+    /// <summary>
+    /// Phase 4 — total triangle count across every variant pool currently
+    /// registered for the given map. Diagnostic.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "GetVariantTriangleCount", CallingConvention = CallingConvention.Cdecl)]
+    public static extern ulong GetVariantTriangleCount(uint mapId);
+
+    /// <summary>
     /// Diagnostic: enumerate ALL surfaces (triangles) at (x,y) from scene cache.
     /// No Z acceptance window filtering — returns all surfaces at any height.
     /// </summary>

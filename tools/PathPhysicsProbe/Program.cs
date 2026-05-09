@@ -181,7 +181,7 @@ internal static class Program
         if (opts.Verbose && bad.GroundZ != null)
         {
             var gz = bad.GroundZ.Value;
-            Console.Error.WriteLine($"#   GetGroundZBypassCache: combined={gz.Combined:F2} vmap={gz.Vmap:F2} adt={gz.Adt:F2} bih={gz.Bih:F2} sceneCache={gz.SceneCache:F2}");
+            Console.Error.WriteLine($"#   GetGroundZBypassCache: combined={gz.Combined:F2} vmap={gz.Vmap:F2} adt={gz.Adt:F2} bih={gz.Bih:F2} sceneCache={gz.SceneCache:F2} dynamic={gz.Dynamic:F2}");
         }
     }
 
@@ -358,7 +358,7 @@ internal sealed record ProbeResult(
 
 internal sealed record EndpointSurface(float Z, uint InstanceId);
 
-internal record struct GroundZBreakdown(float Combined, float Vmap, float Adt, float Bih, float SceneCache);
+internal record struct GroundZBreakdown(float Combined, float Vmap, float Adt, float Bih, float SceneCache, float Dynamic);
 
 internal sealed class SegmentProbe
 {
@@ -411,6 +411,7 @@ internal sealed class SegmentProbe
     {
         var combined = GetGroundZBypassCache(mapId, end.X, end.Y, end.Z, 5.0f,
             out var vmap, out var adt, out var bih, out var scene);
-        return new GroundZBreakdown(combined, vmap, adt, bih, scene);
+        var dyn = GetDynamicGroundZDirect(mapId, end.X, end.Y, end.Z, 5.0f);
+        return new GroundZBreakdown(combined, vmap, adt, bih, scene, dyn);
     }
 }

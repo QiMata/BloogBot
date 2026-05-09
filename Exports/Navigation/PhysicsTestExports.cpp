@@ -698,43 +698,10 @@ extern "C"
                 }
             }
 
-            // Phase 4 — auto-load every <mapId>_*.<variant>.scenecache file we
-            // find under <dataRoot>/scene-cache/. Phase A only ingests
-            // variant="base" (always-on GameObject collision). Missing dir is
-            // not an error; keeps installs without scene-cache running.
-            std::vector<std::string> sceneRoots;
-            if (!dataRoot.empty())
-                sceneRoots.push_back(dataRoot + "scene-cache/");
-            sceneRoots.push_back("scene-cache/");
-            for (auto& sr : sceneRoots)
-            {
-                if (!std::filesystem::exists(sr)) continue;
-                std::set<uint32_t> seenMaps;
-                std::error_code ec;
-                for (const auto& entry : std::filesystem::directory_iterator(sr, ec))
-                {
-                    if (!entry.is_regular_file()) continue;
-                    std::string stem = entry.path().stem().string();   // "0004634.base"
-                    if (entry.path().extension() != ".scenecache") continue;
-                    auto dot = stem.find('.');
-                    if (dot == std::string::npos || dot != 7) continue;
-                    try
-                    {
-                        uint32_t mid = static_cast<uint32_t>(std::stoul(stem.substr(0, 3)));
-                        seenMaps.insert(mid);
-                    }
-                    catch (...) { continue; }
-                }
-                for (uint32_t mid : seenMaps)
-                {
-                    int n = LoadSceneCacheForMap_Internal(mid, sr.c_str(), "base");
-                    if (n > 0)
-                        std::cout << "[Navigation.dll] Loaded " << n
-                                  << " scene-cache tiles for map " << mid
-                                  << " (variant=base) from " << sr << "\n";
-                }
-                break;  // first existing dir wins
-            }
+            // Phase 4 scene-cache loading happens in DllMain.cpp's
+            // InitializeAllSystems() (called once at first DLL entry-point
+            // touch). InitializePhysics is a no-op for that today; reaching
+            // here means the DLL has already been initialized.
 
             return true;
         }
@@ -791,6 +758,20 @@ extern "C"
     {
         try { DynamicObjectRegistry::Instance()->UnloadAllVariants(mapId); }
         catch (...) {}
+    }
+
+    /// Phase 4 diagnostic — sample DynamicObjectRegistry's contribution to
+    /// SceneQuery::GetGroundZ (covers per-instance dynamic objects + bulk
+    /// variant pool triangles). Returns -200000 if no dynamic surface is
+    /// within [z - maxSearchDist, z + 0.5].
+    __declspec(dllexport) float GetDynamicGroundZDirect(
+        uint32_t mapId, float x, float y, float z, float maxSearchDist)
+    {
+        try
+        {
+            return SceneQuery::GetDynamicGroundZ(mapId, x, y, z, maxSearchDist);
+        }
+        catch (...) { return -200000.0f; }
     }
 
     __declspec(dllexport) PhysicsOutput StepPhysicsV2(const PhysicsInput* input, float dt)
@@ -901,9 +882,12 @@ extern "C"
         }
         if (outBihZ) *outBihZ = bihZ;
 
+        // Phase 4 — also probe the dynamic registry (per-instance + variant pool).
+        const float dynZ = SceneQuery::GetDynamicGroundZ(mapId, x, y, z, maxSearchDist);
+
         // Log all results for diagnostics
-        fprintf(stderr, "[GroundZDiag] pos=(%.3f, %.3f, %.3f) scene=%.3f vmap=%.3f vmap(z+2)=%.3f adt=%.3f bih=%.3f\n",
-                x, y, z, sceneZ, vmapZ, vmapZ2, adtZ, bihZ);
+        fprintf(stderr, "[GroundZDiag] pos=(%.3f, %.3f, %.3f) scene=%.3f vmap=%.3f vmap(z+2)=%.3f adt=%.3f bih=%.3f dynamic=%.3f\n",
+                x, y, z, sceneZ, vmapZ, vmapZ2, adtZ, bihZ, dynZ);
         fflush(stderr);
 
         // Return best of non-cached sources (closest to z)
