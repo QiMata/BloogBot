@@ -14,7 +14,8 @@
     "agentHeight": 2.625,
     "walkableRadius": 0,
     "walkableHeight": 0,
-    "walkableClimb": 0
+    "walkableClimb": 0,
+    "_3446_NEGATIVE_RESULT": "PFS-OVERHAUL-006 BRM Round-4-redo (2026-05-09): tested per-tile agentMaxClimbTerrain overrides for tile filename 0004634.mmtile (CLI 34,46) at values 1.0 and 0.2. 1.0 had negligible effect (Walk count 299→296). 0.2 was destructive: Walk count dropped to 13/1071 because Detour rerouted around the over-fragmented tile via a worse (cliffier) corridor. The OG-zeppelin Cycle-17e fix worked because the over-collapsed polygon was a SHORTCUT — disconnecting it forced the bot onto the legitimate spiral ramp inside the same tile. BRM south-face has no equivalent legitimate alternate corridor inside (46,34); aggressive disconnection just pushes Detour to neighbouring tiles whose own cliffs are worse. Single-tile config is the wrong lever for this geometry; needs either coordinated multi-tile bake (tighter walkableClimb across 46,28..36 simultaneously) or a different bake parameter (e.g., walkableHeight, filterLedgeSpans tuning) that fragments cliff-edge cells without destroying horizontal connectivity. See memory project_pfs_overhaul_006_pathphysicsprobe_brm_route.md for the probe-driven evidence and project_pfs_overhaul_006_brm_singletile_negative.md for this round."
   },
   "1": {
     "agentRadius": 1.0247,

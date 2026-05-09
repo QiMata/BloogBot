@@ -230,4 +230,241 @@ public class BrmDungeonRouteDiagnostic : IClassFixture<PathfindingValidationFixt
             _output.WriteLine($"#   {label,-35}| {sp.Length,4} | {d2,12:F2}y");
         }
     }
+
+    /// <summary>
+    /// PFS-OVERHAUL-006 Round 2 (2026-05-09): UBRS bot stalls at
+    /// `(-7949.7,-1162.8,170.8)` with `flags=0x2001` (FORWARD|JUMPING),
+    /// `moved=0.2y`. The cliff classifier was relaxed in Round 1 so the
+    /// route is now `supported:Drop`, but the bot still can't physically
+    /// traverse it. This diagnostic dumps every smooth-path waypoint
+    /// within ±25y of the stall anchor (in the X,Y plane) and computes
+    /// per-segment dz, slope, and surface-Z probe so we can localize
+    /// which step the runtime physics rejects.
+    ///
+    /// Goal: identify whether the offending segment is
+    ///   (a) a single dz > walkableClimb step the bake should have
+    ///       fragmented but didn't,
+    ///   (b) a ledge edge where the bot's capsule clips into a wall,
+    ///   (c) a ceiling overhang that the navmesh ignored.
+    /// Each case has a different fix surface.
+    /// </summary>
+    [Fact]
+    public void Dump_UbrsRoute_StallRegionWaypoints()
+    {
+        const float StallAnchorX = -7949.7f;
+        const float StallAnchorY = -1162.8f;
+        const float StallAnchorZ = 170.8f;
+        const float StallSearchRadius2D = 25f;
+        const float WalkableClimbY = 1.8f;
+
+        _output.WriteLine($"# WWOW_DATA_DIR: {_fixture.DataDir}");
+        _output.WriteLine($"# Stall anchor (UBRS live test): ({StallAnchorX:F1},{StallAnchorY:F1},{StallAnchorZ:F1})");
+        _output.WriteLine($"# Search radius (2D): {StallSearchRadius2D:F1}y");
+        _output.WriteLine("");
+
+        var sp = NavigationInterop.QuerySmoothPath(MapId, FlameCrest, UbrsEntrance, AgentRadius, AgentHeight);
+        Assert.True(sp.Success, "QuerySmoothPath FlameCrest -> UBRS returned no waypoints.");
+        _output.WriteLine($"# UBRS smooth-path waypoint count: {sp.Length}");
+
+        // Locate index range whose XY falls inside the stall search radius.
+        int firstIdx = -1, lastIdx = -1;
+        for (int i = 0; i < sp.Length; i++)
+        {
+            float dx = sp.Waypoints[i].X - StallAnchorX;
+            float dy = sp.Waypoints[i].Y - StallAnchorY;
+            float d2 = MathF.Sqrt(dx * dx + dy * dy);
+            if (d2 <= StallSearchRadius2D)
+            {
+                if (firstIdx < 0) firstIdx = i;
+                lastIdx = i;
+            }
+        }
+
+        if (firstIdx < 0)
+        {
+            _output.WriteLine("# NO waypoints fall within the stall search radius — the smooth path may not actually traverse the stall site.");
+            // Print the closest waypoint to the stall anchor anyway.
+            int bestIdx = 0;
+            float bestD = float.MaxValue;
+            for (int i = 0; i < sp.Length; i++)
+            {
+                float dx = sp.Waypoints[i].X - StallAnchorX;
+                float dy = sp.Waypoints[i].Y - StallAnchorY;
+                float d2 = MathF.Sqrt(dx * dx + dy * dy);
+                if (d2 < bestD) { bestD = d2; bestIdx = i; }
+            }
+            var w = sp.Waypoints[bestIdx];
+            _output.WriteLine($"# Closest waypoint: idx={bestIdx} ({w.X:F2},{w.Y:F2},{w.Z:F2}) — XY-dist to stall anchor = {bestD:F2}y");
+            firstIdx = Math.Max(0, bestIdx - 10);
+            lastIdx = Math.Min(sp.Length - 1, bestIdx + 10);
+            _output.WriteLine($"# Expanding dump to idx [{firstIdx}..{lastIdx}] for context.");
+            _output.WriteLine("");
+        }
+        else
+        {
+            // Pad +/- 5 waypoints either side for context.
+            firstIdx = Math.Max(0, firstIdx - 5);
+            lastIdx = Math.Min(sp.Length - 1, lastIdx + 5);
+            _output.WriteLine($"# Waypoints in range: idx [{firstIdx}..{lastIdx}] (incl. ±5 context)");
+            _output.WriteLine("");
+        }
+
+        _output.WriteLine("# idx |   waypoint X,Y,Z         | polyRef            | type     | surfaceZ | dz(prev) | dist2D | slopeDeg | flag");
+        _output.WriteLine("# ----+--------------------------+--------------------+----------+----------+----------+--------+----------+-----");
+
+        for (int i = firstIdx; i <= lastIdx; i++)
+        {
+            var w = sp.Waypoints[i];
+            var probe = NavigationInterop.QueryPolyAtCoord(MapId, w, AgentRadius, WalkableClimbY);
+
+            float dz = 0f, dist2D = 0f, slopeDeg = 0f;
+            string flag = "";
+            if (i > 0)
+            {
+                var prev = sp.Waypoints[i - 1];
+                dz = w.Z - prev.Z;
+                float dx = w.X - prev.X;
+                float dy = w.Y - prev.Y;
+                dist2D = MathF.Sqrt(dx * dx + dy * dy);
+                slopeDeg = dist2D > 0.01f
+                    ? MathF.Atan2(MathF.Abs(dz), dist2D) * (180f / MathF.PI)
+                    : (MathF.Abs(dz) > 0.5f ? 90f : 0f);
+
+                // Highlight conditions of interest:
+                //  STEP   = dz > walkableClimb (bot would need to jump-up; bake holds polys connected anyway)
+                //  GAP2D  = consecutive waypoints > 4y apart in 2D (string-pulled, may hide ledges)
+                //  -DROP  = dz < -2y (Drop classification by relaxed cliff rule)
+                //  -CLIFF = dz < -6y AND slope > 25° (still classifies as Cliff post-Round-1)
+                if (dz > WalkableClimbY) flag = "STEP";
+                else if (dist2D > 4f) flag = "GAP2D";
+                else if (dz < -6f && slopeDeg > 25f) flag = "-CLIFF";
+                else if (dz < -2f) flag = "-DROP";
+            }
+
+            string polyStr = probe.HasPoly ? $"0x{probe.PolyRef:X16}" : "(no poly)        ";
+            string surfStr = probe.HasSurface ? probe.SurfaceZ.ToString("F2") : "  N/A  ";
+            _output.WriteLine($"# {i,3} | ({w.X,8:F2},{w.Y,8:F2},{w.Z,6:F2}) | {polyStr} | {probe.PolyType,-8} | {surfStr,8} | {dz,+8:F2} | {dist2D,6:F2} | {slopeDeg,8:F2} | {flag,-6}");
+        }
+
+        _output.WriteLine("");
+
+        // Histogram across the WHOLE UBRS path (not just the stall region) so
+        // we can compare local pathology vs global path shape.
+        int stepCount = 0, gapCount = 0, dropCount = 0, cliffCount = 0;
+        float maxStep = 0f, maxGap = 0f, mostNegativeDz = 0f;
+        for (int i = 1; i < sp.Length; i++)
+        {
+            var prev = sp.Waypoints[i - 1];
+            var w = sp.Waypoints[i];
+            float dz = w.Z - prev.Z;
+            float dx = w.X - prev.X;
+            float dy = w.Y - prev.Y;
+            float d2 = MathF.Sqrt(dx * dx + dy * dy);
+            float slope = d2 > 0.01f
+                ? MathF.Atan2(MathF.Abs(dz), d2) * (180f / MathF.PI)
+                : (MathF.Abs(dz) > 0.5f ? 90f : 0f);
+
+            if (dz > WalkableClimbY) { stepCount++; if (dz > maxStep) maxStep = dz; }
+            if (d2 > 4f) { gapCount++; if (d2 > maxGap) maxGap = d2; }
+            if (dz < -6f && slope > 25f) cliffCount++;
+            else if (dz < -2f) dropCount++;
+            if (dz < mostNegativeDz) mostNegativeDz = dz;
+        }
+        _output.WriteLine("# ===== UBRS path-wide segment histogram =====");
+        _output.WriteLine($"#   total segments:           {sp.Length - 1}");
+        _output.WriteLine($"#   STEP segs (dz>{WalkableClimbY:F1}y):     {stepCount} (max={maxStep:F2}y)");
+        _output.WriteLine($"#   GAP2D segs (dist2D>4y):  {gapCount} (max={maxGap:F2}y)");
+        _output.WriteLine($"#   -DROP segs (-6y<dz<-2y): {dropCount}");
+        _output.WriteLine($"#   -CLIFF segs (post-R1):   {cliffCount}");
+        _output.WriteLine($"#   most negative dz:        {mostNegativeDz:F2}y");
+
+        // ===== Replan probe: smooth path FROM the stall coord TO UBRS =====
+        // This is the corridor the bot is currently trying to walk.
+        _output.WriteLine("");
+        _output.WriteLine("# ===== REPLAN-FROM-STALL → UBRS (the bot's current planned route) =====");
+        var stallPos = new XYZ(StallAnchorX, StallAnchorY, StallAnchorZ);
+        var stallPoly = NavigationInterop.QueryPolyAtCoord(MapId, stallPos, AgentRadius, WalkableClimbY);
+        if (stallPoly.HasPoly)
+        {
+            _output.WriteLine($"# Stall poly: 0x{stallPoly.PolyRef:X16} type={stallPoly.PolyType} surfaceZ={stallPoly.SurfaceZ:F2} dz-from-stall-z={stallPoly.SurfaceZ - StallAnchorZ:+0.00;-0.00}");
+            // tile coord extraction (salt:16, tile:28, poly:20)
+            ulong tile = (stallPoly.PolyRef >> 20) & 0xFFFFFFFul;
+            _output.WriteLine($"# Stall tile (in polyRef): 0x{tile:X7}");
+        }
+        else
+        {
+            _output.WriteLine("# Stall coord has NO poly within walkableClimb 1.8y — the bot is wedged off-navmesh.");
+        }
+
+        var replan = NavigationInterop.QuerySmoothPath(MapId, stallPos, UbrsEntrance, AgentRadius, AgentHeight);
+        if (!replan.Success || replan.Length == 0)
+        {
+            _output.WriteLine("# QuerySmoothPath FROM stall FAILED — no path. Bot is stuck on an isolated polygon.");
+        }
+        else
+        {
+            _output.WriteLine($"# Replan smooth-path waypoints: {replan.Length}");
+            // Histogram on replan
+            int rStep = 0, rGap = 0, rDrop = 0, rCliff = 0;
+            float rMaxStep = 0f, rMaxGap = 0f, rMostNeg = 0f;
+            for (int i = 1; i < replan.Length; i++)
+            {
+                var prev = replan.Waypoints[i - 1];
+                var w = replan.Waypoints[i];
+                float dz = w.Z - prev.Z;
+                float dx = w.X - prev.X;
+                float dy = w.Y - prev.Y;
+                float d2 = MathF.Sqrt(dx * dx + dy * dy);
+                float slope = d2 > 0.01f
+                    ? MathF.Atan2(MathF.Abs(dz), d2) * (180f / MathF.PI)
+                    : (MathF.Abs(dz) > 0.5f ? 90f : 0f);
+                if (dz > WalkableClimbY) { rStep++; if (dz > rMaxStep) rMaxStep = dz; }
+                if (d2 > 4f) { rGap++; if (d2 > rMaxGap) rMaxGap = d2; }
+                if (dz < -6f && slope > 25f) rCliff++;
+                else if (dz < -2f) rDrop++;
+                if (dz < rMostNeg) rMostNeg = dz;
+            }
+            _output.WriteLine($"#   STEP segs:  {rStep} (max={rMaxStep:F2}y)");
+            _output.WriteLine($"#   GAP2D segs: {rGap} (max={rMaxGap:F2}y)");
+            _output.WriteLine($"#   -DROP segs: {rDrop}");
+            _output.WriteLine($"#   -CLIFF segs:{rCliff}");
+            _output.WriteLine($"#   most -dz:   {rMostNeg:F2}y");
+
+            // Print first 12 waypoints to see the immediate next-steps from the stall.
+            _output.WriteLine("# First 12 waypoints from stall:");
+            int n = Math.Min(12, replan.Length);
+            for (int i = 0; i < n; i++)
+            {
+                var w = replan.Waypoints[i];
+                var probe = NavigationInterop.QueryPolyAtCoord(MapId, w, AgentRadius, WalkableClimbY);
+                float dz = i > 0 ? w.Z - replan.Waypoints[i - 1].Z : 0f;
+                float dx = i > 0 ? w.X - replan.Waypoints[i - 1].X : 0f;
+                float dy = i > 0 ? w.Y - replan.Waypoints[i - 1].Y : 0f;
+                float d2 = MathF.Sqrt(dx * dx + dy * dy);
+                string surfStr = probe.HasSurface ? probe.SurfaceZ.ToString("F2") : "  N/A  ";
+                _output.WriteLine($"#   {i,3} | ({w.X,8:F2},{w.Y,8:F2},{w.Z,6:F2}) surfaceZ={surfStr} dz={dz,+6:F2} dist2D={d2,5:F2}");
+            }
+
+            var lastWp = replan.Waypoints[replan.Length - 1];
+            float endDx = lastWp.X - UbrsEntrance.X;
+            float endDy = lastWp.Y - UbrsEntrance.Y;
+            float endD2 = MathF.Sqrt(endDx * endDx + endDy * endDy);
+            _output.WriteLine($"# Replan final WP: ({lastWp.X:F2},{lastWp.Y:F2},{lastWp.Z:F2}); dist2D-to-UBRS={endD2:F2}y, dz-to-UBRS={lastWp.Z - UbrsEntrance.Z:F2}");
+        }
+
+        // Probe surface at the stall coord with widening Z search to characterize the geometry there.
+        _output.WriteLine("");
+        _output.WriteLine("# ===== Vertical poly scan at the stall XY (widening Z) =====");
+        _output.WriteLine("#   z   | polyRef             | type     | surfaceZ");
+        _output.WriteLine("#  -----+---------------------+----------+---------");
+        for (float z = StallAnchorZ - 20f; z <= StallAnchorZ + 20f; z += 1f)
+        {
+            var p = new XYZ(StallAnchorX, StallAnchorY, z);
+            var probe = NavigationInterop.QueryPolyAtCoord(MapId, p, AgentRadius, 0.5f);
+            if (probe.HasPoly)
+            {
+                _output.WriteLine($"#  {z,4:F1} | 0x{probe.PolyRef:X16} | {probe.PolyType,-8} | {(probe.HasSurface ? probe.SurfaceZ.ToString("F2") : "  N/A "),8}");
+            }
+        }
+    }
 }
