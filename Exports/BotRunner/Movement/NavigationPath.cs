@@ -126,6 +126,7 @@ public static class NavigationTraceReason
     public const string VerticalLayerMismatch = "vertical_layer_mismatch";
     public const string StrictWaypointRecalc = "strict_waypoint_recalc";
     public const string WallStuck = "wall_stuck";
+    public const string CorridorDrift = "corridor_drift";
     public const string Manual = "manual";
 }
 
@@ -570,6 +571,14 @@ public class NavigationPath(
     private const int RECALCULATE_COOLDOWN_MS = 2000;
     private const int DYNAMIC_BLOCKER_REPLAN_COOLDOWN_MS = 750;
     private const int NEARBY_OBJECT_OVERLAY_REPLAN_COOLDOWN_MS = 2500;
+    // Corridor-drift detection (codex H3, 2026-05-09): when the bot's
+    // perpendicular distance to the active path segment exceeds this
+    // threshold, force a replan from the bot's current position. The
+    // BRM south-face stall observed the bot drifting ~22y from the
+    // corridor before the existing waypoint-advance gate noticed; a
+    // 10y threshold catches drift early enough to recover.
+    private const float CORRIDOR_DRIFT_REPLAN_THRESHOLD = 10.0f;
+    private const int CORRIDOR_DRIFT_REPLAN_COOLDOWN_MS = 2000;
     private const int NEARBY_OBJECT_OVERLAY_REPLAN_LOOKAHEAD_SEGMENTS = 8;
     private const float NEARBY_OBJECT_OVERLAY_REPLAN_CLEARANCE_PADDING = 2.5f;
     private const float NEARBY_OBJECT_OVERLAY_REPLAN_MIN_CLEARANCE = 4.0f;
@@ -618,6 +627,7 @@ public class NavigationPath(
     private bool _pendingDynamicBlockerReplan;
     private long _lastDynamicBlockerReplanTick;
     private long _lastNearbyObjectOverlayReplanTick;
+    private long _lastCorridorDriftReplanTick;
     private string? _lastNearbyObjectOverlaySignature;
     private long _lastWaypointTick;
     private long _lastVerticalLayerReplanTick;
@@ -746,6 +756,15 @@ public class NavigationPath(
 
         // Advance reached waypoints, but avoid skipping corner waypoints into blocked segments.
         AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+
+        // Codex H3 (2026-05-09): when the bot's perpendicular distance to the
+        // active segment exceeds CORRIDOR_DRIFT_REPLAN_THRESHOLD, force a
+        // replan from the bot's CURRENT position so Detour can route from
+        // wherever the bot actually is, not from the stale corridor anchor.
+        // Catches the BRM south-face drift class (bot ~22y off corridor with
+        // FORWARD|JUMPING toggling) before the stuck-guard fires.
+        if (TryTriggerCorridorDriftReplan(currentPosition, destination, mapId))
+            AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
 
         if (TryTriggerNearbyObjectOverlayReplan(currentPosition, destination, mapId))
             AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
@@ -2380,6 +2399,77 @@ public class NavigationPath(
         _lastDynamicBlockerReplanTick = nowTick;
         _pendingDynamicBlockerReplan = false;
         CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.DynamicBlockerObserved);
+        return true;
+    }
+
+    /// <summary>
+    /// Codex H3 (2026-05-09): perpendicular distance from <paramref name="p"/> to
+    /// the segment <paramref name="a"/>→<paramref name="b"/> in 2D (XY plane).
+    /// Returns -1 when the projection parameter is outside [0,1] (bot is past
+    /// an endpoint, not "drifted beside" the segment) or when the segment is
+    /// degenerate. The negative sentinel signals callers to skip the drift
+    /// check for this segment rather than firing a false positive when the
+    /// bot has simply walked past the active waypoint.
+    /// </summary>
+    private static float ComputePerpendicularDistanceToActiveSegment2D(Position p, Position a, Position b)
+    {
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        var lenSq = dx * dx + dy * dy;
+        if (lenSq < 1e-6f)
+            return -1f;
+        var t = ((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lenSq;
+        if (t < 0f || t > 1f)
+            return -1f;
+        var projX = a.X + t * dx;
+        var projY = a.Y + t * dy;
+        var pdx = p.X - projX;
+        var pdy = p.Y - projY;
+        return MathF.Sqrt(pdx * pdx + pdy * pdy);
+    }
+
+    /// <summary>
+    /// Codex H3 (2026-05-09): when the bot drifts perpendicular to the active
+    /// path segment by more than CORRIDOR_DRIFT_REPLAN_THRESHOLD yards, force
+    /// a replan from the bot's current position. Detour produces a fresh path
+    /// from wherever the bot actually is, instead of the bot continuing to
+    /// chase a stale corridor that no longer matches its position.
+    ///
+    /// This catches the BRM south-face stall class memorialized in
+    /// project_pfs_overhaul_006_ubrs_runtime_drift / brm_phase4_findings —
+    /// bot trajectory diverged from the navmesh corridor mid-segment, ended
+    /// up on a cliff top, and the stuck-recovery jump (FORWARD|JUMPING)
+    /// looped indefinitely because every replan from the same start gave the
+    /// same cliff-edge corridor.
+    ///
+    /// Returns true when a replan was triggered. Honors a cooldown to
+    /// avoid replan storms when the bot is steadily off-corridor.
+    /// </summary>
+    private bool TryTriggerCorridorDriftReplan(Position currentPosition, Position destination, uint mapId)
+    {
+        if (_currentIndex == 0 || _currentIndex >= _waypoints.Length)
+            return false;
+
+        var prev = _waypoints[_currentIndex - 1];
+        var curr = _waypoints[_currentIndex];
+
+        var perpDist = ComputePerpendicularDistanceToActiveSegment2D(currentPosition, prev, curr);
+        if (perpDist < 0f || perpDist < CORRIDOR_DRIFT_REPLAN_THRESHOLD)
+            return false;
+
+        var nowTick = _tickProvider();
+        if (_lastCorridorDriftReplanTick != 0
+            && nowTick - _lastCorridorDriftReplanTick < CORRIDOR_DRIFT_REPLAN_COOLDOWN_MS)
+        {
+            return false;
+        }
+
+        _lastCorridorDriftReplanTick = nowTick;
+        _diagnosticSink?.Invoke(
+            $"[NAV_CORRIDOR_DRIFT] perpDist={perpDist:F1} threshold={CORRIDOR_DRIFT_REPLAN_THRESHOLD:F1} "
+            + $"bot=({currentPosition.X:F1},{currentPosition.Y:F1},{currentPosition.Z:F1}) "
+            + $"seg=({prev.X:F1},{prev.Y:F1})->({curr.X:F1},{curr.Y:F1}) idx={_currentIndex}/{_waypoints.Length}");
+        CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.CorridorDrift);
         return true;
     }
 
