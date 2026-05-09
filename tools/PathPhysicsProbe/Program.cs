@@ -47,6 +47,9 @@ internal static class Program
                 return 3;
             }
 
+            if (opts.LoadAdt)
+                MaybeLoadAdtForCorners(opts, corners);
+
             var probe = new SegmentProbe(opts.Radius, opts.Height, opts.Verbose);
             var results = new List<ProbeResult>(corners.Count - 1);
             for (int i = 0; i < corners.Count - 1; i++)
@@ -191,6 +194,61 @@ internal static class Program
         }
         return -1;
     }
+
+    /// <summary>
+    /// Initialize the runtime physics MapLoader and pre-load every tile the
+    /// corner sequence crosses. Without this, runtime physics queries return
+    /// -200000 sentinels (no ADT data) for the probed XYs, polluting the
+    /// classifier output with artifactual Blocked/JumpGap classifications.
+    ///
+    /// Tile coord convention matches Exports/Navigation/MapLoader.cpp's
+    /// worldToGridCoords (lines 1114-1117) — the API takes the "natural"
+    /// (tileX-from-worldX, tileY-from-worldY) order even though MmapGen.exe's
+    /// CLI swaps these. tileX = floor(32 - worldX/533.333),
+    /// tileY = floor(32 - worldY/533.333).
+    /// </summary>
+    private static void MaybeLoadAdtForCorners(Args opts, List<Vector3> corners)
+    {
+        const float GRID_SIZE = 533.33333f;
+        const float CENTER_GRID_ID = 32f;
+
+        var dataDir = opts.AdtDataDir ?? Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
+        if (string.IsNullOrWhiteSpace(dataDir))
+        {
+            Console.Error.WriteLine("# --load-adt: no path supplied and WWOW_DATA_DIR is unset; skipping ADT init.");
+            return;
+        }
+
+        var mapsDir = Path.Combine(dataDir, "maps");
+        if (!Directory.Exists(mapsDir))
+            mapsDir = dataDir; // some callers point straight at the maps/ root
+
+        if (!InitializeMapLoader(mapsDir + Path.DirectorySeparatorChar))
+        {
+            Console.Error.WriteLine($"# --load-adt: InitializeMapLoader failed for '{mapsDir}'.");
+            return;
+        }
+
+        // Dedup tile coords across the entire corner sequence. One tile is
+        // 533.33y x 533.33y, so a 1000-corner BRM-scale path typically lives
+        // in 5-15 tiles and dedup is cheap.
+        var tiles = new HashSet<(uint X, uint Y)>();
+        foreach (var c in corners)
+        {
+            uint tx = (uint)Math.Max(0, Math.Floor(CENTER_GRID_ID - c.X / GRID_SIZE));
+            uint ty = (uint)Math.Max(0, Math.Floor(CENTER_GRID_ID - c.Y / GRID_SIZE));
+            tiles.Add((tx, ty));
+        }
+
+        int loaded = 0, missing = 0;
+        foreach (var (tx, ty) in tiles)
+        {
+            if (LoadMapTile(opts.MapId, tx, ty)) loaded++;
+            else missing++;
+        }
+        Console.Error.WriteLine(
+            $"# --load-adt: dataDir='{mapsDir}' map={opts.MapId} corner-derived tiles={tiles.Count} loaded={loaded} missing={missing}");
+    }
 }
 
 internal sealed class Args
@@ -205,6 +263,8 @@ internal sealed class Args
     public bool SmoothPath;
     public bool Verbose;
     public bool JsonOutput;
+    public bool LoadAdt;
+    public string? AdtDataDir;
 
     public static readonly string UsageText =
         "Usage: PathPhysicsProbe --map <id> --start X,Y,Z --end X,Y,Z [options]\n" +
@@ -215,7 +275,11 @@ internal sealed class Args
         "  --detour-resolve    run FindPath first, then probe the resolved corners\n" +
         "  --smooth            paired with --detour-resolve, request smoothPath\n" +
         "  --verbose           include endpoint surface enumeration + GroundZ breakdown\n" +
-        "  --json              emit machine-parseable JSON instead of TSV\n";
+        "  --json              emit machine-parseable JSON instead of TSV\n" +
+        "  --load-adt [PATH]   auto-init MapLoader against PATH (or $WWOW_DATA_DIR)\n" +
+        "                      and pre-load every tile the corner sequence crosses,\n" +
+        "                      so GroundZ vmap/adt/bih return real values instead of\n" +
+        "                      -200000 sentinels at probe-data-blind XYs\n";
 
     public static Args Parse(string[] argv)
     {
@@ -238,6 +302,12 @@ internal sealed class Args
                 case "--smooth": a.SmoothPath = true; break;
                 case "--verbose": a.Verbose = true; break;
                 case "--json": a.JsonOutput = true; break;
+                case "--load-adt":
+                    a.LoadAdt = true;
+                    // Optional positional path arg: only consume if it doesn't start with --
+                    if (i + 1 < argv.Length && !argv[i + 1].StartsWith("--"))
+                        a.AdtDataDir = argv[++i];
+                    break;
                 case "-h":
                 case "--help":
                     throw new ArgException("(help requested)");
