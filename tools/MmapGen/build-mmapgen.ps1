@@ -105,12 +105,16 @@ if ($needConfigure) {
 }
 
 # --- Build -----------------------------------------------------------------
-Write-Host "Building MmapGen ($Configuration)"
-cmake --build $buildDir --target MmapGen
+Write-Host "Building MmapGen + SceneCacheBuilder ($Configuration)"
+cmake --build $buildDir --target MmapGen SceneCacheBuilder
 if ($LASTEXITCODE -ne 0) { throw "cmake build failed (exit $LASTEXITCODE)" }
 
 $mmapExe = Join-Path $buildDir "MmapGen.exe"
 if (Test-Path $mmapExe) {
     Write-Host "Built: $mmapExe" -ForegroundColor Green
+}
+$sceneExe = Join-Path $buildDir "SceneCacheBuilder.exe"
+if (Test-Path $sceneExe) {
+    Write-Host "Built: $sceneExe" -ForegroundColor Green
 }
 Write-Host "MmapGen build complete." -ForegroundColor Green

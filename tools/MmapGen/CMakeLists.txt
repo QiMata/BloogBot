@@ -374,3 +374,40 @@ set_target_properties(MmapGen PROPERTIES
     FOLDER "MmapGen"
     OUTPUT_NAME "MmapGen"
 )
+
+# ----------------------------------------------------------------------------
+# SceneCacheBuilder (executable). Phase 4 variant-aware scene-cache producer.
+# Consumes gameobject_spawns/<variant>.json (from tools/GameObjectExporter) and
+# vmaps/temp_gameobject_models, transforms each spawn's .vmo triangles into
+# world space, partitions by tile, and writes per-tile binary scene-cache
+# files for ingestion by the runtime DynamicObjectRegistry.
+# ----------------------------------------------------------------------------
+add_executable(SceneCacheBuilder
+    ${CMAKE_CURRENT_SOURCE_DIR}/../SceneCacheBuilder/SceneCacheBuilder.cpp
+    # VMapExtensions.cpp implements WorldModel::getGroupModels +
+    # GroupModel::getMeshData (both #ifdef MMAP_GENERATOR). MmapGen pulls
+    # this in directly; vmap.lib doesn't ship it. SceneCacheBuilder needs
+    # the same symbols, so we link it in here too.
+    contrib/mmap/src/VMapExtensions.cpp
+)
+target_include_directories(SceneCacheBuilder PRIVATE
+    ${MMAPGEN_INC_VMAP}
+    ${MMAPGEN_INC_GAME}
+    ${MMAPGEN_INC_FRAMEWORK}
+    ${MMAPGEN_INC_SHARED}
+    ${MMAPGEN_INC_G3DLITE}
+    ${MMAPGEN_INC_NLOHMANN}
+    ${MMAPGEN_INC_DETOUR}
+    ${MMAPGEN_INC_RECAST_PARENT}
+)
+target_link_libraries(SceneCacheBuilder PRIVATE
+    vmap
+    Detour
+    g3dlite_mmap
+    shared_mmap
+    framework_mmap
+)
+set_target_properties(SceneCacheBuilder PROPERTIES
+    FOLDER "MmapGen"
+    OUTPUT_NAME "SceneCacheBuilder"
+)
