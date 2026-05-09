@@ -291,6 +291,7 @@ public readonly record struct PathAffordanceInfo(
     public static PathAffordanceInfo Empty => new([], 0, 0, 0, 0, 0f, 0f, 0f);
     private const float SevereUphillSlopeDeg = 45f;
     private const float SevereUphillMinZDelta = 3.0f;
+    private const float CliffSlopeDeg = 25f;
 
     public static PathAffordanceInfo Classify(Position[] waypoints)
     {
@@ -328,8 +329,17 @@ public readonly record struct PathAffordanceInfo(
                 affordance = SegmentAffordance.Vertical;
                 verticalCount++;
             }
-            else if (dz < -6f)
+            else if (dz < -6f && slopeDeg > CliffSlopeDeg)
             {
+                // PFS-OVERHAUL-006 follow-up (2026-05-09): require a steep slope
+                // alongside the raw -6y drop. A 6y dz over a 10y horizontal step
+                // is a 31° slope (walkable); the smooth-path emitter densifies
+                // these into cleanly walkable interpolated waypoints (Cycle 17e),
+                // but `StringPullPath` collapses LOS-clear runs of interpolated
+                // waypoints into a single segment whose raw dz crosses the old
+                // -6y trip and falsely tagged the BRM south-face descent
+                // (~430y NE of Flame Crest, 170→164y over 10–30y) as a Cliff,
+                // stalling the FlameCrestToBrmDungeonEntrance live theory.
                 affordance = SegmentAffordance.Cliff;
                 cliffCount++;
             }
