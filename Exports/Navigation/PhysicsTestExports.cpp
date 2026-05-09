@@ -18,9 +18,11 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <set>
 #include <algorithm>
 #include <cmath>
 #include <sstream>
+#include <iostream>
 #define NOMINMAX
 #include <windows.h>
 #include <filesystem>
@@ -612,6 +614,51 @@ static ResolvedStaticContactMetadata ResolveStaticContactMetadata(uint32_t mapId
     return metadata;
 }
 
+// ==========================================================================
+// Phase 4 — variant scene-cache loading (helper used by InitializePhysics
+// auto-wire and the LoadSceneCacheForMap C export below).
+//
+// Filename layout: <map:03d><tileY:02d><tileX:02d>.<variant>.scenecache
+// Example: "0004634.base.scenecache" = map 0, tileY 46, tileX 34, variant base.
+// ==========================================================================
+static int LoadSceneCacheForMap_Internal(uint32_t mapId, const char* dirPath,
+                                         const char* variantFilter)
+{
+    namespace fs = std::filesystem;
+    if (!dirPath || !*dirPath) return 0;
+    fs::path dir(dirPath);
+    if (!fs::exists(dir) || !fs::is_directory(dir)) return 0;
+
+    int loaded = 0;
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(dir, ec))
+    {
+        if (!entry.is_regular_file()) continue;
+        if (entry.path().extension() != ".scenecache") continue;
+
+        std::string stem = entry.path().stem().string();   // "0004634.base"
+        auto dot = stem.find('.');
+        if (dot == std::string::npos || dot != 7) continue;
+
+        uint32_t fileMapId = 0;
+        try
+        {
+            fileMapId = static_cast<uint32_t>(std::stoul(stem.substr(0, 3)));
+        }
+        catch (...) { continue; }
+        if (fileMapId != mapId) continue;
+
+        std::string variant = stem.substr(dot + 1);
+        if (variantFilter && *variantFilter && variant != variantFilter) continue;
+
+        std::string fullPath = entry.path().string();
+        if (DynamicObjectRegistry::Instance()->LoadVariantSceneCache(
+                mapId, variant, fullPath))
+            ++loaded;
+    }
+    return loaded;
+}
+
 extern "C"
 {
     // ==========================================================================
@@ -651,6 +698,44 @@ extern "C"
                 }
             }
 
+            // Phase 4 — auto-load every <mapId>_*.<variant>.scenecache file we
+            // find under <dataRoot>/scene-cache/. Phase A only ingests
+            // variant="base" (always-on GameObject collision). Missing dir is
+            // not an error; keeps installs without scene-cache running.
+            std::vector<std::string> sceneRoots;
+            if (!dataRoot.empty())
+                sceneRoots.push_back(dataRoot + "scene-cache/");
+            sceneRoots.push_back("scene-cache/");
+            for (auto& sr : sceneRoots)
+            {
+                if (!std::filesystem::exists(sr)) continue;
+                std::set<uint32_t> seenMaps;
+                std::error_code ec;
+                for (const auto& entry : std::filesystem::directory_iterator(sr, ec))
+                {
+                    if (!entry.is_regular_file()) continue;
+                    std::string stem = entry.path().stem().string();   // "0004634.base"
+                    if (entry.path().extension() != ".scenecache") continue;
+                    auto dot = stem.find('.');
+                    if (dot == std::string::npos || dot != 7) continue;
+                    try
+                    {
+                        uint32_t mid = static_cast<uint32_t>(std::stoul(stem.substr(0, 3)));
+                        seenMaps.insert(mid);
+                    }
+                    catch (...) { continue; }
+                }
+                for (uint32_t mid : seenMaps)
+                {
+                    int n = LoadSceneCacheForMap_Internal(mid, sr.c_str(), "base");
+                    if (n > 0)
+                        std::cout << "[Navigation.dll] Loaded " << n
+                                  << " scene-cache tiles for map " << mid
+                                  << " (variant=base) from " << sr << "\n";
+                }
+                break;  // first existing dir wins
+            }
+
             return true;
         }
         catch (...)
@@ -671,6 +756,40 @@ extern "C"
                 g_testMapLoader = nullptr;
             }
         }
+        catch (...) {}
+    }
+
+    /// Phase 4 — bulk-load every <mapId>_*.<variant>.scenecache file in the
+    /// given directory whose mapId matches `mapId`. Phase A only ingests
+    /// variant="base"; pass nullptr/"" as `variantFilter` to load every variant.
+    /// Returns the number of tiles successfully loaded (0 = none / dir missing).
+    __declspec(dllexport) int LoadSceneCacheForMap(uint32_t mapId,
+                                                   const char* dirPath,
+                                                   const char* variantFilter)
+    {
+        try
+        {
+            return LoadSceneCacheForMap_Internal(mapId, dirPath, variantFilter);
+        }
+        catch (...) { return -1; }
+    }
+
+    /// Phase 4 — diagnostic. Total triangle count across every variant pool
+    /// currently registered for the map.
+    __declspec(dllexport) uint64_t GetVariantTriangleCount(uint32_t mapId)
+    {
+        try
+        {
+            return (uint64_t)DynamicObjectRegistry::Instance()->VariantTriangleCount(mapId);
+        }
+        catch (...) { return 0ull; }
+    }
+
+    /// Phase 4 — atomically remove every variant pool for the given map.
+    /// Useful for tests that want a clean slate.
+    __declspec(dllexport) void UnloadAllVariantsForMap(uint32_t mapId)
+    {
+        try { DynamicObjectRegistry::Instance()->UnloadAllVariants(mapId); }
         catch (...) {}
     }
 

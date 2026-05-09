@@ -483,6 +483,13 @@ void DynamicObjectRegistry::QueryTriangles(
 {
     std::lock_guard<std::mutex> lock(m_mutex);
 
+    auto aabbOverlap = [&](const G3D::AABox& b) -> bool
+    {
+        return !(b.high().x < worldAABB.low().x  || b.low().x > worldAABB.high().x ||
+                 b.high().y < worldAABB.low().y  || b.low().y > worldAABB.high().y ||
+                 b.high().z < worldAABB.low().z  || b.low().z > worldAABB.high().z);
+    };
+
     for (const auto& [guid, obj] : m_objects)
     {
         if (obj.mapId != mapId) continue;
@@ -495,13 +502,7 @@ void DynamicObjectRegistry::QueryTriangles(
         if (obj.isDoorModel && obj.goState == 0)
             continue;
 
-        // AABB overlap test
-        if (obj.worldBounds.high().x < worldAABB.low().x ||
-            obj.worldBounds.low().x > worldAABB.high().x ||
-            obj.worldBounds.high().y < worldAABB.low().y ||
-            obj.worldBounds.low().y > worldAABB.high().y ||
-            obj.worldBounds.high().z < worldAABB.low().z ||
-            obj.worldBounds.low().z > worldAABB.high().z)
+        if (!aabbOverlap(obj.worldBounds))
             continue;
 
         outTriangles.insert(outTriangles.end(),
@@ -509,6 +510,190 @@ void DynamicObjectRegistry::QueryTriangles(
         if (outInstanceIds)
             outInstanceIds->insert(outInstanceIds->end(), obj.worldTriangles.size(), obj.runtimeInstanceId);
     }
+
+    // Phase 4 — variant scene-cache pools. Pre-baked world-space triangles
+    // pre-partitioned by tile. Three-level early reject (pool → tile → tri AABB).
+    for (const auto& kv : m_variantPools)
+    {
+        if (kv.first.first != mapId) continue;
+        const VariantPool& pool = kv.second;
+        if (pool.totalTriangles == 0) continue;
+        if (pool.poolBoundsValid && !aabbOverlap(pool.poolBounds))
+            continue;
+
+        for (const auto& tkv : pool.tilesByXY)
+        {
+            const VariantTilePool& tile = tkv.second;
+            if (tile.triangles.empty()) continue;
+            if (tile.boundsValid && !aabbOverlap(tile.bounds))
+                continue;
+
+            for (const CapsuleCollision::Triangle& tri : tile.triangles)
+            {
+                const float minX = std::min(std::min(tri.a.x, tri.b.x), tri.c.x);
+                const float maxX = std::max(std::max(tri.a.x, tri.b.x), tri.c.x);
+                if (maxX < worldAABB.low().x || minX > worldAABB.high().x) continue;
+                const float minY = std::min(std::min(tri.a.y, tri.b.y), tri.c.y);
+                const float maxY = std::max(std::max(tri.a.y, tri.b.y), tri.c.y);
+                if (maxY < worldAABB.low().y || minY > worldAABB.high().y) continue;
+                const float minZ = std::min(std::min(tri.a.z, tri.b.z), tri.c.z);
+                const float maxZ = std::max(std::max(tri.a.z, tri.b.z), tri.c.z);
+                if (maxZ < worldAABB.low().z || minZ > worldAABB.high().z) continue;
+
+                outTriangles.push_back(tri);
+                if (outInstanceIds)
+                    outInstanceIds->push_back(kVariantInstanceId);
+            }
+        }
+    }
+}
+
+// ==========================================================================
+// Phase 4 — variant scene-cache pools
+// ==========================================================================
+
+namespace
+{
+    constexpr uint32_t SCENECACHE_MAGIC   = 0x434E4353u;  // 'SCNC' little-endian
+    constexpr uint32_t SCENECACHE_VERSION = 1u;
+}
+
+bool DynamicObjectRegistry::LoadVariantSceneCache(
+    uint32_t mapId, const std::string& variantId,
+    const std::string& sceneCachePath)
+{
+    if (variantId.empty())
+    {
+        std::cerr << "[DynObjReg] LoadVariantSceneCache: empty variantId\n";
+        return false;
+    }
+
+    FILE* rf = std::fopen(sceneCachePath.c_str(), "rb");
+    if (!rf)
+    {
+        std::cerr << "[DynObjReg] Scene cache file not found: " << sceneCachePath << "\n";
+        return false;
+    }
+
+    auto readU32 = [&](uint32_t& out) -> bool
+    {
+        return std::fread(&out, sizeof(uint32_t), 1, rf) == 1;
+    };
+
+    uint32_t magic = 0, version = 0, fileMapId = 0, tileX = 0, tileY = 0,
+             nameLen = 0, triCount = 0;
+
+    auto fail = [&](const char* why) -> bool
+    {
+        std::cerr << "[DynObjReg] " << why << " in " << sceneCachePath << "\n";
+        std::fclose(rf);
+        return false;
+    };
+
+    if (!readU32(magic) || magic != SCENECACHE_MAGIC)        return fail("bad magic");
+    if (!readU32(version) || version != SCENECACHE_VERSION)   return fail("bad version");
+    if (!readU32(fileMapId) || fileMapId != mapId)            return fail("mapId mismatch");
+    if (!readU32(tileX))                                      return fail("short read (tileX)");
+    if (!readU32(tileY))                                      return fail("short read (tileY)");
+    if (!readU32(nameLen) || nameLen == 0 || nameLen > 256)   return fail("bad variant name length");
+
+    std::vector<char> nameBuf(nameLen + 1, 0);
+    if (std::fread(nameBuf.data(), 1, nameLen, rf) != nameLen) return fail("short read (variant name)");
+    if (std::string(nameBuf.data()) != variantId)             return fail("variantId mismatch");
+
+    if (!readU32(triCount)) return fail("short read (triCount)");
+
+    VariantTilePool tile;
+    tile.tileX = static_cast<int>(tileX);
+    tile.tileY = static_cast<int>(tileY);
+    tile.triangles.reserve(triCount);
+
+    G3D::Vector3 bmin(0, 0, 0), bmax(0, 0, 0);
+    bool boundsInit = false;
+
+    for (uint32_t t = 0; t < triCount; ++t)
+    {
+        float v[9];
+        if (std::fread(v, sizeof(float), 9, rf) != 9) return fail("short read (triangle data)");
+
+        CapsuleCollision::Triangle tri;
+        tri.a = { v[0], v[1], v[2] };
+        tri.b = { v[3], v[4], v[5] };
+        tri.c = { v[6], v[7], v[8] };
+        tri.doubleSided = false;
+        tri.collisionMask = 0xFFFFFFFFu;
+        tile.triangles.push_back(tri);
+
+        for (int i = 0; i < 3; ++i)
+        {
+            const float* fp = v + i * 3;
+            const G3D::Vector3 p(fp[0], fp[1], fp[2]);
+            if (!boundsInit) { bmin = bmax = p; boundsInit = true; }
+            else
+            {
+                bmin = bmin.min(p);
+                bmax = bmax.max(p);
+            }
+        }
+    }
+    std::fclose(rf);
+
+    if (boundsInit)
+    {
+        tile.bounds = G3D::AABox(bmin, bmax);
+        tile.boundsValid = true;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    auto& pool = m_variantPools[std::make_pair(mapId, variantId)];
+    pool.variantId = variantId;
+
+    auto& slot = pool.tilesByXY[std::make_pair(tile.tileX, tile.tileY)];
+    if (!slot.triangles.empty())
+        pool.totalTriangles -= slot.triangles.size();
+    slot = std::move(tile);
+    pool.totalTriangles += slot.triangles.size();
+
+    if (slot.boundsValid)
+    {
+        if (!pool.poolBoundsValid)
+        {
+            pool.poolBounds = slot.bounds;
+            pool.poolBoundsValid = true;
+        }
+        else
+        {
+            pool.poolBounds = G3D::AABox(
+                pool.poolBounds.low().min(slot.bounds.low()),
+                pool.poolBounds.high().max(slot.bounds.high()));
+        }
+    }
+    return true;
+}
+
+void DynamicObjectRegistry::UnloadVariant(uint32_t mapId, const std::string& variantId)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_variantPools.erase(std::make_pair(mapId, variantId));
+}
+
+void DynamicObjectRegistry::UnloadAllVariants(uint32_t mapId)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (auto it = m_variantPools.begin(); it != m_variantPools.end(); )
+    {
+        if (it->first.first == mapId) it = m_variantPools.erase(it);
+        else ++it;
+    }
+}
+
+size_t DynamicObjectRegistry::VariantTriangleCount(uint32_t mapId) const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    size_t total = 0;
+    for (const auto& kv : m_variantPools)
+        if (kv.first.first == mapId) total += kv.second.totalTriangles;
+    return total;
 }
 
 bool DynamicObjectRegistry::TryGetLocalPoint(

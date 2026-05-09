@@ -2,10 +2,12 @@
 
 #include <vector>
 #include <unordered_map>
+#include <map>
 #include <cstdint>
 #include <mutex>
 #include <memory>
 #include <string>
+#include <utility>
 #include "CapsuleCollision.h"
 #include "AABox.h"
 #include "Vector3.h"
@@ -90,6 +92,43 @@ public:
     /// Returns true if the object is registered (either existing or newly created).
     bool EnsureRegistered(uint64_t guid, uint32_t displayId, uint32_t mapId, float scale = 1.0f);
 
+    // ----------------------------------------------------------------------
+    // Phase 4 — variant scene-cache API.
+    //
+    // A "variant" is a named set of always-on or event-conditional GameObject
+    // collision triangles, pre-baked per-tile by tools/SceneCacheBuilder.
+    // The runtime composes the active variant set per request (the bake
+    // produces base + per-variant deltas; the runtime loads the union).
+    //
+    // Variant triangles participate in QueryTriangles alongside per-instance
+    // dynamic objects. For variant triangles, outInstanceIds reports the
+    // sentinel kVariantInstanceId (TryGetLocalPoint / FindFirstIntersecting
+    // return false for that sentinel — variant data has no per-instance frame).
+    // ----------------------------------------------------------------------
+
+    /// Sentinel runtime instance ID returned by QueryTriangles for variant
+    /// triangles. Distinct from the per-instance ID range that starts at
+    /// 0x80000001u.
+    static constexpr uint32_t kVariantInstanceId = 0xFFFFFFFEu;
+
+    /// Load one tile's variant scene-cache file produced by SceneCacheBuilder.
+    /// File path is typically <dataRoot>/scene-cache/<map:03d><tileY:02d><tileX:02d>.<variant>.scenecache.
+    /// Returns true on success. On format mismatch (magic/version/mapId/variantId)
+    /// or read error, returns false and leaves any prior state for that tile
+    /// untouched.
+    bool LoadVariantSceneCache(uint32_t mapId, const std::string& variantId,
+                               const std::string& sceneCachePath);
+
+    /// Atomically remove every tile in the given (mapId, variantId) pool.
+    void UnloadVariant(uint32_t mapId, const std::string& variantId);
+
+    /// Remove every variant pool for the given map.
+    void UnloadAllVariants(uint32_t mapId);
+
+    /// Diagnostic — total triangle count across every variant pool registered
+    /// for the given map.
+    size_t VariantTriangleCount(uint32_t mapId) const;
+
 private:
     DynamicObjectRegistry() = default;
 
@@ -136,6 +175,28 @@ private:
         G3D::AABox bounds;      // model-local bounding box
     };
 
+    /// One tile's slice of a variant pool — the contents of one .scenecache file.
+    struct VariantTilePool
+    {
+        int tileX = 0;
+        int tileY = 0;
+        std::vector<CapsuleCollision::Triangle> triangles;
+        G3D::AABox bounds;          // union of triangle vertices in this tile
+        bool boundsValid = false;
+    };
+
+    /// All tiles for one (mapId, variantId) key. UnloadVariant erases this whole
+    /// entry atomically; the per-tile granularity is for future variants whose
+    /// footprint is sparse across the map.
+    struct VariantPool
+    {
+        std::string variantId;
+        std::map<std::pair<int, int>, VariantTilePool> tilesByXY;
+        G3D::AABox poolBounds;       // union across all tiles
+        bool poolBoundsValid = false;
+        size_t totalTriangles = 0;
+    };
+
     mutable std::mutex m_mutex;
     std::string m_vmapsBasePath;
     bool m_mappingLoaded = false;
@@ -150,6 +211,9 @@ private:
     std::unordered_map<uint64_t, DynamicObject> m_objects;
     std::unordered_map<uint32_t, uint64_t> m_instanceIdToGuid;
     uint32_t m_nextRuntimeInstanceId = 0x80000001u;
+
+    // (mapId, variantId) → bulk variant pool (Phase 4).
+    std::map<std::pair<uint32_t, std::string>, VariantPool> m_variantPools;
 
     /// Load and cache a model by its .vmo filename. Returns nullptr on failure.
     std::shared_ptr<CachedModel> LoadModel(const std::string& modelName);
