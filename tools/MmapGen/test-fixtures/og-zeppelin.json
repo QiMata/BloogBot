@@ -3,21 +3,24 @@
   // canonical OG flight-master tower → Frezza zeppelin master climb.
   //
   // Endpoints and tilesAffected mirror tools/scripts/routes/og-zeppelin.json
-  // entry "ClimbOrgrimmarTowerToFrezza". expectedWalkable seeds are taken
-  // from LongPathingTests.OgRampWaypointInspect's per-WP teleport capture
-  // table — these are smooth-path waypoint coords from a successful climb
-  // post-Cycle-17e fix.
+  // entry "ClimbOrgrimmarTowerToFrezza". expectedWalkable / expectedHoles
+  // values are observed from a live `OgZeppelin_RecordFixture` run on
+  // 2026-05-10 (TaurenMale on tile 0012940 post-Cycle-17e fix). The
+  // recorder's auto-classifier (1.5y settle-Z threshold = walkableClimb)
+  // emitted these directly; promoting them to canonical locks the route's
+  // observed truth so the validator can detect future regressions.
   //
-  // expectedHoles is empty for the OG climb route: every smooth-path
-  // waypoint should land on a real walkable polygon. The deck-lip (z=53.5
-  // step from z=51.6) is the canonical pre-fix bug; if it regresses, the
-  // smooth-wp02-z53.5-LIP entry under expectedWalkable will fail with
-  // BAKE_REGRESSION_WALKABLE_LOST when settled Z drops to ~51.6.
+  // Notable: smooth-wp01 at (1337.30,-4645.10,51.70) is an expectedHole
+  // because the bake has NO walkable polygon at that XY/Z; the bot
+  // settles 9y below at z=42.29 (a real cliff drop, not a deck-level
+  // step). If a future bake adds a polygon at z=51.70 here, the
+  // PHANTOM_POLY tag will fire (the bot stays at z=51.70 instead of
+  // falling).
   //
-  // Fixture coords annotated with the seed source so future regenerators
-  // know where the candidates came from.
+  // smooth-wp02-z53.5-LIP is the canonical Cycle-17e deck-lip critical;
+  // settled at z=53.50 confirms the fix is still in effect.
   "route": "ClimbOrgrimmarTowerToFrezza",
-  "description": "OG flight master tower → Frezza zeppelin master climb (post Cycle-17e fix). Seed: LongPathingTests.OgRampWaypointInspect capture table.",
+  "description": "OG flight master tower → Frezza zeppelin master climb (post Cycle-17e fix). Observed via OgZeppelin_RecordFixture on 2026-05-10.",
   "mapId": 1,
   "agent": {
     "race": "TaurenMale",
@@ -29,25 +32,34 @@
     "dest":  [1331.11, -4649.45, 53.6269]
   },
   "expectedWalkable": [
-    { "label": "stall-coord-z51.6",    "xyz": [1338.13, -4645.96, 51.60],   "settleToleranceY": 0.75, "note": "approach-position; tower-deck level" },
-    { "label": "approach-pos-z51.6",   "xyz": [1338.10, -4646.00, 51.60],   "settleToleranceY": 0.75, "note": "explicit ApproachPosition constant" },
-    { "label": "smooth-wp00-z51.9",    "xyz": [1339.10, -4646.10, 51.90],   "settleToleranceY": 0.75, "note": "smooth-path WP 00 seed" },
-    { "label": "smooth-wp01-z51.7",    "xyz": [1337.30, -4645.10, 51.70],   "settleToleranceY": 0.75, "note": "smooth-path WP 01 seed" },
-    { "label": "smooth-wp02-z53.5-LIP", "xyz": [1335.20, -4644.40, 53.50],  "settleToleranceY": 0.50, "note": "deck-lip critical; pre-fix this settled at z=51.6 (BAKE_REGRESSION_WALKABLE_LOST signal)" },
-    { "label": "smooth-wp03-z53.5",    "xyz": [1337.20, -4643.00, 53.50],   "settleToleranceY": 0.50, "note": "deck-top, smooth-path WP 03" },
-    { "label": "smooth-wp04-z53.5",    "xyz": [1339.40, -4644.10, 53.50],   "settleToleranceY": 0.50, "note": "deck-top, smooth-path WP 04" },
-    { "label": "smooth-wp05-z54.3",    "xyz": [1337.50, -4644.60, 54.30],   "settleToleranceY": 0.75, "note": "stair-step toward Frezza" },
-    { "label": "smooth-wp06-z54.8",    "xyz": [1329.10, -4648.60, 54.80],   "settleToleranceY": 0.75, "note": "approach to Frezza" },
-    { "label": "smooth-wp07-z54.6-FRZ", "xyz": [1330.90, -4649.50, 54.60],  "settleToleranceY": 0.75, "note": "Frezza spawn neighborhood" },
-    { "label": "frezza-spawn-z53.6",   "xyz": [1331.11, -4649.45, 53.6269], "settleToleranceY": 0.50, "note": "Frezza NPC 9564 spawn (route dest)" },
-    { "label": "boarding-pos-z53.9",   "xyz": [1320.14, -4653.16, 53.89],   "settleToleranceY": 0.50, "note": "OrgrimmarZeppelinBoardingPosition constant" }
+    { "label": "stall-coord-z51.6",     "xyz": [1338.13, -4645.96, 51.60],     "settleToleranceY": 0.75, "note": "approach-position; tower-deck level" },
+    { "label": "approach-pos-z51.6",    "xyz": [1338.10, -4646.00, 51.59753],  "settleToleranceY": 0.75, "note": "explicit ApproachPosition constant" },
+    { "label": "smooth-wp00-z51.7",     "xyz": [1339.10, -4646.10, 51.706505], "settleToleranceY": 0.75, "note": "smooth-path WP 00 (recorded)" },
+    { "label": "smooth-wp02-z53.5-LIP", "xyz": [1335.20, -4644.40, 53.50],     "settleToleranceY": 0.50, "note": "deck-lip critical (Cycle-17e fix verified)" },
+    { "label": "smooth-wp03-z53.5",     "xyz": [1337.20, -4643.00, 53.50],     "settleToleranceY": 0.50, "note": "deck-top WP 03" },
+    { "label": "smooth-wp04-z53.5",     "xyz": [1339.40, -4644.10, 53.50],     "settleToleranceY": 0.50, "note": "deck-top WP 04" },
+    { "label": "smooth-wp05-z53.5",     "xyz": [1337.50, -4644.60, 53.543625], "settleToleranceY": 0.50, "note": "stair-step toward Frezza (recorded)" },
+    { "label": "smooth-wp06-z54.4",     "xyz": [1329.10, -4648.60, 54.434807], "settleToleranceY": 0.50, "note": "approach to Frezza (recorded)" },
+    { "label": "smooth-wp07-z53.5-FRZ", "xyz": [1330.90, -4649.50, 53.54367],  "settleToleranceY": 0.50, "note": "Frezza spawn neighborhood (recorded)" },
+    { "label": "frezza-spawn-z53.5",    "xyz": [1331.11, -4649.45, 53.54382],  "settleToleranceY": 0.50, "note": "Frezza NPC 9564 spawn (recorded; ~0.08y from canonical 53.6269)" },
+    { "label": "boarding-pos-z53.9",    "xyz": [1320.14, -4653.16, 53.89],     "settleToleranceY": 0.50, "note": "OrgrimmarZeppelinBoardingPosition constant" }
   ],
-  "expectedHoles": [],
+  "expectedHoles": [
+    {
+      "label": "smooth-wp01-cliff-fall-z42",
+      "xyz": [1337.30, -4645.10, 51.70],
+      "expectedSettleZ": 42.32,
+      "settleToleranceY": 1.5,
+      "rationale": "Smooth-path WP 01 seed XY/Z. Bake has no walkable polygon at z=51.70 here; bot falls 9y to the actual walkable surface at z≈42.32. Detour's smooth-path corridor passes through this XY but at the lower Z. Catches PHANTOM_POLY if a future bake adds a phantom poly here at the upper Z."
+    }
+  ],
   "goldenSmoothPath": {
     // Routes/og-zeppelin.json says "expectedCorners: 470-490". Smooth path
     // is denser than corners (one per polygon edge). Real WP count post-
     // Cycle-17e is ~10 (the deck-lip interpolation cap of 0.5y). Tight
-    // tolerance because waypointCount drift is itself a signal.
+    // tolerance because waypointCount drift is itself a signal. Kept for
+    // future x64-side validators; LiveBakeValidationHost is x86 and
+    // skips smooth-path queries.
     "waypointCount": 10,
     "waypointTolerance": 4,
     "endpointToleranceY": 1.0

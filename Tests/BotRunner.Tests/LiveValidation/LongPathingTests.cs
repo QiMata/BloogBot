@@ -2029,12 +2029,20 @@ public class LongPathingTests
         var host = new Harness.LiveBakeValidationHost(_bot, _output.WriteLine);
         var recorder = new Harness.BakeFixtureRecorder(host, screenshotDir: screenshotDir);
 
-        var fixture = await recorder.RecordAsync(input, target.AccountName, outputPath);
+        await EnableGmModeForHarnessAsync(target.AccountName);
+        try
+        {
+            var fixture = await recorder.RecordAsync(input, target.AccountName, outputPath);
 
-        _output.WriteLine($"[BAKE-REC] Recorded fixture: {outputPath}");
-        _output.WriteLine($"[BAKE-REC]   walkable={fixture.ExpectedWalkable.Count} holes={fixture.ExpectedHoles.Count}");
-        _output.WriteLine($"[BAKE-REC] Screenshots: {screenshotDir}");
-        _output.WriteLine("[BAKE-REC] Review screenshots + JSON, then promote to canonical fixture by hand.");
+            _output.WriteLine($"[BAKE-REC] Recorded fixture: {outputPath}");
+            _output.WriteLine($"[BAKE-REC]   walkable={fixture.ExpectedWalkable.Count} holes={fixture.ExpectedHoles.Count}");
+            _output.WriteLine($"[BAKE-REC] Screenshots: {screenshotDir}");
+            _output.WriteLine("[BAKE-REC] Review screenshots + JSON, then promote to canonical fixture by hand.");
+        }
+        finally
+        {
+            await DisableGmModeForHarnessAsync(target.AccountName);
+        }
     }
 
     private async Task RunBakeFixtureValidationAsync(string fixtureRouteId)
@@ -2067,19 +2075,66 @@ public class LongPathingTests
             host,
             screenshotDir: screenshotDir);
 
-        var report = await validator.ValidateAsync(target.AccountName, bgAccount);
-
-        var reportPath = Harness.WaypointSettleValidator.WriteReport(report, reportDir);
-        _output.WriteLine($"[BAKE-VAL] report written: {reportPath}");
-
-        if (!report.Passed)
+        await EnableGmModeForHarnessAsync(target.AccountName);
+        if (bgAccount != null) await EnableGmModeForHarnessAsync(bgAccount);
+        try
         {
-            var summary = string.Join(
-                Environment.NewLine,
-                report.Failures.Select(f => $"  {f.Kind} [{f.Label}] {f.Message}"));
-            Assert.Fail(
-                $"Bake validation failed for route '{fixture.Route}' "
-                + $"({report.Failures.Count} failure(s)). Report: {reportPath}{Environment.NewLine}{summary}");
+            var report = await validator.ValidateAsync(target.AccountName, bgAccount);
+
+            var reportPath = Harness.WaypointSettleValidator.WriteReport(report, reportDir);
+            _output.WriteLine($"[BAKE-VAL] report written: {reportPath}");
+
+            if (!report.Passed)
+            {
+                var summary = string.Join(
+                    Environment.NewLine,
+                    report.Failures.Select(f => $"  {f.Kind} [{f.Label}] {f.Message}"));
+                Assert.Fail(
+                    $"Bake validation failed for route '{fixture.Route}' "
+                    + $"({report.Failures.Count} failure(s)). Report: {reportPath}{Environment.NewLine}{summary}");
+            }
+        }
+        finally
+        {
+            await DisableGmModeForHarnessAsync(target.AccountName);
+            if (bgAccount != null) await DisableGmModeForHarnessAsync(bgAccount);
+        }
+    }
+
+    /// <summary>
+    /// Toggle in-game GM mode ON for the given account. The harness's
+    /// teleport workflow uses bot-chat <c>.go xyz</c>, which requires the
+    /// session's <c>IsGameMaster()</c> flag to be set. VMaNGOS's
+    /// <c>GM.LoginState=2</c> persists last state per character, but a
+    /// prior <c>.gm off</c> (e.g., MovementParityTests:357) leaves new
+    /// runs starting with GM mode OFF. Scoped to harness drivers only —
+    /// callers must pair with <see cref="DisableGmModeForHarnessAsync"/>
+    /// in a finally block. Other tests using <c>.go xyz</c> rely on
+    /// previously-persisted GM-on state and are not modified here.
+    /// </summary>
+    private async Task EnableGmModeForHarnessAsync(string accountName)
+    {
+        try
+        {
+            await _bot.SendGmChatCommandAsync(accountName, ".gm on");
+            _output.WriteLine($"[BAKE-HARNESS] enabled GM mode for {accountName}");
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"[BAKE-HARNESS] WARN: '.gm on' for {accountName} failed: {ex.Message}");
+        }
+    }
+
+    private async Task DisableGmModeForHarnessAsync(string accountName)
+    {
+        try
+        {
+            await _bot.SendGmChatCommandAsync(accountName, ".gm off");
+            _output.WriteLine($"[BAKE-HARNESS] disabled GM mode for {accountName}");
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"[BAKE-HARNESS] WARN: '.gm off' for {accountName} failed: {ex.Message}");
         }
     }
 
