@@ -984,6 +984,24 @@ public static partial class NavigationInterop
         uint mapId, float x, float y, float z, float maxSearchDist);
 
     /// <summary>
+    /// Look up the nearest navmesh polygon to a coord. Returns the polyref
+    /// (0 if none found within extents) and the polygon's surface Z at the
+    /// queried XY. Used by NavMeshPhysicsValidator to map non-Walk segment
+    /// endpoints to specific polygons for the Slice B cull pass.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "GetPolyAtCoord", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool GetPolyAtCoord(
+        uint mapId,
+        Vector3 coord,
+        float searchExtentXY,
+        float searchExtentZ,
+        out ulong outPolyRef,
+        out byte outPolyType,
+        out Vector3 outNearestPoint,
+        out float outSurfaceZ);
+
+    /// <summary>
     /// Phase 4 — total triangle count across every variant pool currently
     /// registered for the given map. Diagnostic.
     /// </summary>

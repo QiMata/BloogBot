@@ -142,6 +142,33 @@ internal static class Program
                             or SegmentAffordanceResult.Cliff)
                             report.UnrecoverableNonWalk++;
 
+                        // Capture polyref at each endpoint via GetPolyAtCoord.
+                        // For Slice B (cull pass), we need to know WHICH polygons
+                        // sit at the segment endpoints so we can mark them
+                        // non-walkable in the .mmtile. searchExtentXY=2y +
+                        // searchExtentZ=walkableClimb=1.8y matches the tighter
+                        // PathfindingService.Tests default. PolyRef==0 means
+                        // "no poly found nearby" — happens when the segment
+                        // endpoint is in unbaked terrain (vmap/adt sparse area).
+                        ulong polyA = 0, polyB = 0;
+                        try
+                        {
+                            GetPolyAtCoord(opts.MapId, segStart, 2f, 1.8f,
+                                out polyA, out _, out _, out _);
+                            GetPolyAtCoord(opts.MapId, segEnd, 2f, 1.8f,
+                                out polyB, out _, out _, out _);
+                        }
+                        catch { /* tolerate per-call failure */ }
+
+                        // Track per-(polyA, polyB) edge counts. Slice B will
+                        // use these to identify edges that consistently fail
+                        // physics — those are the ones to cull.
+                        if (polyA != 0 && polyB != 0)
+                        {
+                            var edge = new PolyEdge(polyA, polyB);
+                            report.PolyEdgeCounts[edge] = report.PolyEdgeCounts.GetValueOrDefault(edge, 0) + 1;
+                        }
+
                         // Update heat map at the SEGMENT MIDPOINT for clearer hotspot localization.
                         var midX = (segStart.X + segEnd.X) * 0.5f;
                         var midY = (segStart.Y + segEnd.Y) * 0.5f;
@@ -169,6 +196,20 @@ internal static class Program
             report.WorstSegments = report.AllBadSegments
                 .OrderByDescending(s => MathF.Max(s.Drop, s.Climb))
                 .Take(opts.WorstTop)
+                .ToList();
+
+            // RejectedEdges: every (polyA, polyB) pair that produced at least
+            // one non-Walk segment. Sorted by frequency so the "most rejected"
+            // edges show first. Slice B's cull tool reads this list and marks
+            // each polygon non-walkable in the .mmtile.
+            report.RejectedEdges = report.PolyEdgeCounts
+                .OrderByDescending(kv => kv.Value)
+                .Select(kv => new PolyEdgeStat
+                {
+                    PolyA = kv.Key.PolyA,
+                    PolyB = kv.Key.PolyB,
+                    BadSegmentCount = kv.Value,
+                })
                 .ToList();
 
             // Hotspot cells: top by non-Walk count, with center coords.
@@ -368,6 +409,14 @@ internal sealed class ValidationReport
     public List<BadSegment> WorstSegments { get; set; } = new();
     public List<HotspotCell> HotspotCells { get; set; } = new();
     public List<BadSegment> AllBadSegments { get; } = new();
+    /// Per-(polyRefA, polyRefB) bad-edge counts. Slice B cull pass uses these
+    /// to identify edges that consistently fail physics validation — those
+    /// are the ones to mark non-walkable in the .mmtile. Serialized as a
+    /// flat list of {polyA, polyB, count} entries since Dictionary keys
+    /// don't survive JSON well.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Dictionary<PolyEdge, int> PolyEdgeCounts { get; } = new();
+    public List<PolyEdgeStat> RejectedEdges { get; set; } = new();
 
     private const int MaxBadSegmentsRetained = 4096;
 
@@ -398,6 +447,21 @@ internal sealed class HotspotCell
     public float CenterX { get; set; }
     public float CenterY { get; set; }
     public int NonWalkCount { get; set; }
+}
+
+/// Composite key for poly-edge counting. Edge ordering is preserved (A→B vs
+/// B→A counted separately) since the runtime affordance is direction-aware
+/// (climbing UP vs dropping DOWN is different).
+internal readonly record struct PolyEdge(ulong PolyA, ulong PolyB);
+
+/// Serializable form of PolyEdge with the bad-segment count for that pair.
+/// Slice B cull pass reads RejectedEdges and marks each (PolyA, PolyB) as
+/// non-walkable in the .mmtile.
+internal sealed class PolyEdgeStat
+{
+    public ulong PolyA { get; set; }
+    public ulong PolyB { get; set; }
+    public int BadSegmentCount { get; set; }
 }
 
 internal sealed class Args
