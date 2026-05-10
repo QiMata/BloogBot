@@ -1,0 +1,99 @@
+{
+  "route": "FlameCrestToBrmDungeonEntrance_Recorded",
+  "description": "Recorded by BrmDungeon_RecordFixture; review screenshots for WMO-interior trap.",
+  "mapId": 0,
+  "agent": {
+    "race": "TaurenMale",
+    "radius": 1.0247,
+    "height": 2.625
+  },
+  "endpoints": {
+    "start": [
+      -7518.7,
+      -2159.9,
+      131.9
+    ],
+    "dest": [
+      -7524,
+      -1233,
+      287
+    ]
+  },
+  "expectedWalkable": [
+    {
+      "label": "flamecrest-tower-foot",
+      "xyz": [
+        -7518.7,
+        -2159.9,
+        131.8912
+      ],
+      "settleToleranceY": 0.75,
+      "note": "FlameCrest start; ground-level"
+    },
+    {
+      "label": "lbrs-portal",
+      "xyz": [
+        -7531,
+        -1226,
+        285.7323
+      ],
+      "settleToleranceY": 0.75,
+      "note": "LBRS literal portal"
+    },
+    {
+      "label": "brm-south-z170.8-trap",
+      "xyz": [
+        -7949.7,
+        -1162.8,
+        170.8
+      ],
+      "settleToleranceY": 0.75,
+      "note": "Round-3 south-face WMO-interior trap"
+    },
+    {
+      "label": "brm-south-z133.8-newtrap",
+      "xyz": [
+        -7825.4,
+        -1129.2,
+        133.78485
+      ],
+      "settleToleranceY": 0.75,
+      "note": "Slice-F new trap (post-cull)"
+    }
+  ],
+  "expectedHoles": [
+    {
+      "label": "ubrs-portal",
+      "xyz": [
+        -7524,
+        -1233,
+        287
+      ],
+      "expectedSettleZ": 49.7662,
+      "settleToleranceY": 1.5,
+      "rationale": "UBRS literal portal"
+    },
+    {
+      "label": "brd-approach",
+      "xyz": [
+        -7187,
+        -958,
+        254
+      ],
+      "expectedSettleZ": 252.3397,
+      "settleToleranceY": 1.5,
+      "rationale": "BRD approach (corridor terminus)"
+    },
+    {
+      "label": "bwl-approach",
+      "xyz": [
+        -7659,
+        -1214,
+        291
+      ],
+      "expectedSettleZ": 288.58258,
+      "settleToleranceY": 1.5,
+      "rationale": "BWL approach"
+    }
+  ]
+}

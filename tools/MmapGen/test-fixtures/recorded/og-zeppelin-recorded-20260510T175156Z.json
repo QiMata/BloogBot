@@ -1,0 +1,147 @@
+{
+  "route": "ClimbOrgrimmarTowerToFrezza_Recorded",
+  "description": "Recorded by OgZeppelin_RecordFixture; review screenshots before promoting.",
+  "mapId": 1,
+  "agent": {
+    "race": "TaurenMale",
+    "radius": 1.0247,
+    "height": 2.625
+  },
+  "endpoints": {
+    "start": [
+      1677,
+      -4315,
+      61.4
+    ],
+    "dest": [
+      1331.11,
+      -4649.45,
+      53.6269
+    ]
+  },
+  "expectedWalkable": [
+    {
+      "label": "stall-coord-z51.6",
+      "xyz": [
+        1338.13,
+        -4645.96,
+        51.6
+      ],
+      "settleToleranceY": 0.75,
+      "note": "approach-position; tower-deck level"
+    },
+    {
+      "label": "approach-pos-z51.6",
+      "xyz": [
+        1338.1,
+        -4646,
+        51.59753
+      ],
+      "settleToleranceY": 0.75,
+      "note": "explicit ApproachPosition constant"
+    },
+    {
+      "label": "smooth-wp00-z51.9",
+      "xyz": [
+        1339.1,
+        -4646.1,
+        51.706505
+      ],
+      "settleToleranceY": 0.75,
+      "note": "smooth-path WP 00"
+    },
+    {
+      "label": "smooth-wp02-z53.5-LIP",
+      "xyz": [
+        1335.2,
+        -4644.4,
+        53.5
+      ],
+      "settleToleranceY": 0.75,
+      "note": "deck-lip critical"
+    },
+    {
+      "label": "smooth-wp03-z53.5",
+      "xyz": [
+        1337.2,
+        -4643,
+        53.5
+      ],
+      "settleToleranceY": 0.75,
+      "note": "deck-top WP 03"
+    },
+    {
+      "label": "smooth-wp04-z53.5",
+      "xyz": [
+        1339.4,
+        -4644.1,
+        53.5
+      ],
+      "settleToleranceY": 0.75,
+      "note": "deck-top WP 04"
+    },
+    {
+      "label": "smooth-wp05-z54.3",
+      "xyz": [
+        1337.5,
+        -4644.6,
+        53.543625
+      ],
+      "settleToleranceY": 0.75,
+      "note": "stair-step toward Frezza"
+    },
+    {
+      "label": "smooth-wp06-z54.8",
+      "xyz": [
+        1329.1,
+        -4648.6,
+        54.434807
+      ],
+      "settleToleranceY": 0.75,
+      "note": "approach to Frezza"
+    },
+    {
+      "label": "smooth-wp07-z54.6-FRZ",
+      "xyz": [
+        1330.9,
+        -4649.5,
+        53.54367
+      ],
+      "settleToleranceY": 0.75,
+      "note": "Frezza spawn neighborhood"
+    },
+    {
+      "label": "frezza-spawn-z53.6",
+      "xyz": [
+        1331.11,
+        -4649.45,
+        53.54382
+      ],
+      "settleToleranceY": 0.75,
+      "note": "Frezza NPC 9564 spawn"
+    },
+    {
+      "label": "boarding-pos-z53.9",
+      "xyz": [
+        1320.14,
+        -4653.16,
+        53.89
+      ],
+      "settleToleranceY": 0.75,
+      "note": "OG zeppelin BoardingPosition"
+    }
+  ],
+  "expectedHoles": [
+    {
+      "label": "smooth-wp01-z51.7",
+      "xyz": [
+        1337.3,
+        -4645.1,
+        51.7
+      ],
+      "expectedSettleZ": 42.316776,
+      "settleToleranceY": 1.5,
+      "rationale": "smooth-path WP 01"
+    }
+  ]
+}
