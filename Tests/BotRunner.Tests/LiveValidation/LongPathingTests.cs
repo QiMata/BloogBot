@@ -1532,32 +1532,7 @@ public class LongPathingTests
     }
 
     private int? ResolveManagedWowProcessId(string account)
-    {
-        if (string.IsNullOrWhiteSpace(account))
-            return null;
-
-        var escapedAccount = Regex.Escape(account);
-        var patterns = new[]
-        {
-            new Regex($@"WoW\.exe started for account\s+{escapedAccount}\s+\(Process ID:\s*(\d+)", RegexOptions.IgnoreCase),
-            new Regex($@"Added\s+{escapedAccount}\s+to managed services with PID\s+(\d+)", RegexOptions.IgnoreCase),
-        };
-
-        foreach (var line in _bot.GetStateManagerOutput().Reverse())
-        {
-            foreach (var pattern in patterns)
-            {
-                var match = pattern.Match(line);
-                if (match.Success
-                    && int.TryParse(match.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var pid))
-                {
-                    return pid;
-                }
-            }
-        }
-
-        return null;
-    }
+        => global::Tests.Infrastructure.ManagedWowProcessIdResolver.Resolve(account, _bot.GetStateManagerOutput());
 
     private static void AssertConfiguredTaurenMaleTarget(string settingsPath, string account)
     {
@@ -1963,7 +1938,12 @@ public class LongPathingTests
 
         var bgAccount = await ResolveBgAccountForParityAsync(target);
         var host = new Harness.LiveBakeValidationHost(_bot, _output.WriteLine);
-        var validator = new Harness.WaypointSettleValidator(fixture, host);
+        var screenshotDir = Path.Combine(reportDir, "screenshots");
+        Directory.CreateDirectory(screenshotDir);
+        var validator = new Harness.WaypointSettleValidator(
+            fixture,
+            host,
+            screenshotDir: screenshotDir);
 
         var report = await validator.ValidateAsync(target.AccountName, bgAccount);
 

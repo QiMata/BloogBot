@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -262,6 +263,84 @@ public class WaypointSettleValidatorTests
     }
 
     [Fact]
+    public async Task CaptureMultiAngle_NotInvokedWhenScreenshotDirOmitted()
+    {
+        var fixture = MakeFixture(walkable: new[] { ("plat", 100f, 200f, 50f) });
+        var host = new MockBakeValidationHost();
+        host.SettleResults[(FgAccount, 100f, 200f, 50f)] = new SettledPosition(100f, 200f, 50.05f, null);
+
+        var validator = new WaypointSettleValidator(fixture, host, settleDelay: TimeSpan.Zero);
+        var report = await validator.ValidateAsync(FgAccount);
+
+        Assert.True(report.Passed);
+        Assert.Empty(host.CaptureCalls);
+        Assert.Null(report.Walkable[0].Screenshots);
+    }
+
+    [Fact]
+    public async Task CaptureMultiAngle_RecordsPathsInCheckpointWhenScreenshotDirSet()
+    {
+        var fixture = MakeFixture(
+            walkable: new[] { ("plat", 100f, 200f, 50f) },
+            holes: new[] { ("cliff", 110f, 200f, 80f, 60f) });
+        var host = new MockBakeValidationHost();
+        host.SettleResults[(FgAccount, 100f, 200f, 50f)] = new SettledPosition(100f, 200f, 50.05f, null);
+        host.SettleResults[(FgAccount, 110f, 200f, 80f)] = new SettledPosition(110f, 200f, 60.10f, null);
+        host.ScreenshotResults = call =>
+            new[] { Path.Combine("out", $"{call.Label}-yaw000.png"), Path.Combine("out", $"{call.Label}-yaw090.png") };
+
+        var validator = new WaypointSettleValidator(
+            fixture, host, settleDelay: TimeSpan.Zero,
+            screenshotDir: "out");
+        var report = await validator.ValidateAsync(FgAccount);
+
+        Assert.True(report.Passed);
+        Assert.Equal(2, host.CaptureCalls.Count);
+        Assert.Equal("plat", host.CaptureCalls[0].Label);
+        Assert.Equal("cliff", host.CaptureCalls[1].Label);
+        Assert.NotNull(report.Walkable[0].Screenshots);
+        Assert.Equal(2, report.Walkable[0].Screenshots!.Count);
+        Assert.Contains("plat-yaw000.png", report.Walkable[0].Screenshots![0]);
+        Assert.NotNull(report.Holes[0].Screenshots);
+        Assert.Contains("cliff-yaw090.png", report.Holes[0].Screenshots![1]);
+    }
+
+    [Fact]
+    public async Task CaptureMultiAngle_FgOnly_NoBgCapture()
+    {
+        // BG is paired for parity, but should NEVER be called for screenshots.
+        var fixture = MakeFixture(walkable: new[] { ("plat", 100f, 200f, 50f) });
+        var host = new MockBakeValidationHost();
+        host.SettleResults[(FgAccount, 100f, 200f, 50f)] = new SettledPosition(100f, 200f, 50f, null);
+        host.SettleResults[(BgAccount, 100f, 200f, 50f)] = new SettledPosition(100f, 200f, 50f, null);
+
+        var validator = new WaypointSettleValidator(
+            fixture, host, settleDelay: TimeSpan.Zero, screenshotDir: "out");
+        var report = await validator.ValidateAsync(FgAccount, BgAccount);
+
+        Assert.True(report.Passed);
+        var capturedAccounts = host.CaptureCalls.Select(c => c.Account).Distinct().ToList();
+        Assert.Single(capturedAccounts);
+        Assert.Equal(FgAccount, capturedAccounts[0]);
+    }
+
+    [Fact]
+    public async Task CaptureMultiAngle_Skipped_WhenSettleMissing()
+    {
+        var fixture = MakeFixture(walkable: new[] { ("offline", 0f, 0f, 0f) });
+        var host = new MockBakeValidationHost();
+        // No SettleResults entry.
+
+        var validator = new WaypointSettleValidator(
+            fixture, host, settleDelay: TimeSpan.Zero, screenshotDir: "out");
+        var report = await validator.ValidateAsync(FgAccount);
+
+        // Settle missing → TELEPORT_FAILED, no screenshot attempt.
+        Assert.False(report.Passed);
+        Assert.Empty(host.CaptureCalls);
+    }
+
+    [Fact]
     public async Task ReportSerializesAndIsReadable()
     {
         var fixture = MakeFixture(walkable: new[] { ("plat", 100f, 200f, 50f) });
@@ -335,6 +414,25 @@ public class WaypointSettleValidatorTests
             if (_segmentIdx < SegmentClassifications.Count)
                 return Task.FromResult(SegmentClassifications[_segmentIdx++]);
             return Task.FromResult<string?>(null);
+        }
+
+        /// <summary>
+        /// Records every multi-angle capture request. By default returns an
+        /// empty list (no screenshots captured). Tests that exercise the
+        /// screenshot path can populate <see cref="ScreenshotResults"/>.
+        /// </summary>
+        public List<(string Label, string Account, string OutputDir, float[] Xyz)> CaptureCalls { get; } = new();
+        public Func<(string Label, string Account, float[] Xyz), IReadOnlyList<string>> ScreenshotResults { get; set; }
+            = _ => Array.Empty<string>();
+
+        public Task<IReadOnlyList<string>> CaptureMultiAngleAsync(
+            string accountName, string baseLabel, uint mapId,
+            float settledX, float settledY, float settledZ,
+            string outputDir, CancellationToken ct)
+        {
+            var xyz = new[] { settledX, settledY, settledZ };
+            CaptureCalls.Add((baseLabel, accountName, outputDir, xyz));
+            return Task.FromResult(ScreenshotResults((baseLabel, accountName, xyz)));
         }
 
         public void Log(string message) => LogLines.Add(message);

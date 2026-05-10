@@ -50,17 +50,20 @@ public sealed class WaypointSettleValidator
     private readonly IBakeValidationHost _host;
     private readonly TimeSpan _settleDelay;
     private readonly Func<DateTime> _clock;
+    private readonly string? _screenshotDir;
 
     public WaypointSettleValidator(
         BakeFixture fixture,
         IBakeValidationHost host,
         TimeSpan? settleDelay = null,
-        Func<DateTime>? clock = null)
+        Func<DateTime>? clock = null,
+        string? screenshotDir = null)
     {
         _fixture = fixture ?? throw new ArgumentNullException(nameof(fixture));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _settleDelay = settleDelay ?? DefaultSettleDelay;
         _clock = clock ?? (() => DateTime.UtcNow);
+        _screenshotDir = screenshotDir;
     }
 
     /// <summary>
@@ -68,7 +71,8 @@ public sealed class WaypointSettleValidator
     /// expectedWalkable/expectedHoles checkpoints are exercised on
     /// <paramref name="fgAccount"/>; if <paramref name="bgAccount"/> is
     /// non-null, the same checkpoints are also exercised on the BG bot
-    /// and FG/BG parity is asserted.
+    /// and FG/BG parity is asserted. BG never gets screenshots —
+    /// observability for the validation cycle comes from the paired FG.
     /// </summary>
     public async Task<BakeValidationReport> ValidateAsync(
         string fgAccount,
@@ -138,7 +142,7 @@ public sealed class WaypointSettleValidator
                 "FG bot never produced a settled position after teleport",
                 Expected: $"({c.Xyz[0]:F2},{c.Xyz[1]:F2},{c.Xyz[2]:F2})",
                 Actual: null));
-            return MakeCheckpoint(c, "walkable", null, null, fgPoly, bgPoly, "MISSING_SAMPLE");
+            return MakeCheckpoint(c, "walkable", null, null, fgPoly, bgPoly, null, "MISSING_SAMPLE");
         }
 
         // 1. Teleport-failed gate.
@@ -151,7 +155,7 @@ public sealed class WaypointSettleValidator
                 $"FG settled XY drifted {MathF.Sqrt(fgXyDrift2):F2}y from teleport target (tolerance {TeleportXyDriftTolerance}y)",
                 Expected: $"({c.Xyz[0]:F2},{c.Xyz[1]:F2})",
                 Actual: $"({fgPos.X:F2},{fgPos.Y:F2})"));
-            return MakeCheckpoint(c, "walkable", fgPos, bgPos, fgPoly, bgPoly, "FAILED");
+            return MakeCheckpoint(c, "walkable", fgPos, bgPos, fgPoly, bgPoly, null, "FAILED");
         }
 
         // 2. Walkable settle-Z gate.
@@ -172,7 +176,10 @@ public sealed class WaypointSettleValidator
         if (bgPos != null && fgPos != null && CheckParity(c.Label, fgPos, bgPos, failures))
             status = "FAILED";
 
-        return MakeCheckpoint(c, "walkable", fgPos, bgPos, fgPoly, bgPoly, status);
+        // 4. Multi-angle screenshots (FG only — BG never gets screenshots).
+        var screenshots = await CaptureScreenshotsAsync(c.Label, fgAccount, fgPos, ct).ConfigureAwait(false);
+
+        return MakeCheckpoint(c, "walkable", fgPos, bgPos, fgPoly, bgPoly, screenshots, status);
     }
 
     private async Task<BakeValidationCheckpointResult> EvaluateHoleAsync(
@@ -195,7 +202,7 @@ public sealed class WaypointSettleValidator
                 "FG bot never produced a settled position after teleport",
                 Expected: $"settle ≈ z={h.ExpectedSettleZ:F2}",
                 Actual: null));
-            return MakeHole(h, null, null, fgPoly, bgPoly, "MISSING_SAMPLE");
+            return MakeHole(h, null, null, fgPoly, bgPoly, null, "MISSING_SAMPLE");
         }
 
         // 1. Phantom-poly gate. The bot must NOT settle at the original xyz
@@ -227,7 +234,42 @@ public sealed class WaypointSettleValidator
         if (bgPos != null && fgPos != null && CheckParity(h.Label, fgPos, bgPos, failures))
             status = "FAILED";
 
-        return MakeHole(h, fgPos, bgPos, fgPoly, bgPoly, status);
+        // Multi-angle screenshots (FG only).
+        var screenshots = await CaptureScreenshotsAsync(h.Label, fgAccount, fgPos, ct).ConfigureAwait(false);
+
+        return MakeHole(h, fgPos, bgPos, fgPoly, bgPoly, screenshots, status);
+    }
+
+    /// <summary>
+    /// Drive the host's multi-angle capture for the given checkpoint
+    /// using the bot's settled position. Returns null when no screenshot
+    /// directory was configured (unit-test mode) or the host returns no
+    /// paths. Failures inside capture are logged but do not break the
+    /// validation cycle.
+    /// </summary>
+    private async Task<IReadOnlyList<string>?> CaptureScreenshotsAsync(
+        string label,
+        string fgAccount,
+        SettledPosition fgPos,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(_screenshotDir)) return null;
+        try
+        {
+            var paths = await _host.CaptureMultiAngleAsync(
+                fgAccount,
+                label,
+                _fixture.MapId,
+                fgPos.X, fgPos.Y, fgPos.Z,
+                _screenshotDir,
+                ct).ConfigureAwait(false);
+            return paths == null || paths.Count == 0 ? null : paths;
+        }
+        catch (Exception ex)
+        {
+            _host.Log($"[BAKE-VAL] screenshot capture failed for '{label}': {ex.Message}");
+            return null;
+        }
     }
 
     private async Task<(BakeValidationSmoothPathResult? Smooth, BakeValidationAffordanceResult? Afford)>
@@ -382,6 +424,7 @@ public sealed class WaypointSettleValidator
         SettledPosition? bg,
         ulong? fgPoly,
         ulong? bgPoly,
+        IReadOnlyList<string>? screenshots,
         string status)
         => new(
             Label: c.Label,
@@ -393,6 +436,7 @@ public sealed class WaypointSettleValidator
             BgSettled: bg == null ? null : new[] { bg.X, bg.Y, bg.Z },
             FgPolyRefHex: fgPoly == null ? null : "0x" + fgPoly.Value.ToString("X16"),
             BgPolyRefHex: bgPoly == null ? null : "0x" + bgPoly.Value.ToString("X16"),
+            Screenshots: screenshots,
             Status: status);
 
     private static BakeValidationCheckpointResult MakeHole(
@@ -401,6 +445,7 @@ public sealed class WaypointSettleValidator
         SettledPosition? bg,
         ulong? fgPoly,
         ulong? bgPoly,
+        IReadOnlyList<string>? screenshots,
         string status)
         => new(
             Label: h.Label,
@@ -412,6 +457,7 @@ public sealed class WaypointSettleValidator
             BgSettled: bg == null ? null : new[] { bg.X, bg.Y, bg.Z },
             FgPolyRefHex: fgPoly == null ? null : "0x" + fgPoly.Value.ToString("X16"),
             BgPolyRefHex: bgPoly == null ? null : "0x" + bgPoly.Value.ToString("X16"),
+            Screenshots: screenshots,
             Status: status);
 
     private static float SqrDistance2D(SettledPosition pos, float tx, float ty)

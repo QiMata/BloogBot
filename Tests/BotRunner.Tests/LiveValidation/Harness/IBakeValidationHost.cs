@@ -50,6 +50,27 @@ public interface IBakeValidationHost
         float[] b,
         CancellationToken ct);
 
+    /// <summary>
+    /// Capture multi-angle screenshots of the bot at its current settled
+    /// position. Implementations re-orient the player to each cardinal yaw
+    /// (and any caller-supplied additional angles) and grab the WoW client
+    /// window for the given account. Returns an empty list when the host
+    /// does not implement screenshot capture (e.g., the unit-test mock).
+    ///
+    /// The validator calls this after every <c>expectedWalkable</c> /
+    /// <c>expectedHoles</c> checkpoint settle so each fixture run produces
+    /// a visual record of where the bot ended up at every angle.
+    /// </summary>
+    Task<IReadOnlyList<string>> CaptureMultiAngleAsync(
+        string accountName,
+        string baseLabel,
+        uint mapId,
+        float settledX,
+        float settledY,
+        float settledZ,
+        string outputDir,
+        CancellationToken ct);
+
     void Log(string message);
 }
 

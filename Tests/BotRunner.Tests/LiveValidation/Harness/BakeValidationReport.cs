@@ -33,6 +33,7 @@ public sealed record BakeValidationCheckpointResult(
     [property: JsonPropertyName("bgSettled")] float[]? BgSettled,
     [property: JsonPropertyName("fgPolyRef")] string? FgPolyRefHex,
     [property: JsonPropertyName("bgPolyRef")] string? BgPolyRefHex,
+    [property: JsonPropertyName("screenshots")] IReadOnlyList<string>? Screenshots,
     [property: JsonPropertyName("status")] string Status); // "OK" | "FAILED" | "MISSING_SAMPLE"
 
 public sealed record BakeValidationSmoothPathResult(

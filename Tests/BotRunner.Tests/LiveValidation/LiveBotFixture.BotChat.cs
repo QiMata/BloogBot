@@ -762,6 +762,29 @@ public partial class LiveBotFixture
     /// </summary>
 
 
+    /// <summary>
+    /// Teleport a bot to (x, y, z) on the given map AND set its facing to
+    /// <paramref name="orientationRad"/>, using the MaNGOS GM command
+    /// <c>.go xyzo X Y Z O mapid</c>. Used by the bake-validation harness
+    /// to drive multi-angle screenshots — WoW's default chase camera
+    /// follows the player's facing, so re-orienting IS the camera change.
+    ///
+    /// Unlike <see cref="BotTeleportAsync"/> this does not retry on
+    /// silent failure and does not poll for settle: callers run it
+    /// shortly after a successful XYZ teleport, so the bot is already
+    /// near the target and we just need to update orientation.
+    /// </summary>
+    public Task BotTeleportWithOrientationAsync(
+        string accountName, int mapId, float x, float y, float z, float orientationRad)
+    {
+        var xText = x.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        var yText = y.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        var zText = z.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        var oText = orientationRad.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+        var command = $".go xyzo {xText} {yText} {zText} {oText} {mapId}";
+        return SendGmChatCommandAsync(accountName, command, captureResponse: false);
+    }
+
     /// <summary>Teleport a bot to a named location via SOAP (.tele name charName location).</summary>
     public Task BotTeleportToNamedAsync(string accountName, string characterName, string locationName)
         => ExecuteGMCommandAsync($".tele name {characterName} {locationName}");

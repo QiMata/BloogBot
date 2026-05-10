@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Tests.Infrastructure;
 
 namespace BotRunner.Tests.LiveValidation.Harness;
 
@@ -71,5 +73,53 @@ public sealed class LiveBakeValidationHost : IBakeValidationHost
     public Task<string?> ClassifySegmentAsync(uint mapId, float[] a, float[] b, CancellationToken ct)
         => Task.FromResult<string?>(null);
 
+    /// <summary>
+    /// Drive multi-angle screenshots by re-orienting the bot through the
+    /// four cardinal yaw angles via <c>.go xyzo</c> and capturing the
+    /// visible WoW client window with <see cref="WindowCapture"/>. WoW's
+    /// chase camera follows player facing, so re-orienting IS the camera
+    /// change — no Lua bridge required.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> CaptureMultiAngleAsync(
+        string accountName,
+        string baseLabel,
+        uint mapId,
+        float settledX,
+        float settledY,
+        float settledZ,
+        string outputDir,
+        CancellationToken ct)
+    {
+        var pid = ManagedWowProcessIdResolver.Resolve(accountName, _bot.GetStateManagerOutput());
+        if (pid == null)
+        {
+            _log($"[BAKE-VAL] no WoW PID for account '{accountName}'; skipping multi-angle capture for '{baseLabel}'.");
+            return Array.Empty<string>();
+        }
+
+        return await MultiAngleScreenshotCapture.CaptureAsync(
+            processId: pid.Value,
+            outputDir: outputDir,
+            baseLabel: SanitizeLabel(baseLabel) + "-" + accountName,
+            yaws: MultiAngleScreenshotCapture.CardinalYaws,
+            applyOrientationAsync: async (yawRad, innerCt) =>
+            {
+                await _bot.BotTeleportWithOrientationAsync(
+                    accountName, (int)mapId, settledX, settledY, settledZ, yawRad).ConfigureAwait(false);
+            },
+            settleMs: 500,
+            ct: ct).ConfigureAwait(false);
+    }
+
     public void Log(string message) => _log(message);
+
+    private static string SanitizeLabel(string label)
+    {
+        if (string.IsNullOrWhiteSpace(label)) return "checkpoint";
+        var buf = new System.Text.StringBuilder(label.Length);
+        foreach (var ch in label)
+            buf.Append(char.IsLetterOrDigit(ch) || ch == '-' || ch == '_' || ch == '.' ? ch : '-');
+        var s = buf.ToString().Trim('-');
+        return s.Length == 0 ? "checkpoint" : (s.Length <= 80 ? s : s[..80]);
+    }
 }
