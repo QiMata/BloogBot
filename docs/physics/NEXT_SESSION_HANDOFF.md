@@ -3,22 +3,16 @@
 > Working dir: `E:/repos/Westworld of Warcraft/`
 > Branch: `main` at HEAD (pushed). Working tree clean except `.env`.
 
-You are continuing PFS-OVERHAUL-006. The validation harness is fully
-operational live; SceneDataService is verified working (BG fetches
-real ADT triangles for the OG zep tile). The OG cliff-fall parity
-break is now **localized to a specific code site**. The frontier is
-to apply the targeted fix and run the OG fixture validator.
+You are continuing PFS-OVERHAUL-006. The OG cliff-fall parity-break
+**fix is shipped end-to-end** with deterministic unit tests and clean
+regression gates. The remaining work is a live OG fixture validator
+re-run to confirm the parity break is gone in the wild.
 
-> Latest finding (2026-05-10): the parity break is NOT in
-> `PhysicsGroundSnap.cpp`. It is in
-> `Exports/WoWSharpClient/Movement/MovementController.cs:466-556`'s
-> `PrimeAirborneTeleportFallIfNeeded` + `TrySnapToNearbyTeleportSupport`,
-> which probe ground via `NativeLocalPhysics.GetGroundZ` → ultimately
-> `SceneCache::GetGroundZ` (SceneCache.cpp:901-979). That function
-> returns any triangle whose XY footprint contains the query point,
-> with **no walkable-slope filter**. See
-> `memory/project_pfs_overhaul_006_cliff_fall_diagnosis.md` for the
-> full chain.
+> 2026-05-10 status: the OG `smooth-wp01-cliff-fall-z42` parity break
+> is fixed at the code level via `SceneCache::GetWalkableGroundZ` +
+> `MovementController` gate updates (commit `1c530288`). Live re-run
+> deferred (~2:15, needs WoW.exe + MaNGOS). See
+> `memory/project_pfs_overhaul_006_cliff_fall_diagnosis.md`.
 
 ## Priority order — DO NOT skip ahead
 
@@ -56,7 +50,8 @@ The full rule with rationale lives in
 | `fed16c25` | Committed recorded BakeFixture artifacts from 2026-05-10 live runs |
 | `e56f3ad7` | Added missing `scenes/` mount to `docker-compose.vmangos-linux.yml`; rebuilt `wwow-scene-data` container so its `ProtobufSocketServer.TryReadExact(allowCleanEndOfStream:true)` silences benign healthcheck disconnects |
 | `f844d101` | Codified FG/BG parity priority + initial next-session handoff (mandate, hard rules, run order) |
-| **THIS SESSION** | Localized cliff-fall parity break to `MovementController.cs:466-556` + `SceneCache::GetGroundZ` missing walkable filter. Wrote `memory/project_pfs_overhaul_006_cliff_fall_diagnosis.md`. Updated handoff with concrete fix surfaces. No code changes shipped — diagnosis-only session. |
+| `7a79154a` | Localized cliff-fall parity break to `MovementController.cs:466-556` + `SceneCache::GetGroundZ` missing walkable filter. Diagnosis-only commit; updated handoff with concrete fix surfaces. |
+| `1c530288` | **THIS SESSION**: Shipped the fix. Added `SceneCache::GetWalkableGroundZ` (+ SceneQuery wrapper + C export + P/Invoke + `NativeLocalPhysics.GetWalkableGroundZ`). Switched the two post-teleport probes in MovementController. Fixed the gate to treat "support above teleport Z" as a falling condition (re-probes BELOW for fall reference). 4 new `OgZeppelinCliffFallParityTests` (all green). 7/7 standard physics regression gates pass (including `GroundMovement_Position_NotUnderground` underground guard). |
 
 The harness's six acceptance items from the prior mandate are all
 green or diagnostically delivered.
@@ -65,56 +60,60 @@ green or diagnostically delivered.
 
 ### Acceptance items
 
-1. **Apply the cliff-fall parity-break fix (localized 2026-05-10).**
+1. **Live OG validator re-run — verify the cliff-fall parity-break fix.**
 
-   Diagnosis is in `memory/project_pfs_overhaul_006_cliff_fall_diagnosis.md`.
-   Summary:
-   - FG settles at `(1337.35, -4645.09, 42.29)` — falls 9y. Correct.
-   - BG settles at `(1337.30, -4645.10, 51.62)` — stays. Wrong.
-   - Both clients see the same triangles (SceneData is delivering).
-   - Divergence path: BG's `MovementController.PrimeAirborneTeleportFallIfNeeded`
-     (line 466) and `TrySnapToNearbyTeleportSupport` (line 515) probe ground
-     via `NativeLocalPhysics.GetGroundZ` → C++ `SceneQuery::GetGroundZ` →
-     `SceneCache::GetGroundZ` (SceneCache.cpp:901-979). That function returns
-     any XY-containing triangle. **No walkable-slope filter.** A non-walkable
-     deck-edge triangle at z=51.62 gets accepted as legitimate support,
-     `_player.Position.Z` is snapped to it, FALLINGFAR never primes.
+   The fix shipped in commit `1c530288`. The OG `smooth-wp01-cliff-fall-z42`
+   parity break should now be resolved (BG should fall to z≈42.29 to match FG).
+   Run the live OG fixture validator:
 
-   Real WoW (FG) probes ground with a walkable-slope filter, rejects the
-   triangle, and falls 9y to ADT terrain at z=42.29.
+   ```powershell
+   $env:WWOW_OG_ZEP_BAKE_FIXTURE = '1'
+   $env:WWOW_DATA_DIR = 'D:\MaNGOS\data'
+   dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj `
+     --configuration Release --no-build `
+     --filter 'FullyQualifiedName~OgZeppelin_BakeFixtureValidation'
+   ```
 
-   **Fix options (in order of preference)**:
-   - **Option A**: add a walkable-slope filter inside `SceneCache::GetGroundZ`.
-     Reject triangles with `|normal.z| < PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z`.
-     Each `SceneTri` already has a derived normal; audit other callers
-     of `cache->GetGroundZ` (only `SceneQuery::GetGroundZ` is high-leverage)
-     before changing wholesale.
-   - **Option B**: replace the C# probe with a `SweepCapsule`-based call
-     via a new native export. `PhysicsGroundSnap::VerticalSweepSnapDown`
-     already does the right walkable filtering — expose a non-mutating
-     variant.
-   - **Option C** (cheapest): add a `GetGroundNormal(x, y, z)` native
-     export; in the C# probes, after `GetGroundZ` returns supportZ,
-     cross-check the normal and reject if `|nz| < 0.6428`.
+   Expected results in the new
+   `tmp/test-runtime/screenshots/long-pathing/bake-validation/og-zeppelin/bake-validation-*.json`:
+   - `passed: true`
+   - Zero `FG_BG_PARITY_BREAK` failures
+   - `smooth-wp01-cliff-fall-z42.bgSettled` Z within ±0.3y of FG's z=42.29
+   - All 11 walkable checkpoints continue to settle within tolerance
+     (the walkable filter must not over-reject — already covered by the
+     `ApproachPos_WalkableGetGroundZ_StillResolvesToDeck_NoRegression`
+     unit test, but live re-run is the canonical signal)
 
-   **Verification**:
-   - Run the OG fixture validator (commands below). Expect `passed=true`
-     in the resulting JSON.
-   - BG settle for `smooth-wp01-cliff-fall-z42` must move from z=51.62
-     to z≈42.29 (matching FG within ±0.3y parity tolerance).
+   If the live run still fails, possible follow-ups:
+   - Inspect the validator JSON: did BG settle ABOVE the deck (z>53.5)?
+     If so the re-probe-below path may need adjustment.
+   - Check WoWSharpClient log for the new
+     `[MovementController] Airborne teleport primed falling state (below-overhead)`
+     line — this should fire on the cliff-fall teleport.
+   - Verify Navigation.dll was redeployed to `Bot/Release/net8.0/`
+     (`docker logs wwow-scene-data --tail 10` should show the same
+     "Indexed N tiles" line; SceneDataService doesn't load Navigation.dll
+     but the BG bot's process does).
 
-   Reference data:
-   - Report: `tmp/test-runtime/screenshots/long-pathing/bake-validation/og-zeppelin/bake-validation-ClimbOrgrimmarTowerToFrezza-20260510T191634Z.json`.
-   - Screenshots: `screenshots/smooth-wp01-cliff-fall-z42-LPATHFG1-yaw*-*.png` —
-     FG (after fall) is under wooden beams of the lower platform.
-   - Code: `Exports/WoWSharpClient/Movement/MovementController.cs:466-556`,
-     `Exports/Navigation/SceneCache.cpp:901-979`,
-     `Exports/Navigation/SceneQuery.cpp:585-692`.
+   **Code shipped (commit `1c530288`)**:
+   - `Exports/Navigation/SceneCache.{cpp,h}` — `GetWalkableGroundZ`
+   - `Exports/Navigation/SceneQuery.{cpp,h}` — entry point
+   - `Exports/Navigation/DllMain.cpp` — C export
+   - `Exports/WoWSharpClient/Movement/NativePhysicsInterop.cs` — P/Invoke
+   - `Exports/WoWSharpClient/Movement/NativeLocalPhysics.cs` — C# wrapper
+   - `Exports/WoWSharpClient/Movement/MovementController.cs` —
+     `PrimeAirborneTeleportFallIfNeeded` + `TrySnapToNearbyTeleportSupport`
+     switched to walkable probe + drop gate handles negative drop
+   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs` — test P/Invoke
+   - `Tests/Navigation.Physics.Tests/OgZeppelinCliffFallParityTests.cs` —
+     4 deterministic unit tests (all green)
 
-   **Disciplined first step (recommended)**: dump triangles at
-   `(1337.30, -4645.10)` ±2y of z=51.62 with normals to confirm the
-   non-walkable hypothesis BEFORE applying the fix. Otherwise the fix
-   is fix-ex-post-coupled to a hypothesis.
+   **Regression validation already complete (offline)**:
+   - 4/4 `OgZeppelinCliffFallParityTests` pass
+   - 7/7 standard physics regression gates pass (from
+     `physicsengine-calibration.md`), including
+     `ServerMovementValidationTests.GroundMovement_Position_NotUnderground`
+     (the previously breached underground regression guard)
 
 2. **Add 2-3 more deck-edge / cliff-edge parity checkpoints** to the
    OG fixture so parity breaks have a wider surface, not just one
