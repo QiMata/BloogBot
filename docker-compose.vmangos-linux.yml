@@ -117,11 +117,16 @@ services:
     ports:
       - "5003:5003"
     volumes:
-      # PFS-OVERHAUL-006: three separate mounts (same as wwow-pathfinding).
-      # See docs/physics/MMAP_DATA_FLOW.md.
+      # PFS-OVERHAUL-006: four separate mounts (same as wwow-pathfinding,
+      # plus scenes/ which only this service consumes). See
+      # docs/physics/MMAP_DATA_FLOW.md. Tile mode requires
+      # scenes/tiles/*.scenetile; without it Program.cs falls back to legacy
+      # AABB extraction, which is incompatible with the SceneTileRequest
+      # protocol the BG client now sends.
       - ${WWOW_BOT_PROD_DATA_DIR:-D:/wwow-bot/prod-data}/mmaps:/wwow-data/mmaps:ro
       - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}/maps:/wwow-data/maps:ro
       - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}/vmaps:/wwow-data/vmaps:ro
+      - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}/scenes:/wwow-data/scenes:ro
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/5003' || exit 1"]
       interval: 30s
