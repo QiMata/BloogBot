@@ -1947,6 +1947,17 @@ public class LongPathingTests
             $"[BAKE-VAL] loaded fixture route='{fixture.Route}' map={fixture.MapId} " +
             $"walkable={fixture.ExpectedWalkable.Count} holes={fixture.ExpectedHoles.Count}");
 
+        // Hard-wipe per-route bake-validation artifacts. Scoped to a
+        // dedicated subdirectory so previous failure screenshots from the
+        // legacy CaptureFailureScreenshot path stay intact.
+        var reportDir = Path.Combine(
+            ResolveRepoRoot(),
+            "tmp", "test-runtime", "screenshots", "long-pathing",
+            "bake-validation",
+            fixtureRouteId);
+        global::Tests.Infrastructure.ScreenshotRunIsolation.Reset(reportDir);
+        _output.WriteLine($"[BAKE-VAL] report dir wiped + recreated: {reportDir}");
+
         var target = await EnsureLongPathingTargetAsync();
         await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
 
@@ -1956,9 +1967,6 @@ public class LongPathingTests
 
         var report = await validator.ValidateAsync(target.AccountName, bgAccount);
 
-        var reportDir = Path.Combine(
-            ResolveRepoRoot(),
-            "tmp", "test-runtime", "screenshots", "long-pathing");
         var reportPath = Harness.WaypointSettleValidator.WriteReport(report, reportDir);
         _output.WriteLine($"[BAKE-VAL] report written: {reportPath}");
 
