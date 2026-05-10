@@ -3,6 +3,8 @@
 > **Status:** Active. Direction set 2026-05-06. Phase 1 (freeze + MmapGen scaffold) shipped on the same date. Phase 2 (MmapGen build bring-up + first off-mesh regen) is the immediate next slice.
 >
 > **Owner concept:** The mesh is authoritative. The query is a thin wrapper. Anything else is a bug.
+>
+> **Foundational priority (2026-05-10).** Before any further bake / pathfinder iteration, BG and FG physics must agree on representative checkpoints. The validation order across this monorepo is rigid — scene-data flow → FG/BG physics parity → pathfinding correctness. The validator harness's `FG_BG_PARITY_BREAK` Kind is the canary; if it fires on a checkpoint where SceneData is delivering triangles, the issue is in physics, NOT pathfinding. See [NEXT_SESSION_HANDOFF.md](NEXT_SESSION_HANDOFF.md) for the current frontier and the per-game portability framing.
 
 ---
 
