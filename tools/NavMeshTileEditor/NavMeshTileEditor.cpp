@@ -204,10 +204,24 @@ int main(int argc, char** argv)
         }
         const unsigned char prevArea = polys[idx].getArea();
         const unsigned char polyType = polys[idx].getType();
+        const unsigned short prevFlags = polys[idx].flags;
+
+        // Cull strategy: zero BOTH area AND flags. Detour's default
+        // dtQueryFilter::passFilter rejects polygons via the FLAGS
+        // (`(poly->flags & m_includeFlags) != 0`), NOT via area. Setting
+        // area=0 alone is a no-op against the default filter — empirically
+        // verified by BRM live theory continuing to route through area=0
+        // polys after the first cull pass. Zeroing flags exits the polygon
+        // from any filter that doesn't whitelist flags=0 explicitly.
+        // Area=0 is set as a belt-and-suspenders for filters that DO
+        // check area + cost.
         polys[idx].setArea(0);
+        polys[idx].flags = 0;
+
         std::cout << "[NavMeshTileEditor]   cull ref=" << ref
                   << " polyIdx=" << idx
                   << " areaWas=" << static_cast<int>(prevArea)
+                  << " flagsWas=0x" << std::hex << prevFlags << std::dec
                   << " type=" << static_cast<int>(polyType) << "\n";
         ++culled;
     }
