@@ -105,8 +105,8 @@ if ($needConfigure) {
 }
 
 # --- Build -----------------------------------------------------------------
-Write-Host "Building MmapGen + SceneCacheBuilder ($Configuration)"
-cmake --build $buildDir --target MmapGen SceneCacheBuilder
+Write-Host "Building MmapGen + SceneCacheBuilder + NavMeshTileEditor ($Configuration)"
+cmake --build $buildDir --target MmapGen SceneCacheBuilder NavMeshTileEditor
 if ($LASTEXITCODE -ne 0) { throw "cmake build failed (exit $LASTEXITCODE)" }
 
 $mmapExe = Join-Path $buildDir "MmapGen.exe"
@@ -116,6 +116,10 @@ if (Test-Path $mmapExe) {
 $sceneExe = Join-Path $buildDir "SceneCacheBuilder.exe"
 if (Test-Path $sceneExe) {
     Write-Host "Built: $sceneExe" -ForegroundColor Green
+}
+$editorExe = Join-Path $buildDir "NavMeshTileEditor.exe"
+if (Test-Path $editorExe) {
+    Write-Host "Built: $editorExe" -ForegroundColor Green
 }
 
 # --- NavMeshPhysicsValidator (.NET) ----------------------------------------

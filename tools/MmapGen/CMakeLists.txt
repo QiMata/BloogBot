@@ -411,3 +411,24 @@ set_target_properties(SceneCacheBuilder PROPERTIES
     FOLDER "MmapGen"
     OUTPUT_NAME "SceneCacheBuilder"
 )
+
+# ----------------------------------------------------------------------------
+# NavMeshTileEditor — Slice B R2 of the physics-validated mmap pipeline.
+# Modifies a baked .mmtile in-place: for each polyref in --cull-polys, sets
+# the corresponding dtPoly's area bits to 0 (DT_NULL_AREA). Detour's
+# dtQueryFilter excludes area-0 polys from path queries, so the runtime can
+# no longer route through them. Runs DOWNSTREAM of NavMeshPhysicsValidator.
+# ----------------------------------------------------------------------------
+add_executable(NavMeshTileEditor
+    ${CMAKE_CURRENT_SOURCE_DIR}/../NavMeshTileEditor/NavMeshTileEditor.cpp
+)
+target_include_directories(NavMeshTileEditor PRIVATE
+    ${MMAPGEN_INC_DETOUR}
+    ${MMAPGEN_INC_RECAST_PARENT}
+)
+target_compile_definitions(NavMeshTileEditor PRIVATE DT_POLYREF64)
+target_link_libraries(NavMeshTileEditor PRIVATE Detour)
+set_target_properties(NavMeshTileEditor PROPERTIES
+    FOLDER "MmapGen"
+    OUTPUT_NAME "NavMeshTileEditor"
+)

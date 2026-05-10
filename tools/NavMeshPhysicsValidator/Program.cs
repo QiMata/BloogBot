@@ -137,36 +137,40 @@ internal static class Program
                         // the segments that would cause the bot to stall.
                         // The unrecoverable rate is the meaningful triage
                         // metric for bake-vs-runtime mismatch.
-                        if (affordance is SegmentAffordanceResult.Blocked
+                        var unrecoverable = affordance is SegmentAffordanceResult.Blocked
                             or SegmentAffordanceResult.UnsafeDrop
-                            or SegmentAffordanceResult.Cliff)
+                            or SegmentAffordanceResult.Cliff;
+                        if (unrecoverable)
                             report.UnrecoverableNonWalk++;
 
-                        // Capture polyref at each endpoint via GetPolyAtCoord.
-                        // For Slice B (cull pass), we need to know WHICH polygons
-                        // sit at the segment endpoints so we can mark them
-                        // non-walkable in the .mmtile. searchExtentXY=2y +
-                        // searchExtentZ=walkableClimb=1.8y matches the tighter
-                        // PathfindingService.Tests default. PolyRef==0 means
-                        // "no poly found nearby" — happens when the segment
-                        // endpoint is in unbaked terrain (vmap/adt sparse area).
-                        ulong polyA = 0, polyB = 0;
-                        try
+                        // Capture polyref at each endpoint via GetPolyAtCoord
+                        // ONLY for unrecoverable affordances. Slice B's cull
+                        // tool reads this list and zeros each polygon's area
+                        // so Detour skips it; doing that for SafeDrop /
+                        // StepUp / Vertical / SteepClimb (which the bot CAN
+                        // navigate) would over-cull and leave the navmesh
+                        // unusable. searchExtentXY=2y + searchExtentZ=
+                        // walkableClimb=1.8y matches PathfindingService.Tests
+                        // default. PolyRef==0 means "no poly found nearby" —
+                        // happens when the segment endpoint is in unbaked
+                        // terrain (vmap/adt sparse area).
+                        if (unrecoverable)
                         {
-                            GetPolyAtCoord(opts.MapId, segStart, 2f, 1.8f,
-                                out polyA, out _, out _, out _);
-                            GetPolyAtCoord(opts.MapId, segEnd, 2f, 1.8f,
-                                out polyB, out _, out _, out _);
-                        }
-                        catch { /* tolerate per-call failure */ }
+                            ulong polyA = 0, polyB = 0;
+                            try
+                            {
+                                GetPolyAtCoord(opts.MapId, segStart, 2f, 1.8f,
+                                    out polyA, out _, out _, out _);
+                                GetPolyAtCoord(opts.MapId, segEnd, 2f, 1.8f,
+                                    out polyB, out _, out _, out _);
+                            }
+                            catch { /* tolerate per-call failure */ }
 
-                        // Track per-(polyA, polyB) edge counts. Slice B will
-                        // use these to identify edges that consistently fail
-                        // physics — those are the ones to cull.
-                        if (polyA != 0 && polyB != 0)
-                        {
-                            var edge = new PolyEdge(polyA, polyB);
-                            report.PolyEdgeCounts[edge] = report.PolyEdgeCounts.GetValueOrDefault(edge, 0) + 1;
+                            if (polyA != 0 && polyB != 0)
+                            {
+                                var edge = new PolyEdge(polyA, polyB);
+                                report.PolyEdgeCounts[edge] = report.PolyEdgeCounts.GetValueOrDefault(edge, 0) + 1;
+                            }
                         }
 
                         // Update heat map at the SEGMENT MIDPOINT for clearer hotspot localization.

@@ -24,7 +24,19 @@ param(
     [int]$Seed = 0,
     [string]$DataDir = "",
     [int]$WorstTop = 20,
-    [switch]$Quiet
+    [switch]$Quiet,
+    # Slice B R3: after validation, cull each tile's rejected polyrefs from
+    # the .mmtile via NavMeshTileEditor. Off by default — Slice A's diagnostic
+    # is non-destructive. Pass -Cull to actually modify the .mmtile files.
+    [switch]$Cull,
+    # Cull only edges whose bad-segment count >= this. Defaults to 1 (any
+    # detected unrecoverable edge), but a higher threshold (e.g. 3) is
+    # conservative for sparse sampling.
+    [int]$CullMinCount = 1,
+    # When -Cull is set, point at the directory holding the .mmtile files
+    # to modify. Defaults to <DataDir>/mmaps. Always BACK UP first since
+    # this is a destructive operation.
+    [string]$MmapsDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,6 +44,10 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $validatorExe = Join-Path $repoRoot "Bot\Release\net8.0\NavMeshPhysicsValidator.exe"
 if (-not (Test-Path $validatorExe)) {
     throw "Validator not built: $validatorExe (run tools/MmapGen/build-mmapgen.ps1)"
+}
+$editorExe = Join-Path $repoRoot "tools\MmapGen\build\NavMeshTileEditor.exe"
+if ($Cull -and -not (Test-Path $editorExe)) {
+    throw "Tile editor not built: $editorExe (run tools/MmapGen/build-mmapgen.ps1)"
 }
 
 if (-not $DataDir) {
@@ -123,11 +139,55 @@ foreach ($t in $tilePairs) {
             UnrecoverablePct = $unrecPct
             ExitCode = $exit
             Report = $reportPath
+            Culled = 0
         }
         if (-not $Quiet) {
             Write-Host ("[validate-bake]   pathsFound={0} segs={1} nonWalk={2} unrecoverable={3} ({4}%)" `
                 -f $report.PathsFound, $report.TotalSegments, $report.NonWalkSegments, `
                    $report.UnrecoverableNonWalk, $unrecPct)
+        }
+
+        # --- Slice B R3: cull pass --------------------------------------------
+        # If -Cull is set, feed every RejectedEdges polyA whose bad-segment
+        # count >= CullMinCount into NavMeshTileEditor. We cull the START
+        # polygon (PolyA) because it's the polygon the bot WAS ON when the
+        # runtime detected the unrecoverable transition. Culling PolyB
+        # would prevent entry to the destination but might also cull
+        # legitimate polys reachable from other directions; PolyA-cull is
+        # more surgical (only the polys that produce bad outgoing edges
+        # get culled).
+        if ($Cull -and $report.RejectedEdges.Count -gt 0) {
+            $mmapsRoot = if ($MmapsDir) { $MmapsDir } else { Join-Path $DataDir "mmaps" }
+            $mmtileName = "{0:D3}{1:D2}{2:D2}.mmtile" -f $t.Map, $t.Y, $t.X
+            $mmtilePath = Join-Path $mmapsRoot $mmtileName
+            if (-not (Test-Path $mmtilePath)) {
+                Write-Warning "  -Cull: .mmtile not found at $mmtilePath; skipping"
+            }
+            else {
+                $cullPolys = $report.RejectedEdges `
+                    | Where-Object { $_.BadSegmentCount -ge $CullMinCount } `
+                    | ForEach-Object { $_.PolyA } `
+                    | Sort-Object -Unique
+                if ($cullPolys.Count -gt 0) {
+                    if (-not $Quiet) {
+                        Write-Host ("[validate-bake]   -Cull: {0} unique PolyA refs (>= {1} bad segs each) -> {2}" `
+                            -f $cullPolys.Count, $CullMinCount, $mmtilePath)
+                    }
+                    $cullCsv = $cullPolys -join ','
+                    $editorArgs = @($mmtilePath, '--cull-polys', $cullCsv)
+                    $prevEAP = $ErrorActionPreference
+                    $ErrorActionPreference = 'Continue'
+                    & $editorExe @editorArgs | Out-Null
+                    $editorExit = $LASTEXITCODE
+                    $ErrorActionPreference = $prevEAP
+                    if ($editorExit -ne 0) {
+                        Write-Warning "  NavMeshTileEditor exited $editorExit on $mmtilePath"
+                    }
+                    else {
+                        $summary[-1].Culled = $cullPolys.Count
+                    }
+                }
+            }
         }
     }
     else {
@@ -143,13 +203,14 @@ if (-not $Quiet) {
     Write-Host ""
     Write-Host "Summary at $summaryPath" -ForegroundColor Green
     Write-Host ""
-    Write-Host ("{0,-6} {1,-9} {2,9} {3,9} {4,12} {5,8}" -f "Map", "Tile", "Paths", "Segs", "Unrecover.", "Pct") -ForegroundColor Cyan
+    Write-Host ("{0,-6} {1,-9} {2,9} {3,9} {4,12} {5,8} {6,8}" `
+        -f "Map", "Tile", "Paths", "Segs", "Unrecover.", "Pct", "Culled") -ForegroundColor Cyan
     foreach ($s in $summary) {
         $color = if ($s.UnrecoverablePct -ge 20) { "Red" }
                  elseif ($s.UnrecoverablePct -ge 10) { "Yellow" }
                  else { "Green" }
-        Write-Host ("{0,-6} {1,-9} {2,9} {3,9} {4,12} {5,8}" `
-            -f $s.Map, $s.Tile, $s.PathsFound, $s.TotalSegments, $s.Unrecoverable, $s.UnrecoverablePct) `
+        Write-Host ("{0,-6} {1,-9} {2,9} {3,9} {4,12} {5,8} {6,8}" `
+            -f $s.Map, $s.Tile, $s.PathsFound, $s.TotalSegments, $s.Unrecoverable, $s.UnrecoverablePct, $s.Culled) `
             -ForegroundColor $color
     }
 }
