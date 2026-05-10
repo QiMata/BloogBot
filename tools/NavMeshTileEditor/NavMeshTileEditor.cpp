@@ -59,6 +59,7 @@ namespace
             "Usage:\n"
             "  NavMeshTileEditor <mmtilePath> --cull-polys ref1,ref2,...\n"
             "  NavMeshTileEditor <mmtilePath> --cull-polys-file <path>   (one polyref per line)\n"
+            "  NavMeshTileEditor <mmtilePath> --cull-polyidx-range MIN,MAX  (cull polyIdx in [MIN,MAX])\n"
             "  NavMeshTileEditor <mmtilePath> --dry-run                  (report only, no write)\n";
     }
 
@@ -105,6 +106,7 @@ int main(int argc, char** argv)
 
     std::string mmtilePath = argv[1];
     std::vector<uint64_t> cullList;
+    int rangeMin = -1, rangeMax = -1;
     bool dryRun = false;
 
     for (int i = 2; i < argc; ++i)
@@ -114,15 +116,42 @@ int main(int argc, char** argv)
             cullList = parsePolyRefList(argv[++i]);
         else if (a == "--cull-polys-file" && i + 1 < argc)
             cullList = parsePolyRefFile(argv[++i]);
+        else if (a == "--cull-polyidx-range" && i + 1 < argc)
+        {
+            // Parse "MIN,MAX"
+            std::string r = argv[++i];
+            auto comma = r.find(',');
+            if (comma == std::string::npos)
+            {
+                std::cerr << "[NavMeshTileEditor] --cull-polyidx-range expects MIN,MAX\n";
+                return 2;
+            }
+            try
+            {
+                rangeMin = std::stoi(r.substr(0, comma));
+                rangeMax = std::stoi(r.substr(comma + 1));
+            }
+            catch (...)
+            {
+                std::cerr << "[NavMeshTileEditor] bad --cull-polyidx-range value '" << r << "'\n";
+                return 2;
+            }
+            if (rangeMin > rangeMax)
+            {
+                std::cerr << "[NavMeshTileEditor] --cull-polyidx-range MIN must be <= MAX\n";
+                return 2;
+            }
+        }
         else if (a == "--dry-run")
             dryRun = true;
         else if (a == "--help" || a == "-h") { usage(); return 0; }
         else { std::cerr << "[NavMeshTileEditor] unknown arg: " << a << "\n"; usage(); return 2; }
     }
 
-    if (cullList.empty())
+    if (cullList.empty() && rangeMin < 0)
     {
-        std::cerr << "[NavMeshTileEditor] no polyrefs to cull (use --cull-polys or --cull-polys-file)\n";
+        std::cerr << "[NavMeshTileEditor] no polyrefs or polyidx-range to cull "
+                     "(use --cull-polys / --cull-polys-file / --cull-polyidx-range)\n";
         return 2;
     }
 
@@ -192,6 +221,31 @@ int main(int argc, char** argv)
     dtPoly* polys = reinterpret_cast<dtPoly*>(buf.data() + polysOffset);
 
     int culled = 0, skippedOutOfRange = 0;
+
+    // Range cull: zeros area+flags for every poly in [rangeMin, rangeMax].
+    // Used for WMO-interior trap clusters where individual polyref probing
+    // misses polys at slightly different XY/Z. Polygon indices in a Detour
+    // tile are typically contiguous within a WMO, so a range catches the
+    // whole cluster.
+    if (rangeMin >= 0)
+    {
+        const int hi = rangeMax < polyCount ? rangeMax : polyCount - 1;
+        for (int idx = rangeMin; idx <= hi; ++idx)
+        {
+            const unsigned char prevArea = polys[idx].getArea();
+            const unsigned short prevFlags = polys[idx].flags;
+            polys[idx].setArea(0);
+            polys[idx].flags = 0;
+            std::cout << "[NavMeshTileEditor]   range-cull polyIdx=" << idx
+                      << " areaWas=" << static_cast<int>(prevArea)
+                      << " flagsWas=0x" << std::hex << prevFlags << std::dec << "\n";
+            ++culled;
+        }
+        if (rangeMax >= polyCount)
+            std::cerr << "[NavMeshTileEditor]   note: --cull-polyidx-range MAX=" << rangeMax
+                      << " clamped to polyCount-1=" << (polyCount - 1) << "\n";
+    }
+
     for (uint64_t ref : cullList)
     {
         const uint64_t idx = ref & PolyMask;
