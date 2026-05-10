@@ -1,0 +1,67 @@
+{
+  // PFS-OVERHAUL-006 (2026-05-10) — bake-validation fixture for the
+  // FlameCrest → BRM dungeon-entrance corridor (UBRS portal as the
+  // canonical mesh-reachable terminus). Seed: BrmDungeonRouteDiagnostic
+  // endpoints + Round-3 BRM south-face stall coord at z=170.8.
+  //
+  // The expectedHoles entry is the canonical PHANTOM_POLY signal: the
+  // 5cm-thick walkable polygon at worldY=170.5..171.0 (from Phase 4
+  // --debug-heightfield diagnostic) is HONEST geometry of a cliff top
+  // INSIDE a Searing-Gorge-style WMO interior, but the ADJACENT
+  // polygon-graph adjacency to it from the south slope is the bug.
+  // From the WMO interior surface, the bot cannot exit; the runtime
+  // physics ground-snap should reject the polygon, sending the bot 12y
+  // down to the cliff bottom at z=158-ish. If the validator finds the bot
+  // STILL standing at z=170.8 after settle, the navmesh has the phantom
+  // adjacency; if the bot settles at z≈158, the bake correctly excluded
+  // the WMO-interior trap.
+  //
+  // expectedSettleZ values are estimates based on the south-face cliff
+  // bottom height observed in screenshots and the heightfield dump. The
+  // recording mode (Layer 5) will refine these via teleport+settle.
+  "route": "FlameCrestToBrmDungeonEntrance",
+  "description": "FlameCrest flight-master ground → UBRS portal cluster on Blackrock Mountain. Seeds: BrmDungeonRouteDiagnostic endpoints + Round-3 stall coord (the WMO-interior trap at z=170.8).",
+  "mapId": 0,
+  "agent": {
+    "race": "TaurenMale",
+    "radius": 1.0247,
+    "height": 2.625
+  },
+  "endpoints": {
+    "start": [-7518.7, -2159.9, 131.9],
+    "dest":  [-7524.0, -1233.0, 287.0]
+  },
+  "expectedWalkable": [
+    { "label": "flamecrest-tower-foot-z131.9", "xyz": [-7518.7, -2159.9, 131.9], "settleToleranceY": 1.0, "note": "FlameCrest start; ground-level near the FM tower foot" },
+    { "label": "ubrs-portal-z287",             "xyz": [-7524.0, -1233.0, 287.0], "settleToleranceY": 1.0, "note": "UBRS literal portal coord; mesh-reachable per BrmDungeonRouteDiagnostic" },
+    { "label": "lbrs-portal-z286",             "xyz": [-7531.0, -1226.0, 286.0], "settleToleranceY": 1.0, "note": "LBRS literal portal coord; same upper-spire poly cluster as UBRS" }
+  ],
+  "expectedHoles": [
+    {
+      "label": "brm-south-wmo-interior-trap-z170.8",
+      "xyz": [-7949.7, -1162.8, 170.8],
+      "expectedSettleZ": 158.0,
+      "settleToleranceY": 6.0,
+      "rationale": "Round-3 south-face stall coord. The 5cm walkable polygon at worldY=170.5..171.0 is HONEST geometry of a Searing-Gorge-style WMO interior platform (per Phase 4 --debug-heightfield), but reaching it via the polygon-graph adjacency traps the bot. Expected settle is the cliff-bottom on the south slope ≈ z=158; tolerance is wide because the south face is rough."
+    },
+    {
+      "label": "brm-south-stall-new-trap-z133.8",
+      "xyz": [-7825.4, -1129.2, 133.8],
+      "expectedSettleZ": 133.8,
+      "settleToleranceY": 1.5,
+      "rationale": "Slice-F NEW trap coord — UBRS/LBRS reach this after the polyIdx[620,680] cull escaped the original trap. Fixture marks it as a hole because the route corridor should not terminate here; if the bot settles AT this point it's caught by a bot-runtime path that bypassed Detour."
+    }
+  ],
+  "goldenSmoothPath": {
+    // BrmDungeonRouteDiagnostic emits 1072-segment corridors for
+    // FlameCrest→UBRS pre-cull. Tolerance is loose because BRM tile bake
+    // is mid-iteration; tighten when the south-face is unblocked.
+    "waypointCount": 1072,
+    "waypointTolerance": 50,
+    "endpointToleranceY": 1.5
+  },
+  "tileInvariants": {
+    "0004634": { "note": "BRM south-face tile (CLI --tile 34,46). Round-3 stall surface here." },
+    "0004533": { "note": "BRM upper-spire tile (CLI --tile 33,45). UBRS/LBRS portal cluster here." }
+  }
+}
