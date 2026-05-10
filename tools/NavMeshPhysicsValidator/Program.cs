@@ -202,6 +202,34 @@ internal static class Program
                 .Take(opts.WorstTop)
                 .ToList();
 
+            // Targeted-coord cull: for each --cull-coord, look up the polyref
+            // via GetPolyAtCoord and add it as a self-loop edge with high
+            // count so the orchestrator's CullMinCount filter doesn't drop it.
+            // Used when path-sampling can't reach the trap polygon directly
+            // (BRM-style: the trap is reachable from many directions, so
+            // sampling finds incoming neighbors but not the trap itself).
+            foreach (var coord in opts.CullCoords)
+            {
+                ulong polyRef = 0;
+                try
+                {
+                    GetPolyAtCoord(opts.MapId, coord, 2f, 1.8f,
+                        out polyRef, out _, out _, out _);
+                }
+                catch { /* tolerate */ }
+                if (polyRef != 0)
+                {
+                    var edge = new PolyEdge(polyRef, polyRef);
+                    report.PolyEdgeCounts[edge] = report.PolyEdgeCounts.GetValueOrDefault(edge, 0) + 1000;
+                    if (!opts.Silent)
+                        Console.Error.WriteLine($"# --cull-coord ({coord.X:F1},{coord.Y:F1},{coord.Z:F1}) → polyref {polyRef}");
+                }
+                else if (!opts.Silent)
+                {
+                    Console.Error.WriteLine($"# --cull-coord ({coord.X:F1},{coord.Y:F1},{coord.Z:F1}) → no poly found");
+                }
+            }
+
             // RejectedEdges: every (polyA, polyB) pair that produced at least
             // one non-Walk segment. Sorted by frequency so the "most rejected"
             // edges show first. Slice B's cull tool reads this list and marks
@@ -484,6 +512,15 @@ internal sealed class Args
     public bool LoadAdt { get; private set; } = true;
     public bool Silent { get; private set; } = false;
     public string? OutputPath { get; private set; }
+    /// Optional list of seed coords. For each, GetPolyAtCoord is called and
+    /// the resulting polyref is added to RejectedEdges (as PolyA in a
+    /// self-loop edge with BadSegmentCount=1). Used to surgically cull a
+    /// specific trap polygon when path-sampling alone misses it (e.g., the
+    /// BRM stall coord is reachable from many directions; culling its
+    /// incoming neighbors per-edge isn't sufficient because the bot finds
+    /// a different incoming edge each route. Culling the trap polygon
+    /// itself blocks every route.).
+    public List<Vector3> CullCoords { get; private set; } = new();
 
     public const string Usage =
         "Usage:\n" +
@@ -521,6 +558,17 @@ internal sealed class Args
                     break;
                 case "--max-segments-per-path" when i + 1 < argv.Length:
                     a.MaxSegmentsPerPath = int.Parse(argv[++i], CultureInfo.InvariantCulture);
+                    break;
+                case "--cull-coord" when i + 1 < argv.Length:
+                    {
+                        var parts = argv[++i].Split(',');
+                        if (parts.Length != 3)
+                            throw new ArgException("--cull-coord expects X,Y,Z");
+                        a.CullCoords.Add(new Vector3(
+                            float.Parse(parts[0], CultureInfo.InvariantCulture),
+                            float.Parse(parts[1], CultureInfo.InvariantCulture),
+                            float.Parse(parts[2], CultureInfo.InvariantCulture)));
+                    }
                     break;
                 case "--out" when i + 1 < argv.Length:
                     a.OutputPath = argv[++i];

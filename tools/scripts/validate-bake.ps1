@@ -36,7 +36,13 @@ param(
     # When -Cull is set, point at the directory holding the .mmtile files
     # to modify. Defaults to <DataDir>/mmaps. Always BACK UP first since
     # this is a destructive operation.
-    [string]$MmapsDir = ""
+    [string]$MmapsDir = "",
+    # Targeted coords (semicolon-separated "X,Y,Z" tuples). For each, the
+    # validator queries GetPolyAtCoord to find the polyref at that coord
+    # and adds it to the cull list. Use when sampling alone can't find a
+    # known-bad trap polygon (e.g., the BRM stall coord — reachable from
+    # many directions, so per-edge cull keeps missing the trap itself).
+    [string]$CullCoords = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -110,6 +116,13 @@ foreach ($t in $tilePairs) {
         '--out', $reportPath,
         '--silent'
     )
+    if ($CullCoords) {
+        foreach ($coord in $CullCoords -split ';') {
+            if ($coord -match '^\s*[-\d.]+,[-\d.]+,[-\d.]+\s*$') {
+                $validatorArgs += @('--cull-coord', $coord.Trim())
+            }
+        }
+    }
     if (-not $Quiet) {
         Write-Host ("[validate-bake] map={0} tile=({1},{2}) samples={3}" -f $t.Map, $t.X, $t.Y, $Samples)
     }
