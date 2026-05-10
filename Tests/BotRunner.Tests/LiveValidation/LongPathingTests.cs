@@ -1892,6 +1892,102 @@ public class LongPathingTests
         }
     }
 
+    private const string OgZeppelinBakeFixtureEnvVar = "WWOW_OG_ZEP_BAKE_FIXTURE";
+    private const string BrmDungeonBakeFixtureEnvVar = "WWOW_BRM_BAKE_FIXTURE";
+
+    /// <summary>
+    /// PFS-OVERHAUL-006 (2026-05-10) — bake-validation harness driver for
+    /// the OG zeppelin climb fixture. Loads
+    /// <c>tools/MmapGen/test-fixtures/og-zeppelin.json</c>, runs
+    /// <see cref="Harness.WaypointSettleValidator"/> against the FG bot
+    /// (and BG when available), writes a JSON report under
+    /// <c>tmp/test-runtime/screenshots/long-pathing/</c>, and fails on
+    /// any registered regression. Gated on
+    /// <c>WWOW_OG_ZEP_BAKE_FIXTURE=1</c>.
+    /// </summary>
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public async Task OgZeppelin_BakeFixtureValidation()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(OgZeppelinBakeFixtureEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"OG zeppelin bake-fixture validation disabled (set {OgZeppelinBakeFixtureEnvVar}=1).");
+
+        await RunBakeFixtureValidationAsync("og-zeppelin");
+    }
+
+    /// <summary>
+    /// PFS-OVERHAUL-006 (2026-05-10) — bake-validation harness driver for
+    /// the FlameCrest → BRM dungeon-entrance fixture. Loads
+    /// <c>tools/MmapGen/test-fixtures/flamecrest-to-brm.json</c>, runs
+    /// the validator, writes a JSON report, and fails on any registered
+    /// regression. Gated on <c>WWOW_BRM_BAKE_FIXTURE=1</c>.
+    /// </summary>
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public async Task BrmDungeon_BakeFixtureValidation()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(BrmDungeonBakeFixtureEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"BRM dungeon bake-fixture validation disabled (set {BrmDungeonBakeFixtureEnvVar}=1).");
+
+        await RunBakeFixtureValidationAsync("flamecrest-to-brm");
+    }
+
+    private async Task RunBakeFixtureValidationAsync(string fixtureRouteId)
+    {
+        var fixture = Harness.BakeFixtureLoader.LoadByRoute(fixtureRouteId);
+        _output.WriteLine(
+            $"[BAKE-VAL] loaded fixture route='{fixture.Route}' map={fixture.MapId} " +
+            $"walkable={fixture.ExpectedWalkable.Count} holes={fixture.ExpectedHoles.Count}");
+
+        var target = await EnsureLongPathingTargetAsync();
+        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
+
+        var bgAccount = await ResolveBgAccountForParityAsync(target);
+        var host = new Harness.LiveBakeValidationHost(_bot, _output.WriteLine);
+        var validator = new Harness.WaypointSettleValidator(fixture, host);
+
+        var report = await validator.ValidateAsync(target.AccountName, bgAccount);
+
+        var reportDir = Path.Combine(
+            ResolveRepoRoot(),
+            "tmp", "test-runtime", "screenshots", "long-pathing");
+        var reportPath = Harness.WaypointSettleValidator.WriteReport(report, reportDir);
+        _output.WriteLine($"[BAKE-VAL] report written: {reportPath}");
+
+        if (!report.Passed)
+        {
+            var summary = string.Join(
+                Environment.NewLine,
+                report.Failures.Select(f => $"  {f.Kind} [{f.Label}] {f.Message}"));
+            Assert.Fail(
+                $"Bake validation failed for route '{fixture.Route}' "
+                + $"({report.Failures.Count} failure(s)). Report: {reportPath}{Environment.NewLine}{summary}");
+        }
+    }
+
+    /// <summary>
+    /// Returns the BG account name when it is in-world and actionable, so
+    /// the validator can pair every checkpoint with an FG/BG parity
+    /// assertion. Returns null when only one client is available — the
+    /// validator then runs FG-only and skips parity.
+    /// </summary>
+    private async Task<string?> ResolveBgAccountForParityAsync(LiveBotFixture.BotRunnerActionTarget fgTarget)
+    {
+        if (string.IsNullOrWhiteSpace(_bot.BgAccountName)) return null;
+        if (string.Equals(_bot.BgAccountName, fgTarget.AccountName, StringComparison.OrdinalIgnoreCase)) return null;
+        await _bot.RefreshSnapshotsAsync();
+        var bgSnap = await _bot.GetSnapshotAsync(_bot.BgAccountName);
+        return bgSnap?.Player?.Unit?.GameObject?.Base?.Position == null ? null : _bot.BgAccountName;
+    }
+
     private sealed class SnapshotStallGuard(string label, TimeSpan timeout, float movementThresholdYards)
     {
         private bool _hasAnchor;
