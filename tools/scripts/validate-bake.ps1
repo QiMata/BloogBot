@@ -42,7 +42,18 @@ param(
     # and adds it to the cull list. Use when sampling alone can't find a
     # known-bad trap polygon (e.g., the BRM stall coord — reachable from
     # many directions, so per-edge cull keeps missing the trap itself).
-    [string]$CullCoords = ""
+    [string]$CullCoords = "",
+    # Z-stack enumeration radius (yards). When > 0, each --cull-coord seed
+    # is probed at multiple Z offsets (0.25y step) and ALL distinct polygons
+    # found in that Z range are culled. Required for WMO-interior traps
+    # that stack multiple walkable polys at slightly different Z values
+    # (the BRM trap had at least 3 polys within 0.1y of each other).
+    [float]$CullCoordZRadius = 0.0,
+    # XY-stack radius (yards). When > 0, each --cull-coord is probed at a
+    # 3x3 XY grid with offsets {-R, 0, +R}, multiplying the Z-stack
+    # enumeration. Used when the bot stall fluctuates by 0.1-1y in XY
+    # across runs.
+    [float]$CullCoordXyRadius = 0.0
 )
 
 $ErrorActionPreference = "Stop"
@@ -121,6 +132,12 @@ foreach ($t in $tilePairs) {
             if ($coord -match '^\s*[-\d.]+,[-\d.]+,[-\d.]+\s*$') {
                 $validatorArgs += @('--cull-coord', $coord.Trim())
             }
+        }
+        if ($CullCoordZRadius -gt 0) {
+            $validatorArgs += @('--cull-coord-z-radius', $CullCoordZRadius.ToString([System.Globalization.CultureInfo]::InvariantCulture))
+        }
+        if ($CullCoordXyRadius -gt 0) {
+            $validatorArgs += @('--cull-coord-xy-radius', $CullCoordXyRadius.ToString([System.Globalization.CultureInfo]::InvariantCulture))
         }
     }
     if (-not $Quiet) {

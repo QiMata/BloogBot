@@ -202,31 +202,80 @@ internal static class Program
                 .Take(opts.WorstTop)
                 .ToList();
 
-            // Targeted-coord cull: for each --cull-coord, look up the polyref
-            // via GetPolyAtCoord and add it as a self-loop edge with high
-            // count so the orchestrator's CullMinCount filter doesn't drop it.
-            // Used when path-sampling can't reach the trap polygon directly
-            // (BRM-style: the trap is reachable from many directions, so
-            // sampling finds incoming neighbors but not the trap itself).
+            // Targeted-coord cull: for each --cull-coord, look up polyrefs
+            // via GetPolyAtCoord and add them as self-loop edges with high
+            // count so the orchestrator's CullMinCount filter doesn't drop
+            // them. Used when path-sampling can't reach the trap polygon
+            // directly (BRM-style: the trap is reachable from many
+            // directions, so sampling finds incoming neighbors but not the
+            // trap itself).
+            //
+            // Slice E: when CullCoordZRadius > 0, probe a Z-stack at the seed
+            // XY (dz in [-R, +R] at fine steps) and enumerate ALL distinct
+            // polygons. WMO-interior traps stack multiple walkable polys at
+            // slightly different Z values; single-Z probe only finds one,
+            // letting the bot stall on a sibling polygon after cull.
+            // GetPolyAtCoord uses a tight Z extent (0.4y) so each probe
+            // returns the polygon AT that Z, not the nearest in a window.
             foreach (var coord in opts.CullCoords)
             {
-                ulong polyRef = 0;
-                try
+                var foundPolys = new HashSet<ulong>();
+
+                // XY offsets: {-R, 0, +R} when XyRadius > 0, else just {0}.
+                // Z offsets: stepped {-R..+R} when ZRadius > 0, else just {0}.
+                // Combined produces a 3×3×N probe matrix per seed; the
+                // hash-set dedupes polyrefs found multiple times.
+                const float zStep = 0.25f;
+                const float zSearchExtent = 0.4f;
+                var xyOffsets = opts.CullCoordXyRadius > 0f
+                    ? new[] { -opts.CullCoordXyRadius, 0f, +opts.CullCoordXyRadius }
+                    : new[] { 0f };
+                var zR = opts.CullCoordZRadius;
+                int zSteps = zR > 0f ? (int)MathF.Ceiling(2 * zR / zStep) + 1 : 1;
+
+                foreach (var dx in xyOffsets)
+                foreach (var dy in xyOffsets)
                 {
-                    GetPolyAtCoord(opts.MapId, coord, 2f, 1.8f,
-                        out polyRef, out _, out _, out _);
+                    if (zR <= 0f)
+                    {
+                        var probe = new Vector3(coord.X + dx, coord.Y + dy, coord.Z);
+                        ulong polyRef = 0;
+                        try
+                        {
+                            GetPolyAtCoord(opts.MapId, probe, 2f, 1.8f,
+                                out polyRef, out _, out _, out _);
+                        }
+                        catch { /* tolerate */ }
+                        if (polyRef != 0) foundPolys.Add(polyRef);
+                    }
+                    else
+                    {
+                        for (float dz = -zR; dz <= zR + 1e-3f; dz += zStep)
+                        {
+                            var probe = new Vector3(coord.X + dx, coord.Y + dy, coord.Z + dz);
+                            ulong polyRef = 0;
+                            try
+                            {
+                                GetPolyAtCoord(opts.MapId, probe, 2f, zSearchExtent,
+                                    out polyRef, out _, out _, out _);
+                            }
+                            catch { /* tolerate */ }
+                            if (polyRef != 0) foundPolys.Add(polyRef);
+                        }
+                    }
                 }
-                catch { /* tolerate */ }
-                if (polyRef != 0)
+
+                foreach (var polyRef in foundPolys)
                 {
                     var edge = new PolyEdge(polyRef, polyRef);
                     report.PolyEdgeCounts[edge] = report.PolyEdgeCounts.GetValueOrDefault(edge, 0) + 1000;
-                    if (!opts.Silent)
-                        Console.Error.WriteLine($"# --cull-coord ({coord.X:F1},{coord.Y:F1},{coord.Z:F1}) → polyref {polyRef}");
                 }
-                else if (!opts.Silent)
+                if (!opts.Silent)
                 {
-                    Console.Error.WriteLine($"# --cull-coord ({coord.X:F1},{coord.Y:F1},{coord.Z:F1}) → no poly found");
+                    if (foundPolys.Count == 0)
+                        Console.Error.WriteLine($"# --cull-coord ({coord.X:F1},{coord.Y:F1},{coord.Z:F1}) zRadius={zR:F1} xyRadius={opts.CullCoordXyRadius:F1} → no poly found");
+                    else
+                        Console.Error.WriteLine($"# --cull-coord ({coord.X:F1},{coord.Y:F1},{coord.Z:F1}) zRadius={zR:F1} xyRadius={opts.CullCoordXyRadius:F1} → {foundPolys.Count} unique polys: [{string.Join(",", foundPolys)}]");
                 }
             }
 
@@ -509,6 +558,18 @@ internal sealed class Args
     /// ~10ms each; smooth paths can be 1000+ corners. Even-stride sampling
     /// gives representative coverage at bounded cost.
     public int MaxSegmentsPerPath { get; private set; } = 100;
+    /// Z-stack enumeration radius for --cull-coord. When > 0, the validator
+    /// probes (X, Y, Z+dz) for dz in [-R, +R] in fine steps to find every
+    /// distinct polygon at that XY. Used for WMO-interior traps where the
+    /// runtime sees multiple stacked walkable polygons at slightly different
+    /// Z values; a single GetPolyAtCoord finds only one. Default 0 = single
+    /// probe (legacy behavior). Recommended 15y for WMO interiors.
+    public float CullCoordZRadius { get; private set; } = 0f;
+    /// XY-stack radius. When > 0, the validator probes a 3×3 XY grid
+    /// (offsets {-R, 0, +R}) at each --cull-coord, multiplying the
+    /// Z-stack enumeration. Used when the bot stall fluctuates by 0.1–1y
+    /// in XY across runs — single-XY probe misses the surrounding cluster.
+    public float CullCoordXyRadius { get; private set; } = 0f;
     public bool LoadAdt { get; private set; } = true;
     public bool Silent { get; private set; } = false;
     public string? OutputPath { get; private set; }
@@ -569,6 +630,12 @@ internal sealed class Args
                             float.Parse(parts[1], CultureInfo.InvariantCulture),
                             float.Parse(parts[2], CultureInfo.InvariantCulture)));
                     }
+                    break;
+                case "--cull-coord-z-radius" when i + 1 < argv.Length:
+                    a.CullCoordZRadius = float.Parse(argv[++i], CultureInfo.InvariantCulture);
+                    break;
+                case "--cull-coord-xy-radius" when i + 1 < argv.Length:
+                    a.CullCoordXyRadius = float.Parse(argv[++i], CultureInfo.InvariantCulture);
                     break;
                 case "--out" when i + 1 < argv.Length:
                     a.OutputPath = argv[++i];
