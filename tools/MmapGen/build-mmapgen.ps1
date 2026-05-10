@@ -117,4 +117,22 @@ $sceneExe = Join-Path $buildDir "SceneCacheBuilder.exe"
 if (Test-Path $sceneExe) {
     Write-Host "Built: $sceneExe" -ForegroundColor Green
 }
+
+# --- NavMeshPhysicsValidator (.NET) ----------------------------------------
+# Slice A of the physics-validated mmap pipeline. Drives the runtime physics
+# classifier (ClassifyPathSegmentAffordance — same C export the BG runtime
+# uses) over sample paths in a tile, emits a JSON report quantifying the
+# bake-vs-runtime mismatch. Run separately via tools/scripts/validate-bake.ps1
+# after MmapGen produces tiles.
+$validatorProj = Join-Path $here "..\NavMeshPhysicsValidator\NavMeshPhysicsValidator.csproj"
+if (Test-Path $validatorProj) {
+    Write-Host "Building NavMeshPhysicsValidator (Release)"
+    & dotnet build $validatorProj --configuration Release -v minimal --nologo | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "dotnet build NavMeshPhysicsValidator failed (exit $LASTEXITCODE)" }
+    $validatorExe = Join-Path $here "..\..\Bot\Release\net8.0\NavMeshPhysicsValidator.exe"
+    if (Test-Path $validatorExe) {
+        Write-Host "Built: $validatorExe" -ForegroundColor Green
+    }
+}
+
 Write-Host "MmapGen build complete." -ForegroundColor Green
