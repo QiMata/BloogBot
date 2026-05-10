@@ -819,6 +819,17 @@ extern "C" __declspec(dllexport) float GetGroundZ(uint32_t mapId, float x, float
     return SceneQuery::GetGroundZ(mapId, x, y, z, maxSearchDist);
 }
 
+extern "C" __declspec(dllexport) float GetWalkableGroundZ(uint32_t mapId, float x, float y, float z,
+                                                          float maxSearchDist, float walkableMinNormalZ)
+{
+    if (!g_initialized)
+        InitializeAllSystems();
+
+    std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+    return SceneQuery::GetWalkableGroundZ(mapId, x, y, z, maxSearchDist, walkableMinNormalZ);
+}
+
 // Möller–Trumbore segment-triangle intersection.
 // Returns true if segment (p0→p1) intersects triangle (a, b, c).
 static bool SegmentIntersectsTriangle(

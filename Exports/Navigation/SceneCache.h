@@ -95,6 +95,15 @@ public:
     // Returns highest Z at (x,y) that is at or below z, within maxSearchDist.
     float GetGroundZ(float x, float y, float z, float maxSearchDist) const;
 
+    // Walkable-only variant of GetGroundZ. Filters candidate triangles by
+    // computed normal slope: only triangles with |normal.z| >= walkableMinNormalZ
+    // are considered. Returns INVALID_HEIGHT when no walkable triangle is found
+    // within the search window. Used by post-teleport ground probes that need
+    // to mirror real WoW's walkable-aware support detection (otherwise BG snaps
+    // to cliff-edge geometry the FG client correctly rejects).
+    float GetWalkableGroundZ(float x, float y, float z, float maxSearchDist,
+                             float walkableMinNormalZ) const;
+
     // Liquid level at (x,y) from pre-sampled grid.
     LiquidCell GetLiquidAt(float x, float y) const;
     bool HasLiquidData() const { return !m_liquidGrid.empty(); }

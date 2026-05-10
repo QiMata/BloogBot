@@ -978,6 +978,101 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
     return bestZ;
 }
 
+float SceneCache::GetWalkableGroundZ(float x, float y, float z, float maxSearchDist,
+                                     float walkableMinNormalZ) const
+{
+    // Walkable-only variant of GetGroundZ. Mirrors that function's barycentric
+    // point-in-triangle scan but rejects candidates whose computed plane normal
+    // is steeper than walkableMinNormalZ (|n.z| < threshold). Used by BG
+    // post-teleport ground probes to avoid snapping to cliff-edge / WMO-doodad
+    // geometry that real WoW's CMovement_AdjustPositionToGround correctly rejects.
+    if (m_cellsX == 0 || m_cellsY == 0)
+        return -200000.0f;
+
+    int cx = static_cast<int>((x - m_minX) / m_cellSize);
+    int cy = static_cast<int>((y - m_minY) / m_cellSize);
+    if (cx < 0 || cx >= static_cast<int>(m_cellsX) ||
+        cy < 0 || cy >= static_cast<int>(m_cellsY))
+        return -200000.0f;
+
+    uint32_t ci = cy * m_cellsX + cx;
+    uint32_t start = m_cellStart[ci];
+    uint32_t count = m_cellCount[ci];
+
+    float bestZ = -200000.0f;
+    float bestErr = std::numeric_limits<float>::max();
+    float zMax = z + maxSearchDist;
+    float zMin = z - maxSearchDist;
+
+    for (uint32_t j = 0; j < count; ++j)
+    {
+        const SceneTri& st = m_triangles[m_triIndices[start + j]];
+
+        // Quick AABB check
+        float txMin = std::min({st.ax, st.bx, st.cx});
+        float txMax = std::max({st.ax, st.bx, st.cx});
+        float tyMin = std::min({st.ay, st.by, st.cy});
+        float tyMax = std::max({st.ay, st.by, st.cy});
+        if (x < txMin || x > txMax || y < tyMin || y > tyMax)
+            continue;
+
+        // Barycentric XY test (same convention as GetGroundZ)
+        float v0x = st.cx - st.ax, v0y = st.cy - st.ay;
+        float v1x = st.bx - st.ax, v1y = st.by - st.ay;
+        float v2x = x - st.ax, v2y = y - st.ay;
+
+        float d00 = v0x * v0x + v0y * v0y;
+        float d01 = v0x * v1x + v0y * v1y;
+        float d02 = v0x * v2x + v0y * v2y;
+        float d11 = v1x * v1x + v1y * v1y;
+        float d12 = v1x * v2x + v1y * v2y;
+
+        float denom = d00 * d11 - d01 * d01;
+        if (std::fabs(denom) < 1e-12f) continue;
+
+        float invDenom = 1.0f / denom;
+        float u = (d11 * d02 - d01 * d12) * invDenom;
+        float v = (d00 * d12 - d01 * d02) * invDenom;
+
+        if (u < -1e-6f || v < -1e-6f || (u + v) > 1.0f + 1e-6f)
+            continue;
+
+        // Walkable filter: compute triangle normal via cross product (e1 x e2)
+        // and reject when |n.z| < walkableMinNormalZ. Triangles with very small
+        // XY footprint will degenerate to |n.z| ≈ 0 here and are correctly
+        // rejected. Absolute value matches the convention used throughout
+        // PhysicsGroundSnap.cpp (overlap normals can point downward when the
+        // capsule center is above the contact).
+        float e1x = st.bx - st.ax, e1y = st.by - st.ay, e1z = st.bz - st.az;
+        float e2x = st.cx - st.ax, e2y = st.cy - st.ay, e2z = st.cz - st.az;
+        float nx = e1y * e2z - e1z * e2y;
+        float ny = e1z * e2x - e1x * e2z;
+        float nz = e1x * e2y - e1y * e2x;
+        float nLen = std::sqrt(nx * nx + ny * ny + nz * nz);
+        if (nLen < 1e-12f) continue;
+        float nzNorm = std::fabs(nz / nLen);
+        if (nzNorm < walkableMinNormalZ) continue;
+
+        // Interpolate Z
+        float triZ = st.az + u * (st.cz - st.az) + v * (st.bz - st.az);
+
+        if (triZ >= zMin && triZ <= z) {
+            if (triZ > bestZ) {
+                bestZ = triZ;
+                bestErr = z - triZ;
+            }
+        } else if (triZ > z && triZ <= zMax && bestZ <= -200000.0f + 1.0f) {
+            float err = triZ - z;
+            if (err < bestErr) {
+                bestZ = triZ;
+                bestErr = err;
+            }
+        }
+    }
+
+    return bestZ;
+}
+
 LiquidCell SceneCache::GetLiquidAt(float x, float y) const
 {
     LiquidCell empty{};

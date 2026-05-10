@@ -24,6 +24,10 @@ internal static class NativePhysics
     public static extern float GetGroundZ(uint mapId, float x, float y, float queryZ, float maxSearchDist);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    public static extern float GetWalkableGroundZ(uint mapId, float x, float y, float queryZ,
+        float maxSearchDist, float walkableMinNormalZ);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     public static extern bool LineOfSight(uint mapId, XYZ from, XYZ to);
 

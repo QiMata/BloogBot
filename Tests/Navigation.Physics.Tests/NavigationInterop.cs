@@ -776,6 +776,17 @@ public static partial class NavigationInterop
     [DllImport(NavigationDll, EntryPoint = "GetGroundZ", CallingConvention = CallingConvention.Cdecl)]
     public static extern float GetGroundZ(uint mapId, float x, float y, float z, float maxSearchDist);
 
+    /// <summary>
+    /// Walkable-only ground Z probe. Filters scene-cache triangles by
+    /// |normal.z| ≥ walkableMinNormalZ. Returns INVALID_HEIGHT (≤ -50000) when
+    /// no walkable triangle is found in the search window. Used by BG
+    /// post-teleport ground probes to match real WoW's walkable-aware support
+    /// detection.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "GetWalkableGroundZ", CallingConvention = CallingConvention.Cdecl)]
+    public static extern float GetWalkableGroundZ(
+        uint mapId, float x, float y, float z, float maxSearchDist, float walkableMinNormalZ);
+
     [DllImport(NavigationDll, EntryPoint = "FindPath", CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr FindPathNative(
         uint mapId,

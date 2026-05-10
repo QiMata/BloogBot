@@ -23,6 +23,7 @@ public static class NativeLocalPhysics
     public static Action<string>? TestSetDataDirectoryOverride { get; set; }
     public static Func<string?>? TestResolveDataDirectoryOverride { get; set; }
     public static Func<uint, float, float, float, float, (float groundZ, bool found)>? TestGetGroundZOverride { get; set; }
+    public static Func<uint, float, float, float, float, float, (float groundZ, bool found)>? TestGetWalkableGroundZOverride { get; set; }
     public static Func<uint, float, float, float, float, float, float, bool>? TestLineOfSightOverride { get; set; }
     public static Func<uint, float, float, float, float, float, float, bool>? TestSegmentIntersectsDynamicObjectsOverride { get; set; }
     public static IReadOnlyList<uint> PreloadedMapIds => _preloadedMapIds;
@@ -174,6 +175,34 @@ public static class NativeLocalPhysics
 
         EnsureInitialized();
         float gz = NativePhysics.GetGroundZ(mapId, x, y, z, maxSearchDist);
+        return (gz, gz > -50000f);
+    }
+
+    /// <summary>
+    /// Walkable-only ground probe: filters scene-cache triangles by |normal.z| ≥
+    /// <paramref name="walkableMinNormalZ"/> and returns the highest matching Z
+    /// at-or-below <paramref name="z"/> within <paramref name="maxSearchDist"/>.
+    /// Mirrors real WoW's CMovement_AdjustPositionToGround walkable-slope filter.
+    /// Used by post-teleport ground probes so BG does not snap to cliff-edge or
+    /// WMO-doodad geometry that the unfiltered <see cref="GetGroundZ"/> accepts
+    /// but FG correctly rejects. Default threshold is cos(50°) ≈ 0.6428 to match
+    /// <c>PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z</c>.
+    /// </summary>
+    public const float DefaultWalkableMinNormalZ = 0.6428f;
+
+    public static (float groundZ, bool found) GetWalkableGroundZ(
+        uint mapId,
+        float x,
+        float y,
+        float z,
+        float maxSearchDist = 10f,
+        float walkableMinNormalZ = DefaultWalkableMinNormalZ)
+    {
+        if (TestGetWalkableGroundZOverride != null)
+            return TestGetWalkableGroundZOverride(mapId, x, y, z, maxSearchDist, walkableMinNormalZ);
+
+        EnsureInitialized();
+        float gz = NativePhysics.GetWalkableGroundZ(mapId, x, y, z, maxSearchDist, walkableMinNormalZ);
         return (gz, gz > -50000f);
     }
 

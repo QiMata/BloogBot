@@ -284,6 +284,14 @@ class SceneQuery
         // More precise than capsule sweep for exact XY positions (no lateral contact offset).
         static float GetGroundZ(uint32_t mapId, float x, float y, float z, float maxSearchDist = 10.0f);
 
+        // Walkable-only ground Z query. Filters scene-cache candidates by computed
+        // triangle normal slope; returns INVALID_HEIGHT when no walkable triangle is
+        // found inside the search window. Use this from post-teleport ground probes
+        // that must mirror real WoW's CMovement_AdjustPositionToGround (rejects cliff
+        // faces / steep WMO geometry that the unfiltered GetGroundZ accepts).
+        static float GetWalkableGroundZ(uint32_t mapId, float x, float y, float z,
+                                        float maxSearchDist, float walkableMinNormalZ);
+
         // Query VMAP area/group flags at a world position when full VMAP data is available.
         // Returns false when the map has no VMAP tree loaded (for example scene-slice-only bots).
         static bool GetAreaInfo(uint32_t mapId,

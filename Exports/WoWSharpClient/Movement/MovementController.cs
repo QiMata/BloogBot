@@ -479,7 +479,15 @@ namespace WoWSharpClient.Movement
 
             _ = EnsureLocalSceneDataFresh();
             var queryZ = MathF.Max(_player.Position.Z, _teleportZ) + 0.5f;
-            var (groundZ, foundGround) = NativeLocalPhysics.GetGroundZ(
+            // Walkable-only probe matches real WoW's CMovement_AdjustPositionToGround
+            // behavior: cliff-edge / WMO-doodad triangles whose normal exceeds the
+            // walkable slope threshold are ignored, so the bot correctly enters
+            // FALLINGFAR when teleported past a deck edge instead of snapping to the
+            // unfiltered triangle the original GetGroundZ would have returned.
+            // Diagnosed via OG smooth-wp01-cliff-fall-z42 parity break (FG=42.29 vs
+            // unfiltered BG=51.62, dz=9.33y). See
+            // memory/project_pfs_overhaul_006_cliff_fall_diagnosis.md.
+            var (groundZ, foundGround) = NativeLocalPhysics.GetWalkableGroundZ(
                 _player.MapId,
                 _player.Position.X,
                 _player.Position.Y,
@@ -487,29 +495,87 @@ namespace WoWSharpClient.Movement
                 POST_TELEPORT_AIRBORNE_GROUND_SEARCH_DISTANCE);
 
             if (!foundGround)
+            {
+                // No walkable support within search range — bot is genuinely in
+                // open air (cliff teleport, falling-from-height scenario). Prime
+                // FALLINGFAR with no support reference so gravity can take over.
+                _player.MovementFlags |= MovementFlags.MOVEFLAG_FALLINGFAR;
+                _fallTimeMs = 0;
+                _velocity = new Vector3(_velocity.X, _velocity.Y, MathF.Min(_velocity.Z, 0f));
+                _hasPhysicsGroundContact = false;
+                _wasGroundedLastFrame = false;
+
+                Log.Information(
+                    "[MovementController] Airborne teleport (no walkable support in {Range:F0}y): map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1}",
+                    POST_TELEPORT_AIRBORNE_GROUND_SEARCH_DISTANCE,
+                    _player.MapId,
+                    _player.Position.X,
+                    _player.Position.Y,
+                    _player.Position.Z,
+                    _teleportZ);
                 return;
+            }
 
             var drop = _teleportZ - groundZ;
-            if (drop <= TELEPORT_NEARBY_SUPPORT_PROBE_DISTANCE)
+
+            // Standing on nearby support: walkable surface within [0, 6y] BELOW
+            // the teleport target. Negative drop means the walkable surface is
+            // ABOVE the teleport — bot is below a deck / overhead structure
+            // (cliff-fall class), so must fall. Large positive drop (>6y) means
+            // teleported high above support, also must fall.
+            const float NearbySupportDownTolerance = TELEPORT_NEARBY_SUPPORT_PROBE_DISTANCE;
+            const float NearbySupportUpTolerance = 0.5f;  // small grace for bake-Z noise
+            if (drop >= -NearbySupportUpTolerance && drop <= NearbySupportDownTolerance)
                 return;
 
             _player.MovementFlags |= MovementFlags.MOVEFLAG_FALLINGFAR;
             _fallTimeMs = 0;
             _velocity = new Vector3(_velocity.X, _velocity.Y, MathF.Min(_velocity.Z, 0f));
-            _prevGroundZ = groundZ;
-            _prevGroundNormal = new Vector3(0, 0, 1);
-            _hasPhysicsGroundContact = true;
-            _wasGroundedLastFrame = false;
 
-            Log.Information(
-                "[MovementController] Airborne teleport primed falling state: map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} groundZ={GroundZ:F1} drop={Drop:F1}",
-                _player.MapId,
-                _player.Position.X,
-                _player.Position.Y,
-                _player.Position.Z,
-                _teleportZ,
-                groundZ,
-                drop);
+            // When the walkable surface is ABOVE the teleport (drop < 0), the
+            // probe returned a ceiling/overhead deck — using it as _prevGroundZ
+            // would lie to the runtime physics about where the bot will land.
+            // Probe again from BELOW the teleport for the actual fall reference,
+            // and only set _prevGroundZ when found. If nothing below, leave
+            // physics-contact unset so gravity drives the simulation honestly.
+            if (drop < 0f)
+            {
+                var (belowZ, foundBelow) = NativeLocalPhysics.GetWalkableGroundZ(
+                    _player.MapId,
+                    _player.Position.X,
+                    _player.Position.Y,
+                    _teleportZ - 0.5f,
+                    POST_TELEPORT_AIRBORNE_GROUND_SEARCH_DISTANCE);
+                if (foundBelow && belowZ <= _teleportZ + 0.1f)
+                {
+                    _prevGroundZ = belowZ;
+                    _prevGroundNormal = new Vector3(0, 0, 1);
+                    _hasPhysicsGroundContact = true;
+                    Log.Information(
+                        "[MovementController] Airborne teleport primed falling state (below-overhead): map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} overheadZ={OverheadZ:F1} belowZ={BelowZ:F1}",
+                        _player.MapId, _player.Position.X, _player.Position.Y, _player.Position.Z,
+                        _teleportZ, groundZ, belowZ);
+                }
+                else
+                {
+                    _hasPhysicsGroundContact = false;
+                    Log.Information(
+                        "[MovementController] Airborne teleport primed falling state (below overhead, no support found): map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} overheadZ={OverheadZ:F1}",
+                        _player.MapId, _player.Position.X, _player.Position.Y, _player.Position.Z,
+                        _teleportZ, groundZ);
+                }
+            }
+            else
+            {
+                _prevGroundZ = groundZ;
+                _prevGroundNormal = new Vector3(0, 0, 1);
+                _hasPhysicsGroundContact = true;
+                Log.Information(
+                    "[MovementController] Airborne teleport primed falling state: map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} groundZ={GroundZ:F1} drop={Drop:F1}",
+                    _player.MapId, _player.Position.X, _player.Position.Y, _player.Position.Z,
+                    _teleportZ, groundZ, drop);
+            }
+            _wasGroundedLastFrame = false;
         }
 
         private void TrySnapToNearbyTeleportSupport()
@@ -517,7 +583,12 @@ namespace WoWSharpClient.Movement
             if (float.IsNaN(_teleportZ))
                 return;
 
-            var (supportZ, foundSupport) = NativeLocalPhysics.GetGroundZ(
+            // Walkable-only probe so cliff-edge / WMO-doodad geometry doesn't
+            // satisfy "nearby support" — real WoW falls past those triangles
+            // and so must BG. Diagnosed via OG smooth-wp01-cliff-fall-z42
+            // parity break. See
+            // memory/project_pfs_overhaul_006_cliff_fall_diagnosis.md.
+            var (supportZ, foundSupport) = NativeLocalPhysics.GetWalkableGroundZ(
                 _player.MapId,
                 _player.Position.X,
                 _player.Position.Y,

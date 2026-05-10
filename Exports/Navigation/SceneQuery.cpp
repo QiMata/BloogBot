@@ -691,6 +691,31 @@ float SceneQuery::GetGroundZ(uint32_t mapId, float x, float y, float z, float ma
     return bestZ;
 }
 
+float SceneQuery::GetWalkableGroundZ(uint32_t mapId, float x, float y, float z,
+                                     float maxSearchDist, float walkableMinNormalZ)
+{
+    EnsureMapLoaded(mapId);
+
+    // Mirror GetGroundZ's underground search expansion so caves/interiors still
+    // probe a wide enough vertical window. The walkable filter only narrows the
+    // set of acceptable triangles, not the search range.
+    if (z < -10.0f && maxSearchDist < 60.0f)
+        maxSearchDist = 60.0f;
+
+    // Scene-cache fast path is the only path BG uses in tile-mode (the WWoW
+    // bake-validation harness's BG accounts hit only this branch). Other
+    // callers using the unfiltered GetGroundZ won't see this code at all, so
+    // VMAP/ADT/BIH fallbacks here are deliberately kept simple: if there is a
+    // SceneCache for the map, trust it. If no SceneCache (FG side or
+    // server-side preload-failure cases), return INVALID_HEIGHT so the caller
+    // can decide its own fallback (typically "treat as no support, let bot
+    // fall").
+    if (auto* cache = GetSceneCache(mapId))
+        return cache->GetWalkableGroundZ(x, y, z, maxSearchDist, walkableMinNormalZ);
+
+    return PhysicsConstants::INVALID_HEIGHT;
+}
+
 bool SceneQuery::GetAreaInfo(uint32_t mapId,
                              float x,
                              float y,
