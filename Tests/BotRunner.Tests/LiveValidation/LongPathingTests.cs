@@ -1869,6 +1869,8 @@ public class LongPathingTests
 
     private const string OgZeppelinBakeFixtureEnvVar = "WWOW_OG_ZEP_BAKE_FIXTURE";
     private const string BrmDungeonBakeFixtureEnvVar = "WWOW_BRM_BAKE_FIXTURE";
+    private const string OgZeppelinRecordFixtureEnvVar = "WWOW_OG_ZEP_RECORD_FIXTURE";
+    private const string BrmDungeonRecordFixtureEnvVar = "WWOW_BRM_RECORD_FIXTURE";
 
     /// <summary>
     /// PFS-OVERHAUL-006 (2026-05-10) — bake-validation harness driver for
@@ -1913,6 +1915,126 @@ public class LongPathingTests
             $"BRM dungeon bake-fixture validation disabled (set {BrmDungeonBakeFixtureEnvVar}=1).");
 
         await RunBakeFixtureValidationAsync("flamecrest-to-brm");
+    }
+
+    /// <summary>
+    /// PFS-OVERHAUL-006 (2026-05-10) — Layer 5 recording mode for the OG
+    /// zeppelin climb. Drives the
+    /// <see cref="Harness.BakeFixtureRecorder"/> over the canonical
+    /// candidate set (the post-Cycle-17e smooth-path waypoints + ramp
+    /// reference points), auto-classifies each as walkable/hole based on
+    /// settle-Z delta, captures multi-angle screenshots, and writes a
+    /// fresh fixture under <c>tools/MmapGen/test-fixtures/recorded/</c>.
+    /// The user reviews the recorded JSON and screenshots, then promotes
+    /// the file (or its useful subset) into the canonical fixture by
+    /// hand. Gated on <c>WWOW_OG_ZEP_RECORD_FIXTURE=1</c>.
+    /// </summary>
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public async Task OgZeppelin_RecordFixture()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(OgZeppelinRecordFixtureEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"OG zeppelin fixture recording disabled (set {OgZeppelinRecordFixtureEnvVar}=1).");
+
+        var input = new Harness.BakeFixtureRecorderInput(
+            RouteName: "ClimbOrgrimmarTowerToFrezza_Recorded",
+            MapId: 1,
+            Endpoints: new Harness.BakeFixtureEndpoints(
+                Start: new[] { 1677.0f, -4315.0f, 61.4f },
+                Dest: new[] { 1331.11f, -4649.45f, 53.6269f }),
+            Description: "Recorded by OgZeppelin_RecordFixture; review screenshots before promoting.",
+            Agent: new Harness.BakeFixtureAgent("TaurenMale", 1.0247f, 2.625f),
+            Candidates: new[]
+            {
+                new Harness.BakeFixtureRecorderCandidate("stall-coord-z51.6",     new[] { 1338.13f, -4645.96f, 51.60f }, "approach-position; tower-deck level"),
+                new Harness.BakeFixtureRecorderCandidate("approach-pos-z51.6",    new[] { 1338.10f, -4646.00f, 51.60f }, "explicit ApproachPosition constant"),
+                new Harness.BakeFixtureRecorderCandidate("smooth-wp00-z51.9",     new[] { 1339.10f, -4646.10f, 51.90f }, "smooth-path WP 00"),
+                new Harness.BakeFixtureRecorderCandidate("smooth-wp01-z51.7",     new[] { 1337.30f, -4645.10f, 51.70f }, "smooth-path WP 01"),
+                new Harness.BakeFixtureRecorderCandidate("smooth-wp02-z53.5-LIP", new[] { 1335.20f, -4644.40f, 53.50f }, "deck-lip critical"),
+                new Harness.BakeFixtureRecorderCandidate("smooth-wp03-z53.5",     new[] { 1337.20f, -4643.00f, 53.50f }, "deck-top WP 03"),
+                new Harness.BakeFixtureRecorderCandidate("smooth-wp04-z53.5",     new[] { 1339.40f, -4644.10f, 53.50f }, "deck-top WP 04"),
+                new Harness.BakeFixtureRecorderCandidate("smooth-wp05-z54.3",     new[] { 1337.50f, -4644.60f, 54.30f }, "stair-step toward Frezza"),
+                new Harness.BakeFixtureRecorderCandidate("smooth-wp06-z54.8",     new[] { 1329.10f, -4648.60f, 54.80f }, "approach to Frezza"),
+                new Harness.BakeFixtureRecorderCandidate("smooth-wp07-z54.6-FRZ", new[] { 1330.90f, -4649.50f, 54.60f }, "Frezza spawn neighborhood"),
+                new Harness.BakeFixtureRecorderCandidate("frezza-spawn-z53.6",    new[] { 1331.11f, -4649.45f, 53.6269f }, "Frezza NPC 9564 spawn"),
+                new Harness.BakeFixtureRecorderCandidate("boarding-pos-z53.9",    new[] { 1320.14f, -4653.16f, 53.89f }, "OG zeppelin BoardingPosition"),
+            });
+
+        await RunRecordFixtureAsync(input, fixtureBasename: "og-zeppelin");
+    }
+
+    /// <summary>
+    /// Layer 5 recording mode for FlameCrest → BRM. Seeds the recorder
+    /// with the BrmDungeonRouteDiagnostic endpoints + the Round-3 stall
+    /// coords (which the auto-classifier should mark as holes when the
+    /// south-face WMO trap is present, or as walkable if a future bake
+    /// fix has resolved it). Gated on <c>WWOW_BRM_RECORD_FIXTURE=1</c>.
+    /// </summary>
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public async Task BrmDungeon_RecordFixture()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(BrmDungeonRecordFixtureEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"BRM fixture recording disabled (set {BrmDungeonRecordFixtureEnvVar}=1).");
+
+        var input = new Harness.BakeFixtureRecorderInput(
+            RouteName: "FlameCrestToBrmDungeonEntrance_Recorded",
+            MapId: 0,
+            Endpoints: new Harness.BakeFixtureEndpoints(
+                Start: new[] { -7518.7f, -2159.9f, 131.9f },
+                Dest:  new[] { -7524.0f, -1233.0f, 287.0f }),
+            Description: "Recorded by BrmDungeon_RecordFixture; review screenshots for WMO-interior trap.",
+            Agent: new Harness.BakeFixtureAgent("TaurenMale", 1.0247f, 2.625f),
+            Candidates: new[]
+            {
+                new Harness.BakeFixtureRecorderCandidate("flamecrest-tower-foot",   new[] { -7518.7f, -2159.9f, 131.9f }, "FlameCrest start; ground-level"),
+                new Harness.BakeFixtureRecorderCandidate("ubrs-portal",             new[] { -7524.0f, -1233.0f, 287.0f }, "UBRS literal portal"),
+                new Harness.BakeFixtureRecorderCandidate("lbrs-portal",             new[] { -7531.0f, -1226.0f, 286.0f }, "LBRS literal portal"),
+                new Harness.BakeFixtureRecorderCandidate("brm-south-z170.8-trap",   new[] { -7949.7f, -1162.8f, 170.8f }, "Round-3 south-face WMO-interior trap"),
+                new Harness.BakeFixtureRecorderCandidate("brm-south-z133.8-newtrap", new[] { -7825.4f, -1129.2f, 133.8f }, "Slice-F new trap (post-cull)"),
+                new Harness.BakeFixtureRecorderCandidate("brd-approach",            new[] { -7187f,    -958f,    254f }, "BRD approach (corridor terminus)"),
+                new Harness.BakeFixtureRecorderCandidate("bwl-approach",            new[] { -7659f,    -1214f,   291f }, "BWL approach"),
+            });
+
+        await RunRecordFixtureAsync(input, fixtureBasename: "flamecrest-to-brm");
+    }
+
+    private async Task RunRecordFixtureAsync(Harness.BakeFixtureRecorderInput input, string fixtureBasename)
+    {
+        var target = await EnsureLongPathingTargetAsync();
+        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
+
+        var outputDir = Path.Combine(
+            ResolveRepoRoot(),
+            "tools", "MmapGen", "test-fixtures", "recorded");
+        Directory.CreateDirectory(outputDir);
+
+        var screenshotDir = Path.Combine(
+            ResolveRepoRoot(),
+            "tmp", "test-runtime", "screenshots", "long-pathing",
+            "bake-fixture-recording", fixtureBasename);
+        global::Tests.Infrastructure.ScreenshotRunIsolation.Reset(screenshotDir);
+
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ");
+        var outputPath = Path.Combine(outputDir, $"{fixtureBasename}-recorded-{timestamp}.json");
+
+        var host = new Harness.LiveBakeValidationHost(_bot, _output.WriteLine);
+        var recorder = new Harness.BakeFixtureRecorder(host, screenshotDir: screenshotDir);
+
+        var fixture = await recorder.RecordAsync(input, target.AccountName, outputPath);
+
+        _output.WriteLine($"[BAKE-REC] Recorded fixture: {outputPath}");
+        _output.WriteLine($"[BAKE-REC]   walkable={fixture.ExpectedWalkable.Count} holes={fixture.ExpectedHoles.Count}");
+        _output.WriteLine($"[BAKE-REC] Screenshots: {screenshotDir}");
+        _output.WriteLine("[BAKE-REC] Review screenshots + JSON, then promote to canonical fixture by hand.");
     }
 
     private async Task RunBakeFixtureValidationAsync(string fixtureRouteId)
