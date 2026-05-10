@@ -2009,6 +2009,11 @@ public class LongPathingTests
 
     private async Task RunRecordFixtureAsync(Harness.BakeFixtureRecorderInput input, string fixtureBasename)
     {
+        // Cross-map teleports (Kalimdor safe-zone → EK BRM, etc.) destabilize
+        // the FG packet hooks and crash WoW.exe. Same scope the OG climb test
+        // uses; required for any harness fixture that crosses maps.
+        using var packetHookScope = DisableForegroundPacketHooksForCrossMapTransfers();
+
         var target = await EnsureLongPathingTargetAsync();
         await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
 
@@ -2047,6 +2052,11 @@ public class LongPathingTests
 
     private async Task RunBakeFixtureValidationAsync(string fixtureRouteId)
     {
+        // Cross-map teleports (Kalimdor safe-zone → EK BRM, etc.) destabilize
+        // the FG packet hooks and crash WoW.exe. Same scope the OG climb test
+        // uses; required for any harness fixture that crosses maps.
+        using var packetHookScope = DisableForegroundPacketHooksForCrossMapTransfers();
+
         var fixture = Harness.BakeFixtureLoader.LoadByRoute(fixtureRouteId);
         _output.WriteLine(
             $"[BAKE-VAL] loaded fixture route='{fixture.Route}' map={fixture.MapId} " +
