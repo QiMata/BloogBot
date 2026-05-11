@@ -167,9 +167,19 @@ void ProcessAirMovement(
     // The character lands when endPos.z is at or below the terrain surface.
     constexpr float LANDING_TOLERANCE = 0.3f;
 
-    float groundZ = SceneQuery::GetGroundZ(input.mapId, endPos.x, endPos.y,
+    // PFS-OVERHAUL-006 round 4 iter 5 (2026-05-11): walkable-filtered variant.
+    // Real WoW falls past non-walkable cliff faces / steep WMO geometry; only
+    // surfaces whose normal exceeds the walkable slope threshold (cos 50°)
+    // count as landing targets. Round-1 introduced GetWalkableGroundZ for the
+    // post-teleport probes; the airborne landing detection has the same
+    // requirement — without the filter the falling bot lands on the first
+    // triangle whose XY footprint contains it, including non-walkable cliff
+    // sides. OG cliff-fall canonical case: bot was landing at z=47.7 instead
+    // of falling through to ADT at 42.29.
+    float groundZ = SceneQuery::GetWalkableGroundZ(input.mapId, endPos.x, endPos.y,
         endPos.z + PhysicsConstants::STEP_HEIGHT,
-        PhysicsConstants::STEP_HEIGHT + PhysicsConstants::STEP_DOWN_HEIGHT);
+        PhysicsConstants::STEP_HEIGHT + PhysicsConstants::STEP_DOWN_HEIGHT,
+        PhysicsConstants::DEFAULT_WALKABLE_MIN_NORMAL_Z);
 
     // PFS-OVERHAUL-006 round 3 (2026-05-10): the probe origin reaches
     // STEP_HEIGHT (2.028y) ABOVE the bot's predicted feet, so an overhead

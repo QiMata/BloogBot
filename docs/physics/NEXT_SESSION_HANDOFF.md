@@ -3,6 +3,17 @@
 > Working dir: `E:/repos/Westworld of Warcraft/`
 > Branch: `main` at HEAD (pushed). Working tree clean except `.env`.
 
+> **2026-05-11: OG cliff-fall is RESOLVED.** Round-4 iter-5 landed the
+> final piece — `ProcessAirMovement` landing probe now uses
+> `SceneQuery::GetWalkableGroundZ`. Live OG `OgZeppelin_BakeFixtureValidation`
+> reports `passed=true`, dz=0.224y (within 0.3y parity tolerance). 12/12
+> OG checkpoints pass, 68/68 offline tests pass. Cumulative loop progress:
+> BG settle Z 53.317 → 42.093 (11.22y movement toward FG 42.317). See
+> `memory/project_pfs_overhaul_006_round4_iter5_VICTORY.md` for the full
+> arc and architecture summary. Next mandate is whatever comes after the
+> OG canary closes (BRM cluster, additional cliff-fall checkpoints, or
+> moving on to pathfinding now that Phase 2 of R13 is green at OG).
+
 You are continuing PFS-OVERHAUL-006. The OG cliff-fall parity-break has
 been LOCALIZED to three C++ snap-up sites. Round-3 prevGroundZ-aware
 gates land cleanly (67/67 offline tests pass) but the LIVE validator
