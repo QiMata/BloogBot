@@ -579,8 +579,17 @@ namespace WoWSharpClient.Movement
                 else
                 {
                     _hasPhysicsGroundContact = false;
+                    // Explicitly invalidate _prevGroundZ. GetWalkableGroundZ is
+                    // nearest-walkable not strictly-downward, so its result here
+                    // is often the same overhead deck we already classified as
+                    // ceiling — using it as a fall reference would lie to physics
+                    // and defeat the airborne gates in PhysicsEngine.cpp /
+                    // PhysicsMovement.cpp. INVALID_HEIGHT signals "airborne but
+                    // unknown fall reference"; physics handles the rest via
+                    // gravity + the inputAirborneFlag-driven gate path.
+                    _prevGroundZ = -200000f;
                     Log.Warning(
-                        "[MovementController] Airborne teleport primed falling state (below overhead, no support found): map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} overheadZ={OverheadZ:F1} belowProbeFound={Found} belowProbeZ={BelowZ:F1} searchRange={Range:F0}y",
+                        "[MovementController] Airborne teleport primed falling state (below overhead, no support found, prevGroundZ=INVALID): map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} overheadZ={OverheadZ:F1} belowProbeFound={Found} belowProbeZ={BelowZ:F1} searchRange={Range:F0}y",
                         _player.MapId, _player.Position.X, _player.Position.Y, _player.Position.Z,
                         _teleportZ, groundZ, foundBelow, belowZ,
                         POST_TELEPORT_AIRBORNE_GROUND_SEARCH_DISTANCE);

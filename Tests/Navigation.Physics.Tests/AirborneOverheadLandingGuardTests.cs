@@ -251,4 +251,95 @@ public sealed class AirborneOverheadLandingGuardTests : IDisposable
 
         Assert.InRange(finalZ, 53.0f, 54.0f);
     }
+
+    /// <summary>
+    /// PFS-OVERHAUL-006 round 4 iter 3 (2026-05-11) — covers the path where
+    /// <c>MovementController.PrimeAirborneTeleportFallIfNeeded</c> detected an
+    /// overhead deck but the below-probe failed to find a reliable ADT
+    /// reference (the live OG cliff-fall case where
+    /// <c>NativeLocalPhysics.GetWalkableGroundZ</c> returns the SAME overhead
+    /// deck because it's nearest-walkable, not strictly-downward). Prime then
+    /// sets <c>_prevGroundZ = -200000f</c> (INVALID) so physics knows "airborne
+    /// but no reliable fall reference."
+    ///
+    /// Required behavior: with FALLINGFAR set AND prevGroundZ at the INVALID
+    /// sentinel, the round-3 PhysicsEngine.cpp depen-skip gate AND the
+    /// PhysicsMovement.cpp landing-reject gate must STILL fire — purely on
+    /// the inputAirborneFlag, ignoring the missing prevGroundZ. Otherwise
+    /// the bot snaps UP to the overhead deck (the round-4 iter-1/2 regression).
+    /// </summary>
+    [SkippableFact]
+    [Trait("Category", "PhysicsParity")]
+    public void StepV2_FallingFar_OverheadDeck_InvalidPrevGroundZ_DoesNotSnapUp()
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        PreloadMap(TestMapId);
+        ClearSceneCache(TestMapId);
+
+        var triangles = new[]
+        {
+            new InjectedTriangle
+            {
+                V0X = 1330f, V0Y = -4640f, V0Z = 42.29f,
+                V1X = 1345f, V1Y = -4640f, V1Z = 42.29f,
+                V2X = 1337f, V2Y = -4650f, V2Z = 42.29f,
+                SourceType = 0u,
+                InstanceId = 0x3001u,
+                GroupFlags = 0u,
+            },
+            new InjectedTriangle
+            {
+                V0X = 1330f, V0Y = -4640f, V0Z = 53.5f,
+                V1X = 1345f, V1Y = -4640f, V1Z = 53.5f,
+                V2X = 1337f, V2Y = -4650f, V2Z = 53.5f,
+                SourceType = 0u,
+                InstanceId = 0x3002u,
+                GroupFlags = 0u,
+            },
+        };
+
+        Assert.True(InjectSceneTriangles(TestMapId, 1325f, -4655f, 1350f, -4635f, triangles, triangles.Length),
+            "Failed to inject test triangles");
+
+        const uint MOVEFLAG_FALLINGFAR = 0x4000u;
+
+        var input = new PhysicsInput
+        {
+            MapId = TestMapId,
+            X = 1337.3f,
+            Y = -4645.1f,
+            Z = 51.7f,
+            Vx = 0f, Vy = 0f, Vz = 0f,
+            MoveFlags = MOVEFLAG_FALLINGFAR,
+            Height = 2.625f,
+            Radius = 1.025f,
+            DeltaTime = 1f / 60f,
+            FallTime = 0u,
+            FallStartZ = 51.7f,
+            // INVALID sentinel — Prime hit the no-support-found branch.
+            PrevGroundZ = -200000f,
+            PrevGroundNx = 0f, PrevGroundNy = 0f, PrevGroundNz = 1f,
+            WasGrounded = 0u,
+        };
+
+        var output = StepPhysicsV2(ref input);
+        _output.WriteLine(
+            $"AfterStep: Z={output.Z:F3} Vz={output.Vz:F3} " +
+            $"moveFlags=0x{output.MoveFlags:X} groundZ={output.GroundZ:F3} " +
+            $"fallTime={output.FallTime}");
+
+        Assert.True(output.Z <= 51.7f + 0.01f,
+            $"PhysicsStepV2 snapped UP to overhead surface despite FALLINGFAR + " +
+            $"INVALID prevGroundZ. Expected Z ≤ 51.7, got Z={output.Z:F3}. " +
+            $"The prevGroundUnknown branch of the depen/landing gates is missing.");
+
+        bool stillFalling = (output.MoveFlags & MOVEFLAG_FALLINGFAR) != 0;
+        Assert.True(stillFalling,
+            $"FALLINGFAR was cleared after one frame with INVALID prevGroundZ. " +
+            $"moveFlags=0x{output.MoveFlags:X}. The bot was incorrectly grounded.");
+
+        Assert.True(output.Vz <= 0f + 1e-3f,
+            $"Vz should be ≤ 0 after one frame of gravity, got Vz={output.Vz:F3}");
+    }
 }

@@ -26,6 +26,22 @@ round-3 diagnosis and the prerequisite for the next cycle.
 > + 4 OG parity tests + 14 ServerMovement + ~33 MovementControllerPhysics
 > + 16 FrameByFrame = 67 offline tests green.
 
+> 2026-05-11 round-4 iter-3 update: **Option C SHIPPED.** Prime now
+> sets `_prevGroundZ = -200000f` (INVALID sentinel) in the
+> no-support-found branch + the round-3 PhysicsEngine.cpp depen gate
+> and PhysicsMovement.cpp landing gate both accept
+> `(prevGroundUnknown && airborneFlag)` as airborne. **First measurable
+> BG-Z movement**: 53.317436 → 51.7000, dz 11.03 → 9.38 (-1.617y toward
+> FG 42.29). 68/68 offline (added
+> `StepV2_FallingFar_OverheadDeck_InvalidPrevGroundZ_DoesNotSnapUp`);
+> 11/11 walkable still green. Overhead-snap-up bug FIXED.
+>
+> Remaining 9.38y gap: bot sits AT the teleport target (51.7) instead
+> of falling to ADT at 42.29. Next iteration applies the same gate
+> pattern to the PhysicsStepV2 idle branch at
+> `Exports/Navigation/PhysicsEngine.cpp:5947-5961` (round-3's known
+> third snap-up site). See `memory/project_pfs_overhaul_006_round4_iter3.md`.
+
 > 2026-05-11 round-4 iter-2 update: S0 diagnostic shipped (WRN-level
 > Prime traces). Live log now PROVES Prime fires for cliff-fall, takes
 > the drop<0 (overhead) branch, and the below-probe

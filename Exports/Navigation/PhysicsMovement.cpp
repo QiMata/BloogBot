@@ -186,9 +186,17 @@ void ProcessAirMovement(
     // genuinely-airborne check. Diagnosed via deterministic test
     // AirborneOverheadLandingGuardTests; see memory entry
     // project_pfs_overhaul_006_depen_overhead_fix.md.
+    // PFS-OVERHAUL-006 round 4 iter 3 (2026-05-11): also accept "prevGround
+    // unknown + airborne flag set" as genuinelyAirborne. Prime sets prevGroundZ
+    // to INVALID when an overhead deck blocks the post-teleport probe and no
+    // reliable below-reference can be inferred — the bot IS airborne, just
+    // without a known fall reference Z. Same shape as the depen-skip gate in
+    // PhysicsEngine.cpp.
+    const bool airborneFlag = (input.moveFlags & (MOVEFLAG_JUMPING | MOVEFLAG_FALLINGFAR)) != 0;
+    const bool prevGroundKnown = VMAP::IsValidHeight(input.prevGroundZ);
     const bool genuinelyAirborne =
-        VMAP::IsValidHeight(input.prevGroundZ) &&
-        (startPos.z - input.prevGroundZ) > PhysicsConstants::STEP_HEIGHT;
+        (prevGroundKnown && (startPos.z - input.prevGroundZ) > PhysicsConstants::STEP_HEIGHT)
+        || (!prevGroundKnown && airborneFlag);
     const bool overheadSurface =
         VMAP::IsValidHeight(groundZ) && groundZ > startPos.z + LANDING_TOLERANCE;
     const bool rejectOverheadLanding = genuinelyAirborne && overheadSurface;

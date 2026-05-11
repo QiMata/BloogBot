@@ -5614,7 +5614,14 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		const bool hasFarPrevGround =
 			(input.prevGroundZ > PhysicsConstants::INVALID_HEIGHT) &&
 			(st.z - input.prevGroundZ) > PhysicsConstants::STEP_HEIGHT;
-		const bool skipVerticalDepen = inputAirborneFlag && hasFarPrevGround;
+		// PFS-OVERHAUL-006 round 4 iter 3 (2026-05-11): Prime sets prevGroundZ
+		// to INVALID when an overhead deck blocks the post-teleport probe and
+		// no reliable below-reference can be inferred (OG cliff-fall canonical
+		// case). Accept "prevGround unknown + airborne flag" as equivalent to
+		// hasFarPrevGround so depen skip still fires; physics handles the fall
+		// via gravity without needing a known reference Z.
+		const bool prevGroundUnknown = input.prevGroundZ <= PhysicsConstants::INVALID_HEIGHT;
+		const bool skipVerticalDepen = inputAirborneFlag && (hasFarPrevGround || prevGroundUnknown);
 		for (int i = 0; i < PhysicsConstants::MAX_OVERLAP_RECOVER_ITERATIONS; ++i) {
 			// Using existing helpers as a first-class overlap recovery step.
 			// Vertical first (most common: clipped into ground), then horizontal.
