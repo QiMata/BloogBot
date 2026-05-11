@@ -4,15 +4,20 @@
 > Branch: `main` at HEAD (pushed). Working tree clean except `.env`.
 
 You are continuing PFS-OVERHAUL-006. The OG cliff-fall parity-break
-**fix is shipped end-to-end** with deterministic unit tests and clean
-regression gates. The remaining work is a live OG fixture validator
-re-run to confirm the parity break is gone in the wild.
+fix from commit `1c530288` (round 1) was **live-verified as PARTIAL**.
+A round-2 attempt to gate `ApplyVerticalDepenetration` on
+`inputAirborneFlag` had ZERO live effect and was reverted. Round 3
+must localize the actual snap-up site somewhere in `PhysicsStepV2`.
 
-> 2026-05-10 status: the OG `smooth-wp01-cliff-fall-z42` parity break
-> is fixed at the code level via `SceneCache::GetWalkableGroundZ` +
-> `MovementController` gate updates (commit `1c530288`). Live re-run
-> deferred (~2:15, needs WoW.exe + MaNGOS). See
-> `memory/project_pfs_overhaul_006_cliff_fall_diagnosis.md`.
+> 2026-05-10 status (post-live-verify): the OG `smooth-wp01-cliff-fall-z42`
+> parity break has CHANGED but persists. Pre-1c530288: BG settled at
+> z=51.62 (the cliff fillet). Post-1c530288 (round 1): BG settles at
+> **z=53.32** (the deck above teleport). FG=42.29. dz=11.00y. The
+> round-1 fix is necessary (cleanly rejects the cliff fillet) but
+> insufficient (some other PhysicsStepV2 mechanism still snaps UP to
+> the overhead deck). See
+> `memory/project_pfs_overhaul_006_depen_overhead_fix.md` for the
+> round-2-attempt-and-revert details + the recommended round-3 plan.
 
 ## Priority order — DO NOT skip ahead
 
@@ -51,7 +56,8 @@ The full rule with rationale lives in
 | `e56f3ad7` | Added missing `scenes/` mount to `docker-compose.vmangos-linux.yml`; rebuilt `wwow-scene-data` container so its `ProtobufSocketServer.TryReadExact(allowCleanEndOfStream:true)` silences benign healthcheck disconnects |
 | `f844d101` | Codified FG/BG parity priority + initial next-session handoff (mandate, hard rules, run order) |
 | `7a79154a` | Localized cliff-fall parity break to `MovementController.cs:466-556` + `SceneCache::GetGroundZ` missing walkable filter. Diagnosis-only commit; updated handoff with concrete fix surfaces. |
-| `1c530288` | **THIS SESSION**: Shipped the fix. Added `SceneCache::GetWalkableGroundZ` (+ SceneQuery wrapper + C export + P/Invoke + `NativeLocalPhysics.GetWalkableGroundZ`). Switched the two post-teleport probes in MovementController. Fixed the gate to treat "support above teleport Z" as a falling condition (re-probes BELOW for fall reference). 4 new `OgZeppelinCliffFallParityTests` (all green). 7/7 standard physics regression gates pass (including `GroundMovement_Position_NotUnderground` underground guard). |
+| `1c530288` | Shipped round-1 fix. Added `SceneCache::GetWalkableGroundZ` (+ SceneQuery wrapper + C export + P/Invoke + `NativeLocalPhysics.GetWalkableGroundZ`). Switched the two post-teleport probes in MovementController. Fixed the gate to treat "support above teleport Z" as a falling condition (re-probes BELOW for fall reference). 4 new `OgZeppelinCliffFallParityTests` (all green). 7/7 standard physics regression gates pass (including `GroundMovement_Position_NotUnderground` underground guard). |
+| (this session) | Live-verified `1c530288` is PARTIAL. Round-2 attempt to gate `ApplyVerticalDepenetration` on `inputAirborneFlag` had no live effect (BG still 53.32). Reverted. No code shipped. Documentation only — see `memory/project_pfs_overhaul_006_depen_overhead_fix.md`. |
 
 The harness's six acceptance items from the prior mandate are all
 green or diagnostically delivered.
@@ -60,60 +66,63 @@ green or diagnostically delivered.
 
 ### Acceptance items
 
-1. **Live OG validator re-run — verify the cliff-fall parity-break fix.**
+1. **Localize the snap-up site in PhysicsStepV2 (round 3 of cliff-fall fix).**
 
-   The fix shipped in commit `1c530288`. The OG `smooth-wp01-cliff-fall-z42`
-   parity break should now be resolved (BG should fall to z≈42.29 to match FG).
-   Run the live OG fixture validator:
+   Live-verify of commit `1c530288` (round 1) shows BG settle moved
+   51.62→**53.32** instead of falling to 42.29. The round-1 fix
+   correctly rejects the cliff fillet at z=51.62, but the bot now
+   snaps UP to the deck at z=53.5 via a SECOND mechanism inside
+   `Exports/Navigation/PhysicsEngine.cpp::PhysicsStepV2`.
 
-   ```powershell
-   $env:WWOW_OG_ZEP_BAKE_FIXTURE = '1'
-   $env:WWOW_DATA_DIR = 'D:\MaNGOS\data'
-   dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj `
-     --configuration Release --no-build `
-     --filter 'FullyQualifiedName~OgZeppelin_BakeFixtureValidation'
-   ```
+   Latest validator JSON (canonical source of truth):
+   `tmp/test-runtime/screenshots/long-pathing/bake-validation/og-zeppelin/bake-validation-ClimbOrgrimmarTowerToFrezza-20260511T002911Z.json`
+   - 11/11 walkable checkpoints PASS (no regression).
+   - `smooth-wp01-cliff-fall-z42`: FG=42.29, BG=53.32, dz=11.03y, FAILED.
 
-   Expected results in the new
-   `tmp/test-runtime/screenshots/long-pathing/bake-validation/og-zeppelin/bake-validation-*.json`:
-   - `passed: true`
-   - Zero `FG_BG_PARITY_BREAK` failures
-   - `smooth-wp01-cliff-fall-z42.bgSettled` Z within ±0.3y of FG's z=42.29
-   - All 11 walkable checkpoints continue to settle within tolerance
-     (the walkable filter must not over-reject — already covered by the
-     `ApproachPos_WalkableGetGroundZ_StillResolvesToDeck_NoRegression`
-     unit test, but live re-run is the canonical signal)
+   BG live trace (Bot/Release/net8.0/WWoWLogs/bg_LPATHBG120260510.log):
+   - 20:29:04: teleport to (1337.3,-4645.1,51.7) (drop from boarding-pos).
+   - 20:29:04.529: "Post-teleport ground snap complete: pos=(1337.3,-4645.1,**53.3**)
+     groundZ=53.317 moveFlags=0x0 envFlags=0x0 indoors=false **frames=1**".
+   - Bot moved UP 1.617y in ONE physics frame. No
+     "Nearby teleport support probe corrected" log line, so
+     `TrySnapToNearbyTeleportSupport` did NOT fire.
 
-   If the live run still fails, possible follow-ups:
-   - Inspect the validator JSON: did BG settle ABOVE the deck (z>53.5)?
-     If so the re-probe-below path may need adjustment.
-   - Check WoWSharpClient log for the new
-     `[MovementController] Airborne teleport primed falling state (below-overhead)`
-     line — this should fire on the cliff-fall teleport.
-   - Verify Navigation.dll was redeployed to `Bot/Release/net8.0/`
-     (`docker logs wwow-scene-data --tail 10` should show the same
-     "Indexed N tiles" line; SceneDataService doesn't load Navigation.dll
-     but the BG bot's process does).
+   **Round-2 attempt failed**: gating `ApplyVerticalDepenetration`
+   on `inputAirborneFlag` (PhysicsEngine.cpp:5604) had ZERO live
+   effect — BG still settled at 53.32. The depen loop is NOT the
+   snap mechanism. Reverted. See
+   `memory/project_pfs_overhaul_006_depen_overhead_fix.md` for full
+   details.
 
-   **Code shipped (commit `1c530288`)**:
-   - `Exports/Navigation/SceneCache.{cpp,h}` — `GetWalkableGroundZ`
-   - `Exports/Navigation/SceneQuery.{cpp,h}` — entry point
-   - `Exports/Navigation/DllMain.cpp` — C export
-   - `Exports/WoWSharpClient/Movement/NativePhysicsInterop.cs` — P/Invoke
-   - `Exports/WoWSharpClient/Movement/NativeLocalPhysics.cs` — C# wrapper
-   - `Exports/WoWSharpClient/Movement/MovementController.cs` —
-     `PrimeAirborneTeleportFallIfNeeded` + `TrySnapToNearbyTeleportSupport`
-     switched to walkable probe + drop gate handles negative drop
-   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs` — test P/Invoke
-   - `Tests/Navigation.Physics.Tests/OgZeppelinCliffFallParityTests.cs` —
-     4 deterministic unit tests (all green)
+   **Recommended round-3 diagnostic**:
+   1. Add temporary per-Z-mutation logging at every `st.z = ...`
+      site in `Exports/Navigation/PhysicsEngine.cpp::PhysicsStepV2`
+      (search for `st.z =` between lines ~5400 and ~6100).
+   2. Trigger the cliff-fall via the live validator:
+      ```powershell
+      $env:WWOW_OG_ZEP_BAKE_FIXTURE = '1'
+      $env:WWOW_DATA_DIR = 'D:\MaNGOS\data'
+      dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj `
+        --configuration Release --no-build `
+        --filter 'FullyQualifiedName~OgZeppelin_BakeFixtureValidation'
+      ```
+   3. Read `Bot/Release/net8.0/WWoWLogs/bg_LPATHBG{date}.log`
+      around the cliff-fall timestamp. The first log line where
+      st.z jumps from 51.7 → ~53.3 IS the snap-up site.
+   4. Likely candidates per memory entry:
+      - PhysicsStepV2 `hasPrevGround` branch at ~line 5454.
+      - Deferred depen vector at line 5635-5667 (Side region only,
+        but worth verifying).
+      - PhysicsThreePass collision sweep (initial overlap settle).
+   5. Once localized, the fix shape is: when FALLINGFAR is set AND
+      the candidate ground surface is ABOVE the bot's feet by more
+      than `walkableClimb`, suppress the snap. Real WoW falls past
+      overhead WMO/M2 floors; BG must too.
 
-   **Regression validation already complete (offline)**:
-   - 4/4 `OgZeppelinCliffFallParityTests` pass
-   - 7/7 standard physics regression gates pass (from
-     `physicsengine-calibration.md`), including
-     `ServerMovementValidationTests.GroundMovement_Position_NotUnderground`
-     (the previously breached underground regression guard)
+   **Don't redo**: the round-1 SceneCache walkable filter (commit
+   `1c530288`) IS correct and IS load-bearing. Its unit tests prove
+   the post-teleport probes correctly prime FALLINGFAR with
+   `_prevGroundZ=42.29`. The downstream snap-up is a separate bug.
 
 2. **Add 2-3 more deck-edge / cliff-edge parity checkpoints** to the
    OG fixture so parity breaks have a wider surface, not just one
@@ -242,11 +251,11 @@ produced fast iteration this session:
 Stop iterating when EITHER:
 - The OG `smooth-wp01-cliff-fall-z42` parity break is resolved AND a
   fresh validator run shows zero `FG_BG_PARITY_BREAK` failures across
-  the OG fixture, OR
-- You've localized the divergence to a specific code site
-  (PhysicsGroundSnap line + reason: capsule-vs-edge / step-up / slope
-  threshold / depenetration order) AND documented the next-cycle fix
-  surface in memory.
+  the OG fixture (BG settles at z≈42.29 within 0.3y of FG), OR
+- You've localized the snap-up site to a specific PhysicsStepV2 code
+  line (with reason: hasPrevGround branch / collision sweep settle /
+  deferred depen / etc.) AND documented the next-cycle fix surface in
+  memory.
 
 At stopping time, write a session-summary memory entry, commit + push,
 and surface any remaining blocker concisely. Then update this
