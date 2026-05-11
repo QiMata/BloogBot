@@ -389,8 +389,17 @@ namespace WoWSharpClient.Movement
                 // rooftop), allow gravity to pull the bot down naturally — this is correct WoW behavior.
                 // Only clamp when there's no ground at all (missing navmesh/collision), which prevents
                 // fallthrough at docks/bridges/beaches where the navmesh sees the ocean floor.
+                //
+                // PFS-OVERHAUL-006 round 4 iter 4 (2026-05-11): also skip the clamp when FALLINGFAR
+                // is set. Prime intentionally sets _prevGroundZ = INVALID (-200000) for the
+                // overhead-deck case (Option C, iter 3) to signal "airborne, unknown fall reference".
+                // Without this gate, that INVALID value flips `physicsFoundGround` to false and the
+                // clamp drags the falling bot back up to the teleport Z + clears FALLINGFAR, killing
+                // the intentional fall on frame 1. The OG cliff-fall settles at exactly 51.7 instead
+                // of falling to ADT at 42.29.
                 bool physicsFoundGround = _prevGroundZ > -50000f;
-                if (!float.IsNaN(_teleportZ) && _player.Position.Z < _teleportZ && !physicsFoundGround)
+                bool intentionalFall = (_player.MovementFlags & MovementFlags.MOVEFLAG_FALLINGFAR) != 0;
+                if (!float.IsNaN(_teleportZ) && _player.Position.Z < _teleportZ && !physicsFoundGround && !intentionalFall)
                 {
                     _player.Position = new Position(_player.Position.X, _player.Position.Y, _teleportZ);
                     _player.MovementFlags &= ~(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING);

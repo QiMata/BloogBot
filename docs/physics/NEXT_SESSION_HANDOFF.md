@@ -35,12 +35,25 @@ round-3 diagnosis and the prerequisite for the next cycle.
 > FG 42.29). 68/68 offline (added
 > `StepV2_FallingFar_OverheadDeck_InvalidPrevGroundZ_DoesNotSnapUp`);
 > 11/11 walkable still green. Overhead-snap-up bug FIXED.
+
+> 2026-05-11 round-4 iter-4 update: **C# fallthrough clamp gated.**
+> Real third snap-up was at `MovementController.cs:393`, not the
+> PhysicsStepV2 idle branch — Option C's INVALID prevGroundZ tripped
+> `!physicsFoundGround` and the clamp dragged the falling bot back to
+> teleport Z + cleared FALLINGFAR on frame 1. Added `!intentionalFall`
+> (FALLINGFAR check) to clamp condition. **BG-Z dropped further**:
+> 51.7000 → **47.7168**, dz 9.38 → **5.40** (-3.98y toward FG).
+> Cumulative across iter-3 + iter-4: BG moved 5.6y toward FG. Bot now
+> falls **39 frames** under gravity before landing. 68/68 offline;
+> 11/11 walkable green.
 >
-> Remaining 9.38y gap: bot sits AT the teleport target (51.7) instead
-> of falling to ADT at 42.29. Next iteration applies the same gate
-> pattern to the PhysicsStepV2 idle branch at
-> `Exports/Navigation/PhysicsEngine.cpp:5947-5961` (round-3's known
-> third snap-up site). See `memory/project_pfs_overhaul_006_round4_iter3.md`.
+> Remaining 5.40y gap: ProcessAirMovement's landing probe at
+> `Exports/Navigation/PhysicsMovement.cpp:170` uses
+> `SceneQuery::GetGroundZ` (unfiltered) which catches a non-walkable
+> cliff surface around z=47.7 between teleport and ADT. Next iteration
+> switches the probe to `SceneQuery::GetWalkableGroundZ` (the round-1
+> walkable-filtered variant) so the bot falls past non-walkable surfaces
+> to the ADT at 42.29. See `memory/project_pfs_overhaul_006_round4_iter4.md`.
 
 > 2026-05-11 round-4 iter-2 update: S0 diagnostic shipped (WRN-level
 > Prime traces). Live log now PROVES Prime fires for cliff-fall, takes
