@@ -24,10 +24,31 @@ round-3 diagnosis and the prerequisite for the next cycle.
 > via 2 new deterministic unit tests in
 > `Tests/Navigation.Physics.Tests/AirborneOverheadLandingGuardTests.cs`
 > + 4 OG parity tests + 14 ServerMovement + ~33 MovementControllerPhysics
-> + 16 FrameByFrame = 67 offline tests green. They just don't fire in
-> live because Prime is gated out → FALLINGFAR not set → my
-> inputAirborneFlag-gated checks no-op. Plus the idle branch is a third
-> snap-up site.
+> + 16 FrameByFrame = 67 offline tests green.
+
+> 2026-05-11 round-4 iter-2 update: S0 diagnostic shipped (WRN-level
+> Prime traces). Live log now PROVES Prime fires for cliff-fall, takes
+> the drop<0 (overhead) branch, and the below-probe
+> `NativeLocalPhysics.GetWalkableGroundZ(x, y, teleportZ-0.5, 150)`
+> returns `belowProbeFound=true belowProbeZ=53.5` — **the SAME overhead
+> deck at z=53.5, NOT the ADT below at z=42.29**. The probe is
+> "nearest walkable", not "walkable strictly below fromZ". The deck
+> 2.3y above the query wins over the ADT 8.9y below. Code at
+> MovementController.cs:549 rejects via `belowZ <= teleportZ+0.1f`
+> check, falls into no-support-found branch, sets
+> `_hasPhysicsGroundContact=false` and LEAVES `_prevGroundZ` at stale
+> previous-checkpoint value (~53.9). Round-3 `hasFarPrevGround` gate
+> needs `(st.z - prevGroundZ) > STEP_HEIGHT` but actual is
+> `51.7 - 53.9 = -2.2` → gate evaluates false → depen runs → snap to
+> 53.317. See `memory/project_pfs_overhaul_006_round4_iter2.md`.
+>
+> Next iteration's fix surface: target the below-probe semantics. Best
+> architectural option (Option C in iter-2 memo): don't try to set
+> `_prevGroundZ` from C# Prime at all — set it to `INVALID_HEIGHT`
+> when an overhead deck is detected, then change the round-3
+> `hasFarPrevGround` gate to also fire when `prevGroundZ == INVALID
+> && inputAirborneFlag` (FALLINGFAR set). Trust the C# "I'm primed
+> for fall" signal even without a known fall reference Z.
 
 ## Priority order — DO NOT skip ahead
 

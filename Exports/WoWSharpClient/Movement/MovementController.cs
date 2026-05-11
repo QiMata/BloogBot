@@ -472,6 +472,20 @@ namespace WoWSharpClient.Movement
                 || _player.Position == null
                 || _player.MovementFlags != MovementFlags.MOVEFLAG_NONE)
             {
+                // Diagnostic: surface bail cause for any post-teleport tick
+                // where a snap is pending. Live BG logs filter at Warning+
+                // so this is the only level that survives. Stays quiet on
+                // idle frames where _needsGroundSnap is false.
+                if (_needsGroundSnap)
+                {
+                    Log.Warning(
+                        "[MovementController] Prime bail: probeDone={ProbeDone} frames={Frames} teleportNaN={TeleNaN} posNull={PosNull} flags=0x{Flags:X}",
+                        _airborneTeleportProbeCompleted,
+                        _groundSnapFrames,
+                        float.IsNaN(_teleportZ),
+                        _player.Position == null,
+                        _player.Position == null ? 0u : (uint)_player.MovementFlags);
+                }
                 return;
             }
 
@@ -505,7 +519,7 @@ namespace WoWSharpClient.Movement
                 _hasPhysicsGroundContact = false;
                 _wasGroundedLastFrame = false;
 
-                Log.Information(
+                Log.Warning(
                     "[MovementController] Airborne teleport (no walkable support in {Range:F0}y): map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1}",
                     POST_TELEPORT_AIRBORNE_GROUND_SEARCH_DISTANCE,
                     _player.MapId,
@@ -526,7 +540,13 @@ namespace WoWSharpClient.Movement
             const float NearbySupportDownTolerance = TELEPORT_NEARBY_SUPPORT_PROBE_DISTANCE;
             const float NearbySupportUpTolerance = 0.5f;  // small grace for bake-Z noise
             if (drop >= -NearbySupportUpTolerance && drop <= NearbySupportDownTolerance)
+            {
+                Log.Warning(
+                    "[MovementController] Airborne teleport primed: standing on nearby support map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} groundZ={GroundZ:F1} drop={Drop:F2}",
+                    _player.MapId, _player.Position.X, _player.Position.Y, _player.Position.Z,
+                    _teleportZ, groundZ, drop);
                 return;
+            }
 
             _player.MovementFlags |= MovementFlags.MOVEFLAG_FALLINGFAR;
             _fallTimeMs = 0;
@@ -551,7 +571,7 @@ namespace WoWSharpClient.Movement
                     _prevGroundZ = belowZ;
                     _prevGroundNormal = new Vector3(0, 0, 1);
                     _hasPhysicsGroundContact = true;
-                    Log.Information(
+                    Log.Warning(
                         "[MovementController] Airborne teleport primed falling state (below-overhead): map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} overheadZ={OverheadZ:F1} belowZ={BelowZ:F1}",
                         _player.MapId, _player.Position.X, _player.Position.Y, _player.Position.Z,
                         _teleportZ, groundZ, belowZ);
@@ -559,10 +579,11 @@ namespace WoWSharpClient.Movement
                 else
                 {
                     _hasPhysicsGroundContact = false;
-                    Log.Information(
-                        "[MovementController] Airborne teleport primed falling state (below overhead, no support found): map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} overheadZ={OverheadZ:F1}",
+                    Log.Warning(
+                        "[MovementController] Airborne teleport primed falling state (below overhead, no support found): map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} overheadZ={OverheadZ:F1} belowProbeFound={Found} belowProbeZ={BelowZ:F1} searchRange={Range:F0}y",
                         _player.MapId, _player.Position.X, _player.Position.Y, _player.Position.Z,
-                        _teleportZ, groundZ);
+                        _teleportZ, groundZ, foundBelow, belowZ,
+                        POST_TELEPORT_AIRBORNE_GROUND_SEARCH_DISTANCE);
                 }
             }
             else
@@ -570,7 +591,7 @@ namespace WoWSharpClient.Movement
                 _prevGroundZ = groundZ;
                 _prevGroundNormal = new Vector3(0, 0, 1);
                 _hasPhysicsGroundContact = true;
-                Log.Information(
+                Log.Warning(
                     "[MovementController] Airborne teleport primed falling state: map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1} groundZ={GroundZ:F1} drop={Drop:F1}",
                     _player.MapId, _player.Position.X, _player.Position.Y, _player.Position.Z,
                     _teleportZ, groundZ, drop);
