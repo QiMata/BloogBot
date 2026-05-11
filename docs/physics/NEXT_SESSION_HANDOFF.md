@@ -3,21 +3,31 @@
 > Working dir: `E:/repos/Westworld of Warcraft/`
 > Branch: `main` at HEAD (pushed). Working tree clean except `.env`.
 
-You are continuing PFS-OVERHAUL-006. The OG cliff-fall parity-break
-fix from commit `1c530288` (round 1) was **live-verified as PARTIAL**.
-A round-2 attempt to gate `ApplyVerticalDepenetration` on
-`inputAirborneFlag` had ZERO live effect and was reverted. Round 3
-must localize the actual snap-up site somewhere in `PhysicsStepV2`.
+You are continuing PFS-OVERHAUL-006. The OG cliff-fall parity-break has
+been LOCALIZED to three C++ snap-up sites. Round-3 prevGroundZ-aware
+gates land cleanly (67/67 offline tests pass) but the LIVE validator
+still fires the parity break because (a) `PrimeAirborneTeleportFallIfNeeded`
+never fires in the bake-validator path (its `MovementFlags == MOVEFLAG_NONE`
+precondition is gated out by residual flags), so prevGroundZ is not set
+to the below-overhead probe value AND FALLINGFAR is not set, AND (b) a
+THIRD snap-up path exists in the PhysicsStepV2 idle branch
+(`Exports/Navigation/PhysicsEngine.cpp:5947-5961`) that has its own
+GetGroundZ-based "stand on terrain" logic. See
+`memory/project_pfs_overhaul_006_round3_session.md` for the full
+round-3 diagnosis and the prerequisite for the next cycle.
 
-> 2026-05-10 status (post-live-verify): the OG `smooth-wp01-cliff-fall-z42`
-> parity break has CHANGED but persists. Pre-1c530288: BG settled at
-> z=51.62 (the cliff fillet). Post-1c530288 (round 1): BG settles at
-> **z=53.32** (the deck above teleport). FG=42.29. dz=11.00y. The
-> round-1 fix is necessary (cleanly rejects the cliff fillet) but
-> insufficient (some other PhysicsStepV2 mechanism still snaps UP to
-> the overhead deck). See
-> `memory/project_pfs_overhaul_006_depen_overhead_fix.md` for the
-> round-2-attempt-and-revert details + the recommended round-3 plan.
+> 2026-05-10 status (round-3 offline-verified, live still failing): the
+> OG `smooth-wp01-cliff-fall-z42` parity break persists. Pre-1c530288:
+> BG settled at z=51.62 (cliff fillet). Post-1c530288 + post-round-3:
+> BG=53.317. FG=42.291. dz=11.03y. The round-3 PhysicsEngine.cpp +
+> PhysicsMovement.cpp gates (prevGroundZ-aware) are CORRECT — verified
+> via 2 new deterministic unit tests in
+> `Tests/Navigation.Physics.Tests/AirborneOverheadLandingGuardTests.cs`
+> + 4 OG parity tests + 14 ServerMovement + ~33 MovementControllerPhysics
+> + 16 FrameByFrame = 67 offline tests green. They just don't fire in
+> live because Prime is gated out → FALLINGFAR not set → my
+> inputAirborneFlag-gated checks no-op. Plus the idle branch is a third
+> snap-up site.
 
 ## Priority order — DO NOT skip ahead
 
@@ -57,7 +67,8 @@ The full rule with rationale lives in
 | `f844d101` | Codified FG/BG parity priority + initial next-session handoff (mandate, hard rules, run order) |
 | `7a79154a` | Localized cliff-fall parity break to `MovementController.cs:466-556` + `SceneCache::GetGroundZ` missing walkable filter. Diagnosis-only commit; updated handoff with concrete fix surfaces. |
 | `1c530288` | Shipped round-1 fix. Added `SceneCache::GetWalkableGroundZ` (+ SceneQuery wrapper + C export + P/Invoke + `NativeLocalPhysics.GetWalkableGroundZ`). Switched the two post-teleport probes in MovementController. Fixed the gate to treat "support above teleport Z" as a falling condition (re-probes BELOW for fall reference). 4 new `OgZeppelinCliffFallParityTests` (all green). 7/7 standard physics regression gates pass (including `GroundMovement_Position_NotUnderground` underground guard). |
-| (this session) | Live-verified `1c530288` is PARTIAL. Round-2 attempt to gate `ApplyVerticalDepenetration` on `inputAirborneFlag` had no live effect (BG still 53.32). Reverted. No code shipped. Documentation only — see `memory/project_pfs_overhaul_006_depen_overhead_fix.md`. |
+| (prior session) | Live-verified `1c530288` is PARTIAL. Round-2 attempt to gate `ApplyVerticalDepenetration` on `inputAirborneFlag` had no live effect (BG still 53.32). Reverted. No code shipped. Documentation only — see `memory/project_pfs_overhaul_006_depen_overhead_fix.md`. |
+| (round 3, this session) | Localized cliff-fall snap-up to THREE C++ sites: (1) `ApplyVerticalDepenetration` overlap recovery, (2) `ProcessAirMovement` landing detection, (3) `PhysicsStepV2` idle branch. Shipped prevGroundZ-aware gates for (1) and (2), reverted experimental probes in `PhysicsGroundSnap.cpp`. Created `Tests/Navigation.Physics.Tests/AirborneOverheadLandingGuardTests.cs` (2 deterministic tests). All 67 offline tests pass. Live still fails: Prime isn't firing → my gates are no-ops → idle branch (3) re-snaps to deck. See `memory/project_pfs_overhaul_006_round3_session.md`. |
 
 The harness's six acceptance items from the prior mandate are all
 green or diagnostically delivered.
@@ -66,63 +77,91 @@ green or diagnostically delivered.
 
 ### Acceptance items
 
-1. **Localize the snap-up site in PhysicsStepV2 (round 3 of cliff-fall fix).**
+1. **Make `PrimeAirborneTeleportFallIfNeeded` fire after each bake-validator
+   teleport.** (PRIMARY BLOCKER — without this, round-3's correct fixes
+   stay no-ops in live.)
 
-   Live-verify of commit `1c530288` (round 1) shows BG settle moved
-   51.62→**53.32** instead of falling to 42.29. The round-1 fix
-   correctly rejects the cliff fillet at z=51.62, but the bot now
-   snaps UP to the deck at z=53.5 via a SECOND mechanism inside
-   `Exports/Navigation/PhysicsEngine.cpp::PhysicsStepV2`.
+   Prime's precondition at `MovementController.cs:472-474` requires
+   `_player.MovementFlags == MovementFlags.MOVEFLAG_NONE`. In the
+   bake-validator path the bot's MovementFlags retain residual intent bits
+   (FORWARD etc.) between checkpoints, so Prime returns early. The BG log
+   confirms ZERO "Airborne teleport primed falling state" entries across
+   the entire run.
 
-   Latest validator JSON (canonical source of truth):
-   `tmp/test-runtime/screenshots/long-pathing/bake-validation/og-zeppelin/bake-validation-ClimbOrgrimmarTowerToFrezza-20260511T002911Z.json`
-   - 11/11 walkable checkpoints PASS (no regression).
-   - `smooth-wp01-cliff-fall-z42`: FG=42.29, BG=53.32, dz=11.03y, FAILED.
+   Without Prime:
+   - `_prevGroundZ` keeps the previous walkable Z (~53.x from the last
+     checkpoint) instead of the below-overhead probe value (42.29).
+   - `_player.MovementFlags` has no FALLINGFAR set when the first physics
+     frame runs after the cliff-fall teleport.
+   - Round-3's `inputAirborneFlag && hasFarPrevGround` gates are no-ops.
+   - The bot takes the ground path → idle branch → snap UP to deck.
 
-   BG live trace (Bot/Release/net8.0/WWoWLogs/bg_LPATHBG120260510.log):
-   - 20:29:04: teleport to (1337.3,-4645.1,51.7) (drop from boarding-pos).
-   - 20:29:04.529: "Post-teleport ground snap complete: pos=(1337.3,-4645.1,**53.3**)
-     groundZ=53.317 moveFlags=0x0 envFlags=0x0 indoors=false **frames=1**".
-   - Bot moved UP 1.617y in ONE physics frame. No
-     "Nearby teleport support probe corrected" log line, so
-     `TrySnapToNearbyTeleportSupport` did NOT fire.
+   Two clean options:
 
-   **Round-2 attempt failed**: gating `ApplyVerticalDepenetration`
-   on `inputAirborneFlag` (PhysicsEngine.cpp:5604) had ZERO live
-   effect — BG still settled at 53.32. The depen loop is NOT the
-   snap mechanism. Reverted. See
-   `memory/project_pfs_overhaul_006_depen_overhead_fix.md` for full
-   details.
+   **Option A (preferred): Detect teleport via position delta in
+   MovementController.** The "Position changed outside physics by 19.085
+   units" warning at `MovementController.cs:~636` is already a teleport
+   signal. Fire Prime here regardless of MovementFlags state. The position
+   delta check is more robust than the flag-state precondition.
 
-   **Recommended round-3 diagnostic**:
-   1. Add temporary per-Z-mutation logging at every `st.z = ...`
-      site in `Exports/Navigation/PhysicsEngine.cpp::PhysicsStepV2`
-      (search for `st.z =` between lines ~5400 and ~6100).
-   2. Trigger the cliff-fall via the live validator:
-      ```powershell
-      $env:WWOW_OG_ZEP_BAKE_FIXTURE = '1'
-      $env:WWOW_DATA_DIR = 'D:\MaNGOS\data'
-      dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj `
-        --configuration Release --no-build `
-        --filter 'FullyQualifiedName~OgZeppelin_BakeFixtureValidation'
-      ```
-   3. Read `Bot/Release/net8.0/WWoWLogs/bg_LPATHBG{date}.log`
-      around the cliff-fall timestamp. The first log line where
-      st.z jumps from 51.7 → ~53.3 IS the snap-up site.
-   4. Likely candidates per memory entry:
-      - PhysicsStepV2 `hasPrevGround` branch at ~line 5454.
-      - Deferred depen vector at line 5635-5667 (Side region only,
-        but worth verifying).
-      - PhysicsThreePass collision sweep (initial overlap settle).
-   5. Once localized, the fix shape is: when FALLINGFAR is set AND
-      the candidate ground surface is ABOVE the bot's feet by more
-      than `walkableClimb`, suppress the snap. Real WoW falls past
-      overhead WMO/M2 floors; BG must too.
+   **Option B: Force MovementFlags = NONE in the bake-validator harness
+   right before each teleport.** Search for the bake-fixture teleport
+   routine in `Tests/BotRunner.Tests/LiveValidation/` and clear
+   MovementFlags before sending the warp packet.
+
+   Once Prime fires:
+   - inputAirborneFlag=true (FALLINGFAR set).
+   - `(st.z - input.prevGroundZ) = 51.7 - 42.29 = 9.4y > STEP_HEIGHT (2.028y)`
+     → `hasFarPrevGround = true` → `skipVerticalDepen = true` (depen skipped).
+   - `(startPos.z - input.prevGroundZ) > STEP_HEIGHT` → `genuinelyAirborne = true`
+     → `rejectOverheadLanding = true` (ProcessAirMovement landing snap rejected).
+   - Bot falls through to ProcessAirMovement's natural fall path. Lands on
+     ADT at 42.29 within ~28 frames (per ComputeFallDisplacement).
+
+2. **Add the prevGroundZ-aware gate to the PhysicsStepV2 idle branch**
+   at `Exports/Navigation/PhysicsEngine.cpp:5947-5961`. Belt-and-suspenders
+   on top of (1). Same gate shape:
+   ```cpp
+   const bool idleGenuinelyAirborne =
+       (input.prevGroundZ > PhysicsConstants::INVALID_HEIGHT) &&
+       inputAirborneFlag &&
+       (st.z - input.prevGroundZ) > PhysicsConstants::STEP_HEIGHT;
+   const bool idleOverhead = VMAP::IsValidHeight(idleGroundZ) &&
+       idleGroundZ > st.z + LANDING_TOLERANCE;
+   if (VMAP::IsValidHeight(idleGroundZ) &&
+       idleGroundZ >= st.z - PhysicsConstants::STEP_DOWN_HEIGHT &&
+       idleGroundZ <= st.z + PhysicsConstants::STEP_HEIGHT &&
+       !(idleGenuinelyAirborne && idleOverhead)) {
+       st.z = idleGroundZ;
+       ...
+   }
+   ```
+   Add a similar gate (using `startPos` if needed) — note the idle branch
+   has `st.z` not `startPos`, so use `st.z` directly. Prerequisite: (1)
+   must land first or this gate is also a no-op.
+
+3. **Re-run the live OG validator.** Expected on success:
+   - `passed=true` (zero `FG_BG_PARITY_BREAK` failures).
+   - `smooth-wp01-cliff-fall-z42` BG settles at z≈42.29 within 0.3y of FG.
+   - 11/11 walkable checkpoints continue to pass.
+
+   ```powershell
+   $env:WWOW_OG_ZEP_BAKE_FIXTURE = '1'
+   $env:WWOW_DATA_DIR = 'D:\MaNGOS\data'
+   dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj `
+     --configuration Release --no-build `
+     --filter 'FullyQualifiedName~OgZeppelin_BakeFixtureValidation'
+   ```
 
    **Don't redo**: the round-1 SceneCache walkable filter (commit
-   `1c530288`) IS correct and IS load-bearing. Its unit tests prove
-   the post-teleport probes correctly prime FALLINGFAR with
-   `_prevGroundZ=42.29`. The downstream snap-up is a separate bug.
+   `1c530288`) IS correct and IS load-bearing. Round-3's PhysicsEngine.cpp
+   + PhysicsMovement.cpp gates are CORRECT — they just need Prime to fire
+   in live. Don't touch `Exports/Navigation/PhysicsGroundSnap.cpp` again
+   (the experimental downward-probe approach was reverted; SceneCache may
+   not have ADT triangles loaded on first frame post-teleport, making it
+   unreliable). The deterministic
+   `Tests/Navigation.Physics.Tests/AirborneOverheadLandingGuardTests.cs`
+   tests verify the architecture; they MUST continue to pass.
 
 2. **Add 2-3 more deck-edge / cliff-edge parity checkpoints** to the
    OG fixture so parity breaks have a wider surface, not just one

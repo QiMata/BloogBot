@@ -171,7 +171,29 @@ void ProcessAirMovement(
         endPos.z + PhysicsConstants::STEP_HEIGHT,
         PhysicsConstants::STEP_HEIGHT + PhysicsConstants::STEP_DOWN_HEIGHT);
 
-    if (VMAP::IsValidHeight(groundZ) && endPos.z <= groundZ + LANDING_TOLERANCE) {
+    // PFS-OVERHAUL-006 round 3 (2026-05-10): the probe origin reaches
+    // STEP_HEIGHT (2.028y) ABOVE the bot's predicted feet, so an overhead
+    // walkable surface (deck/bridge/WMO floor) within that window will be
+    // returned by GetGroundZ even when the bot is FALLING PAST it. Without
+    // this gate, a teleport into the gap between an overhead deck and the
+    // real ADT below — the OG smooth-wp01-cliff-fall-z42 case — snaps the
+    // falling bot UP onto the overhead deck. Real WoW falls past overhead
+    // WMO/M2 floors. Gate on "ground is at or below the bot's previous Z"
+    // only when the bot is GENUINELY airborne (current Z far above the
+    // last known walkable ground, per PrimeAirborneTeleportFallIfNeeded).
+    // The reverse-hill rescue case (bot placed below a hill surface, no
+    // Prime, prevGroundZ ≈ current Z) is preserved by the prevGroundZ
+    // genuinely-airborne check. Diagnosed via deterministic test
+    // AirborneOverheadLandingGuardTests; see memory entry
+    // project_pfs_overhaul_006_depen_overhead_fix.md.
+    const bool genuinelyAirborne =
+        VMAP::IsValidHeight(input.prevGroundZ) &&
+        (startPos.z - input.prevGroundZ) > PhysicsConstants::STEP_HEIGHT;
+    const bool overheadSurface =
+        VMAP::IsValidHeight(groundZ) && groundZ > startPos.z + LANDING_TOLERANCE;
+    const bool rejectOverheadLanding = genuinelyAirborne && overheadSurface;
+
+    if (VMAP::IsValidHeight(groundZ) && endPos.z <= groundZ + LANDING_TOLERANCE && !rejectOverheadLanding) {
         st.z = groundZ;
         st.vz = 0.0f;
         st.isGrounded = true;

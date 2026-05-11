@@ -5598,10 +5598,27 @@ PhysicsOutput PhysicsEngine::StepV2(const PhysicsInput& input, float dt)
 		float totalRecovered = 0.0f;
 		const bool preserveAirborne = inputAirborneFlag;
 		const float savedVz = st.vz;
+		// PFS-OVERHAUL-006 round 3 (2026-05-10): skip ApplyVerticalDepenetration
+		// when the bot is genuinely airborne — i.e. has FALLINGFAR/JUMPING set AND
+		// its current Z is far above its last known walkable ground (set by
+		// MovementController.PrimeAirborneTeleportFallIfNeeded after a teleport
+		// past a deck edge). Without this gate, the depen overlap recovery's
+		// "closest in-capsule walkable contact" heuristic picks an overhead
+		// deck/WMO floor and snaps the falling bot UP onto it. Real WoW falls
+		// past overhead WMO/M2 floors. The reverse-hill rescue case (bot placed
+		// below a hill surface, no Prime, prevGroundZ ≈ current Z) is preserved
+		// because hasFarPrevGround is false there. Diagnosed via deterministic
+		// test AirborneOverheadLandingGuardTests; see memory entry
+		// project_pfs_overhaul_006_depen_overhead_fix.md and the OG smooth-wp01-
+		// cliff-fall-z42 live validator regression.
+		const bool hasFarPrevGround =
+			(input.prevGroundZ > PhysicsConstants::INVALID_HEIGHT) &&
+			(st.z - input.prevGroundZ) > PhysicsConstants::STEP_HEIGHT;
+		const bool skipVerticalDepen = inputAirborneFlag && hasFarPrevGround;
 		for (int i = 0; i < PhysicsConstants::MAX_OVERLAP_RECOVER_ITERATIONS; ++i) {
 			// Using existing helpers as a first-class overlap recovery step.
 			// Vertical first (most common: clipped into ground), then horizontal.
-			float dz = ApplyVerticalDepenetration(input, st, r, h);
+			float dz = skipVerticalDepen ? 0.0f : ApplyVerticalDepenetration(input, st, r, h);
 			// Use walkableOnly=true so walkable ground contacts on sloped terrain are
 			// resolved vertically (by ApplyVerticalDepenetration), not pushed horizontally.
 			// With walkableOnly=false, the capsule's side-region contacts on sloped ground
