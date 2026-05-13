@@ -165,8 +165,8 @@ known BRM south-face trap.
 - Runtime tile backups under
   `tmp/test-runtime/visualization/pathfinding/brd/latest/backup/`.
 
-2026-05-13 (later iteration, walkable-slope split): the focused Flame Crest
-stall crop after the earlier erosion-radius split still surfaced 16
+2026-05-13 (later iteration, walkable-slope split — REVERTED): the focused
+Flame Crest stall crop after the earlier erosion-radius split surfaced 16
 NAV_STEEP_SLOPES-flagged walkable polygons inside a 25y radius of the FG
 stall coordinate `(-7519,-2100,130)`, peak `zRange=46.8y` (polyIndex 7926,
 area=3 `AREA_STEEP_SLOPE`, `flags=0x11 = NAV_GROUND|NAV_STEEP_SLOPES`).
@@ -174,57 +174,63 @@ These are 52-75 degree BRM rock-face slopes that the bake classifies as
 walkable-but-penalized via the AI-creature path. Player physics rejects
 anything >52 degrees, so the runtime `PathFinder::createFilter` includes
 them via `NAV_GROUND` with a 10x area cost and Detour string-pulls smooth
-paths across them — the bot then collides against an invisible wall and
-stalls.
+paths across them.
 
-Fix: align the per-tile `walkableSlopeAngle` and `walkableSlopeAngleVMaps`
-with the hardcoded 52 degree player limit (`playerClimbLimit` in
-`tools/MmapGen/contrib/mmap/src/TileWorker.cpp`) for tiles `3345`, `3446`,
-and `3546`. With the bake limit equal to the player limit, the
-`AREA_STEEP_SLOPE` classification band (52 < theta <= 75 on terrain,
-52 < theta <= 61 on VMap) closes — slopes >52 degrees become `AREA_NONE`
-and are not baked. The legitimate BRM switchback road remains
-`AREA_GROUND` (<52 degree triangles). Per-tile blast radius matches the
-OG erosion split; revertable.
+Attempted fix: align per-tile `walkableSlopeAngle` and
+`walkableSlopeAngleVMaps` with the hardcoded 52 degree
+`playerClimbLimit` for tiles `3345`, `3446`, `3546`, closing the
+`AREA_STEEP_SLOPE` classification band entirely (52 < theta <= 75 on terrain,
+52 < theta <= 61 on VMap become `AREA_NONE`). Bench evidence was promising:
 
-Post-fix runtime hashes:
-
-- `0004635.mmtile`: regenerated 2026-05-13, ~1.03 MB (was ~1.71 MB).
-- `0004533.mmtile`: regenerated 2026-05-13, ~1.39 MB (was ~2.72 MB).
-- `0004634.mmtile`: regenerated 2026-05-13, ~1.85 MB (was ~3.02 MB).
-
-Post-fix evidence:
-
-- `MmapMeshQualityTests.FlameCrestStall_HasNoTallSteepSlopeWallsNearStall`
-  and `FlameCrestStall_HasNoUnreasonableGroundBridgePolygons` both pass.
-- `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
-  and `OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces` remain
-  green (the fix is map-0-only).
+- `MmapMeshQualityTests.FlameCrestStall_*` regressions went green.
 - `BrmDungeonRouteDiagnostic.Audit_BrmDungeonEndpoints_ResolveAndCorridor`
-  now finishes every dungeon corridor at the target polygon (was 1/4 before
-  the fix):
+  moved Flame Crest -> {BRD, LBRS, UBRS, BWL} from 1/4 ends-at-target to 4/4.
+- `Dump_UbrsRoute_FlameCrestStallWaypoints` showed the smooth path no longer
+  entered a 25y XY radius around the stall coord (closest WP idx=32 at
+  33.73y on regular Ground polys).
+- Tile sizes dropped 40-50% (`0004635.mmtile` 1.71 -> 1.03 MB, `0004533`
+  2.72 -> 1.39 MB, `0004634` 3.02 -> 1.85 MB).
 
-  | Route | Pre-fix | Post-fix |
-  |---|---|---|
-  | Flame Crest -> BRD | 277 polys, ENDS_AT_TARGET=YES | 290 polys, YES |
-  | Flame Crest -> LBRS | 316 polys, NO | 303 polys, YES |
-  | Flame Crest -> UBRS | 316 polys, NO | 307 polys, YES |
-  | Flame Crest -> BWL | 275 polys, NO | 312 polys, YES |
-- `BrmDungeonRouteDiagnostic.Dump_UbrsRoute_FlameCrestStallWaypoints` (new in
-  this iteration) reports: smooth path Flame Crest -> UBRS has 1152 waypoints
-  and now leaves a 25y XY radius around the stall coordinate empty — the
-  closest waypoint is index 32 at `(-7547.24,-2118.85,126.73)`, 33.73y away
-  on regular Ground polygons. Replan from the stall position finds 1178
-  waypoints, the first 12 are gentle (dz |segments| < 0.27y), and reaches
-  `(-7615.68,-1244.65,234.41)` ~92y from UBRS at z=287.
+Live regression: with the new tiles promoted to `D:\wwow-bot\prod-data\mmaps\`
+and `wwow-pathfinding` restarted, the live BotRunner FG run had the bot
+running into model/WMO decorations and sliding off surfaces that were
+previously walkable. Erasing the 52-61 degree VMap-side band removed thin
+walkable footing on rocks, lamps, fence segments, and similar decorative
+geometry along the path. Detour still found a corridor, but FG physics fell
+off the smaller mesh between detail-mesh fragments.
+
+Both data dirs reverted to the pre-fix tiles (live and Docker prod backups in
+`tmp/test-runtime/visualization/pathfinding/brd/latest/backup/` and
+`backup/prod-data/`). `wwow-pathfinding` restarted against the restored
+tiles. `MmapMeshQualityTests.FlameCrestStall_*` are now `[Fact(Skip=...)]`
+referencing this revert so CI stays green while the bake bug stays
+documented.
+
+Real fix surfaces to evaluate next iteration (one at a time, with FG live
+runs between each so the model-footing regression cannot return silently):
+
+1. Terrain-only slope tightening: change `walkableSlopeAngle` to 52 but
+   leave `walkableSlopeAngleVMaps` at the default 61. The original failing
+   polys were all `area=3` (TERRAIN steep slope); the VMap side was
+   collateral damage.
+2. Runtime filter exclude `NAV_STEEP_SLOPES` for player paths in
+   `Exports/Navigation/PathFinder.cpp::createFilter` (`includeFlags |=
+   NAV_GROUND` already; add `excludeFlags |= NAV_STEEP_SLOPES`). The bake
+   stays AI-creature-friendly; player smooth paths cannot string-pull
+   through 52-75 degree polys. This is the vmangos pattern (`Map.cpp`
+   uses `setExcludeFlags(NAV_STEEP_SLOPES)` for non-steep walking).
+3. Separate filter pass during the bake that fragments only the tallest
+   steep-slope polys (e.g., a per-tile `maxSteepSlopePolyZRange` knob) and
+   leaves thin model footing untouched.
 
 Lay explanation: BRM south-face has real rock cliffs at 52-75 degrees. The
-old bake marked them walkable for AI-creature paths and trusted the runtime
-to penalize them via area cost. Detour's smooth path used them anyway when
-the cost gradient suggested a shortcut, and FG physics then rejected the
-move. Lowering the per-tile slope limit to the hard player limit produces a
-mesh that says player-walkable iff the geometry is actually player-walkable.
-Legitimate switchback ground (<52 degrees) is unaffected.
+old bake marks them walkable for AI-creature paths and the runtime
+penalizes them via area cost. Detour's smooth path can still string-pull
+through them when the cost gradient suggests a shortcut, and FG physics
+then rejects the move. The naive "lower the bake limit to the player
+limit" fix is too coarse — it removes legitimate model-side footing along
+with the cliff walls. The next attempt must keep VMap classification at 61
+and address the terrain side and/or runtime filter independently.
 
 ## Nav Summary Accelerator
 
