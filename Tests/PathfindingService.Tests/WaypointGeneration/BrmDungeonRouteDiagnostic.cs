@@ -319,21 +319,42 @@ public class BrmDungeonRouteDiagnostic : IClassFixture<PathfindingValidationFixt
     /// count 1105). The bot never received a usable path before the legacy
     /// stall guard fired (45s anchor timeout). The runtime filter is the
     /// wrong surface for the BRM mesh given its current bake density of
-    /// AREA_STEEP_SLOPE polys. Skipped until either (a) an off-mesh
-    /// connection for the BRM ascent is added to tools/MmapGen/offmesh.txt
-    /// so Detour does not have to A*-search the full BRM south-face for a
-    /// non-steep corridor, or (b) a per-tile maxSteepSlopePolyZRange
-    /// bake-side knob fragments the tallest steep-slope polys so the runtime
-    /// filter can be reintroduced without exploding A* search.
+    /// AREA_STEEP_SLOPE polys.
+    ///
+    /// REVERTED (2026-05-13, FOURTH attempt — Surface 4 off-mesh BRM ascent):
+    /// three off-mesh entries (FC stall → LBRS/UBRS/BWL) authored in
+    /// tools/MmapGen/offmesh.txt, baked, and promoted. Bench was strong:
+    /// the FC→UBRS corridor dropped 316→18 polys (94% reduction), all four
+    /// routes ends-at-target=YES with smooth-path dist2D=0.00y to each
+    /// portal, and A* picked the off-mesh link over the cliff chain.
+    /// Live FG regressed 4/4: bot teleported to Flame Crest, dispatched
+    /// TravelTo, never moved (currentSpeed=0 movementFlags=0 for 360s).
+    /// Root cause: Docker pathfinding log
+    /// `[PATH_REQ] id=3 still-running elapsed>=25s` — the live managed
+    /// pipeline (Services/PathfindingService/Repository/Navigation.cs,
+    /// 5,600 LOC, 8 repair phases, 35s budget) cannot handle off-mesh
+    /// polys in the corridor and hangs / runs out of budget. The Detour
+    /// layer is correct; the managed repair layer is not off-mesh-aware,
+    /// and the PATHFINDING_OVERHAUL freeze contract forbids extending
+    /// Navigation.cs repair phases until Phase 5 cutover. Reverted.
+    ///
+    /// Re-enable when EITHER (a) Phase 4 of the overhaul ships
+    /// off-mesh-aware managed path consumption (likely combined with
+    /// off-mesh BRM ascent entries) OR (b) a per-tile
+    /// maxSteepSlopePolyZRange bake-side knob fragments the tallest
+    /// steep-slope polys so the runtime filter approach (Surface 3 in the
+    /// docs) becomes viable without exploding A* search.
     /// </summary>
-    [Fact(Skip = "REVERTED 2026-05-13: runtime NAV_STEEP_SLOPES exclude was "
-        + "the third bake/runtime attempt to fix the Flame Crest UBRS stall; "
-        + "live FG regressed (Docker NAV_METRICS avgNativeFindMs=170294, "
-        + "maxNativeFindMs=306810 — A* search exploded on the BRM mesh, bot "
-        + "never received a path before the 45s stall guard fired). The mesh "
-        + "needs off-mesh connections (tools/MmapGen/offmesh.txt) for the BRM "
-        + "ascent OR a per-tile maxSteepSlopePolyZRange bake knob before the "
-        + "runtime filter can land. Re-enable when one of those surfaces lands.")]
+    [Fact(Skip = "REVERTED 2026-05-13: four attempts (two bake-side slope "
+        + "tightenings, one runtime NAV_STEEP_SLOPES exclude, one off-mesh "
+        + "BRM ascent in tools/MmapGen/offmesh.txt) have all regressed live "
+        + "FG. The off-mesh attempt was bench-green (corridor 316→18 polys, "
+        + "94% reduction, smooth-path dist2D=0.00y to every portal) but live "
+        + "managed repair pipeline (Navigation.cs) hangs on off-mesh "
+        + "corridors (PATH_REQ elapsed>=25s, bot never moved). Re-enable when "
+        + "Phase 4 of PATHFINDING_OVERHAUL ships off-mesh-aware managed path "
+        + "consumption OR a per-tile maxSteepSlopePolyZRange bake-side knob "
+        + "fragments the tallest steep-slope polys.")]
     public void FlameCrestToUbrsCorridor_AvoidsSteepSlopePolys()
     {
         var chain = NavigationInterop.QueryPathPolygons(MapId, FlameCrest, UbrsEntrance, AgentRadius, AgentHeight, maxOut: 4096);

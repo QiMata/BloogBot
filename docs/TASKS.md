@@ -4,7 +4,7 @@
 > today. The full slot enumeration lives in [`Plan/`](Plan/). Read
 > [`SPEC.md`](SPEC.md) first if you have not.
 
-Last refresh: 2026-05-13 (Flame Crest UBRS stall — THIRD attempt REVERTED: runtime NAV_STEEP_SLOPES exclude in PathFinder.cpp::createFilter + DllMain player-path filters blew up Detour A* to 170-306s per FlameCrest -> UBRS query. Mesh-side BRM AREA_STEEP_SLOPE density is too high for runtime filter alone. Next session must try Surface 2 — off-mesh connection in tools/MmapGen/offmesh.txt for BRM ascent — or Surface 3 — per-tile maxSteepSlopePolyZRange bake knob.).
+Last refresh: 2026-05-13 (Flame Crest UBRS stall — FOURTH attempt REVERTED: Surface 4 off-mesh BRM ascent. Three off-mesh entries in tools/MmapGen/offmesh.txt connected FC stall → LBRS/UBRS/BWL portals; bench was strong (corridor 316→18 polys, 94% reduction, smooth-path dist2D=0.00y to every portal) but live FG regressed 4/4 with bot stuck at FC start (currentSpeed=0 movementFlags=0). Root cause: Docker pathfinding [PATH_REQ] elapsed>=25s — the live managed repair pipeline (Services/PathfindingService/Repository/Navigation.cs) is NOT off-mesh-aware and hangs on off-mesh corridors. Surface 4 cannot land standalone; it requires Phase 4 of PATHFINDING_OVERHAUL to ship off-mesh-aware managed path consumption, which is outside the current freeze contract. Next session must try Surface 3 — per-tile maxSteepSlopePolyZRange bake knob — or design how to make Navigation.cs off-mesh-aware as a Phase 4 sub-deliverable.).
 Active phase: **Phase 1 — Action / Task Foundation** (S1.1..S1.20 unblocked; S1.3 has a pathfinding/physics blocker).
 Phase 0: **done.** S1.0 (IBotTask migration): **done.**
 

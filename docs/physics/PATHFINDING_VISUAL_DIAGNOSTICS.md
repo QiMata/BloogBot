@@ -249,15 +249,52 @@ Three fix surfaces were proposed; attempt status as of 2026-05-13:
    cycle work — design first, write code only after the design has been
    reviewed against MmapGen's existing polymesh-stage knobs.
 4. **Off-mesh connection for the BRM ascent** in `tools/MmapGen/offmesh.txt`
-   (Phase 4 of `PATHFINDING_OVERHAUL.md`): NOT YET TRIED. Author explicit
-   jump-down / climb-up edges for the BRD/BRM road switchbacks so Detour
-   has explicit edges where the terrain triangulation cannot provide a
-   smooth walkable corridor. With those edges present, A* finds the
-   ascent in a small number of steps without enumerating BRM south-face
-   alternates. This is the canonical fix for "navmesh has no walkable
-   route but the world does." Either implement standalone, or pair with
-   Surface 2 (after Surface 3) so the runtime filter is safe to re-enable
-   because the A* search doesn't have to enumerate every face cell.
+   (Phase 4 of `PATHFINDING_OVERHAUL.md`): **TRIED, REVERTED.** Three
+   off-mesh entries (FC stall → LBRS / UBRS / BWL portals) were authored,
+   baked, and promoted to both `D:\MaNGOS\data\mmaps` and
+   `D:\wwow-bot\prod-data\mmaps`. Bench evidence was strong:
+   - `loadOffMeshConnections::` lines confirmed bake registration.
+   - `MmapVisualize` reported `3 off-mesh` polys in tile 0004635.
+   - `BrmDungeonRouteDiagnostic.Audit_BrmDungeonEndpoints_ResolveAndCorridor`
+     showed all 4 routes ends-at-target=YES with smooth-path
+     `dist2D=0.00y` to every BRM portal (was 19-128y short before).
+   - FC→UBRS corridor dropped 316→18 polys (94% reduction); A* picked
+     the off-mesh link as cheaper than the cliff chain.
+   - The new `BrmDungeonRouteDiagnostic.FlameCrestToBrmPortals_ReachableViaOffMeshAscent`
+     test passed end-to-end.
+
+   Live FG REGRESSED HARD on all four routes (BRD/LBRS/UBRS/BWL): the
+   bot teleported to Flame Crest, dispatched `TravelTo`, and **never
+   moved** (`currentSpeed=0 movementFlags=0 currentAction=TravelTo` for
+   360s × 4 routes = 6m19s test duration). Docker `wwow-pathfinding`
+   logs revealed the root cause: `[PATH_REQ] id=3 still-running
+   elapsed>=25s` for the FlameCrest → UBRS query — the live
+   PathfindingService's managed repair pipeline
+   (`Services/PathfindingService/Repository/Navigation.cs`, ~5,600 LOC,
+   8 repair phases, 35s budget) **does not know how to handle off-mesh
+   polys** in the corridor and hangs / runs out of budget. The bench
+   API (`FindPathPolygonsForAgent`, thin Detour wrapper) completes in
+   11s, but the managed pipeline operates on the smooth-path / corner
+   output and cannot validate or repair off-mesh waypoints.
+
+   Surface 4 is the architecturally correct fix at the Detour level
+   but cannot land standalone: it requires `Navigation.cs` to be
+   off-mesh-aware. The `PATHFINDING_OVERHAUL` freeze contract forbids
+   extending Navigation.cs repair phases until Phase 5 cutover, so
+   re-enabling off-mesh authoring is gated on Phase 4 of the overhaul
+   shipping off-mesh-aware managed path consumption (probably an
+   adapter layer that detects off-mesh polys in the corridor and bypasses
+   the per-segment validators for them, or a dedicated off-mesh-traversal
+   action the BotRunner consumes).
+
+   Reverted as a no-code-change-to-source: offmesh.txt entries removed,
+   tile backups restored from
+   `tmp/test-runtime/visualization/pathfinding/brd/latest/backup/{,prod-data/}*.before_offmesh_brm_ascent.mmtile`,
+   `wwow-pathfinding` restarted against the restored tiles. Tests
+   `MmapMeshQualityTests.FlameCrestStall_*` and
+   `BrmDungeonRouteDiagnostic.FlameCrestToUbrsCorridor_AvoidsSteepSlopePolys`
+   remain Skipped, with their Skip messages updated to record this fourth
+   attempt.
 
 Lay explanation: BRM south-face has real rock cliffs at 52-75 degrees. The
 old bake marks them walkable for AI-creature paths and the runtime
