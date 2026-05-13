@@ -16,7 +16,22 @@
     "walkableRadius": 0,
     "walkableHeight": 0,
     "walkableClimb": 0,
-    "_3446_NEGATIVE_RESULT": "PFS-OVERHAUL-006 BRM Round-4-redo (2026-05-09): tested per-tile agentMaxClimbTerrain overrides for tile filename 0004634.mmtile (CLI 34,46) at values 1.0 and 0.2. 1.0 had negligible effect (Walk count 299->296). 0.2 was destructive: Walk count dropped to 13/1071 because Detour rerouted around the over-fragmented tile via a worse cliff corridor. The OG-zeppelin Cycle-17e fix worked because the over-collapsed polygon was a shortcut; disconnecting it forced the bot onto the legitimate spiral ramp inside the same tile. BRM south-face has no equivalent legitimate alternate corridor inside (46,34); aggressive disconnection just pushes Detour to neighbouring tiles whose own cliffs are worse. Single-tile config is the wrong lever for this geometry; needs either coordinated multi-tile bake (tighter walkableClimb across 46,28..36 simultaneously) or a different bake parameter (for example walkableHeight or filterLedgeSpans tuning) that fragments cliff-edge cells without destroying horizontal connectivity. See memory project_pfs_overhaul_006_pathphysicsprobe_brm_route.md for the probe-driven evidence and project_pfs_overhaul_006_brm_singletile_negative.md for this round."
+    "_3345_README": "BRD/BRM route tile for Flame Crest -> BRD approach / upper-spire portal cluster. Apply only source-support erosion tuning here; do not lower climb or add route repair.",
+    "_3446_NEGATIVE_RESULT": "PFS-OVERHAUL-006 BRM Round-4-redo (2026-05-09): tested per-tile agentMaxClimbTerrain overrides for tile filename 0004634.mmtile (CLI 34,46) at values 1.0 and 0.2. 1.0 had negligible effect (Walk count 299->296). 0.2 was destructive: Walk count dropped to 13/1071 because Detour rerouted around the over-fragmented tile via a worse cliff corridor. The OG-zeppelin Cycle-17e fix worked because the over-collapsed polygon was a shortcut; disconnecting it forced the bot onto the legitimate spiral ramp inside the same tile. BRM south-face has no equivalent legitimate alternate corridor inside (46,34); aggressive disconnection just pushes Detour to neighbouring tiles whose own cliffs are worse. Single-tile config is the wrong lever for this geometry; needs either coordinated multi-tile bake (tighter walkableClimb across 46,28..36 simultaneously) or a different bake parameter (for example walkableHeight or filterLedgeSpans tuning) that fragments cliff-edge cells without destroying horizontal connectivity. See memory project_pfs_overhaul_006_pathphysicsprobe_brm_route.md for the probe-driven evidence and project_pfs_overhaul_006_brm_singletile_negative.md for this round.",
+    "_3446_README_erosion": "2026-05-13: try the OG-style source-support erosion split without changing Detour/header capsule or climb. walkableErosionRadius=0.2y trims rcErodeWalkableArea only; it is meant to preserve thin WMO/source surfaces for the BRD run while avoiding the earlier climb-fragmentation regression.",
+    "_3546_README_erosion": "2026-05-13: live Flame Crest -> BRD/UBRS/LBRS/BWL tests stall around (-7519,-2100,130), which maps to MmapGen tile 35,46 / runtime 0004635.mmtile. Apply the same source-support erosion split and export a focused stall crop before investigating BotRunner execution.",
+    "3345": {
+      "walkableErosionRadius": 0.2,
+      "debugStageCropWow": [-7240, -1010, 140, -7135, -890, 275]
+    },
+    "3446": {
+      "walkableErosionRadius": 0.2,
+      "debugStageCropWow": [-8010, -1225, 115, -7780, -1080, 190]
+    },
+    "3546": {
+      "walkableErosionRadius": 0.2,
+      "debugStageCropWow": [-7545, -2135, 118, -7480, -2075, 150]
+    }
   },
   "1": {
     "agentRadius": 1.0247,

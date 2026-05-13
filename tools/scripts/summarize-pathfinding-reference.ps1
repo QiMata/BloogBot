@@ -187,14 +187,28 @@ function Write-BrdSummary {
     $lines.Add("")
     $lines.Add("Generated: $([DateTime]::Now.ToString('yyyy-MM-dd HH:mm:ss zzz'))")
     $lines.Add("")
-    $lines.Add("Inspection target: Flame Crest to BRD approach plus known BRM south-face trap.")
+    $lines.Add("Inspection target: Flame Crest live-stall tile, BRD approach, and known BRM south-face trap.")
     $lines.Add("")
 
+    $flamecrestStats = Get-PolyStats (Join-Path $analysis 'flamecrest_stall_mmap_crop_polys.csv')
     $brdStats = Get-PolyStats (Join-Path $analysis 'brd_approach_mmap_crop_polys.csv')
     $brmStats = Get-PolyStats (Join-Path $analysis 'brm_south_trap_mmap_crop_polys.csv')
+    Add-StatsLines $lines "Flame Crest Stall Crop" $flamecrestStats
     Add-StatsLines $lines "BRD Approach Crop" $brdStats
     Add-StatsLines $lines "BRM South Trap Crop" $brmStats
 
+    if ($flamecrestStats.Exists -and $null -ne $flamecrestStats.WorstZ) {
+        Invoke-MmapVisualizePoly `
+            (Join-Path $DataDir 'mmaps\0004635.mmtile') `
+            $flamecrestStats.WorstZ.polyIndex `
+            (Join-Path $analysis 'suspicious_poly_flamecrest_stall.obj') `
+            (Join-Path $analysis 'suspicious_poly_flamecrest_stall.csv') `
+            @(
+                (New-Marker -7519.0 -2100.4 130.2 'live_stall_ubrs'),
+                (New-Marker -7504.8 -2104.4 132.0 'live_stall_brd')
+            )
+        $lines.Add("- Flame Crest suspicious polygon OBJ: analysis/suspicious_poly_flamecrest_stall.obj")
+    }
     if ($brdStats.Exists -and $null -ne $brdStats.WorstZ) {
         Invoke-MmapVisualizePoly `
             (Join-Path $DataDir 'mmaps\0004533.mmtile') `
@@ -219,13 +233,13 @@ function Write-BrdSummary {
             )
         $lines.Add("- BRM suspicious polygon OBJ: analysis/suspicious_poly_brm_south_trap.obj")
     }
-    if (($brdStats.Exists -and $null -ne $brdStats.WorstZ) -or ($brmStats.Exists -and $null -ne $brmStats.WorstZ)) {
+    if (($flamecrestStats.Exists -and $null -ne $flamecrestStats.WorstZ) -or ($brdStats.Exists -and $null -ne $brdStats.WorstZ) -or ($brmStats.Exists -and $null -ne $brmStats.WorstZ)) {
         $lines.Add("")
     }
 
     $lines.Add("### GO Bake Evidence")
     $lines.Add("")
-    foreach ($log in 'mmapgen_tile_0004533.log', 'mmapgen_tile_0004634.log') {
+    foreach ($log in 'mmapgen_tile_0004635.log', 'mmapgen_tile_0004533.log', 'mmapgen_tile_0004634.log') {
         foreach ($line in Get-GoLines (Join-Path $latest "logs\$log")) {
             $lines.Add("- ${log}: $line")
         }

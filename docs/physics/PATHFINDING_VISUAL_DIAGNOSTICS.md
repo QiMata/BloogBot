@@ -156,31 +156,51 @@ repair for this.
 
 ### BRD / BRM
 
-This bundle covers Flame Crest to the BRD approach plus the known BRM south-face
-trap.
+This bundle covers the Flame Crest live-stall tile, the BRD approach, and the
+known BRM south-face trap.
 
+- Flame Crest stall tile: map `0`, tile `35,46`, runtime `0004635.mmtile`.
 - BRD approach tile: map `0`, tile `33,45`, runtime `0004533.mmtile`.
 - BRM south-trap tile: map `0`, tile `34,46`, runtime `0004634.mmtile`.
 - Focused runtime regen on 2026-05-13 rewrote
-  `D:\MaNGOS\data\mmaps\0004533.mmtile` and
+  `D:\MaNGOS\data\mmaps\0004635.mmtile`,
+  `D:\MaNGOS\data\mmaps\0004533.mmtile`, and
   `D:\MaNGOS\data\mmaps\0004634.mmtile`; backups are in
   `tmp/test-runtime/visualization/pathfinding/brd/latest/backup/`.
-- `analysis/brd_approach_mmap_crop_polys.csv`: 608 polygons, max
+- Promoted runtime hashes:
+  - `0004635.mmtile`: `1A2C1FC96192653EAFA76B7EF2174EE77FAAB2E1869797A070E51FEFACF5135F`
+  - `0004533.mmtile`: `C7769E46B14E1ED2F957FE231B825AF3914C4ED119873FCDE97DA7D1507DECA7`
+  - `0004634.mmtile`: `8FC60E9FD727610CB865D0DA122B9A377BE5DA61BA8CBE92A85E940290BAB3DC`
+- `analysis/flamecrest_stall_mmap_crop_polys.csv`: 93 polygons, max
+  `zRange=19.60y`.
+- `analysis/brd_approach_mmap_crop_polys.csv`: 752 polygons, max
   `zRange=16.70y`.
-- `analysis/brm_south_trap_mmap_crop_polys.csv`: 1199 polygons, max
-  `zRange=39.70y`.
-- `analysis/suspicious_poly_brd_approach.obj` and
+- `analysis/brm_south_trap_mmap_crop_polys.csv`: 1374 polygons, max
+  `zRange=41.00y`.
+- `analysis/suspicious_poly_flamecrest_stall.obj`,
+  `analysis/suspicious_poly_brd_approach.obj`, and
   `analysis/suspicious_poly_brm_south_trap.obj` isolate the current worst
   polygons from those crops.
-- Runtime logs show no model-backed GameObjects baked for those two tiles; they
-  marked fallback GO span boxes (`55` and `74` respectively). Focused
-  `NavDataAudit` passes the Detour/header capsule checks for both tiles but
+- Runtime logs show no model-backed GameObjects baked for those three tiles; they
+  marked fallback GO span boxes (`101`, `55`, and `74` respectively). Focused
+  `NavDataAudit` passes the Detour/header capsule checks for the map-0 tiles but
   fails the GO-bake assertion because there are no modeled GO spawn origins in
   those audited map-0 tiles and no `[GO] ... baked ...` log line.
+- `BrmDungeonRouteDiagnostic` passes after the three-tile bake (`2/2`, TRX:
+  `tmp/test-runtime/results-pathfinding/brm_dungeon_route_diagnostic_after_brd_run_tiles.trx`).
+- The live BotRunner run does not handle the route yet. With all three promoted
+  tiles, `LongPathingTests.FlameCrestToBrmDungeonEntrance` still stalls on the
+  UBRS case at `(-7519.0,-2100.4,130.3)` on tile `35,46`; the same test run then
+  hit client/harness fallout (`BRD` client crash, `BWL` target selection error,
+  `LBRS` not executed). Screenshot:
+  `tmp/test-runtime/screenshots/long-pathing/Long-travel-stall-before-Flame-Crest-UBRS-portal-likely-wall-ceiling-collision-n-LPATHFG1-client-35024-win0-20260513_121624.png`.
 
 Lay explanation: the BRM failure looks less like a missing decorative object and
 more like terrain/WMO surfaces being simplified or connected through cliff/interior
-geometry that a real player cannot walk across.
+geometry that a real player cannot walk across. The route query can find a
+corridor, but FG execution still collides or stalls at the Flame Crest surface,
+so the next fix should compare the `flamecrest_stall` source/stage/mmap outputs
+before changing BotRunner movement.
 
 ## Nav Summary Accelerator
 
@@ -240,22 +260,25 @@ Next command:
 
 ```powershell
 $env:WWOW_DATA_DIR='D:\MaNGOS\data'
-.\tools\scripts\export-pathfinding-reference.ps1 -Route og-zeppelin -Resume -MmapGenExe .\tools\MmapGen\build\MmapGen.exe
-.\tools\scripts\summarize-pathfinding-reference.ps1 -Route og-zeppelin
-.\tools\scripts\compare-og-top-deck-source-vs-mmap.ps1
-dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck" --logger "console;verbosity=minimal"
+.\tools\scripts\export-pathfinding-reference.ps1 -Route brd -Resume -MmapGenExe .\tools\MmapGen\build\MmapGen.exe
+.\tools\scripts\summarize-pathfinding-reference.ps1 -Route brd
+dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BrmDungeonRouteDiagnostic" --logger "console;verbosity=minimal"
+$env:WWOW_BRM_DUNGEON_TRAVEL_TEST='1'
+$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'
+dotnet test Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.FlameCrestToBrmDungeonEntrance" --logger "console;verbosity=minimal" -- RunConfiguration.TestSessionTimeout=1800000
 ```
 
 Then inspect:
 
-- `source/compiled_adt_vmap_go_top_ramp_deck_all_sources.obj`
-- `mmap/mmap_top_ramp_deck_crop.obj`
-- `mmap/mmap_top_ramp_deck_reachable.obj`
-- `analysis/top_deck_surface_coverage.md`
+- `source/flamecrest_stall_compiled_adt_vmap_go_all_sources.obj`
+- `mmap/flamecrest_stall_mmap_crop.obj`
+- `analysis/flamecrest_stall_mmapgen_stage_heightfield_spans.csv`
+- `analysis/flamecrest_stall_mmapgen_stage_compact_spans.csv`
+- `analysis/suspicious_poly_flamecrest_stall.obj`
 
-If the visual mesh now matches the screenshot but movement still fails, the next
-layer is Detour corridor/path selection. Only inspect BotRunner path execution
-after that corridor check shows the generated path itself is sane.
+If the Flame Crest visual mesh and Detour corridor are both sane but FG movement
+still stalls at the same surface, the next layer is movement execution/collision
+diagnostics.
 
 For the nav-summary accelerator scaffold, next command:
 

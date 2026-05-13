@@ -584,15 +584,26 @@ function Export-Brd {
 
     $markers = @(
         (New-Point -7518.7 -2159.9 131.9 'flamecrest_start'),
+        (New-Point -7519.0 -2100.4 130.2 'live_stall_ubrs'),
+        (New-Point -7504.8 -2104.4 132.0 'live_stall_brd'),
         (New-Point -7187.0 -958.0 254.0 'brd_approach'),
         (New-Point -7179.0 -921.0 165.0 'literal_brd_portal'),
         (New-Point -7949.7 -1162.8 170.8 'brm_south_trap_z170_8'),
         (New-Point -7825.4 -1129.2 133.8 'brm_south_new_trap_z133_8')
     )
+    $flamecrestStallCrop = New-Bounds -7545 -2135 118 -7480 -2075 150
     $brdApproachCrop = New-Bounds -7240 -1010 140 -7135 -890 275
     $southTrapCrop = New-Bounds -8010 -1225 115 -7780 -1080 190
 
     $tiles = @(
+        [pscustomobject]@{
+            Name = 'flamecrest_stall'
+            Map = 0
+            TileX = 35
+            TileY = 46
+            Mmtile = Join-Path $DataDir 'mmaps\0004635.mmtile'
+            Crop = $flamecrestStallCrop
+        },
         [pscustomobject]@{
             Name = 'brd_approach'
             Map = 0
@@ -622,7 +633,23 @@ function Export-Brd {
 
         Convert-RawMmapGenObj $rawResult.RawObj (Join-Path $latest "source\$($tile.Name)_compiled_adt_vmap_go_full.obj")
         Convert-RawMmapGenObj $rawResult.RawObj (Join-Path $latest "source\$($tile.Name)_compiled_adt_vmap_go_crop.obj") $tile.Crop
+        Copy-Item -Force (Join-Path $latest "source\$($tile.Name)_compiled_adt_vmap_go_crop.obj") (Join-Path $latest "source\$($tile.Name)_compiled_adt_vmap_go_all_sources.obj")
 
+        Copy-IfExists $rawResult.Mmtile (Join-Path $latest "mmap\$($tile.Name)_mmapgen_generated_tile.mmtile")
+        Copy-IfExists $rawResult.PolyMeshObj (Join-Path $latest "mmap\$($tile.Name)_mmapgen_polymesh.obj")
+        Copy-IfExists $rawResult.DetailMeshObj (Join-Path $latest "mmap\$($tile.Name)_mmapgen_detailmesh.obj")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "$tileKey.pmesh") (Join-Path $latest "mmap\$($tile.Name)_mmapgen_polymesh.pmesh")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "$tileKey.dmesh") (Join-Path $latest "mmap\$($tile.Name)_mmapgen_detailmesh.dmesh")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "map$tileKey.nav") (Join-Path $latest "mmap\$($tile.Name)_mmapgen_final_detour_tile.nav")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "map${tileKey}_stage_heightfield_spans.csv") (Join-Path $latest "analysis\$($tile.Name)_mmapgen_stage_heightfield_spans.csv")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "map${tileKey}_stage_compact_spans.csv") (Join-Path $latest "analysis\$($tile.Name)_mmapgen_stage_compact_spans.csv")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "map${tileKey}_stage_contours.csv") (Join-Path $latest "analysis\$($tile.Name)_mmapgen_stage_contours.csv")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "map${tileKey}.source_triangles.csv") (Join-Path $latest "analysis\$($tile.Name)_compiled_adt_vmap_go_source_triangles.csv")
+
+        $generatedTile = Join-Path $latest "mmap\$($tile.Name)_mmapgen_generated_tile.mmtile"
+        if (Test-Path $generatedTile) {
+            Invoke-MmapVisualize $generatedTile (Join-Path $latest "mmap\$($tile.Name)_mmapgen_generated_crop.obj") $markers $tile.Crop (Join-Path $latest "analysis\$($tile.Name)_mmapgen_generated_crop_polys.csv")
+        }
         Invoke-MmapVisualize $tile.Mmtile (Join-Path $latest "mmap\$($tile.Name)_mmap_full_with_vmap_bounds.obj") $markers -IncludeVmaps
         Invoke-MmapVisualize $tile.Mmtile (Join-Path $latest "mmap\$($tile.Name)_mmap_crop.obj") $markers $tile.Crop (Join-Path $latest "analysis\$($tile.Name)_mmap_crop_polys.csv")
     }
@@ -632,12 +659,13 @@ function Export-Brd {
     Write-Waypoints $referencePoints (Join-Path $latest 'analysis\reference_points.csv') (Join-Path $latest 'overlays\reference_points.obj')
 
     Write-Readme (Join-Path $latest 'README.md') 'BRD/BRM Pathfinding Reference' @(
-        "- Scope: Flame Crest to Blackrock Depths approach plus the known BRM south-face trap tile.",
+        "- Scope: Flame Crest live-stall tile, Blackrock Depths approach, and the known BRM south-face trap tile.",
+        "- Flame Crest stall tile: map 0, MmapGen tile 35,46, runtime 0004635.mmtile.",
         "- BRD approach tile: map 0, MmapGen tile 33,45, runtime 0004533.mmtile.",
         "- South trap tile: map 0, MmapGen tile 34,46, runtime 0004634.mmtile.",
-        "- source/ contains converted compiled ADT/VMAP/GO bake-input geometry from MmapGen debug output.",
-        "- mmap/ contains Detour/MMAP renderings for the same tiles.",
-        "- analysis/brd_approach_mmap_crop_polys.csv and analysis/brm_south_trap_mmap_crop_polys.csv are the focused polygon reports.",
+        "- source/ contains converted compiled ADT/VMAP/GO bake-input geometry from MmapGen debug output; *_all_sources.obj keeps terrain/vmap/gameobject/liquid materials visible for direct source-vs-mmap inspection.",
+        "- mmap/ contains Detour/MMAP renderings for the same tiles, including *_mmapgen_generated_* files before runtime promotion.",
+        "- analysis/flamecrest_stall_mmap_crop_polys.csv, analysis/brd_approach_mmap_crop_polys.csv, and analysis/brm_south_trap_mmap_crop_polys.csv are the focused polygon reports.",
         "- MmapGen logs in logs/ show whether static GameObject spawns were baked for each tile."
     )
 
