@@ -66,15 +66,17 @@ public sealed class MmapMeshQualityTests
 
     [Fact(Skip = "Documents an open bake bug. The Flame Crest crop on the live "
         + "BRD/BRM runtime tiles contains 16 walkable-with-NAV_STEEP_SLOPES "
-        + "polygons within 25y of the FG stall coord, peak zRange=46.8y. A "
-        + "2026-05-13 attempt to close the AREA_STEEP_SLOPE band by setting "
-        + "walkableSlopeAngle/walkableSlopeAngleVMaps=52 on tiles 3345/3446/3546 "
-        + "passed this regression but regressed the live FG run (bot ran into "
-        + "model/WMO decorations and slid off surfaces that lost their thin "
-        + "52-61 degree walkable footing). The real fix has to target terrain "
-        + "without erasing model footing — a terrain-only slope tightening, a "
-        + "runtime NAV_STEEP_SLOPES exclude for player paths, or a separate "
-        + "filter pass — so this regression stays Skip until it lands.")]
+        + "polygons within 25y of the FG stall coord, peak zRange=46.8y. Two "
+        + "2026-05-13 bake-side attempts have already regressed the live FG run: "
+        + "(1) walkableSlopeAngle+walkableSlopeAngleVMaps=52 produced the "
+        + "'object exclusion' bug (bot inside model darkness); (2) terrain-only "
+        + "walkableSlopeAngle=52 produced a wall-collision creep where the bot "
+        + "pressed nose-first into BRM rock at (-7665,-1808,137) with "
+        + "route=none replans. The real fix has to live in the runtime path "
+        + "filter (exclude NAV_STEEP_SLOPES for player paths in "
+        + "Exports/Navigation/PathFinder.cpp::createFilter — the vmangos "
+        + "Map.cpp pattern), or as an off-mesh connection for the BRM ascent. "
+        + "Keeping Skip until that fix lands.")]
     public void FlameCrestStall_HasNoTallSteepSlopeWallsNearStall()
     {
         // PROPERTY: a polygon flagged as walkable through the steep-slope path
@@ -124,10 +126,8 @@ public sealed class MmapMeshQualityTests
     }
 
     [Fact(Skip = "See FlameCrestStall_HasNoTallSteepSlopeWallsNearStall — same "
-        + "open bake bug. The reverted slope-angle change kept this assertion "
-        + "green incidentally, but the property is the secondary fingerprint "
-        + "for the same Flame Crest stall iteration; keeping it Skip until the "
-        + "real fix lands so it can be re-enabled together.")]
+        + "open bake bug. Both regressions are Skip until the runtime-filter or "
+        + "off-mesh-connection fix lands; they re-enable together.")]
     public void FlameCrestStall_HasNoUnreasonableGroundBridgePolygons()
     {
         // PROPERTY: a regular walkable polygon (NAV_GROUND only, no steep-slope

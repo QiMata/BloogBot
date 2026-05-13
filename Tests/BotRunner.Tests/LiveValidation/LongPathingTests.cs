@@ -2165,6 +2165,19 @@ public class LongPathingTests
 
     private sealed class SnapshotStallGuard(string label, TimeSpan timeout, float movementThresholdYards)
     {
+        // Wall-collision creep detector: the original detector only triggered on
+        // ~no movement for `timeout`, which a 0.25y/s wall-grind defeats (small
+        // incremental drift > movementThresholdYards/timeout keeps resetting the
+        // anchor). When the bot's snapshot reports currentSpeed≈0 while the
+        // movement-intent flag is set (FORWARD=0x1) for sustained time, that's
+        // the FG bot pushing into a wall — runtime physics rejects the move so
+        // the agent stays still even though the path executor wants to advance.
+        // Fail faster on that signal so test iterations don't have to wait the
+        // full travel timeout.
+        private const float CollisionSpeedThresholdYps = 0.5f;
+        private const uint CollisionMovementForwardMask = 0x1fu; // MOVE_FORWARD | LEFT | RIGHT | BACKWARD | STRAFE
+        private static readonly TimeSpan CollisionCreepTimeout = TimeSpan.FromSeconds(15);
+
         private bool _hasAnchor;
         private uint _anchorMapId;
         private float _anchorX;
@@ -2172,10 +2185,17 @@ public class LongPathingTests
         private float _anchorZ;
         private DateTime _anchorUtc;
 
+        private bool _hasCollisionAnchor;
+        private float _collisionAnchorX;
+        private float _collisionAnchorY;
+        private DateTime _collisionAnchorUtc;
+
         public void Reset()
         {
             _hasAnchor = false;
             _anchorUtc = DateTime.MinValue;
+            _hasCollisionAnchor = false;
+            _collisionAnchorUtc = DateTime.MinValue;
         }
 
         public void FailIfStalled(WoWActivitySnapshot snapshot, Action<string, WoWActivitySnapshot?> fail)
@@ -2188,6 +2208,46 @@ public class LongPathingTests
             }
 
             var now = DateTime.UtcNow;
+
+            // Wall-collision creep: agent intends to move (movement-intent bit set)
+            // but currentSpeed is at or near zero. The original "no anchor change"
+            // detector resets when the bot drifts 1.5y in 6s along a wall, so we
+            // need a second guard keyed on intent + observed speed, not delta from
+            // an anchor.
+            var moveFlags = snapshot.MovementData?.MovementFlags ?? 0u;
+            var intentToMove = (moveFlags & CollisionMovementForwardMask) != 0;
+            var movementData = snapshot.MovementData;
+            var currentSpeed = movementData != null ? Math.Abs(movementData.CurrentSpeed) : 0f;
+            var stalledByCollision = intentToMove && currentSpeed < CollisionSpeedThresholdYps;
+            if (stalledByCollision)
+            {
+                if (!_hasCollisionAnchor
+                    || snapshot.CurrentMapId != _anchorMapId
+                    || LiveBotFixture.Distance2D(position.X, position.Y, _collisionAnchorX, _collisionAnchorY) > 3f)
+                {
+                    _hasCollisionAnchor = true;
+                    _collisionAnchorX = position.X;
+                    _collisionAnchorY = position.Y;
+                    _collisionAnchorUtc = now;
+                }
+                else if (now - _collisionAnchorUtc >= CollisionCreepTimeout)
+                {
+                    fail(
+                        $"Long-travel wall-collision creep before {label}; FG physics rejects forward "
+                        + $"movement (intent-flag set, currentSpeed={currentSpeed:F2} yd/s). "
+                        + $"map={snapshot.CurrentMapId} anchor=({_collisionAnchorX:F1},{_collisionAnchorY:F1}) "
+                        + $"current=({position.X:F1},{position.Y:F1},{position.Z:F1}) "
+                        + $"flags=0x{moveFlags:X} "
+                        + $"creep-window={CollisionCreepTimeout.TotalSeconds:F0}s.",
+                        snapshot);
+                    return;
+                }
+            }
+            else
+            {
+                _hasCollisionAnchor = false;
+            }
+
             var moved = _hasAnchor
                 ? LiveBotFixture.Distance2D(position.X, position.Y, _anchorX, _anchorY)
                 : float.MaxValue;
