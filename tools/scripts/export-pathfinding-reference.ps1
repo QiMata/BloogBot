@@ -4,7 +4,7 @@ param(
     [string]$DataDir = $(if ($env:WWOW_DATA_DIR) { $env:WWOW_DATA_DIR } else { 'D:\MaNGOS\data' }),
     [string]$OutRoot = 'tmp\test-runtime\visualization\pathfinding',
     [string]$TrxPath = 'tmp\test-runtime\results-pathfinding\underpass_sim_anchor_diagnostics.trx',
-    [string]$MmapGenExe = $(if (Test-Path 'D:\MaNGOS\source\bin\MoveMapGenerator.exe') { 'D:\MaNGOS\source\bin\MoveMapGenerator.exe' } else { 'tools\MmapGen\build\MmapGen.exe' }),
+    [string]$MmapGenExe = $(if (Test-Path 'tools\MmapGen\build\MmapGen.exe') { 'tools\MmapGen\build\MmapGen.exe' } else { 'D:\MaNGOS\source\bin\MoveMapGenerator.exe' }),
     [switch]$RefreshRaw,
     [switch]$Resume,
     [switch]$CleanLegacyOgFolder
@@ -105,6 +105,32 @@ function Test-InBounds($WowPoint, $Bounds) {
         -and $WowPoint.Z -ge $Bounds.MinZ -and $WowPoint.Z -le $Bounds.MaxZ
 }
 
+function Test-TriangleIntersectsBounds($WowPoints, $Bounds) {
+    if ($null -eq $Bounds) { return $true }
+    if ($null -eq $WowPoints -or $WowPoints.Count -lt 3) { return $false }
+
+    $first = $WowPoints[0]
+    $minX = $first.X
+    $maxX = $first.X
+    $minY = $first.Y
+    $maxY = $first.Y
+    $minZ = $first.Z
+    $maxZ = $first.Z
+    for ($i = 1; $i -lt $WowPoints.Count; $i++) {
+        $p = $WowPoints[$i]
+        if ($p.X -lt $minX) { $minX = $p.X }
+        if ($p.X -gt $maxX) { $maxX = $p.X }
+        if ($p.Y -lt $minY) { $minY = $p.Y }
+        if ($p.Y -gt $maxY) { $maxY = $p.Y }
+        if ($p.Z -lt $minZ) { $minZ = $p.Z }
+        if ($p.Z -gt $maxZ) { $maxZ = $p.Z }
+    }
+
+    return $maxX -ge $Bounds.MinX -and $minX -le $Bounds.MaxX `
+        -and $maxY -ge $Bounds.MinY -and $minY -le $Bounds.MaxY `
+        -and $maxZ -ge $Bounds.MinZ -and $minZ -le $Bounds.MaxZ
+}
+
 function Write-ReferenceMtl([string]$Path) {
 @'
 newmtl raw_geometry
@@ -186,15 +212,14 @@ function Convert-RawMmapGenObj(
             if (-not $line.StartsWith('f ')) { continue }
             $parts = $line.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
             $indices = New-Object System.Collections.Generic.List[int]
-            $include = $false
+            $faceWowVerts = New-Object System.Collections.Generic.List[object]
             for ($i = 1; $i -lt $parts.Length; $i++) {
                 $idx = [int]($parts[$i].Split('/')[0])
                 if ($idx -le 0 -or $idx -gt $wowVerts.Count) { continue }
                 $indices.Add($idx)
-                if (Test-InBounds $wowVerts[$idx - 1] $CropWow) {
-                    $include = $true
-                }
+                $faceWowVerts.Add($wowVerts[$idx - 1])
             }
+            $include = Test-TriangleIntersectsBounds $faceWowVerts $CropWow
             if (-not $include -or $indices.Count -lt 3) { continue }
 
             $face = New-Object System.Text.StringBuilder
@@ -411,10 +436,12 @@ function Copy-IfExists([string]$From, [string]$To) {
 
 function Copy-OgMmapGenDebugStageFiles([string]$WorkDir, [string]$LatestDir) {
     $meshDir = Join-Path $WorkDir 'meshes'
+    $mmapDir = Join-Path $WorkDir 'mmaps'
     if (-not (Test-Path $meshDir)) {
         return
     }
 
+    Copy-IfExists (Join-Path $mmapDir '0012940.mmtile') (Join-Path $LatestDir 'mmap\mmapgen_generated_tile.mmtile')
     Copy-IfExists (Join-Path $meshDir 'map0012940.mtl') (Join-Path $LatestDir 'source\compiled_adt_vmap_go_full.mtl')
     Copy-IfExists (Join-Path $meshDir 'map0012940.source_triangles.csv') (Join-Path $LatestDir 'analysis\compiled_adt_vmap_go_source_triangles.csv')
     Copy-IfExists (Join-Path $meshDir 'map0012940_stage_heightfield_spans.csv') (Join-Path $LatestDir 'analysis\mmapgen_stage_heightfield_spans.csv')
@@ -448,7 +475,10 @@ function Export-OgZeppelin {
     $latestWorkRaw = Join-Path $latest '_work\mmapgen\meshes\map0012940.obj'
     $legacyRaw = Resolve-RepoPath 'tmp\test-runtime\visualization\og-zeppelin-tower\mmapgen-debug-work\meshes\map0012940.obj'
     $raw = if (Test-Path $latestWorkRaw) { $latestWorkRaw } elseif (Test-Path $legacyRaw) { $legacyRaw } else { $latestWorkRaw }
-    $needsSource = $RefreshRaw -or -not (Test-Path $sourceFull) -or -not (Test-Path $sourceTowerCrop) -or -not (Test-Path $sourceTopDeckCrop)
+    $needsSourceFull = $RefreshRaw -or -not (Test-Path $sourceFull)
+    $needsSourceTowerCrop = $RefreshRaw -or -not (Test-Path $sourceTowerCrop)
+    $needsSourceTopDeckCrop = $RefreshRaw -or -not (Test-Path $sourceTopDeckCrop)
+    $needsSource = $needsSourceFull -or $needsSourceTowerCrop -or $needsSourceTopDeckCrop
     if ($needsSource -and ($RefreshRaw -or -not (Test-Path $raw))) {
         $rawResult = Invoke-MmapGenDebugTile 1 40 29 `
             (Join-Path $OutRoot 'og-zeppelin\latest\_work\mmapgen') `
@@ -459,11 +489,16 @@ function Export-OgZeppelin {
     }
 
     if ($needsSource) {
-        Convert-RawMmapGenObj $raw $sourceFull
-        Convert-RawMmapGenObj $raw $sourceTowerCrop $towerCrop
-        Convert-RawMmapGenObj $raw $sourceTopDeckCrop $topDeckCrop
+        if ($needsSourceFull) { Convert-RawMmapGenObj $raw $sourceFull }
+        if ($needsSourceTowerCrop) { Convert-RawMmapGenObj $raw $sourceTowerCrop $towerCrop }
+        if ($needsSourceTopDeckCrop) { Convert-RawMmapGenObj $raw $sourceTopDeckCrop $topDeckCrop }
     }
     Copy-OgMmapGenDebugStageFiles (Join-Path $OutRoot 'og-zeppelin\latest\_work\mmapgen') $latest
+
+    $mmapgenGeneratedTile = Join-Path $latest 'mmap\mmapgen_generated_tile.mmtile'
+    if (Test-Path $mmapgenGeneratedTile) {
+        Invoke-MmapVisualize $mmapgenGeneratedTile (Join-Path $latest 'mmap\mmapgen_generated_top_ramp_deck_crop.obj') $markers $topDeckCrop (Join-Path $latest 'analysis\mmapgen_generated_top_ramp_deck_polys.csv')
+    }
 
     Invoke-MmapVisualize $mmtile (Join-Path $latest 'mmap\mmap_full_with_vmap_bounds.obj') $markers -IncludeVmaps
     Invoke-MmapVisualize $mmtile (Join-Path $latest 'mmap\mmap_tower_crop.obj') $markers $towerCrop (Join-Path $latest 'analysis\mmap_tower_crop_polys.csv')
