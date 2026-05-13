@@ -74,6 +74,95 @@
 3. Route validity focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName=PathfindingService.Tests.PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_ReroutesAroundBlockedDirectLine|FullyQualifiedName=PathfindingService.Tests.PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_StraightRequestCompletesWithinBudget|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-05-13 (Focused mmap regen visibility pass)
+- Active task: refresh visual mmap artifacts after focused OG/BRD/BRM runtime
+  tile regeneration.
+- Pass result: `delta shipped; OG guard green, BRD/BRM still red as bake
+  fidelity evidence`.
+- Last delta:
+  - Regenerated runtime tiles `0012940.mmtile`, `0004533.mmtile`, and
+    `0004634.mmtile` in `D:\MaNGOS\data\mmaps`.
+  - Re-rendered stable latest artifacts under
+    `tmp/test-runtime/visualization/pathfinding/og-zeppelin/latest/` and
+    `tmp/test-runtime/visualization/pathfinding/brd/latest/`.
+  - Updated summaries and suspicious polygon OBJs. OG top-deck crop remains
+    below guard thresholds. BRD/BRM still show large vertical-span polygons.
+- Validation/tests run:
+  - Focused `NavDataAudit` for OG tile `1 40,29` -> passed.
+  - Focused `NavDataAudit` for BRD/BRM map-0 tiles -> Detour/header capsule
+    checks passed; GO-bake assertions failed because those tiles have no
+    modeled GO spawn origins and only fallback GO span boxes.
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Debug --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons" --logger "console;verbosity=minimal"` -> passed `1/1`.
+- Next command: `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; .\tools\scripts\summarize-pathfinding-reference.ps1 -Route all`
+
+### 2026-05-13 (NavSummary resolver coverage)
+- Active task: deterministic coverage for the optional nav-summary accelerator.
+- Pass result: `delta shipped; summary expansion/fallback tests green`.
+- Last delta:
+  - Added `NavSummaryRouteResolverTests` covering detailed-leg expansion,
+    dynamic-overlay bypass, failed detailed-leg fallback, and route-cache
+    signature activation.
+- Validation/tests run:
+  - `dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Debug --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavSummaryRouteResolverTests" --logger "console;verbosity=minimal"` -> passed `4/4`.
+- Next command: `dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Debug --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavSummaryRouteResolverTests" --logger "console;verbosity=minimal"`
+
+### 2026-05-12 (S1.3 OG tower mmap/physics drill-down)
+- Active task: S1.3 remains blocked on the Orgrimmar zeppelin tower
+  deterministic route gate.
+- Pass result: `blocked; exact tower segment is physically unreachable and
+  final route selection still returns it`.
+- Last delta:
+  - Confirmed the correct tile convention for the OG tower:
+    MmapGen tile `(40,29)`, runtime file `0012940.mmtile`, config key
+    `"4029"`. Earlier `(29,40)` / `0014029.mmtile` notes were wrong-tile
+    artifacts and must not be used.
+  - Isolated the current underpass red segment:
+    `94->95 from=(1342.667,-4653.067,39.509) to=(1340.800,-4652.000,40.509)`.
+  - Direct segment trace shows the Tauren capsule slides along a wall:
+    final position stays near X `1342.7`, endpoint miss `1.87`, repeated wall
+    normal `(1,0,0)`.
+  - In-tree MmapGen regenerated `0012940.mmtile` with GO bake support,
+    source/stage diagnostics, and per-tile `maxVertsPerPoly=3`; the top
+    ramp/deck mesh-quality guard now passes.
+- Evidence:
+  - `tmp/test-runtime/results-pathfinding/underpass_sim_anchor_diagnostics.trx`
+  - `tmp/test-runtime/results-pathfinding/spiral_reachability_segment94_trace.trx`
+  - `tmp/test-runtime/visualization/pathfinding/og-zeppelin/latest/analysis/summary.md`
+  - `Tests/PathfindingService.Tests/MmapMeshQualityTests.cs`
+- Follow-up result: S1.3 critical walk-leg rerun reported `Passed (1/1),
+  Duration: 15s`, then `dotnet test` aborted at the 600s test-session timeout.
+  `.\run-tests.ps1 -ListRepoScopedProcesses` reported no repo-scoped processes.
+- Next command: isolate PathfindingService testhost/fixture cleanup after the
+  functional pass; do not re-open pathfinding or BotRunner movement without an
+  actual route assertion failure.
+
+### 2026-05-12 (S1.3 PathfindingService stability baseline)
+- Active task: S1.3 no-route-pack stability sweep is red before the catalog
+  P99 guard can be trusted.
+- Pass result: `blocked; critical walk-leg matrix failed 3/23`.
+- Last delta:
+  - Re-ran the Crossroads -> Undercity critical walking-leg matrix against
+    `D:\MaNGOS\data`.
+  - The matrix now reports three Orgrimmar zeppelin tower failures. These are
+    substrate failures, not invitation to add managed path repair, route-pack
+    seeds, per-spot route gates, or BotRunner boarding constants.
+  - Per the PathfindingService freeze, route the next delta through
+    MmapGen/physics evidence for the OG zeppelin tower cluster.
+- Failing cases:
+  - `orgrimmar_city_live_vertical_replan_recovery`: waypoint `63` floats
+    `2.9y` from collision support (`supportZ=27.400`) on a
+    `repaired_static_los` path.
+  - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`: local
+    physics movement break at segment `172->173`.
+  - `orgrimmar_zeppelin_tower_friction_recovery`: early waypoint projects
+    onto upper tower support before the Tauren capsule can reach it.
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=s1_3_critical_walk_legs.trx" --results-directory tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (20 passed, 3 failed)`.
+  - `.\run-tests.ps1 -ListRepoScopedProcesses` -> `No repo-scoped processes found`.
+- Evidence:
+  - `tmp/test-runtime/results-pathfinding/s1_3_critical_walk_legs.trx`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
 - Last updated: 2026-05-06
 - Active task: deterministic Orgrimmar route gates are green; live proof moved
   past PathfindingService and is now blocked in BotRunner zeppelin boarding.

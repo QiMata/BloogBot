@@ -7,14 +7,24 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace BotRunner.Tasks;
 
 /// <summary>
-/// Base class for bot tasks providing common functionality.
+/// Base class for bot tasks providing common functionality. Implements the
+/// Phase 1 <see cref="IBotTask"/> contract via a synchronous shim per R25:
+/// <see cref="TickAsync"/> forwards to a virtual <see cref="OnTick"/> whose
+/// default body invokes the legacy <c>void Update()</c> defined on the
+/// concrete subclass (cached via reflection). Family slots (S1.4..S1.13) may
+/// override <see cref="TickAsync"/> directly when migrating a representative
+/// task to the native async contract.
 /// </summary>
-public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
+public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider, IBotTask
 {
     protected readonly IBotContext BotContext = botContext;
 
@@ -163,6 +173,95 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
 
     protected virtual NavigationTraceSnapshot? GetDiagnosticNavigationTraceSnapshot()
         => NavPath?.TraceSnapshot;
+
+    // -----------------------------------------------------------------
+    // Phase 1 IBotTask shim per slot S1.0 (R25 — shim-only migration).
+    // Subclasses keep their existing `public void Update()` body unchanged.
+    // -----------------------------------------------------------------
+
+    /// <inheritdoc/>
+    public virtual string Name => GetType().Name;
+
+    /// <inheritdoc/>
+    public BotTaskStatus Status { get; protected set; } = BotTaskStatus.Running;
+
+    /// <summary>
+    /// Mark the task as <see cref="BotTaskStatus.Complete"/>. The runner pops
+    /// the task on the next tick and fires <see cref="OnPoppedAsync"/>.
+    /// </summary>
+    protected void MarkComplete() => Status = BotTaskStatus.Complete;
+
+    /// <summary>
+    /// Mark the task as <see cref="BotTaskStatus.Failed"/>. The runner pops
+    /// the task and consults the parent's <see cref="OnChildFailedAsync"/>
+    /// to decide whether to escalate (R24).
+    /// </summary>
+    protected void MarkFailed() => Status = BotTaskStatus.Failed;
+
+    /// <summary>
+    /// Internal escalation hook used by <see cref="TaskStackDriver"/> when a
+    /// child task fails and the parent's <see cref="OnChildFailedAsync"/>
+    /// returns <c>false</c> (R24 default). Not part of the public task API —
+    /// concrete tasks should call <see cref="MarkComplete"/> or
+    /// <see cref="MarkFailed"/> instead.
+    /// </summary>
+    internal void RequestStatusForEscalation(BotTaskStatus status) => Status = status;
+
+    /// <summary>
+    /// Per-type reflection cache for the legacy <c>void Update()</c> body.
+    /// One <see cref="MethodInfo"/> lookup per concrete subclass; subsequent
+    /// invocations are direct-dispatch <see cref="MethodInfo.Invoke(object?,object?[])"/>.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Type, Action<BotTask>> _legacyUpdateInvokers = new();
+
+    /// <inheritdoc/>
+    public virtual Task TickAsync(BotTaskContext context, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        OnTick(context);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Default sync tick body — dispatches to the legacy <c>void Update()</c>
+    /// declared on the concrete subclass. Family slots overriding
+    /// <see cref="TickAsync"/> directly bypass this path entirely.
+    /// </summary>
+    protected virtual void OnTick(BotTaskContext context)
+    {
+        var invoker = _legacyUpdateInvokers.GetOrAdd(GetType(), CreateLegacyUpdateInvoker);
+        invoker(this);
+    }
+
+    private static Action<BotTask> CreateLegacyUpdateInvoker(Type runtimeType)
+    {
+        var mi = runtimeType.GetMethod(
+            "Update",
+            BindingFlags.Public | BindingFlags.Instance,
+            binder: null,
+            types: Type.EmptyTypes,
+            modifiers: null);
+        if (mi == null)
+            return static _ => { };
+        return target => mi.Invoke(target, parameters: null);
+    }
+
+    /// <inheritdoc/>
+    public virtual Task OnPushedAsync(BotTaskContext context, CancellationToken ct)
+        => Task.CompletedTask;
+
+    /// <inheritdoc/>
+    public virtual Task OnPoppedAsync(BotTaskContext context, BotTaskStatus terminal)
+        => Task.CompletedTask;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// R24 — base-class default returns <c>false</c>: parent escalates
+    /// (fails too) when a child fails. Override to absorb specific failure
+    /// classes.
+    /// </remarks>
+    public virtual Task<bool> OnChildFailedAsync(BotTaskContext context, IBotTask child, string reason)
+        => Task.FromResult(false);
 }
 
 /// <summary>

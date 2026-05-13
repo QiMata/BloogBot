@@ -2,6 +2,7 @@ using GameData.Core.Models;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
 
@@ -79,7 +80,7 @@ namespace PathfindingService.Repository
         private const float CorridorFirstHighVerticalMinDelta = 50f;
         private const int BoundedCorridorStaticRepairScanLimit = 96;
         private const int BoundedCorridorLocalPhysicsLayerProjectionScanLimit = 32;
-        private const int BoundedCorridorLocalPhysicsRepairScanLimit = 48;
+        private const int BoundedCorridorLocalPhysicsRepairScanLimit = 256;
         private const int BoundedCorridorFloatingSupportProjectionLimit = 32;
         private const float FloatingSupportProjectionMinDrop = 1.0f;
         private const float FloatingSupportProjectionMaxDrop = 6.0f;
@@ -162,6 +163,7 @@ namespace PathfindingService.Repository
         private const float LocalPhysicsLayerProjectionMaxEndpointDistance = 0.90f;
         private const float LocalPhysicsSimulationMaxDistance = 12.0f;
         private const float LocalPhysicsSimulationDeltaTime = 0.05f;
+        private const int LocalPhysicsSimulationWallSlideExtraSteps = 16;
         private const float LocalPhysicsRunSpeed = 7.0f;
         private const float LocalPhysicsRouteLayerRejectZDelta = 5.0f;
         private const float LocalPhysicsRouteLateralRejectDistance = 3.0f;
@@ -179,6 +181,7 @@ namespace PathfindingService.Repository
         private static readonly float[] LocalPhysicsReachabilityBridgeLateralOffsets = [0.75f, -0.75f, 1.5f, -1.5f, 2.5f, -2.5f, 3.5f, -3.5f];
         private static readonly float[] LocalPhysicsReachabilityRepairDistances = [2.0f, 4.0f, 6.0f, 8.0f];
         private static readonly float[] LocalPhysicsReachabilityProgressDistances = [0.75f, 1.25f, 1.75f, 2.5f, 3.5f];
+        private static readonly float[] LocalPhysicsReachabilityPivotDistances = [0.05f, 0.10f, 0.20f, 0.35f, 0.50f, 0.75f];
         private const float LocalPhysicsReachabilityProgressMinRise = 0.30f;
         private const float LocalPhysicsReachabilityProgressMaxOvershoot = 0.35f;
         private const float LocalPhysicsReachabilityProgressMaxLateralDeviation = 4.0f;
@@ -187,9 +190,41 @@ namespace PathfindingService.Repository
         private const float LocalPhysicsReachabilityRouteProgressMinImprovement = 0.50f;
         private const float LocalPhysicsReachabilityRouteProgressMaxOvershoot = 1.50f;
         private const float LocalPhysicsReachabilityRouteProgressMaxZDelta = 2.0f;
+        private const float LocalPhysicsReachabilityEndpointDistanceTolerance = 1.10f;
+        private const float LocalPhysicsReachabilityEndpointZTolerance = 1.0f;
+        private const float LocalPhysicsReachabilityProjectedEndpointMinProjectionT = 0.98f;
         private const uint MoveFlagForward = 0x00000001;
+        private const uint MoveFlagBackward = 0x00000002;
+        private const uint MoveFlagStrafeLeft = 0x00000004;
+        private const uint MoveFlagStrafeRight = 0x00000008;
+        private const uint MoveFlagTurnLeft = 0x00000010;
+        private const uint MoveFlagTurnRight = 0x00000020;
+        private const uint MoveFlagPitchUp = 0x00000040;
+        private const uint MoveFlagPitchDown = 0x00000080;
+        private const uint MoveFlagWalking = 0x00000100;
         private const uint MoveFlagJumping = 0x00002000;
+        private const uint MoveFlagFalling = 0x00004000;
         private const uint MoveFlagFallingFar = 0x00004000;
+        private const uint MoveFlagSwimming = 0x00200000;
+        private const uint MoveFlagFlying = 0x01000000;
+        private const uint MoveFlagOnTransport = 0x02000000;
+        private const uint LocalPhysicsIntentMoveMask =
+            MoveFlagForward |
+            MoveFlagBackward |
+            MoveFlagStrafeLeft |
+            MoveFlagStrafeRight |
+            MoveFlagTurnLeft |
+            MoveFlagTurnRight |
+            MoveFlagPitchUp |
+            MoveFlagPitchDown |
+            MoveFlagWalking |
+            MoveFlagJumping;
+        private const uint LocalPhysicsRuntimeStateMask =
+            MoveFlagFalling |
+            MoveFlagFallingFar |
+            MoveFlagSwimming |
+            MoveFlagFlying |
+            MoveFlagOnTransport;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeXyz
@@ -288,6 +323,9 @@ namespace PathfindingService.Repository
             int WallContactSteps,
             int LowDisplacementWallSteps,
             int MaxConsecutiveLowProgressSteps,
+            float BestProjectionT,
+            float BestEndpointDistance,
+            float BestEndpointZDelta,
             XYZ FinalPosition,
             string Reason);
 
@@ -1621,6 +1659,53 @@ namespace PathfindingService.Repository
                 "1",
                 StringComparison.OrdinalIgnoreCase);
 
+        private static bool ShouldTraceLocalPhysicsSegment(XYZ from, XYZ to)
+        {
+            var value = Environment.GetEnvironmentVariable("WWOW_LOCAL_PHYSICS_STEP_TRACE");
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            if (string.Equals(value, "1", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var parts = value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 4 ||
+                !float.TryParse(parts[0], CultureInfo.InvariantCulture, out var fromX) ||
+                !float.TryParse(parts[1], CultureInfo.InvariantCulture, out var fromY) ||
+                !float.TryParse(parts[2], CultureInfo.InvariantCulture, out var toX) ||
+                !float.TryParse(parts[3], CultureInfo.InvariantCulture, out var toY))
+            {
+                return false;
+            }
+
+            return MathF.Abs(from.X - fromX) <= 0.15f &&
+                MathF.Abs(from.Y - fromY) <= 0.15f &&
+                MathF.Abs(to.X - toX) <= 0.15f &&
+                MathF.Abs(to.Y - toY) <= 0.15f;
+        }
+
+        private static void TraceLocalPhysicsStep(
+            int step,
+            XYZ from,
+            XYZ to,
+            XYZ previous,
+            XYZ current,
+            NativePhysicsInput input,
+            NativePhysicsOutput output,
+            float projectionT,
+            float endpointDistance,
+            float endpointZDelta)
+        {
+            Console.Error.WriteLine(
+                $"[LOCAL-PHYSICS-STEP] step={step} from=({from.X:F3},{from.Y:F3},{from.Z:F3}) to=({to.X:F3},{to.Y:F3},{to.Z:F3}) " +
+                $"in=({previous.X:F3},{previous.Y:F3},{previous.Z:F3}) out=({current.X:F3},{current.Y:F3},{current.Z:F3}) " +
+                $"inFlags=0x{input.MoveFlags:X8} outFlags=0x{output.MoveFlags:X8} wasGrounded={input.WasGrounded} " +
+                $"ground=({output.GroundZ:F3},{output.GroundNx:F3},{output.GroundNy:F3},{output.GroundNz:F3}) " +
+                $"wall={output.HitWall} blocked={output.BlockedFraction:F3} wallN=({output.WallNormalX:F3},{output.WallNormalY:F3},{output.WallNormalZ:F3}) " +
+                $"fallStart={output.FallStartZ:F3} fallTime={output.FallTime:F1} groundedWall={input.GroundedWallState}->{output.GroundedWallState} " +
+                $"proj={projectionT:F3} endpoint={endpointDistance:F3} zDelta={endpointZDelta:F3}");
+        }
+
         private NavigationPathResult BuildUsablePathResult(
             uint mapId,
             XYZ start,
@@ -2932,7 +3017,7 @@ namespace PathfindingService.Repository
             var dz = to.Z - from.Z;
             var segmentDistance2D = MathF.Sqrt((dx * dx) + (dy * dy));
             if (segmentDistance2D <= 0.05f)
-                return new LocalPhysicsSimulation(true, true, 0f, 0f, 0f, 1f, 0, 0, 0, from, "compatible");
+                return new LocalPhysicsSimulation(true, true, 0f, 0f, 0f, 1f, 0, 0, 0, 1f, 0f, 0f, from, "compatible");
 
             var travelDistance = MathF.Min(segmentDistance2D, MathF.Max(0.5f, LocalPhysicsSimulationMaxDistance));
             var horizonT = travelDistance / segmentDistance2D;
@@ -2941,8 +3026,10 @@ namespace PathfindingService.Repository
                 from.Y + (dy * horizonT),
                 from.Z + (dz * horizonT));
             var orientation = MathF.Atan2(dy, dx);
+            var nominalStepCount =
+                (int)MathF.Ceiling(travelDistance / MathF.Max(LocalPhysicsRunSpeed * LocalPhysicsSimulationDeltaTime, 0.05f)) + 6;
             var stepCount = Math.Clamp(
-                (int)MathF.Ceiling(travelDistance / MathF.Max(LocalPhysicsRunSpeed * LocalPhysicsSimulationDeltaTime, 0.05f)) + 6,
+                nominalStepCount + LocalPhysicsSimulationWallSlideExtraSteps,
                 4,
                 96);
 
@@ -2962,11 +3049,13 @@ namespace PathfindingService.Repository
             var standingOnLocalY = 0f;
             var standingOnLocalZ = 0f;
             var fallTime = 0f;
-            var fallStartZ = from.Z;
+            var fallStartZ = -200000f;
             var stepUpBaseZ = -200000f;
             var stepUpAge = 0u;
+            var groundedWallState = 0u;
             var wasGrounded = true;
-            var moveFlags = MoveFlagForward;
+            var intentFlags = MoveFlagForward & LocalPhysicsIntentMoveMask;
+            var moveFlags = intentFlags;
             var maxUpwardZDelta = 0f;
             var maxAbsZDelta = 0f;
             var maxLateralDistance = 0f;
@@ -2978,6 +3067,19 @@ namespace PathfindingService.Repository
             var totalRequestedDistance = 0f;
             var totalAchievedDistance = 0f;
             var bestProjectionT = 0f;
+            var endpointDistanceTolerance = GetLocalPhysicsReachabilityEndpointDistanceTolerance(agentRadius);
+            var bestEndpointDistance = Distance2D(pos, horizon);
+            var bestEndpointZDelta = MathF.Abs(pos.Z - horizon.Z);
+            var bestEndpointPosition = pos;
+            var traceSteps = ShouldTraceLocalPhysicsSegment(from, to);
+
+            if (traceSteps)
+            {
+                Console.Error.WriteLine(
+                    $"[LOCAL-PHYSICS-STEP] begin from=({from.X:F3},{from.Y:F3},{from.Z:F3}) to=({to.X:F3},{to.Y:F3},{to.Z:F3}) " +
+                    $"horizon=({horizon.X:F3},{horizon.Y:F3},{horizon.Z:F3}) steps={stepCount} dt={LocalPhysicsSimulationDeltaTime:F3} " +
+                    $"radius={agentRadius:F4} height={agentHeight:F4}");
+            }
 
             try
             {
@@ -2987,7 +3089,7 @@ namespace PathfindingService.Repository
                     var previousProjectionT = bestProjectionT;
                     var input = new NativePhysicsInput
                     {
-                        MoveFlags = moveFlags | MoveFlagForward,
+                        MoveFlags = moveFlags,
                         X = pos.X,
                         Y = pos.Y,
                         Z = pos.Z,
@@ -2996,12 +3098,12 @@ namespace PathfindingService.Repository
                         Vx = velX,
                         Vy = velY,
                         Vz = velZ,
-                        WalkSpeed = 2.5f,
+                        WalkSpeed = LocalPhysicsRunSpeed * 0.5f,
                         RunSpeed = LocalPhysicsRunSpeed,
                         RunBackSpeed = 4.5f,
                         SwimSpeed = 4.722222f,
                         SwimBackSpeed = 2.5f,
-                        FlightSpeed = LocalPhysicsRunSpeed,
+                        FlightSpeed = 0f,
                         TurnSpeed = MathF.PI,
                         TransportGuid = 0,
                         TransportX = 0f,
@@ -3009,7 +3111,7 @@ namespace PathfindingService.Repository
                         TransportZ = 0f,
                         TransportO = 0f,
                         FallTime = (uint)fallTime,
-                        FallStartZ = fallStartZ != 0f ? fallStartZ : -200000f,
+                        FallStartZ = fallStartZ,
                         Height = agentHeight,
                         Radius = agentRadius,
                         HasSplinePath = false,
@@ -3036,7 +3138,7 @@ namespace PathfindingService.Repository
                         PhysicsFlags = 0,
                         StepUpBaseZ = stepUpBaseZ,
                         StepUpAge = stepUpAge,
-                        GroundedWallState = 0,
+                        GroundedWallState = groundedWallState,
                         WasGrounded = wasGrounded ? 1u : 0u,
                     };
 
@@ -3045,7 +3147,8 @@ namespace PathfindingService.Repository
                     velX = output.Vx;
                     velY = output.Vy;
                     velZ = output.Vz;
-                    moveFlags = output.MoveFlags | MoveFlagForward;
+                    var stateFlags = output.MoveFlags & LocalPhysicsRuntimeStateMask;
+                    moveFlags = intentFlags | stateFlags;
                     fallTime = output.FallTime;
                     fallStartZ = output.FallStartZ;
                     prevGroundZ = output.GroundZ;
@@ -3061,7 +3164,8 @@ namespace PathfindingService.Repository
                     standingOnLocalZ = output.StandingOnLocalZ;
                     stepUpBaseZ = output.StepUpBaseZ;
                     stepUpAge = output.StepUpAge;
-                    wasGrounded = (output.MoveFlags & (MoveFlagFallingFar | MoveFlagJumping)) == 0;
+                    groundedWallState = output.GroundedWallState;
+                    wasGrounded = (output.MoveFlags & (MoveFlagFalling | MoveFlagFallingFar | MoveFlagJumping)) == 0;
                     hitWall |= output.HitWall &&
                         float.IsFinite(output.BlockedFraction) &&
                         output.BlockedFraction < LocalPhysicsBlockingWallProgressThreshold;
@@ -3085,6 +3189,32 @@ namespace PathfindingService.Repository
                         1f);
                     if (projectionT > bestProjectionT)
                         bestProjectionT = projectionT;
+
+                    var endpointDistance = Distance2D(pos, horizon);
+                    var endpointZDelta = MathF.Abs(pos.Z - horizon.Z);
+                    if (endpointDistance < bestEndpointDistance ||
+                        (endpointDistance <= endpointDistanceTolerance &&
+                            endpointZDelta < bestEndpointZDelta))
+                    {
+                        bestEndpointDistance = endpointDistance;
+                        bestEndpointZDelta = endpointZDelta;
+                        bestEndpointPosition = pos;
+                    }
+
+                    if (traceSteps)
+                    {
+                        TraceLocalPhysicsStep(
+                            step,
+                            from,
+                            horizon,
+                            previousPos,
+                            pos,
+                            input,
+                            output,
+                            projectionT,
+                            endpointDistance,
+                            endpointZDelta);
+                    }
 
                     var forwardProgress = MathF.Max(0f, projectionT - previousProjectionT) * segmentDistance2D;
                     if (forwardProgress <= LocalPhysicsMovementStallProgressEpsilon)
@@ -3112,13 +3242,36 @@ namespace PathfindingService.Repository
                         maxLateralDistance,
                         MathF.Sqrt((lateralX * lateralX) + (lateralY * lateralY)));
 
-                    if (Distance2D(pos, horizon) <= LocalPhysicsLayerProjectionMaxEndpointDistance)
+                    if (endpointDistance <= LocalPhysicsLayerProjectionMaxEndpointDistance &&
+                        endpointZDelta <= LocalPhysicsReachabilityEndpointZTolerance)
+                    {
                         break;
+                    }
+
+                    if (bestProjectionT >= horizonT &&
+                        endpointDistance > bestEndpointDistance + LocalPhysicsLayerProjectionMaxEndpointDistance)
+                    {
+                        break;
+                    }
                 }
             }
             catch
             {
-                return new LocalPhysicsSimulation(false, true, 0f, 0f, 0f, 1f, 0, 0, 0, from, "unavailable");
+                return new LocalPhysicsSimulation(
+                    false,
+                    true,
+                    0f,
+                    0f,
+                    0f,
+                    1f,
+                    0,
+                    0,
+                    0,
+                    bestProjectionT,
+                    bestEndpointDistance,
+                    bestEndpointZDelta,
+                    from,
+                    "unavailable");
             }
 
             var averageDisplacementRatio = totalRequestedDistance > 0.001f
@@ -3132,7 +3285,7 @@ namespace PathfindingService.Repository
 
             return new LocalPhysicsSimulation(
                 true,
-                !hitWall && !movementStall,
+                !movementStall,
                 maxUpwardZDelta,
                 maxAbsZDelta,
                 maxLateralDistance,
@@ -3140,8 +3293,11 @@ namespace PathfindingService.Repository
                 wallContactSteps,
                 lowDisplacementWallSteps,
                 maxConsecutiveLowProgressSteps,
-                pos,
-                hitWall ? "hit_wall" : movementStall ? "movement_stall" : "simulated");
+                bestProjectionT,
+                bestEndpointDistance,
+                bestEndpointZDelta,
+                bestEndpointPosition,
+                movementStall ? "movement_stall" : hitWall ? "transient_wall_slide" : "simulated");
         }
 
         private static bool IsSustainedLocalPhysicsMovementStall(
@@ -3468,14 +3624,39 @@ namespace PathfindingService.Repository
                 return false;
 
             var simulation = SimulateLocalPhysicsSegment(mapId, from, to, agentRadius, agentHeight);
+            if (IsLocalPhysicsLayerDiagnosticsEnabled())
+            {
+                Console.Error.WriteLine(
+                    $"[LOCAL-REACH-DBG] from=({from.X:F1},{from.Y:F1},{from.Z:F1}) to=({to.X:F1},{to.Y:F1},{to.Z:F1}) " +
+                    $"compatible={simulation.Compatible} reason={simulation.Reason} final=({simulation.FinalPosition.X:F1},{simulation.FinalPosition.Y:F1},{simulation.FinalPosition.Z:F1}) " +
+                    $"endpoint={Distance2D(simulation.FinalPosition, to):F2} zDelta={MathF.Abs(simulation.FinalPosition.Z - to.Z):F2} " +
+                    $"proj={simulation.BestProjectionT:F3} bestEndpoint={simulation.BestEndpointDistance:F2} bestZDelta={simulation.BestEndpointZDelta:F2} " +
+                    $"avg={simulation.AverageDisplacementRatio:F2} wall={simulation.WallContactSteps} low={simulation.LowDisplacementWallSteps} lowSeq={simulation.MaxConsecutiveLowProgressSteps}");
+            }
+
             if (!simulation.Available || !simulation.Compatible)
                 return true;
 
-            if (Distance2D(simulation.FinalPosition, to) > LocalPhysicsLayerProjectionMaxEndpointDistance)
+            if (Distance2D(simulation.FinalPosition, to) > GetLocalPhysicsReachabilityEndpointDistanceTolerance(agentRadius) &&
+                !IsLocalPhysicsProjectedEndpointReachable(simulation, agentRadius))
                 return true;
 
-            return MathF.Abs(simulation.FinalPosition.Z - to.Z) > EarlySupportProjectionReachableMaxZDelta;
+            return MathF.Abs(simulation.FinalPosition.Z - to.Z) > LocalPhysicsReachabilityEndpointZTolerance;
         }
+
+        private static float GetLocalPhysicsReachabilityEndpointDistanceTolerance(float agentRadius) =>
+            MathF.Max(LocalPhysicsReachabilityEndpointDistanceTolerance, agentRadius + 0.25f);
+
+        private static float GetLocalPhysicsReachabilityProjectedEndpointDistanceTolerance(float agentRadius) =>
+            MathF.Max(GetLocalPhysicsReachabilityEndpointDistanceTolerance(agentRadius), agentRadius + 0.35f);
+
+        private static bool IsLocalPhysicsProjectedEndpointReachable(
+            LocalPhysicsSimulation simulation,
+            float agentRadius)
+            => simulation.BestProjectionT >= LocalPhysicsReachabilityProjectedEndpointMinProjectionT &&
+                simulation.BestEndpointDistance <= GetLocalPhysicsReachabilityProjectedEndpointDistanceTolerance(agentRadius) &&
+                simulation.BestEndpointZDelta <= LocalPhysicsReachabilityEndpointZTolerance &&
+                simulation.MaxLateralDistance <= LocalPhysicsReachabilityProgressMaxLateralDeviation;
 
         private static bool FindFirstLocalPhysicsReachabilityBreak(
             uint mapId,
@@ -3538,6 +3719,30 @@ namespace PathfindingService.Repository
                 }
 
                 var next = i + 2 < repaired.Count ? repaired[i + 2] : (XYZ?)null;
+                if (i > 0 &&
+                    TryBuildLocalPhysicsReachabilityPivotPoint(
+                        mapId,
+                        repaired[i - 1],
+                        from,
+                        to,
+                        next,
+                        agentRadius,
+                        agentHeight,
+                        out var pivotPoint))
+                {
+                    if (diagnostics)
+                    {
+                        Console.Error.WriteLine(
+                            $"[LOCAL-REPAIR-DBG] seg={i} replace_pivot=({pivotPoint.X:F1},{pivotPoint.Y:F1},{pivotPoint.Z:F1})");
+                    }
+
+                    repaired[i] = pivotPoint;
+                    repairCount++;
+                    scanEnd = Math.Min(repaired.Count - 1, Math.Max(0, maxScanSegments));
+                    i = Math.Max(-1, i - 2);
+                    continue;
+                }
+
                 if (TryBuildLocalPhysicsReachabilityProgressPoint(
                         mapId,
                         from,
@@ -3687,6 +3892,124 @@ namespace PathfindingService.Repository
             return repairCount == 0
                 ? path
                 : CollapseDuplicateWaypoints(repaired.ToArray());
+        }
+
+        private static bool TryBuildLocalPhysicsReachabilityPivotPoint(
+            uint mapId,
+            XYZ previous,
+            XYZ from,
+            XYZ rejectedTo,
+            XYZ? next,
+            float agentRadius,
+            float agentHeight,
+            out XYZ pivotPoint)
+        {
+            pivotPoint = from;
+            foreach (var desired in EnumerateLocalPhysicsReachabilityPivotCandidates(from, rejectedTo, next))
+            {
+                foreach (var candidate in EnumerateLocalPhysicsReachabilityPivotSnaps(
+                    mapId,
+                    desired,
+                    from,
+                    agentRadius))
+                {
+                    if (Distance2D(candidate, from) <= 0.001f ||
+                        Distance2D(candidate, from) > MathF.Max(0.85f, agentRadius) ||
+                        MathF.Abs(candidate.Z - from.Z) > 1.0f ||
+                        Distance2D(previous, candidate) <= CombineWaypointEpsilon ||
+                        Distance2D(candidate, rejectedTo) <= CombineWaypointEpsilon)
+                    {
+                        continue;
+                    }
+
+                    if (!IsAffordanceRepairLegWalkable(mapId, previous, candidate, agentRadius, agentHeight) ||
+                        !IsAffordanceRepairLegWalkable(mapId, candidate, rejectedTo, agentRadius, agentHeight))
+                    {
+                        continue;
+                    }
+
+                    if (IsLocalPhysicsReachabilityBreak(mapId, previous, candidate, agentRadius, agentHeight) ||
+                        IsLocalPhysicsReachabilityBreak(mapId, candidate, rejectedTo, agentRadius, agentHeight))
+                    {
+                        continue;
+                    }
+
+                    pivotPoint = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<XYZ> EnumerateLocalPhysicsReachabilityPivotSnaps(
+            uint mapId,
+            XYZ desired,
+            XYZ original,
+            float agentRadius)
+        {
+            yield return desired;
+
+            if (TryFindNearbyWalkablePoint(
+                    mapId,
+                    desired,
+                    searchRadius: MathF.Max(1.5f, agentRadius + 0.75f),
+                    maxHorizontalOffset: MathF.Max(0.75f, agentRadius),
+                    maxVerticalOffset: 1.0f,
+                    out var snapped) &&
+                Distance2D(snapped, original) > 0.001f)
+            {
+                yield return snapped;
+            }
+        }
+
+        private static IEnumerable<XYZ> EnumerateLocalPhysicsReachabilityPivotCandidates(
+            XYZ from,
+            XYZ rejectedTo,
+            XYZ? next)
+        {
+            foreach (var (dirX, dirY) in EnumerateLocalPhysicsReachabilityPivotDirections(from, rejectedTo, next))
+            {
+                foreach (var distance in LocalPhysicsReachabilityPivotDistances)
+                    yield return new XYZ(from.X + (dirX * distance), from.Y + (dirY * distance), from.Z);
+            }
+        }
+
+        private static IEnumerable<(float X, float Y)> EnumerateLocalPhysicsReachabilityPivotDirections(
+            XYZ from,
+            XYZ rejectedTo,
+            XYZ? next)
+        {
+            var (dirX, dirY) = ResolveLocalPhysicsReachabilityRepairDirection(from, rejectedTo, next);
+            var perpX = -dirY;
+            var perpY = dirX;
+            const float DiagonalScale = 0.70710677f;
+
+            yield return (dirX, dirY);
+            yield return (-dirX, -dirY);
+            yield return (perpX, perpY);
+            yield return (-perpX, -perpY);
+            yield return ((dirX + perpX) * DiagonalScale, (dirY + perpY) * DiagonalScale);
+            yield return ((dirX - perpX) * DiagonalScale, (dirY - perpY) * DiagonalScale);
+            yield return ((-dirX + perpX) * DiagonalScale, (-dirY + perpY) * DiagonalScale);
+            yield return ((-dirX - perpX) * DiagonalScale, (-dirY - perpY) * DiagonalScale);
+
+            if (!next.HasValue)
+                yield break;
+
+            var routeHorizontal = Distance2D(from, next.Value);
+            if (routeHorizontal <= 0.001f)
+                yield break;
+
+            var routeDirX = (next.Value.X - from.X) / routeHorizontal;
+            var routeDirY = (next.Value.Y - from.Y) / routeHorizontal;
+            var routePerpX = -routeDirY;
+            var routePerpY = routeDirX;
+
+            yield return (routeDirX, routeDirY);
+            yield return (-routeDirX, -routeDirY);
+            yield return (routePerpX, routePerpY);
+            yield return (-routePerpX, -routePerpY);
         }
 
         private static bool TryBuildLocalPhysicsReachabilityProgressPoint(
@@ -4140,13 +4463,7 @@ namespace PathfindingService.Repository
                 if (Distance2D(from, anchor) > LocalPhysicsSimulationMaxDistance)
                     continue;
 
-                if (Distance2D(from, anchor) >= EarlyStaticRepairLosMinSegmentLength &&
-                    !HasLineOfSightStrict(mapId, from, anchor))
-                {
-                    continue;
-                }
-
-                if (!IsAffordanceRepairLegWalkable(mapId, from, anchor, agentRadius, agentHeight))
+                if (!IsLocalPhysicsDownstreamAnchorReachable(mapId, from, anchor, agentRadius, agentHeight))
                     continue;
 
                 downstreamAnchorIndex = anchorIndex;
@@ -4154,6 +4471,37 @@ namespace PathfindingService.Repository
             }
 
             return false;
+        }
+
+        private static bool IsLocalPhysicsDownstreamAnchorReachable(
+            uint mapId,
+            XYZ from,
+            XYZ anchor,
+            float agentRadius,
+            float agentHeight)
+        {
+            var horizontal = Distance2D(from, anchor);
+            if (agentRadius <= 0f ||
+                agentHeight <= 0f ||
+                horizontal < LocalPhysicsLayerProjectionMinSegmentLength ||
+                horizontal > LocalPhysicsSimulationMaxDistance)
+            {
+                return false;
+            }
+
+            var simulation = SimulateLocalPhysicsSegment(mapId, from, anchor, agentRadius, agentHeight);
+            if (!simulation.Available || !simulation.Compatible)
+                return false;
+
+            var endpointDistance = Distance2D(simulation.FinalPosition, anchor);
+            var endpointZDelta = MathF.Abs(simulation.FinalPosition.Z - anchor.Z);
+            if (endpointDistance <= GetLocalPhysicsReachabilityEndpointDistanceTolerance(agentRadius) &&
+                endpointZDelta <= LocalPhysicsReachabilityEndpointZTolerance)
+            {
+                return true;
+            }
+
+            return IsLocalPhysicsProjectedEndpointReachable(simulation, agentRadius);
         }
 
         private static bool TryBuildLocalPhysicsReachabilityRepairPoint(

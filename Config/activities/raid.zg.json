@@ -1,0 +1,45 @@
+{
+  "ActivityId": "raid.zg",
+  "Loadout": {
+    "TargetLevel": 60,
+    "RidingSkill": 150,
+    "MountSpellId": 18793,
+    "SpellIdsToLearn": [25357, 25358],
+    "Skills": [
+      { "SkillId": 43, "Value": 300, "Max": 300 },
+      { "SkillId": 173, "Value": 300, "Max": 300 }
+    ],
+    "EquipItems": [
+      { "ItemId": 19394, "InventorySlot": 0 }
+    ],
+    "SupplementalItemIds": [13446, 8951],
+    "ElixirItemIds": [13452, 20007],
+    "FactionReps": [],
+    "CompletedQuestIds": [],
+    "TalentTemplate": "CombatRoguePreRaid"
+  },
+  "LockoutSkip": true,
+  "LevelOverride": null,
+  "GearOverrides": [],
+  "ReputationOverrides": {
+    "270": "Friendly"
+  },
+  "RoleOverrides": {
+    "Tanks": 2,
+    "Healers": 5,
+    "Dps": 13,
+    "Support": 0
+  },
+  "StagingLocation": "Zul'Gurub",
+  "HumanJoin": {
+    "HumanRole": "Leader",
+    "BotRaidLeader": false,
+    "GearHuman": true,
+    "HumanIdleTimeoutSeconds": 900
+  },
+  "LootPolicy": "MasterLoot",
+  "TearDownPolicy": {
+    "Action": "DeleteCharacters",
+    "HoldTtlSeconds": null
+  }
+}

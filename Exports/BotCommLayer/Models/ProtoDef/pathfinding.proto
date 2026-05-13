@@ -171,6 +171,10 @@ message PhysicsInput {
 
 	// Binary parity: CMovement grounded state persistence.
 	bool was_grounded = 43;
+
+	// Binary parity: selected grounded-wall contact state carried between
+	// frames for the 0x636100 grounded collision branch.
+	uint32 grounded_wall_state = 44;
 }
 
 // Physics output
@@ -236,4 +240,8 @@ message PhysicsOutput {
 
 	// Runtime scene/environment classification (bitfield, see SceneEnvironmentFlags).
 	uint32 environment_flags = 38;
+
+	// Binary parity: selected grounded-wall contact state carried between
+	// frames for the 0x636100 grounded collision branch.
+	uint32 grounded_wall_state = 39;
 }

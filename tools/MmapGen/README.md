@@ -62,7 +62,7 @@ Push-Location D:\MaNGOS\data
 Pop-Location
 
 # Or a focused single-tile regen for the OG dock
-& "$repo\tools\MmapGen\build\Release\MmapGen.exe" 1 --tile 29,40 --threads 1 --silent --offMeshInput "$repo\tools\MmapGen\offmesh.txt" --configInputPath "$repo\tools\MmapGen\config.json"
+& "$repo\tools\MmapGen\build\Release\MmapGen.exe" 1 --tile 40,29 --threads 1 --silent --offMeshInput "$repo\tools\MmapGen\offmesh.txt" --configInputPath "$repo\tools\MmapGen\config.json"
 ```
 
 Every regeneration must be followed by:
@@ -79,6 +79,10 @@ Two files in this directory drive what gets baked into tiles:
   metrics, walkable rules. **Tauren Male is the largest WoW capsule** and is
   the default; do not regress to `agentRadius=0.2` (that was vmangos's stock
   default and produces tiles small races fit through but Tauren do not).
+  Focused diagnostics can add `debugStageCropWow` to a per-tile block; with
+  `--debug` the generator writes heightfield, compact-heightfield, and contour
+  CSVs for that WoW-space crop beside the usual OBJ/debug files. Per-tile
+  `maxVertsPerPoly` is honored and clamped to Recast/Detour's valid range.
 - [offmesh.txt](offmesh.txt) — explicit nav-graph edges Recast cannot infer:
   zeppelin gangplanks, elevator shafts, teleport pads, fall drops with no
   walkable slope.

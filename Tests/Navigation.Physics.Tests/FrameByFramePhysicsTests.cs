@@ -508,6 +508,59 @@ public class FrameByFramePhysicsTests
             $"Walkable slope route should keep making forward progress, got totalTravel={totalTravel:F3}.");
     }
 
+    /// <summary>
+    /// Regression guard for the Orgrimmar zeppelin tower spiral ramp segment that
+    /// the long-route validator rejected even though the walkability classifier
+    /// marks it as a legal step-up.
+    /// </summary>
+    [Theory]
+    [InlineData(1346.7f, -4647.5f, 26.0f, 1347.2f, -4650.7f, 27.5f)]
+    [InlineData(1346.4f, -4651.7f, 28.0f, 1344.0f, -4653.3f, 29.3f)]
+    [InlineData(1340.3f, -4650.7f, 31.5f, 1341.1f, -4648.0f, 32.8f)]
+    [InlineData(1340.267f, -4650.667f, 31.509f, 1341.067f, -4648.000f, 32.759f)]
+    [InlineData(1345.6f, -4652.0f, 38.0f, 1344.0f, -4653.1f, 38.8f)]
+    [InlineData(1345.600f, -4652.000f, 38.009f, 1344.000f, -4653.067f, 38.759f)]
+    public void OrgrimmarZeppelinTowerSpiralStep_KeepsForwardProgress(
+        float startX,
+        float startY,
+        float startZ,
+        float endX,
+        float endY,
+        float endZ)
+    {
+        Skip.If(!_fixture.IsInitialized, "Physics engine not available");
+
+        var start = new WorldPosition(1, startX, startY, startZ, 0f);
+        var end = new WorldPosition(1, endX, endY, endZ, 0f);
+        var orientation = FacingBetween(start, end);
+        var input = CreateInput(start, MoveFlags.Forward, runSpeed: 7.0f, orientation: orientation);
+        input.Height = 2.625f;
+        input.Radius = 0.9747f;
+        input.PrevGroundZ = start.Z;
+        input.PrevGroundNz = 1.0f;
+        input.FallStartZ = -200000.0f;
+        input.StepUpBaseZ = -200000.0f;
+
+        const float dt = 0.05f;
+        const int framesToSimulate = 24;
+
+        var frames = SimulatePhysics(input, framesToSimulate, dt);
+        WriteFrameTrace("OrgrimmarZeppelinTowerSpiralStep_KeepsForwardProgress", frames);
+        WriteGroundedWallTrace("OrgrimmarZeppelinTowerSpiralStep_KeepsForwardProgress", frames, dt);
+
+        var last = frames[^1].Position;
+        float segmentDx = end.X - start.X;
+        float segmentDy = end.Y - start.Y;
+        float segmentDistance = MathF.Sqrt((segmentDx * segmentDx) + (segmentDy * segmentDy));
+        float progressed = (((last.X - start.X) * segmentDx) + ((last.Y - start.Y) * segmentDy)) / segmentDistance;
+        int lowBlockFrames = frames.Count(f => f.Output.HitWall && f.Output.BlockedFraction < 0.25f);
+
+        _output.WriteLine($"progressed={progressed:F3} segmentDistance={segmentDistance:F3} lowBlockFrames={lowBlockFrames}");
+
+        Assert.True(progressed > segmentDistance - 0.25f,
+            $"Spiral ramp step should reach the next route point: progressed={progressed:F3}, segment={segmentDistance:F3}.");
+    }
+
     // ==========================================================================
     // TEST: WATER TRANSITION
     // ==========================================================================
@@ -788,6 +841,7 @@ public class FrameByFramePhysicsTests
             TurnSpeed = MathF.PI,
             Height = CharHeight,
             Radius = CharRadius,
+            WasGrounded = 1u,
         };
     }
 
@@ -862,6 +916,12 @@ public class FrameByFramePhysicsTests
             input.StandingOnLocalX = output.StandingOnLocalX;
             input.StandingOnLocalY = output.StandingOnLocalY;
             input.StandingOnLocalZ = output.StandingOnLocalZ;
+            input.StepUpBaseZ = output.StepUpBaseZ;
+            input.StepUpAge = output.StepUpAge;
+            input.GroundedWallState = output.GroundedWallState;
+            input.WasGrounded = ((MoveFlags)output.MoveFlags & (MoveFlags.FallingFar | MoveFlags.Jumping)) == 0
+                ? 1u
+                : 0u;
         }
 
         return frames;
@@ -883,6 +943,97 @@ public class FrameByFramePhysicsTests
                 $"groundZ={o.GroundZ:F3} liquidZ={o.LiquidZ:F3} " +
                 $"flags=0x{(uint)flags:X}");
         }
+    }
+
+    private void WriteGroundedWallTrace(string scenario, IReadOnlyList<PhysicsFrame> frames, float dt)
+    {
+        _output.WriteLine($"=== {scenario}: grounded wall selection ===");
+        foreach (var frame in frames)
+        {
+            var input = frame.Input;
+            BuildGroundedWallQuery(
+                input,
+                dt,
+                out var boxMin,
+                out var boxMax,
+                out var currentPosition,
+                out var requestedMove);
+
+            bool resolved = EvaluateGroundedWallSelection(
+                input.MapId,
+                in boxMin,
+                in boxMax,
+                in currentPosition,
+                in requestedMove,
+                input.Radius,
+                input.Height,
+                input.GroundedWallState != 0,
+                out var trace);
+
+            if (!resolved && trace.CandidateCount == 0 && !frame.Output.HitWall)
+                continue;
+
+            _output.WriteLine(
+                $"  f={frame.FrameNumber,3} resolved={resolved} hit={frame.Output.HitWall} " +
+                $"blocked={frame.Output.BlockedFraction:F3} contacts={trace.QueryContactCount} candidates={trace.CandidateCount} " +
+                $"selected={trace.SelectedContactIndex} src={trace.SelectedSourceType} inst=0x{trace.SelectedInstanceId:X8} " +
+                $"point={trace.SelectedPoint} normal={trace.SelectedNormal} final={trace.FinalProjectedMove} " +
+                $"final2D={trace.FinalResolved2D:F3} state={trace.GroundedWallStateBefore}->{trace.GroundedWallStateAfter} " +
+                $"branch={(GroundedWallBranchKind)trace.BranchKind} prism={trace.SelectedCurrentPositionInsidePrism}/{trace.SelectedProjectedPositionInsidePrism} " +
+                $"threshold={trace.SelectedThresholdSensitiveStandard}/{trace.SelectedWouldUseDirectPairStandard} " +
+                $"flags=0x{trace.SelectedGroupFlags:X8} root={trace.SelectedRootId} group={trace.SelectedGroupId}");
+        }
+    }
+
+    private static void BuildGroundedWallQuery(
+        PhysicsInput input,
+        float dt,
+        out Vector3 boxMin,
+        out Vector3 boxMax,
+        out Vector3 currentPosition,
+        out Vector3 requestedMove)
+    {
+        const float skin = 0.333333f;
+        const float stepHeight = 2.027778f;
+        const float stepDownHeight = 4.0f;
+        const float tan50 = 1.19175363f;
+        const float sqrt2 = 1.41421354f;
+
+        float startZ = input.Z;
+        float snapZ = GetGroundZ(input.MapId, input.X, input.Y, input.Z + stepHeight, stepHeight + stepDownHeight);
+        if (snapZ > -100000.0f &&
+            snapZ >= input.Z - stepDownHeight &&
+            snapZ <= input.Z + stepHeight)
+        {
+            startZ = snapZ;
+        }
+
+        float dirX = MathF.Cos(input.Orientation);
+        float dirY = MathF.Sin(input.Orientation);
+        float intendedDist = input.RunSpeed * dt;
+        requestedMove = new Vector3(dirX * intendedDist, dirY * intendedDist, 0.0f);
+        currentPosition = new Vector3(input.X, input.Y, startZ);
+
+        float speedDt = input.RunSpeed * dt;
+        float stepUp = MathF.Min(2.0f * input.Radius, speedDt);
+        float adjustedMaxZ = startZ + stepHeight + stepUp;
+        float slopeDown = input.Radius + speedDt * tan50;
+        float adjustedMinZ = adjustedMaxZ - slopeDown - stepHeight;
+
+        float endX = input.X + requestedMove.X;
+        float endY = input.Y + requestedMove.Y;
+        float halfX = input.X + requestedMove.X * 0.5f;
+        float halfY = input.Y + requestedMove.Y * 0.5f;
+        float contracted = skin * sqrt2;
+
+        boxMin = new Vector3(
+            MathF.Min(input.X - skin, MathF.Min(endX - skin, halfX - contracted)),
+            MathF.Min(input.Y - skin, MathF.Min(endY - skin, halfY - contracted)),
+            adjustedMinZ);
+        boxMax = new Vector3(
+            MathF.Max(input.X + skin, MathF.Max(endX + skin, halfX + contracted)),
+            MathF.Max(input.Y + skin, MathF.Max(endY + skin, halfY + contracted)),
+            adjustedMaxZ);
     }
 
     private static void AssertFinite(PhysicsOutput output, int frame)

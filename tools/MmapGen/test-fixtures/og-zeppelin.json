@@ -5,7 +5,7 @@
   // Endpoints and tilesAffected mirror tools/scripts/routes/og-zeppelin.json
   // entry "ClimbOrgrimmarTowerToFrezza". expectedWalkable / expectedHoles
   // values are observed from a live `OgZeppelin_RecordFixture` run on
-  // 2026-05-10 (TaurenMale on tile 0012940 post-Cycle-17e fix). The
+  // 2026-05-10 (TaurenMale on tile 0014029 post-Cycle-17e fix). The
   // recorder's auto-classifier (1.5y settle-Z threshold = walkableClimb)
   // emitted these directly; promoting them to canonical locks the route's
   // observed truth so the validator can detect future regressions.
@@ -65,6 +65,6 @@
     "endpointToleranceY": 1.0
   },
   "tileInvariants": {
-    "0012940": { "note": "OG zeppelin tile (CLI --tile 40,29). Per-tile cs/ch/tileSize override drove Layer-B 7/10 → 10/10 in Cycle-16 work." }
+    "0014029": { "note": "OG zeppelin tile (CLI --tile 29,40). Per-tile cs/ch/tileSize override drove Layer-B 7/10 → 10/10 in Cycle-16 work." }
   }
 }

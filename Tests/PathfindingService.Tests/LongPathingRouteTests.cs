@@ -31,6 +31,35 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
     private readonly Navigation _navigation = fixture.Navigation;
     private readonly ITestOutputHelper _output = output;
 
+    [Theory]
+    [InlineData(1346.7f, -4647.5f, 26.0f, 1347.2f, -4650.7f, 27.5f)]
+    [InlineData(1346.4f, -4651.7f, 28.0f, 1344.0f, -4653.3f, 29.3f)]
+    [InlineData(1340.3f, -4650.7f, 31.5f, 1341.1f, -4648.0f, 32.8f)]
+    [InlineData(1340.267f, -4650.667f, 31.509f, 1341.067f, -4648.000f, 32.759f)]
+    [InlineData(1345.6f, -4652.0f, 38.0f, 1344.0f, -4653.1f, 38.8f)]
+    [InlineData(1345.600f, -4652.000f, 38.009f, 1344.000f, -4653.067f, 38.759f)]
+    public void OrgrimmarZeppelinTowerSpiralStep_IsLocallyReachableForTaurenCapsule(
+        float startX,
+        float startY,
+        float startZ,
+        float endX,
+        float endY,
+        float endZ)
+    {
+        var start = new XYZ(startX, startY, startZ);
+        var end = new XYZ(endX, endY, endZ);
+
+        Assert.True(
+            Navigation.IsSegmentLocallyReachableForAgent(
+                Kalimdor,
+                start,
+                end,
+                TaurenMaleCapsule.Radius,
+                TaurenMaleCapsule.Height),
+            $"Orgrimmar spiral segment should be locally reachable: " +
+            $"from=({start.X:F1},{start.Y:F1},{start.Z:F1}) to=({end.X:F1},{end.Y:F1},{end.Z:F1})");
+    }
+
     public static IEnumerable<object[]> CriticalWalkableLegs()
     {
         yield return
@@ -1306,7 +1335,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
     // so seeds below that elevation are silently dropped at Detour's
     // dtCreateNavMeshData::classifyOffMeshPoint height-check
     // (DetourNavMeshBuilder.cpp:344-348). Snapped to the closest existing
-    // walkable detail verts in tile (1, 29, 40) — see tools/MmapGen/offmesh.txt
+    // walkable detail verts in tile (1, 40, 29) — see tools/MmapGen/offmesh.txt
     // and memory note project_mmapgen_offmesh_axis_swap.md.
     private static readonly Position OrgrimmarZeppelinUpperPlatformWalkable =
         new(1330.66f, -4656.03f, 96.29f);
@@ -1328,7 +1357,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
     {
         // Phase 3 proof gate (PFS-OVERHAUL-003). Two assertions:
         //
-        // PROOF A — the regenerated tile (1, 29, 40) authoritatively encodes a
+        // PROOF A — the regenerated tile (1, 40, 29) authoritatively encodes a
         //   bidirectional dtOffMeshConnection between the OG zeppelin tower's
         //   upper-platform anchor (1330.66, -4656.03, 96.29) and the
         //   gangplank-end anchor (1315.33, -4650.00, 98.54). Parsed directly
@@ -1343,7 +1372,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR")
             ?? throw new InvalidOperationException(
                 "WWOW_DATA_DIR not set; NavigationFixture should auto-discover it.");
-        var tilePath = System.IO.Path.Combine(dataDir, "mmaps", "0014029.mmtile");
+        var tilePath = System.IO.Path.Combine(dataDir, "mmaps", "0012940.mmtile");
         Assert.True(
             System.IO.File.Exists(tilePath),
             $"Expected regenerated OG-dock tile at {tilePath}. Run tools/MmapGen and "
@@ -1361,11 +1390,10 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         }
 
         // On-disk Recast frame for off-mesh pos after the WWoW divergence in
-        // TerrainBuilder.cpp::loadOffMeshConnections is (WoW_X, WoW_Z, WoW_Y) per
-        // endpoint — same swap as solidVerts and as MapBuilder::getTileBounds's
-        // bmin[0]/bmax[0] (= WoW X) and bmin[2]/bmax[2] (= WoW Y) axes.
+        // TerrainBuilder.cpp::loadOffMeshConnections is (WoW_Y, WoW_Z, WoW_X) per
+        // endpoint, matching solidVerts and the ADT tile frame.
         static (float A, float B, float C) ToOnDisk(float wowX, float wowY, float wowZ)
-            => (wowX, wowZ, wowY);
+            => (wowY, wowZ, wowX);
         var upperPlatformOnDisk = ToOnDisk(
             OrgrimmarZeppelinUpperPlatformWalkable.X,
             OrgrimmarZeppelinUpperPlatformWalkable.Y,
@@ -1392,7 +1420,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
 
         Assert.True(
             match.HasValue,
-            $"Tile (map=1, tileX=29, tileY=40) does not contain an off-mesh "
+            $"Tile (map=1, tileX=40, tileY=29) does not contain an off-mesh "
             + $"connection between OG upper-platform anchor "
             + $"({OrgrimmarZeppelinUpperPlatformWalkable.X:F2},"
             + $"{OrgrimmarZeppelinUpperPlatformWalkable.Y:F2},"
@@ -1411,7 +1439,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
 
         _output.WriteLine(
             "PROOF A: bidirectional OG↔UC zeppelin off-mesh connection present in "
-            + "tile (1, 29, 40).");
+            + "tile (1, 40, 29).");
 
         // PROOF B — runtime traversal does not invoke any managed repair phase.
         var before = NavigationPerformanceMetrics.Snapshot;
@@ -1465,7 +1493,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
     public void OrgrimmarFlightMasterToApproach_PrefersUpperPlatformOffMeshShortcut()
     {
         // PROOF C (Phase 4 navmesh-tuning gate). The Phase 3 off-mesh entries
-        // are baked into tile (1, 29, 40) (PROOF A) and the upper-platform →
+        // are baked into tile (1, 40, 29) (PROOF A) and the upper-platform →
         // gangplank-end query traverses them without managed repair (PROOF B).
         // But the live CrossroadsToUndercity_UsesFlightAndZeppelin test at
         // 11m33s showed Detour preferred a 470-waypoint sea-level walk through
@@ -1581,7 +1609,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
             + $"corridor from OG flight master to ApproachPosition to traverse at least "
             + $"one DT_POLYTYPE_OFFMESH_CONNECTION polygon. Observed polyCount="
             + $"{polyResult.TotalPolyCount} with offMeshPolyCount=0. This means the "
-            + $"off-mesh anchors baked into tile (1, 29, 40) are correct (PROOF A + B "
+            + $"off-mesh anchors baked into tile (1, 40, 29) are correct (PROOF A + B "
             + $"green) but Detour does not include them in its findPath result for this "
             + $"start/end pair — typically because the off-mesh START anchor sits in a "
             + $"polygon island unreachable from the flight-master walkable graph "
@@ -1688,11 +1716,11 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
 
         Assert.True(counts.Total >= 4,
             $"Expected at least 4 off-mesh polygons on Kalimdor (the four "
-            + $"OG↔UC zeppelin entries baked into tile (1, 29, 40)); got "
+            + $"OG↔UC zeppelin entries baked into tile (1, 40, 29)); got "
             + $"total={counts.Total}. If 0, the navmesh wasn't fully loaded "
             + $"or the tile lost its off-mesh entries.");
 
-        // The 4 OG↔UC zeppelin entries in tile (1, 29, 40) are all intra-tile
+        // The 4 OG↔UC zeppelin entries in tile (1, 40, 29) are all intra-tile
         // (side==0xff) so baseOffMeshLinks/connectExtOffMeshLinks(tile,tile,-1)
         // both fire and the runtime poly's firstLink chain is non-empty. Any
         // additional cross-tile entries (e.g., the prior H2a sea-level entry
@@ -1700,7 +1728,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         // link depending on tile load order; that is tracked separately.
         Assert.True(counts.Linked >= 4,
             $"H2d GATE: expected at least the 4 OG↔UC intra-tile off-mesh "
-            + $"polygons in tile (1, 29, 40) to be linked at runtime; got "
+            + $"polygons in tile (1, 40, 29) to be linked at runtime; got "
             + $"linked={counts.Linked} of total={counts.Total}. If linked < 4, "
             + $"the runtime baseOffMeshLinks / connectExtOffMeshLinks failed "
             + $"to snap the off-mesh anchors to a ground polygon. Check "
@@ -2133,8 +2161,8 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
             if (Navigation.IsSegmentLocallyReachableForAgent(mapId, from, to, TaurenMaleCapsule.Radius, TaurenMaleCapsule.Height))
                 continue;
 
-            return $"segment {i}->{i + 1} from=({from.X:F1},{from.Y:F1},{from.Z:F1}) " +
-                $"to=({to.X:F1},{to.Y:F1},{to.Z:F1})";
+            return $"segment {i}->{i + 1} from=({from.X:F3},{from.Y:F3},{from.Z:F3}) " +
+                $"to=({to.X:F3},{to.Y:F3},{to.Z:F3})";
         }
 
         return null;

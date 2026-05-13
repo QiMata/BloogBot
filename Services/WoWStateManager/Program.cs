@@ -11,6 +11,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
+using WoWStateManager.Activities;
 using WoWStateManager.Modes;
 using WoWStateManager.Settings;
 
@@ -366,6 +367,9 @@ namespace WoWStateManager
                     // MaNGOS server auto-launch (MySQL, realmd, mangosd)
                     services.Configure<MangosServerOptions>(hostContext.Configuration.GetSection("MangosServer"));
                     services.AddHostedService<MangosServerBootstrapper>();
+
+                    // S0.3 activity catalog (compiled, immutable, 86 rows).
+                    services.AddSingleton<IActivityCatalog, ActivityCatalog>();
 
                     services.AddSingleton<IStateManagerModeHandler>(sp =>
                     {

@@ -42,6 +42,7 @@ namespace WoWSharpClient.Movement
         private Vector3 _standingOnLocal = Vector3.Zero;
         private float _stepUpBaseZ = -200000f;
         private uint _stepUpAge = 0;
+        private uint _groundedWallState = 0;
 
         // Steering target hint only (no corridor execution here).
         // BotRunner owns waypoint/corridor progression and replans.
@@ -527,6 +528,7 @@ namespace WoWSharpClient.Movement
                 _velocity = new Vector3(_velocity.X, _velocity.Y, MathF.Min(_velocity.Z, 0f));
                 _hasPhysicsGroundContact = false;
                 _wasGroundedLastFrame = false;
+                _groundedWallState = 0;
 
                 Log.Warning(
                     "[MovementController] Airborne teleport (no walkable support in {Range:F0}y): map={MapId} pos=({X:F1},{Y:F1},{Z:F1}) teleportZ={TeleportZ:F1}",
@@ -615,6 +617,7 @@ namespace WoWSharpClient.Movement
                     _teleportZ, groundZ, drop);
             }
             _wasGroundedLastFrame = false;
+            _groundedWallState = 0;
         }
 
         private void TrySnapToNearbyTeleportSupport()
@@ -663,6 +666,7 @@ namespace WoWSharpClient.Movement
             _prevGroundNormal = new Vector3(0, 0, 1);
             _hasPhysicsGroundContact = true;
             _wasGroundedLastFrame = true;
+            _groundedWallState = 0;
         }
 
         private void DetectAuthoritativeRelocationAndPrimeGroundSnap()
@@ -792,6 +796,7 @@ namespace WoWSharpClient.Movement
 
                 StepUpBaseZ = _stepUpBaseZ,
                 StepUpAge = _stepUpAge,
+                GroundedWallState = _groundedWallState,
 
                 // Binary parity: CMovement grounded state persistence
                 WasGrounded = _wasGroundedLastFrame,
@@ -864,6 +869,7 @@ namespace WoWSharpClient.Movement
             _standingOnLocal = Vector3.Zero;
             _stepUpBaseZ = -200000f;
             _stepUpAge = 0;
+            _groundedWallState = 0;
 
             if (_player.TransportGuid == 0)
             {
@@ -1390,6 +1396,7 @@ namespace WoWSharpClient.Movement
             _pendingDepen = new Vector3(output.PendingDepenX, output.PendingDepenY, output.PendingDepenZ);
             _standingOnInstanceId = output.StandingOnInstanceId;
             _standingOnLocal = new Vector3(output.StandingOnLocalX, output.StandingOnLocalY, output.StandingOnLocalZ);
+            _groundedWallState = output.GroundedWallState;
 
             // Apply physics state flags directly — no hysteresis, no suppression
             const MovementFlags PhysicsFlags =
@@ -1972,6 +1979,7 @@ namespace WoWSharpClient.Movement
             _hasResolvedEnvironmentState = false;
             _stepUpBaseZ = -200000f;
             _stepUpAge = 0;
+            _groundedWallState = 0;
             _hasPhysicsGroundContact = false;
             // Don't assume grounded after teleport — the first physics frame will determine
             // the correct state. Setting true here prevents airborne tests from falling.

@@ -1,0 +1,43 @@
+{
+  "ActivityId": "boss.azuregos",
+  "Loadout": {
+    "TargetLevel": 60,
+    "RidingSkill": 150,
+    "MountSpellId": 18793,
+    "SpellIdsToLearn": [25286, 25289],
+    "Skills": [
+      { "SkillId": 172, "Value": 300, "Max": 300 },
+      { "SkillId": 433, "Value": 300, "Max": 300 }
+    ],
+    "EquipItems": [
+      { "ItemId": 13446, "InventorySlot": 0 }
+    ],
+    "SupplementalItemIds": [9030, 13446],
+    "ElixirItemIds": [13452, 20007],
+    "FactionReps": [],
+    "CompletedQuestIds": [],
+    "TalentTemplate": "ProtWarriorPreRaid"
+  },
+  "LockoutSkip": false,
+  "LevelOverride": null,
+  "GearOverrides": [13446, 9030],
+  "ReputationOverrides": {},
+  "RoleOverrides": {
+    "Tanks": 3,
+    "Healers": 8,
+    "Dps": 29,
+    "Support": 0
+  },
+  "StagingLocation": "Azuregos (Azshara)",
+  "HumanJoin": {
+    "HumanRole": "Leader",
+    "BotRaidLeader": true,
+    "GearHuman": true,
+    "HumanIdleTimeoutSeconds": 900
+  },
+  "LootPolicy": "MasterLoot",
+  "TearDownPolicy": {
+    "Action": "DeleteCharacters",
+    "HoldTtlSeconds": null
+  }
+}

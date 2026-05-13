@@ -1,0 +1,38 @@
+{
+  "ActivityId": "econ.vendor-loop",
+  "Loadout": {
+    "TargetLevel": 60,
+    "RidingSkill": 150,
+    "MountSpellId": 18793,
+    "SpellIdsToLearn": [],
+    "Skills": [],
+    "EquipItems": [],
+    "SupplementalItemIds": [6948],
+    "ElixirItemIds": [],
+    "FactionReps": [],
+    "CompletedQuestIds": [],
+    "TalentTemplate": null
+  },
+  "LockoutSkip": false,
+  "LevelOverride": null,
+  "GearOverrides": [6948],
+  "ReputationOverrides": {},
+  "RoleOverrides": {
+    "Tanks": 0,
+    "Healers": 0,
+    "Dps": 1,
+    "Support": 0
+  },
+  "StagingLocation": "Vendor + repair + bank + mail loop",
+  "HumanJoin": {
+    "HumanRole": "Observer",
+    "BotRaidLeader": false,
+    "GearHuman": false,
+    "HumanIdleTimeoutSeconds": 1800
+  },
+  "LootPolicy": "FreeForAll",
+  "TearDownPolicy": {
+    "Action": "HoldForReuse",
+    "HoldTtlSeconds": 7200
+  }
+}

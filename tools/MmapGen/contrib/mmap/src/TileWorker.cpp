@@ -1,7 +1,393 @@
 #include "TileWorker.h"
 #include "MapBuilder.h"
 #include "Maps/GridMapDefines.h"
+#include <algorithm>
+#include <cfloat>
 #include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_set>
+#include <unordered_map>
+#include <vector>
+
+using namespace VMAP;
+
+struct GameObjectModelInfo
+{
+    std::string modelName;
+    float minX;
+    float minY;
+    float minZ;
+    float maxX;
+    float maxY;
+    float maxZ;
+};
+
+struct GameObjectSpawn
+{
+    uint32 mapId;
+    uint32 displayId;
+    float x;
+    float y;
+    float z;
+    float orientation;
+    float scale;
+};
+
+struct GameObjectBakeStats
+{
+    int candidateSpawns = 0;
+    int bakedSpawns = 0;
+    int missingModels = 0;
+    int addedVertices = 0;
+    int addedTriangles = 0;
+};
+
+static std::unordered_map<uint32, GameObjectModelInfo> s_gameObjectModels;
+static std::unordered_map<uint32, std::vector<GameObjectSpawn>> s_gameObjectSpawnsByMap;
+static std::unordered_map<uint32, std::shared_ptr<VMAP::WorldModel>> s_gameObjectWorldModelCache;
+static std::unordered_set<uint32> s_gameObjectGeometryBackedDisplayIds;
+static std::once_flag s_gameObjectLoadOnce;
+static std::mutex s_gameObjectModelCacheMutex;
+
+static float JsonFloatOrDefault(const nlohmann::json& obj, const char* name, float defaultValue)
+{
+    auto it = obj.find(name);
+    if (it == obj.end() || !it->is_number())
+        return defaultValue;
+
+    return it->get<float>();
+}
+
+static uint32 JsonUIntOrDefault(const nlohmann::json& obj, const char* name, uint32 defaultValue)
+{
+    auto it = obj.find(name);
+    if (it == obj.end() || !it->is_number_unsigned())
+        return defaultValue;
+
+    return it->get<uint32>();
+}
+
+static void LoadGameObjectModelBounds()
+{
+    std::ifstream file("vmaps/temp_gameobject_models", std::ios::binary);
+    if (!file)
+        return;
+
+    while (file)
+    {
+        uint32 displayId = 0;
+        uint32 pathLength = 0;
+        file.read(reinterpret_cast<char*>(&displayId), sizeof(displayId));
+        file.read(reinterpret_cast<char*>(&pathLength), sizeof(pathLength));
+        if (!file || pathLength > 1024)
+            break;
+
+        std::string modelName(pathLength, '\0');
+        if (pathLength > 0)
+            file.read(&modelName[0], pathLength);
+
+        GameObjectModelInfo model{};
+        model.modelName = modelName;
+        file.read(reinterpret_cast<char*>(&model.minX), sizeof(float));
+        file.read(reinterpret_cast<char*>(&model.minY), sizeof(float));
+        file.read(reinterpret_cast<char*>(&model.minZ), sizeof(float));
+        file.read(reinterpret_cast<char*>(&model.maxX), sizeof(float));
+        file.read(reinterpret_cast<char*>(&model.maxY), sizeof(float));
+        file.read(reinterpret_cast<char*>(&model.maxZ), sizeof(float));
+        if (!file)
+            break;
+
+        s_gameObjectModels[displayId] = model;
+    }
+
+    printf("  Loaded %zu gameobject model mappings from temp_gameobject_models\n", s_gameObjectModels.size());
+}
+
+static void LoadGameObjectSpawns()
+{
+    std::ifstream file("gameobject_spawns.json");
+    if (!file)
+        return;
+
+    nlohmann::json root;
+    file >> root;
+
+    uint32 total = 0;
+    for (auto it = root.begin(); it != root.end(); ++it)
+    {
+        const uint32 mapId = static_cast<uint32>(std::stoul(it.key()));
+        if (!it->is_array())
+            continue;
+
+        auto& spawns = s_gameObjectSpawnsByMap[mapId];
+        for (const auto& item : *it)
+        {
+            GameObjectSpawn spawn{};
+            spawn.mapId = mapId;
+            spawn.displayId = JsonUIntOrDefault(item, "displayId", 0);
+            spawn.x = JsonFloatOrDefault(item, "x", 0.0f);
+            spawn.y = JsonFloatOrDefault(item, "y", 0.0f);
+            spawn.z = JsonFloatOrDefault(item, "z", 0.0f);
+            spawn.orientation = JsonFloatOrDefault(item, "o", 0.0f);
+            spawn.scale = JsonFloatOrDefault(item, "s", 1.0f);
+            spawns.push_back(spawn);
+            ++total;
+        }
+    }
+
+    printf("  Loaded %u gameobject spawns across %zu maps from gameobject_spawns.json\n", total, s_gameObjectSpawnsByMap.size());
+}
+
+static void EnsureGameObjectDataLoaded()
+{
+    std::call_once(s_gameObjectLoadOnce, []()
+    {
+        LoadGameObjectModelBounds();
+        LoadGameObjectSpawns();
+    });
+}
+
+static bool IntersectsRecast2D(float minX, float maxX, float minZ, float maxZ, const rcConfig& config)
+{
+    return maxX >= config.bmin[0]
+        && minX <= config.bmax[0]
+        && maxZ >= config.bmin[2]
+        && minZ <= config.bmax[2];
+}
+
+static void ComputeRotatedAabb(const GameObjectSpawn& spawn, const GameObjectModelInfo& model,
+                               float& minX, float& maxX, float& minY, float& maxY, float& minZ, float& maxZ)
+{
+    const float scale = spawn.scale <= 0.0f ? 1.0f : spawn.scale;
+    const float c = std::cos(spawn.orientation);
+    const float s = std::sin(spawn.orientation);
+
+    minX = FLT_MAX;
+    minY = FLT_MAX;
+    maxX = -FLT_MAX;
+    maxY = -FLT_MAX;
+
+    const float xs[2] = { model.minX * scale, model.maxX * scale };
+    const float ys[2] = { model.minY * scale, model.maxY * scale };
+    for (float lx : xs)
+    {
+        for (float ly : ys)
+        {
+            const float wx = spawn.x + (lx * c - ly * s);
+            const float wy = spawn.y + (lx * s + ly * c);
+            minX = std::min(minX, wx);
+            maxX = std::max(maxX, wx);
+            minY = std::min(minY, wy);
+            maxY = std::max(maxY, wy);
+        }
+    }
+
+    minZ = spawn.z + model.minZ * scale;
+    maxZ = spawn.z + model.maxZ * scale;
+}
+
+static bool HasSuffix(const std::string& value, const std::string& suffix)
+{
+    return value.size() >= suffix.size()
+        && value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+static std::shared_ptr<WorldModel> LoadGameObjectWorldModel(uint32 displayId, const GameObjectModelInfo& model)
+{
+    std::lock_guard<std::mutex> lock(s_gameObjectModelCacheMutex);
+
+    auto cached = s_gameObjectWorldModelCache.find(displayId);
+    if (cached != s_gameObjectWorldModelCache.end())
+        return cached->second;
+
+    std::vector<std::string> candidates;
+    if (!HasSuffix(model.modelName, ".vmo"))
+        candidates.push_back("vmaps/" + model.modelName + ".vmo");
+    candidates.push_back("vmaps/" + model.modelName);
+
+    for (const std::string& candidate : candidates)
+    {
+        std::shared_ptr<WorldModel> worldModel(new WorldModel());
+        if (worldModel->readFile(candidate))
+        {
+            s_gameObjectWorldModelCache[displayId] = worldModel;
+            return worldModel;
+        }
+    }
+
+    s_gameObjectWorldModelCache[displayId] = nullptr;
+    return nullptr;
+}
+
+static bool HasBakedGameObjectGeometry(uint32 displayId)
+{
+    std::lock_guard<std::mutex> lock(s_gameObjectModelCacheMutex);
+    return s_gameObjectGeometryBackedDisplayIds.find(displayId) != s_gameObjectGeometryBackedDisplayIds.end();
+}
+
+static void MarkBakedGameObjectGeometry(uint32 displayId)
+{
+    std::lock_guard<std::mutex> lock(s_gameObjectModelCacheMutex);
+    s_gameObjectGeometryBackedDisplayIds.insert(displayId);
+}
+
+static bool IntersectsTileAabb(
+    uint32 tileX,
+    uint32 tileY,
+    float minX,
+    float maxX,
+    float minY,
+    float maxY)
+{
+    const float tileMaxX = (32 - int(tileX)) * MMAP::GRID_SIZE;
+    const float tileMinX = tileMaxX - MMAP::GRID_SIZE;
+    const float tileMaxY = (32 - int(tileY)) * MMAP::GRID_SIZE;
+    const float tileMinY = tileMaxY - MMAP::GRID_SIZE;
+
+    return maxX >= tileMinX
+        && minX <= tileMaxX
+        && maxY >= tileMinY
+        && minY <= tileMaxY;
+}
+
+static void AppendGameObjectModelGeometry(
+    const GameObjectSpawn& spawn,
+    const GameObjectModelInfo& modelInfo,
+    WorldModel& worldModel,
+    MMAP::MeshData& meshData,
+    GameObjectBakeStats& stats)
+{
+    std::vector<GroupModel> groupModels;
+    worldModel.getGroupModels(groupModels);
+
+    const bool isM2 = modelInfo.modelName.find(".m2") != modelInfo.modelName.npos
+        || modelInfo.modelName.find(".M2") != modelInfo.modelName.npos;
+    const float scale = spawn.scale <= 0.0f ? 1.0f : spawn.scale;
+    const float cosO = std::cos(spawn.orientation);
+    const float sinO = std::sin(spawn.orientation);
+
+    for (std::vector<GroupModel>::iterator it = groupModels.begin(); it != groupModels.end(); ++it)
+    {
+        std::vector<G3D::Vector3> tempVertices;
+        std::vector<MeshTriangle> tempTriangles;
+        WmoLiquid* liquid = nullptr;
+
+        (*it).getMeshData(tempVertices, tempTriangles, liquid);
+        if (tempVertices.empty() || tempTriangles.empty())
+            continue;
+
+        const int offset = meshData.solidVerts.size() / 3;
+        for (std::vector<G3D::Vector3>::const_iterator vertex = tempVertices.begin(); vertex != tempVertices.end(); ++vertex)
+        {
+            const float sx = vertex->x * scale;
+            const float sy = vertex->y * scale;
+            const float sz = vertex->z * scale;
+
+            const float wx = spawn.x + (sx * cosO - sy * sinO);
+            const float wy = spawn.y + (sx * sinO + sy * cosO);
+            const float wz = spawn.z + sz;
+
+            meshData.solidVerts.append(wx);
+            meshData.solidVerts.append(wz);
+            meshData.solidVerts.append(wy);
+        }
+
+        MMAP::TerrainBuilder::copyIndices(tempTriangles, meshData.solidTris, offset, isM2);
+
+        stats.addedVertices += int(tempVertices.size());
+        stats.addedTriangles += int(tempTriangles.size());
+    }
+}
+
+static GameObjectBakeStats BakeGameObjectModelsIntoMesh(uint32 mapId, uint32 tileX, uint32 tileY, MMAP::MeshData& meshData)
+{
+    EnsureGameObjectDataLoaded();
+
+    GameObjectBakeStats stats;
+    auto mapIt = s_gameObjectSpawnsByMap.find(mapId);
+    if (mapIt == s_gameObjectSpawnsByMap.end())
+        return stats;
+
+    const int firstGameObjectTriangle = meshData.solidTris.size() / 3;
+
+    for (const GameObjectSpawn& spawn : mapIt->second)
+    {
+        auto modelIt = s_gameObjectModels.find(spawn.displayId);
+        if (modelIt == s_gameObjectModels.end())
+            continue;
+
+        float minX, maxX, minY, maxY, minZ, maxZ;
+        ComputeRotatedAabb(spawn, modelIt->second, minX, maxX, minY, maxY, minZ, maxZ);
+        if (!IntersectsTileAabb(tileX, tileY, minX, maxX, minY, maxY))
+            continue;
+
+        ++stats.candidateSpawns;
+        std::shared_ptr<WorldModel> worldModel = LoadGameObjectWorldModel(spawn.displayId, modelIt->second);
+        if (!worldModel)
+        {
+            ++stats.missingModels;
+            continue;
+        }
+
+        const int trianglesBefore = stats.addedTriangles;
+        AppendGameObjectModelGeometry(spawn, modelIt->second, *worldModel, meshData, stats);
+        if (stats.addedTriangles > trianglesBefore)
+        {
+            ++stats.bakedSpawns;
+            MarkBakedGameObjectGeometry(spawn.displayId);
+        }
+    }
+
+    const int lastGameObjectTriangle = meshData.solidTris.size() / 3;
+    meshData.AddModelTriangleRange(firstGameObjectTriangle, lastGameObjectTriangle);
+    return stats;
+}
+
+static int MarkGameObjectAreas(rcContext* context, uint32 mapId, uint32 tileX, uint32 tileY,
+                               const rcConfig& config, rcCompactHeightfield& compactHeightfield)
+{
+    EnsureGameObjectDataLoaded();
+
+    auto mapIt = s_gameObjectSpawnsByMap.find(mapId);
+    if (mapIt == s_gameObjectSpawnsByMap.end())
+        return 0;
+
+    int marked = 0;
+    for (const GameObjectSpawn& spawn : mapIt->second)
+    {
+        auto boundsIt = s_gameObjectModels.find(spawn.displayId);
+        if (boundsIt == s_gameObjectModels.end())
+            continue;
+
+        if (HasBakedGameObjectGeometry(spawn.displayId))
+            continue;
+
+        float minX, maxX, minY, maxY, minZ, maxZ;
+        ComputeRotatedAabb(spawn, boundsIt->second, minX, maxX, minY, maxY, minZ, maxZ);
+
+        // Recast/Detour stores WoW world positions as (Y, Z, X). Gameobject
+        // spawn data is exported in server/world coordinates (X, Y, Z), so
+        // the horizontal AABB must be swizzled before marking compact spans.
+        const float recastMinX = minY;
+        const float recastMaxX = maxY;
+        const float recastMinZ = minX;
+        const float recastMaxZ = maxX;
+        if (!IntersectsRecast2D(recastMinX, recastMaxX, recastMinZ, recastMaxZ, config))
+            continue;
+
+        const float padding = 0.05f;
+        float recastMin[3] = { recastMinX - padding, minZ - padding, recastMinZ - padding };
+        float recastMax[3] = { recastMaxX + padding, maxZ + padding, recastMaxZ + padding };
+        rcMarkBoxArea(context, recastMin, recastMax, RC_NULL_AREA, compactHeightfield);
+        ++marked;
+    }
+
+    return marked;
+}
 
 // [WWoW-DIVERGENCE] 2026-05-07: --debug-heightfield X,Y diagnostic helpers.
 // Dump per-stage span flags for one heightfield column. Both helpers are
@@ -46,6 +432,202 @@ inline static void dumpCompactHeightfieldColumn(const char* stage, int cx, int c
         printf("[DBG-HF] stage=%-16s col=(%d,%d) span#=%u bot=%u top=%u area=%u (worldY=%.3f..%.3f)\n",
                stage, cx, cy, (unsigned)(i - cell.index), (unsigned)s.y, (unsigned)(s.y + s.h), (unsigned)area, worldBot, worldTop);
     }
+}
+
+struct DebugStageCrop
+{
+    bool enabled = false;
+    float minRecastX = 0.0f;
+    float maxRecastX = 0.0f;
+    float minRecastZ = 0.0f;
+    float maxRecastZ = 0.0f;
+    float minHeight = 0.0f;
+    float maxHeight = 0.0f;
+};
+
+static DebugStageCrop ReadDebugStageCrop(const json& jsonTileConfig)
+{
+    DebugStageCrop crop;
+    auto it = jsonTileConfig.find("debugStageCropWow");
+    if (it == jsonTileConfig.end() || !it->is_array() || it->size() != 6)
+        return crop;
+
+    const float minWowX = std::min((*it)[0].get<float>(), (*it)[3].get<float>());
+    const float maxWowX = std::max((*it)[0].get<float>(), (*it)[3].get<float>());
+    const float minWowY = std::min((*it)[1].get<float>(), (*it)[4].get<float>());
+    const float maxWowY = std::max((*it)[1].get<float>(), (*it)[4].get<float>());
+    const float minWowZ = std::min((*it)[2].get<float>(), (*it)[5].get<float>());
+    const float maxWowZ = std::max((*it)[2].get<float>(), (*it)[5].get<float>());
+
+    // Generator/Recast horizontal coordinates are stored as (WoW Y, WoW X).
+    crop.minRecastX = minWowY;
+    crop.maxRecastX = maxWowY;
+    crop.minRecastZ = minWowX;
+    crop.maxRecastZ = maxWowX;
+    crop.minHeight = minWowZ;
+    crop.maxHeight = maxWowZ;
+    crop.enabled = true;
+    return crop;
+}
+
+static bool IntersectsDebugCrop2D(float minX, float maxX, float minZ, float maxZ, const DebugStageCrop& crop)
+{
+    if (!crop.enabled)
+        return false;
+
+    return maxX >= crop.minRecastX
+        && minX <= crop.maxRecastX
+        && maxZ >= crop.minRecastZ
+        && minZ <= crop.maxRecastZ;
+}
+
+static bool IntersectsDebugCropHeight(float minHeight, float maxHeight, const DebugStageCrop& crop)
+{
+    return maxHeight >= crop.minHeight && minHeight <= crop.maxHeight;
+}
+
+static FILE* OpenDebugCsv(const char* fileName, const char* header)
+{
+    bool exists = false;
+    {
+        std::ifstream probe(fileName, std::ios::binary);
+        exists = probe.good();
+    }
+
+    FILE* file = fopen(fileName, exists ? "ab" : "wb");
+    if (file && !exists)
+        fprintf(file, "%s\n", header);
+    return file;
+}
+
+static void ResetDebugStageFiles(uint32 mapID, uint32 tileX, uint32 tileY)
+{
+    char fileName[256];
+    sprintf(fileName, "meshes/map%03u%02u%02u_stage_heightfield_spans.csv", mapID, tileY, tileX);
+    std::remove(fileName);
+    sprintf(fileName, "meshes/map%03u%02u%02u_stage_compact_spans.csv", mapID, tileY, tileX);
+    std::remove(fileName);
+    sprintf(fileName, "meshes/map%03u%02u%02u_stage_contours.csv", mapID, tileY, tileX);
+    std::remove(fileName);
+}
+
+static void WriteHeightfieldStageCsv(const char* stage, uint32 mapID, uint32 tileX, uint32 tileY,
+                                     int subX, int subY, const DebugStageCrop& crop, const rcHeightfield& hf)
+{
+    if (!crop.enabled)
+        return;
+
+    char fileName[256];
+    sprintf(fileName, "meshes/map%03u%02u%02u_stage_heightfield_spans.csv", mapID, tileY, tileX);
+    FILE* file = OpenDebugCsv(fileName, "stage,map,tileX,tileY,subX,subY,cellX,cellY,spanIndex,recastX,recastZ,minHeight,maxHeight,area");
+    if (!file)
+        return;
+
+    for (int y = 0; y < hf.height; ++y)
+    {
+        const float cellMinZ = hf.bmin[2] + y * hf.cs;
+        const float cellMaxZ = cellMinZ + hf.cs;
+        for (int x = 0; x < hf.width; ++x)
+        {
+            const float cellMinX = hf.bmin[0] + x * hf.cs;
+            const float cellMaxX = cellMinX + hf.cs;
+            if (!IntersectsDebugCrop2D(cellMinX, cellMaxX, cellMinZ, cellMaxZ, crop))
+                continue;
+
+            int spanIndex = 0;
+            for (rcSpan* span = hf.spans[x + y * hf.width]; span; span = span->next, ++spanIndex)
+            {
+                const float minHeight = hf.bmin[1] + (float)span->smin * hf.ch;
+                const float maxHeight = hf.bmin[1] + (float)span->smax * hf.ch;
+                if (!IntersectsDebugCropHeight(minHeight, maxHeight, crop))
+                    continue;
+
+                fprintf(file, "%s,%u,%u,%u,%d,%d,%d,%d,%d,%f,%f,%f,%f,%u\n",
+                        stage, mapID, tileX, tileY, subX, subY, x, y, spanIndex,
+                        cellMinX + hf.cs * 0.5f, cellMinZ + hf.cs * 0.5f,
+                        minHeight, maxHeight, (unsigned)span->area);
+            }
+        }
+    }
+
+    fclose(file);
+}
+
+static void WriteCompactHeightfieldStageCsv(const char* stage, uint32 mapID, uint32 tileX, uint32 tileY,
+                                            int subX, int subY, const DebugStageCrop& crop, const rcCompactHeightfield& chf)
+{
+    if (!crop.enabled)
+        return;
+
+    char fileName[256];
+    sprintf(fileName, "meshes/map%03u%02u%02u_stage_compact_spans.csv", mapID, tileY, tileX);
+    FILE* file = OpenDebugCsv(fileName, "stage,map,tileX,tileY,subX,subY,cellX,cellY,spanIndex,recastX,recastZ,minHeight,maxHeight,area,connections");
+    if (!file)
+        return;
+
+    for (int y = 0; y < chf.height; ++y)
+    {
+        const float cellMinZ = chf.bmin[2] + y * chf.cs;
+        const float cellMaxZ = cellMinZ + chf.cs;
+        for (int x = 0; x < chf.width; ++x)
+        {
+            const float cellMinX = chf.bmin[0] + x * chf.cs;
+            const float cellMaxX = cellMinX + chf.cs;
+            if (!IntersectsDebugCrop2D(cellMinX, cellMaxX, cellMinZ, cellMaxZ, crop))
+                continue;
+
+            const rcCompactCell& cell = chf.cells[x + y * chf.width];
+            for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+            {
+                const rcCompactSpan& span = chf.spans[i];
+                const float minHeight = chf.bmin[1] + (float)span.y * chf.ch;
+                const float maxHeight = chf.bmin[1] + (float)(span.y + span.h) * chf.ch;
+                if (!IntersectsDebugCropHeight(minHeight, maxHeight, crop))
+                    continue;
+
+                fprintf(file, "%s,%u,%u,%u,%d,%d,%d,%d,%u,%f,%f,%f,%f,%u,%u\n",
+                        stage, mapID, tileX, tileY, subX, subY, x, y, (unsigned)(i - cell.index),
+                        cellMinX + chf.cs * 0.5f, cellMinZ + chf.cs * 0.5f,
+                        minHeight, maxHeight, (unsigned)chf.areas[i], (unsigned)span.con);
+            }
+        }
+    }
+
+    fclose(file);
+}
+
+static void WriteContourStageCsv(uint32 mapID, uint32 tileX, uint32 tileY, int subX, int subY,
+                                 const DebugStageCrop& crop, const rcContourSet& contours)
+{
+    if (!crop.enabled)
+        return;
+
+    char fileName[256];
+    sprintf(fileName, "meshes/map%03u%02u%02u_stage_contours.csv", mapID, tileY, tileX);
+    FILE* file = OpenDebugCsv(fileName, "map,tileX,tileY,subX,subY,contourIndex,vertexIndex,recastX,recastY,recastZ,area,region");
+    if (!file)
+        return;
+
+    for (int i = 0; i < contours.nconts; ++i)
+    {
+        const rcContour& contour = contours.conts[i];
+        for (int v = 0; v < contour.nverts; ++v)
+        {
+            const int* cv = &contour.verts[v * 4];
+            const float recastX = contours.bmin[0] + cv[0] * contours.cs;
+            const float recastY = contours.bmin[1] + cv[1] * contours.ch;
+            const float recastZ = contours.bmin[2] + cv[2] * contours.cs;
+            if (!IntersectsDebugCrop2D(recastX, recastX, recastZ, recastZ, crop)
+                || !IntersectsDebugCropHeight(recastY, recastY, crop))
+                continue;
+
+            fprintf(file, "%u,%u,%u,%d,%d,%d,%d,%f,%f,%f,%u,%u\n",
+                    mapID, tileX, tileY, subX, subY, i, v,
+                    recastX, recastY, recastZ, (unsigned)contour.area, (unsigned)contour.reg);
+        }
+    }
+
+    fclose(file);
 }
 
 inline static void calcTriNormal(const float* v0, const float* v1, const float* v2, float* norm)
@@ -286,7 +868,11 @@ static void from_json(const json& j, rcConfig& config)
     config.maxSimplificationError = j["maxSimplificationError"].get<float>();
     config.minRegionArea          = rcSqr(j["minRegionArea"].get<int>());
     config.mergeRegionArea        = rcSqr(j["mergeRegionArea"].get<int>());
-    config.maxVertsPerPoly        = DT_VERTS_PER_POLYGON;
+    config.maxVertsPerPoly        = j.value("maxVertsPerPoly", DT_VERTS_PER_POLYGON);
+    if (config.maxVertsPerPoly < 3)
+        config.maxVertsPerPoly = 3;
+    if (config.maxVertsPerPoly > DT_VERTS_PER_POLYGON)
+        config.maxVertsPerPoly = DT_VERTS_PER_POLYGON;
     config.detailSampleDist       = j["detailSampleDist"].get<float>();
     config.detailSampleMaxError   = j["detailSampleMaxError"].get<float>();
 }
@@ -472,6 +1058,17 @@ namespace MMAP
         TerrainBuilder::cleanVertices(meshData.liquidVerts, meshData.liquidTris);
 
         m_terrainBuilder->loadVMap(mapID, tileX, tileY, meshData); // get model data
+        GameObjectBakeStats gameObjectBakeStats = BakeGameObjectModelsIntoMesh(mapID, tileX, tileY, meshData);
+        if (gameObjectBakeStats.candidateSpawns || gameObjectBakeStats.bakedSpawns || gameObjectBakeStats.missingModels)
+        {
+            printf("[GO] map=%u tile=%u,%u: baked %d gameobject model(s), triangles=%d vertices=%d candidates=%d missing=%d\n",
+                   mapID, tileX, tileY,
+                   gameObjectBakeStats.bakedSpawns,
+                   gameObjectBakeStats.addedTriangles,
+                   gameObjectBakeStats.addedVertices,
+                   gameObjectBakeStats.candidateSpawns,
+                   gameObjectBakeStats.missingModels);
+        }
         //TerrainBuilder::cleanVertices(meshData.solidVerts, meshData.solidTris);
 
         // if there is no data, give up now
@@ -520,6 +1117,9 @@ namespace MMAP
         rcConfig config;
         memset(&config, 0, sizeof(rcConfig));
         json jsonTileConfig = getTileConfig(mapID, tileX, tileY);
+        DebugStageCrop debugStageCrop = ReadDebugStageCrop(jsonTileConfig);
+        if (m_debug && debugStageCrop.enabled)
+            ResetDebugStageFiles(mapID, tileX, tileY);
         int const quickFromConfig = jsonTileConfig["quick"].get<int>();
         if (quickFromConfig >= 0)
             m_quick = quickFromConfig == 0 ? false : true;
@@ -614,6 +1214,7 @@ namespace MMAP
 
         int inWaterGround = config.walkableHeight;
         int stepForGroundInheriteWater = (int)ceilf(30.0f / config.ch);
+        int gameObjectMarks = 0;
 
         // allocate subregions : tiles
         Tile* tiles = new Tile[TILES_PER_MAP * TILES_PER_MAP];
@@ -653,15 +1254,15 @@ namespace MMAP
                 }
 
                 // [WWoW-DIVERGENCE] 2026-05-07: --debug-heightfield diagnostic.
-                // Convert WoW (X, Y) to a recast cell index for THIS sub-tile. The
-                // recast frame swaps axes: recast.x = WoW.y, recast.z = WoW.x. Only
-                // sub-tiles whose heightfield contains the requested column will emit
-                // any per-stage dumps below; out-of-range columns become no-ops.
+                // Convert WoW (X, Y) to a recast cell index for THIS sub-tile.
+                // MapBuilder::getTileBounds stores WoW X in bmin[0]/bmax[0] and
+                // WoW Y in bmin[2]/bmax[2]. Only sub-tiles whose heightfield
+                // contains the requested column emit per-stage dumps below.
                 int dbgCellX = -1, dbgCellY = -1;
                 if (m_debugWoWSet)
                 {
-                    const float recastX = m_debugWoWY;
-                    const float recastZ = m_debugWoWX;
+                    const float recastX = m_debugWoWX;
+                    const float recastZ = m_debugWoWY;
                     dbgCellX = (int)std::floor((recastX - tile.solid->bmin[0]) / tileCfg.cs);
                     dbgCellY = (int)std::floor((recastZ - tile.solid->bmin[2]) / tileCfg.cs);
                     const bool inRange = (dbgCellX >= 0 && dbgCellX < tile.solid->width &&
@@ -756,6 +1357,8 @@ namespace MMAP
                 SortAndRasterizeTriangles(m_rcContext, tVerts, tVertCount, tTris, areas, tTriCount, *tile.solid, 0);
                 delete[] areas;
                 dumpHeightfieldColumn("rasterize", dbgCellX, dbgCellY, *tile.solid);
+                if (m_debug)
+                    WriteHeightfieldStageCsv("rasterize", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
 
                 /// 5. Don't walk over too high Obstacles.
                 // We can pass higher terrain obstacles, or model obstacles.
@@ -764,6 +1367,8 @@ namespace MMAP
                 // 5.1 walkableClimbTerrain >= walkableClimbModelTransition so do it first
                 rcFilterLowHangingWalkableObstacles(m_rcContext, walkableClimbTerrain, *tile.solid);
                 dumpHeightfieldColumn("filterLowHanging", dbgCellX, dbgCellY, *tile.solid);
+                if (m_debug)
+                    WriteHeightfieldStageCsv("filterLowHanging", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
                 // 5.2 maps <-> vmaps transition
                 // PFS-OVERHAUL-006 / Phase 6: pull per-tile ledge-filter knobs from JSON.
                 // Defaults (true / false) preserve legacy on tiles that don't opt in.
@@ -773,6 +1378,8 @@ namespace MMAP
                                  treatOobNeighborAsCliff, mixedAreaUsesTerrainClimb);
                 //rcFilterLedgeSpans(m_rcContext, tileCfg.walkableHeight, walkableClimbTerrain, *tile.solid); // Default recast code
                 dumpHeightfieldColumn("filterLedge", dbgCellX, dbgCellY, *tile.solid);
+                if (m_debug)
+                    WriteHeightfieldStageCsv("filterLedge", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
 
                 /// 6. Now we are happy because we have the correct flags.
                 // Set's cleanup tmp flags used by the generator, so we don't have a too
@@ -780,14 +1387,20 @@ namespace MMAP
                 // (We dont care if a poly comes from Terrain or Model at runtime)
                 filterRemoveUselessAreas(*tile.solid);
                 dumpHeightfieldColumn("removeUseless", dbgCellX, dbgCellY, *tile.solid);
+                if (m_debug)
+                    WriteHeightfieldStageCsv("removeUseless", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
                 rcFilterWalkableLowHeightSpans(m_rcContext, tileCfg.walkableHeight, *tile.solid);
                 dumpHeightfieldColumn("filterLowHeight", dbgCellX, dbgCellY, *tile.solid);
+                if (m_debug)
+                    WriteHeightfieldStageCsv("filterLowHeight", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
 
                 /// 7. Let's process water now.
                 // When water is not deep, we have a transition area (AREA_WATER_TRANSITION)
                 // Both ground and water creatures can be there.
                 // Otherwise, the terrain in deeper waters is considered as actual swim/water terrain.
                 filterWalkableLowHeightSpansWith(*liquidsTile.solid, *tile.solid, inWaterGround, stepForGroundInheriteWater);
+                if (m_debug)
+                    WriteHeightfieldStageCsv("waterInheritance", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
 
                 /// 8. Now let's move on with the last and more generic steps of navmesh generation.
                 // compact heightfield spans
@@ -798,6 +1411,12 @@ namespace MMAP
                     continue;
                 }
                 dumpCompactHeightfieldColumn("buildCHF", dbgCellX, dbgCellY, *tile.chf);
+                if (m_debug)
+                    WriteCompactHeightfieldStageCsv("buildCHF", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
+
+                gameObjectMarks += MarkGameObjectAreas(m_rcContext, mapID, tileX, tileY, tileCfg, *tile.chf);
+                if (m_debug)
+                    WriteCompactHeightfieldStageCsv("markGameObjects", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
 
                 // build polymesh intermediates
                 if (!rcErodeWalkableArea(m_rcContext, config.walkableRadius, *tile.chf))
@@ -806,12 +1425,16 @@ namespace MMAP
                     continue;
                 }
                 dumpCompactHeightfieldColumn("erode", dbgCellX, dbgCellY, *tile.chf);
+                if (m_debug)
+                    WriteCompactHeightfieldStageCsv("erode", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
 
                 if (!rcMedianFilterWalkableArea(m_rcContext, *tile.chf))
                 {
                     printf("%s Failed filtering area!                             \n", tileString);
                     continue;
                 }
+                if (m_debug)
+                    WriteCompactHeightfieldStageCsv("median", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
 
                 if (!rcBuildDistanceField(m_rcContext, *tile.chf))
                 {
@@ -824,6 +1447,8 @@ namespace MMAP
                     printf("%s Failed building regions!                           \n", tileString);
                     continue;
                 }
+                if (m_debug)
+                    WriteCompactHeightfieldStageCsv("regions", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
 
                 tile.cset = rcAllocContourSet();
                 if (!tile.cset || !rcBuildContours(m_rcContext, *tile.chf, tileCfg.maxSimplificationError, tileCfg.maxEdgeLen, *tile.cset))
@@ -831,6 +1456,8 @@ namespace MMAP
                     printf("%s Failed building contours!                          \n", tileString);
                     continue;
                 }
+                if (m_debug)
+                    WriteContourStageCsv(mapID, tileX, tileY, x, y, debugStageCrop, *tile.cset);
 
                 // build polymesh
                 tile.pmesh = rcAllocPolyMesh();
@@ -858,6 +1485,9 @@ namespace MMAP
                 tile.cset = nullptr;
             }
         }
+
+        if (gameObjectMarks > 0)
+            printf("[GO] map=%u tile=%u,%u: marked %d fallback gameobject span box(es)\n", mapID, tileX, tileY, gameObjectMarks);
 
         // merge per tile poly and detail meshes
         rcPolyMesh** pmmerge = new rcPolyMesh * [TILES_PER_MAP * TILES_PER_MAP];
@@ -1069,7 +1699,7 @@ namespace MMAP
                 duDumpPolyMeshDetailToObj(*iv.polyMeshDetail, mapID, tileY, tileX);
                 duDumpPolyMeshToObj(*iv.polyMesh, mapID, tileY, tileX);
 
-                //iv.writeIV(mapID, tileX, tileY);
+                iv.writeIV(mapID, tileX, tileY);
                 // Write navmesh data
                 char fname[256];
                 sprintf(fname, "meshes/map%03u%02u%02u.nav", mapID, tileY, tileX);
@@ -1094,6 +1724,7 @@ namespace MMAP
             { "detailSampleDist",        2.0f  },
             { "detailSampleMaxError",    0.5f  },
             { "maxEdgeLen",              0     }, // placeholder
+            { "maxVertsPerPoly",         DT_VERTS_PER_POLYGON },
             { "maxSimplificationError",  1.8f  },
             { "mergeRegionArea",         10    },
             { "minRegionArea",           30    },

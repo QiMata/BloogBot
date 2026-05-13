@@ -62,7 +62,8 @@ public class WaypointDumpDiagnostic : IClassFixture<PathfindingValidationFixture
     /// <summary>
     /// Polygon-chain dump from one of the canonical NPC pairs. Cycle 17b
     /// proved this baseline is HEALTHY (Grunt1 → Frezza = 106 polys all in
-    /// tile (40,29), endsAtTarget). If this fails, the bake regressed.
+    /// tile (40,29), file 0012940, endsAtTarget). If this fails, the bake
+    /// regressed.
     /// </summary>
     [Fact]
     public void Dump_GruntToFrezza_PolygonChain()
@@ -90,7 +91,7 @@ public class WaypointDumpDiagnostic : IClassFixture<PathfindingValidationFixture
 
     // ============================================================== Diagnostic 4
     /// <summary>
-    /// In-tile (40,29) NPC↔NPC pathing matrix. If the tower's internal
+    /// In-tile (40,29 / file 0012940) NPC↔NPC pathing matrix. If the tower's internal
     /// navmesh is healthy, every NPC pair returns a chain that
     /// endsAtTarget. Cycle 17b proved this is true post-Cycle-16.
     /// </summary>
@@ -198,6 +199,58 @@ public class WaypointDumpDiagnostic : IClassFixture<PathfindingValidationFixture
         // And a deck-only short hop for sanity (proves the deck cluster is
         // internally connected without a lip step).
         DumpSmoothPathFull("Snurk → Frezza (deck only, 24y)", Snurk, Frezza);
+    }
+
+    // ============================================================== Diagnostic 7
+    /// <summary>
+    /// Drill-down for
+    /// LongPathingRouteTests.OrgrimmarZeppelinTowerUnderpassLiveStallExactRecovery.
+    /// The managed route currently fails local physics on the lower spiral at
+    /// segment 172→173. This diagnostic maps the stall points back to navmesh
+    /// poly refs and surface Z without asserting, so cull/generation iterations
+    /// can target the responsible mesh cells.
+    /// </summary>
+    [Fact]
+    public void Audit_UnderpassLiveStall_Polys()
+    {
+        _output.WriteLine($"# WWOW_DATA_DIR: {_fixture.DataDir}");
+        var underpassStart = new XYZ(1357.2f, -4516.2f, 32.0f);
+        var boarding = new XYZ(1320.142944f, -4653.158691f, 53.891945f);
+        var failFrom = new XYZ(1346.7f, -4647.5f, 26.0f);
+        var failTo = new XYZ(1347.2f, -4650.7f, 27.5f);
+
+        _output.WriteLine("# underpass native polygon chain:");
+        DumpPolygonChain("underpass start → boarding", underpassStart, boarding);
+
+        _output.WriteLine("");
+        _output.WriteLine("# lower-spiral failing segment polygon chain:");
+        DumpPolygonChain("segment 172 → 173", failFrom, failTo);
+
+        _output.WriteLine("");
+        _output.WriteLine("# coordinate probes:");
+        var probes = new (string label, XYZ xyz, float xyExtent, float zExtent)[]
+        {
+            ("wall-hit-a", new XYZ(1354.0300f, -4523.0664f, 33.3155f), AgentRadius, 5f),
+            ("out-zero-low", new XYZ(1346.1189f, -4524.1284f, 31.5713f), AgentRadius, 5f),
+            ("out-zero-high", new XYZ(1346.1189f, -4524.1284f, 32.4846f), AgentRadius, 5f),
+            ("fail-from", failFrom, AgentRadius, 5f),
+            ("fail-to", failTo, AgentRadius, 5f),
+            ("fail-from-wide", failFrom, 3.0f, 12f),
+            ("fail-to-wide", failTo, 3.0f, 12f),
+        };
+
+        _output.WriteLine("# label          | coord X,Y,Z                  | polyRef            | type     | nearest X,Y,Z              | surfaceZ | dz");
+        _output.WriteLine("# ---------------+------------------------------+--------------------+----------+----------------------------+----------+------");
+        foreach (var (label, xyz, xyExtent, zExtent) in probes)
+        {
+            var p = NavigationInterop.QueryPolyAtCoord(MapId, xyz, xyExtent, zExtent);
+            var dz = p.HasSurface ? xyz.Z - p.SurfaceZ : float.NaN;
+            _output.WriteLine(
+                $"# {label,-14} | {xyz.X,8:F2},{xyz.Y,8:F2},{xyz.Z,6:F2} | 0x{p.PolyRef:X16} | {p.PolyType,-8} | "
+                + $"{p.NearestPoint.X,8:F2},{p.NearestPoint.Y,8:F2},{p.NearestPoint.Z,6:F2} | "
+                + $"{(p.HasSurface ? p.SurfaceZ.ToString("F2") : "N/A"),8} | "
+                + $"{(float.IsNaN(dz) ? "N/A" : dz.ToString("+0.00;-0.00")),5}");
+        }
     }
 
     private void DumpSmoothPathFull(string label, XYZ start, XYZ end)

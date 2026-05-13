@@ -35,10 +35,11 @@ namespace NavMeshPhysicsValidator;
 
 internal static class Program
 {
-    // Tile coord ↔ world transform. WoW (X, Y) → MmapGen tileX, tileY.
-    //   tileX = floor((ORIGIN - WoW.Y) / GRID_SIZE)
-    //   tileY = floor((ORIGIN - WoW.X) / GRID_SIZE)
-    // (Per memory project_pfs_overhaul_006_tile_coord_inversion.md.)
+    // Tile coord ↔ world transform. MmapGen uses the same natural world-axis
+    // order as MapBuilder::getTileBounds:
+    //   tileX = floor(32 - WoW.X / GRID_SIZE)
+    //   tileY = floor(32 - WoW.Y / GRID_SIZE)
+    // The .mmtile filename still stores mapId,tileY,tileX.
     private const float GridSize = 533.33333f;
     private const float Origin = 32.0f * GridSize;     // 17066.66...
 
@@ -57,8 +58,8 @@ internal static class Program
                     + $"samples={opts.SampleCount} seed={opts.Seed}");
             }
 
-            // World AABB for the requested tile. The tile covers [low, high) in
-            // both X (recast Z dim) and Y (recast X dim); we sample inside.
+            // World AABB for the requested tile. The tile covers [low, high)
+            // in both WoW X and WoW Y; we sample inside.
             var (xLo, xHi, yLo, yHi) = TileWorldBounds(opts.TileX, opts.TileY);
             if (!opts.Silent)
                 Console.Error.WriteLine($"# tile world bounds: X=[{xLo:F1},{xHi:F1}] Y=[{yLo:F1},{yHi:F1}]");
@@ -339,12 +340,12 @@ internal static class Program
 
     private static (float xLo, float xHi, float yLo, float yHi) TileWorldBounds(int tileX, int tileY)
     {
-        // tileX = floor((ORIGIN - WoW.Y) / GRID_SIZE)  →  WoW.Y in [ORIGIN-(tileX+1)*GRID, ORIGIN-tileX*GRID)
-        // tileY = floor((ORIGIN - WoW.X) / GRID_SIZE)  →  WoW.X in [ORIGIN-(tileY+1)*GRID, ORIGIN-tileY*GRID)
-        var xLo = Origin - (tileY + 1) * GridSize;
-        var xHi = Origin - tileY * GridSize;
-        var yLo = Origin - (tileX + 1) * GridSize;
-        var yHi = Origin - tileX * GridSize;
+        // tileX = floor((ORIGIN - WoW.X) / GRID_SIZE)  →  WoW.X in [ORIGIN-(tileX+1)*GRID, ORIGIN-tileX*GRID)
+        // tileY = floor((ORIGIN - WoW.Y) / GRID_SIZE)  →  WoW.Y in [ORIGIN-(tileY+1)*GRID, ORIGIN-tileY*GRID)
+        var xLo = Origin - (tileX + 1) * GridSize;
+        var xHi = Origin - tileX * GridSize;
+        var yLo = Origin - (tileY + 1) * GridSize;
+        var yHi = Origin - tileY * GridSize;
         return (xLo, xHi, yLo, yHi);
     }
 

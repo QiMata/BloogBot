@@ -20,6 +20,7 @@
 #define _MMAP_TERRAIN_BUILDER_H
 
 #include <set>
+#include <vector>
 
 #include "MMapCommon.h"
 #include "../../../src/game/Maps/MoveMapSharedDefines.h"
@@ -67,6 +68,20 @@ namespace MMAP
     // src/game/GridMap.cpp
     static char const* MAP_VERSION_MAGIC = "z1.4";
 
+    enum class MeshTriangleSource
+    {
+        Terrain,
+        VMap,
+        GameObject
+    };
+
+    struct MeshTriangleSourceRange
+    {
+        int first;
+        int last;
+        MeshTriangleSource source;
+    };
+
     struct MeshData
     {
         G3D::Array<float> solidVerts;
@@ -83,10 +98,51 @@ namespace MMAP
         G3D::Array<unsigned char> offMeshConnectionsAreas;
         G3D::Array<unsigned short> offMeshConnectionsFlags;
 
-        // Terrain or gobj model ?
-        bool IsTerrainTriangle(int tri) const { return tri < vmapFirstTriangle || tri >=  vmapLastTriangle; }
-        int vmapFirstTriangle;
-        int vmapLastTriangle;
+        MeshTriangleSource SourceForTriangle(int tri) const
+        {
+            for (const auto& range : sourceTriangleRanges)
+            {
+                if (tri >= range.first && tri < range.last)
+                    return range.source;
+            }
+
+            if (tri >= vmapFirstTriangle && tri < vmapLastTriangle)
+                return MeshTriangleSource::VMap;
+
+            return MeshTriangleSource::Terrain;
+        }
+
+        const char* SourceNameForTriangle(int tri) const
+        {
+            switch (SourceForTriangle(tri))
+            {
+            case MeshTriangleSource::VMap:
+                return "vmap";
+            case MeshTriangleSource::GameObject:
+                return "gameobject";
+            case MeshTriangleSource::Terrain:
+            default:
+                return "terrain";
+            }
+        }
+
+        // Terrain or model-backed geometry?
+        bool IsTerrainTriangle(int tri) const { return SourceForTriangle(tri) == MeshTriangleSource::Terrain; }
+
+        void AddSourceTriangleRange(int first, int last, MeshTriangleSource source)
+        {
+            if (last > first)
+                sourceTriangleRanges.push_back({ first, last, source });
+        }
+
+        void AddModelTriangleRange(int first, int last)
+        {
+            AddSourceTriangleRange(first, last, MeshTriangleSource::GameObject);
+        }
+
+        int vmapFirstTriangle = 0;
+        int vmapLastTriangle = 0;
+        std::vector<MeshTriangleSourceRange> sourceTriangleRanges;
     };
 
     class TerrainBuilder

@@ -1,0 +1,37 @@
+{
+  "ActivityId": "dungeon.ragefire-chasm",
+  "Loadout": {
+    "TargetLevel": 16,
+    "RidingSkill": 0,
+    "MountSpellId": 0,
+    "SpellIdsToLearn": [78, 100, 6673],
+    "Skills": [
+      { "SkillId": 43, "Value": 80, "Max": 300 }
+    ],
+    "EquipItems": [
+      { "ItemId": 2207, "InventorySlot": 0 }
+    ],
+    "SupplementalItemIds": [4540, 159, 1251],
+    "ElixirItemIds": [],
+    "FactionReps": [],
+    "CompletedQuestIds": [],
+    "TalentTemplate": "ProtWarriorLeveling"
+  },
+  "LockoutSkip": true,
+  "LevelOverride": null,
+  "GearOverrides": [4540, 159],
+  "ReputationOverrides": {},
+  "RoleOverrides": null,
+  "StagingLocation": "Ragefire Chasm",
+  "HumanJoin": {
+    "HumanRole": "Member",
+    "BotRaidLeader": false,
+    "GearHuman": false,
+    "HumanIdleTimeoutSeconds": 300
+  },
+  "LootPolicy": "GroupLoot",
+  "TearDownPolicy": {
+    "Action": "DeleteCharacters",
+    "HoldTtlSeconds": null
+  }
+}

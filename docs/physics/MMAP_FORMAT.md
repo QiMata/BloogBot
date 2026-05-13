@@ -77,24 +77,40 @@ the lifecycle from there.
 
 ## 3. Tile coordinate system
 
-MaNGOS uses a 64×64 tile grid per continent, aligned to WoW's continental grid:
+MaNGOS uses a 64x64 tile grid per continent, aligned to WoW's continental
+grid. The vendored vmangos/CMaNGOS generator uses the historical ADT tile
+frame, which is swapped relative to normal WoW `(X, Y, Z)` coordinates:
+`tileX` is derived from world **Y**, and `tileY` is derived from world **X**.
+This matches `src/game/Commands/DebugCommands.cpp`, which prints rebuild
+commands as:
+
+```c++
+tileY = 32 - player.X / GRID_SIZE;
+tileX = 32 - player.Y / GRID_SIZE;
+```
 
 - Continent extent: `(-17066.6664f, +17066.6664f)` on both X and Y axes (WoW continental units).
 - `GRID_SIZE = 533.33333f` (WoW units per tile, both axes).
-- Tile origin convention (vmangos): tile `(0, 0)` is at the **NW corner** of the continent.
-  - WoW X axis runs **south → north** in the game world; Tile Y indexes the X dimension *backward* from MaNGOS's perspective. Read `MapBuilder::getTileBounds(...)` if confused.
-  - `tileX = floor((maxX - worldY) / GRID_SIZE)` (yes, swap).
+- Tile origin convention: tile `(0, 0)` is at the north-west corner of the
+  continent.
+  - `tileX = floor((maxX - worldY) / GRID_SIZE)`.
   - `tileY = floor((maxX - worldX) / GRID_SIZE)`.
+- Tile filenames are still written as `<map><tileY:02d><tileX:02d>.mmtile`.
+  This filename order is easy to misread during single-tile regen work.
 
-Example: WoW point `(1320.14, -4653.16, 53.89)` (OG↔UC zeppelin deck) lives in:
+Example: WoW point `(1320.14, -4653.16, 53.89)` (OG/UC zeppelin deck) lives in:
 
 ```
 tileX = floor((17066.6664 - -4653.16) / 533.3333) = floor(40.726) = 40
 tileY = floor((17066.6664 -  1320.14) / 533.3333) = floor(29.527) = 29
 ```
 
-→ Tile `29,40` on map 1, file `mmaps/0012940.mmtile`. (Matches the
-`offmesh.txt` line for the OG↔UC gangplank.)
+So the correct MmapGen CLI tile is `--tile 40,29`, the matching per-tile config
+key is `"4029"`, and the generated runtime file is `mmaps/0012940.mmtile`.
+
+Important: Detour vertices in these tiles are also in the generator frame:
+`(Recast X, Recast Y, Recast Z) = (WoW Y, WoW Z, WoW X)`. Visualization tools
+must swap axes back before overlaying WoW path coordinates.
 
 Per-tile vertex grid:
 

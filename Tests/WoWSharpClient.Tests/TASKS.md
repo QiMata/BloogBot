@@ -12,6 +12,21 @@
 4. Keep BG server-packet movement triggers in the full `Category=MovementParity` bundle, covering `MovementHandler -> WoWSharpObjectManager -> MovementController`.
 
 ## Session Handoff
+### 2026-05-12 (S1.2 MovementController parity audit)
+- Pass result: `audit green; recorded movement parity corpus passed 33/33`.
+- Last delta:
+  - Ran the full `Category=MovementParity` corpus against explicit
+    `WWOW_DATA_DIR=D:\MaNGOS\data`.
+  - The first run without `WWOW_DATA_DIR` aborted in `Navigation.dll` by
+    design, proving the native data-root guard is still fail-fast.
+  - No FG/BG drift outside tolerance was found in the recorded corpus, and no
+    WoWSharpClient code changed in this pass.
+- Validation/tests run:
+  - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "Category=MovementParity" --logger "console;verbosity=minimal" --logger "trx;LogFileName=s1_2_movement_parity.trx" --results-directory tmp/test-runtime/results-wowsharp` with `WWOW_DATA_DIR=D:\MaNGOS\data` -> `passed (33/33)`.
+- Evidence:
+  - `tmp/test-runtime/results-wowsharp/s1_2_movement_parity.trx`
+- Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
 ### 2026-05-04 (scheduled zeppelin passive attach deck gate)
 - Pass result: focused movement-controller deterministic coverage passed
   `76/76`.

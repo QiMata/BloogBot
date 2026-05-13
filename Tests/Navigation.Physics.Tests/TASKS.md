@@ -35,6 +35,23 @@ Known remaining work in this owner: `0` items.
 10. [x] All 30 proof gates green after retry loop: `MovementControllerPhysics`, `AggregateDriftGate`, wall replay fixtures (Durotar/BRS/Undercity), multi-level terrain disambiguation.
 
 ## Session Handoff
+### 2026-05-12 (S1.1 physics parity substrate guard)
+- Pass result: `guard green; representative checkpoint authoring still open`.
+- Last delta:
+  - Revalidated the deterministic movement parity guard that currently covers
+    the OG zeppelin cliff-fall, Undercity elevator, replay, jump, and knockback
+    physics surfaces.
+  - No Navigation.Physics code changed in this pass.
+  - S1.1 is not closed yet: it still needs new representative checkpoints for
+    the Phase 1 family terrain called out in the plan (UC elevator
+    transitions, MC lava run, WSG flag rooms, Strat steep ramps).
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:\MaNGOS\data'; dotnet test Tests\Navigation.Physics.Tests\Navigation.Physics.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --settings Tests\Navigation.Physics.Tests\test.runsettings --filter "Category=MovementParity|FullyQualifiedName~OgZeppelinCliffFallParityTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=s1_1_physics_parity_guard.trx" --results-directory tmp\test-runtime\results-navigation` -> `passed (12/12)`.
+- Evidence:
+  - `tmp/test-runtime/results-navigation/s1_1_physics_parity_guard.trx`
+- Exact next command:
+  - `.\run-tests.ps1 -ListRepoScopedProcesses`
+
 - Last updated: `2026-05-05`
 - Pass result: `delta shipped; Detour v7/mmap v6 regenerated-tile contract green`
 - Last delta:

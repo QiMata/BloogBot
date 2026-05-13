@@ -1,6 +1,7 @@
 using BotCommLayer;
 using GameData.Core.Models;
 using Pathfinding;
+using PathfindingService.NavSummary;
 using PathfindingService.RouteCaching;
 using PathfindingService.Repository;
 using PathfindingService.RoutePacks;
@@ -76,6 +77,7 @@ namespace PathfindingService
         private StaticRoutePackCache? _mainPathCache;
         private readonly INavigationDataSignatureProvider _navigationDataSignatureProvider = new FileSystemNavigationDataSignatureProvider();
         private readonly RouteResultCache _routeResultCache = new();
+        private readonly NavSummaryRouteResolver _navSummaryRouteResolver = NavSummaryRouteResolver.FromConfiguration(configuration, logger);
         private readonly RequestScopedDynamicObjectOverlay _dynamicObjectOverlay = new(new NativeDynamicObjectOverlayRegistry());
         private volatile bool _isInitialized;
         private readonly object _initLock = new();
@@ -422,6 +424,7 @@ namespace PathfindingService
 
             NavigationPathResult pathResult;
             StaticRoutePackMatch? routePackMatch = null;
+            NavSummaryRouteMatch? navSummaryMatch = null;
             RouteResultCacheStatus routeCacheStatus;
             try
             {
@@ -465,7 +468,7 @@ namespace PathfindingService
                     req.Straight,
                     StaticRoutePackCache.DefaultRoutePolicy,
                     _navigationDataSignatureProvider.GetSignature(req.MapId),
-                    RouteResultCache.RouteAlgorithmSignature,
+                    _navSummaryRouteResolver.ApplyToRouteAlgorithmSignature(RouteResultCache.RouteAlgorithmSignature),
                     CreateDynamicOverlaySignature(effectiveNearbyObjects.Count));
 
                 var lookup = _routeResultCache.GetOrAdd(
@@ -489,14 +492,36 @@ namespace PathfindingService
                         // bake fidelity exactly like the static route pack did.
                         // Set WWOW_ENABLE_PATH_REPAIR=1 to re-enable the repair
                         // pipeline for production deploys.
-                        var pathQueryFn = IsPathRepairEnabled()
-                            ? (Func<NavigationPathResult>)(() => _navigation.CalculateValidatedPath(req.MapId, start, end, req.Straight, agentRadius, agentHeight))
-                            : (() => _navigation.CalculateRawPath(req.MapId, start, end, req.Straight, agentRadius, agentHeight));
-                        var overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
-                            req.MapId, effectiveNearbyObjects,
-                            pathQueryFn,
-                            logger, operationName: "path");
-                        return new RouteComputationResult(overlayResult.Value);
+                        NavigationPathResult CalculateDetailedPath(XYZ queryStart, XYZ queryEnd)
+                        {
+                            var pathQueryFn = IsPathRepairEnabled()
+                                ? (Func<NavigationPathResult>)(() => _navigation.CalculateValidatedPath(req.MapId, queryStart, queryEnd, req.Straight, agentRadius, agentHeight))
+                                : (() => _navigation.CalculateRawPath(req.MapId, queryStart, queryEnd, req.Straight, agentRadius, agentHeight));
+                            var overlayResult = _dynamicObjectOverlay.ExecuteWithOverlay(
+                                req.MapId, effectiveNearbyObjects,
+                                pathQueryFn,
+                                logger, operationName: "path");
+                            return overlayResult.Value;
+                        }
+
+                        var summaryRequest = new NavSummaryRouteRequest(
+                            req.MapId,
+                            start,
+                            end,
+                            req.Straight,
+                            agentRadius,
+                            agentHeight,
+                            dist2D,
+                            effectiveNearbyObjects.Count);
+                        if (_navSummaryRouteResolver.TryResolve(
+                            summaryRequest,
+                            CalculateDetailedPath,
+                            out var summaryResolution))
+                        {
+                            return new RouteComputationResult(summaryResolution.PathResult, summaryResolution.Match);
+                        }
+
+                        return new RouteComputationResult(CalculateDetailedPath(start, end));
                     });
 
                 routeCacheStatus = lookup.Status;
@@ -504,6 +529,11 @@ namespace PathfindingService
                 if (lookup.Result.MatchMetadata is StaticRoutePackMatch match)
                 {
                     routePackMatch = match;
+                }
+
+                if (lookup.Result.MatchMetadata is NavSummaryRouteMatch summaryMatch)
+                {
+                    navSummaryMatch = summaryMatch;
                 }
             }
             finally
@@ -523,6 +553,19 @@ namespace PathfindingService
                     cacheHit.StartDistanceFromCorridor,
                     sanitizedPath.Length,
                     cacheHit.NavDataSignature.Length <= 12 ? cacheHit.NavDataSignature : cacheHit.NavDataSignature[..12]);
+            }
+
+            if (navSummaryMatch is NavSummaryRouteMatch summaryHit)
+            {
+                logger.LogInformation(
+                    "[NAV_SUMMARY] id={RequestId} hit graph={GraphId} anchors={Anchors} segments={Segments} estimatedCost={EstimatedCost:F1} corners={Corners} graphSig={GraphSig}",
+                    requestId,
+                    summaryHit.GraphId,
+                    summaryHit.AnchorCount,
+                    summaryHit.SegmentCount,
+                    summaryHit.EstimatedCost,
+                    sanitizedPath.Length,
+                    summaryHit.GraphSignature.Length <= 12 ? summaryHit.GraphSignature : summaryHit.GraphSignature[..12]);
             }
 
             if (ShouldLogRouteCacheStatus(routeCacheStatus, dist2D, requestId))

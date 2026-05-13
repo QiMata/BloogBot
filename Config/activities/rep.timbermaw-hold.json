@@ -1,0 +1,44 @@
+{
+  "ActivityId": "rep.timbermaw-hold",
+  "Loadout": {
+    "TargetLevel": 55,
+    "RidingSkill": 150,
+    "MountSpellId": 18793,
+    "SpellIdsToLearn": [],
+    "Skills": [
+      { "SkillId": 54, "Value": 280, "Max": 300 }
+    ],
+    "EquipItems": [],
+    "SupplementalItemIds": [],
+    "ElixirItemIds": [],
+    "FactionReps": [
+      { "FactionId": 576, "Standing": 0 }
+    ],
+    "CompletedQuestIds": [],
+    "TalentTemplate": "RetPaladinFarming"
+  },
+  "LockoutSkip": false,
+  "LevelOverride": null,
+  "GearOverrides": [],
+  "ReputationOverrides": {
+    "576": "Neutral"
+  },
+  "RoleOverrides": {
+    "Tanks": 1,
+    "Healers": 1,
+    "Dps": 3,
+    "Support": 0
+  },
+  "StagingLocation": "Timbermaw Hold",
+  "HumanJoin": {
+    "HumanRole": "Member",
+    "BotRaidLeader": false,
+    "GearHuman": false,
+    "HumanIdleTimeoutSeconds": 1200
+  },
+  "LootPolicy": "NeedBeforeGreed",
+  "TearDownPolicy": {
+    "Action": "LogOutOnly",
+    "HoldTtlSeconds": null
+  }
+}

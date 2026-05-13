@@ -1,0 +1,42 @@
+{
+  "ActivityId": "event.stv-fishing-extravaganza",
+  "Loadout": {
+    "TargetLevel": 45,
+    "RidingSkill": 75,
+    "MountSpellId": 458,
+    "SpellIdsToLearn": [7732],
+    "Skills": [
+      { "SkillId": 356, "Value": 225, "Max": 300 }
+    ],
+    "EquipItems": [
+      { "ItemId": 6256, "InventorySlot": 0 }
+    ],
+    "SupplementalItemIds": [6529, 6532],
+    "ElixirItemIds": [],
+    "FactionReps": [],
+    "CompletedQuestIds": [],
+    "TalentTemplate": null
+  },
+  "LockoutSkip": false,
+  "LevelOverride": 45,
+  "GearOverrides": [6256, 6529],
+  "ReputationOverrides": {},
+  "RoleOverrides": {
+    "Tanks": 0,
+    "Healers": 0,
+    "Dps": 1,
+    "Support": 0
+  },
+  "StagingLocation": "STV Fishing Extravaganza",
+  "HumanJoin": {
+    "HumanRole": "Observer",
+    "BotRaidLeader": false,
+    "GearHuman": false,
+    "HumanIdleTimeoutSeconds": 1800
+  },
+  "LootPolicy": "FreeForAll",
+  "TearDownPolicy": {
+    "Action": "HoldForReuse",
+    "HoldTtlSeconds": 3600
+  }
+}

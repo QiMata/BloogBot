@@ -4,7 +4,7 @@
 // VMap (.vmtile) collision geometry as a separate OBJ object so you can see
 // when the navmesh's polygons overlap unbaked wall geometry.
 //
-// Output coords follow WoW convention (X east, Y north, Z up). Standard OBJ
+// Output coords follow WoW convention (X/Y horizontal, Z up). Standard OBJ
 // viewers interpret Z-up well enough; pass --y-up to swap (Y becomes vertical).
 //
 // Format references:
@@ -17,6 +17,10 @@
 //   MmapVisualize.exe --mmtile <path> --out <obj-path>
 //                     [--mark X,Y,Z label]*
 //                     [--z-band <yards>]   (default 2)
+//                     [--reachable-from X,Y,Z] [--reachable-mode all|only|unreachable]
+//                     [--crop minX,minY,minZ,maxX,maxY,maxZ]
+//                     [--polys i,j,k]
+//                     [--poly-report <csv-path>]
 //                     [--y-up]             (swap to Y-up world for OBJ viewer)
 //                     [--quiet]
 //
@@ -232,27 +236,30 @@ internal static class Program
 
     private static void WriteObj(StreamWriter w, Tile tile, Args opts)
     {
-        // Detour stores verts as (X, Z_up, Y_north) — i.e. with Y as vertical
-        // already (Detour's internal Y-up convention). The WoW source frame is
-        // Z-up: (WoW_X east, WoW_Y north, WoW_Z up). So Detour's vy = WoW Z
-        // (vertical), Detour's vz = WoW Y (north).
+        // vmangos stores MaNGOS/Recast verts as (WoW_Y, WoW_Z_up, WoW_X).
+        // This looks backwards if you start from normal WoW XYZ, but it matches
+        // the extractor and the in-game debug command:
+        //   tileX = 32 - worldY / GRID_SIZE
+        //   tileY = 32 - worldX / GRID_SIZE
+        // So Detour vx is WoW Y, Detour vy is vertical WoW Z, and Detour vz is
+        // WoW X.
         //
-        // Default OBJ output: Y-up right-handed (X east, Y vertical, Z south).
+        // Default OBJ output: Y-up right-handed (OBJ X = WoW X, OBJ Y = WoW Z,
+        // OBJ Z = -WoW Y).
         // Most 3D viewers (Windows 3D Viewer, Blender default, glTF) interpret
         // OBJ as Y-up — without this remap the ground appears edge-on and you
         // have to rotate the model 90° in the viewer. We negate WoW Y so the
         // result preserves right-handedness:
-        //   (Xo, Yo, Zo) = (vx, vy, -vz) = (WoW_X, WoW_Z, -WoW_Y)
-        // Camera looking down -Z sees +X east on right, +Y up; +Z south means
-        // north points INTO the screen (away from camera). This matches what
-        // WoW's minimap looks like with north up.
+        //   (Xo, Yo, Zo) = (vz, vy, -vx) = (WoW_X, WoW_Z, -WoW_Y)
+        // Camera looking down -Z sees WoW X on the horizontal screen axis and
+        // vertical height on screen Y.
         //
-        // --z-up emits WoW-native Z-up: (WoW_X, WoW_Y, WoW_Z) = (vx, vz, vy).
+        // --z-up emits WoW-native Z-up: (WoW_X, WoW_Y, WoW_Z) = (vz, vx, vy).
         // Use this only with viewers that respect the OBJ file's coord system
         // (Blender with Z-up import, MeshLab with manual axis settings).
         Vec3 ToWorld(Vec3 v) => opts.ZUp
-            ? new Vec3(v.X, v.Z, v.Y)             // Z-up WoW: X east, Y north, Z vertical
-            : new Vec3(v.X, v.Y, -v.Z);           // Y-up right-handed: X east, Y vertical, Z south
+            ? DetourToWow(v)                                // Z-up WoW: X/Y horizontal, Z vertical
+            : new Vec3(v.Z, v.Y, -v.X);                      // Y-up OBJ: X=WoW X, Y=WoW Z, Z=-WoW Y
 
         w.WriteLine("# MmapVisualize OBJ — generated from mmtile");
         w.WriteLine($"# tile=({tile.Header.X},{tile.Header.Y},{tile.Header.Layer}) " +
@@ -260,12 +267,21 @@ internal static class Program
                     $"offMesh={tile.Header.OffMeshConCount}");
         w.WriteLine($"# bmin=({tile.Header.BMin.X:F2},{tile.Header.BMin.Y:F2},{tile.Header.BMin.Z:F2}) " +
                     $"bmax=({tile.Header.BMax.X:F2},{tile.Header.BMax.Y:F2},{tile.Header.BMax.Z:F2})");
-        w.WriteLine($"# coord-system: {(opts.ZUp ? "Z-up WoW (X east, Y north, Z vertical) — pass to Blender as Z-up" : "Y-up right-handed (X east, Y vertical, Z south) — default OBJ viewer convention")}");
+        w.WriteLine($"# coord-system: {(opts.ZUp ? "Z-up WoW (X/Y horizontal, Z vertical) — pass to Blender as Z-up" : "Y-up OBJ (X=WoW X, Y=WoW Z, Z=-WoW Y) — default OBJ viewer convention")}");
         w.WriteLine();
+
+        if (opts.CropWow is { } crop)
+        {
+            w.WriteLine($"# crop-wow=({crop.MinX:F2},{crop.MinY:F2},{crop.MinZ:F2})..({crop.MaxX:F2},{crop.MaxY:F2},{crop.MaxZ:F2})");
+            w.WriteLine();
+        }
+
+        var reachabilityFilter = BuildReachabilityFilter(tile, opts);
 
         // Group polygons by Z band for selective layer hide/show in the viewer.
         // The WoW vertical axis corresponds to Detour vy, NOT vz — Detour stores
-        // (X, Z, Y). Polygon Z banding therefore uses .Y of the raw Detour vert.
+        // (WoW_Y, WoW_Z, WoW_X). Polygon Z banding therefore uses .Y of the raw
+        // Detour vert.
         var bandPolys = new Dictionary<int, List<int>>();
         for (var pIdx = 0; pIdx < tile.Polys.Length; pIdx++)
         {
@@ -273,7 +289,13 @@ internal static class Program
             // Skip off-mesh-connection polygons (rendered separately).
             if ((poly.AreaAndType >> 6) == 1) // DT_POLYTYPE_OFFMESH_CONNECTION = 1
                 continue;
+            if (reachabilityFilter != null && !reachabilityFilter.Contains(pIdx))
+                continue;
             if (poly.VertCount == 0)
+                continue;
+            if (opts.PolyFilter.Count > 0 && !opts.PolyFilter.Contains(pIdx))
+                continue;
+            if (opts.CropWow is { } cropFilter && !PolyIntersectsCrop(tile, pIdx, cropFilter))
                 continue;
             // Use the polygon's first vertex's WoW-vertical for band assignment
             // (close enough — we don't care about sub-yard precision in banding).
@@ -400,20 +422,17 @@ internal static class Program
                         Console.Error.WriteLine($"#   spawn {s.Name} flags=0x{s.Flags:X} pos=({s.Pos.X:F1},{s.Pos.Y:F1},{s.Pos.Z:F1}) bound=[({s.BoundLow.X:F1},{s.BoundLow.Y:F1},{s.BoundLow.Z:F1}) .. ({s.BoundHigh.X:F1},{s.BoundHigh.Y:F1},{s.BoundHigh.Z:F1})]");
                 }
                 int sIdx = 0;
-                // vmtile coord system → WoW world coord conversion. Confirmed
-                // empirically against tile (29,40) bmin/bmax bounds: vmtile
-                // iPos/iBound store (Y, X, Z) in a 32-tile shifted convention,
-                // i.e. raw_x corresponds to WoW Y, raw_y to WoW X, with
-                // raw = 32*GRID_SIZE - WoW. The transform matches the
-                // negate-and-shift pattern in vmap_reader/main.cpp lines
-                // 107-112: realPos.x *= -1 after subtracting 32*GRID_SIZE.
-                // Apply inverse: WoW_X = 32*GRID_SIZE - raw_y, WoW_Y =
-                // 32*GRID_SIZE - raw_x, WoW_Z = raw_z. Then ToWorld remaps
-                // (WoW_X, WoW_Z, WoW_Y) into the OBJ output frame.
+                // vmtile coord system → WoW world coord conversion. The raw
+                // instance/bound coordinates are shifted by 32 ADT tiles and
+                // negated by TerrainBuilder before being copied into Detour as
+                // (WoW_Y, WoW_Z, WoW_X). Inverting that transform gives:
+                //   WoW_X = 32*GRID_SIZE - raw_x
+                //   WoW_Y = 32*GRID_SIZE - raw_y
+                //   WoW_Z = raw_z
                 const float GridSize = 533.33333f;
                 const float HalfWorld = 32f * GridSize;
                 Vec3 VmapToWow(Vec3 raw) =>
-                    new Vec3(HalfWorld - raw.Y, HalfWorld - raw.X, raw.Z);
+                    new Vec3(HalfWorld - raw.X, HalfWorld - raw.Y, raw.Z);
                 foreach (var s in spawns)
                 {
                     if (!s.HasBound)
@@ -421,7 +440,7 @@ internal static class Program
                     var safeName = SanitizeGroupName(s.Name);
                     w.WriteLine($"g vmap_{sIdx:D3}_{safeName}");
                     // Convert raw vmtile bound coords to WoW (X, Y, Z), then
-                    // re-pack into Detour storage form (X, Z_vertical, Y_north)
+                    // re-pack into Detour storage form (WoW_Y, WoW_Z, WoW_X)
                     // so ToWorld() can produce the requested OBJ output frame.
                     var wL = VmapToWow(s.BoundLow);
                     var wH = VmapToWow(s.BoundHigh);
@@ -432,10 +451,10 @@ internal static class Program
                     var minZ = MathF.Min(wL.Z, wH.Z); var maxZ = MathF.Max(wL.Z, wH.Z);
                     var corners = new Vec3[8]
                     {
-                        new Vec3(minX, minZ, minY), new Vec3(maxX, minZ, minY),
-                        new Vec3(maxX, minZ, maxY), new Vec3(minX, minZ, maxY),
-                        new Vec3(minX, maxZ, minY), new Vec3(maxX, maxZ, minY),
-                        new Vec3(maxX, maxZ, maxY), new Vec3(minX, maxZ, maxY),
+                        WowToDetour(new Vec3(minX, minY, minZ)), WowToDetour(new Vec3(maxX, minY, minZ)),
+                        WowToDetour(new Vec3(maxX, maxY, minZ)), WowToDetour(new Vec3(minX, maxY, minZ)),
+                        WowToDetour(new Vec3(minX, minY, maxZ)), WowToDetour(new Vec3(maxX, minY, maxZ)),
+                        WowToDetour(new Vec3(maxX, maxY, maxZ)), WowToDetour(new Vec3(minX, maxY, maxZ)),
                     };
                     var worldCorners = corners.Select(ToWorld).ToArray();
                     foreach (var v in worldCorners)
@@ -469,7 +488,7 @@ internal static class Program
                 w.WriteLine($"g marker_{i:D2}_{m.Label}");
                 // Octahedron with radius 0.5y around the mark coord.
                 // WoW coord -> Detour coord -> ToWorld
-                var center = new Vec3(m.X, m.Z, m.Y); // input is WoW (X,Y,Z), Detour stores (X, Z, Y)
+                var center = WowToDetour(new Vec3(m.X, m.Y, m.Z));
                 var c = ToWorld(center);
                 const float r = 0.5f;
                 var verts = new[]
@@ -501,11 +520,258 @@ internal static class Program
             w.WriteLine();
         }
 
+        var includedPolys = bandPolys.Values.SelectMany(v => v).OrderBy(v => v).ToArray();
+        if (opts.PolyReportPath != null)
+        {
+            WritePolyReport(tile, includedPolys, opts.PolyReportPath);
+            if (!opts.Quiet)
+                Console.Error.WriteLine($"# wrote polygon report: {opts.PolyReportPath} ({includedPolys.Length} polys)");
+        }
+
         if (!opts.Quiet)
         {
-            Console.Error.WriteLine($"# OBJ written: {globalVertOffset - 1} verts total, {bandPolys.Count} Z bands, {tile.OffMesh.Length} off-mesh, {opts.Markers.Count} markers");
+            Console.Error.WriteLine($"# OBJ written: {globalVertOffset - 1} verts total, {includedPolys.Length} polys, {bandPolys.Count} Z bands, {tile.OffMesh.Length} off-mesh, {opts.Markers.Count} markers");
         }
     }
+
+    private static HashSet<int>? BuildReachabilityFilter(Tile tile, Args opts)
+    {
+        if (opts.ReachableFrom == null || opts.ReachableMode == ReachableMode.All)
+            return null;
+
+        var start = new Vec3(
+            opts.ReachableFrom.Y,
+            opts.ReachableFrom.Z,
+            opts.ReachableFrom.X);
+
+        var startPoly = FindClosestGroundPoly(tile, start);
+        if (startPoly < 0)
+        {
+            Console.Error.WriteLine("# WARN: --reachable-from could not find a nearest ground poly; reachability filter disabled");
+            return null;
+        }
+
+        var reachable = new HashSet<int>();
+        var queue = new Queue<int>();
+        reachable.Add(startPoly);
+        queue.Enqueue(startPoly);
+
+        while (queue.Count > 0)
+        {
+            var pIdx = queue.Dequeue();
+            var poly = tile.Polys[pIdx];
+            foreach (var nei in poly.Neis)
+            {
+                if (nei == 0)
+                    continue;
+                if ((nei & 0x8000) != 0)
+                    continue; // external tile side; this single-tile visualizer cannot resolve it.
+
+                var nIdx = nei - 1;
+                if (nIdx < 0 || nIdx >= tile.Polys.Length || reachable.Contains(nIdx))
+                    continue;
+
+                reachable.Add(nIdx);
+                queue.Enqueue(nIdx);
+            }
+        }
+
+        var groundPolys = Enumerable.Range(0, tile.Polys.Length)
+            .Where(i => !IsOffMesh(tile.Polys[i]) && tile.Polys[i].VertCount > 0)
+            .ToHashSet();
+
+        var output = opts.ReachableMode == ReachableMode.Only
+            ? groundPolys.Where(reachable.Contains).ToHashSet()
+            : groundPolys.Where(i => !reachable.Contains(i)).ToHashSet();
+
+        Console.Error.WriteLine(
+            $"# reachability: startPoly={startPoly} reachableGround={groundPolys.Count(reachable.Contains)} " +
+            $"groundTotal={groundPolys.Count} output={output.Count} mode={opts.ReachableMode}");
+        return output;
+    }
+
+    private static int FindClosestGroundPoly(Tile tile, Vec3 start)
+    {
+        var best = -1;
+        var bestDist = double.MaxValue;
+        for (var i = 0; i < tile.Polys.Length; i++)
+        {
+            var poly = tile.Polys[i];
+            if (IsOffMesh(poly) || poly.VertCount == 0)
+                continue;
+
+            var centroid = GetPolyCentroid(tile, i);
+            var dx = centroid.X - start.X;
+            var dy = centroid.Y - start.Y;
+            var dz = centroid.Z - start.Z;
+            var dist = dx * dx + dz * dz + (dy * dy * 4.0f);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                best = i;
+            }
+        }
+
+        return best;
+    }
+
+    private static Vec3 GetPolyCentroid(Tile tile, int polyIndex)
+    {
+        var poly = tile.Polys[polyIndex];
+        var x = 0f;
+        var y = 0f;
+        var z = 0f;
+        for (var i = 0; i < poly.VertCount; i++)
+        {
+            var v = tile.Verts[poly.Verts[i]];
+            x += v.X;
+            y += v.Y;
+            z += v.Z;
+        }
+
+        var inv = 1f / poly.VertCount;
+        return new Vec3(x * inv, y * inv, z * inv);
+    }
+
+    private static Vec3 DetourToWow(Vec3 v) => new(v.Z, v.X, v.Y);
+
+    private static Vec3 WowToDetour(Vec3 v) => new(v.Y, v.Z, v.X);
+
+    private static bool PolyIntersectsCrop(Tile tile, int polyIndex, WowBounds crop)
+    {
+        var bounds = GetPolyWowBounds(tile, polyIndex);
+        return bounds.MaxX >= crop.MinX
+            && bounds.MinX <= crop.MaxX
+            && bounds.MaxY >= crop.MinY
+            && bounds.MinY <= crop.MaxY
+            && bounds.MaxZ >= crop.MinZ
+            && bounds.MinZ <= crop.MaxZ;
+    }
+
+    private static WowBounds GetPolyWowBounds(Tile tile, int polyIndex)
+    {
+        var poly = tile.Polys[polyIndex];
+        var minX = float.PositiveInfinity;
+        var minY = float.PositiveInfinity;
+        var minZ = float.PositiveInfinity;
+        var maxX = float.NegativeInfinity;
+        var maxY = float.NegativeInfinity;
+        var maxZ = float.NegativeInfinity;
+
+        void Include(Vec3 detour)
+        {
+            var wow = DetourToWow(detour);
+            minX = MathF.Min(minX, wow.X);
+            minY = MathF.Min(minY, wow.Y);
+            minZ = MathF.Min(minZ, wow.Z);
+            maxX = MathF.Max(maxX, wow.X);
+            maxY = MathF.Max(maxY, wow.Y);
+            maxZ = MathF.Max(maxZ, wow.Z);
+        }
+
+        for (var i = 0; i < poly.VertCount; i++)
+            Include(tile.Verts[poly.Verts[i]]);
+
+        if (polyIndex < tile.DetailMeshes.Length)
+        {
+            var detail = tile.DetailMeshes[polyIndex];
+            for (var i = 0; i < detail.VertCount; i++)
+                Include(tile.DetailVerts[(int)detail.VertBase + i]);
+        }
+
+        if (float.IsPositiveInfinity(minX))
+            return new WowBounds(0, 0, 0, 0, 0, 0);
+
+        return new WowBounds(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+
+    private static float GetMaxPolyEdge2D(Tile tile, Poly poly)
+    {
+        var max = 0f;
+        for (var i = 0; i < poly.VertCount; i++)
+        {
+            var a = DetourToWow(tile.Verts[poly.Verts[i]]);
+            var b = DetourToWow(tile.Verts[poly.Verts[(i + 1) % poly.VertCount]]);
+            var dx = a.X - b.X;
+            var dy = a.Y - b.Y;
+            max = MathF.Max(max, MathF.Sqrt(dx * dx + dy * dy));
+        }
+
+        return max;
+    }
+
+    private static float GetHorizontalArea2D(Tile tile, Poly poly)
+    {
+        var twiceArea = 0f;
+        for (var i = 0; i < poly.VertCount; i++)
+        {
+            var a = DetourToWow(tile.Verts[poly.Verts[i]]);
+            var b = DetourToWow(tile.Verts[poly.Verts[(i + 1) % poly.VertCount]]);
+            twiceArea += (a.X * b.Y) - (b.X * a.Y);
+        }
+
+        return MathF.Abs(twiceArea) * 0.5f;
+    }
+
+    private static int CountInternalNeighbors(Poly poly)
+    {
+        var count = 0;
+        foreach (var nei in poly.Neis)
+        {
+            if (nei != 0 && (nei & 0x8000) == 0)
+                count++;
+        }
+
+        return count;
+    }
+
+    private static void WritePolyReport(Tile tile, IReadOnlyList<int> polyIndices, string path)
+    {
+        var dir = Path.GetDirectoryName(Path.GetFullPath(path));
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        using var writer = new StreamWriter(path, append: false, Encoding.UTF8);
+        writer.NewLine = "\n";
+        writer.WriteLine("polyIndex,polyType,area,flags,vertCount,detailTriCount,centroidX,centroidY,centroidZ,minX,maxX,minY,maxY,minZ,maxZ,zRange,maxEdge2D,horizontalArea2D,internalNeighbors");
+
+        foreach (var polyIndex in polyIndices)
+        {
+            var poly = tile.Polys[polyIndex];
+            var detailTriCount = polyIndex < tile.DetailMeshes.Length ? tile.DetailMeshes[polyIndex].TriCount : 0;
+            var centroid = DetourToWow(GetPolyCentroid(tile, polyIndex));
+            var bounds = GetPolyWowBounds(tile, polyIndex);
+            var polyType = poly.AreaAndType >> 6;
+            var area = poly.AreaAndType & 0x3f;
+            var zRange = bounds.MaxZ - bounds.MinZ;
+            var maxEdge2D = GetMaxPolyEdge2D(tile, poly);
+            var horizontalArea = GetHorizontalArea2D(tile, poly);
+            var neighbors = CountInternalNeighbors(poly);
+
+            writer.WriteLine(string.Join(',',
+                polyIndex.ToString(CultureInfo.InvariantCulture),
+                polyType.ToString(CultureInfo.InvariantCulture),
+                area.ToString(CultureInfo.InvariantCulture),
+                poly.Flags.ToString(CultureInfo.InvariantCulture),
+                poly.VertCount.ToString(CultureInfo.InvariantCulture),
+                detailTriCount.ToString(CultureInfo.InvariantCulture),
+                centroid.X.ToString("F4", CultureInfo.InvariantCulture),
+                centroid.Y.ToString("F4", CultureInfo.InvariantCulture),
+                centroid.Z.ToString("F4", CultureInfo.InvariantCulture),
+                bounds.MinX.ToString("F4", CultureInfo.InvariantCulture),
+                bounds.MaxX.ToString("F4", CultureInfo.InvariantCulture),
+                bounds.MinY.ToString("F4", CultureInfo.InvariantCulture),
+                bounds.MaxY.ToString("F4", CultureInfo.InvariantCulture),
+                bounds.MinZ.ToString("F4", CultureInfo.InvariantCulture),
+                bounds.MaxZ.ToString("F4", CultureInfo.InvariantCulture),
+                zRange.ToString("F4", CultureInfo.InvariantCulture),
+                maxEdge2D.ToString("F4", CultureInfo.InvariantCulture),
+                horizontalArea.ToString("F4", CultureInfo.InvariantCulture),
+                neighbors.ToString(CultureInfo.InvariantCulture)));
+        }
+    }
+
+    private static bool IsOffMesh(Poly poly) => (poly.AreaAndType >> 6) == 1;
 
     // Parse vmangos .vmtile: 8-byte "VMAP_7.0" magic + uint32 numSpawns +
     // sequence of (ModelSpawn + uint32 referencedVal) records. ModelSpawn
@@ -656,6 +922,21 @@ internal readonly record struct Vec3(float X, float Y, float Z);
 
 internal sealed record Marker(float X, float Y, float Z, string Label);
 
+internal readonly record struct WowBounds(
+    float MinX,
+    float MinY,
+    float MinZ,
+    float MaxX,
+    float MaxY,
+    float MaxZ);
+
+internal enum ReachableMode
+{
+    All,
+    Only,
+    Unreachable
+}
+
 internal sealed record VmapSpawn(
     uint Flags,
     Vec3 Pos,
@@ -675,16 +956,26 @@ internal sealed class Args
     public bool ZUp;
     public bool Quiet;
     public string? VmapsDir;
+    public Marker? ReachableFrom;
+    public ReachableMode ReachableMode = ReachableMode.All;
+    public WowBounds? CropWow;
+    public HashSet<int> PolyFilter = new();
+    public string? PolyReportPath;
 
     public static readonly string UsageText =
         "Usage: MmapVisualize --mmtile <path> --out <obj-path> [options]\n" +
         "Options:\n" +
         "  --mmtile <path>      input .mmtile file (required)\n" +
         "  --out <path>         output OBJ file (required)\n" +
-        "  --mark X,Y,Z label   add a marker octahedron at WoW coord (X east, Y north, Z up); repeat\n" +
+        "  --mark X,Y,Z label   add a marker octahedron at WoW coord (X/Y horizontal, Z up); repeat\n" +
         "  --z-band <yards>     group polygons into Z bands of this size (default 2)\n" +
-        "  --z-up               output WoW-native Z-up (X east, Y north, Z vertical) for Blender/MeshLab\n" +
-        "                       (default: Y-up right-handed, X east, Y vertical, Z south — Windows 3D Viewer / glTF default)\n" +
+        "  --reachable-from X,Y,Z  find nearest ground poly to WoW coord and compute connected component\n" +
+        "  --reachable-mode <mode> all|only|unreachable (default: only when --reachable-from is set)\n" +
+        "  --crop minX,minY,minZ,maxX,maxY,maxZ  include only polygons whose WoW-space AABB intersects this box\n" +
+        "  --polys i,j,k         include only these polygon indices, after reachability/crop filtering\n" +
+        "  --poly-report <csv> emit CSV facts for rendered polygons (after crop/reachability filters)\n" +
+        "  --z-up               output WoW-native Z-up (X/Y horizontal, Z vertical) for Blender/MeshLab\n" +
+        "                       (default: Y-up OBJ, X=WoW X, Y=WoW Z, Z=-WoW Y)\n" +
         "  --include-vmaps <dir> overlay WMO instance bounding boxes from <dir>/<map>_<X>_<Y>.vmtile\n" +
         "  --quiet              suppress informational stderr\n";
 
@@ -705,6 +996,25 @@ internal sealed class Args
                 case "--z-band":
                     a.ZBand = float.Parse(Next(argv, ref i, "--z-band"), CultureInfo.InvariantCulture);
                     break;
+                case "--reachable-from":
+                    var reachableCoord = Next(argv, ref i, "--reachable-from");
+                    a.ReachableFrom = ParseMark(reachableCoord, "reachable_from");
+                    if (a.ReachableMode == ReachableMode.All)
+                        a.ReachableMode = ReachableMode.Only;
+                    break;
+                case "--reachable-mode":
+                    a.ReachableMode = ParseReachableMode(Next(argv, ref i, "--reachable-mode"));
+                    break;
+                case "--crop":
+                    a.CropWow = ParseBounds(Next(argv, ref i, "--crop"));
+                    break;
+                case "--polys":
+                    foreach (var polyIndex in ParsePolyList(Next(argv, ref i, "--polys")))
+                        a.PolyFilter.Add(polyIndex);
+                    break;
+                case "--poly-report":
+                    a.PolyReportPath = Next(argv, ref i, "--poly-report");
+                    break;
                 case "--z-up": a.ZUp = true; break;
                 case "--y-up": break; // accepted for backward compat with old default; new default IS y-up
                 case "--include-vmaps": a.VmapsDir = Next(argv, ref i, "--include-vmaps"); break;
@@ -723,6 +1033,19 @@ internal sealed class Args
         return a;
     }
 
+    private static ReachableMode ParseReachableMode(string value)
+    {
+        return value.ToLowerInvariant() switch
+        {
+            "all" => ReachableMode.All,
+            "only" => ReachableMode.Only,
+            "reachable" => ReachableMode.Only,
+            "unreachable" => ReachableMode.Unreachable,
+            "unreachable-only" => ReachableMode.Unreachable,
+            _ => throw new ArgException($"unknown reachable mode: {value}")
+        };
+    }
+
     private static string Next(string[] argv, ref int i, string name)
     {
         if (i + 1 >= argv.Length) throw new ArgException($"{name} requires a value");
@@ -738,6 +1061,41 @@ internal sealed class Args
             float.Parse(parts[1].Trim(), CultureInfo.InvariantCulture),
             float.Parse(parts[2].Trim(), CultureInfo.InvariantCulture),
             label);
+    }
+
+    private static WowBounds ParseBounds(string value)
+    {
+        var parts = value.Split(',');
+        if (parts.Length != 6)
+            throw new ArgException($"--crop expects minX,minY,minZ,maxX,maxY,maxZ; got {value}");
+
+        var minX = float.Parse(parts[0].Trim(), CultureInfo.InvariantCulture);
+        var minY = float.Parse(parts[1].Trim(), CultureInfo.InvariantCulture);
+        var minZ = float.Parse(parts[2].Trim(), CultureInfo.InvariantCulture);
+        var maxX = float.Parse(parts[3].Trim(), CultureInfo.InvariantCulture);
+        var maxY = float.Parse(parts[4].Trim(), CultureInfo.InvariantCulture);
+        var maxZ = float.Parse(parts[5].Trim(), CultureInfo.InvariantCulture);
+
+        return new WowBounds(
+            MathF.Min(minX, maxX),
+            MathF.Min(minY, maxY),
+            MathF.Min(minZ, maxZ),
+            MathF.Max(minX, maxX),
+            MathF.Max(minY, maxY),
+            MathF.Max(minZ, maxZ));
+    }
+
+    private static IEnumerable<int> ParsePolyList(string value)
+    {
+        foreach (var part in value.Split(','))
+        {
+            var trimmed = part.Trim();
+            if (trimmed.Length == 0)
+                continue;
+            if (!int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var polyIndex) || polyIndex < 0)
+                throw new ArgException($"--polys expects non-negative integer indices; got {trimmed}");
+            yield return polyIndex;
+        }
     }
 }
 

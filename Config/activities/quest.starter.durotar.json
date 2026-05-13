@@ -1,0 +1,33 @@
+{
+  "ActivityId": "quest.starter.durotar",
+  "Loadout": {
+    "TargetLevel": 1,
+    "RidingSkill": 0,
+    "MountSpellId": 0,
+    "SpellIdsToLearn": [],
+    "Skills": [],
+    "EquipItems": [],
+    "SupplementalItemIds": [],
+    "ElixirItemIds": [],
+    "FactionReps": [],
+    "CompletedQuestIds": [],
+    "TalentTemplate": null
+  },
+  "LockoutSkip": false,
+  "LevelOverride": null,
+  "GearOverrides": [],
+  "ReputationOverrides": {},
+  "RoleOverrides": null,
+  "StagingLocation": "Durotar",
+  "HumanJoin": {
+    "HumanRole": "Member",
+    "BotRaidLeader": false,
+    "GearHuman": false,
+    "HumanIdleTimeoutSeconds": 600
+  },
+  "LootPolicy": "FreeForAll",
+  "TearDownPolicy": {
+    "Action": "DeleteCharacters",
+    "HoldTtlSeconds": null
+  }
+}

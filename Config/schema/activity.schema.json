@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wwow.local/schema/activity.schema.json",
+  "title": "ActivityConfig",
+  "description": "Per-activity OnDemand launcher configuration. One file per catalog row at `Config/activities/<id>.json`. Read by `OnDemandActivityLauncher` (docs/Plan/03_PHASE2_ONDEMAND_ENGINE.md S2.7) at the Outfitting / Partying / Travelling / Engaged stages. Field shapes mirror `ActivityDefinition` subtypes in docs/Spec/04_ACTIVITIES.md (HumanJoinPolicy, RoleTemplate, LootPolicy, ReputationStanding) and the `LoadoutSpec` POCO in docs/Spec/17_LOADOUT.md. Casing follows the repo convention (PascalCase) established in `Services/WoWStateManager/Settings/StateManagerSettings.json` and `LoadoutSpecSettings` in `Services/WoWStateManager/Settings/CharacterSettings.cs`.",
+  "$comment": "S0.10 has shipped docs/Spec/17_LOADOUT.md; the `Loadout` shape below is the JSON projection of `LoadoutSpecSettings` (CharacterSettings.cs:192). Top-level `GearOverrides` and `ReputationOverrides` (per slot S0.11 brief) are activity-level extras the Phase 2 OnDemand launcher merges INTO the per-bot loadout before dispatch — see Spec/17 §5 'Two execution paths' (test/OnDemand mode applies them offline via `.additem` and `.modify rep`).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ActivityId",
+    "Loadout",
+    "LockoutSkip",
+    "LevelOverride",
+    "GearOverrides",
+    "ReputationOverrides",
+    "RoleOverrides",
+    "StagingLocation",
+    "HumanJoin",
+    "LootPolicy",
+    "TearDownPolicy"
+  ],
+  "properties": {
+    "ActivityId": {
+      "type": "string",
+      "description": "Catalog row id matching `ActivityDefinition.Id` in `Services/WoWStateManager/Activities/ActivityCatalog.cs` and a row in `docs/Plan/Activities/00_INDEX.md`. Example: `dungeon.ragefire-chasm`.",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$",
+      "minLength": 3,
+      "maxLength": 80
+    },
+    "Loadout": {
+      "type": "object",
+      "description": "JSON projection of `LoadoutSpecSettings` (docs/Spec/17_LOADOUT.md, `Services/WoWStateManager/Settings/CharacterSettings.cs:192`). Applied during the Outfitting stage via `ActionType.APPLY_LOADOUT` (online) or coordinator GM commands (offline). All fields are optional; zero/empty values mean 'don't change' so the spec is additive (Spec/17 overview).",
+      "additionalProperties": false,
+      "required": ["TargetLevel"],
+      "properties": {
+        "TargetLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60,
+          "description": "Target character level the bot should reach. `0` = leave as is. `LoadoutTask` issues `.levelup <delta>` last so gear required-level checks already pass."
+        },
+        "HonorRank": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 14,
+          "default": 0,
+          "description": "Vanilla PvP rank id (0..14). Offline-only — applied by the coordinator via MySQL `UPDATE characters.honor_rank_points`."
+        },
+        "RidingSkill": {
+          "type": "integer",
+          "enum": [0, 75, 150, 300],
+          "default": 0,
+          "description": "Riding skill value. `LoadoutTask` issues `.setskill 762 <value> max(value,300)`."
+        },
+        "MountSpellId": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "mangos `spell_template.entry`. `0` = no mount. `LoadoutTask` issues `.learn <id>` after riding skill is set."
+        },
+        "ArmorSetId": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "mangos `item_template_sets` token for one-shot bulk equip via `.additemset <id>`."
+        },
+        "SpellIdsToLearn": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "default": [],
+          "description": "mangos `spell_template.entry` ids granted via `.learn <id>` before anything else."
+        },
+        "Skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["SkillId", "Value"],
+            "properties": {
+              "SkillId": { "type": "integer", "minimum": 1 },
+              "Value":   { "type": "integer", "minimum": 0, "maximum": 300 },
+              "Max":     { "type": "integer", "minimum": 0, "maximum": 300 }
+            }
+          },
+          "default": [],
+          "description": "Weapon / profession skill values applied via `.setskill <id> <value> <max>`. Bot only raises, never lowers."
+        },
+        "EquipItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ItemId"],
+            "properties": {
+              "ItemId":        { "type": "integer", "minimum": 1 },
+              "InventorySlot": { "type": "integer", "minimum": 0, "maximum": 18 }
+            }
+          },
+          "default": [],
+          "description": "Items the bot must end up wearing. `.additem <id>` + `EquipItemTask`. `InventorySlot=0` means 'server picks'."
+        },
+        "SupplementalItemIds": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "default": [],
+          "description": "Bag-fill items (reagents, ammo, food, bandages) added via `.additem <id>` without equipping."
+        },
+        "ElixirItemIds": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "default": [],
+          "description": "Consumables added then used at end of prep (one `UseItemTask` per id)."
+        },
+        "FactionReps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["FactionId", "Standing"],
+            "properties": {
+              "FactionId": { "type": "integer", "minimum": 1 },
+              "Standing":  { "type": "integer", "minimum": -42000, "maximum": 42999 }
+            }
+          },
+          "default": [],
+          "description": "Faction standings the bot needs (attunement gates, vendor access). Offline-only — coordinator runs `.modify rep <factionId> <standing>` pre-login."
+        },
+        "CompletedQuestIds": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "default": [],
+          "description": "mangos `quest_template.entry`s applied offline via `.quest add` then `.quest complete`."
+        },
+        "TalentTemplate": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Named talent build (e.g. `FuryWarriorPreRaid`). Offline-only — coordinator runs `.reset talents` then the template's `.add talent <spellId>` chain. See Spec/17 §GM-command translation."
+        }
+      }
+    },
+    "LockoutSkip": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, the OnDemand launcher clears the `mangos.character_instance` lockout for each participant (including the human if present) before launch. Allows re-running an instance the human is already saved to. See `LockoutVerifier` (Spec/04 R17)."
+    },
+    "LevelOverride": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "maximum": 60,
+      "default": null,
+      "description": "If non-null, overrides `Loadout.TargetLevel` for participants. Used when the operator wants a level different from the activity's natural band (e.g. running Wailing Caverns at level 60)."
+    },
+    "GearOverrides": {
+      "type": "array",
+      "description": "Extra item ids `.additem`'d on top of `Loadout.SupplementalItemIds` / `Loadout.EquipItems`. Used for activity-specific consumables, keys, or quest items the launcher should hand out even if the per-bot loadout doesn't mention them.",
+      "items": { "type": "integer", "minimum": 1 },
+      "default": [],
+      "uniqueItems": false
+    },
+    "ReputationOverrides": {
+      "type": "object",
+      "description": "Faction-id → standing-name map. Activity-level rep nudges the launcher applies via `.modify rep <factionId> <standing>` ON TOP OF `Loadout.FactionReps`. Standing names are the `ReputationStanding` enum in docs/Spec/04_ACTIVITIES.md and are translated to the standing-points value by the launcher. Keys are stringified MaNGOS faction ids (mangos.faction.id).",
+      "default": {},
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "Hated",
+          "Hostile",
+          "Unfriendly",
+          "Neutral",
+          "Friendly",
+          "Honored",
+          "Revered",
+          "Exalted"
+        ]
+      },
+      "propertyNames": {
+        "pattern": "^[0-9]+$"
+      }
+    },
+    "RoleOverrides": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["Tanks", "Healers", "Dps", "Support"],
+          "properties": {
+            "Tanks":   { "type": "integer", "minimum": 0, "maximum": 40 },
+            "Healers": { "type": "integer", "minimum": 0, "maximum": 40 },
+            "Dps":     { "type": "integer", "minimum": 0, "maximum": 40 },
+            "Support": { "type": "integer", "minimum": 0, "maximum": 40 }
+          }
+        }
+      ],
+      "default": null,
+      "description": "If non-null, overrides the catalog row's `RoleTemplate` (docs/Spec/04_ACTIVITIES.md `RoleTemplate`). Use to short-staff (e.g. 4-man dungeon) or expand support. Sum must respect `MinPlayers`..`MaxPlayers` on the catalog row — validated at launch, not at schema time."
+    },
+    "StagingLocation": {
+      "type": "string",
+      "description": "Named-location key resolved at runtime via `Bot/named-locations.json` (S0.12). The OnDemand launcher teleports every participant via `.tele name <bot> <StagingLocation>` at the Travelling stage. MUST match a key in the named-locations seed (asserted by Phase 0 catalog tests). Default convention: same string as the catalog row's `Location` field.",
+      "minLength": 1
+    },
+    "HumanJoin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["HumanRole", "BotRaidLeader", "GearHuman", "HumanIdleTimeoutSeconds"],
+      "description": "Per-activity human participation rules. Mirrors the `HumanJoinPolicy` record in docs/Spec/04_ACTIVITIES.md (the OnDemand-relevant subset; `HumanCanInitiate` is always true per decision R6).",
+      "properties": {
+        "HumanRole": {
+          "type": "string",
+          "enum": ["Member", "Leader", "Observer"],
+          "description": "Human's group role. Maps to `HumanGroupRole` enum in Spec/04. `Observer` = human is invited but bots run the show."
+        },
+        "BotRaidLeader": {
+          "type": "boolean",
+          "description": "When true, a bot is raid leader even if `HumanRole=Leader`. Used for raids where the human should follow bot pulls."
+        },
+        "GearHuman": {
+          "type": "boolean",
+          "description": "When true, the launcher also applies `Loadout` to the human player. Otherwise bots are level-scaled to the human."
+        },
+        "HumanIdleTimeoutSeconds": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 7200,
+          "description": "Seconds of human inactivity before the launcher tears the instance down. Default per Spec/04: 300 (5 min) for short activities, 900 (15 min) for raids."
+        }
+      }
+    },
+    "LootPolicy": {
+      "type": "string",
+      "enum": ["FreeForAll", "GroupLoot", "NeedBeforeGreed", "MasterLoot"],
+      "description": "Group loot rule applied at the Partying stage. Mirrors `LootPolicy` enum in docs/Spec/04_ACTIVITIES.md. Note Spec/04: in OnDemand mode loot priority does not really matter because characters are ephemeral; this field is preserved for the Partying-stage `.group settings` GM commands."
+    },
+    "TearDownPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Action", "HoldTtlSeconds"],
+      "description": "What the launcher does at the TearDown stage. See docs/Spec/02_STATEMANAGER.md OnDemand stage 6.",
+      "properties": {
+        "Action": {
+          "type": "string",
+          "enum": ["DeleteCharacters", "HoldForReuse", "LogOutOnly"],
+          "description": "`DeleteCharacters` = `.character delete` for ephemeral pools (default for dungeons/raids/BGs). `HoldForReuse` = keep characters parked for `HoldTtlSeconds` to reuse on the next request. `LogOutOnly` = leave characters in DB but log out (useful for profession runs that build reputation across instances)."
+        },
+        "HoldTtlSeconds": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 86400,
+          "description": "Only meaningful when `Action=HoldForReuse`. Seconds to keep the characters before deletion. Null for the other actions."
+        }
+      }
+    }
+  }
+}

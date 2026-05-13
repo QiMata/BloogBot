@@ -85,7 +85,7 @@ public static class NativeLocalPhysics
             PhysicsFlags = proto.PhysicsFlags,
             StepUpBaseZ = proto.StepUpBaseZ,
             StepUpAge = proto.StepUpAge,
-            GroundedWallState = 0,
+            GroundedWallState = proto.GroundedWallState,
             WasGrounded = proto.WasGrounded ? 1u : 0u,
         };
 
@@ -142,6 +142,7 @@ public static class NativeLocalPhysics
                 BlockedFraction = output.BlockedFraction,
                 StepUpBaseZ = output.StepUpBaseZ,
                 StepUpAge = output.StepUpAge,
+                GroundedWallState = output.GroundedWallState,
                 EnvironmentFlags = output.EnvironmentFlags,
             };
         }

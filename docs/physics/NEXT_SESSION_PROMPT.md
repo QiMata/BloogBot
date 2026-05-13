@@ -252,8 +252,8 @@ bake + runtime` plus a follow-up for the `SceneCacheBuilder` tool itself.
    — list of variants that touch this tile. Used by Phase C cache lookup.
 
 **Phase B exit:**
-- `MmapGen.exe 1 --tile 40,29 --variants base,ony-head-org` produces both
-  `0012940.base.mmtile` and `0012940.ony-head-org.mmtile`.
+- `MmapGen.exe 1 --tile 29,40 --variants base,ony-head-org` produces both
+  `0014029.base.mmtile` and `0014029.ony-head-org.mmtile`.
 - Probe with `--variants base` reproduces Phase A behavior; probe with
   `--variants base,ony-head-org` shows the head GO as collidable.
 

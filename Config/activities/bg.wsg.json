@@ -1,0 +1,40 @@
+{
+  "ActivityId": "bg.wsg",
+  "Loadout": {
+    "TargetLevel": 29,
+    "RidingSkill": 0,
+    "MountSpellId": 0,
+    "SpellIdsToLearn": [],
+    "Skills": [
+      { "SkillId": 54, "Value": 145, "Max": 145 }
+    ],
+    "EquipItems": [],
+    "SupplementalItemIds": [3825, 1487],
+    "ElixirItemIds": [],
+    "FactionReps": [],
+    "CompletedQuestIds": [],
+    "TalentTemplate": "FeralDruidTwink29"
+  },
+  "LockoutSkip": false,
+  "LevelOverride": null,
+  "GearOverrides": [],
+  "ReputationOverrides": {},
+  "RoleOverrides": {
+    "Tanks": 0,
+    "Healers": 2,
+    "Dps": 7,
+    "Support": 1
+  },
+  "StagingLocation": "Warsong Gulch",
+  "HumanJoin": {
+    "HumanRole": "Member",
+    "BotRaidLeader": true,
+    "GearHuman": false,
+    "HumanIdleTimeoutSeconds": 600
+  },
+  "LootPolicy": "GroupLoot",
+  "TearDownPolicy": {
+    "Action": "DeleteCharacters",
+    "HoldTtlSeconds": null
+  }
+}

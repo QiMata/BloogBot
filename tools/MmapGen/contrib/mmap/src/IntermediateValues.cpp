@@ -17,6 +17,7 @@
  */
 
 #include "IntermediateValues.h"
+#include <cstring>
 
 namespace MMAP
 {
@@ -217,22 +218,106 @@ namespace MMAP
             return;
         }
 
-        G3D::Array<float> allVerts;
-        G3D::Array<int> allTris;
+        std::string mtlFileName = "meshes/" + filename + ".mtl";
+        FILE* mtlFile = fopen(mtlFileName.c_str(), "wb");
+        if (mtlFile)
+        {
+            fprintf(mtlFile, "newmtl terrain\nKd 0.42 0.72 0.34\nKa 0.10 0.10 0.10\n\n");
+            fprintf(mtlFile, "newmtl vmap\nKd 0.55 0.55 0.85\nKa 0.10 0.10 0.10\n\n");
+            fprintf(mtlFile, "newmtl gameobject\nKd 0.95 0.55 0.22\nKa 0.10 0.10 0.10\n\n");
+            fprintf(mtlFile, "newmtl liquid\nKd 0.20 0.55 0.90\nKa 0.10 0.10 0.10\n\n");
+            fclose(mtlFile);
+        }
 
-        allTris.append(meshData.liquidTris);
-        allVerts.append(meshData.liquidVerts);
-        TerrainBuilder::copyIndices(meshData.solidTris, allTris, allVerts.size() / 3);
-        allVerts.append(meshData.solidVerts);
+        std::string csvFileName = "meshes/" + filename + ".source_triangles.csv";
+        FILE* csvFile = fopen(csvFileName.c_str(), "wb");
+        if (csvFile)
+            fprintf(csvFile, "faceIndex,source,meshTriIndex,minX,minY,minZ,maxX,maxY,maxZ\n");
 
-        float* verts = allVerts.getCArray();
-        int* tris = allTris.getCArray();
+        fprintf(objFile, "# MmapGen source geometry with triangle-source tags.\n");
+        fprintf(objFile, "# Coordinates are generator/Recast coordinates, not viewer-remapped WoW XYZ.\n");
+        fprintf(objFile, "mtllib %s.mtl\n", filename.c_str());
+        fprintf(objFile, "o source_geometry\n");
 
-        for (int i = 0; i < allVerts.size() / 3; i++)
-            fprintf(objFile, "v %f %f %f\n", verts[i * 3], verts[i * 3 + 1], verts[i * 3 + 2]);
+        float* liquidVerts = meshData.liquidVerts.getCArray();
+        int* liquidTris = meshData.liquidTris.getCArray();
+        float* solidVerts = meshData.solidVerts.getCArray();
+        int* solidTris = meshData.solidTris.getCArray();
 
-        for (int i = 0; i < allTris.size() / 3; i++)
-            fprintf(objFile, "f %i %i %i\n", tris[i * 3] + 1, tris[i * 3 + 1] + 1, tris[i * 3 + 2] + 1);
+        const int liquidVertCount = meshData.liquidVerts.size() / 3;
+        const int liquidTriCount = meshData.liquidTris.size() / 3;
+        const int solidVertCount = meshData.solidVerts.size() / 3;
+        const int solidTriCount = meshData.solidTris.size() / 3;
+
+        for (int i = 0; i < liquidVertCount; i++)
+            fprintf(objFile, "v %f %f %f\n", liquidVerts[i * 3], liquidVerts[i * 3 + 1], liquidVerts[i * 3 + 2]);
+        for (int i = 0; i < solidVertCount; i++)
+            fprintf(objFile, "v %f %f %f\n", solidVerts[i * 3], solidVerts[i * 3 + 1], solidVerts[i * 3 + 2]);
+
+        auto writeCsvRow = [csvFile](int faceIndex, const char* source, int meshTriIndex, const float* verts, const int* tris)
+        {
+            if (!csvFile)
+                return;
+
+            const int i0 = tris[meshTriIndex * 3];
+            const int i1 = tris[meshTriIndex * 3 + 1];
+            const int i2 = tris[meshTriIndex * 3 + 2];
+            float minX = verts[i0 * 3];
+            float minY = verts[i0 * 3 + 1];
+            float minZ = verts[i0 * 3 + 2];
+            float maxX = minX;
+            float maxY = minY;
+            float maxZ = minZ;
+            const int indices[3] = { i0, i1, i2 };
+            for (int c = 1; c < 3; ++c)
+            {
+                const float x = verts[indices[c] * 3];
+                const float y = verts[indices[c] * 3 + 1];
+                const float z = verts[indices[c] * 3 + 2];
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (z < minZ) minZ = z;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+                if (z > maxZ) maxZ = z;
+            }
+
+            fprintf(csvFile, "%d,%s,%d,%f,%f,%f,%f,%f,%f\n",
+                    faceIndex, source, meshTriIndex, minX, minY, minZ, maxX, maxY, maxZ);
+        };
+
+        if (liquidTriCount > 0)
+        {
+            fprintf(objFile, "g liquid\nusemtl liquid\n");
+            for (int i = 0; i < liquidTriCount; i++)
+            {
+                fprintf(objFile, "f %i %i %i\n",
+                        liquidTris[i * 3] + 1,
+                        liquidTris[i * 3 + 1] + 1,
+                        liquidTris[i * 3 + 2] + 1);
+                writeCsvRow(i, "liquid", i, liquidVerts, liquidTris);
+            }
+        }
+
+        const char* activeSource = "";
+        for (int i = 0; i < solidTriCount; i++)
+        {
+            const char* source = meshData.SourceNameForTriangle(i);
+            if (strcmp(activeSource, source) != 0)
+            {
+                activeSource = source;
+                fprintf(objFile, "g %s\nusemtl %s\n", source, source);
+            }
+
+            fprintf(objFile, "f %i %i %i\n",
+                    solidTris[i * 3] + liquidVertCount + 1,
+                    solidTris[i * 3 + 1] + liquidVertCount + 1,
+                    solidTris[i * 3 + 2] + liquidVertCount + 1);
+            writeCsvRow(liquidTriCount + i, source, i, solidVerts, solidTris);
+        }
+
+        if (csvFile)
+            fclose(csvFile);
 
         fclose(objFile);
 

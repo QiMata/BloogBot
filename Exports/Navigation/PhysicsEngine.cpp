@@ -3909,6 +3909,19 @@ bool WoWCollision::ResolveGroundedWallContacts(const std::vector<SceneQuery::AAB
             nonWalkableGateReturnCode =
                 highestStatefulSupportZ > (currentPosition.z + upwardClearanceThreshold) ? 2u : 1u;
         }
+
+        if (nonWalkableGateReturnCode != 2u && selectionInfo.selectedContact != nullptr) {
+            G3D::Vector3 selectedNormal = selectionInfo.selectedNormal.directionOrZero();
+            if (selectedNormal.magnitude() > PhysicsConstants::VECTOR_EPSILON &&
+                selectedNormal.z > PhysicsConstants::VECTOR_EPSILON &&
+                selectedNormal.z < WOW_WALKABLE_MIN_NORMAL_Z) {
+                const float supportBand = std::max(0.20f, (collisionRadius * 0.50f) + 0.05f);
+                const float contactFootDelta = selectionInfo.selectedContact->point.z - currentPosition.z;
+                if (contactFootDelta <= supportBand) {
+                    nonWalkableGateReturnCode = 2u;
+                }
+            }
+        }
     }
 
     if (!usedWalkableSelectedContact && nonWalkableGateReturnCode == 2u) {

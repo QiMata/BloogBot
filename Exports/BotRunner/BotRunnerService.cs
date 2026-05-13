@@ -83,6 +83,11 @@ namespace BotRunner
         private PendingCommandAckState? _activeLoadoutAck;
 
         private readonly Stack<IBotTask> _botTasks = new();
+        // Phase 1 S1.0: track which IBotTask instances have already received OnPushedAsync
+        // so the lifecycle hook fires exactly once per appearance at stack top.
+        private readonly HashSet<IBotTask> _pushedNotified = new();
+        private readonly TaskStackDriver _taskDriver = new();
+        private readonly IMetricsSink _metrics;
         private bool _tasksInitialized;
         // Sticky flag: once we've entered the world, never fall back to login/charselect
         // sequences until an explicit logout is detected. Prevents CreateCharacter spam
@@ -187,6 +192,8 @@ namespace BotRunner
             _diagnosticPacketTraceRecorder = diagnosticPacketTraceRecorder;
             _useGmCommands = useGmCommands;
             _assignedActivity = string.IsNullOrWhiteSpace(assignedActivity) ? null : assignedActivity.Trim();
+            // Phase 1 S1.0 (R22): metrics sink null-object default until Phase 5 wires Prometheus.
+            _metrics = NoOpMetricsSink.Instance;
 
             var logsDir = System.IO.Path.Combine(AppContext.BaseDirectory, "logs");
             System.IO.Directory.CreateDirectory(logsDir);
@@ -442,7 +449,25 @@ namespace BotRunner
                         var canRunGeneralTasks = _behaviorTree == null || _behaviorTreeStatus != BehaviourTreeStatus.Running;
 
                         if (_botTasks.Count > 0 && (hasDeathRecoveryTask || canRunGeneralTasks))
-                            _botTasks.Peek().Update();
+                        {
+                            // Phase 1 S1.0: drive the full IBotTask lifecycle (Push/Tick/Pop/ChildFail)
+                            // through TaskStackDriver. Default OnTick body in BotTask delegates to the
+                            // legacy void Update() per R25 shim-only migration.
+                            var taskContext = new Tasks.BotTaskContext(
+                                _objectManager,
+                                _container.PathfindingClient,
+                                Chat: (_, text) => _objectManager.SendChatMessage(text),
+                                _metrics,
+                                Bot: new BotRunnerContext(
+                                    _objectManager,
+                                    _botTasks,
+                                    _container,
+                                    _behaviorConfig,
+                                    EnqueueDiagnosticMessage),
+                                cancellationToken);
+                            await _taskDriver.DriveOneTickAsync(_botTasks, _pushedNotified, taskContext, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
                     }
 
                     if (incomingActivityMemberState != null)

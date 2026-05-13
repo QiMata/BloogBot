@@ -1,0 +1,40 @@
+{
+  "ActivityId": "prof.mining-route",
+  "Loadout": {
+    "TargetLevel": 35,
+    "RidingSkill": 75,
+    "MountSpellId": 458,
+    "SpellIdsToLearn": [2575],
+    "Skills": [
+      { "SkillId": 186, "Value": 175, "Max": 300 }
+    ],
+    "EquipItems": [],
+    "SupplementalItemIds": [2901, 4540, 1251],
+    "ElixirItemIds": [],
+    "FactionReps": [],
+    "CompletedQuestIds": [],
+    "TalentTemplate": null
+  },
+  "LockoutSkip": false,
+  "LevelOverride": 35,
+  "GearOverrides": [2901],
+  "ReputationOverrides": {},
+  "RoleOverrides": {
+    "Tanks": 0,
+    "Healers": 0,
+    "Dps": 1,
+    "Support": 0
+  },
+  "StagingLocation": "Mining route",
+  "HumanJoin": {
+    "HumanRole": "Observer",
+    "BotRaidLeader": false,
+    "GearHuman": false,
+    "HumanIdleTimeoutSeconds": 1800
+  },
+  "LootPolicy": "FreeForAll",
+  "TearDownPolicy": {
+    "Action": "HoldForReuse",
+    "HoldTtlSeconds": 3600
+  }
+}

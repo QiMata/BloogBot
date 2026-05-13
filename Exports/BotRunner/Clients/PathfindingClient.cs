@@ -248,6 +248,7 @@ namespace BotRunner.Clients
             var fallStartZ = from.Z;
             var stepUpBaseZ = -200000f;
             var stepUpAge = 0u;
+            var groundedWallState = 0u;
             var wasGrounded = true;
             var moveFlags = (uint)MovementFlags.MOVEFLAG_FORWARD;
             var maxUpwardZDelta = 0f;
@@ -295,6 +296,7 @@ namespace BotRunner.Clients
                         StandingOnLocalZ = standingOnLocalZ,
                         StepUpBaseZ = stepUpBaseZ,
                         StepUpAge = stepUpAge,
+                        GroundedWallState = groundedWallState,
                         WasGrounded = wasGrounded,
                     };
 
@@ -319,6 +321,7 @@ namespace BotRunner.Clients
                     standingOnLocalZ = output.StandingOnLocalZ;
                     stepUpBaseZ = output.StepUpBaseZ;
                     stepUpAge = output.StepUpAge;
+                    groundedWallState = output.GroundedWallState;
                     wasGrounded = (output.MovementFlags & (uint)(MovementFlags.MOVEFLAG_FALLINGFAR | MovementFlags.MOVEFLAG_JUMPING)) == 0;
                     hitWall |= IsBlockingWallContact(output.HitWall, output.BlockedFraction);
 

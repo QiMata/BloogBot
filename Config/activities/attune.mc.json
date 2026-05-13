@@ -1,0 +1,42 @@
+{
+  "ActivityId": "attune.mc",
+  "Loadout": {
+    "TargetLevel": 58,
+    "RidingSkill": 150,
+    "MountSpellId": 18793,
+    "SpellIdsToLearn": [25307, 25309],
+    "Skills": [
+      { "SkillId": 354, "Value": 290, "Max": 300 }
+    ],
+    "EquipItems": [],
+    "SupplementalItemIds": [13446],
+    "ElixirItemIds": [9224],
+    "FactionReps": [],
+    "CompletedQuestIds": [],
+    "TalentTemplate": "AfflictionWarlockLeveling"
+  },
+  "LockoutSkip": true,
+  "LevelOverride": null,
+  "GearOverrides": [],
+  "ReputationOverrides": {
+    "59": "Friendly"
+  },
+  "RoleOverrides": {
+    "Tanks": 1,
+    "Healers": 1,
+    "Dps": 3,
+    "Support": 0
+  },
+  "StagingLocation": "Molten Core attunement",
+  "HumanJoin": {
+    "HumanRole": "Member",
+    "BotRaidLeader": false,
+    "GearHuman": true,
+    "HumanIdleTimeoutSeconds": 600
+  },
+  "LootPolicy": "GroupLoot",
+  "TearDownPolicy": {
+    "Action": "DeleteCharacters",
+    "HoldTtlSeconds": null
+  }
+}

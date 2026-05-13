@@ -1,5 +1,15 @@
 # BloogBot (Westworld of Warcraft) - Claude Code Instructions
 
+## Entry point: [docs/SPEC.md](docs/SPEC.md)
+
+`docs/SPEC.md` is the single entry point for all autonomous work. It links
+to Spec contracts (`docs/Spec/`), the phased Plan (`docs/Plan/`), the
+per-activity implementation slots (`docs/Plan/Activities/`), and the
+rolling task board ([docs/TASKS.md](docs/TASKS.md)).
+
+The decisions of record from the 2026-05-11 design session are in
+[`docs/SPEC.md#decisions-of-record`](docs/SPEC.md#decisions-of-record).
+
 ## Monorepo Shared Contract
 
 - Also follow the root monorepo rules in [../CLAUDE.md](../CLAUDE.md) and [../AGENTS.md](../AGENTS.md).

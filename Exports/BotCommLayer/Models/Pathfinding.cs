@@ -51,7 +51,7 @@ namespace Pathfinding {
             "Z2h0GBYgASgCIpwBChJEeW5hbWljT2JqZWN0UHJvdG8SDAoEZ3VpZBgBIAEo",
             "BBISCgpkaXNwbGF5X2lkGAIgASgNEgkKAXgYAyABKAISCQoBeRgEIAEoAhIJ",
             "CgF6GAUgASgCEhMKC29yaWVudGF0aW9uGAYgASgCEg0KBXNjYWxlGAcgASgC",
-            "EhAKCGdvX3N0YXRlGAggASgNEg0KBWVudHJ5GAkgASgNIuwHCgxQaHlzaWNz",
+            "EhAKCGdvX3N0YXRlGAggASgNEg0KBWVudHJ5GAkgASgNIokICgxQaHlzaWNz",
             "SW5wdXQSFgoObW92ZW1lbnRfZmxhZ3MYASABKA0SDQoFcG9zX3gYAiABKAIS",
             "DQoFcG9zX3kYAyABKAISDQoFcG9zX3oYBCABKAISDgoGZmFjaW5nGAUgASgC",
             "EhYKDnRyYW5zcG9ydF9ndWlkGAYgASgEEhoKEnRyYW5zcG9ydF9vZmZzZXRf",
@@ -74,35 +74,37 @@ namespace Pathfinding {
             "c2ljc19mbGFncxgmIAEoDRI3Cg5uZWFyYnlfb2JqZWN0cxgoIAMoCzIfLnBh",
             "dGhmaW5kaW5nLkR5bmFtaWNPYmplY3RQcm90bxIWCg5zdGVwX3VwX2Jhc2Vf",
             "ehgpIAEoAhITCgtzdGVwX3VwX2FnZRgqIAEoDRIUCgx3YXNfZ3JvdW5kZWQY",
-            "KyABKAgi3wYKDVBoeXNpY3NPdXRwdXQSEQoJbmV3X3Bvc194GAEgASgCEhEK",
-            "CW5ld19wb3NfeRgCIAEoAhIRCgluZXdfcG9zX3oYAyABKAISEQoJbmV3X3Zl",
-            "bF94GAQgASgCEhEKCW5ld192ZWxfeRgFIAEoAhIRCgluZXdfdmVsX3oYBiAB",
-            "KAISFgoObW92ZW1lbnRfZmxhZ3MYByABKA0SEwoLb3JpZW50YXRpb24YCCAB",
-            "KAISDQoFcGl0Y2gYCSABKAISEwoLaXNfZ3JvdW5kZWQYCiABKAgSEwoLaXNf",
-            "c3dpbW1pbmcYCyABKAgSEQoJaXNfZmx5aW5nGAwgASgIEhEKCWZhbGxfdGlt",
-            "ZRgNIAEoAhIcChRjdXJyZW50X3NwbGluZV9pbmRleBgOIAEoBRIXCg9zcGxp",
-            "bmVfcHJvZ3Jlc3MYDyABKAISEAoIZ3JvdW5kX3oYECABKAISEQoJZ3JvdW5k",
-            "X254GBEgASgCEhEKCWdyb3VuZF9ueRgSIAEoAhIRCglncm91bmRfbnoYEyAB",
-            "KAISEAoIbGlxdWlkX3oYFCABKAISEwoLbGlxdWlkX3R5cGUYFSABKA0SFwoP",
-            "cGVuZGluZ19kZXBlbl94GBYgASgCEhcKD3BlbmRpbmdfZGVwZW5feRgXIAEo",
-            "AhIXCg9wZW5kaW5nX2RlcGVuX3oYGCABKAISHwoXc3RhbmRpbmdfb25faW5z",
-            "dGFuY2VfaWQYGSABKA0SGwoTc3RhbmRpbmdfb25fbG9jYWxfeBgaIAEoAhIb",
-            "ChNzdGFuZGluZ19vbl9sb2NhbF95GBsgASgCEhsKE3N0YW5kaW5nX29uX2xv",
-            "Y2FsX3oYHCABKAISFQoNZmFsbF9kaXN0YW5jZRgdIAEoAhIUCgxmYWxsX3N0",
-            "YXJ0X3oYHiABKAISEAoIaGl0X3dhbGwYHyABKAgSFQoNd2FsbF9ub3JtYWxf",
-            "eBggIAEoAhIVCg13YWxsX25vcm1hbF95GCEgASgCEhUKDXdhbGxfbm9ybWFs",
-            "X3oYIiABKAISGAoQYmxvY2tlZF9mcmFjdGlvbhgjIAEoAhIWCg5zdGVwX3Vw",
-            "X2Jhc2VfehgkIAEoAhITCgtzdGVwX3VwX2FnZRglIAEoDRIZChFlbnZpcm9u",
-            "bWVudF9mbGFncxgmIAEoDSqNAwoVUGF0aFNlZ21lbnRBZmZvcmRhbmNlEiAK",
-            "HFBBVEhfU0VHTUVOVF9BRkZPUkRBTkNFX1dBTEsQABIjCh9QQVRIX1NFR01F",
-            "TlRfQUZGT1JEQU5DRV9TVEVQX1VQEAESJwojUEFUSF9TRUdNRU5UX0FGRk9S",
-            "REFOQ0VfU1RFRVBfQ0xJTUIQAhIgChxQQVRIX1NFR01FTlRfQUZGT1JEQU5D",
-            "RV9EUk9QEAMSIQodUEFUSF9TRUdNRU5UX0FGRk9SREFOQ0VfQ0xJRkYQBBIk",
-            "CiBQQVRIX1NFR01FTlRfQUZGT1JEQU5DRV9WRVJUSUNBTBAFEiQKIFBBVEhf",
-            "U0VHTUVOVF9BRkZPUkRBTkNFX0pVTVBfR0FQEAYSJQohUEFUSF9TRUdNRU5U",
-            "X0FGRk9SREFOQ0VfU0FGRV9EUk9QEAcSJwojUEFUSF9TRUdNRU5UX0FGRk9S",
-            "REFOQ0VfVU5TQUZFX0RST1AQCBIjCh9QQVRIX1NFR01FTlRfQUZGT1JEQU5D",
-            "RV9CTE9DS0VEEAlCDqoCC1BhdGhmaW5kaW5nYgZwcm90bzM="));
+            "KyABKAgSGwoTZ3JvdW5kZWRfd2FsbF9zdGF0ZRgsIAEoDSL8BgoNUGh5c2lj",
+            "c091dHB1dBIRCgluZXdfcG9zX3gYASABKAISEQoJbmV3X3Bvc195GAIgASgC",
+            "EhEKCW5ld19wb3NfehgDIAEoAhIRCgluZXdfdmVsX3gYBCABKAISEQoJbmV3",
+            "X3ZlbF95GAUgASgCEhEKCW5ld192ZWxfehgGIAEoAhIWCg5tb3ZlbWVudF9m",
+            "bGFncxgHIAEoDRITCgtvcmllbnRhdGlvbhgIIAEoAhINCgVwaXRjaBgJIAEo",
+            "AhITCgtpc19ncm91bmRlZBgKIAEoCBITCgtpc19zd2ltbWluZxgLIAEoCBIR",
+            "Cglpc19mbHlpbmcYDCABKAgSEQoJZmFsbF90aW1lGA0gASgCEhwKFGN1cnJl",
+            "bnRfc3BsaW5lX2luZGV4GA4gASgFEhcKD3NwbGluZV9wcm9ncmVzcxgPIAEo",
+            "AhIQCghncm91bmRfehgQIAEoAhIRCglncm91bmRfbngYESABKAISEQoJZ3Jv",
+            "dW5kX255GBIgASgCEhEKCWdyb3VuZF9uehgTIAEoAhIQCghsaXF1aWRfehgU",
+            "IAEoAhITCgtsaXF1aWRfdHlwZRgVIAEoDRIXCg9wZW5kaW5nX2RlcGVuX3gY",
+            "FiABKAISFwoPcGVuZGluZ19kZXBlbl95GBcgASgCEhcKD3BlbmRpbmdfZGVw",
+            "ZW5fehgYIAEoAhIfChdzdGFuZGluZ19vbl9pbnN0YW5jZV9pZBgZIAEoDRIb",
+            "ChNzdGFuZGluZ19vbl9sb2NhbF94GBogASgCEhsKE3N0YW5kaW5nX29uX2xv",
+            "Y2FsX3kYGyABKAISGwoTc3RhbmRpbmdfb25fbG9jYWxfehgcIAEoAhIVCg1m",
+            "YWxsX2Rpc3RhbmNlGB0gASgCEhQKDGZhbGxfc3RhcnRfehgeIAEoAhIQCgho",
+            "aXRfd2FsbBgfIAEoCBIVCg13YWxsX25vcm1hbF94GCAgASgCEhUKDXdhbGxf",
+            "bm9ybWFsX3kYISABKAISFQoNd2FsbF9ub3JtYWxfehgiIAEoAhIYChBibG9j",
+            "a2VkX2ZyYWN0aW9uGCMgASgCEhYKDnN0ZXBfdXBfYmFzZV96GCQgASgCEhMK",
+            "C3N0ZXBfdXBfYWdlGCUgASgNEhkKEWVudmlyb25tZW50X2ZsYWdzGCYgASgN",
+            "EhsKE2dyb3VuZGVkX3dhbGxfc3RhdGUYJyABKA0qjQMKFVBhdGhTZWdtZW50",
+            "QWZmb3JkYW5jZRIgChxQQVRIX1NFR01FTlRfQUZGT1JEQU5DRV9XQUxLEAAS",
+            "IwofUEFUSF9TRUdNRU5UX0FGRk9SREFOQ0VfU1RFUF9VUBABEicKI1BBVEhf",
+            "U0VHTUVOVF9BRkZPUkRBTkNFX1NURUVQX0NMSU1CEAISIAocUEFUSF9TRUdN",
+            "RU5UX0FGRk9SREFOQ0VfRFJPUBADEiEKHVBBVEhfU0VHTUVOVF9BRkZPUkRB",
+            "TkNFX0NMSUZGEAQSJAogUEFUSF9TRUdNRU5UX0FGRk9SREFOQ0VfVkVSVElD",
+            "QUwQBRIkCiBQQVRIX1NFR01FTlRfQUZGT1JEQU5DRV9KVU1QX0dBUBAGEiUK",
+            "IVBBVEhfU0VHTUVOVF9BRkZPUkRBTkNFX1NBRkVfRFJPUBAHEicKI1BBVEhf",
+            "U0VHTUVOVF9BRkZPUkRBTkNFX1VOU0FGRV9EUk9QEAgSIwofUEFUSF9TRUdN",
+            "RU5UX0FGRk9SREFOQ0VfQkxPQ0tFRBAJQg6qAgtQYXRoZmluZGluZ2IGcHJv",
+            "dG8z"));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
           new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Pathfinding.PathSegmentAffordance), }, null, new pbr::GeneratedClrTypeInfo[] {
@@ -112,8 +114,8 @@ namespace Pathfinding {
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.CalculatePathRequest), global::Pathfinding.CalculatePathRequest.Parser, new[]{ "MapId", "Start", "End", "Straight", "NearbyObjects", "Race", "Gender" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.CalculatePathResponse), global::Pathfinding.CalculatePathResponse.Parser, new[]{ "Corners", "Result", "RawCornerCount", "HasBlockedSegment", "BlockedSegmentIndex", "BlockedReason", "MaxAffordance", "PathSupported", "StepUpCount", "DropCount", "CliffCount", "VerticalCount", "TotalZGain", "TotalZLoss", "MaxSlopeAngleDeg", "JumpGapCount", "SafeDropCount", "UnsafeDropCount", "BlockedCount", "MaxClimbHeight", "MaxGapDistance", "MaxDropHeight" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.DynamicObjectProto), global::Pathfinding.DynamicObjectProto.Parser, new[]{ "Guid", "DisplayId", "X", "Y", "Z", "Orientation", "Scale", "GoState", "Entry" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsInput), global::Pathfinding.PhysicsInput.Parser, new[]{ "MovementFlags", "PosX", "PosY", "PosZ", "Facing", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "SwimPitch", "FallTime", "FallStartZ", "SplineElevation", "VelX", "VelY", "VelZ", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "Race", "Gender", "MapId", "DeltaTime", "FrameCounter", "PrevGroundZ", "PrevGroundNx", "PrevGroundNy", "PrevGroundNz", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "PhysicsFlags", "NearbyObjects", "StepUpBaseZ", "StepUpAge", "WasGrounded" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsOutput), global::Pathfinding.PhysicsOutput.Parser, new[]{ "NewPosX", "NewPosY", "NewPosZ", "NewVelX", "NewVelY", "NewVelZ", "MovementFlags", "Orientation", "Pitch", "IsGrounded", "IsSwimming", "IsFlying", "FallTime", "CurrentSplineIndex", "SplineProgress", "GroundZ", "GroundNx", "GroundNy", "GroundNz", "LiquidZ", "LiquidType", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "FallDistance", "FallStartZ", "HitWall", "WallNormalX", "WallNormalY", "WallNormalZ", "BlockedFraction", "StepUpBaseZ", "StepUpAge", "EnvironmentFlags" }, null, null, null, null)
+            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsInput), global::Pathfinding.PhysicsInput.Parser, new[]{ "MovementFlags", "PosX", "PosY", "PosZ", "Facing", "TransportGuid", "TransportOffsetX", "TransportOffsetY", "TransportOffsetZ", "TransportOrientation", "SwimPitch", "FallTime", "FallStartZ", "SplineElevation", "VelX", "VelY", "VelZ", "WalkSpeed", "RunSpeed", "RunBackSpeed", "SwimSpeed", "SwimBackSpeed", "Race", "Gender", "MapId", "DeltaTime", "FrameCounter", "PrevGroundZ", "PrevGroundNx", "PrevGroundNy", "PrevGroundNz", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "PhysicsFlags", "NearbyObjects", "StepUpBaseZ", "StepUpAge", "WasGrounded", "GroundedWallState" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Pathfinding.PhysicsOutput), global::Pathfinding.PhysicsOutput.Parser, new[]{ "NewPosX", "NewPosY", "NewPosZ", "NewVelX", "NewVelY", "NewVelZ", "MovementFlags", "Orientation", "Pitch", "IsGrounded", "IsSwimming", "IsFlying", "FallTime", "CurrentSplineIndex", "SplineProgress", "GroundZ", "GroundNx", "GroundNy", "GroundNz", "LiquidZ", "LiquidType", "PendingDepenX", "PendingDepenY", "PendingDepenZ", "StandingOnInstanceId", "StandingOnLocalX", "StandingOnLocalY", "StandingOnLocalZ", "FallDistance", "FallStartZ", "HitWall", "WallNormalX", "WallNormalY", "WallNormalZ", "BlockedFraction", "StepUpBaseZ", "StepUpAge", "EnvironmentFlags", "GroundedWallState" }, null, null, null, null)
           }));
     }
     #endregion
@@ -2872,6 +2874,7 @@ namespace Pathfinding {
       stepUpBaseZ_ = other.stepUpBaseZ_;
       stepUpAge_ = other.stepUpAge_;
       wasGrounded_ = other.wasGrounded_;
+      groundedWallState_ = other.groundedWallState_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -3454,6 +3457,22 @@ namespace Pathfinding {
       }
     }
 
+    /// <summary>Field number for the "grounded_wall_state" field.</summary>
+    public const int GroundedWallStateFieldNumber = 44;
+    private uint groundedWallState_;
+    /// <summary>
+    /// Binary parity: selected grounded-wall contact state carried between
+    /// frames for the 0x636100 grounded collision branch.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint GroundedWallState {
+      get { return groundedWallState_; }
+      set {
+        groundedWallState_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -3512,6 +3531,7 @@ namespace Pathfinding {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(StepUpBaseZ, other.StepUpBaseZ)) return false;
       if (StepUpAge != other.StepUpAge) return false;
       if (WasGrounded != other.WasGrounded) return false;
+      if (GroundedWallState != other.GroundedWallState) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -3562,6 +3582,7 @@ namespace Pathfinding {
       if (StepUpBaseZ != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(StepUpBaseZ);
       if (StepUpAge != 0) hash ^= StepUpAge.GetHashCode();
       if (WasGrounded != false) hash ^= WasGrounded.GetHashCode();
+      if (GroundedWallState != 0) hash ^= GroundedWallState.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -3749,6 +3770,10 @@ namespace Pathfinding {
         output.WriteRawTag(216, 2);
         output.WriteBool(WasGrounded);
       }
+      if (GroundedWallState != 0) {
+        output.WriteRawTag(224, 2);
+        output.WriteUInt32(GroundedWallState);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -3928,6 +3953,10 @@ namespace Pathfinding {
         output.WriteRawTag(216, 2);
         output.WriteBool(WasGrounded);
       }
+      if (GroundedWallState != 0) {
+        output.WriteRawTag(224, 2);
+        output.WriteUInt32(GroundedWallState);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -4064,6 +4093,9 @@ namespace Pathfinding {
       }
       if (WasGrounded != false) {
         size += 2 + 1;
+      }
+      if (GroundedWallState != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(GroundedWallState);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -4203,6 +4235,9 @@ namespace Pathfinding {
       }
       if (other.WasGrounded != false) {
         WasGrounded = other.WasGrounded;
+      }
+      if (other.GroundedWallState != 0) {
+        GroundedWallState = other.GroundedWallState;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -4393,6 +4428,10 @@ namespace Pathfinding {
           }
           case 344: {
             WasGrounded = input.ReadBool();
+            break;
+          }
+          case 352: {
+            GroundedWallState = input.ReadUInt32();
             break;
           }
         }
@@ -4586,6 +4625,10 @@ namespace Pathfinding {
             WasGrounded = input.ReadBool();
             break;
           }
+          case 352: {
+            GroundedWallState = input.ReadUInt32();
+            break;
+          }
         }
       }
     }
@@ -4669,6 +4712,7 @@ namespace Pathfinding {
       stepUpBaseZ_ = other.stepUpBaseZ_;
       stepUpAge_ = other.stepUpAge_;
       environmentFlags_ = other.environmentFlags_;
+      groundedWallState_ = other.groundedWallState_;
       _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
     }
 
@@ -5170,6 +5214,22 @@ namespace Pathfinding {
       }
     }
 
+    /// <summary>Field number for the "grounded_wall_state" field.</summary>
+    public const int GroundedWallStateFieldNumber = 39;
+    private uint groundedWallState_;
+    /// <summary>
+    /// Binary parity: selected grounded-wall contact state carried between
+    /// frames for the 0x636100 grounded collision branch.
+    /// </summary>
+    [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+    [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+    public uint GroundedWallState {
+      get { return groundedWallState_; }
+      set {
+        groundedWallState_ = value;
+      }
+    }
+
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
@@ -5223,6 +5283,7 @@ namespace Pathfinding {
       if (!pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.Equals(StepUpBaseZ, other.StepUpBaseZ)) return false;
       if (StepUpAge != other.StepUpAge) return false;
       if (EnvironmentFlags != other.EnvironmentFlags) return false;
+      if (GroundedWallState != other.GroundedWallState) return false;
       return Equals(_unknownFields, other._unknownFields);
     }
 
@@ -5268,6 +5329,7 @@ namespace Pathfinding {
       if (StepUpBaseZ != 0F) hash ^= pbc::ProtobufEqualityComparers.BitwiseSingleEqualityComparer.GetHashCode(StepUpBaseZ);
       if (StepUpAge != 0) hash ^= StepUpAge.GetHashCode();
       if (EnvironmentFlags != 0) hash ^= EnvironmentFlags.GetHashCode();
+      if (GroundedWallState != 0) hash ^= GroundedWallState.GetHashCode();
       if (_unknownFields != null) {
         hash ^= _unknownFields.GetHashCode();
       }
@@ -5438,6 +5500,10 @@ namespace Pathfinding {
         output.WriteRawTag(176, 2);
         output.WriteUInt32(EnvironmentFlags);
       }
+      if (GroundedWallState != 0) {
+        output.WriteRawTag(184, 2);
+        output.WriteUInt32(GroundedWallState);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(output);
       }
@@ -5600,6 +5666,10 @@ namespace Pathfinding {
         output.WriteRawTag(176, 2);
         output.WriteUInt32(EnvironmentFlags);
       }
+      if (GroundedWallState != 0) {
+        output.WriteRawTag(184, 2);
+        output.WriteUInt32(GroundedWallState);
+      }
       if (_unknownFields != null) {
         _unknownFields.WriteTo(ref output);
       }
@@ -5723,6 +5793,9 @@ namespace Pathfinding {
       }
       if (EnvironmentFlags != 0) {
         size += 2 + pb::CodedOutputStream.ComputeUInt32Size(EnvironmentFlags);
+      }
+      if (GroundedWallState != 0) {
+        size += 2 + pb::CodedOutputStream.ComputeUInt32Size(GroundedWallState);
       }
       if (_unknownFields != null) {
         size += _unknownFields.CalculateSize();
@@ -5849,6 +5922,9 @@ namespace Pathfinding {
       }
       if (other.EnvironmentFlags != 0) {
         EnvironmentFlags = other.EnvironmentFlags;
+      }
+      if (other.GroundedWallState != 0) {
+        GroundedWallState = other.GroundedWallState;
       }
       _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
     }
@@ -6021,6 +6097,10 @@ namespace Pathfinding {
             EnvironmentFlags = input.ReadUInt32();
             break;
           }
+          case 312: {
+            GroundedWallState = input.ReadUInt32();
+            break;
+          }
         }
       }
     #endif
@@ -6190,6 +6270,10 @@ namespace Pathfinding {
           }
           case 304: {
             EnvironmentFlags = input.ReadUInt32();
+            break;
+          }
+          case 312: {
+            GroundedWallState = input.ReadUInt32();
             break;
           }
         }

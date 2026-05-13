@@ -35,7 +35,7 @@
 //   BoardingPosition (deck):   (1320.142944, -4653.158691, 53.891945)
 // These were the bot's recorded positions when stalled, not the actual
 // walkable upper-platform / gangplank elevations. Snapping to the existing
-// walkable detail verts in tile (1, 29, 40) — see Phase 3 follow-up:
+// walkable detail verts in tile (1, 40, 29) -- see Phase 3 follow-up:
 //   approach (closest walkable to (1338,-4646)): (1330.66, -4656.03, 96.29)
 //   deck     (closest walkable to (1320,-4653)): (1315.33, -4650.00, 98.54)
 // XY distance ~16 units — plausible OG zeppelin gangplank length. Detour
@@ -45,8 +45,8 @@
 // the connection at dtCreateNavMeshData::classifyOffMeshPoint's height
 // check (DetourNavMeshBuilder.cpp:344-348). See memory note
 // project_mmapgen_offmesh_axis_swap.md for the full diagnosis.
-1 29,40 (1330.66 -4656.03 96.29) (1315.33 -4650.00 98.54) 4.0 // WWoW: OG upper platform -> OG-UC zeppelin gangplank end (proof-test anchor)
-1 29,40 (1315.33 -4650.00 98.54) (1330.66 -4656.03 96.29) 4.0 // WWoW: reverse (won't bake — start z=98.54 IS walkable but redundant given bidir flag on forward)
+1 40,29 (1330.66 -4656.03 96.29) (1315.33 -4650.00 98.54) 4.0 // WWoW: OG upper platform -> OG-UC zeppelin gangplank end (proof-test anchor; revalidate after 40,29 axis correction)
+1 40,29 (1315.33 -4650.00 98.54) (1330.66 -4656.03 96.29) 4.0 // WWoW: reverse (redundant given bidir flag on forward; revalidate after 40,29 axis correction)
 // Bridge from walkable upper platform to BotRunner's existing ApproachPosition + BoardingPosition
 // (TransportData.cs lines 179, 186). The forward entry's start is on walkable mesh; the end is
 // at the bot's expected boarding/approach Z, so the path query "navigate to (1338.10,-4646.00,51.60)"
@@ -55,8 +55,8 @@
 // directions without needing a reverse entry — and a reverse entry would be silently dropped at
 // dtCreateNavMeshData::classifyOffMeshPoint's height check (start z=51.60 below the tile's walkable
 // mesh floor at hmin=72.29).
-1 29,40 (1330.66 -4656.03 96.29) (1338.10 -4646.00 51.60) 4.0 // WWoW: OG upper platform -> ApproachPosition (BotRunner staging point)
-1 29,40 (1330.66 -4656.03 96.29) (1320.14 -4653.16 53.89) 4.0 // WWoW: OG upper platform -> BoardingPosition (gangplank/deck — final boarding XYZ before TransportWaitingLogic attaches the zeppelin)
+1 40,29 (1330.66 -4656.03 96.29) (1338.10 -4646.00 51.60) 4.0 // WWoW: OG upper platform -> ApproachPosition (BotRunner staging point; revalidate after 40,29 axis correction)
+1 40,29 (1330.66 -4656.03 96.29) (1320.14 -4653.16 53.89) 4.0 // WWoW: OG upper platform -> BoardingPosition (gangplank/deck; revalidate after 40,29 axis correction)
 // ----------------------------------------------------------------------------
 // Phase 4 experiment matrix outcomes (PFS-OVERHAUL-004, 2026-05-06):
 //   H1 (radius 4.0 → 12.0 on all four entries): NO EFFECT. PROOF C still
@@ -83,19 +83,19 @@
 // endpoints are confirmed walkable: the start by an existing walkable-leg
 // test, the end by the live CrossroadsToUndercity test trace where the bot
 // reached (1338.1, -4646.0, 51.6) at z=51.6 (within walkableClimb of 53.89).
-// Tile coordinate: tileX = 32 - ceil(1604.8/533.33) = 28; tileY = 32 -
-// ceil(-4425.6/533.33) = 40 → 1 28,40 → mmtile filename 0014028.mmtile
-// (sprintf order is mapID, tileY, tileX per project_pathfinding_tile_coords.md).
-1 28,40 (1604.8 -4425.6 10.36) (1320.14 -4653.16 53.89) 4.0 // WWoW: OG city sea-level walk -> BoardingPosition (Phase 4 H2a)
+// Tile coordinate: tileX = 32 - floor(-4425.6/533.33) = 40; tileY = 32 -
+// floor(1604.8/533.33) = 28 -> 1 40,28 -> mmtile filename 0012840.mmtile
+// (sprintf order is mapID, tileY, tileX).
+1 40,28 (1604.8 -4425.6 10.36) (1320.14 -4653.16 53.89) 4.0 // WWoW: OG city sea-level walk -> BoardingPosition (Phase 4 H2a; revalidate)
 // ----------------------------------------------------------------------------
 
 // WWoW: H2c intra-tile off-mesh proof (PFS-OVERHAUL-004 Phase 4, 2026-05-06).
-// Both endpoints inside tile (29, 40) bounds (Recast X 1066.67..1600.0,
-// Recast Z -4800..-4266.67). Eliminates the cross-tile linkage variable that
+// Both endpoints inside tile (40, 29) bounds (Recast X / WoW Y -4800..-4266.67,
+// Recast Z / WoW X 1066.67..1600.0). Eliminates the cross-tile linkage variable that
 // H2a leaves open. Start coord is the canonical intermediate from
 // orgrimmar_city_to_zeppelin_tower_lower_approach walkable-leg test
 // (LongPathingRouteTests.cs:71); end coord is BoardingPosition.
-1 29,40 (1356.8 -4501.3 29.44) (1320.14 -4653.16 53.89) 4.0 // WWoW: H2c intra-tile off-mesh proof
+1 40,29 (1356.8 -4501.3 29.44) (1320.14 -4653.16 53.89) 4.0 // WWoW: H2c intra-tile off-mesh proof (revalidate)
 // ----------------------------------------------------------------------------
 
 // WWoW: Undercity zeppelin elevator (map 0, Tirisfal side)

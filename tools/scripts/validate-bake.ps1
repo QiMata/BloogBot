@@ -5,7 +5,7 @@
 #
 # Usage:
 #   tools/scripts/validate-bake.ps1                                # default tile set
-#   tools/scripts/validate-bake.ps1 -Tiles "0:34,46;1:40,29"       # explicit list
+#   tools/scripts/validate-bake.ps1 -Tiles "0:34,46;1:29,40"       # explicit list
 #   tools/scripts/validate-bake.ps1 -Manifest tools/scripts/routes/og-zeppelin.json
 #   tools/scripts/validate-bake.ps1 -Samples 50 -DataDir D:/wwow-bot/test-data
 #
@@ -102,7 +102,7 @@ else {
     # Default tile set: known-problem tiles from the BRM/OG-zep work.
     $tilePairs = @(
         @{ Map = 0; X = 34; Y = 46 }      # BRM south-face
-        @{ Map = 1; X = 40; Y = 29 }      # OG zeppelin tower
+        @{ Map = 1; X = 29; Y = 40 }      # OG zeppelin tower
         @{ Map = 0; X = 31; Y = 49 }      # Elwynn (healthy baseline)
     )
 }

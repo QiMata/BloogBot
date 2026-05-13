@@ -67,7 +67,7 @@
   **Next command:** Phase 3 - validate that offmesh.txt's `1 29,40 ...` seed lives in the right MaNGOS tile coordinate frame (the seed treats tile coords as `tileX,tileY` per offmesh.txt grammar; cross-check with the runtime via a single-tile load test before regenerating the OG/UC dock cluster).
 
 12. `PFS-OVERHAUL-003` Phase 3 - OG↔UC zeppelin off-mesh pilot
-- [x] Validate the OG↔UC zeppelin off-mesh entry seeded in `tools/MmapGen/offmesh.txt` against MmapGen's tile-coord frame. Tile (`tileX=29, tileY=40`) world bounds (Recast X 1066.67..1600.0, Recast Z -4800..-4266.67) contain both off-mesh endpoints (1338.10, -4646.00, 51.60) and (1320.14, -4653.16, 53.89), so the seed lands in the right tile. Note: `docs/physics/MMAP_FORMAT.md` §3 currently labels this tile `(tileX=40, tileY=29)` because the doc's `tileX = floor((maxX - worldY)/GRID_SIZE)` formula uses MaNGOS-side axis conventions; MmapGen's runtime convention (per `MapBuilder::getTileBounds` line 418-421 with `(32 - tileX) * GRID_SIZE` indexing Recast X) matches the offmesh.txt seed and the `mmaps/<map><tileY:02d><tileX:02d>.mmtile` filename order. The doc would benefit from a follow-up clarification, but the seed itself is correct.
+- [x] Validate the OG↔UC zeppelin off-mesh entry seeded in `tools/MmapGen/offmesh.txt` against MmapGen's tile-coord frame. Tile (`tileX=29, tileY=40`) world bounds (Recast X 1066.67..1600.0, Recast Z -4800..-4266.67) contain both off-mesh endpoints (1338.10, -4646.00, 51.60) and (1320.14, -4653.16, 53.89), so the seed lands in the right tile. The corrected coordinate rule is now documented in `docs/physics/MMAP_FORMAT.md` §3: MmapGen CLI tile `(29,40)` writes runtime file `0014029.mmtile` because filenames use `<map><tileY:02d><tileX:02d>.mmtile`.
 - [x] Regenerate map 1 tiles 28-30 / 39-41 (Orgrimmar dock cluster, 9 tiles) with the OG↔UC off-mesh entry baked into tile (29,40). NavDataAudit capsule + format gates green for all 9 tiles. Nav-data signature updated; remaining audit failure is the `[GO] map=1 tile=X,Y: baked ...` build-log marker which is custom Phase-4 instrumentation that even the existing externally-built `map1_build.log` does not emit (it has `loaded` markers but not `baked` markers).
 - [x] Regenerate map 0 tiles 27-30 / 30-32 (Undercity arrival cluster, 12 tiles). NavDataAudit capsule + format gates green for all 12 tiles. Same Phase-4 GO-bake instrumentation gap. Note: `tools/MmapGen/offmesh.txt` does not yet have a Tirisfal-side entry for the UC zeppelin tower disembark, so this cluster regen is purely a capsule + lineage refresh; the actual UC arrival off-mesh authoring belongs to the next iteration.
 - [x] Add `Tests/PathfindingService.Tests/LongPathingRouteTests.OrgrimmarToUndercityZeppelin_BoardingIsOffMeshLink` proving the returned `dtPath` includes a `DT_OFFMESH_CON_BIDIR` polygon, with no managed repair invoked. Test parses the on-disk `.mmtile` directly (managed binary parse of the wrapper + `dtMeshHeader` + `dtOffMeshConnection` table — no new P/Invoke surface), then issues `_navigation.CalculateValidatedPath(...)` and snapshots all six `NavigationPerformanceMetrics` repair counters (LongLOS / StaticWall / SteepAffordance / LocalPhysicsLayer / SegmentValidation / DynamicOverlay). **Test green (2026-05-06)** at `tmp/test-runtime/results-pathfinding/phase3_offmesh_pilot_walkable_snap.trx` after two compounding fixes: (1) the WWoW divergence in `TerrainBuilder.cpp::loadOffMeshConnections` (axis swap), (2) snapping the offmesh.txt seeds from the screenshot-derived z=51.60/53.89 (which fell below the walkable mesh floor and were dropped by Detour's height check) to the walkable-mesh-aligned z=96.29/98.54 anchors that match existing detail verts in tile (1, 29, 40). PROOF A asserts `offMeshConCount=2` with both connections bidirectional in the regenerated tile; PROOF B asserts a 9-corner native path between the anchors with all six repair counters staying at zero.
@@ -99,7 +99,7 @@
 - [ ] Author Tirisfal-side disembark off-mesh entries in `tools/MmapGen/offmesh.txt` for the OG↔UC zeppelin tower on map 0 (currently no map-0 entry; the prior session noted this gap). Pair with the Phase 3 regen of map 0 tiles 27-30 / 30-32 once dock walkability is fixed on both sides.
 - [ ] Audit `MapBuilder::buildGameObject(...)` GO bake fidelity vs `gameobject_spawns.json`. Regenerate maps 0 and 1 in full.
 - [ ] Replace per-spot `LongPathingRouteTests` with capsule-walkability property tests.
-- [ ] **Doc fix:** `docs/physics/MMAP_FORMAT.md` §3 currently uses MaNGOS-side axis conventions (`tileX = floor((maxX - worldY)/GRID_SIZE)`, "yes, swap") while MmapGen's runtime conventions match the offmesh.txt grammar and the `MapBuilder::getTileBounds`. The doc and source disagreed silently for the entire freeze period until 2026-05-06. Rewrite §3 to match the source; cite memory/`project_pathfinding_tile_coords.md`.
+- [x] **Doc fix:** `docs/physics/MMAP_FORMAT.md` §3 and `docs/physics/MMAP_DATA_FLOW.md` now match the MmapGen source convention: OG zeppelin tower is tile `(29,40)`, config key `"2940"`, runtime file `0014029.mmtile`. Follow-up failure memo: `docs/physics/ORGRIMMAR_ZEPPELIN_TOWER_MMAP_FAILURE_2026_05_12.md`.
 
 14. `PFS-OVERHAUL-005` Phase 5 - Managed repair retirement
 - [ ] Disable `Navigation.cs` repair phases one-by-one behind a feature flag; delete each after it proves green.
@@ -167,6 +167,26 @@
   service startup or deterministic tests for a full session timeout.
 
 ## Session Handoff
+- Last updated: 2026-05-13 (nav-summary accelerator scaffold)
+
+### 2026-05-13 — Nav-summary accelerator scaffold
+- Active task: long-route performance acceleration without replacing detailed
+  mmap authority.
+- Pass result: `delta shipped; opt-in scaffold and focused tests green`.
+- Last delta:
+  - Added `NavSummary` graph loading, Dijkstra anchor planning, and detailed
+    leg expansion. Summary paths are rejected if any detailed leg fails,
+    reports blocked metadata, or snaps too far from its requested endpoint.
+  - Wired `PathfindingSocketServer` to try nav-summary expansion after
+    route-pack misses and before the normal detailed query. The layer is
+    disabled by default and bypasses dynamic overlays.
+  - Added config defaults under `Navigation:NavSummary` and cache-key signature
+    isolation when summaries are active.
+- Validation/tests run:
+  - `dotnet build Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Debug` -> passed.
+  - `dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Debug --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavSummaryRouteResolverTests" --logger "console;verbosity=minimal"` -> passed `4/4`.
+- Next command: `dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Debug --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavSummaryRouteResolverTests" --logger "console;verbosity=minimal"`
+
 - Last updated: 2026-05-07 (Phase 5.3.5: NPC-anchor ApproachPosition + walk-leg radius fix + un-gated nav predicate + focused sub-test landed; user reframed gap as corner-cutting / Facing-based completion + 11-phase test breakdown)
 
 ### 2026-05-07 — Phase 5.3.5 outcome (NPC-anchor + corner-cutting investigation; user reframed for Phase 5.3.6)

@@ -1055,27 +1055,17 @@ namespace MMAP
                            mapID, tileX, tileY, p0[0], p0[1], p0[2], p1[0], p1[1], p1[2], size);
                 }
 
-                // BEGIN WWoW divergence (PFS-OVERHAUL-003)
-                // Upstream vmangos swaps offmesh.txt (X, Y, Z) -> (Y, Z, X), but every
-                // other mesh consumer in TerrainBuilder/MapBuilder uses the (X, Z, Y)
-                // mapping (Recast X = WoW X, Recast Y = WoW Z (vertical), Recast Z =
-                // WoW Y). See the solidVerts / liquidVerts swaps at lines 205-207 and
-                // MapBuilder::getTileBounds where bmin[0]/bmax[0] are bounded against
-                // WoW X via (32 - tileX) * GRID_SIZE. With the upstream swap the
-                // off-mesh point ends up with pt[0] = WoW Y and pt[2] = WoW X, which
-                // does not lie in the tile's bmin/bmax along axes 0/2; Detour's
-                // dtCreateNavMeshData classifyOffMeshPoint then silently drops the
-                // entry (storedOffMeshConCount stays 0). Use the (X, Z, Y) swap so
-                // off-mesh starts land inside the tile's bounds and Detour stores
-                // them. See docs/physics/PATHFINDING_OVERHAUL.md (Phase 3).
-                meshData.offMeshConnections.append(p0[0]);
-                meshData.offMeshConnections.append(p0[2]);
+                // vmangos/CMaNGOS Recast coords are (WoW_Y, WoW_Z, WoW_X).
+                // This matches TerrainBuilder::getHeightCoord/copyVertices and
+                // the in-game offmesh debug command where tileX is derived from
+                // world Y while tileY is derived from world X.
                 meshData.offMeshConnections.append(p0[1]);
+                meshData.offMeshConnections.append(p0[2]);
+                meshData.offMeshConnections.append(p0[0]);
 
-                meshData.offMeshConnections.append(p1[0]);
-                meshData.offMeshConnections.append(p1[2]);
                 meshData.offMeshConnections.append(p1[1]);
-                // END WWoW divergence (PFS-OVERHAUL-003)
+                meshData.offMeshConnections.append(p1[2]);
+                meshData.offMeshConnections.append(p1[0]);
 
                 meshData.offMeshConnectionDirs.append(1);          // 1 - both direction, 0 - one sided
                 meshData.offMeshConnectionRads.append(size);       // agent size equivalent
