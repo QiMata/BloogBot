@@ -12,6 +12,34 @@ public sealed class MmapMeshQualityTests
     private const string OgTopRampDeckTile = "0012940.mmtile";
     private static readonly WowBounds OgTopRampDeckCrop = new(1316f, -4664f, 47f, 1348f, -4636f, 67f);
 
+    // 2026-05-13: BRD/BRM Flame Crest live-stall tile.
+    // Stall coord (LongPathingTests.FlameCrestToBrmDungeonEntrance UBRS case):
+    //   (-7519.0,-2100.4,130.3) on tile 35,46. The mmap crop has shown an
+    //   AREA_STEEP_SLOPE polygon (flags=17 = NAV_GROUND|NAV_STEEP_SLOPES) with
+    //   zRange=19.6y at centroid (-7479.3,-2116.4,147.1) — a tall steep-slope
+    //   wall just NE of the stall. The bot's smooth path is suspected to be
+    //   string-pulled across or close to that wall.
+    private const string FlameCrestStallTile = "0004635.mmtile";
+    private static readonly WowBounds FlameCrestStallCrop = new(
+        MinX: -7545f, MinY: -2135f, MinZ: 118f,
+        MaxX: -7480f, MaxY: -2075f, MaxZ: 165f);
+    private const float FlameCrestStallX = -7519.0f;
+    private const float FlameCrestStallY = -2100.4f;
+    private const float FlameCrestStallZ = 130.3f;
+    // VMaNGOS NAV flag bits (MoveMapSharedDefines.h):
+    //   NAV_EMPTY       = 0x00
+    //   NAV_GROUND      = 0x01
+    //   NAV_MAGMA       = 0x02
+    //   NAV_SLIME       = 0x04
+    //   NAV_WATER       = 0x08
+    //   NAV_STEEP_SLOPES= 0x10
+    private const ushort NavGround = 0x01;
+    private const ushort NavSteepSlopes = 0x10;
+    // VMaNGOS AREA ids (GridMapDefines.h): GROUND=1, GROUND_MODEL=2,
+    //   STEEP_SLOPE=3, STEEP_SLOPE_MODEL=4 (plus water/magma/slime above).
+    private const byte AreaSteepSlope = 3;
+    private const byte AreaSteepSlopeModel = 4;
+
     [Fact]
     public void OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons()
     {
@@ -34,6 +62,93 @@ public sealed class MmapMeshQualityTests
             "Expected no large bridge/auto-completed polygon across the mostly-flat OG zeppelin top ramp/deck crop."
             + Environment.NewLine
             + FormatOffenders(offenders));
+    }
+
+    [Fact]
+    public void FlameCrestStall_HasNoTallSteepSlopeWallsNearStall()
+    {
+        // PROPERTY: a polygon flagged as walkable through the steep-slope path
+        // (NAV_GROUND|NAV_STEEP_SLOPES) and located within a small XY radius of
+        // the live FG stall coordinate should not represent a tall wall the
+        // FG capsule cannot physically traverse.
+        //
+        // A "tall wall" here is a steep-slope polygon whose vertical span
+        // exceeds an agent's reachable climb-per-stride budget. The walkable
+        // climb threshold for the Tauren capsule is 1.8y, so even a chain of
+        // contiguous stair-like polys should not encode >~6y of climb in a
+        // single polygon. Anything over 12y is unambiguously a wall: the
+        // string-pulled smooth path can interpolate straight into it.
+        //
+        // Currently failing fingerprint:
+        //   polyIndex=8869 zRange=19.60 area=3 flags=17 horizArea2D=45 maxEdge2D=7.5
+        var dataDir = ResolveDataDir();
+        var tilePath = Path.Combine(dataDir, "mmaps", FlameCrestStallTile);
+        Assert.True(File.Exists(tilePath), $"Expected Flame Crest stall mmap tile at {tilePath}");
+
+        var tile = MmapTile.Read(tilePath);
+        var stallSearchBox = new WowBounds(
+            FlameCrestStallX - 25f, FlameCrestStallY - 25f, FlameCrestStallZ - 25f,
+            FlameCrestStallX + 25f, FlameCrestStallY + 25f, FlameCrestStallZ + 40f);
+        var stats = tile.GetPolygonStats(stallSearchBox).ToArray();
+
+        Assert.True(stats.Length > 0,
+            $"Expected at least one polygon in Flame Crest stall search box {stallSearchBox}.");
+
+        // A reachable wall is a polygon whose flags include NAV_STEEP_SLOPES
+        // (so the AI mesh tagged it as a steep slope) AND whose vertical span
+        // is large enough that physical traversal is implausible.
+        const float MaxWalkableSteepSlopeZRange = 12.0f;
+        var tallSteepSlopeWalls = stats
+            .Where(s => (s.Flags & NavSteepSlopes) != 0)
+            .Where(s => s.ZRange > MaxWalkableSteepSlopeZRange)
+            .OrderByDescending(s => s.ZRange)
+            .ToArray();
+
+        Assert.True(tallSteepSlopeWalls.Length == 0,
+            "Expected no tall steep-slope walls in the Flame Crest stall search box. "
+            + $"Found {tallSteepSlopeWalls.Length} polygon(s) with NAV_STEEP_SLOPES bit set and zRange > "
+            + $"{MaxWalkableSteepSlopeZRange:F1}y. The smooth path may string-pull across these as if they "
+            + "were walkable surface; FG physics rejects them and the bot stalls."
+            + Environment.NewLine
+            + FormatOffenders(tallSteepSlopeWalls));
+    }
+
+    [Fact]
+    public void FlameCrestStall_HasNoUnreasonableGroundBridgePolygons()
+    {
+        // PROPERTY: a regular walkable polygon (NAV_GROUND only, no steep-slope
+        // bit) near the stall coordinate should not encode an unreasonable
+        // vertical span. Stairs/ramps span Z over a horizontal stretch; a poly
+        // with small horizontal extent but large Z span is a bridge/ceiling
+        // artifact, not real walkable surface.
+        //
+        // Threshold: zRange > 6y AND horizArea2D < 80 AND maxEdge2D < 12y
+        // (a tall narrow column that isn't a wide sloped ramp).
+        var dataDir = ResolveDataDir();
+        var tilePath = Path.Combine(dataDir, "mmaps", FlameCrestStallTile);
+        Assert.True(File.Exists(tilePath), $"Expected Flame Crest stall mmap tile at {tilePath}");
+
+        var tile = MmapTile.Read(tilePath);
+        var stallSearchBox = new WowBounds(
+            FlameCrestStallX - 25f, FlameCrestStallY - 25f, FlameCrestStallZ - 25f,
+            FlameCrestStallX + 25f, FlameCrestStallY + 25f, FlameCrestStallZ + 40f);
+        var stats = tile.GetPolygonStats(stallSearchBox).ToArray();
+
+        var pureGroundPolys = stats.Where(s => (s.Flags & NavSteepSlopes) == 0 && (s.Flags & NavGround) != 0).ToArray();
+        Assert.True(pureGroundPolys.Length > 0,
+            $"Expected at least one pure-ground walkable polygon in Flame Crest stall search box {stallSearchBox}.");
+
+        var bridgeOffenders = pureGroundPolys
+            .Where(s => s.ZRange > 6f && s.HorizontalArea2D < 80f && s.MaxEdge2D < 12f)
+            .OrderByDescending(s => s.ZRange)
+            .ToArray();
+
+        Assert.True(bridgeOffenders.Length == 0,
+            "Expected no pure-ground bridge/column polygons near the Flame Crest stall. "
+            + $"Found {bridgeOffenders.Length} narrow-tall walkable polygon(s) (zRange > 6y, area < 80yd^2, maxEdge < 12y). "
+            + "These typically appear when Recast merges multi-level ledge cells into one detail mesh."
+            + Environment.NewLine
+            + FormatOffenders(bridgeOffenders));
     }
 
     [Fact]
@@ -80,7 +195,8 @@ public sealed class MmapMeshQualityTests
         {
             builder.AppendLine(
                 $"polyIndex={offender.PolyIndex} zRange={offender.ZRange:F3} maxEdge2D={offender.MaxEdge2D:F3} "
-                + $"horizontalArea2D={offender.HorizontalArea2D:F3} bounds={offender.Bounds}");
+                + $"horizontalArea2D={offender.HorizontalArea2D:F3} area={offender.Area} flags=0x{offender.Flags:X2} "
+                + $"bounds={offender.Bounds}");
         }
 
         return builder.ToString();
@@ -217,7 +333,9 @@ public sealed class MmapMeshQualityTests
                     bounds.MaxZ - bounds.MinZ,
                     GetMaxPolyEdge2D(poly),
                     GetHorizontalArea2D(poly),
-                    bounds);
+                    bounds,
+                    poly.Flags,
+                    (byte)(poly.AreaAndType & 0x3F));
             }
         }
 
@@ -317,7 +435,14 @@ public sealed class MmapMeshQualityTests
 
     private readonly record struct Vec3(float X, float Y, float Z);
 
-    private readonly record struct PolygonStats(int PolyIndex, float ZRange, float MaxEdge2D, float HorizontalArea2D, WowBounds Bounds);
+    private readonly record struct PolygonStats(
+        int PolyIndex,
+        float ZRange,
+        float MaxEdge2D,
+        float HorizontalArea2D,
+        WowBounds Bounds,
+        ushort Flags,
+        byte Area);
 
     private readonly record struct WowBounds(float MinX, float MinY, float MinZ, float MaxX, float MaxY, float MaxZ)
     {

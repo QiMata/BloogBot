@@ -251,11 +251,38 @@ public class BrmDungeonRouteDiagnostic : IClassFixture<PathfindingValidationFixt
     [Fact]
     public void Dump_UbrsRoute_StallRegionWaypoints()
     {
-        const float StallAnchorX = -7949.7f;
-        const float StallAnchorY = -1162.8f;
-        const float StallAnchorZ = 170.8f;
+        DumpStallRegion(stallX: -7949.7f, stallY: -1162.8f, stallZ: 170.8f,
+                        label: "UBRS live test (BRM south-face stall, 2026-05-09)");
+    }
+
+    /// <summary>
+    /// 2026-05-13 follow-up: the live BotRunner FlameCrestToBrmDungeonEntrance
+    /// UBRS case now stalls early, at `(-7519.0,-2100.4,130.3)` on tile (35,46) —
+    /// only ~60y north of the Flame Crest start, well before the historical
+    /// (-7949.7,-1162.8,170.8) BRM south-face site. Screenshot evidence reads as
+    /// wall/ceiling collision. The Flame Crest stall mmap crop reports a
+    /// suspicious zRange=19.60y AREA_STEEP_SLOPE polygon (`area=3, flags=17`)
+    /// at centroid (-7479.3,-2116.4,147.1). This dump captures the smooth-path
+    /// behavior around the live stall so we can localize whether the bot is
+    /// being walked into one of those steep-slope walls or whether the failure
+    /// is unrelated to the corridor (true wall/ceiling collision against
+    /// unbaked WMO).
+    /// </summary>
+    [Fact]
+    public void Dump_UbrsRoute_FlameCrestStallWaypoints()
+    {
+        DumpStallRegion(stallX: -7519.0f, stallY: -2100.4f, stallZ: 130.3f,
+                        label: "UBRS live test (Flame Crest early stall, 2026-05-13)");
+    }
+
+    private void DumpStallRegion(float stallX, float stallY, float stallZ, string label)
+    {
+        float StallAnchorX = stallX;
+        float StallAnchorY = stallY;
+        float StallAnchorZ = stallZ;
         const float StallSearchRadius2D = 25f;
         const float WalkableClimbY = 1.8f;
+        _output.WriteLine($"# Variant: {label}");
 
         _output.WriteLine($"# WWOW_DATA_DIR: {_fixture.DataDir}");
         _output.WriteLine($"# Stall anchor (UBRS live test): ({StallAnchorX:F1},{StallAnchorY:F1},{StallAnchorZ:F1})");

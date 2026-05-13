@@ -318,7 +318,22 @@ function Invoke-MmapVisualize(
         $argsList += @('--mark', (Format-WowCoord $m), $m.Label)
     }
 
-    & dotnet @argsList
+    # PowerShell 5.1 treats any stderr output from a native command as a
+    # NativeCommandError when $ErrorActionPreference='Stop'. MmapVisualize
+    # writes its tile-header banner ("# tile=(...) ...") to stderr by design
+    # so non-OBJ stream content does not pollute the OBJ files; that banner
+    # is informational, not a failure. Do not redirect stderr (2>&1 makes 5.1
+    # wrap each stderr line as ErrorRecord which itself triggers the same
+    # stop). Instead, scope ErrorActionPreference to Continue for this call
+    # and gate on the actual exit code.
+    $previousEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & dotnet @argsList
+    }
+    finally {
+        $ErrorActionPreference = $previousEAP
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "MmapVisualize failed for $OutObj with exit code $LASTEXITCODE"
     }

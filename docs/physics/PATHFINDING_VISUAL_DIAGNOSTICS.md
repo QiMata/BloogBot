@@ -162,45 +162,69 @@ known BRM south-face trap.
 - Flame Crest stall tile: map `0`, tile `35,46`, runtime `0004635.mmtile`.
 - BRD approach tile: map `0`, tile `33,45`, runtime `0004533.mmtile`.
 - BRM south-trap tile: map `0`, tile `34,46`, runtime `0004634.mmtile`.
-- Focused runtime regen on 2026-05-13 rewrote
-  `D:\MaNGOS\data\mmaps\0004635.mmtile`,
-  `D:\MaNGOS\data\mmaps\0004533.mmtile`, and
-  `D:\MaNGOS\data\mmaps\0004634.mmtile`; backups are in
+- Runtime tile backups under
   `tmp/test-runtime/visualization/pathfinding/brd/latest/backup/`.
-- Promoted runtime hashes:
-  - `0004635.mmtile`: `1A2C1FC96192653EAFA76B7EF2174EE77FAAB2E1869797A070E51FEFACF5135F`
-  - `0004533.mmtile`: `C7769E46B14E1ED2F957FE231B825AF3914C4ED119873FCDE97DA7D1507DECA7`
-  - `0004634.mmtile`: `8FC60E9FD727610CB865D0DA122B9A377BE5DA61BA8CBE92A85E940290BAB3DC`
-- `analysis/flamecrest_stall_mmap_crop_polys.csv`: 93 polygons, max
-  `zRange=19.60y`.
-- `analysis/brd_approach_mmap_crop_polys.csv`: 752 polygons, max
-  `zRange=16.70y`.
-- `analysis/brm_south_trap_mmap_crop_polys.csv`: 1374 polygons, max
-  `zRange=41.00y`.
-- `analysis/suspicious_poly_flamecrest_stall.obj`,
-  `analysis/suspicious_poly_brd_approach.obj`, and
-  `analysis/suspicious_poly_brm_south_trap.obj` isolate the current worst
-  polygons from those crops.
-- Runtime logs show no model-backed GameObjects baked for those three tiles; they
-  marked fallback GO span boxes (`101`, `55`, and `74` respectively). Focused
-  `NavDataAudit` passes the Detour/header capsule checks for the map-0 tiles but
-  fails the GO-bake assertion because there are no modeled GO spawn origins in
-  those audited map-0 tiles and no `[GO] ... baked ...` log line.
-- `BrmDungeonRouteDiagnostic` passes after the three-tile bake (`2/2`, TRX:
-  `tmp/test-runtime/results-pathfinding/brm_dungeon_route_diagnostic_after_brd_run_tiles.trx`).
-- The live BotRunner run does not handle the route yet. With all three promoted
-  tiles, `LongPathingTests.FlameCrestToBrmDungeonEntrance` still stalls on the
-  UBRS case at `(-7519.0,-2100.4,130.3)` on tile `35,46`; the same test run then
-  hit client/harness fallout (`BRD` client crash, `BWL` target selection error,
-  `LBRS` not executed). Screenshot:
-  `tmp/test-runtime/screenshots/long-pathing/Long-travel-stall-before-Flame-Crest-UBRS-portal-likely-wall-ceiling-collision-n-LPATHFG1-client-35024-win0-20260513_121624.png`.
 
-Lay explanation: the BRM failure looks less like a missing decorative object and
-more like terrain/WMO surfaces being simplified or connected through cliff/interior
-geometry that a real player cannot walk across. The route query can find a
-corridor, but FG execution still collides or stalls at the Flame Crest surface,
-so the next fix should compare the `flamecrest_stall` source/stage/mmap outputs
-before changing BotRunner movement.
+2026-05-13 (later iteration, walkable-slope split): the focused Flame Crest
+stall crop after the earlier erosion-radius split still surfaced 16
+NAV_STEEP_SLOPES-flagged walkable polygons inside a 25y radius of the FG
+stall coordinate `(-7519,-2100,130)`, peak `zRange=46.8y` (polyIndex 7926,
+area=3 `AREA_STEEP_SLOPE`, `flags=0x11 = NAV_GROUND|NAV_STEEP_SLOPES`).
+These are 52-75 degree BRM rock-face slopes that the bake classifies as
+walkable-but-penalized via the AI-creature path. Player physics rejects
+anything >52 degrees, so the runtime `PathFinder::createFilter` includes
+them via `NAV_GROUND` with a 10x area cost and Detour string-pulls smooth
+paths across them — the bot then collides against an invisible wall and
+stalls.
+
+Fix: align the per-tile `walkableSlopeAngle` and `walkableSlopeAngleVMaps`
+with the hardcoded 52 degree player limit (`playerClimbLimit` in
+`tools/MmapGen/contrib/mmap/src/TileWorker.cpp`) for tiles `3345`, `3446`,
+and `3546`. With the bake limit equal to the player limit, the
+`AREA_STEEP_SLOPE` classification band (52 < theta <= 75 on terrain,
+52 < theta <= 61 on VMap) closes — slopes >52 degrees become `AREA_NONE`
+and are not baked. The legitimate BRM switchback road remains
+`AREA_GROUND` (<52 degree triangles). Per-tile blast radius matches the
+OG erosion split; revertable.
+
+Post-fix runtime hashes:
+
+- `0004635.mmtile`: regenerated 2026-05-13, ~1.03 MB (was ~1.71 MB).
+- `0004533.mmtile`: regenerated 2026-05-13, ~1.39 MB (was ~2.72 MB).
+- `0004634.mmtile`: regenerated 2026-05-13, ~1.85 MB (was ~3.02 MB).
+
+Post-fix evidence:
+
+- `MmapMeshQualityTests.FlameCrestStall_HasNoTallSteepSlopeWallsNearStall`
+  and `FlameCrestStall_HasNoUnreasonableGroundBridgePolygons` both pass.
+- `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+  and `OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces` remain
+  green (the fix is map-0-only).
+- `BrmDungeonRouteDiagnostic.Audit_BrmDungeonEndpoints_ResolveAndCorridor`
+  now finishes every dungeon corridor at the target polygon (was 1/4 before
+  the fix):
+
+  | Route | Pre-fix | Post-fix |
+  |---|---|---|
+  | Flame Crest -> BRD | 277 polys, ENDS_AT_TARGET=YES | 290 polys, YES |
+  | Flame Crest -> LBRS | 316 polys, NO | 303 polys, YES |
+  | Flame Crest -> UBRS | 316 polys, NO | 307 polys, YES |
+  | Flame Crest -> BWL | 275 polys, NO | 312 polys, YES |
+- `BrmDungeonRouteDiagnostic.Dump_UbrsRoute_FlameCrestStallWaypoints` (new in
+  this iteration) reports: smooth path Flame Crest -> UBRS has 1152 waypoints
+  and now leaves a 25y XY radius around the stall coordinate empty — the
+  closest waypoint is index 32 at `(-7547.24,-2118.85,126.73)`, 33.73y away
+  on regular Ground polygons. Replan from the stall position finds 1178
+  waypoints, the first 12 are gentle (dz |segments| < 0.27y), and reaches
+  `(-7615.68,-1244.65,234.41)` ~92y from UBRS at z=287.
+
+Lay explanation: BRM south-face has real rock cliffs at 52-75 degrees. The
+old bake marked them walkable for AI-creature paths and trusted the runtime
+to penalize them via area cost. Detour's smooth path used them anyway when
+the cost gradient suggested a shortcut, and FG physics then rejected the
+move. Lowering the per-tile slope limit to the hard player limit produces a
+mesh that says player-walkable iff the geometry is actually player-walkable.
+Legitimate switchback ground (<52 degrees) is unaffected.
 
 ## Nav Summary Accelerator
 
@@ -262,7 +286,7 @@ Next command:
 $env:WWOW_DATA_DIR='D:\MaNGOS\data'
 .\tools\scripts\export-pathfinding-reference.ps1 -Route brd -Resume -MmapGenExe .\tools\MmapGen\build\MmapGen.exe
 .\tools\scripts\summarize-pathfinding-reference.ps1 -Route brd
-dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BrmDungeonRouteDiagnostic" --logger "console;verbosity=minimal"
+dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.FlameCrestStall|FullyQualifiedName~BrmDungeonRouteDiagnostic" --logger "console;verbosity=minimal"
 $env:WWOW_BRM_DUNGEON_TRAVEL_TEST='1'
 $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'
 dotnet test Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.FlameCrestToBrmDungeonEntrance" --logger "console;verbosity=minimal" -- RunConfiguration.TestSessionTimeout=1800000
