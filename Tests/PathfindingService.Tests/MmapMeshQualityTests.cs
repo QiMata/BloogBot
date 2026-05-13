@@ -64,19 +64,27 @@ public sealed class MmapMeshQualityTests
             + FormatOffenders(offenders));
     }
 
-    [Fact(Skip = "Documents an open bake bug. The Flame Crest crop on the live "
-        + "BRD/BRM runtime tiles contains 16 walkable-with-NAV_STEEP_SLOPES "
-        + "polygons within 25y of the FG stall coord, peak zRange=46.8y. Two "
-        + "2026-05-13 bake-side attempts have already regressed the live FG run: "
-        + "(1) walkableSlopeAngle+walkableSlopeAngleVMaps=52 produced the "
-        + "'object exclusion' bug (bot inside model darkness); (2) terrain-only "
-        + "walkableSlopeAngle=52 produced a wall-collision creep where the bot "
-        + "pressed nose-first into BRM rock at (-7665,-1808,137) with "
-        + "route=none replans. The real fix has to live in the runtime path "
-        + "filter (exclude NAV_STEEP_SLOPES for player paths in "
-        + "Exports/Navigation/PathFinder.cpp::createFilter — the vmangos "
-        + "Map.cpp pattern), or as an off-mesh connection for the BRM ascent. "
-        + "Keeping Skip until that fix lands.")]
+    [Fact(Skip = "Mesh-side fingerprint of an open bake bug. The Flame Crest "
+        + "crop on the live BRD/BRM runtime tiles contains 16 walkable-with-"
+        + "NAV_STEEP_SLOPES polygons within 25y of the FG stall coord, peak "
+        + "zRange=46.8y. THREE attempts have now been tried and reverted on "
+        + "2026-05-13: (1) walkableSlopeAngle+walkableSlopeAngleVMaps=52 "
+        + "produced an object-exclusion bug (bot inside model darkness, "
+        + "fd085d68 reverted as 47219721); (2) terrain-only "
+        + "walkableSlopeAngle=52 produced wall-collision creep at "
+        + "(-7665,-1808,137) (reverted as fd943e57); (3) the runtime "
+        + "NAV_STEEP_SLOPES exclude (PathFinder::createFilter + DllMain "
+        + "player-path filters, the vmangos Map.cpp pattern) blew up Detour "
+        + "A* search to 170-306 seconds per FlameCrest -> UBRS findpath "
+        + "query (Docker NAV_METRICS avgNativeFindMs=170294, "
+        + "maxNativeFindMs=306810; smooth-path corner count 1105). Reverted. "
+        + "The runtime filter is the wrong surface for the BRM mesh given "
+        + "its current AREA_STEEP_SLOPE density. Next session must try "
+        + "Surface 2 (off-mesh connections in tools/MmapGen/offmesh.txt for "
+        + "the BRM ascent) or Surface 3 (per-tile maxSteepSlopePolyZRange "
+        + "bake knob that fragments the tallest steep-slope polys while "
+        + "preserving thin model footing). These mesh-side Facts re-enable "
+        + "when the chosen surface lands.")]
     public void FlameCrestStall_HasNoTallSteepSlopeWallsNearStall()
     {
         // PROPERTY: a polygon flagged as walkable through the steep-slope path
@@ -126,8 +134,10 @@ public sealed class MmapMeshQualityTests
     }
 
     [Fact(Skip = "See FlameCrestStall_HasNoTallSteepSlopeWallsNearStall — same "
-        + "open bake bug. Both regressions are Skip until the runtime-filter or "
-        + "off-mesh-connection fix lands; they re-enable together.")]
+        + "open mesh-side bake bug. All three 2026-05-13 attempts (two bake-side "
+        + "slope tightenings, one runtime NAV_STEEP_SLOPES exclude) have been "
+        + "tried and reverted. Re-enable together when a bake-side surface "
+        + "lands (off-mesh BRM ascent or per-tile maxSteepSlopePolyZRange).")]
     public void FlameCrestStall_HasNoUnreasonableGroundBridgePolygons()
     {
         // PROPERTY: a regular walkable polygon (NAV_GROUND only, no steep-slope

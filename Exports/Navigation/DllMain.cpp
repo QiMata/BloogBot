@@ -2034,7 +2034,10 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
         dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
         if (!query) { fprintf(stderr, "[CORRIDOR] no query for map %u\n", mapId); return result; }
 
-        // Find start and end poly refs
+        // Find start and end poly refs.
+        // NOTE (2026-05-13, post-revert): attempted setExcludeFlags(NAV_STEEP_SLOPES)
+        // here (the vmangos Map.cpp pattern) — reverted. See PathFinder.cpp::createFilter
+        // for the full diagnosis (BRM A* search exploded to 170-306s per query).
         dtQueryFilter filter;
         filter.setIncludeFlags(0xFFFF);
         filter.setExcludeFlags(0);
@@ -2221,6 +2224,8 @@ extern "C" __declspec(dllexport) bool FindPathPolygonsForAgent(
         const dtNavMesh* navMesh = query->getAttachedNavMesh();
         if (!navMesh) { fprintf(stderr, "[POLYLIST] no navMesh for map %u\n", mapId); return false; }
 
+        // NOTE (2026-05-13, post-revert): attempted setExcludeFlags(NAV_STEEP_SLOPES)
+        // here — reverted. See PathFinder.cpp::createFilter for the diagnosis.
         dtQueryFilter filter;
         filter.setIncludeFlags(0xFFFF);
         filter.setExcludeFlags(0);
@@ -2351,6 +2356,8 @@ extern "C" __declspec(dllexport) bool FindPathCornersForAgent(
         dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
         if (!query) { fprintf(stderr, "[CORNERS] no query for map %u\n", mapId); return false; }
 
+        // NOTE (2026-05-13, post-revert): attempted setExcludeFlags(NAV_STEEP_SLOPES)
+        // here — reverted. See PathFinder.cpp::createFilter for the diagnosis.
         dtQueryFilter filter;
         filter.setIncludeFlags(0xFFFF);
         filter.setExcludeFlags(0);
@@ -2560,6 +2567,57 @@ extern "C" __declspec(dllexport) bool GetPolyAtCoord(
     catch (...)
     {
         fprintf(stderr, "[Navigation.dll] SEH exception in GetPolyAtCoord (code=0x%08lx)\n", 0UL);
+        return false;
+    }
+}
+
+// Test-only diagnostic export (2026-05-13 runtime NAV_STEEP_SLOPES exclude):
+// returns the user-flag bits and area type of a polygon given its polyRef.
+// Used by FlameCrestUbrsSmoothPath_AvoidsSteepSlopePolys to prove that no
+// smooth-path corner produced by FindPathForAgent lands on a NAV_STEEP_SLOPES
+// polygon (the runtime-filter regression for the BRD/BRM stall fix). Without
+// this accessor the test would have to decode polyRef -> tile/poly manually
+// and re-read mmap bytes, duplicating logic already in dtNavMesh.
+//
+// Contract:
+//   - outFlags: polygon's user-defined 16-bit flags (NAV_GROUND, NAV_WATER,
+//     NAV_STEEP_SLOPES, ...). 0 if the polyRef does not resolve.
+//   - outArea:  6-bit area id (1=AREA_GROUND, 3=AREA_STEEP_SLOPE, ...).
+//   - Returns false on infrastructure failure (no query/navmesh, bad ref).
+extern "C" __declspec(dllexport) bool GetPolyFlagsForRef(
+    uint32_t mapId,
+    uint64_t polyRef,
+    uint16_t* outFlags,
+    uint8_t* outArea)
+{
+    if (outFlags) *outFlags = 0;
+    if (outArea)  *outArea  = 0;
+    if (!outFlags || polyRef == 0) return false;
+
+    try
+    {
+        if (!g_initialized) InitializeAllSystems();
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+        auto* nav = Navigation::GetInstance();
+        if (!nav) return false;
+        const dtNavMeshQuery* query = nav->GetQueryForMap(mapId);
+        if (!query) return false;
+        const dtNavMesh* navMesh = query->getAttachedNavMesh();
+        if (!navMesh) return false;
+
+        const dtMeshTile* tile = nullptr;
+        const dtPoly* poly = nullptr;
+        if (dtStatusFailed(navMesh->getTileAndPolyByRef(polyRef, &tile, &poly)) || !poly)
+            return false;
+
+        *outFlags = poly->flags;
+        if (outArea) *outArea = (uint8_t)(poly->getArea() & 0x3F);
+        return true;
+    }
+    catch (...)
+    {
+        fprintf(stderr, "[POLYFLAGS] SEH exception (code=0x%08lx)\n", 0UL);
         return false;
     }
 }

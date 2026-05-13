@@ -209,6 +209,46 @@ internal static class NavigationInterop
         return new CornerPathResult(true, written, trimmed);
     }
 
+    [DllImport(NavigationDll, EntryPoint = "GetPolyFlagsForRef", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool GetPolyFlagsForRef(
+        uint mapId,
+        ulong polyRef,
+        out ushort outFlags,
+        out byte outArea);
+
+    public readonly record struct PolyFlagsResult(
+        bool Success,
+        ushort Flags,
+        byte Area)
+    {
+        // Bits from MoveMapSharedDefines.h (kept inline so test code stays
+        // self-contained — the C++ enum is not visible to managed code).
+        public const ushort NavGround       = 0x01;
+        public const ushort NavMagma        = 0x02;
+        public const ushort NavSlime        = 0x04;
+        public const ushort NavWater        = 0x08;
+        public const ushort NavSteepSlopes  = 0x10;
+
+        public bool HasSteepSlopes => Success && (Flags & NavSteepSlopes) != 0;
+    }
+
+    /// <summary>
+    /// Looks up the user-flag bits and area id of a polygon identified by
+    /// <paramref name="polyRef"/>. Pair with <see cref="QueryPolyAtCoord"/> to
+    /// classify the polygon a smooth-path corner sits on (e.g. assert no
+    /// corner lands on a NAV_STEEP_SLOPES poly after the 2026-05-13 runtime
+    /// filter change).
+    /// </summary>
+    public static PolyFlagsResult QueryPolyFlags(uint mapId, ulong polyRef)
+    {
+        if (polyRef == 0)
+            return new PolyFlagsResult(false, 0, 0);
+
+        bool ok = GetPolyFlagsForRef(mapId, polyRef, out ushort flags, out byte area);
+        return new PolyFlagsResult(ok, flags, area);
+    }
+
     [DllImport(NavigationDll, EntryPoint = "GetPolyAtCoord", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]
     private static extern bool GetPolyAtCoord(

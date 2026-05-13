@@ -1497,6 +1497,15 @@ void PathFinder::createFilter()
 	includeFlags |= (NAV_GROUND);
 	// NAV_STEEP_SLOPES polygons (>52°) are included via NAV_GROUND but penalized
 	// with high area cost below so pathfinding avoids them when alternatives exist.
+	// NOTE (2026-05-13, post-revert): attempted to exclude NAV_STEEP_SLOPES here
+	// (the vmangos Map.cpp pattern) to stop the Flame Crest UBRS string-pull
+	// stall — see PathFinder.cpp commit log. Live regressed: BRD/BRM tiles have
+	// such dense AREA_STEEP_SLOPE coverage that excluding the bit blew up
+	// Detour A* search to 170-306 seconds per FlameCrest -> UBRS query, with
+	// 1105-corner smooth paths the bot could not follow. Reverted. The mesh
+	// needs an off-mesh connection for the BRM ascent (Phase 4 of
+	// docs/physics/PATHFINDING_OVERHAUL.md) or a per-tile maxSteepSlopePolyZRange
+	// bake-side knob before the runtime filter alone can carry the change.
 
 	m_filter.setIncludeFlags(includeFlags);
 	m_filter.setExcludeFlags(excludeFlags);

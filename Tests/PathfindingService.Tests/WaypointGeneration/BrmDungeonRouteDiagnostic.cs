@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using GameData.Core.Models;
 using Tests.Infrastructure;
 using Xunit;
@@ -273,6 +275,102 @@ public class BrmDungeonRouteDiagnostic : IClassFixture<PathfindingValidationFixt
     {
         DumpStallRegion(stallX: -7519.0f, stallY: -2100.4f, stallZ: 130.3f,
                         label: "UBRS live test (Flame Crest early stall, 2026-05-13)");
+    }
+
+    /// <summary>
+    /// 2026-05-13 runtime-filter regression for the BRD/BRM Flame Crest stall.
+    ///
+    /// Player paths must not include polygons flagged NAV_STEEP_SLOPES (slopes
+    /// above the 52° player climb limit). The vmangos Map.cpp pattern is to
+    /// pair includeFlags with `setExcludeFlags(NAV_STEEP_SLOPES)` so Detour
+    /// will not string-pull smooth paths across rock-face polygons that FG
+    /// physics rejects. Both bake-side tightening attempts on 2026-05-13
+    /// regressed live FG (object exclusion / wall-collision creep, commits
+    /// fd085d68 + fd943e57); the chosen fix surface is the runtime filter in
+    /// `Exports/Navigation/PathFinder.cpp::createFilter` plus the player-path
+    /// `setExcludeFlags(NAV_STEEP_SLOPES)` calls in
+    /// `Exports/Navigation/DllMain.cpp::Find{PathCorridor,PathPolygonsForAgent,PathCornersForAgent}`.
+    ///
+    /// This regression goes red when any polygon in the Flame Crest → UBRS
+    /// corridor (the result of `FindPathPolygonsForAgent`, which Detour
+    /// produces via `findPath` under the player-path filter) has
+    /// NAV_STEEP_SLOPES set. Checking the corridor directly is more correct
+    /// than checking smooth-path waypoint positions: the smooth path
+    /// interpolates positions ALONG the corridor, and a waypoint's nearest
+    /// poly within 1y XY / 1.8y Z can still be a vertically-adjacent
+    /// steep-slope poly even when the actual corridor avoids it. The corridor
+    /// is exactly the set of polys the filter accepted, so it is the
+    /// authoritative gate.
+    ///
+    /// Important: this test does NOT assert the corridor reaches the UBRS
+    /// portal. The BRM south-face ascent has multi-tile bake-fidelity gaps
+    /// where the only physically-implausible "corridor" went THROUGH the
+    /// steep-slope polys this filter now correctly excludes. Reaching UBRS
+    /// requires a separate fix surface (off-mesh connection in
+    /// tools/MmapGen/offmesh.txt for the BRM ascent, or a per-tile
+    /// maxSteepSlopePolyZRange bake-side knob). The runtime filter's job is
+    /// solely to stop the bot from being walked into a rock face; route
+    /// completeness is a downstream concern tracked separately in TASKS.md.
+    ///
+    /// REVERTED (2026-05-13, third attempt): the runtime NAV_STEEP_SLOPES
+    /// exclude blew up Detour A* search to 170-306 seconds per FlameCrest
+    /// -> UBRS findpath query (Docker pathfinding log NAV_METRICS
+    /// avgNativeFindMs=170294, maxNativeFindMs=306810, smooth-path corner
+    /// count 1105). The bot never received a usable path before the legacy
+    /// stall guard fired (45s anchor timeout). The runtime filter is the
+    /// wrong surface for the BRM mesh given its current bake density of
+    /// AREA_STEEP_SLOPE polys. Skipped until either (a) an off-mesh
+    /// connection for the BRM ascent is added to tools/MmapGen/offmesh.txt
+    /// so Detour does not have to A*-search the full BRM south-face for a
+    /// non-steep corridor, or (b) a per-tile maxSteepSlopePolyZRange
+    /// bake-side knob fragments the tallest steep-slope polys so the runtime
+    /// filter can be reintroduced without exploding A* search.
+    /// </summary>
+    [Fact(Skip = "REVERTED 2026-05-13: runtime NAV_STEEP_SLOPES exclude was "
+        + "the third bake/runtime attempt to fix the Flame Crest UBRS stall; "
+        + "live FG regressed (Docker NAV_METRICS avgNativeFindMs=170294, "
+        + "maxNativeFindMs=306810 — A* search exploded on the BRM mesh, bot "
+        + "never received a path before the 45s stall guard fired). The mesh "
+        + "needs off-mesh connections (tools/MmapGen/offmesh.txt) for the BRM "
+        + "ascent OR a per-tile maxSteepSlopePolyZRange bake knob before the "
+        + "runtime filter can land. Re-enable when one of those surfaces lands.")]
+    public void FlameCrestToUbrsCorridor_AvoidsSteepSlopePolys()
+    {
+        var chain = NavigationInterop.QueryPathPolygons(MapId, FlameCrest, UbrsEntrance, AgentRadius, AgentHeight, maxOut: 4096);
+        Assert.True(chain.Success && chain.PolyRefs.Length > 0,
+            "Expected a non-empty corridor Flame Crest -> UBRS (partial OK). Filter exclude must not "
+            + "produce no-path; if it does, the start poly is itself NAV_STEEP_SLOPES and the bake needs widening.");
+
+        // Walk every corridor poly and verify NAV_STEEP_SLOPES bit is NOT set.
+        // Skip off-mesh connection polys (their flags encode link semantics).
+        var steepOffenders = new List<(int Idx, ulong PolyRef, ushort Flags, byte Area)>();
+        int probedCount = 0;
+        for (int i = 0; i < chain.PolyRefs.Length; i++)
+        {
+            if (chain.PolyTypes[i] == NavigationInterop.PolyType.OffMeshConnection)
+                continue;
+
+            var flags = NavigationInterop.QueryPolyFlags(MapId, chain.PolyRefs[i]);
+            if (!flags.Success)
+                continue;
+
+            probedCount++;
+            if (flags.HasSteepSlopes)
+                steepOffenders.Add((i, chain.PolyRefs[i], flags.Flags, flags.Area));
+        }
+
+        Assert.True(probedCount > 0,
+            "Expected at least one ground-polygon in the corridor to resolve flags via "
+            + "QueryPolyFlags; none did. Investigate the GetPolyFlagsForRef export.");
+
+        Assert.True(steepOffenders.Count == 0,
+            $"Corridor Flame Crest -> UBRS includes {steepOffenders.Count} NAV_STEEP_SLOPES polygon(s). "
+            + "The runtime path filter (PathFinder::createFilter + DllMain player-path filters) must "
+            + "exclude NAV_STEEP_SLOPES (flag 0x10) so Detour cannot route across area=3/AREA_STEEP_SLOPE polys. "
+            + $"Corridor length: {chain.PolyRefs.Length} polys, {probedCount} ground polys probed. "
+            + "First 8 offenders:" + Environment.NewLine
+            + string.Join(Environment.NewLine, steepOffenders.Take(8).Select(o =>
+                $"  corridorIdx={o.Idx} polyRef=0x{o.PolyRef:X16} flags=0x{o.Flags:X4} area={o.Area}")));
     }
 
     private void DumpStallRegion(float stallX, float stallY, float stallZ, string label)

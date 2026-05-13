@@ -206,31 +206,70 @@ tiles. `MmapMeshQualityTests.FlameCrestStall_*` are now `[Fact(Skip=...)]`
 referencing this revert so CI stays green while the bake bug stays
 documented.
 
-Real fix surfaces to evaluate next iteration (one at a time, with FG live
-runs between each so the model-footing regression cannot return silently):
+Three fix surfaces were proposed; attempt status as of 2026-05-13:
 
-1. Terrain-only slope tightening: change `walkableSlopeAngle` to 52 but
-   leave `walkableSlopeAngleVMaps` at the default 61. The original failing
-   polys were all `area=3` (TERRAIN steep slope); the VMap side was
-   collateral damage.
-2. Runtime filter exclude `NAV_STEEP_SLOPES` for player paths in
-   `Exports/Navigation/PathFinder.cpp::createFilter` (`includeFlags |=
-   NAV_GROUND` already; add `excludeFlags |= NAV_STEEP_SLOPES`). The bake
-   stays AI-creature-friendly; player smooth paths cannot string-pull
-   through 52-75 degree polys. This is the vmangos pattern (`Map.cpp`
-   uses `setExcludeFlags(NAV_STEEP_SLOPES)` for non-steep walking).
-3. Separate filter pass during the bake that fragments only the tallest
-   steep-slope polys (e.g., a per-tile `maxSteepSlopePolyZRange` knob) and
-   leaves thin model footing untouched.
+1. **Terrain-only slope tightening** (`walkableSlopeAngle=52`, leave
+   `walkableSlopeAngleVMaps=61`): **TRIED, REVERTED.** Live FG escaped the
+   original stall coord (-7519,-2100,130) but progressed only to
+   (-7665,-1808,137) in Ruins of Thaurissan, where it pressed nose-first
+   into a BRM rock wall with `route=none` replans (plan=33..37). The
+   `SnapshotStallGuard` was extended with a wall-collision creep detector
+   (15s @ currentSpeed<0.5y/s + intentToMove) so future attempts fail
+   fast. Reverted as fd943e57.
+2. **Runtime filter exclude `NAV_STEEP_SLOPES`** for player paths in
+   `Exports/Navigation/PathFinder.cpp::createFilter` (`excludeFlags |=
+   NAV_STEEP_SLOPES`) plus matching exclude on the three player-path
+   queries in `Exports/Navigation/DllMain.cpp::Find{PathCorridor,PathPolygonsForAgent,PathCornersForAgent}`:
+   **TRIED, REVERTED.** Bench evidence was strong: new `[Fact]` regression
+   `BrmDungeonRouteDiagnostic.FlameCrestToUbrsCorridor_AvoidsSteepSlopePolys`
+   confirmed the corridor (returned by `FindPathPolygonsForAgent`) had
+   zero NAV_STEEP_SLOPES polys after the change. Live FG REGRESSED HARD:
+   Docker pathfinding `[NAV_METRICS] nativeFind=2 avgNativeFindMs=170294
+   maxNativeFindMs=306810` (170-306 seconds per FlameCrest -> UBRS
+   findpath), `[PATH_DIAG] result=raw_detour corners=1105
+   rawCorners=1105`. Detour A* search exploded across the BRM mesh
+   because the AREA_STEEP_SLOPE coverage is dense enough that excluding
+   NAV_STEEP_SLOPES forces A* to enumerate many alternate corridors
+   before finding a non-steep route. The 1105-corner smooth path is also
+   unfollowable. Bot teleported to Flame Crest and never received a
+   usable path before the legacy stall guard fired (UBRS poll 00050
+   shows `currentSpeed=0 movementFlags=0 currentAction=TravelTo` at
+   start coord). Reverted. KEPT the diagnostic export
+   `GetPolyFlagsForRef(mapId, polyRef, outFlags, outArea)` and managed
+   wrapper `NavigationInterop.QueryPolyFlags`; the new corridor
+   regression now carries `[Fact(Skip=...)]` referencing this revert and
+   re-enables when Surface 3 lands.
+3. **Per-tile `maxSteepSlopePolyZRange` bake-side knob**: NOT YET TRIED.
+   Design intent: post-process the polymesh after `rcBuildPolyMesh` but
+   before serialization, fragmenting only the tallest steep-slope polys
+   (e.g., zRange > 6y) into pieces no larger than ~3y zRange each.
+   Preserves thin model footing untouched. Reduces the polygon count
+   that the runtime would have to A*-skip; combined with the Surface 2
+   filter exclude, this could make path queries feasible again. Multi-
+   cycle work — design first, write code only after the design has been
+   reviewed against MmapGen's existing polymesh-stage knobs.
+4. **Off-mesh connection for the BRM ascent** in `tools/MmapGen/offmesh.txt`
+   (Phase 4 of `PATHFINDING_OVERHAUL.md`): NOT YET TRIED. Author explicit
+   jump-down / climb-up edges for the BRD/BRM road switchbacks so Detour
+   has explicit edges where the terrain triangulation cannot provide a
+   smooth walkable corridor. With those edges present, A* finds the
+   ascent in a small number of steps without enumerating BRM south-face
+   alternates. This is the canonical fix for "navmesh has no walkable
+   route but the world does." Either implement standalone, or pair with
+   Surface 2 (after Surface 3) so the runtime filter is safe to re-enable
+   because the A* search doesn't have to enumerate every face cell.
 
 Lay explanation: BRM south-face has real rock cliffs at 52-75 degrees. The
 old bake marks them walkable for AI-creature paths and the runtime
 penalizes them via area cost. Detour's smooth path can still string-pull
 through them when the cost gradient suggests a shortcut, and FG physics
 then rejects the move. The naive "lower the bake limit to the player
-limit" fix is too coarse — it removes legitimate model-side footing along
-with the cliff walls. The next attempt must keep VMap classification at 61
-and address the terrain side and/or runtime filter independently.
+limit" fix is too coarse — it removes legitimate model-side footing. The
+runtime filter alone is also too coarse — without an explicit off-mesh
+ascent route, A* enumerates too many alternates and the query times out.
+The right surfaces are off-mesh connections (give Detour the route) and/or
+per-tile poly fragmentation (reduce the alternate-corridor count). The
+next attempt must use one of those.
 
 ## Nav Summary Accelerator
 
