@@ -36,6 +36,28 @@ public sealed class MmapMeshQualityTests
             + FormatOffenders(offenders));
     }
 
+    [Fact]
+    public void OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces()
+    {
+        var dataDir = ResolveDataDir();
+        var tilePath = Path.Combine(dataDir, "mmaps", OgTopRampDeckTile);
+        Assert.True(File.Exists(tilePath), $"Expected OG tower mmap tile at {tilePath}");
+
+        var tile = MmapTile.Read(tilePath);
+        var stats = tile.GetPolygonStats(OgTopRampDeckCrop).ToArray();
+        var upperDeckStats = stats
+            .Where(static s => s.Bounds.MaxZ >= 52.5f && s.Bounds.MinZ <= 54.8f)
+            .ToArray();
+        var upperDeckArea = upperDeckStats.Sum(static s => s.HorizontalArea2D);
+
+        Assert.True(stats.Length >= 220,
+            $"Expected the top-ramp/deck crop to retain the thin connector surfaces; found {stats.Length} polygons.");
+        Assert.True(upperDeckStats.Length >= 140,
+            $"Expected the upper deck band to retain connector fragments; found {upperDeckStats.Length} polygons.");
+        Assert.True(upperDeckArea >= 700f,
+            $"Expected the upper deck band to preserve at least 700 yd^2 of walkable polygon area; found {upperDeckArea:F3}.");
+    }
+
     private static string ResolveDataDir()
     {
         var fromEnv = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");

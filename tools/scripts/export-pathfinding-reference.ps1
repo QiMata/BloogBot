@@ -138,6 +138,26 @@ Kd 0.62 0.62 0.58
 Ka 0.03 0.03 0.03
 d 0.72
 
+newmtl terrain
+Kd 0.42 0.72 0.34
+Ka 0.10 0.10 0.10
+d 0.82
+
+newmtl vmap
+Kd 0.55 0.55 0.85
+Ka 0.10 0.10 0.10
+d 0.82
+
+newmtl gameobject
+Kd 0.95 0.55 0.22
+Ka 0.10 0.10 0.10
+d 0.82
+
+newmtl liquid
+Kd 0.20 0.55 0.90
+Ka 0.10 0.10 0.10
+d 0.45
+
 newmtl path_line
 Kd 0.05 0.30 1.00
 Ka 0.00 0.02 0.05
@@ -186,6 +206,8 @@ function Convert-RawMmapGenObj(
                         ([double]::Parse($parts[3], $script:Invariant))
                     $obj = Convert-WowToObj (Convert-RawDetourToWow $raw)
                     $writer.WriteLine(("v {0} {1} {2}" -f (Format-Number $obj.X), (Format-Number $obj.Y), (Format-Number $obj.Z)))
+                } elseif ($line.StartsWith('g ') -or $line.StartsWith('usemtl ')) {
+                    $writer.WriteLine($line)
                 } elseif ($line.StartsWith('f ') -or $line.StartsWith('l ')) {
                     $writer.WriteLine($line)
                 }
@@ -208,7 +230,19 @@ function Convert-RawMmapGenObj(
         }
 
         $next = 1
+        $currentGroup = 'compiled_adt_vmap_go_crop'
+        $currentMaterial = 'raw_geometry'
+        $writtenGroup = 'compiled_adt_vmap_go'
+        $writtenMaterial = 'raw_geometry'
         foreach ($line in [IO.File]::ReadLines((Resolve-Path $RawObj))) {
+            if ($line.StartsWith('g ')) {
+                $currentGroup = $line.Substring(2).Trim()
+                continue
+            }
+            if ($line.StartsWith('usemtl ')) {
+                $currentMaterial = $line.Substring(7).Trim()
+                continue
+            }
             if (-not $line.StartsWith('f ')) { continue }
             $parts = $line.Split(' ', [StringSplitOptions]::RemoveEmptyEntries)
             $indices = New-Object System.Collections.Generic.List[int]
@@ -221,6 +255,15 @@ function Convert-RawMmapGenObj(
             }
             $include = Test-TriangleIntersectsBounds $faceWowVerts $CropWow
             if (-not $include -or $indices.Count -lt 3) { continue }
+
+            if ($currentGroup -ne $writtenGroup) {
+                $writer.WriteLine("g $currentGroup")
+                $writtenGroup = $currentGroup
+            }
+            if ($currentMaterial -ne $writtenMaterial) {
+                $writer.WriteLine("usemtl $currentMaterial")
+                $writtenMaterial = $currentMaterial
+            }
 
             $face = New-Object System.Text.StringBuilder
             [void]$face.Append('f')
@@ -288,8 +331,9 @@ function Invoke-MmapGenDebugTile(
     [string]$WorkDir,
     [string]$LogPath)
 {
-    if (-not (Test-Path $MmapGenExe)) {
-        throw "MmapGen exe not found: $MmapGenExe"
+    $resolvedMmapGenExe = Resolve-RepoPath $MmapGenExe
+    if (-not (Test-Path $resolvedMmapGenExe)) {
+        throw "MmapGen exe not found: $resolvedMmapGenExe"
     }
 
     Reset-Directory $WorkDir | Out-Null
@@ -315,7 +359,7 @@ function Invoke-MmapGenDebugTile(
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath) | Out-Null
     Push-Location $work
     try {
-        & $MmapGenExe $MapId --tile "$TileX,$TileY" --silent --threads 1 --debug `
+        & $resolvedMmapGenExe $MapId --tile "$TileX,$TileY" --silent --threads 1 --debug `
             --offMeshInput (Join-Path $script:RepoRoot 'tools\MmapGen\offmesh.txt') `
             --configInputPath (Join-Path $script:RepoRoot 'tools\MmapGen\config.json') 2>&1 |
             Tee-Object -FilePath $LogPath | Out-Host
@@ -450,7 +494,9 @@ function Copy-OgMmapGenDebugStageFiles([string]$WorkDir, [string]$LatestDir) {
     Copy-IfExists (Join-Path $meshDir 'map0012940navmesh.obj') (Join-Path $LatestDir 'mmap\mmapgen_polymesh.obj')
     Copy-IfExists (Join-Path $meshDir 'map0012940navmeshdetail.obj') (Join-Path $LatestDir 'mmap\mmapgen_detailmesh.obj')
     Copy-IfExists (Join-Path $meshDir 'map0012940.pmesh') (Join-Path $LatestDir 'mmap\mmapgen_polymesh.pmesh')
+    Copy-IfExists (Join-Path $meshDir '0012940.pmesh') (Join-Path $LatestDir 'mmap\mmapgen_polymesh.pmesh')
     Copy-IfExists (Join-Path $meshDir 'map0012940.dmesh') (Join-Path $LatestDir 'mmap\mmapgen_detailmesh.dmesh')
+    Copy-IfExists (Join-Path $meshDir '0012940.dmesh') (Join-Path $LatestDir 'mmap\mmapgen_detailmesh.dmesh')
     Copy-IfExists (Join-Path $meshDir 'map0012940.nav') (Join-Path $LatestDir 'mmap\mmapgen_final_detour_tile.nav')
 }
 
@@ -472,12 +518,13 @@ function Export-OgZeppelin {
     $sourceFull = Join-Path $latest 'source\compiled_adt_vmap_go_full.obj'
     $sourceTowerCrop = Join-Path $latest 'source\compiled_adt_vmap_go_tower_crop.obj'
     $sourceTopDeckCrop = Join-Path $latest 'source\compiled_adt_vmap_go_top_ramp_deck_crop.obj'
+    $sourceTopDeckAllSources = Join-Path $latest 'source\compiled_adt_vmap_go_top_ramp_deck_all_sources.obj'
     $latestWorkRaw = Join-Path $latest '_work\mmapgen\meshes\map0012940.obj'
     $legacyRaw = Resolve-RepoPath 'tmp\test-runtime\visualization\og-zeppelin-tower\mmapgen-debug-work\meshes\map0012940.obj'
     $raw = if (Test-Path $latestWorkRaw) { $latestWorkRaw } elseif (Test-Path $legacyRaw) { $legacyRaw } else { $latestWorkRaw }
     $needsSourceFull = $RefreshRaw -or -not (Test-Path $sourceFull)
     $needsSourceTowerCrop = $RefreshRaw -or -not (Test-Path $sourceTowerCrop)
-    $needsSourceTopDeckCrop = $RefreshRaw -or -not (Test-Path $sourceTopDeckCrop)
+    $needsSourceTopDeckCrop = $RefreshRaw -or -not (Test-Path $sourceTopDeckCrop) -or -not (Test-Path $sourceTopDeckAllSources)
     $needsSource = $needsSourceFull -or $needsSourceTowerCrop -or $needsSourceTopDeckCrop
     if ($needsSource -and ($RefreshRaw -or -not (Test-Path $raw))) {
         $rawResult = Invoke-MmapGenDebugTile 1 40 29 `
@@ -491,7 +538,10 @@ function Export-OgZeppelin {
     if ($needsSource) {
         if ($needsSourceFull) { Convert-RawMmapGenObj $raw $sourceFull }
         if ($needsSourceTowerCrop) { Convert-RawMmapGenObj $raw $sourceTowerCrop $towerCrop }
-        if ($needsSourceTopDeckCrop) { Convert-RawMmapGenObj $raw $sourceTopDeckCrop $topDeckCrop }
+        if ($needsSourceTopDeckCrop) {
+            Convert-RawMmapGenObj $raw $sourceTopDeckCrop $topDeckCrop
+            Copy-Item -Force $sourceTopDeckCrop $sourceTopDeckAllSources
+        }
     }
     Copy-OgMmapGenDebugStageFiles (Join-Path $OutRoot 'og-zeppelin\latest\_work\mmapgen') $latest
 
@@ -513,7 +563,7 @@ function Export-OgZeppelin {
 
     Write-Readme (Join-Path $latest 'README.md') 'Orgrimmar Zeppelin Tower Pathfinding Reference' @(
         "- Correct map/tile: map 1, MmapGen tile 40,29, runtime 0012940.mmtile, vmap 001_40_29.vmtile.",
-        "- source/ contains converted compiled ADT/VMAP/GO bake-input geometry.",
+        "- source/ contains converted compiled ADT/VMAP/GO bake-input geometry; source/compiled_adt_vmap_go_top_ramp_deck_all_sources.obj keeps terrain/vmap/gameobject/liquid materials visible for direct source-vs-mmap inspection.",
         "- analysis/compiled_adt_vmap_go_source_triangles.csv tags raw source triangles as terrain, vmap, gameobject, or liquid when generated by the in-tree MmapGen.",
         "- analysis/mmapgen_stage_* CSVs are focused heightfield/compact-heightfield/contour debug exports for the configured top-ramp/deck crop when debugStageCropWow is active.",
         "- mmap/mmapgen_* contains MmapGen's poly mesh, detail mesh, binary intermediate mesh files, and final Detour tile when available.",

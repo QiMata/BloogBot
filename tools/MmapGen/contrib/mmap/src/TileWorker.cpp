@@ -1204,10 +1204,35 @@ namespace MMAP
         uint32 walkableClimbModelTransition = (int)floorf(agentMaxClimbModelTerrainTransition / config.ch);
         if (config.walkableRadius == 0)
             config.walkableRadius = (int)ceilf(agentRadius / config.cs);
+        int walkableErosionRadius = config.walkableRadius;
+        // [WWoW-DIVERGENCE] WoW lets character feet/capsules overhang many
+        // WMO deck edges that Recast would reject if floor support erosion is
+        // tied to the full collision capsule. Keep the Detour/header capsule
+        // at agentRadius, but allow pathological tiles to use a smaller
+        // source-support radius for rcErodeWalkableArea.
+        if (jsonTileConfig.contains("walkableErosionRadius"))
+        {
+            const float erosionRadiusWorld = jsonTileConfig["walkableErosionRadius"].get<float>();
+            if (erosionRadiusWorld >= 0.0f)
+                walkableErosionRadius = (int)ceilf(erosionRadiusWorld / config.cs);
+        }
+        if (jsonTileConfig.contains("walkableErosionRadiusCells"))
+        {
+            const int erosionRadiusCells = jsonTileConfig["walkableErosionRadiusCells"].get<int>();
+            if (erosionRadiusCells >= 0)
+                walkableErosionRadius = erosionRadiusCells;
+        }
+        if (walkableErosionRadius < 0)
+            walkableErosionRadius = 0;
         if (config.maxEdgeLen == 0)
             config.maxEdgeLen = (int)(12 / config.cs);
         if (config.borderSize == 0)
             config.borderSize = config.walkableRadius + 3;
+        if (walkableErosionRadius != config.walkableRadius)
+        {
+            printf("[ERODE] map=%u tile=%u,%u: agentRadius=%.4f walkableRadiusCells=%d erosionRadiusCells=%d cs=%.4f\n",
+                   mapID, tileX, tileY, agentRadius, config.walkableRadius, walkableErosionRadius, config.cs);
+        }
 
         config.width = config.tileSize + config.borderSize * 2;
         config.height = config.tileSize + config.borderSize * 2;
@@ -1419,7 +1444,7 @@ namespace MMAP
                     WriteCompactHeightfieldStageCsv("markGameObjects", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
 
                 // build polymesh intermediates
-                if (!rcErodeWalkableArea(m_rcContext, config.walkableRadius, *tile.chf))
+                if (!rcErodeWalkableArea(m_rcContext, walkableErosionRadius, *tile.chf))
                 {
                     printf("%s Failed eroding area!                               \n", tileString);
                     continue;
@@ -1731,6 +1756,8 @@ namespace MMAP
             { "walkableClimb",           0     }, // placeholder
             { "walkableHeight",          0     }, // placeholder
             { "walkableRadius",          0     }, // placeholder
+            { "walkableErosionRadius",   -1.0f }, // world units; -1 uses walkableRadius
+            { "walkableErosionRadiusCells", -1  }, // cells; overrides world-unit erosion radius when >= 0
             { "walkableSlopeAngle",      75.0f }, // slope terrain
             { "walkableSlopeAngleVMaps", 61.0f }, // slope model (WMO...)
             { "quick",                   -1    }, // skip 'undermesh removal'
