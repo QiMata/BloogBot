@@ -378,6 +378,74 @@ The fix gates are the 4 RED property tests in
 `LongPathingTests.FlameCrestToBrmDungeonEntrance`. Both must turn
 green before the BRM ascent is declared fixed.
 
+#### 2026-05-14 follow-up: Phase 2 retry-prep + prod-data baseline (commit ad288945)
+
+Three minimum-scope test-infrastructure fixes that unblock fair
+Phase 2 evaluation. None of them are pathfinding fixes themselves.
+
+1. **`FlameCrestToBrmDungeonEntrance` crash mitigation**: pass
+   `teleportToSafeZone:false` to `EnsureCleanSlateAsync`. The map=1
+   OG SafeZone teleport was crashing WoW.exe with the PFS-OVERHAUL
+   Round-3 INVALID-groundZ sentinel (-200000.0) at the OG deck-lip
+   cliff-fall coord (1337.3,-4645.1,42.8) whenever the bot's prior
+   position sat in that area. The test immediately teleports to
+   FlameCrest on map=0 next, so the SafeZone hop was dead weight.
+2. **`PathfindingValidationFixture` honors pre-set `WWOW_DATA_DIR`**:
+   previously the fixture unconditionally overwrote whatever the
+   caller set with `test-data`, so the documented prod-data property-
+   test recipe was a silent no-op. Now it honors `WWOW_DATA_DIR` if
+   pre-set to a valid path, after the explicit
+   `WWOW_VALIDATION_DATA_DIR` override.
+3. **`BrmAscentRenderingExpectations` dynamic `FcStallPolyRef`
+   discovery**: replaced the MaNGOS/data-only hardcoded constant
+   `0x0001000015001ECA` with a per-test `QueryPolyAtCoord` lookup
+   against the loaded bake.
+
+**Prod-data baseline (the bake live FG actually runs against)**:
+
+| Gate | MaNGOS/data | prod-data |
+|---|---|---|
+| `Corridor_FcToUbrsPortal_TerminatesAtPortalPoly` | RED | **GREEN** |
+| `Corridor_FcToLbrsPortal_TerminatesAtPortalPoly` | RED | **GREEN** |
+| `Corridor_FcToBrdPortal_TerminatesAtPortalPoly` | GREEN | GREEN |
+| `Corridor_FcToBwlPortal_TerminatesAtPortalPoly` | RED | RED (`0x14F01877` vs portal `0x14F01B1B`) |
+| `Walkable_AllFourPortals_HaveGroundPoly` | GREEN | RED (ubrs_portal Ground but `surfaceZ=null`) |
+| `Corridor_*_DoesNotPassThroughFcStallPoly` (×4) | GREEN | GREEN |
+| `SmoothPath_FcToUbrsPortal_NoUnreasonableZJump` | RED 58 violations, worst 27.14y | RED **only 4 violations, worst 2.61y** |
+| `SmoothPath_*_NoCliffWaypointsNearFcStall` (×2) | GREEN | GREEN |
+| Other | GREEN | GREEN |
+| **Total** | **10/14** | **11/14** |
+
+The prod-data baseline lands 11/14 vs MaNGOS/data's 10/14. Crucially:
+
+- **Surface E (cull fc_stall poly) is now a confirmed NO-OP on prod-
+  data.** All four `Corridor_*_DoesNotPassThroughFcStallPoly` gates
+  pass. The prod-data corridor doesn't include fc_stall. Surface E
+  is retired; the previous framing was based on the silent test-data
+  overwrite hiding the prod-data corridor reality.
+- **The 27y MAGMA polygon `0x14F002AC` is MaNGOS/data-only**, not
+  present on prod-data. The Phase 1 follow-up "single 36y polygon"
+  finding was an over-statement of the live-FG problem.
+- **Real prod-data RED surfaces**: F (UBRS portal `surfaceZ=null`),
+  G (BWL corridor terminus +1 poly), H (sub-3y smooth-path dz
+  removal at idx 259 near (-7676,-1747,135)). See RECON_SUMMARY.md
+  "Phase 2 candidate surfaces (revised)" for the full revised
+  surface list.
+
+Run the data-source-aware recipe per RECON_SUMMARY's "Re-run recipe
+(data-source aware)" section.
+
+**Live FG 4-route validation post-crash-mitigation** (recipe per
+RECON_SUMMARY's "4-route live FG validation" section): completed
+6m 22s wallclock with **zero cross-map crashes**. Each sub-test
+reached the FlameCrest TravelTo dispatch independently — UBRS
+walked ~1100y to (-7949.8,-1162.8,170.8) (the `brm_south_lo` recon
+ridge); BRD/LBRS/BWL stalled within 8y of FlameCrest at the
+pre-existing bake-side wall-collision-creep site. 4/4 still RED
+because of the pre-existing bake-side BRM ascent stall (in-scope
+for Surface F/G/H), but the crash blocker is closed. TRX report at
+`tmp/test-runtime/results-pathfinding/brm_4route_after_crash_mitigation.trx`.
+
 ## Nav Summary Accelerator
 
 Long-route acceleration should not replace detailed mmaps with a lossy "smoothed

@@ -385,3 +385,183 @@ Pop-Location
 After re-running, the existing PNGs and JSONs are overwritten in
 `tmp/test-runtime/screenshots/brm-ascent-recon/`. Re-read the
 screenshots and re-author this summary if observations change.
+
+## 2026-05-14 — Phase 2 retry-prep + prod-data baseline (commit ad288945)
+
+Three minimum-scope fixes landed to unblock fair Phase 2 evaluation.
+None of them is a pathfinding fix; they remove obstacles that
+prevented the 2026-05-14 Surface-E retry attempt (commit 125e6928)
+from being fairly evaluated.
+
+1. **Crash mitigation** in `FlameCrestToBrmDungeonEntrance`: skip the
+   map=1 OG SafeZone teleport via `EnsureCleanSlateAsync(...,
+   teleportToSafeZone:false)`. The Surface-E retry crashed WoW.exe
+   inside that hop with the PFS-OVERHAUL Round-3 INVALID-groundZ
+   sentinel (-200000.0) at (1337.3,-4645.1,42.8) — the OG deck-lip
+   cliff-fall coord — whenever the bot's prior position (server-side
+   saved logout) sat in that area. The next call teleports directly
+   to FlameCrest on map=0, so the SafeZone hop was dead weight.
+
+2. **`PathfindingValidationFixture` honors pre-set `WWOW_DATA_DIR`**:
+   the previous `ResolveDataDir`/`ConfigureProcessDataDir` pair
+   unconditionally overwrote whatever the caller set with `test-data`,
+   so the documented recipe (`WWOW_DATA_DIR=prod-data dotnet test
+   ...BrmAscentRenderingExpectations`) was a silent no-op — the
+   test process loaded test-data tiles regardless. Fixed to honor
+   a pre-set valid `WWOW_DATA_DIR` after the explicit
+   `WWOW_VALIDATION_DATA_DIR` override.
+
+3. **`BrmAscentRenderingExpectations` dynamic `FcStallPolyRef`
+   discovery**: replaced the hardcoded `0x0001000015001ECA` (MaNGOS/
+   data-only) with a `QueryPolyAtCoord` lookup against the loaded
+   bake. Same XY resolves to a different polyref per bake.
+
+### Prod-data baseline (after the three fixes)
+
+`WWOW_DATA_DIR=D:\wwow-bot\prod-data dotnet test ...
+BrmAscentRenderingExpectations` — log line confirms
+`[Navigation] Loading map 0 tiles from: D:\wwow-bot\prod-data\mmaps\`,
+so the fixture truly loaded prod-data this time.
+
+| Gate | MaNGOS/data | prod-data |
+|---|---|---|
+| Walkable_RuinsWall_HasGroundPoly | ✅ | ✅ |
+| Walkable_BrmSouthLo_HasGroundPoly | ✅ | ✅ |
+| Walkable_AllFourPortals_HaveGroundPoly | ✅ | ❌ ubrs_portal Ground but `surfaceZ=null` |
+| Corridor_FcToUbrsPortal_TerminatesAtPortalPoly | ❌ | ✅ **flipped GREEN** |
+| Corridor_FcToLbrsPortal_TerminatesAtPortalPoly | ❌ | ✅ **flipped GREEN** |
+| Corridor_FcToBrdPortal_TerminatesAtPortalPoly | ✅ | ✅ |
+| Corridor_FcToBwlPortal_TerminatesAtPortalPoly | ❌ | ❌ corridor 1 poly short (`0x14F01877` vs portal `0x14F01B1B`) |
+| Corridor_FcToUbrsPortal_DoesNotPassThroughFcStallPoly | ✅ | ✅ (resolved 0x...15001A9F) |
+| Corridor_FcToLbrsPortal_DoesNotPassThroughFcStallPoly | ✅ | ✅ |
+| Corridor_FcToBrdPortal_DoesNotPassThroughFcStallPoly | ✅ | ✅ |
+| Corridor_FcToBwlPortal_DoesNotPassThroughFcStallPoly | ✅ | ✅ |
+| SmoothPath_FcToUbrsPortal_NoUnreasonableZJump | ❌ 58 violations, worst 27.14y at idx 663 | ❌ **only 4 violations**, worst **2.61y** at idx 259 (-7676,-1747,135) |
+| SmoothPath_FcToUbrsPortal_NoCliffWaypointsNearFcStall | ✅ | ✅ |
+| SmoothPath_FcToLbrsPortal_NoCliffWaypointsNearFcStall | ✅ | ✅ |
+| **Total** | **10/14** | **11/14** |
+
+Prod-data lands 11/14 vs MaNGOS/data's 10/14, with two of MaNGOS/data's
+RED gates (UBRS and LBRS portal-terminus) already GREEN there and the
+SmoothPath dz dropping from 27.14y catastrophic to 2.61y manageable.
+The MaNGOS/data baseline therefore over-stated the actual live-FG
+problem surface by an order of magnitude.
+
+### Surface E is a no-op on prod-data — RETIRED
+
+The four `Corridor_*_DoesNotPassThroughFcStallPoly` gates pass against
+both bakes. The corridors on prod-data don't include the fc_stall poly
+(0x...15001A9F). Culling poly 6815 of `0004635.mmtile` would change
+nothing in the live FG's smooth-path or corridor. Surface E is
+retired; the previous "Surface E retry needed" framing was based on
+the silent test-data overwrite hiding the prod-data corridor reality.
+
+### Phase 2 candidate surfaces (revised)
+
+The actual prod-data RED gates target three distinct geometry
+defects, none of which Surface E addresses:
+
+- **F. UBRS portal `surfaceZ=null` repair.** `ubrs_portal` resolves
+  to polyRef `0x0001000014F02CDF` flagged Ground, but Navigation.dll's
+  `GetPolyAtCoord` returns `surfaceZ=null` — the polygon has no
+  detail-mesh data. Live FG cannot ground-snap onto it. Fix surface:
+  re-bake the UBRS-portal tile (`0x14F` ~= (47,29)) so the portal
+  polygon carries detail-mesh triangles. Per-tile
+  `maxSimplificationError` or `detailSampleDist` tightening.
+- **G. BWL corridor terminus extension by one poly.** Corridor ends
+  at `0x14F01877`, BWL portal poly is `0x14F01B1B`. Same tile cluster
+  as F. Likely the same bake-config tightening will close both.
+- **H. Sub-3y smooth-path dz removal.** 4 WP-to-WP `dz > 1.8y`
+  violations on FC→UBRS, worst 2.61y at idx 259 between
+  `(-7673.9,-1746.2,136.0)` and `(-7679.0,-1747.5,133.4)`. These are
+  in the Ruins-of-Thaurissan ascending corridor, not the BRM upper
+  cluster. Either `WAYPOINT_VERTICAL_REACH_TOLERANCE` could absorb
+  this with a small bump (1.25y → 3y) — but per the freeze rules,
+  that's a managed-side hack — or a per-tile `walkableClimb`
+  tightening to fragment the offending polys.
+
+The MaNGOS/data 27y MAGMA polygon `0x0001000014F002AC` is a MaNGOS/
+data-only artifact; not present on prod-data. The "fragment a single
+36y polygon" framing is wrong for the live-FG problem.
+
+### Re-run recipe (data-source aware)
+
+```powershell
+Push-Location 'E:\repos\Westworld of Warcraft'
+
+# Property tests against PROD-DATA (what live FG actually runs against)
+$env:WWOW_DATA_DIR='D:\wwow-bot\prod-data'
+dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj `
+  --configuration Release --no-build -m:1 -p:UseSharedCompilation=false `
+  --filter "FullyQualifiedName~BrmAscentRenderingExpectations" `
+  --logger "console;verbosity=normal"
+
+# Property tests against MaNGOS/data (recon-baseline comparison)
+$env:WWOW_DATA_DIR='D:\MaNGOS\data'
+dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj `
+  --configuration Release --no-build -m:1 -p:UseSharedCompilation=false `
+  --filter "FullyQualifiedName~BrmAscentRenderingExpectations" `
+  --logger "console;verbosity=normal"
+
+Pop-Location
+```
+
+### 4-route live FG validation post-crash-mitigation (2026-05-14)
+
+Recipe (per prompt):
+```powershell
+$env:WWOW_BRM_DUNGEON_TRAVEL_TEST='1'
+$env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'
+$env:WWOW_DATA_DIR='D:\MaNGOS\data'
+$env:WWOW_LONG_PATHING_TIMELINE='1'
+dotnet test Tests\BotRunner.Tests\BotRunner.Tests.csproj `
+  --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false `
+  --filter "FullyQualifiedName~LongPathingTests.FlameCrestToBrmDungeonEntrance" `
+  --logger "console;verbosity=normal" `
+  -- RunConfiguration.TestSessionTimeout=2700000
+```
+
+Outcome (`tmp/test-runtime/results-pathfinding/brm_4route_after_crash_mitigation.trx`,
+6m 22s total):
+
+| Sub-test | Outcome | Final position | Duration |
+|---|---|---|---|
+| UBRS | wall-collision-creep stall | **(-7949.8, -1162.8, 170.8) — `brm_south_lo` ridge** | 3m 39s |
+| BRD  | wall-collision-creep stall | (-7522.2, -2139.9, 132.5) — near FlameCrest | 34s |
+| LBRS | wall-collision-creep stall | (-7525.6, -2147.0, 131.8) — near FlameCrest | 30s |
+| BWL  | wall-collision-creep stall | (-7526.2, -2149.7, 131.7) — near FlameCrest | 25s |
+
+**All four sub-tests reached the FlameCrest TravelTo dispatch
+independently** — no cross-map crash, no "no FG target" cascade, no
+WoW.exe death cluster. The crash-mitigation acceptance criterion is
+met. UBRS even walked the bot ~1100y from FlameCrest to the BRM south
+face ridge (the exact `brm_south_lo` recon coord (-7949.7,-1162.8,170.8)
+from entry #4), which had no rendering objection on prod-data — proving
+the prod-data corridor has substantial real-world fidelity that
+MaNGOS/data lacked.
+
+The remaining 4/4 RED is the original bake-side BRM ascent stall, not
+the cross-map crash — the `SnapshotStallGuard` wall-collision-creep
+detector caught each one at its true failure site. Per the revised
+Phase 2 surface list above (F/G/H), the next attempt should target
+the actual prod-data failure modes:
+
+- F (UBRS portal surfaceZ=null): the bot stalls at the BRM south face
+  before reaching the upper portal cluster, suggesting the corridor
+  drops the bot at the cliff transition with no smooth landing.
+- G (BWL corridor +1 poly): stall before leaving FlameCrest implies
+  Detour's partial-path return at the corridor terminus seeds an
+  unreachable smooth-path endpoint.
+- H (sub-3y smooth-path dz at idx 259): the 2.61y vertical jump at
+  (-7676,-1747,135) is in the Ruins-of-Thaurissan ascending corridor,
+  ~150y SE of the BRM south face. Likely the actual stall trigger for
+  three of the four sub-tests (BRD/LBRS/BWL all stalled within 8y of
+  FlameCrest, before reaching this WP, but the corridor query may be
+  failing earlier as a result of the same poly fragmentation issue).
+
+Screenshot artifacts:
+- `tmp/test-runtime/screenshots/long-pathing/Long-travel-wall-collision-creep-before-Flame-Crest-UBRS-portal-FG-physics-rejec-LPATHFG1-client-75924-win0-20260513_221217.png`
+- `tmp/test-runtime/screenshots/long-pathing/Long-travel-wall-collision-creep-before-Flame-Crest-BRD-portal-FG-physics-reject-LPATHFG1-client-75924-win0-20260513_221254.png`
+- `tmp/test-runtime/screenshots/long-pathing/Long-travel-wall-collision-creep-before-Flame-Crest-LBRS-portal-FG-physics-rejec-LPATHFG1-client-75924-win0-20260513_221328.png`
+- `tmp/test-runtime/screenshots/long-pathing/Long-travel-wall-collision-creep-before-Flame-Crest-BWL-portal-FG-physics-reject-LPATHFG1-client-75924-win0-20260513_221354.png`
+
