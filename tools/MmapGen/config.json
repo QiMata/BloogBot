@@ -31,7 +31,10 @@
       "walkableErosionRadius": 0.2,
       "debugStageCropWow": [-8010, -1225, 115, -7780, -1080, 190]
     },
+    "_3546_README_surface_H": "PFS-OVERHAUL BRM ascent Phase 2 Surface H (2026-05-14): tighten per-tile cs from default 0.2666 to 0.15 to fragment the 2.61y-dz polygon at WP[259] (-7673.9,-1746.2,136.0)→(-7679.0,-1747.5,133.4) into shorter steps. Per the cs+tileSize coupling rule (memory project_pfs_overhaul_006_config_key_inversion): when cs shrinks, tileSize must grow so 25*tileSize*cs ≈ 533.33y. For cs=0.15: tileSize = 533.33/(25*0.15) ≈ 142.22 → use 142. OG zeppelin precedent: cs=0.1 paired with tileSize=213 (25*213*0.1 = 532.5y). Target gate: SmoothPath_FcToUbrsPortal_NoUnreasonableZJump (4 violations, worst 2.61y at idx 259). Tile 3546 is the Flame Crest stall tile, a DIFFERENT tile from F/G's 3446 — so the tile-3446 corridor-terminus tests won't see polyIdx churn.",
     "3546": {
+      "cs": 0.15,
+      "tileSize": 142,
       "walkableErosionRadius": 0.2,
       "debugStageCropWow": [-7545, -2135, 118, -7480, -2075, 150]
     }

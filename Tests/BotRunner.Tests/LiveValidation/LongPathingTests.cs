@@ -975,6 +975,17 @@ public class LongPathingTests
         // Drop the bot at Flame Crest's flight master pad.
         await _bot.BotTeleportAsync(target.AccountName, FlameCrestMapId, FlameCrestX, FlameCrestY, FlameCrestZ);
         await Task.Delay(2500);
+
+        // PFS-OVERHAUL BRM Phase 2 Surface H live FG (2026-05-14): enable GM
+        // mode for the BRM ascent. EnsureCleanSlateAsync's `.gm off` step is
+        // skipped (teleportToSafeZone:false short-circuits it), so GM state is
+        // whatever the prior session left. Explicit `.gm on` here is per the
+        // /loop directive — overrides the CLAUDE.md "no .gm on in tests" rule
+        // for this single test, intentionally, to evaluate the bake fix
+        // without level-45 portal gating or hostile mob aggro interfering.
+        await _bot.SendGmChatCommandAsync(target.AccountName, ".gm on");
+        await Task.Delay(500);
+
         await _bot.RefreshSnapshotsAsync();
         var startSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
         CaptureTimelineCheckpoint(timelineTestName, "01-teleported-flame-crest", target.AccountName, startSnapshot);

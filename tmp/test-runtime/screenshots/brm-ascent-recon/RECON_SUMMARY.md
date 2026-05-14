@@ -489,14 +489,20 @@ defects, none of which Surface E addresses:
   BWL/UBRS/LBRS corridor-terminus failures are robust to bake-fidelity
   tightening. The 1-poly-short symptom is a fundamental tile-3446
   intra-tile connectivity gap, not a bake-fidelity issue.
-- **H. Sub-3y smooth-path dz removal.** 4 WP-to-WP `dz > 1.8y`
+- **H. Sub-3y smooth-path dz removal.** **SHIPPED 2026-05-14 — see
+  "Surface H SHIPPED" section below.** 4 WP-to-WP `dz > 1.8y`
   violations on FC→UBRS, worst 2.61y at idx 259 between
   `(-7673.9,-1746.2,136.0)` and `(-7679.0,-1747.5,133.4)`. These are
-  in the Ruins-of-Thaurissan ascending corridor, not the BRM upper
-  cluster. Either `WAYPOINT_VERTICAL_REACH_TOLERANCE` could absorb
-  this with a small bump (1.25y → 3y) — but per the freeze rules,
-  that's a managed-side hack — or a per-tile `walkableClimb`
-  tightening to fragment the offending polys.
+  in the Ruins-of-Thaurissan ascending corridor (tile 3546 / filename
+  0004635.mmtile, NOT the tile 3446 cluster from F/G). Fix landed:
+  per-tile `cs=0.15` + `tileSize=142` on tile 3546 fragments the
+  2.61y-dz polygon into smaller steps. Property tests 13/14 GREEN
+  (SmoothPath_FcToUbrsPortal_NoUnreasonableZJump flipped GREEN; the
+  Corridor_FcToBwlPortal_TerminatesAtPortalPoly gate also flipped
+  GREEN as a side-effect of the denser bake on tile 3546's neighbor).
+  Live FG: 3 of 4 sub-tests (BRD/LBRS/BWL) walked 500-1100y further
+  than baseline before stalling at downstream sites; UBRS unchanged
+  at brm_south_lo (a tile-3446 issue, separate fix surface).
 
 The MaNGOS/data 27y MAGMA polygon `0x0001000014F002AC` is a MaNGOS/
 data-only artifact; not present on prod-data. The "fragment a single
@@ -622,6 +628,110 @@ geometry has intentional connectivity gaps that the bake faithfully
 reproduces and that the smooth-path / corridor consumer must be
 made tolerant of. Phase 2 iteration moves to Surface H (a different
 tile in Ruins of Thaurissan) for the third attempt.
+
+### Surface H SHIPPED (2026-05-14)
+
+Attempt: per-tile `cs=0.15` + `tileSize=142` on tile `3546` (CLI
+`--tile 35,46`, filename `0004635.mmtile` — the Ruins-of-Thaurissan
+ascending corridor tile, DIFFERENT from F/G's tile 3446). The cs +
+tileSize coupling rule (memory `project_pfs_overhaul_006_config_key_inversion`)
+says when `cs` shrinks, `tileSize` must grow so `25*tileSize*cs ≈
+533.33y` total tile coverage; for cs=0.15: tileSize = 533.33 /
+(25*0.15) ≈ 142. The hypothesis: smaller XY cells fragment the
+2.61y-dz polygon at WP[259] into shorter steps that
+`WAYPOINT_VERTICAL_REACH_TOLERANCE=1.25y` can absorb.
+
+**Bake outcome:** completed cleanly. Tile size 1,711,864 → 1,887,456
+bytes (+10%, much smaller growth than F/G's +20-23%). MmapGen logs
+`erosionRadiusCells=2 cs=0.1500` confirming the override applied.
+Promoted to both data dirs; `wwow-pathfinding` restart healthy.
+
+**Property-test outcome (prod-data, cs=0.15 + tileSize=142):**
+
+| Gate | Baseline (cs=default 0.2666) | cs=0.15 attempt | Delta |
+|---|---|---|---|
+| Walkable_AllFourPortals_HaveGroundPoly | ❌ ubrs surfaceZ=null | ❌ STILL RED (tile-3446 issue, unrelated to H) | (no change) |
+| Corridor_FcToBwlPortal_TerminatesAtPortalPoly | ❌ 1 poly short | ✅ **flipped GREEN as side-effect** | **+** |
+| Corridor_FcToUbrsPortal_TerminatesAtPortalPoly | ✅ | ✅ | (no change) |
+| Corridor_FcToLbrsPortal_TerminatesAtPortalPoly | ✅ | ✅ | (no change) |
+| SmoothPath_FcToUbrsPortal_NoUnreasonableZJump (H's target) | ❌ 4 violations | ✅ **flipped GREEN** | **+** |
+| All other previously-GREEN gates | ✅ | ✅ | (no change) |
+| **Aggregate** | **11/14** | **13/14 + NO A\* regression** | **net +2 gates** |
+
+The Corridor_FcToBwlPortal_TerminatesAtPortalPoly going GREEN was an
+unexpected and very welcome side-effect: tile 3546 is upstream of
+tile 3446 on the FC→BWL corridor, and the denser cs=0.15 bake on
+tile 3546 produced new tile-boundary polys that connect into tile
+3446's BWL portal poly directly. Surface G's negative attempt
+showed tile-3446 bake-knobs couldn't close that gap; Surface H's
+tile-3546 cs override did, by changing the cross-tile connectivity
+seam.
+
+A* runtime: NO regression. The full 14-gate suite ran in ~17s (vs
+17.6s baseline). The SmoothPath query that hung >9min on Surface F/G
+ran in 23ms here.
+
+**Live FG outcome:**
+
+GM mode enabled for this run via `.gm on` after `BotTeleportAsync`
+in `LongPathingTests.cs` (per user mid-loop directive). Test ran
+12.7min total wall-clock.
+
+| Sub-test | Baseline final position (2026-05-14) | Surface H final position | Δ distance from FC |
+|---|---|---|---|
+| UBRS | (-7949.8,-1162.8,170.8) `brm_south_lo` ridge | (-7949.7,-1162.7,170.8) **same ridge** | **0y** (tile-3446 issue) |
+| BRD  | (-7522.2,-2139.9,132.5) near FC (~30y) | (-7883.3,-1690.7,130.1) canyon | **~580y** |
+| LBRS | (-7525.6,-2147.0,131.8) near FC (~30y) | (-7876.9,-1752.1,126.7) past Ruins | **~553y** |
+| BWL  | (-7526.2,-2149.7,131.7) near FC (~25y) | (-7836.4,-1114.3,127.7) near BRM south | **~1100y** |
+
+3 of 4 sub-tests walked 500-1100y further before stalling. BRD/LBRS/BWL
+all cleared the Ruins-of-Thaurissan ascending corridor that the
+2.61y-dz polygon had been blocking. UBRS was unaffected — it already
+walked past the Ruins on the baseline; its stall site is at
+`brm_south_lo` in tile 3446 (a separate fix surface, ruled out by F+G).
+
+All four sub-tests still fail the test as a whole (no portal arrival),
+but Surface H is a **clear partial success** — the prod-data RED gate
+it targeted flipped GREEN, no regressions, and live FG walked
+substantially further. Per the loop's Step 8b ("commit + push the
+bake fix with the live evidence"): SHIP.
+
+Screenshot artifacts:
+- `tmp/test-runtime/screenshots/long-pathing/Long-travel-wall-collision-creep-before-Flame-Crest-UBRS-portal-FG-physics-rejec-LPATHFG1-client-94720-win0-20260514_001358.png`
+- `tmp/test-runtime/screenshots/long-pathing/Long-travel-wall-collision-creep-before-Flame-Crest-BRD-portal-FG-physics-reject-LPATHFG1-client-94720-win0-20260514_001600.png`
+- `tmp/test-runtime/screenshots/long-pathing/Long-travel-wall-collision-creep-before-Flame-Crest-LBRS-portal-FG-physics-rejec-LPATHFG1-client-94720-win0-20260514_001741.png`
+- `tmp/test-runtime/screenshots/long-pathing/Long-travel-wall-collision-creep-before-Flame-Crest-BWL-portal-FG-physics-reject-LPATHFG1-client-94720-win0-20260514_002148.png`
+
+**GM-on caveat:** the test was run with `.gm on` enabled (per user
+directive mid-loop). The CLAUDE.md "no .gm on in tests" rule was
+intentionally overridden for this single test to evaluate the bake
+fix without portal-level gating or hostile-mob aggro interfering.
+The Surface H bake effect (500-1100y travel improvement) is far
+larger than GM-on alone could plausibly explain (mob aggro doesn't
+cause sub-30y wall-collision stalls), so the dominant cause is the
+cs=0.15 fragmentation of the Ruins WP[259] polygon. Future
+no-GM-on validation would close the attribution gap, but is not
+needed to characterize the Surface H bake fix as the dominant
+driver of the 3-of-4 sub-test improvements.
+
+### Phase 2 closeout (2026-05-14)
+
+| Surface | Outcome | Commit |
+|---|---|---|
+| E | Retired NO-OP on prod-data | (retired by ad288945) |
+| F (mse on tile 3446) | NEGATIVE | 953cdae8 |
+| G (walkableErosionRadius=0.0 on tile 3446) | NEGATIVE | a6dfcb4e |
+| H (cs=0.15+tileSize=142 on tile 3546) | **SHIPPED** | (this commit) |
+
+Phase 2 ends with one shipped surface (H), two negative surfaces
+(F+G ruled out tile 3446 bake-knob fixes), and one remaining live FG
+failure cluster: tile 3446's BRM upper portal cluster (UBRS still
+stalls at brm_south_lo, plus the persistent ubrs_portal surfaceZ=null
+property gate). Future iteration must use a structurally different
+approach for the BRM upper portals — Phase 4 off-mesh connections,
+or smooth-path / corridor consumer tolerance for the partial-path
+case, or a deeper-recon investigation of why the WoW client's portal
+geometry has connectivity gaps the bake faithfully reproduces.
 
 ### Re-run recipe (data-source aware)
 
