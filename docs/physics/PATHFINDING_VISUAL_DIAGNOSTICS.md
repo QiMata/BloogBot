@@ -308,6 +308,76 @@ The right surfaces are off-mesh connections (give Detour the route) and/or
 per-tile poly fragmentation (reduce the alternate-corridor count). The
 next attempt must use one of those.
 
+#### 2026-05-13 follow-up: FG-rendering reconnaissance + property tests landed (commit 54cb9b9d)
+
+After four reverted bake/runtime attempts whose pattern was
+"bench-green, live-regress", the iteration loop was inverted via
+`mmo-pathfinding`'s "FG-rendering reconnaissance" workflow. The work
+landed in commit 54cb9b9d:
+
+- `Tests/BotRunner.Tests/LiveValidation/BrmAscentReconTests.cs` — env-gated
+  (`WWOW_BRM_ASCENT_RECON=1`) FG recon harness that teleports LPATHFG1 to
+  11 seeded coords, drives 4 cardinal yaws via `.go xyzo`, and captures
+  the WoW client window via `Tests.Infrastructure.WindowCapture`. The
+  test includes a process-scan PID fallback (`ResolveLiveWoWClientPid`)
+  that fixes the StateManager-log-only-records-first-launch resolver
+  bug — screenshots survive WoW.exe auto-restart cycles.
+- `Tests/PathfindingService.Tests/WaypointGeneration/BrmAscentReconPolyrefDump.cs`
+  — x64 sidecar that queries the same coords via `QueryPolyAtCoord` +
+  `QueryPolyFlags`. Includes `DumpZJumpZone` diagnostic that probes the
+  vertical column at the WP[663] 27y jump XY.
+- `Tests/PathfindingService.Tests/WaypointGeneration/BrmAscentRenderingExpectations.cs`
+  — 14 property tests rooted in observed FG geometry. Pre-Phase-2
+  baseline: 10 pass, 4 fail. The 4 failing tests are the iteration
+  gates for whichever Phase 2 surface is chosen.
+- `tmp/test-runtime/screenshots/brm-ascent-recon/RECON_SUMMARY.md`
+  (force-tracked) — human synthesis of all observations.
+
+Pre-Phase-2 baseline (44 PNGs + per-coord JSONs at the recon dir):
+
+- `fc_stall` (-7519,-2100,130) renders as bot wedged in rock with lava
+  on one flank — but the property tests
+  `Corridor_FcTo*Portal_DoesNotPassThroughFcStallPoly` confirm the
+  fc_stall poly `0x0001000015001ECA` is NOT in the FC->portal corridor.
+  Earlier "fc_stall is the headline" hypothesis was wrong; corrected in
+  the summary.
+- All four BRM dungeon portals (UBRS, LBRS, BWL, BRD) are visually
+  reachable in-game per their renderings.
+- `Corridor_FcTo{Ubrs,Lbrs,Bwl}Portal_TerminatesAtPortalPoly` runs RED:
+  corridor terminates one poly short of the literal portal poly in
+  the BRM upper portal cluster tile (`0x14F`). FC->BRD passes.
+- `SmoothPath_FcToUbrsPortal_NoUnreasonableZJump` runs RED: 58 WP-to-WP
+  violations, worst is 27.14y at WP[663]->WP[664] = (-7945.7,-1289.2,
+  97.2) -> (-7946.8,-1291.7,124.4).
+
+`DumpZJumpZone` localizes the headline failure to a single polygon:
+`0x0001000014F002AC` in tile-bits `0x14F`, `area=7` AREA_MAGMA,
+`flags=0x0002` NAV_MAGMA only. A vertical column scan at the midpoint
+XY (-7946.25,-1290.45) from z=90 to z=130 in 2y steps shows EVERY
+probe lands on the same polygon with `surfaceZ=126.35`. The polygon
+spans at least 36y vertically. The smooth-path generator emits an
+in-space waypoint at z=97 (below the polygon's actual surface),
+then jumps to z=124 — creating the 27y impossible-to-walk transition.
+
+Phase 2 candidate surfaces (NOT attempted in commit 54cb9b9d's
+session):
+
+- **E.** Targeted PolyRef cull of `0x14F002AC` via `NavMeshTileEditor`
+  (`flags=0`). Smallest blast radius. Disconnects the 36y polygon
+  from the navmesh; Detour reroutes around. Validate via property
+  tests + live FG.
+- **C.** Per-tile `cs` / `ch` / `maxSimplificationError` tightening
+  for tile `0x14F`. Recast bakes finer-grained polygons. Wider blast
+  radius; possible cross-tile linking issues with neighbors.
+- **D.** Surface 3 generalized — per-tile `maxAnyPolyZRange` bake
+  post-process that fragments any polygon whose vertical extent
+  exceeds threshold. Multi-cycle design work.
+
+The fix gates are the 4 RED property tests in
+`BrmAscentRenderingExpectations` + the 4-route live
+`LongPathingTests.FlameCrestToBrmDungeonEntrance`. Both must turn
+green before the BRM ascent is declared fixed.
+
 ## Nav Summary Accelerator
 
 Long-route acceleration should not replace detailed mmaps with a lossy "smoothed

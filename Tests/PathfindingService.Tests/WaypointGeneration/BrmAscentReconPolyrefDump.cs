@@ -170,6 +170,123 @@ public class BrmAscentReconPolyrefDump : IClassFixture<PathfindingValidationFixt
         _output.WriteLine($"# WWOW_DATA_DIR: {_fixture.DataDir}");
     }
 
+    /// <summary>
+    /// Phase 2 diagnostic: identify the tile + poly hosting the 27y Z-jump
+    /// at smooth-path WP[663] of the FC->UBRS smooth path. RECON_SUMMARY
+    /// names this as the headline failure mode. Run with the recon env var
+    /// set; output goes to recon-jump-zone.json beside the recon outputs.
+    /// </summary>
+    [SkippableFact]
+    public void DumpZJumpZone()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(EnableEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"BRM ascent recon disabled (set {EnableEnvVar}=1).");
+
+        // The two coords involved in WP[663]->WP[664] of the FC->UBRS
+        // smooth path (per BrmAscentRenderingExpectations baseline run).
+        var jumpFrom = new XYZ(-7945.7f, -1289.2f, 97.2f);
+        var jumpTo   = new XYZ(-7946.8f, -1291.7f, 124.4f);
+
+        // Probe each at strict (capsule) and wide (pre-search) extents.
+        // Also probe a vertical column at the XY to map every walkable
+        // surface in the area, so we can see whether real intermediate
+        // ledges exist between z=97 and z=124.
+        var rows = new System.Collections.Generic.List<object>();
+
+        foreach (var (label, c) in new (string, XYZ)[]
+        {
+            ("wp663_from", jumpFrom),
+            ("wp664_to",   jumpTo),
+        })
+        {
+            var strict = NavigationInterop.QueryPolyAtCoord(
+                MapId, c, AgentRadius, WalkableClimb);
+            var wide = NavigationInterop.QueryPolyAtCoord(
+                MapId, c, WideSearchXY, WideSearchZ);
+            rows.Add(new
+            {
+                label,
+                coord = new { x = c.X, y = c.Y, z = c.Z },
+                strict = SerializeProbeShort(strict),
+                wide = SerializeProbeShort(wide),
+            });
+        }
+
+        // Vertical column scan at the jump XY.
+        var column = new System.Collections.Generic.List<object>();
+        float midX = 0.5f * (jumpFrom.X + jumpTo.X);
+        float midY = 0.5f * (jumpFrom.Y + jumpTo.Y);
+        for (float z = 90f; z <= 130f; z += 2f)
+        {
+            var probe = NavigationInterop.QueryPolyAtCoord(
+                MapId, new XYZ(midX, midY, z), AgentRadius, 1.5f);
+            if (probe.HasPoly)
+            {
+                column.Add(new
+                {
+                    z,
+                    polyRef = $"0x{probe.PolyRef:X16}",
+                    tileBits = $"0x{(probe.PolyRef >> 20) & 0x0FFFFFFFul:X7}",
+                    polyType = probe.PolyType.ToString(),
+                    surfaceZ = probe.HasSurface ? (float?)probe.SurfaceZ : null,
+                });
+            }
+        }
+
+        var doc = new
+        {
+            generatedUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+            mapId = MapId,
+            jumpFromTo = new
+            {
+                from = new { x = jumpFrom.X, y = jumpFrom.Y, z = jumpFrom.Z },
+                to = new { x = jumpTo.X, y = jumpTo.Y, z = jumpTo.Z },
+                dz = Math.Abs(jumpTo.Z - jumpFrom.Z),
+            },
+            probes = rows,
+            columnAtMidXy = new
+            {
+                xy = new { x = midX, y = midY },
+                zRange = new { min = 90f, max = 130f, step = 2f },
+                walkablePolys = column,
+            },
+            dataDir = _fixture.DataDir,
+        };
+
+        var outDir = ResolveReconOutputDir();
+        Directory.CreateDirectory(outDir);
+        var outPath = Path.Combine(outDir, "recon-jump-zone.json");
+        File.WriteAllText(
+            outPath,
+            JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true }));
+
+        _output.WriteLine($"# z-jump zone dump written to {outPath}");
+        foreach (var row in column)
+            _output.WriteLine($"#   {JsonSerializer.Serialize(row)}");
+    }
+
+    private static object SerializeProbeShort(NavigationInterop.PolyAtCoordResult p)
+    {
+        if (!p.Success || !p.HasPoly)
+            return new { hasPoly = false };
+        var flags = NavigationInterop.QueryPolyFlags(MapId, p.PolyRef);
+        return new
+        {
+            hasPoly = true,
+            polyRef = $"0x{p.PolyRef:X16}",
+            tileBits = $"0x{(p.PolyRef >> 20) & 0x0FFFFFFFul:X7}",
+            polyType = p.PolyType.ToString(),
+            flagsHex = flags.Success ? $"0x{flags.Flags:X4}" : null,
+            area = flags.Success ? (byte?)flags.Area : null,
+            steepSlopes = flags.Success ? flags.HasSteepSlopes : (bool?)null,
+            surfaceZ = p.HasSurface ? (float?)p.SurfaceZ : null,
+        };
+    }
+
     private static string ResolveReconOutputDir()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

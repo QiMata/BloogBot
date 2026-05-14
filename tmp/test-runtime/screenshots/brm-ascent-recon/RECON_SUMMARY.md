@@ -118,54 +118,86 @@ WP[662] = (-7945.7, -1289.2, 97.2)
 WP[663] = (-7946.8, -1291.7, 124.4)   dz = 27.14y
 ```
 
-This is on the BRM south-face approach (XY near `brm_south_lo`'s ridge
-sample at -7949.7,-1162.8 — same general area). The bake's smooth path
-dips down to z=97 (Searing Gorge floor near the south face), then jumps
-up by 27y in a single waypoint pair to z=124. The bot's NavigationPath
-will stall at this jump; even a relaxed
-`WAYPOINT_VERTICAL_REACH_TOLERANCE > 1.25y` would not absorb a 27y
-jump.
+`BrmAscentReconPolyrefDump.DumpZJumpZone` (`recon-jump-zone.json`)
+localizes the offending polygon. **Both WP[662] and WP[663] resolve
+to the SAME polygon `0x0001000014F002AC` in tile `0x14F` (poly
+0x2AC).** A vertical column scan at the midpoint XY (-7946.25,
+-1290.45) from z=90 to z=130 in 2y steps shows EVERY probe (z=90,
+92, ..., 128) lands on the same polygon, with `surfaceZ=126.35` —
+i.e. the polygon's actual walkable top surface is z=126, but it
+spans at least 36y vertically (z=90 to z=126).
 
-**This is the live FG failure mode.** The four reverted attempts each
-tried to address a different symptom (steep-slope filter, off-mesh
-ascent), but the underlying cause is the bake string-pulling the
-smooth path across a vertical cliff face the player physics cannot
-traverse. The corridor at that index walks across cliff-face polys
-that are in the bake but not physically continuous in-game.
+Polygon flags + area:
+- `flagsHex=0x0002` = `NAV_MAGMA` only (NOT `NAV_GROUND`).
+- `area=7` = `AREA_MAGMA` (lava).
+
+The runtime filter `PathFinder::createFilter` sets
+`includeFlags = NAV_GROUND` only, which SHOULD exclude this MAGMA
+polygon from the corridor. But the smooth-path generator puts
+WP[662] at z=97 below the polygon's surface — a synthetic in-space
+waypoint that lands ABOVE the lava but BELOW any actual walkable
+surface in that XY zone. WP[663] then jumps to z=124, near the
+polygon's true surface at z=126.
+
+**Live FG failure mode:** the bot's NavigationPath cannot accept a
+27y vertical waypoint advance, so it stalls. Even a relaxed
+`WAYPOINT_VERTICAL_REACH_TOLERANCE > 1.25y` cannot absorb 27y.
+Even if it could, the bot would attempt to walk into a
+near-vertical cliff face, which player physics rejects.
+
+The four reverted attempts each tried to address a different symptom
+(steep-slope filter, off-mesh ascent), but the underlying cause is
+this single 36y-tall polygon producing an in-space waypoint at z=97
+during smooth-path interpolation. The fix surface is bake-side
+fragmentation of polygon `0x14F002AC` (or the bake-config knob that
+prevented its fragmentation in the first place).
 
 ### Implication for the Phase 2 fix surface
 
-The recon does NOT support the targeted-poly-cull approach for fc_stall
-that the earlier draft suggested. It DOES support a bake-side fix
-focused on the BRM south-face cliff transition (around XY
-(-7945,-1290) z=97→124). Candidate fix surfaces:
+The recon now points at one specific polygon: `0x14F002AC` in
+Detour tile-bits `0x14F` (decimal 335). The (X, Y) tile-coord
+mapping for index 335 needs to be derived from the navmesh's
+bmin + tileSize at Phase 2 start; the polyRef itself is the
+canonical handle that `NavMeshTileEditor` consumes regardless of
+the tile-coord decoding.
 
-- **C.** **Per-tile bake fragmentation around the BRM south-face cliff
-  band** — fragment the polygons that bridge z≈100 to z≈125 on the
-  southwest BRM face into smaller pieces. Likely tiles `0x14F0` (BRM
-  upper portal cluster) and adjacent. The mechanism is a per-tile `cs`
-  / `ch` reduction or `maxSimplificationError` tightening for those
-  specific tiles, so Recast's contour build doesn't emit the cliff
-  edge as a single 27y vertical span.
-- **D.** **Surface 3 revisited (per-tile `maxSteepSlopePolyZRange`
-  bake post-process)** — the cliff-bridging polys may also be
-  STEEP-classified (the brm_southnew sample at z=133 is STEEP). A
-  per-tile post-process that fragments any STEEP poly with `zRange > 6y`
-  would directly break the 27y jump. Surface 3 was the only never-tried
-  surface in the four-attempt list; recon now has rendering evidence
-  to justify it. Still needs design review per the docs.
-- **E.** **Targeted PolyRef cull of the cliff-bridging polys at
-  `brm_south_lo` neighborhood**, using the same `NavMeshTileEditor`
-  pipeline as the BRM Round-3 work
-  (`project_pfs_overhaul_006_brm_phase4_findings`). Requires identifying
-  the specific polyrefs that span the 27y gap.
+Candidate fix surfaces, ordered by blast radius:
 
-Property test
-`SmoothPath_FcToUbrsPortal_NoUnreasonableZJump` is the
-green-or-red gate for whichever surface is chosen. The
-`Corridor_*MustReachTarget` tests are the secondary gates — they may
-require a separate intra-tile connectivity fix in the BRM upper portal
-cluster.
+- **E.** **Targeted PolyRef cull of `0x14F002AC`** using the
+  `NavMeshTileEditor` pipeline from
+  `project_pfs_overhaul_006_brm_phase4_findings`. Smallest blast
+  radius. Disconnects the 36y polygon entirely; Detour will route
+  around. Risk: if the polygon is the only walkable surface in that
+  XY column, the cull strands the BRM south face — but the recon
+  shows `brm_south_lo` (-7949.7, -1162.8, 170.8) is a separate
+  polygon at z=171 elsewhere on the ridge, so an alternate corridor
+  should exist.
+- **C.** **Per-tile `cs` / `ch` / `maxSimplificationError` tightening
+  for tile (47, 29)** — Recast bakes finer-grained polygons that
+  don't span 36y vertically. Wider blast radius (regenerates the
+  whole tile's mesh). Risk: file-size growth, possible new
+  cross-tile linking issues with neighbors at different `cs`.
+- **D.** **Surface 3 (per-tile `maxSteepSlopePolyZRange` bake
+  post-process)** — designed for STEEP polys; less directly
+  applicable here because `0x14F002AC` is `area=7` MAGMA, not
+  `area=3` STEEP. Could be generalized to a `maxAnyPolyZRange`
+  post-process that fragments any polygon (regardless of area)
+  whose vertical extent exceeds a threshold. Multi-cycle design
+  work per the docs.
+
+Property test `SmoothPath_FcToUbrsPortal_NoUnreasonableZJump` is
+the green-or-red gate. `Corridor_*MustReachTarget` is the secondary
+gate — likely needs a separate fix in the BRM upper portal cluster
+tile.
+
+**Phase 2 not attempted in this session.** The targeted-cull
+(Surface E) is the most surgical option but requires identifying
+the right `NavMeshTileEditor` invocation; the per-tile cs tweak
+(Surface C) requires a focused bake + regression sweep; both
+require a fresh attempt cycle including the live FG validation that
+takes ~30-40 min per try. The Phase 1 commit lands the recon +
+property tests + this updated summary as the foundational handoff
+for the next session.
 
 ### Secondary finding — interior BRM coords are on the route
 
