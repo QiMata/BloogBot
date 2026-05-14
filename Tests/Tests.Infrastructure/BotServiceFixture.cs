@@ -45,6 +45,7 @@ public class BotServiceFixture : IAsyncLifetime
     private readonly MangosServerFixture _mangosFixture = new();
     private ITestOutputHelper? _output;
     private Process? _stateManagerProcess;
+    private Process? _uiSidecarProcess;
     private readonly List<int> _managedWoWPids = [];
     private readonly System.Collections.Concurrent.ConcurrentBag<string> _capturedOutput = [];
 
@@ -323,6 +324,12 @@ public class BotServiceFixture : IAsyncLifetime
             _activeSettingsPath = CustomSettingsPath != null ? Path.GetFullPath(CustomSettingsPath) : null;
             _activeCoordinatorFlag = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") ?? "1";
             Log($"All services are ready! (settings={Path.GetFileName(CustomSettingsPath ?? "default")}, coordinator={_activeCoordinatorFlag})");
+
+            // Launch the WoWStateManagerUI sidecar so live tests have a visible
+            // operator console for infrastructure health (and, once Phase 3 lands,
+            // live bot Activity/Objective/Task/Action state). Failure to launch
+            // never blocks the fixture — UI visibility is a developer affordance.
+            _uiSidecarProcess = UiSidecarLauncher.TryLaunch(Log);
 
             // Check if PathfindingService is available on its external endpoint.
             // Tests that require pathfinding (corpse run, movement, gathering) should skip when unavailable.
@@ -661,6 +668,15 @@ public class BotServiceFixture : IAsyncLifetime
         }
         catch { /* process may have exited */ }
 
+        // 0. Stop the WoWStateManagerUI sidecar BEFORE StateManager — otherwise the
+        //    UI's HealthCheckService polls a dead protobuf port and logs a disconnect
+        //    storm. Safe no-op when the sidecar was suppressed (CI opt-out).
+        if (_uiSidecarProcess != null)
+        {
+            UiSidecarLauncher.Stop(_uiSidecarProcess, "fixture_teardown", Log);
+            _uiSidecarProcess = null;
+        }
+
         // 1. Kill StateManager FIRST — prevents its monitoring loop (every 5s) from
         //    relaunching WoW.exe after we kill bot processes. StateManager detects
         //    terminated bots and re-creates them via ApplyDesiredWorkerState.
@@ -818,10 +834,36 @@ public class BotServiceFixture : IAsyncLifetime
             finally { proc.Dispose(); }
         }
 
-        int totalKilled = smKilled + wowKilled;
+        // 3. Kill orphaned WoWStateManagerUI sidecars from previous test runs
+        //    (repo-scoped — only kills processes that resolve to this repo's bin output).
+        int uiKilled = 0;
+        foreach (var proc in Process.GetProcessesByName("WoWStateManagerUI"))
+        {
+            try
+            {
+                var modulePath = proc.MainModule?.FileName ?? "";
+                if (!modulePath.Contains(RepoMarker, StringComparison.OrdinalIgnoreCase))
+                {
+                    Log($"  [Cleanup] Skipping WoWStateManagerUI PID {proc.Id} (not repo-scoped: {modulePath})");
+                    continue;
+                }
+
+                Log($"  [Cleanup] Killing stale WoWStateManagerUI PID {proc.Id} (started {proc.StartTime:HH:mm:ss})");
+                proc.Kill(entireProcessTree: true);
+                proc.WaitForExit(5000);
+                uiKilled++;
+            }
+            catch (Exception ex)
+            {
+                Log($"  [Cleanup] Could not kill WoWStateManagerUI PID {proc.Id}: {ex.Message}");
+            }
+            finally { proc.Dispose(); }
+        }
+
+        int totalKilled = smKilled + wowKilled + uiKilled;
         if (totalKilled > 0)
         {
-            Log($"  [Cleanup] Killed: {smKilled} StateManager, {wowKilled} WoW.exe");
+            Log($"  [Cleanup] Killed: {smKilled} StateManager, {wowKilled} WoW.exe, {uiKilled} WoWStateManagerUI");
 
             // Wait for MaNGOS auth server to clear stale sessions (rejects duplicates otherwise)
             // Also wait for port release after StateManager kill

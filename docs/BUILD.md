@@ -182,6 +182,9 @@ BloogBot/
 | `WWOW_LOADER_DLL_PATH` | *(auto-detected)* | Override path to Loader.dll for FG injection |
 | `WWOW_SETTINGS_OVERRIDE` | *(unset)* | Path to override StateManagerSettings.json |
 | `WWOW_SHOW_WINDOWS` | *(unset)* | Set to `1` to show child process consoles for StateManager and PathfindingService. ForegroundBotRunner / BackgroundBotRunner are now `WinExe` and never allocate a console window regardless of this setting; their stdout is captured by StateManager and routed through ILogger. |
+| `WWOW_DISABLE_UI_SIDECAR` | *(unset)* | Set to `1` to suppress the `WoWStateManagerUI` sidecar that integration test fixtures auto-launch alongside StateManager. Use in CI/headless environments with no desktop. |
+| `WWOW_UI_STATEMANAGER_URL` | `tcp://127.0.0.1:8088` | StateManager protobuf endpoint passed to the auto-launched UI sidecar. Reserved for Phase 3 bot-state visibility work (`docs/Plan/04_PHASE3_UI_DEFAULT.md`); not consumed by the current UI. |
+| `WWOW_UI_AUTOCONNECT` | *(unset)* | Set by the fixture launcher to `1` when the UI runs as a sidecar; the UI appends `[FIXTURE]` to its title bar so screenshots are distinguishable from manual UI runs. |
 | `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` | *(unset)* | Set to `1` to enable native path segment validation in PathfindingService |
 | `WWOW_NAVIGATION_PRELOAD_MAPS` | *(unset / `none`)* | Native `Navigation.dll` mmap preload setting. Use `0,1,389` for an explicit map list or `all` to preload every `.mmap` discovered under `WWOW_DATA_DIR/mmaps`. PathfindingService also supports `Navigation:PreloadMaps` / `Navigation__PreloadMaps`. |
 
