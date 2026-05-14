@@ -60,17 +60,44 @@ public class BrmAscentRenderingExpectations : IClassFixture<PathfindingValidatio
     private static readonly XYZ BwlPortal       = new(-7659.0f, -1214.0f, 291.0f);
     private static readonly XYZ BrdPortal       = new(-7187.0f,  -958.0f, 254.0f);
 
-    // fc_stall polyRef captured by the recon's 2026-05-13 polyref dump.
-    // 0x0001000015001ECA tile=0x000150 (35,46), poly=0x01ECA. RECON_SUMMARY
-    // entry #2 — bake says Ground area=1 but rendering shows the coord is
-    // wedged inside a rock outcrop with lava on one flank.
-    private const ulong FcStallPolyRef = 0x0001000015001ECAul;
+    // fc_stall polyRef is captured DYNAMICALLY at each test's setup against
+    // the currently-loaded bake, because the same XY resolves to different
+    // polyrefs across bakes (per RECON_SUMMARY's MaNGOS/data-vs-prod-data
+    // discrepancy section, 2026-05-13):
+    //   MaNGOS/data:  0x0001000015001ECA  tile=(35,46) poly=0x01ECA
+    //   prod-data:    0x0001000015001A9F  tile=(35,46) poly=0x01A9F
+    // The test fixture sets WWOW_DATA_DIR (and Navigation.dll resolves it at
+    // first P/Invoke) to one or the other; the polyref discovery below
+    // returns whatever the loaded bake reports.
+    //
+    // The earlier hardcoded constant (0x0001000015001ECA) was MaNGOS/data-
+    // specific and silently made the fc_stall avoidance gates a no-op when
+    // the test ran against prod-data — the corridor never contains that
+    // MaNGOS-only polyref. Discovered during Phase 2 Surface-E retry on
+    // 2026-05-14.
 
     public BrmAscentRenderingExpectations(
         PathfindingValidationFixture fixture, ITestOutputHelper output)
     {
         _fixture = fixture;
         _output = output;
+    }
+
+    /// <summary>
+    /// Look up the polygon ID the current bake reports at the FcStall coord.
+    /// Returns 0 if the bake has no polygon there within
+    /// (agentRadius, walkableClimb) — a separate failure mode worth surfacing
+    /// to the caller rather than asserting on a zero polyref.
+    /// </summary>
+    private ulong ResolveFcStallPolyRefDynamically(string label)
+    {
+        var probe = NavigationInterop.QueryPolyAtCoord(
+            MapId, FcStall, AgentRadius, WalkableClimb);
+        _output.WriteLine(
+            $"# {label} fc_stall probe: hasPoly={probe.HasPoly} "
+            + $"polyRef=0x{probe.PolyRef:X16} type={probe.PolyType} "
+            + $"dataDir={_fixture.DataDir}");
+        return probe.HasPoly ? probe.PolyRef : 0ul;
     }
 
     // ---------------------------------------------------------------------
@@ -248,6 +275,14 @@ public class BrmAscentRenderingExpectations : IClassFixture<PathfindingValidatio
 
     private void AssertCorridorAvoidsFcStall(string label, XYZ start, XYZ dest)
     {
+        var fcStallPolyRef = ResolveFcStallPolyRefDynamically(label);
+        Assert.True(
+            fcStallPolyRef != 0,
+            $"FC→{label}: current bake (dataDir={_fixture.DataDir}) has no polygon at fc_stall "
+            + $"({FcStall.X:F1},{FcStall.Y:F1},{FcStall.Z:F1}) within "
+            + $"agentRadius={AgentRadius}y / walkableClimb={WalkableClimb}y — "
+            + $"RECON_SUMMARY entry #2 says a poly should be there. Investigate the bake before treating this as fc_stall-avoidance passing.");
+
         var chain = NavigationInterop.QueryPathPolygons(
             MapId, start, dest, AgentRadius, AgentHeight, maxOut: 4096);
         Assert.True(chain.Success && chain.PolyRefs.Length > 0,
@@ -255,19 +290,19 @@ public class BrmAscentRenderingExpectations : IClassFixture<PathfindingValidatio
 
         var hits = chain.PolyRefs
             .Select((polyRef, idx) => (idx, polyRef))
-            .Where(t => t.polyRef == FcStallPolyRef)
+            .Where(t => t.polyRef == fcStallPolyRef)
             .ToList();
 
         _output.WriteLine(
-            $"# FC→{label}: corridor {chain.PolyRefs.Length} polys, fc_stall poly hits: {hits.Count}");
+            $"# FC→{label}: corridor {chain.PolyRefs.Length} polys, fc_stall poly (0x{fcStallPolyRef:X16}) hits: {hits.Count}");
 
         Assert.True(
             hits.Count == 0,
-            $"FC→{label}: corridor includes the fc_stall poly 0x{FcStallPolyRef:X16} at "
+            $"FC→{label}: corridor includes the fc_stall poly 0x{fcStallPolyRef:X16} at "
             + $"{(hits.Count <= 4 ? string.Join(",", hits.Select(h => $"idx={h.idx}")) : "many positions")}. "
             + $"RECON_SUMMARY entry #2 shows this coord is geometrically wedged inside rock with lava on one flank — "
             + $"the corridor must route around it. Targeted fix: cull this poly from the bake "
-            + $"(NavMeshTileEditor flags=0 on tile (35,46) poly 0x1ECA).");
+            + $"(NavMeshTileEditor --cull-polys 0x{fcStallPolyRef:X16}).");
     }
 
     private void AssertSmoothPathHasNoUnreasonableZJump(string label, XYZ start, XYZ dest)

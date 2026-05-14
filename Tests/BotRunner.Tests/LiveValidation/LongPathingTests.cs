@@ -958,7 +958,19 @@ public class LongPathingTests
         using var timelineScope = new EnvironmentVariableScope(LongPathingTimelineEnvVar);
         Environment.SetEnvironmentVariable(LongPathingTimelineEnvVar, "1");
 
-        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
+        // PFS-OVERHAUL BRM Phase 2 (2026-05-14 crash mitigation): skip the
+        // map=1 OG SafeZone teleport. The Phase 2 Surface-E retry on
+        // 2026-05-14 showed WoW.exe crashing inside EnsureCleanSlateAsync's
+        // SafeZone hop with the PFS-OVERHAUL Round-3 INVALID-groundZ sentinel
+        // (-200000.0) at (1337.3,-4645.1,42.8) on map=1 — the OG deck-lip
+        // cliff-fall coord — when the bot's prior position was in that area
+        // (server-side saved logout pos, not produced by this test). The next
+        // call below teleports directly to FlameCrest on map=0, so the
+        // SafeZone hop is dead weight for this test and is what triggered the
+        // crash. EnsureCleanSlateAsync still drains pending actions, hydrates
+        // the snapshot, revives if dead, and clears group state with
+        // teleportToSafeZone:false.
+        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel, teleportToSafeZone: false);
 
         // Drop the bot at Flame Crest's flight master pad.
         await _bot.BotTeleportAsync(target.AccountName, FlameCrestMapId, FlameCrestX, FlameCrestY, FlameCrestZ);

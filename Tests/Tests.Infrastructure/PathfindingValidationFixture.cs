@@ -121,9 +121,41 @@ public sealed class PathfindingValidationFixture : IAsyncDisposable
 
     private static string ResolveDataDir()
     {
-        return Environment.GetEnvironmentVariable(DataDirEnvVar)
-            ?? Environment.GetEnvironmentVariable("WWOW_TEST_DATA_DIR")
+        // Priority (highest first):
+        //   1. WWOW_VALIDATION_DATA_DIR — explicit override for this fixture.
+        //   2. WWOW_DATA_DIR if pre-set to a valid data dir — honors the
+        //      caller's external choice (e.g. PFS-OVERHAUL BRM property tests
+        //      run with WWOW_DATA_DIR=D:\wwow-bot\prod-data to validate the
+        //      live-FG bake instead of test-data). Before 2026-05-14 the
+        //      fixture unconditionally overwrote WWOW_DATA_DIR with
+        //      test-data, which made the documented data-source-aware recipe
+        //      a silent no-op.
+        //   3. WWOW_TEST_DATA_DIR — legacy alias.
+        //   4. Default test-data root.
+        var explicitOverride = Environment.GetEnvironmentVariable(DataDirEnvVar);
+        if (!string.IsNullOrWhiteSpace(explicitOverride))
+            return explicitOverride;
+
+        var inheritedDataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR");
+        if (!string.IsNullOrWhiteSpace(inheritedDataDir) && HasNavDataShape(inheritedDataDir))
+            return inheritedDataDir;
+
+        return Environment.GetEnvironmentVariable("WWOW_TEST_DATA_DIR")
             ?? @"D:\wwow-bot\test-data";
+    }
+
+    private static bool HasNavDataShape(string dataDir)
+    {
+        try
+        {
+            return Directory.Exists(Path.Combine(dataDir, "mmaps"))
+                && Directory.Exists(Path.Combine(dataDir, "maps"))
+                && Directory.Exists(Path.Combine(dataDir, "vmaps"));
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void EnsureDataDirShape(string dataDir)
