@@ -461,16 +461,27 @@ the silent test-data overwrite hiding the prod-data corridor reality.
 The actual prod-data RED gates target three distinct geometry
 defects, none of which Surface E addresses:
 
-- **F. UBRS portal `surfaceZ=null` repair.** `ubrs_portal` resolves
-  to polyRef `0x0001000014F02CDF` flagged Ground, but Navigation.dll's
-  `GetPolyAtCoord` returns `surfaceZ=null` — the polygon has no
-  detail-mesh data. Live FG cannot ground-snap onto it. Fix surface:
-  re-bake the UBRS-portal tile (`0x14F` ~= (47,29)) so the portal
-  polygon carries detail-mesh triangles. Per-tile
-  `maxSimplificationError` or `detailSampleDist` tightening.
+- **F. UBRS portal `surfaceZ=null` repair.** **ATTEMPTED 2026-05-14,
+  REVERTED — see "Surface F NEGATIVE" section below.** `ubrs_portal`
+  resolves to polyRef `0x0001000014F02CDF` flagged Ground, but
+  Navigation.dll's `GetPolyAtCoord` returns `surfaceZ=null`. Diagnosis:
+  the polygon's footprint is short of the queried XY (the polygon's
+  nearest point is at (-7523.715,-1232.9683), 0.3y off the queried
+  (-7524,-1233)). Tightening `maxSimplificationError` (default 1.8)
+  was the recon's proposed knob. 0.5 overbuilt; 1.2 flipped the target
+  gate GREEN but regressed two previously-GREEN corridor gates AND
+  exploded SmoothPath A* runtime (>9min vs <100ms). Reverted; needs a
+  different bake knob (candidates: per-tile `walkableErosionRadius=0.0`
+  to extend polygon footprint toward source walkable boundary, or
+  per-tile `cs`/`tileSize`/`maxVertsPerPoly=3` in the OG-zeppelin
+  style).
 - **G. BWL corridor terminus extension by one poly.** Corridor ends
   at `0x14F01877`, BWL portal poly is `0x14F01B1B`. Same tile cluster
-  as F. Likely the same bake-config tightening will close both.
+  as F. Surface F's negative result implies the same maxSimplificationError
+  knob won't close G either — a structurally different connectivity
+  fix is needed. Next attack: per-tile `walkableErosionRadius=0.0` (or
+  `walkableRadius` reduction localized to this tile) so the corridor
+  terminus can reach into the portal poly's XY footprint.
 - **H. Sub-3y smooth-path dz removal.** 4 WP-to-WP `dz > 1.8y`
   violations on FC→UBRS, worst 2.61y at idx 259 between
   `(-7673.9,-1746.2,136.0)` and `(-7679.0,-1747.5,133.4)`. These are
@@ -483,6 +494,80 @@ defects, none of which Surface E addresses:
 The MaNGOS/data 27y MAGMA polygon `0x0001000014F002AC` is a MaNGOS/
 data-only artifact; not present on prod-data. The "fragment a single
 36y polygon" framing is wrong for the live-FG problem.
+
+### Surface F NEGATIVE result (2026-05-14)
+
+Attempt: per-tile `maxSimplificationError` tightening on tile `3446`
+(MmapGen CLI `--tile 34,46`, filename `0004634.mmtile` — the BRM upper
+portal cluster). The recon localized the gate failures to detour tile
+slot bits `0x14F`, which decodes (via world coord → tile XY math) to
+tileX=34/tileY=46 for the entire FC→BRM corridor terminus + all four
+portal polys.
+
+Two iterations:
+
+1. **mse=0.5** — bake aborted with `Too many vertices! (0x28f84)`.
+   Tile NOT written. Detour's per-tile 16-bit vertex limit (65,535
+   verts) was exceeded by ~2.5×. The same overbuild that the existing
+   `_4029_README_erosion` config note already warns about for a 0.0y
+   probe.
+2. **mse=1.2** — bake completed cleanly. Tile size grew 3,020,100 →
+   3,619,812 bytes (+20%). Promoted to both `D:\MaNGOS\data\mmaps` and
+   `D:\wwow-bot\prod-data\mmaps`; `wwow-pathfinding` restarted healthy.
+
+Property-test outcome (prod-data) for mse=1.2:
+
+| Gate | Baseline (mse=1.8 default) | mse=1.2 attempt | Delta |
+|---|---|---|---|
+| Walkable_AllFourPortals_HaveGroundPoly | ❌ ubrs_portal surfaceZ=null | ✅ **flipped GREEN** | **+** |
+| Corridor_FcToUbrsPortal_TerminatesAtPortalPoly | ✅ | ❌ terminates at 0x14F044FE, portal poly is 0x14F04474 | **−** |
+| Corridor_FcToLbrsPortal_TerminatesAtPortalPoly | ✅ | ❌ terminates at 0x14F044FE, portal poly is 0x14F03FCA | **−** |
+| Corridor_FcToBwlPortal_TerminatesAtPortalPoly | ❌ corridor 1 poly short | ❌ STILL 1 poly short (new polyIdxes) | (no change) |
+| SmoothPath_FcToUbrsPortal_NoUnreasonableZJump | ❌ 4 violations, worst 2.61y at idx 259 | ❌ **hung >9min** (was ~80ms baseline) | catastrophic perf regression |
+| **Aggregate** | **11/14** | **10/14 + A* perf explosion** | **net −1 gate + live-FG fatal latency** |
+
+Diagnostic interpretation:
+
+- Target gate (Walkable_AllFourPortals) DID flip GREEN — the tighter
+  simplification did extend the ubrs_portal polygon's footprint to
+  cover (-7524,-1233). The recon's hypothesis was correct on the
+  precision direction.
+- But the bake's denser polygon graph (corridor poly count 287→355
+  on FC→UBRS) shifted EVERY polyIdx in the upper-cluster: the new
+  portal polys are at different polyrefs (0x14F04474 vs 0x14F02CDF),
+  and the new corridor terminuses (0x14F044FE) don't match. Two
+  previously-GREEN corridor gates went RED as a side effect.
+- SmoothPath A* runtime explosion (>9min) is fatal for live FG —
+  bot path queries would stall the BotRunner. Even ignoring the
+  property test failures, the latency alone disqualifies this bake.
+
+Reverted. Restored both `D:\MaNGOS\data\mmaps\0004634.mmtile`
+(3,020,100 bytes) and `D:\wwow-bot\prod-data\mmaps\0004634.mmtile`
+(2,378,004 bytes) from
+`tmp/test-runtime/visualization/pathfinding/brd/latest/backup/
+0004634.before_surface_F_attempt_{mangos,prod}.mmtile`. Restarted
+`wwow-pathfinding` healthy. Re-confirmed 11/14 prod-data baseline
+unchanged.
+
+`tools/MmapGen/config.json` keeps the `_3446_NEGATIVE_RESULT_surface_F`
+README documenting the attempt, the overbuild threshold, and the
+diagnostic for the next iteration's knob choice. The per-tile
+`maxSimplificationError` override is reverted (only the baseline
+`walkableErosionRadius=0.2` + `debugStageCropWow` remain).
+
+Conclusion: `maxSimplificationError` is the WRONG knob for the
+polygon-footprint-coverage problem. The polygon edges DO get tighter
+to source geometry, but the cost is (a) every polyIdx in the tile
+shifts (breaking previously-green corridor gates) and (b) A* explodes
+on the denser graph. The polygon-footprint short of queried XY can
+likely be addressed instead by lowering `walkableErosionRadius` to 0.0
+for tile `3446` — eliminate the source-support erosion margin that
+shrinks each walkable polygon by 0.2y. This would extend polygon
+footprints WITHOUT splitting existing polys (so polyIdxes stay stable
+and A* runtime stays bounded). The Detour header agentRadius=1.0247y
+is preserved (no agent-capsule change). Next iteration should try
+this on Surface G first since G is now the only un-attempted F-tile
+gate that hasn't been ruled out.
 
 ### Re-run recipe (data-source aware)
 
