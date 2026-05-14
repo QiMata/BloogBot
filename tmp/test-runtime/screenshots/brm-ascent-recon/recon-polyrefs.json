@@ -1,0 +1,573 @@
+{
+  "generatedUtc": "2026-05-13T23:37:57.0100611Z",
+  "mapId": 0,
+  "agent": {
+    "radius": 1.0247,
+    "walkableClimb": 1.8
+  },
+  "dataDir": "D:\\wwow-bot\\test-data",
+  "coordCount": 11,
+  "coords": [
+    {
+      "name": "fc_start",
+      "why": "FlameCrest bot spawn",
+      "requested": {
+        "x": -7518.7,
+        "y": -2159.9,
+        "z": 131.9
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x00010000151024C1",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7518.7,
+          "y": -2159.9,
+          "z": 132.22647
+        },
+        "surfaceZ": 132.22647,
+        "deltaZ": 0.32647705
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x00010000151024C1",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7518.7,
+          "y": -2159.9,
+          "z": 132.22647
+        },
+        "surfaceZ": 132.22647,
+        "deltaZ": 0.32647705
+      }
+    },
+    {
+      "name": "fc_stall",
+      "why": "Round-1 stall, ~60y north of FC",
+      "requested": {
+        "x": -7519,
+        "y": -2100.4,
+        "z": 130.3
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000015001ECA",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7519,
+          "y": -2100.4,
+          "z": 130.36626
+        },
+        "surfaceZ": 130.36626,
+        "deltaZ": 0.06625366
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000015001ECA",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7519,
+          "y": -2100.4,
+          "z": 130.36626
+        },
+        "surfaceZ": 130.36626,
+        "deltaZ": 0.06625366
+      }
+    },
+    {
+      "name": "ruins_wall",
+      "why": "Round-2 wall-creep coord (Ruins of Thaurissan)",
+      "requested": {
+        "x": -7665,
+        "y": -1808,
+        "z": 137
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x00010000150012C1",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7665,
+          "y": -1808,
+          "z": 137.43774
+        },
+        "surfaceZ": 137.43774,
+        "deltaZ": 0.43774414
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x00010000150012C1",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7665,
+          "y": -1808,
+          "z": 137.43774
+        },
+        "surfaceZ": 137.43774,
+        "deltaZ": 0.43774414
+      }
+    },
+    {
+      "name": "brm_south_lo",
+      "why": "BRM south-face baseline",
+      "requested": {
+        "x": -7949.7,
+        "y": -1162.8,
+        "z": 170.8
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F002E5",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7949.7,
+          "y": -1162.8,
+          "z": 171.24327
+        },
+        "surfaceZ": 171.24327,
+        "deltaZ": 0.44326782
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F002E5",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7949.7,
+          "y": -1162.8,
+          "z": 171.24327
+        },
+        "surfaceZ": 171.24327,
+        "deltaZ": 0.44326782
+      }
+    },
+    {
+      "name": "brm_southnew",
+      "why": "Round-3 stuck-recovery coord",
+      "requested": {
+        "x": -7825.4,
+        "y": -1129.2,
+        "z": 133.8
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F00CD2",
+        "polyType": "Ground",
+        "flagsHex": "0x0011",
+        "area": 3,
+        "steepSlopes": true,
+        "nearestPoint": {
+          "x": -7825.4,
+          "y": -1129.2,
+          "z": 135.1768
+        },
+        "surfaceZ": 135.1768,
+        "deltaZ": 1.3768005
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F00CD2",
+        "polyType": "Ground",
+        "flagsHex": "0x0011",
+        "area": 3,
+        "steepSlopes": true,
+        "nearestPoint": {
+          "x": -7825.4,
+          "y": -1129.2,
+          "z": 135.1768
+        },
+        "surfaceZ": 135.1768,
+        "deltaZ": 1.3768005
+      }
+    },
+    {
+      "name": "brm_mid_lbrs",
+      "why": "smooth-path endWP for FC-\u003ELBRS/UBRS",
+      "requested": {
+        "x": -7647.1,
+        "y": -1197.1,
+        "z": 225.2
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F02191",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7647.1,
+          "y": -1197.1,
+          "z": 224.66457
+        },
+        "surfaceZ": 224.66457,
+        "deltaZ": 0.5354309
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F02191",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7647.1,
+          "y": -1197.1,
+          "z": 224.66457
+        },
+        "surfaceZ": 224.66457,
+        "deltaZ": 0.5354309
+      }
+    },
+    {
+      "name": "brm_mid_bwl",
+      "why": "smooth-path endWP for FC-\u003EBWL",
+      "requested": {
+        "x": -7640,
+        "y": -1213.4,
+        "z": 228.4
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F02191",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7640,
+          "y": -1213.4,
+          "z": 227.93137
+        },
+        "surfaceZ": 227.93137,
+        "deltaZ": 0.46862793
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F02191",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7640,
+          "y": -1213.4,
+          "z": 227.93137
+        },
+        "surfaceZ": 227.93137,
+        "deltaZ": 0.46862793
+      }
+    },
+    {
+      "name": "ubrs_portal",
+      "why": "UBRS portal target",
+      "requested": {
+        "x": -7524,
+        "y": -1233,
+        "z": 287
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F038A3",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7524,
+          "y": -1233,
+          "z": 285.82565
+        },
+        "surfaceZ": 285.82565,
+        "deltaZ": 1.1743469
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F038A3",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7524,
+          "y": -1233,
+          "z": 285.82565
+        },
+        "surfaceZ": 285.82565,
+        "deltaZ": 1.1743469
+      }
+    },
+    {
+      "name": "lbrs_portal",
+      "why": "LBRS portal target",
+      "requested": {
+        "x": -7531,
+        "y": -1226,
+        "z": 286
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F034C5",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7531,
+          "y": -1226,
+          "z": 285.81598
+        },
+        "surfaceZ": 285.81598,
+        "deltaZ": 0.184021
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F034C5",
+        "polyType": "Ground",
+        "flagsHex": "0x0001",
+        "area": 1,
+        "steepSlopes": false,
+        "nearestPoint": {
+          "x": -7531,
+          "y": -1226,
+          "z": 285.81598
+        },
+        "surfaceZ": 285.81598,
+        "deltaZ": 0.184021
+      }
+    },
+    {
+      "name": "bwl_portal",
+      "why": "BWL approach",
+      "requested": {
+        "x": -7659,
+        "y": -1214,
+        "z": 291
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F01EA0",
+        "polyType": "Ground",
+        "flagsHex": "0x0011",
+        "area": 3,
+        "steepSlopes": true,
+        "nearestPoint": {
+          "x": -7659,
+          "y": -1214,
+          "z": 289.63693
+        },
+        "surfaceZ": 289.63693,
+        "deltaZ": 1.3630676
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x0001000014F01EA0",
+        "polyType": "Ground",
+        "flagsHex": "0x0011",
+        "area": 3,
+        "steepSlopes": true,
+        "nearestPoint": {
+          "x": -7659,
+          "y": -1214,
+          "z": 289.63693
+        },
+        "surfaceZ": 289.63693,
+        "deltaZ": 1.3630676
+      }
+    },
+    {
+      "name": "brd_portal",
+      "why": "BRD approach",
+      "requested": {
+        "x": -7187,
+        "y": -958,
+        "z": 254
+      },
+      "searchExtents": {
+        "strict": {
+          "xy": 1.0247,
+          "z": 1.8
+        },
+        "wide": {
+          "xy": 10,
+          "z": 300
+        }
+      },
+      "strict": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x00010000140023BB",
+        "polyType": "Ground",
+        "flagsHex": "0x0011",
+        "area": 3,
+        "steepSlopes": true,
+        "nearestPoint": {
+          "x": -7187,
+          "y": -958,
+          "z": 253.35216
+        },
+        "surfaceZ": 253.35216,
+        "deltaZ": 0.6478424
+      },
+      "wide": {
+        "success": true,
+        "hasPoly": true,
+        "polyRef": "0x00010000140023BB",
+        "polyType": "Ground",
+        "flagsHex": "0x0011",
+        "area": 3,
+        "steepSlopes": true,
+        "nearestPoint": {
+          "x": -7187,
+          "y": -958,
+          "z": 253.35216
+        },
+        "surfaceZ": 253.35216,
+        "deltaZ": 0.6478424
+      }
+    }
+  ]
+}
