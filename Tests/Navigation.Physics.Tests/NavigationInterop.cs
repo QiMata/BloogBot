@@ -1010,7 +1010,8 @@ public static partial class NavigationInterop
         out ulong outPolyRef,
         out byte outPolyType,
         out Vector3 outNearestPoint,
-        out float outSurfaceZ);
+        out float outSurfaceZ,
+        out byte outPosOverPoly);
 
     /// <summary>
     /// Phase 4 — total triangle count across every variant pool currently

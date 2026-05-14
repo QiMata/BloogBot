@@ -2466,6 +2466,20 @@ extern "C" __declspec(dllexport) bool FindPathCornersForAgent(
 //     failure for the test; it is NOT a runtime error.
 //   - outPolyType lets the test reject DT_POLYTYPE_OFFMESH_CONNECTION
 //     (1) when the corner is supposed to be on walkable ground.
+//   - outPosOverPoly (Phase 3 Surface J): 1 if findNearestPoly's snapped
+//     XY lies inside the polygon's base footprint (so getPolyHeight on
+//     the requested XY succeeded); 0 if the requested XY is outside the
+//     base footprint (findNearestPoly fell through to closestPointOnDetailEdges
+//     and surfaceZ is reported at the snapped boundary point instead of
+//     the requested XY); 0xFF if no poly was found.
+//
+// Surface J (consumer-side nearestPoint snap, 2026-05-14): when the
+// requested XY is just outside the polygon's base convex footprint
+// (sub-meter clip), Detour's strict getPolyHeight rejects it. We retry
+// with the snapped nearestPoint XY (which by construction sits on or
+// inside the polygon boundary) and return that surface Z. Callers use
+// outPosOverPoly to distinguish "Z at requested XY" from "Z at boundary-
+// snapped XY". See docs/physics/PATHFINDING_RESEARCH_QA.md §Q1.
 //
 // Returns false only on true infrastructure failure (no query/navmesh,
 // invalid args, SEH).
@@ -2477,12 +2491,14 @@ extern "C" __declspec(dllexport) bool GetPolyAtCoord(
     uint64_t* outPolyRef,
     uint8_t* outPolyType,
     XYZ* outNearestPoint,
-    float* outSurfaceZ)
+    float* outSurfaceZ,
+    uint8_t* outPosOverPoly)
 {
     if (outPolyRef) *outPolyRef = 0;
     if (outPolyType) *outPolyType = 0xFF;
     if (outNearestPoint) { outNearestPoint->X = 0.0f; outNearestPoint->Y = 0.0f; outNearestPoint->Z = 0.0f; }
     if (outSurfaceZ) *outSurfaceZ = std::numeric_limits<float>::quiet_NaN();
+    if (outPosOverPoly) *outPosOverPoly = 0xFF;
 
     if (!outPolyRef)
     {
@@ -2552,14 +2568,56 @@ extern "C" __declspec(dllexport) bool GetPolyAtCoord(
             outNearestPoint->Z = nearest[1];
         }
 
+        // Surface J — compute posOverPoly via closestPointOnPoly. This is
+        // the same flag findNearestPoly uses internally for its ranking
+        // heuristic but doesn't propagate to the public API.
+        bool posOverPoly = false;
+        {
+            float discardClosest[3] = { 0.0f, 0.0f, 0.0f };
+            dtStatus cpSt = query->closestPointOnPoly(polyRef, pos, discardClosest, &posOverPoly);
+            if (dtStatusSucceed(cpSt) && outPosOverPoly)
+                *outPosOverPoly = posOverPoly ? 1 : 0;
+        }
+
         if (outSurfaceZ)
         {
             float height = 0.0f;
             dtStatus hSt = query->getPolyHeight(polyRef, pos, &height);
             if (dtStatusSucceed(hSt))
+            {
                 *outSurfaceZ = height; // Detour Y == WoW Z
-            // else: leave NaN sentinel — the caller treats that as "poly
-            // does not cover (X,Y)" which is its own validation failure.
+            }
+            else
+            {
+                // Surface J — the requested XY is just outside the polygon's
+                // base convex footprint (dtPointInPolygon failed). Retry on
+                // the snapped nearest point, which is on/inside the boundary
+                // by construction. This recovers a usable surface Z for
+                // sub-meter polygon-footprint clips (e.g. ubrs_portal where
+                // the requested XY is ~0.3y outside poly 0x14F02CDF's base
+                // footprint). Off-mesh-connection polys are short-circuited
+                // by getPolyHeight (DetourNavMesh.cpp:681-682) so the retry
+                // is a no-op for them — that's the correct behaviour.
+                dtStatus hSt2 = query->getPolyHeight(polyRef, nearest, &height);
+                if (dtStatusSucceed(hSt2))
+                {
+                    *outSurfaceZ = height;
+                    fprintf(stderr,
+                        "[POLYAT] surfaceJ retry on nearestPoint succeeded for poly 0x%llx at "
+                        "requested=(%.2f,%.2f,%.2f) snapped=(%.2f,%.2f,%.2f) posOverPoly=%d\n",
+                        (unsigned long long)polyRef,
+                        coord.X, coord.Y, coord.Z,
+                        outNearestPoint ? outNearestPoint->X : nearest[2],
+                        outNearestPoint ? outNearestPoint->Y : nearest[0],
+                        height,
+                        posOverPoly ? 1 : 0);
+                }
+                // else: leave NaN sentinel — both the requested XY and the
+                // snapped XY failed getPolyHeight, which is structurally
+                // impossible for ground polys (dtPointInPolygon on a boundary
+                // point) so it's an off-mesh-connection or genuinely bad
+                // poly. The caller treats NaN as a validation failure.
+            }
         }
 
         return true;

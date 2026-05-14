@@ -161,9 +161,9 @@ internal static class Program
                             try
                             {
                                 GetPolyAtCoord(opts.MapId, segStart, 2f, 1.8f,
-                                    out polyA, out _, out _, out _);
+                                    out polyA, out _, out _, out _, out _);
                                 GetPolyAtCoord(opts.MapId, segEnd, 2f, 1.8f,
-                                    out polyB, out _, out _, out _);
+                                    out polyB, out _, out _, out _, out _);
                             }
                             catch { /* tolerate per-call failure */ }
 
@@ -244,7 +244,7 @@ internal static class Program
                         try
                         {
                             GetPolyAtCoord(opts.MapId, probe, 2f, 1.8f,
-                                out polyRef, out _, out _, out _);
+                                out polyRef, out _, out _, out _, out _);
                         }
                         catch { /* tolerate */ }
                         if (polyRef != 0) foundPolys.Add(polyRef);
@@ -258,7 +258,7 @@ internal static class Program
                             try
                             {
                                 GetPolyAtCoord(opts.MapId, probe, 2f, zSearchExtent,
-                                    out polyRef, out _, out _, out _);
+                                    out polyRef, out _, out _, out _, out _);
                             }
                             catch { /* tolerate */ }
                             if (polyRef != 0) foundPolys.Add(polyRef);

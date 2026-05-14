@@ -259,7 +259,23 @@ internal static class NavigationInterop
         out ulong outPolyRef,
         out byte outPolyType,
         out XYZ outNearestPoint,
-        out float outSurfaceZ);
+        out float outSurfaceZ,
+        out byte outPosOverPoly);
+
+    /// <summary>
+    /// Whether the requested XY lies inside the polygon's base convex
+    /// footprint (Phase 3 Surface J). When false, the polygon's surface Z
+    /// reported in <see cref="PolyAtCoordResult.SurfaceZ"/> is at the
+    /// boundary-snapped nearest point, not at the requested XY — useful for
+    /// distinguishing "polygon edge clip" (sub-meter) from "polygon absent"
+    /// (multi-yard) without re-reading recon JSON.
+    /// </summary>
+    public enum PosOverPoly : byte
+    {
+        Outside = 0,
+        Inside = 1,
+        Unknown = 0xFF,
+    }
 
     public readonly record struct PolyAtCoordResult(
         bool Success,
@@ -267,9 +283,12 @@ internal static class NavigationInterop
         ulong PolyRef,
         PolyType PolyType,
         XYZ NearestPoint,
-        float SurfaceZ)
+        float SurfaceZ,
+        PosOverPoly PosOverPolyStatus)
     {
         public bool HasSurface => HasPoly && !float.IsNaN(SurfaceZ);
+
+        public bool RequestedXyInsidePoly => PosOverPolyStatus == PosOverPoly.Inside;
     }
 
     /// <summary>
@@ -284,6 +303,11 @@ internal static class NavigationInterop
     /// A corner whose Z is more than walkableClimb above/below any poly
     /// surface is "in space" — a synthetic interpolation that the bot
     /// cannot stand on.
+    ///
+    /// Surface J: when the requested XY is outside the polygon's base
+    /// convex footprint, the native side retries getPolyHeight on the
+    /// snapped nearest point. <see cref="PolyAtCoordResult.PosOverPoly"/>
+    /// distinguishes the two cases.
     /// </summary>
     public static PolyAtCoordResult QueryPolyAtCoord(
         uint mapId,
@@ -293,7 +317,8 @@ internal static class NavigationInterop
     {
         bool ok = GetPolyAtCoord(
             mapId, coord, searchExtentXY, searchExtentZ,
-            out ulong polyRef, out byte polyType, out XYZ nearest, out float surfaceZ);
+            out ulong polyRef, out byte polyType, out XYZ nearest, out float surfaceZ,
+            out byte posOverPoly);
 
         if (!ok)
         {
@@ -303,7 +328,8 @@ internal static class NavigationInterop
                 PolyRef: 0,
                 PolyType: PolyType.Unknown,
                 NearestPoint: default,
-                SurfaceZ: float.NaN);
+                SurfaceZ: float.NaN,
+                PosOverPolyStatus: PosOverPoly.Unknown);
         }
 
         return new PolyAtCoordResult(
@@ -312,6 +338,7 @@ internal static class NavigationInterop
             PolyRef: polyRef,
             PolyType: (PolyType)polyType,
             NearestPoint: nearest,
-            SurfaceZ: surfaceZ);
+            SurfaceZ: surfaceZ,
+            PosOverPolyStatus: (PosOverPoly)posOverPoly);
     }
 }

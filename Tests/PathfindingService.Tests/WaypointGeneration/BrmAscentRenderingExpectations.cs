@@ -233,6 +233,7 @@ public class BrmAscentRenderingExpectations : IClassFixture<PathfindingValidatio
         _output.WriteLine(
             $"# {label} ({coord.X:F1},{coord.Y:F1},{coord.Z:F1}): "
             + $"hasPoly={probe.HasPoly} polyRef=0x{probe.PolyRef:X16} type={probe.PolyType} "
+            + $"posOverPoly={probe.PosOverPolyStatus} "
             + (probe.HasSurface ? $"surfaceZ={probe.SurfaceZ:F2} dz={Math.Abs(coord.Z - probe.SurfaceZ):F2}" : "no surface"));
 
         Assert.True(

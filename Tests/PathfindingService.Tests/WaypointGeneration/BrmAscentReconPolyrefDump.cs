@@ -114,6 +114,7 @@ public class BrmAscentReconPolyrefDump : IClassFixture<PathfindingValidationFixt
                         nearestPoint = (object?)null,
                         surfaceZ = (float?)null,
                         deltaZ = (float?)null,
+                        posOverPoly = "Unknown",
                     };
                 }
                 var flags = NavigationInterop.QueryPolyFlags(MapId, p.PolyRef);
@@ -129,6 +130,7 @@ public class BrmAscentReconPolyrefDump : IClassFixture<PathfindingValidationFixt
                     nearestPoint = new { x = p.NearestPoint.X, y = p.NearestPoint.Y, z = p.NearestPoint.Z },
                     surfaceZ = p.HasSurface ? (float?)p.SurfaceZ : null,
                     deltaZ = p.HasSurface ? (float?)Math.Abs(c.Z - p.SurfaceZ) : null,
+                    posOverPoly = p.PosOverPolyStatus.ToString(),
                 };
             }
 
@@ -284,6 +286,7 @@ public class BrmAscentReconPolyrefDump : IClassFixture<PathfindingValidationFixt
             area = flags.Success ? (byte?)flags.Area : null,
             steepSlopes = flags.Success ? flags.HasSteepSlopes : (bool?)null,
             surfaceZ = p.HasSurface ? (float?)p.SurfaceZ : null,
+            posOverPoly = p.PosOverPolyStatus.ToString(),
         };
     }
 
