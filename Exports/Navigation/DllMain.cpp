@@ -29,6 +29,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <chrono>
 #include <limits>
 
 #if defined(_WIN32)
@@ -2307,6 +2308,220 @@ extern "C" __declspec(dllexport) bool FindPathPolygonsForAgent(
         fprintf(stderr, "[Navigation.dll] SEH exception in FindPathPolygonsForAgent (code=0x%08lx)\n",
                 0);
         if (outCount) *outCount = 0;
+        return false;
+    }
+}
+
+// PFS-OVERHAUL Phase 3 Surface K: sliced-find-path variant with wall-clock cap.
+//
+// Same shape as FindPathPolygonsForAgent (poly-corridor output, no smooth
+// path) but drives Detour's sliced-find-path API (initSlicedFindPath +
+// updateSlicedFindPath + finalizeSlicedFindPath) with an external
+// std::chrono wall-clock budget. Converts the F/G-class >9min A* hangs
+// into deterministic <30s aborts.
+//
+// Status codes written to *outStatus on success of the wrapper call
+// (return value is true):
+//   0 = success, full path to endRef
+//   1 = partial result — sliced query terminated with lastBestNode but did
+//       not reach endRef (treat as Detour DT_PARTIAL_RESULT)
+//   2 = a_star_timeout — wall-clock cap fired before sliced query reached
+//       endRef; the partial path through lastBestNode was finalized and
+//       returned (still potentially useful for stall-recovery replans)
+//   3 = no_path — sliced query terminated cleanly with empty path
+//
+// Returns false only on infrastructure failure (no navmesh, invalid args,
+// SEH, findNearestPoly failure). In that case outStatus is left at 0xFF.
+//
+// maxWallClockMs caps total wall-clock time. 0 or negative selects the
+// default 30000ms (30s). Iterations-per-slice is fixed at 1024 — a
+// compromise between cap responsiveness (the budget is checked between
+// slices) and overhead (initSlicedFindPath's queue/pool setup is per-init
+// not per-slice, so per-slice overhead is just the std::chrono check).
+extern "C" __declspec(dllexport) bool FindPathForAgentSliced(
+    uint32_t mapId,
+    XYZ start,
+    XYZ end,
+    float agentRadius,
+    float agentHeight,
+    uint64_t* outPolyRefs,
+    uint8_t* outPolyTypes,
+    int maxOut,
+    int* outCount,
+    int32_t maxWallClockMs,
+    uint8_t* outStatus,
+    int32_t* outElapsedMs,
+    int32_t* outSliceIterations)
+{
+    (void)agentRadius;
+    (void)agentHeight;
+
+    if (outCount) *outCount = 0;
+    if (outStatus) *outStatus = 0xFF;
+    if (outElapsedMs) *outElapsedMs = 0;
+    if (outSliceIterations) *outSliceIterations = 0;
+
+    if (!outPolyRefs || !outPolyTypes || maxOut <= 0 || !outCount)
+    {
+        fprintf(stderr, "[SLICED] invalid args: refs=%p types=%p max=%d count=%p\n",
+                (void*)outPolyRefs, (void*)outPolyTypes, maxOut, (void*)outCount);
+        return false;
+    }
+
+    const int32_t budgetMs = (maxWallClockMs > 0) ? maxWallClockMs : 30000;
+    const int kSliceIters = 1024;
+
+    try
+    {
+        if (!g_initialized)
+            InitializeAllSystems();
+
+        auto* navigation = Navigation::GetInstance();
+        if (!navigation) { fprintf(stderr, "[SLICED] no Navigation instance\n"); return false; }
+
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+        dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
+        if (!query) { fprintf(stderr, "[SLICED] no query for map %u\n", mapId); return false; }
+
+        const dtNavMesh* navMesh = query->getAttachedNavMesh();
+        if (!navMesh) { fprintf(stderr, "[SLICED] no navMesh for map %u\n", mapId); return false; }
+
+        dtQueryFilter filter;
+        filter.setIncludeFlags(0xFFFF);
+        filter.setExcludeFlags(0);
+
+        // WoW (X,Y,Z) → Detour (Y,Z,X) — matches FindPathPolygonsForAgent.
+        float startPos[3] = { start.Y, start.Z, start.X };
+        float endPos[3]   = { end.Y,   end.Z,   end.X   };
+        float extents[3]  = { 4.0f, 5.0f, 4.0f };
+
+        dtPolyRef startRef = 0, endRef = 0;
+        float nearestStart[3], nearestEnd[3];
+
+        dtStatus st = query->findNearestPoly(startPos, extents, &filter, &startRef, nearestStart);
+        if (dtStatusFailed(st) || startRef == 0)
+        {
+            float bigExtents[3] = { 8.0f, 200.0f, 8.0f };
+            st = query->findNearestPoly(startPos, bigExtents, &filter, &startRef, nearestStart);
+            if (dtStatusFailed(st) || startRef == 0)
+            {
+                fprintf(stderr, "[SLICED] findNearestPoly failed for START (%.1f,%.1f,%.1f) st=0x%x\n",
+                        start.X, start.Y, start.Z, st);
+                return false;
+            }
+        }
+
+        st = query->findNearestPoly(endPos, extents, &filter, &endRef, nearestEnd);
+        if (dtStatusFailed(st) || endRef == 0)
+        {
+            float bigExtents[3] = { 8.0f, 200.0f, 8.0f };
+            st = query->findNearestPoly(endPos, bigExtents, &filter, &endRef, nearestEnd);
+            if (dtStatusFailed(st) || endRef == 0)
+            {
+                fprintf(stderr, "[SLICED] findNearestPoly failed for END (%.1f,%.1f,%.1f) st=0x%x\n",
+                        end.X, end.Y, end.Z, st);
+                return false;
+            }
+        }
+
+        // Init the sliced query. Returns DT_IN_PROGRESS on success and
+        // clears the shared node-pool + open-list.
+        dtStatus initSt = query->initSlicedFindPath(
+            startRef, endRef, nearestStart, nearestEnd, &filter);
+        if (dtStatusFailed(initSt))
+        {
+            fprintf(stderr, "[SLICED] initSlicedFindPath failed: st=0x%x\n", initSt);
+            return false;
+        }
+
+        const auto startClock = std::chrono::steady_clock::now();
+        const auto deadline = startClock + std::chrono::milliseconds(budgetMs);
+
+        bool timedOut = false;
+        int totalIters = 0;
+        dtStatus sliceSt = DT_IN_PROGRESS;
+        while ((sliceSt & DT_IN_PROGRESS) != 0)
+        {
+            int doneIters = 0;
+            sliceSt = query->updateSlicedFindPath(kSliceIters, &doneIters);
+            totalIters += doneIters;
+
+            if (dtStatusFailed(sliceSt))
+            {
+                fprintf(stderr, "[SLICED] updateSlicedFindPath failed: st=0x%x iters=%d\n",
+                        sliceSt, totalIters);
+                return false;
+            }
+
+            if (std::chrono::steady_clock::now() >= deadline)
+            {
+                timedOut = true;
+                break;
+            }
+        }
+
+        // finalizeSlicedFindPath returns the path through lastBestNode,
+        // with DT_PARTIAL_RESULT marker if lastBestNode != endRef. This is
+        // the correct call for both natural completion AND timeout — the
+        // *Partial variant is only for extending an existing path buffer
+        // and returns DT_FAILURE when called with existingSize=0.
+        dtPolyRef polyPath[CORRIDOR_MAX_PATH];
+        int polyCount = 0;
+        dtStatus finSt = query->finalizeSlicedFindPath(
+            polyPath, &polyCount, CORRIDOR_MAX_PATH);
+
+        const auto elapsed = std::chrono::steady_clock::now() - startClock;
+        const auto elapsedMs = static_cast<int32_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+        if (outElapsedMs) *outElapsedMs = elapsedMs;
+        if (outSliceIterations) *outSliceIterations = totalIters;
+
+        if (dtStatusFailed(finSt) || polyCount == 0)
+        {
+            if (outStatus) *outStatus = 3; // no_path
+            fprintf(stderr, "[SLICED] finalize empty path: st=0x%x polyCount=%d timedOut=%d elapsedMs=%d iters=%d\n",
+                    finSt, polyCount, timedOut ? 1 : 0, elapsedMs, totalIters);
+            return true;
+        }
+
+        const bool detourPartial = dtStatusDetail(finSt, DT_PARTIAL_RESULT);
+        const uint8_t status = timedOut ? 2 : (detourPartial ? 1 : 0);
+        if (outStatus) *outStatus = status;
+
+        *outCount = polyCount;
+        const int writeCount = (polyCount < maxOut) ? polyCount : maxOut;
+
+        int offMeshSeen = 0;
+        for (int i = 0; i < writeCount; ++i)
+        {
+            outPolyRefs[i] = (uint64_t)polyPath[i];
+
+            const dtMeshTile* tile = nullptr;
+            const dtPoly* poly = nullptr;
+            dtStatus refSt = navMesh->getTileAndPolyByRef(polyPath[i], &tile, &poly);
+            if (dtStatusFailed(refSt) || tile == nullptr || poly == nullptr)
+            {
+                outPolyTypes[i] = 0xFF;
+                continue;
+            }
+
+            const unsigned char polyType = poly->getType();
+            outPolyTypes[i] = polyType;
+            if (polyType == DT_POLYTYPE_OFFMESH_CONNECTION)
+                ++offMeshSeen;
+        }
+
+        fprintf(stderr, "[SLICED] map=%u polyCount=%d written=%d offMesh=%d status=%u elapsedMs=%d iters=%d budgetMs=%d\n",
+                mapId, polyCount, writeCount, offMeshSeen,
+                static_cast<unsigned>(status), elapsedMs, totalIters, budgetMs);
+        return true;
+    }
+    catch (...)
+    {
+        fprintf(stderr, "[Navigation.dll] SEH exception in FindPathForAgentSliced (code=0x%08lx)\n", 0UL);
+        if (outCount) *outCount = 0;
+        if (outStatus) *outStatus = 0xFF;
         return false;
     }
 }

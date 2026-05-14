@@ -73,6 +73,93 @@ internal static class NavigationInterop
         int maxOut,
         out int outCount);
 
+    // Phase 3 Surface K: sliced-find-path with wall-clock cap.
+    [DllImport(NavigationDll, EntryPoint = "FindPathForAgentSliced", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool FindPathForAgentSliced(
+        uint mapId,
+        XYZ start,
+        XYZ end,
+        float agentRadius,
+        float agentHeight,
+        [Out] ulong[] outPolyRefs,
+        [Out] byte[] outPolyTypes,
+        int maxOut,
+        out int outCount,
+        int maxWallClockMs,
+        out byte outStatus,
+        out int outElapsedMs,
+        out int outSliceIterations);
+
+    /// <summary>
+    /// Sliced-find-path status code (Surface K).
+    /// </summary>
+    public enum SlicedFindPathStatus : byte
+    {
+        Success = 0,
+        PartialDetour = 1,
+        AStarTimeout = 2,
+        NoPath = 3,
+        InfrastructureFailure = 0xFF,
+    }
+
+    public readonly record struct SlicedPolygonPathResult(
+        bool Success,
+        SlicedFindPathStatus Status,
+        int TotalPolyCount,
+        ulong[] PolyRefs,
+        PolyType[] PolyTypes,
+        int ElapsedMs,
+        int SliceIterations);
+
+    /// <summary>
+    /// Phase 3 Surface K — sliced-find-path variant of <see cref="QueryPathPolygons"/>.
+    /// Drives Detour's sliced API with the given wall-clock budget; on cap,
+    /// returns the partial path through lastBestNode with status
+    /// <see cref="SlicedFindPathStatus.AStarTimeout"/>. Use when callers
+    /// need deterministic abort on F/G-class A* pathologies.
+    /// </summary>
+    public static SlicedPolygonPathResult QueryPathPolygonsSliced(
+        uint mapId,
+        XYZ start,
+        XYZ end,
+        float agentRadius,
+        float agentHeight,
+        int maxOut = 740,
+        int maxWallClockMs = 30000)
+    {
+        if (maxOut <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxOut));
+
+        var refs = new ulong[maxOut];
+        var types = new byte[maxOut];
+        bool ok = FindPathForAgentSliced(
+            mapId, start, end, agentRadius, agentHeight,
+            refs, types, maxOut, out int total,
+            maxWallClockMs,
+            out byte status,
+            out int elapsedMs,
+            out int iters);
+
+        if (!ok)
+            return new SlicedPolygonPathResult(
+                false, SlicedFindPathStatus.InfrastructureFailure, 0,
+                Array.Empty<ulong>(), Array.Empty<PolyType>(), elapsedMs, iters);
+
+        int written = total < maxOut ? total : maxOut;
+        var refsOut = new ulong[written];
+        var typesOut = new PolyType[written];
+        for (int i = 0; i < written; i++)
+        {
+            refsOut[i] = refs[i];
+            typesOut[i] = (PolyType)types[i];
+        }
+
+        return new SlicedPolygonPathResult(
+            true, (SlicedFindPathStatus)status, total,
+            refsOut, typesOut, elapsedMs, iters);
+    }
+
     public enum PolyType : byte
     {
         Ground = 0,
