@@ -24,6 +24,7 @@ message WoWObject {
     float height = 6;
     float facing = 7;
     Position position = 8;
+    string zoneName = 9;            // Resolved area name (e.g. "Stormwind City", "Burning Steppes")
 }
 
 // Definition for WoWGameObject, extending WoWObject
@@ -77,6 +78,8 @@ message WoWUnit {
     float boundingRadius = 31;     // UNIT_FIELD_BOUNDINGRADIUS — collision radius
     float combatReach = 32;        // UNIT_FIELD_COMBATREACH — melee attack range component
     uint32 unitReaction = 33;      // UnitReaction enum (0=Hated..7=Exalted) — from IWoWUnit.UnitReaction
+    uint32 unitClass = 34;         // GameData.Core.Enums.Class value (UNIT_FIELD_BYTES_0 byte 1)
+    uint32 gender = 35;            // GameData.Core.Enums.Gender value (UNIT_FIELD_BYTES_0 byte 2)
 }
 
 // Definition for WoWPlayer, extending WoWUnit

@@ -215,6 +215,15 @@ namespace BotRunner
             try
             {
                 _activitySnapshot.Player = BuildPlayerProtobuf(player);
+
+                // Resolved zone name (e.g. "Stormwind City") — populated here because the
+                // static BuildPlayerProtobuf helper doesn't have access to _objectManager.
+                // FG runners read this from the in-game ZoneText memory pointer; BG runners
+                // return null/empty and consumers fall back to numeric zone IDs.
+                if (_activitySnapshot.Player?.Unit?.GameObject?.Base != null)
+                {
+                    _activitySnapshot.Player.Unit.GameObject.Base.ZoneName = _objectManager.ZoneText ?? string.Empty;
+                }
             }
             catch (Exception ex)
             {
@@ -517,6 +526,11 @@ namespace BotRunner
             TryPopulate(() => { if (unit.Bytes0 != null && unit.Bytes0.Length > 0) protoUnit.Bytes0 = unit.Bytes0[0]; }, "Bytes0");
             TryPopulate(() => { if (unit.Bytes1 != null && unit.Bytes1.Length > 0) protoUnit.Bytes1 = unit.Bytes1[0]; }, "Bytes1");
             TryPopulate(() => { if (unit.Bytes2 != null && unit.Bytes2.Length > 0) protoUnit.Bytes2 = unit.Bytes2[0]; }, "Bytes2");
+            // UNIT_FIELD_BYTES_0 layout: byte0=race, byte1=class, byte2=gender, byte3=powerType.
+            // Race is already exposed via Bytes0; surface class and gender explicitly so consumers
+            // don't have to decode the packed array.
+            TryPopulate(() => { if (unit.Bytes0 != null && unit.Bytes0.Length > 1) protoUnit.UnitClass = unit.Bytes0[1]; }, "UnitClass");
+            TryPopulate(() => { if (unit.Bytes0 != null && unit.Bytes0.Length > 2) protoUnit.Gender = unit.Bytes0[2]; }, "Gender");
 
             // Power map: Mana, Rage, Energy
             try

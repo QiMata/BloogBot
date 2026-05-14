@@ -81,13 +81,17 @@ namespace WoWStateManagerUI.ViewModels
             var raceByte = unit != null ? (byte)(unit.Bytes0 & 0xFF) : (byte)0;
             RaceDisplay = raceByte == 0 ? "—" : ((Race)raceByte).ToString();
 
-            // Class lives in byte 1 of UNIT_FIELD_BYTES_0 but isn't on the wire yet.
-            // Phase C of the UI refresh extends the proto with an explicit class field.
-            ClassDisplay = "—";
+            var classByte = unit != null ? (byte)(unit.UnitClass & 0xFF) : (byte)0;
+            ClassDisplay = classByte == 0 || !Enum.IsDefined(typeof(Class), classByte)
+                ? "—"
+                : ((Class)classByte).ToString();
 
             MapId = baseObj?.MapId ?? 0;
             ZoneId = baseObj?.ZoneId ?? 0;
-            AreaDisplay = ZoneId == 0 ? $"map {MapId}" : $"map {MapId} / zone {ZoneId}";
+            var zoneName = baseObj?.ZoneName;
+            AreaDisplay = !string.IsNullOrEmpty(zoneName)
+                ? zoneName
+                : ZoneId == 0 ? $"map {MapId}" : $"map {MapId} / zone {ZoneId}";
 
             Health = (int)(unit?.Health ?? 0);
             MaxHealth = (int)(unit?.MaxHealth ?? 0);
