@@ -264,6 +264,81 @@ to the resolved FG/BG accounts instead. See
 [Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md](Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md)
 and [Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md](Tests/BotRunner.Tests/LiveValidation/docs/TEST_EXECUTION_MODES.md).
 
+## Test Isolation Rules — CRITICAL
+
+> The canonical four-layer hierarchy is `Activity → Objective → Task →
+> Action` (see [`docs/Spec/18_TERMINOLOGY.md`](docs/Spec/18_TERMINOLOGY.md)).
+> Tests **drive Activities**, not Actions.
+
+**The rule.** A test under `Tests/BotRunner.Tests/LiveValidation/`
+exercises bot behavior by:
+
+1. Setting up world state (NPC spawns, bot position, lockouts, gear).
+2. Declaring an Activity to the bot (e.g. `AssignedActivity =
+   "Fishing[Ratchet]"` today; `IActivity.Start(...)` once Phase 2
+   slot S2.0 lands). The fixture's `StageBotRunnerFor...` helpers and
+   `LiveBotFixture.ResolveBotRunnerActionTargets(...)` are the legal
+   entry points.
+3. Letting `DecisionEngine` + `ActivityResolver` pick the IBotTask
+   family naturally.
+4. Asserting on the BOT'S BEHAVIOR — `WoWActivitySnapshot` fields,
+   Task-stack progression, `current_activity_id` (Phase 2+),
+   `current_objective_id` (Phase 2+), or the resulting `ActionMessage`
+   stream as captured by `AckCaptureTests`-style harnesses.
+
+A test that constructs `new ActionMessage { ActionType = ... }` and
+dispatches it via `_bot.SendActionAsync(...)` (or `SendActionAndWaitAsync`)
+in the test body is **REMOTE-CONTROLLING THE BOT**, not testing its
+behavior. That pattern bypasses DecisionEngine, ActivityResolver, and
+(once landed) `IActivity.NextAction` — it cannot detect regressions in
+any of those layers.
+
+**Documented exceptions:**
+
+- `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs` and its
+  partials (`.BotChat.cs`, `.Assertions.cs`, `.ServerManagement.cs`,
+  `.ShodanLoadout.cs`, `.TestDirector.cs`) — the fixture itself owns
+  the dispatch path.
+- `Tests/BotRunner.Tests/LiveValidation/CoordinatorFixtureBase.cs` —
+  same.
+- Shodan-targeted dispatches anywhere — Shodan is the production GM
+  Liaison / test director and is exempt by the "Shodan: Production GM
+  Liaison, Test Director" section below.
+- IPC-layer tests under `Tests/BotRunner.Tests/IPC/` and
+  `Tests/PathfindingService.Tests/`,
+  `Tests/WoWSharpClient.Tests/Movement/SceneData*` — those exercise
+  the protobuf contract itself, by design.
+- Unit tests that construct `BotRunnerService` with mocked
+  `IObjectManager` (Category B in the audit) — legitimate isolated
+  unit-test pattern.
+
+**Existing population (grandfathered with a deadline).** The 97
+Category-A sites catalogued in
+[`docs/Audits/test-isolation-audit.md`](docs/Audits/test-isolation-audit.md)
+are grandfathered until the
+[`Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md`](docs/Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md)
+phase rewrites them. Phase 12 runs once Phase 2 slot S2.0 lands the
+runtime `IActivity` / `IObjective` contracts. Until then, the rule
+applies to **NEW tests only**.
+
+**What this means right now (before S2.0 lands):**
+
+- New LiveValidation tests must declare an Activity (today: via the
+  `AssignedActivity` string + `StageBotRunner*Async` fixture helpers)
+  and assert on snapshot state, NOT construct raw `ActionMessage`
+  objects in the test body.
+- New tests that legitimately need to verify a single Action shape in
+  isolation should go in `Tests/BotRunner.Tests/ActionDispatch/`
+  (a new folder created for the purpose) — not in
+  `Tests/BotRunner.Tests/LiveValidation/`.
+- Existing tests may continue using their current pattern until Phase
+  12 rewrites them; do NOT mass-refactor pre-existing tests as part of
+  unrelated work.
+
+The Roslyn analyzer / xUnit-collection guard that mechanically enforces
+this rule is slot S12.1 in
+[`Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md`](docs/Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md).
+
 ## Test Skip Policy — CRITICAL
 
 **Tests must NEVER skip for "resource not found."** If a fishing pool, gathering node, mob, or NPC exists in the game world (DB spawns) but the bot can't find it, that is a REAL FAILURE — a detection, pathfinding, or ObjectManager bug.
