@@ -4,7 +4,6 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Windows;
 using System.Windows.Input;
 using GameData.Core.Enums;
 using WoWStateManagerUI.Handlers;
@@ -25,7 +24,12 @@ namespace WoWStateManagerUI.ViewModels
         public HealthCheckService HealthCheck => _healthCheck;
         public ProcessLauncherService ProcessLauncher { get; }
 
-        public ObservableCollection<BotSnapshotViewModel> Bots { get; } = [];
+        /// <summary>
+        /// The live bot cache owned by the listener. Bound directly by the dashboard
+        /// grid — no per-update rebuild. Selection and per-row state survive pushes
+        /// because each VM is mutated in place by the listener.
+        /// </summary>
+        public ObservableCollection<BotSnapshotViewModel> Bots => _listener.Bots;
 
         public ICommand LaunchStateManagerCommand { get; }
         public ICommand StopStateManagerCommand { get; }
@@ -89,30 +93,10 @@ namespace WoWStateManagerUI.ViewModels
                 }
             };
 
-            _listener.SnapshotsUpdated += OnSnapshotsUpdated;
-
             ProcessLauncher = new ProcessLauncherService();
             LaunchStateManagerCommand = new CommandHandler(LaunchStateManager, true);
             StopStateManagerCommand = new CommandHandler(StopStateManager, true);
             BrowseExeCommand = new CommandHandler(BrowseExe, true);
-        }
-
-        private void OnSnapshotsUpdated()
-        {
-            Application.Current?.Dispatcher?.InvokeAsync(() =>
-            {
-                var selectedAccount = _selectedBot?.AccountName;
-
-                Bots.Clear();
-                foreach (var kvp in _listener.GetInstances())
-                {
-                    foreach (var snap in kvp.Value.Snapshots)
-                        Bots.Add(new BotSnapshotViewModel(snap));
-                }
-
-                if (selectedAccount != null)
-                    SelectedBot = Bots.FirstOrDefault(b => b.AccountName == selectedAccount);
-            });
         }
 
         private void BrowseExe()
@@ -144,7 +128,6 @@ namespace WoWStateManagerUI.ViewModels
 
         public void Dispose()
         {
-            _listener.SnapshotsUpdated -= OnSnapshotsUpdated;
             ProcessLauncher.Dispose();
         }
     }

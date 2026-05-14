@@ -45,38 +45,62 @@ namespace WoWStateManagerUI.ViewModels
 
         private void OnSnapshotsUpdated()
         {
-            Application.Current?.Dispatcher?.InvokeAsync(() =>
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher != null)
+                dispatcher.InvokeAsync(Rebuild);
+            else
+                Rebuild();
+        }
+
+        private void Rebuild()
+        {
+            // Group the listener's cached VMs by (instanceId | action). Same bot
+            // appears under a different key when its CurrentAction changes; each
+            // group references the live mutable VM (no clone) so binding updates
+            // continue to flow.
+            var instances = _listener.GetInstances();
+            var instanceByAccount = BuildAccountToInstanceMap(instances);
+
+            var newGroups = new Dictionary<string, List<BotSnapshotViewModel>>();
+            foreach (var bot in _listener.Bots)
             {
-                var snapshotsByInstance = _listener.GetInstances();
+                if (!instanceByAccount.TryGetValue(bot.AccountName, out var instanceId))
+                    instanceId = "unknown";
 
-                // Build new grouping keyed by (instanceId, actionType)
-                var newGroups = new Dictionary<string, List<BotSnapshotViewModel>>();
-                foreach (var kvp in snapshotsByInstance)
+                var actionType = string.IsNullOrEmpty(bot.CurrentAction) ? "(idle)" : bot.CurrentAction;
+                var key = $"{instanceId} | {actionType}";
+
+                if (!newGroups.TryGetValue(key, out var list))
+                    newGroups[key] = list = new List<BotSnapshotViewModel>();
+                list.Add(bot);
+            }
+
+            var previousKey = _selectedActivity?.Key;
+            Activities.Clear();
+            foreach (var kvp in newGroups.OrderBy(g => g.Key))
+                Activities.Add(new ActivityGroupViewModel(kvp.Key, kvp.Value));
+
+            if (previousKey != null)
+                SelectedActivity = Activities.FirstOrDefault(a => a.Key == previousKey);
+
+            var totalBots = newGroups.Values.Sum(v => v.Count);
+            StatusMessage = Activities.Count == 0
+                ? "No StateManager connected."
+                : $"{Activities.Count} activit{(Activities.Count == 1 ? "y" : "ies")}, {totalBots} bot{(totalBots == 1 ? "" : "s")}";
+        }
+
+        private static Dictionary<string, string> BuildAccountToInstanceMap(IReadOnlyDictionary<string, InstanceData> instances)
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kvp in instances)
+            {
+                foreach (var snap in kvp.Value.Snapshots)
                 {
-                    foreach (var snap in kvp.Value.Snapshots)
-                    {
-                        var actionType = snap.CurrentAction?.ActionType.ToString() ?? "(idle)";
-                        var key = $"{kvp.Key} | {actionType}";
-                        if (!newGroups.TryGetValue(key, out var list))
-                            newGroups[key] = list = new List<BotSnapshotViewModel>();
-                        list.Add(new BotSnapshotViewModel(snap));
-                    }
+                    if (!string.IsNullOrEmpty(snap.AccountName))
+                        map[snap.AccountName] = kvp.Key;
                 }
-
-                // Rebuild Activities collection, preserving SelectedActivity if its key still exists
-                var previousKey = _selectedActivity?.Key;
-                Activities.Clear();
-                foreach (var kvp in newGroups.OrderBy(g => g.Key))
-                    Activities.Add(new ActivityGroupViewModel(kvp.Key, kvp.Value));
-
-                if (previousKey != null)
-                    SelectedActivity = Activities.FirstOrDefault(a => a.Key == previousKey);
-
-                var totalBots = newGroups.Values.Sum(v => v.Count);
-                StatusMessage = Activities.Count == 0
-                    ? "No StateManager connected."
-                    : $"{Activities.Count} activit{(Activities.Count == 1 ? "y" : "ies")}, {totalBots} bot{(totalBots == 1 ? "" : "s")}";
-            });
+            }
+            return map;
         }
 
         public void Dispose()
