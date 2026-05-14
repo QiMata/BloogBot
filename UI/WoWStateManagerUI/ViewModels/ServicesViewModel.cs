@@ -4,25 +4,29 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
-using System.Windows;
+using System.Windows.Threading;
 using System.Windows.Input;
 using WoWStateManagerUI.Handlers;
 using WoWStateManagerUI.Services;
 
 namespace WoWStateManagerUI.ViewModels
 {
-    public sealed class ServicesViewModel : INotifyPropertyChanged
+    public sealed class ServicesViewModel : INotifyPropertyChanged, IDisposable
     {
         private readonly DockerService _docker = new();
+        private readonly DispatcherTimer _refreshTimer;
         private ContainerInfo? _selectedContainer;
-        private string _statusMessage = string.Empty;
+        private string _statusMessage = "Connecting to Docker...";
         private string _logOutput = string.Empty;
         private bool _isConnected;
         private string _filterProject = "All";
+        private bool _refreshInFlight;
 
         public ObservableCollection<ContainerInfo> Containers { get; } = [];
         public ObservableCollection<ContainerInfo> FilteredContainers { get; } = [];
         public ObservableCollection<string> ProjectFilters { get; } = ["All"];
+
+        public MangosConsoleViewModel MangosConsole { get; } = new();
 
         public ContainerInfo? SelectedContainer
         {
@@ -56,7 +60,6 @@ namespace WoWStateManagerUI.ViewModels
             set { _filterProject = value; OnPropertyChanged(); ApplyFilter(); }
         }
 
-        public ICommand ConnectCommand { get; }
         public ICommand RefreshCommand { get; }
         public ICommand StartCommand { get; }
         public ICommand StopCommand { get; }
@@ -68,7 +71,6 @@ namespace WoWStateManagerUI.ViewModels
 
         public ServicesViewModel()
         {
-            ConnectCommand = new AsyncCommandHandler(ConnectAsync);
             RefreshCommand = new AsyncCommandHandler(RefreshAsync, () => IsConnected);
             StartCommand = new AsyncCommandHandler(StartSelectedAsync, () => IsConnected && _selectedContainer != null);
             StopCommand = new AsyncCommandHandler(StopSelectedAsync, () => IsConnected && _selectedContainer != null);
@@ -77,36 +79,60 @@ namespace WoWStateManagerUI.ViewModels
             RestartWwowStackCommand = new AsyncCommandHandler(() => StackOperationAsync("WWoW", "restart"), () => IsConnected);
             StopWwowStackCommand = new AsyncCommandHandler(() => StackOperationAsync("WWoW", "stop"), () => IsConnected);
             StartWwowStackCommand = new AsyncCommandHandler(() => StackOperationAsync("WWoW", "start"), () => IsConnected);
+
+            _refreshTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(UIConstants.ServicesRefreshSeconds)
+            };
+            _refreshTimer.Tick += async (_, _) => await TickAsync();
+
+            _ = AutoConnectAsync();
         }
 
-        private async Task ConnectAsync()
+        private async Task AutoConnectAsync()
         {
             IsConnected = await _docker.TestDockerAvailableAsync();
-            StatusMessage = IsConnected ? "Docker CLI connected" : "Docker not available — is Docker Desktop running?";
+            StatusMessage = IsConnected ? "Docker connected — auto-refreshing" : "Docker not available — is Docker Desktop running?";
             if (IsConnected)
+            {
                 await RefreshAsync();
+                _refreshTimer.Start();
+            }
             RefreshCanExecute();
+        }
+
+        private async Task TickAsync()
+        {
+            if (_refreshInFlight || !IsConnected) return;
+            await RefreshAsync();
         }
 
         private async Task RefreshAsync()
         {
+            if (_refreshInFlight) return;
+            _refreshInFlight = true;
             try
             {
                 var containers = await _docker.ListContainersAsync();
-                Containers.Clear();
-                ProjectFilters.Clear();
-                ProjectFilters.Add("All");
+                var selectedName = _selectedContainer?.Name;
 
+                Containers.Clear();
                 foreach (var c in containers)
                     Containers.Add(c);
 
-                foreach (var project in containers.Select(c => c.Project).Distinct().OrderBy(p => p))
+                var existingFilters = ProjectFilters.ToList();
+                var newFilters = new[] { "All" }.Concat(containers.Select(c => c.Project).Distinct().OrderBy(p => p)).ToList();
+                if (!existingFilters.SequenceEqual(newFilters))
                 {
-                    if (!ProjectFilters.Contains(project))
-                        ProjectFilters.Add(project);
+                    ProjectFilters.Clear();
+                    foreach (var f in newFilters) ProjectFilters.Add(f);
                 }
 
                 ApplyFilter();
+
+                // Preserve selection by name across refresh cycles
+                if (selectedName != null)
+                    SelectedContainer = FilteredContainers.FirstOrDefault(c => c.Name == selectedName);
 
                 var running = containers.Count(c => c.State == "running");
                 var healthy = containers.Count(c => c.IsHealthy);
@@ -115,6 +141,10 @@ namespace WoWStateManagerUI.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Refresh failed: {ex.Message}";
+            }
+            finally
+            {
+                _refreshInFlight = false;
             }
         }
 
@@ -204,6 +234,11 @@ namespace WoWStateManagerUI.ViewModels
             (RestartWwowStackCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
             (StopWwowStackCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
             (StartWwowStackCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
+        }
+
+        public void Dispose()
+        {
+            _refreshTimer.Stop();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

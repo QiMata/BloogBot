@@ -5,39 +5,16 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:WoWStateManagerUI.ViewModels"
              d:DataContext="{d:DesignInstance Type=vm:MangosConsoleViewModel}"
-             mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="500">
-    <Grid Margin="10">
+             mc:Ignorable="d" d:DesignWidth="1024" d:DesignHeight="320">
+    <Grid Margin="6">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Row 0: Connection bar -->
-        <Grid Grid.Row="0" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="200"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="120"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="120"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <Label Grid.Column="0" Content="SOAP URL:" VerticalAlignment="Center"/>
-            <TextBox Grid.Column="1" Text="{Binding SoapUrl, UpdateSourceTrigger=PropertyChanged}" Margin="4,2" VerticalAlignment="Center"/>
-            <Label Grid.Column="2" Content="User:" VerticalAlignment="Center"/>
-            <TextBox Grid.Column="3" Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Margin="4,2" VerticalAlignment="Center"/>
-            <Label Grid.Column="4" Content="Pass:" VerticalAlignment="Center"/>
-            <TextBox Grid.Column="5" Text="{Binding Password, UpdateSourceTrigger=PropertyChanged}" Margin="4,2" VerticalAlignment="Center"/>
-            <Button Grid.Column="6" Content="Connect" Command="{Binding ConnectCommand}" Margin="4,2" Padding="12,2" VerticalAlignment="Center"/>
-        </Grid>
-
-        <!-- Row 1: Quick actions -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+        <!-- Row 0: Quick actions (auto-connected; no URL/auth boxes) -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
             <Button Content="Server Info" Command="{Binding ServerInfoCommand}" Margin="0,0,4,0" Padding="8,4"/>
             <Label Content="Account:" VerticalAlignment="Center"/>
             <TextBox Text="{Binding AccountName, UpdateSourceTrigger=PropertyChanged}" Width="120" Margin="4,2" VerticalAlignment="Center"/>
@@ -48,16 +25,16 @@
             <Button Content="Clear Log" Command="{Binding ClearLogCommand}" Margin="16,0,0,0" Padding="8,4"/>
         </StackPanel>
 
-        <!-- Row 2: Output log -->
-        <Border Grid.Row="2" BorderBrush="Gray" BorderThickness="1" Margin="0,0,0,8">
+        <!-- Row 1: Output log -->
+        <Border Grid.Row="1" BorderBrush="Gray" BorderThickness="1" Margin="0,0,0,6">
             <ListBox x:Name="OutputListBox" ItemsSource="{Binding OutputLog}" FontFamily="Consolas" FontSize="11"
                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                      BorderThickness="0"/>
         </Border>
 
-        <!-- Row 3: Command input -->
-        <Grid Grid.Row="3">
+        <!-- Row 2: Command input -->
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>

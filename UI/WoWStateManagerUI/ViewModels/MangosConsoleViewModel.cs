@@ -7,15 +7,13 @@ using System.Windows.Input;
 using BotCommLayer;
 using Microsoft.Extensions.Logging;
 using WoWStateManagerUI.Handlers;
+using WoWStateManagerUI.Services;
 
 namespace WoWStateManagerUI.ViewModels
 {
     public sealed class MangosConsoleViewModel : INotifyPropertyChanged
     {
         private MangosSOAPClient? _soapClient;
-        private string _soapUrl = "http://localhost:7878";
-        private string _username = "ADMINISTRATOR";
-        private string _password = "PASSWORD";
         private string _commandText = string.Empty;
         private string _accountName = string.Empty;
         private int _gmLevel = 6;
@@ -23,9 +21,6 @@ namespace WoWStateManagerUI.ViewModels
 
         public ObservableCollection<string> OutputLog { get; } = [];
 
-        public string SoapUrl { get => _soapUrl; set { _soapUrl = value; OnPropertyChanged(); } }
-        public string Username { get => _username; set { _username = value; OnPropertyChanged(); } }
-        public string Password { get => _password; set { _password = value; OnPropertyChanged(); } }
         public string CommandText { get => _commandText; set { _commandText = value; OnPropertyChanged(); } }
         public string AccountName { get => _accountName; set { _accountName = value; OnPropertyChanged(); } }
         public int GmLevel { get => _gmLevel; set { _gmLevel = value; OnPropertyChanged(); } }
@@ -36,7 +31,6 @@ namespace WoWStateManagerUI.ViewModels
             private set { if (_isConnected != value) { _isConnected = value; OnPropertyChanged(); } }
         }
 
-        public ICommand ConnectCommand { get; }
         public ICommand ExecuteCommand { get; }
         public ICommand CreateAccountCommand { get; }
         public ICommand SetGMLevelCommand { get; }
@@ -45,20 +39,28 @@ namespace WoWStateManagerUI.ViewModels
 
         public MangosConsoleViewModel()
         {
-            ConnectCommand = new AsyncCommandHandler(ConnectAsync);
             ExecuteCommand = new AsyncCommandHandler(ExecuteGMCommandAsync, () => IsConnected);
             CreateAccountCommand = new AsyncCommandHandler(CreateAccountAsync, () => IsConnected);
             SetGMLevelCommand = new AsyncCommandHandler(SetGMLevelAsync, () => IsConnected);
             ServerInfoCommand = new AsyncCommandHandler(GetServerInfoAsync, () => IsConnected);
             ClearLogCommand = new CommandHandler(() => OutputLog.Clear(), true);
+
+            _ = AutoConnectAsync();
         }
 
-        private async Task ConnectAsync()
+        private async Task AutoConnectAsync()
         {
-            _soapClient = new MangosSOAPClient(SoapUrl, new BasicLoggerAdapter(), Username, Password);
+            _soapClient = new MangosSOAPClient(
+                UIConstants.MangosSoapUrl,
+                new BasicLoggerAdapter(),
+                UIConstants.MangosUsername,
+                UIConstants.MangosPassword);
+
             var up = await _soapClient.CheckSOAPPortStatus();
             IsConnected = up;
-            AppendLog(up ? $"Connected to SOAP at {SoapUrl}" : $"Failed to connect to SOAP at {SoapUrl}");
+            AppendLog(up
+                ? $"SOAP connected at {UIConstants.MangosSoapUrl}"
+                : $"SOAP not reachable at {UIConstants.MangosSoapUrl} — will retry on next command");
             RefreshCanExecute();
         }
 
@@ -141,16 +143,12 @@ namespace WoWStateManagerUI.ViewModels
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
-        /// <summary>
-        /// Minimal ILogger adapter so MangosSOAPClient can log to the output panel.
-        /// </summary>
         private sealed class BasicLoggerAdapter : ILogger<MangosSOAPClient>
         {
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
             public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Warning;
             public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
             {
-                // Warnings and errors will show in debug output; routine logs suppressed
                 if (logLevel >= LogLevel.Warning)
                     System.Diagnostics.Debug.WriteLine($"[SOAP] {formatter(state, exception)}");
             }

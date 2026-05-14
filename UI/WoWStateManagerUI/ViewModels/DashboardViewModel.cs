@@ -1,55 +1,47 @@
-using Communication;
-using WoWStateManagerUI.Handlers;
-using WoWStateManagerUI.Services;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Windows;
 using System.Windows.Input;
+using GameData.Core.Enums;
+using WoWStateManagerUI.Handlers;
+using WoWStateManagerUI.Services;
 
 namespace WoWStateManagerUI.ViewModels
 {
     public sealed class DashboardViewModel : INotifyPropertyChanged, IDisposable
     {
         private readonly HealthCheckService _healthCheck;
+        private readonly UIListenerService _listener;
 
-        private readonly Dictionary<CharacterDefinition, CharacterDefinition> _characterStates = [];
-        private CharacterDefinition[]? _characterCache;
-        private int _currentPageIndex = -1;
-        private int _selectedCharacterIndex = -1;
+        private BotSnapshotViewModel? _selectedBot;
+        private DashboardBotDetailViewModel? _selectedDetail;
         private string _stateManagerExePath = string.Empty;
         private string _statusMessage = string.Empty;
 
         public HealthCheckService HealthCheck => _healthCheck;
         public ProcessLauncherService ProcessLauncher { get; }
 
-        public ICommand LocalStateManagerLoadCommand { get; }
-        public ICommand StateManagerConnectCommand { get; }
-        public ICommand StateManagerDisconnectCommand { get; }
+        public ObservableCollection<BotSnapshotViewModel> Bots { get; } = [];
+
         public ICommand LaunchStateManagerCommand { get; }
         public ICommand StopStateManagerCommand { get; }
         public ICommand BrowseExeCommand { get; }
 
-        public string StateManagerUrl { get; set; } = "http://localhost:8088";
-        public string MangosUrl { get; set; } = "http://localhost:7878";
-        public string AdminUsername { get; set; } = "ADMINISTRATOR";
-        public string AdminPassword { get; set; } = "PASSWORD";
+        public string RealmState =>
+            _healthCheck.RealmdStatus == ServiceStatus.Up ? "UP" :
+            _healthCheck.RealmdStatus == ServiceStatus.Down ? "DOWN" : "UNKNOWN";
 
-        public string RealmState
-        {
-            get => _healthCheck.RealmdStatus == ServiceStatus.Up ? "UP" : _healthCheck.RealmdStatus == ServiceStatus.Down ? "DOWN" : "UNKNOWN";
-        }
+        public string WorldState =>
+            _healthCheck.MangosdStatus == ServiceStatus.Up ? "UP" :
+            _healthCheck.MangosdStatus == ServiceStatus.Down ? "DOWN" : "UNKNOWN";
 
-        public string WorldState
-        {
-            get => _healthCheck.MangosdStatus == ServiceStatus.Up ? "UP" : _healthCheck.MangosdStatus == ServiceStatus.Down ? "DOWN" : "UNKNOWN";
-        }
-
-        public string TotalPopulation
-        {
-            get => _healthCheck.RealmdStatus == ServiceStatus.Up && _healthCheck.MangosdStatus == ServiceStatus.Up ? "3000" : "0";
-        }
+        public string TotalPopulation =>
+            _healthCheck.RealmdStatus == ServiceStatus.Up &&
+            _healthCheck.MangosdStatus == ServiceStatus.Up ? "3000" : "0";
 
         public string StateManagerExePath
         {
@@ -63,64 +55,30 @@ namespace WoWStateManagerUI.ViewModels
             private set { _statusMessage = value; OnPropertyChanged(); }
         }
 
-        private bool _isConnected;
-        public bool IsConnected
+        public BotSnapshotViewModel? SelectedBot
         {
-            get => _isConnected;
-            set { if (_isConnected != value) { _isConnected = value; OnPropertyChanged(); } }
+            get => _selectedBot;
+            set
+            {
+                _selectedBot = value;
+                _selectedDetail = value == null ? null : new DashboardBotDetailViewModel(value);
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(SelectedDetail));
+                OnPropertyChanged(nameof(HasSelection));
+                OnPropertyChanged(nameof(HasNoSelection));
+            }
         }
 
-        public int SelectCharacterIndex => _selectedCharacterIndex;
-        public int CurrentPageIndex => _currentPageIndex;
+        public bool HasSelection => _selectedBot != null;
+        public bool HasNoSelection => _selectedBot == null;
 
-        public float OpennessValue
-        {
-            get => GetSelectedCharacter()?.Openness ?? 0f;
-            set { if (TryGetSelectedCharacter(out var c)) { c.Openness = value; OnPropertyChanged(); } }
-        }
+        public DashboardBotDetailViewModel? SelectedDetail => _selectedDetail;
 
-        public float ConscientiousnessValue
-        {
-            get => GetSelectedCharacter()?.Conscientiousness ?? 0f;
-            set { if (TryGetSelectedCharacter(out var c)) { c.Conscientiousness = value; OnPropertyChanged(); } }
-        }
-
-        public float ExtraversionValue
-        {
-            get => GetSelectedCharacter()?.Extraversion ?? 0f;
-            set { if (TryGetSelectedCharacter(out var c)) { c.Extraversion = value; OnPropertyChanged(); } }
-        }
-
-        public float AgreeablenessValue
-        {
-            get => GetSelectedCharacter()?.Agreeableness ?? 0f;
-            set { if (TryGetSelectedCharacter(out var c)) { c.Agreeableness = value; OnPropertyChanged(); } }
-        }
-
-        public float NeuroticismValue
-        {
-            get => GetSelectedCharacter()?.Neuroticism ?? 0f;
-            set { if (TryGetSelectedCharacter(out var c)) { c.Neuroticism = value; OnPropertyChanged(); } }
-        }
-
-        public string[] AvailableTemplates { get; } =
-        [
-            "",
-            "FuryWarriorPreRaid",
-            "HolyPriestMCReady",
-            "FrostMageAoEFarmer",
-            "ProtectionWarriorTank",
-        ];
-
-        public string SelectedBuildTemplate
-        {
-            get => GetSelectedCharacter()?.BuildTemplate ?? "";
-            set { if (TryGetSelectedCharacter(out var c)) { c.BuildTemplate = value; OnPropertyChanged(); } }
-        }
-
-        public DashboardViewModel(HealthCheckService healthCheck)
+        public DashboardViewModel(HealthCheckService healthCheck, UIListenerService listener)
         {
             _healthCheck = healthCheck;
+            _listener = listener;
+
             _healthCheck.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName is nameof(HealthCheckService.RealmdStatus) or nameof(HealthCheckService.MangosdStatus))
@@ -130,14 +88,31 @@ namespace WoWStateManagerUI.ViewModels
                     OnPropertyChanged(nameof(TotalPopulation));
                 }
             };
-            ProcessLauncher = new ProcessLauncherService();
 
-            LocalStateManagerLoadCommand = new CommandHandler(() => { }, true);
-            StateManagerConnectCommand = new CommandHandler(() => { }, true);
-            StateManagerDisconnectCommand = new CommandHandler(() => { }, true);
+            _listener.SnapshotsUpdated += OnSnapshotsUpdated;
+
+            ProcessLauncher = new ProcessLauncherService();
             LaunchStateManagerCommand = new CommandHandler(LaunchStateManager, true);
             StopStateManagerCommand = new CommandHandler(StopStateManager, true);
             BrowseExeCommand = new CommandHandler(BrowseExe, true);
+        }
+
+        private void OnSnapshotsUpdated()
+        {
+            Application.Current?.Dispatcher?.InvokeAsync(() =>
+            {
+                var selectedAccount = _selectedBot?.AccountName;
+
+                Bots.Clear();
+                foreach (var kvp in _listener.GetInstances())
+                {
+                    foreach (var snap in kvp.Value.Snapshots)
+                        Bots.Add(new BotSnapshotViewModel(snap));
+                }
+
+                if (selectedAccount != null)
+                    SelectedBot = Bots.FirstOrDefault(b => b.AccountName == selectedAccount);
+            });
         }
 
         private void BrowseExe()
@@ -161,29 +136,7 @@ namespace WoWStateManagerUI.ViewModels
             StatusMessage = ProcessLauncher.Launch(_stateManagerExePath);
         }
 
-        private void StopStateManager()
-        {
-            StatusMessage = ProcessLauncher.Stop();
-        }
-
-        private CharacterDefinition? GetSelectedCharacter() => TryGetSelectedCharacter(out var c) ? c : null;
-
-        private bool TryGetSelectedCharacter(out CharacterDefinition character)
-        {
-            character = default!;
-            if (_characterStates.Count == 0) return false;
-            EnsureCharacterCache();
-            var index = 20 * _currentPageIndex + _selectedCharacterIndex;
-            if (index < 0 || _characterCache == null || index >= _characterCache.Length) return false;
-            character = _characterCache[index];
-            return true;
-        }
-
-        private void EnsureCharacterCache()
-        {
-            if (_characterCache == null || _characterCache.Length != _characterStates.Count)
-                _characterCache = _characterStates.Keys.ToArray();
-        }
+        private void StopStateManager() => StatusMessage = ProcessLauncher.Stop();
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -191,7 +144,47 @@ namespace WoWStateManagerUI.ViewModels
 
         public void Dispose()
         {
+            _listener.SnapshotsUpdated -= OnSnapshotsUpdated;
             ProcessLauncher.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Detail-pane view-model for the selected bot. Surfaces stats, spell count, and
+    /// other per-character data that exists in the snapshot today. Stats and spells will
+    /// be expanded once the Phase C proto extension adds explicit fields.
+    /// </summary>
+    public sealed class DashboardBotDetailViewModel
+    {
+        public BotSnapshotViewModel Snapshot { get; }
+        public List<StatRow> Stats { get; }
+        public int SpellCount { get; }
+        public string Travel { get; }
+        public string LoadoutStatus { get; }
+
+        public DashboardBotDetailViewModel(BotSnapshotViewModel snap)
+        {
+            Snapshot = snap;
+            var raw = snap.Raw;
+            var statMap = raw.Player?.Unit?.Stats;
+            Stats = [];
+            if (statMap != null)
+            {
+                foreach (var kvp in statMap.OrderBy(k => k.Key))
+                {
+                    var label = Enum.IsDefined(typeof(StatType), (int)kvp.Key)
+                        ? ((StatType)kvp.Key).ToString()
+                        : $"stat {kvp.Key}";
+                    Stats.Add(new StatRow(label, kvp.Value));
+                }
+            }
+            SpellCount = raw.Player?.SpellList?.Count ?? 0;
+            Travel = raw.TravelObjective != null
+                ? $"map {raw.TravelObjective.TargetMapId} → {raw.TravelObjective.TargetLocationName}"
+                : "(none)";
+            LoadoutStatus = raw.LoadoutStatus.ToString();
+        }
+
+        public sealed record StatRow(string Name, uint Value);
     }
 }

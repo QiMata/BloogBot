@@ -42,20 +42,17 @@
             <TabItem Header="Dashboard">
                 <views:DashboardView DataContext="{Binding Dashboard}"/>
             </TabItem>
-            <TabItem Header="MaNGOS Console">
-                <views:MangosConsoleView DataContext="{Binding MangosConsole}"/>
+            <TabItem Header="Services">
+                <views:ServicesView DataContext="{Binding Services}"/>
+            </TabItem>
+            <TabItem Header="Activities">
+                <views:ActivitiesView DataContext="{Binding Activities}"/>
             </TabItem>
             <TabItem Header="Accounts">
                 <views:AccountManagementView DataContext="{Binding AccountManagement}"/>
             </TabItem>
             <TabItem Header="Config Editor">
                 <views:ConfigEditorView DataContext="{Binding ConfigEditor}"/>
-            </TabItem>
-            <TabItem Header="Services">
-                <views:ServicesView DataContext="{Binding Services}"/>
-            </TabItem>
-            <TabItem Header="Instances">
-                <views:InstancesView DataContext="{Binding Instances}"/>
             </TabItem>
         </TabControl>
     </DockPanel>
