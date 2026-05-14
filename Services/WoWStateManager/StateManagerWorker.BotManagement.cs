@@ -82,19 +82,19 @@ namespace WoWStateManager
                 botDllPath = Path.Combine(baseDir, "BackgroundBotRunner.dll");
             }
 
-            var showWindows = Environment.GetEnvironmentVariable("WWOW_SHOW_WINDOWS") == "1";
+            // BackgroundBotRunner is a WinExe — no console window regardless of CreateNoWindow.
+            // Always redirect stdout/stderr so we can forward bot logs into the StateManager
+            // logger pipeline. The bot's per-account log file (WWoWLogs/bg_{account}.log)
+            // captures the full Serilog stream independently.
             var psi = new ProcessStartInfo
             {
                 FileName = File.Exists(botExePath) ? botExePath : "dotnet",
                 Arguments = File.Exists(botExePath) ? string.Empty : $"\"{botDllPath}\"",
                 WorkingDirectory = File.Exists(botExePath) ? Path.GetDirectoryName(botExePath)! : Path.GetDirectoryName(botDllPath)!,
                 UseShellExecute = false,
-                // When WWOW_SHOW_WINDOWS=1, don't redirect stdout/stderr so Serilog's Console
-                // sink writes to the visible console window. Log file sink (WWoWLogs/bg_{account}.log)
-                // still captures everything regardless.
-                RedirectStandardOutput = !showWindows,
-                RedirectStandardError = !showWindows,
-                CreateNoWindow = !showWindows,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
             };
             psi.Environment["WWOW_ACCOUNT_NAME"] = accountName;
             psi.Environment["WWOW_ACCOUNT_PASSWORD"] = "PASSWORD";
@@ -134,8 +134,8 @@ namespace WoWStateManager
             var process = Process.Start(psi);
             var pid = (uint?)process?.Id;
 
-            // Forward stdout/stderr to our logger (only when redirecting, i.e. no visible window)
-            if (process != null && !showWindows)
+            // Forward redirected stdout/stderr into the StateManager logger.
+            if (process != null)
             {
                 _ = Task.Run(async () =>
                 {

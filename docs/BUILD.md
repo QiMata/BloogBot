@@ -181,7 +181,7 @@ BloogBot/
 | `WWOW_RECORDINGS_DIR` | `<Documents>/BloogBot/MovementRecordings` | Override directory for movement recordings |
 | `WWOW_LOADER_DLL_PATH` | *(auto-detected)* | Override path to Loader.dll for FG injection |
 | `WWOW_SETTINGS_OVERRIDE` | *(unset)* | Path to override StateManagerSettings.json |
-| `WWOW_SHOW_WINDOWS` | *(unset)* | Set to `1` to show child process windows (StateManager, PathfindingService, etc.) |
+| `WWOW_SHOW_WINDOWS` | *(unset)* | Set to `1` to show child process consoles for StateManager and PathfindingService. ForegroundBotRunner / BackgroundBotRunner are now `WinExe` and never allocate a console window regardless of this setting; their stdout is captured by StateManager and routed through ILogger. |
 | `WWOW_ENABLE_NATIVE_SEGMENT_VALIDATION` | *(unset)* | Set to `1` to enable native path segment validation in PathfindingService |
 | `WWOW_NAVIGATION_PRELOAD_MAPS` | *(unset / `none`)* | Native `Navigation.dll` mmap preload setting. Use `0,1,389` for an explicit map list or `all` to preload every `.mmap` discovered under `WWOW_DATA_DIR/mmaps`. PathfindingService also supports `Navigation:PreloadMaps` / `Navigation__PreloadMaps`. |
 
