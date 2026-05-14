@@ -69,6 +69,7 @@ Companion top-level docs:
 | [`Spec/15_SKILLS.md`](Spec/15_SKILLS.md) | Agent skill registry; cross-game replication contract |
 | [`Spec/16_REALMS_AND_ACCOUNTS.md`](Spec/16_REALMS_AND_ACCOUNTS.md) | Two realms (Westworld-Test + Westworld), explicit account/character lists, OnDemand reserved pool |
 | [`Spec/17_LOADOUT.md`](Spec/17_LOADOUT.md) | LoadoutSpec field reference, GM-command translation, proto mapping |
+| [`Spec/18_TERMINOLOGY.md`](Spec/18_TERMINOLOGY.md) | Activity/Objective/Task/Action four-layer hierarchy (canonical glossary; adopted from D2Bot) |
 
 ## Implementation plan (Plan/)
 

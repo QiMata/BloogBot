@@ -48,6 +48,40 @@ Phase 1 complete (task families implementable).
 
 ## Slots
 
+### S2.0 — `IActivity` + `IObjective` runtime contracts
+
+- **Owner:** `monorepo-worker`
+- **Status:** open
+- **Owned paths:**
+  - `Exports/BotRunner/Activities/IActivity.cs` (new)
+  - `Exports/BotRunner/Activities/IObjective.cs` (new)
+  - `Exports/BotRunner/Activities/ActivityResolver.cs` (modify — wrap, do not break callers)
+  - `Exports/BotCommLayer/Models/ProtoDef/communication.proto` (add `current_activity_id`, `current_objective_id`, `current_objective_type` to `WoWActivitySnapshot`)
+  - `Tests/BotRunner.Tests/Activities/IActivityContractTests.cs`
+- **Spec contracts:** [`Spec/18_TERMINOLOGY.md`](../Spec/18_TERMINOLOGY.md), [`Spec/03_BOTRUNNER.md`](../Spec/03_BOTRUNNER.md), [`Spec/04_ACTIVITIES.md`](../Spec/04_ACTIVITIES.md)
+- **Reference:** D2Bot's [`D2Orchestrator/Orchestration/Activities/IActivity.cs`](../../../D2Bot/D2Orchestrator/Orchestration/Activities/IActivity.cs) and [`ObjectiveRuntimeContracts.cs`](../../../D2Bot/D2Orchestrator/Orchestration/ObjectiveRuntimeContracts.cs).
+- **Goal:** Port D2Bot's runtime Activity/Objective contracts to WWoW so
+  the OnDemand launcher (S2.1–S2.x) can dispatch activities through an
+  `IActivity.NextAction(snapshot)` pump and assert on `IObjective` state
+  transitions. Three sub-deliverables:
+  1. `IActivity`: `string Id`, `IActivityParameters Parameters`,
+     `ActionMessage? NextAction(WoWActivitySnapshot snapshot)`,
+     `ActivityCompletion CheckCompletion(WoWActivitySnapshot snapshot)`.
+     Mirror D2's contract.
+  2. `IObjective`: `string Id`, `ObjectiveType Type`,
+     `ObjectiveEndState EndState`, `IReadOnlyList<ObjectiveGate> Gates`.
+     Wire-shape mirrors D2's `BotObjectiveContract`.
+  3. Snapshot extension: add `current_activity_id`,
+     `current_objective_id`, `current_objective_type` fields to
+     `WoWActivitySnapshot`. Backward compatible (proto3 additive). Tests
+     drive `Activity × Objective` permutations and assert these new
+     fields propagate end-to-end.
+- **Non-goals (out of scope for S2.0):** Renaming `ActivityResolver`;
+  porting D2's `AutonomousObjectivePicker` (that's S6.x autonomous-
+  progression scope); refactoring the 117 LiveValidation violations
+  catalogued in [`Audits/test-isolation-audit.md`](Audits/test-isolation-audit.md)
+  (that's S5.x test-rewrite scope).
+
 ### S2.1 — `ReservedPoolManager`
 
 - **Owner:** `monorepo-worker`

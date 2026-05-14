@@ -179,6 +179,14 @@ corresponding task family. **The string format must match the catalog
 identifiers in [`Spec/04_ACTIVITIES.md`](04_ACTIVITIES.md).** Drift
 between resolver and catalog is a bug; tests assert both directions.
 
+`ActivityResolver` today returns an `IBotTask` directly — it skips the
+Activity AND Objective layers defined in
+[`Spec/18_TERMINOLOGY.md`](18_TERMINOLOGY.md). The runtime `IActivity` /
+`IObjective` contracts (modeled on D2Bot's
+`D2Orchestrator/Orchestration/Activities/IActivity.cs`) are Phase-2
+work; see [`Plan/03_PHASE2_ONDEMAND_ENGINE.md`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md)
+slot S2.0.
+
 ## Reward selection
 
 **Invariant: a bot ALWAYS picks a reward when offered.** Quests, raid

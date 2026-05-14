@@ -1,5 +1,16 @@
 # Spec 04 — Activities
 
+> **Layer disambiguation:** "Activity" in this doc is the top layer of
+> the four-layer hierarchy defined in
+> [`Spec/18_TERMINOLOGY.md`](18_TERMINOLOGY.md):
+> `Activity → Objective → Task → Action`. The `ActivityDefinition` record
+> below is the **catalog row** (data-only). The runtime `IActivity`
+> interface is Phase-2 work tracked in
+> [`Plan/03_PHASE2_ONDEMAND_ENGINE.md`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md)
+> slot S2.0; today the only Activity-shaped fields on the wire are
+> `WoWActivitySnapshot.travel_objective` and
+> `progression_status.current_objective`.
+
 ## ActivityDefinition
 
 Every activity in the system is described by:

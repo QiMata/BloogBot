@@ -10,6 +10,16 @@ rolling task board ([docs/TASKS.md](docs/TASKS.md)).
 The decisions of record from the 2026-05-11 design session are in
 [`docs/SPEC.md#decisions-of-record`](docs/SPEC.md#decisions-of-record).
 
+## Canonical glossary: Activity / Objective / Task / Action
+
+WWoW uses a four-layer behavior hierarchy adopted from D2Bot:
+`Activity → Objective → Task → Action`. Read
+[`docs/Spec/18_TERMINOLOGY.md`](docs/Spec/18_TERMINOLOGY.md) before
+adding new "behavior tree", "task family", or "action mapping" terms —
+those map onto these four layers and using them as synonyms drifts the
+spec. Worked example: `dungeon.ubrs` Activity → `reach-flame-crest`
+Objective → `TravelToTask(coord)` Task → `ActionMessage{ActionType=TravelTo,...}` Action.
+
 ## Monorepo Shared Contract
 
 - Also follow the root monorepo rules in [../CLAUDE.md](../CLAUDE.md) and [../AGENTS.md](../AGENTS.md).

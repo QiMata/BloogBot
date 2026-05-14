@@ -1,5 +1,15 @@
 # Plan 02 — Phase 1: Action / Task Foundation
 
+> **Layer split (per [`Spec/18_TERMINOLOGY.md`](../Spec/18_TERMINOLOGY.md)):**
+> Phase 1 closes the **bottom two layers** of the four-layer hierarchy —
+> `Action` (the protobuf wire surface) and `Task` (the IBotTask behavior-
+> tree node). Phase 2 ([`Plan/03_PHASE2_ONDEMAND_ENGINE.md`](03_PHASE2_ONDEMAND_ENGINE.md)
+> slot S2.0) adds the **top two layers** — `Activity` (runtime
+> `IActivity` interface, modeled on D2Bot's contract) and `Objective`
+> (runtime `IObjective` interface). Today's WWoW has `Action` and `Task`
+> as runtime concepts; `Activity` is a catalog row only, and `Objective`
+> exists only as travel-specific snapshot fields.
+
 ## Why this is Phase 1
 
 Per the 2026-05-12 design refinement: **action/task functionality is
