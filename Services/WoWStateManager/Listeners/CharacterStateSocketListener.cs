@@ -56,6 +56,7 @@ namespace WoWStateManager.Listeners
         private readonly MangosSOAPClient? _soapClient;
         private readonly ProgressionPlanner _progressionPlanner;
         private readonly IStateManagerModeHandler _modeHandler;
+        private readonly StateEventEmitter? _eventEmitter;
         private CombatCoordinator? _combatCoordinator;
         private DungeoneeringCoordinator? _dungeoneeringCoordinator;
         private BattlegroundCoordinator? _battlegroundCoordinator;
@@ -77,12 +78,14 @@ namespace WoWStateManager.Listeners
             MangosSOAPClient? soapClient,
             ProgressionPlanner progressionPlanner,
             IStateManagerModeHandler modeHandler,
-            ILogger<CharacterStateSocketListener> logger) : base(ipAddress, port, logger)
+            ILogger<CharacterStateSocketListener> logger,
+            StateEventEmitter? eventEmitter = null) : base(ipAddress, port, logger)
         {
             _characterSettings = characterSettings;
             _soapClient = soapClient;
             _progressionPlanner = progressionPlanner;
             _modeHandler = modeHandler;
+            _eventEmitter = eventEmitter;
             _coordinatorSuppressionSeconds = GetCoordinatorSuppressionSeconds();
             _coordinatorEnabled = Environment.GetEnvironmentVariable("WWOW_TEST_DISABLE_COORDINATOR") != "1";
             if (!_coordinatorEnabled)
@@ -189,6 +192,7 @@ namespace WoWStateManager.Listeners
             {
                 CurrentActivityMemberList[accountName] = request;
                 InvokeModeHandler(accountName, request);
+                _eventEmitter?.RaiseBotSnapshotUpdated(request);
             }
             // Build the response from the stored snapshot (post-write for full, cached for heartbeat)
             var response = CurrentActivityMemberList[accountName];

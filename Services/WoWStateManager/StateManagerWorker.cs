@@ -43,6 +43,11 @@ namespace WoWStateManager
 
         private readonly IStateManagerModeHandler _modeHandler;
 
+        /// <summary>
+        /// Central event surface for state changes. Listeners (UI push, telemetry) hook
+        /// in here instead of polling shared state on a fixed timer.
+        /// </summary>
+        public StateEventEmitter EventEmitter { get; } = new();
 
         private readonly CharacterStateSocketListener _activityMemberSocketListener;
 
@@ -101,7 +106,8 @@ namespace WoWStateManager
                 _mangosSOAPClient,
                 progressionPlanner,
                 _modeHandler,
-                _loggerFactory.CreateLogger<CharacterStateSocketListener>()
+                _loggerFactory.CreateLogger<CharacterStateSocketListener>(),
+                EventEmitter
             );
 
             _logger.LogInformation($"Started ActivityMemberListener| {configuration["CharacterStateListener:IpAddress"]}:{configuration["CharacterStateListener:Port"]}");
@@ -125,6 +131,11 @@ namespace WoWStateManager
                 _uiUpdateClient = new UIUpdateClient(uiListenerIp, uiListenerPort,
                     _loggerFactory.CreateLogger<UIUpdateClient>());
                 _logger.LogInformation("UI push client configured for {Ip}:{Port}", uiListenerIp, uiListenerPort);
+
+                // Push to the UI whenever a bot's state changes, rather than polling every 5 s.
+                // Each push carries only the affected bot — the UI maintains a per-account cache
+                // and applies updates field-by-field.
+                EventEmitter.BotSnapshotUpdated += OnBotSnapshotUpdatedForUi;
             }
             else
             {
@@ -485,8 +496,8 @@ namespace WoWStateManager
                         _logger.LogDebug("No managed services currently running");
                     }
 
-                    // Push snapshots to UI if connected
-                    PushSnapshotsToUI();
+                    // UI snapshot pushes are now event-driven via EventEmitter.BotSnapshotUpdated
+                    // (see OnBotSnapshotUpdatedForUi). The main loop no longer polls for UI churn.
 
                     await Task.Delay(5000, stoppingToken); // Check every 5 seconds
                 }
@@ -515,19 +526,18 @@ namespace WoWStateManager
         /// Guaranteed cleanup on host shutdown — even if ExecuteAsync throws.
         /// The .NET host calls StopAsync on all IHostedService instances during shutdown.
         /// </summary>
-        private void PushSnapshotsToUI()
+        /// <summary>
+        /// Event handler subscribed to <see cref="StateEventEmitter.BotSnapshotUpdated"/>.
+        /// Pushes the single affected snapshot to the UI listener so the UI does not
+        /// need to receive (or re-render) snapshots that haven't changed.
+        /// </summary>
+        private void OnBotSnapshotUpdatedForUi(WoWActivitySnapshot snapshot)
         {
             if (_uiUpdateClient == null) return;
-
             try
             {
-                var snapshots = _activityMemberSocketListener.CurrentActivityMemberList;
-                if (snapshots.Count == 0) return;
-
                 var push = new StateChangeResponse { Response = ResponseResult.Success };
-                foreach (var snapshot in snapshots.Values)
-                    push.Snapshots.Add(snapshot);
-
+                push.Snapshots.Add(snapshot);
                 _uiUpdateClient.PushSnapshots(push);
             }
             catch (Exception ex)
@@ -539,6 +549,7 @@ namespace WoWStateManager
         public override async Task StopAsync(CancellationToken cancellationToken)
         {
             _logger.LogInformation("StateManagerWorker.StopAsync — cleaning up managed processes...");
+            EventEmitter.BotSnapshotUpdated -= OnBotSnapshotUpdatedForUi;
             _uiUpdateClient?.Dispose();
             await StopAllManagedServices();
             await base.StopAsync(cancellationToken);
