@@ -11,6 +11,12 @@ using WoWStateManagerUI.Services;
 
 namespace WoWStateManagerUI.ViewModels
 {
+    /// <summary>
+    /// Docker container management for the running WWoW stack. Auto-connects on
+    /// startup and auto-refreshes every <see cref="UIConstants.ServicesRefreshSeconds"/>.
+    /// Project filtering is intentionally absent — this UI is WWoW-specific; each
+    /// other game solution ships its own UI.
+    /// </summary>
     public sealed class ServicesViewModel : INotifyPropertyChanged, IDisposable
     {
         private readonly DockerService _docker = new();
@@ -19,14 +25,9 @@ namespace WoWStateManagerUI.ViewModels
         private string _statusMessage = "Connecting to Docker...";
         private string _logOutput = string.Empty;
         private bool _isConnected;
-        private string _filterProject = "All";
         private bool _refreshInFlight;
 
         public ObservableCollection<ContainerInfo> Containers { get; } = [];
-        public ObservableCollection<ContainerInfo> FilteredContainers { get; } = [];
-        public ObservableCollection<string> ProjectFilters { get; } = ["All"];
-
-        public MangosConsoleViewModel MangosConsole { get; } = new();
 
         public ContainerInfo? SelectedContainer
         {
@@ -52,12 +53,6 @@ namespace WoWStateManagerUI.ViewModels
         {
             get => _isConnected;
             private set { _isConnected = value; OnPropertyChanged(); }
-        }
-
-        public string FilterProject
-        {
-            get => _filterProject;
-            set { _filterProject = value; OnPropertyChanged(); ApplyFilter(); }
         }
 
         public ICommand RefreshCommand { get; }
@@ -120,19 +115,9 @@ namespace WoWStateManagerUI.ViewModels
                 foreach (var c in containers)
                     Containers.Add(c);
 
-                var existingFilters = ProjectFilters.ToList();
-                var newFilters = new[] { "All" }.Concat(containers.Select(c => c.Project).Distinct().OrderBy(p => p)).ToList();
-                if (!existingFilters.SequenceEqual(newFilters))
-                {
-                    ProjectFilters.Clear();
-                    foreach (var f in newFilters) ProjectFilters.Add(f);
-                }
-
-                ApplyFilter();
-
                 // Preserve selection by name across refresh cycles
                 if (selectedName != null)
-                    SelectedContainer = FilteredContainers.FirstOrDefault(c => c.Name == selectedName);
+                    SelectedContainer = Containers.FirstOrDefault(c => c.Name == selectedName);
 
                 var running = containers.Count(c => c.State == "running");
                 var healthy = containers.Count(c => c.IsHealthy);
@@ -145,16 +130,6 @@ namespace WoWStateManagerUI.ViewModels
             finally
             {
                 _refreshInFlight = false;
-            }
-        }
-
-        private void ApplyFilter()
-        {
-            FilteredContainers.Clear();
-            foreach (var c in Containers)
-            {
-                if (_filterProject == "All" || c.Project == _filterProject)
-                    FilteredContainers.Add(c);
             }
         }
 

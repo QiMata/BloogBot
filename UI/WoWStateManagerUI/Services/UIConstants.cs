@@ -14,6 +14,10 @@ namespace WoWStateManagerUI.Services
         public const string MangosUsername = "ADMINISTRATOR";
         public const string MangosPassword = "PASSWORD";
 
+        public const string RealmdConnectionString =
+            "server=localhost;user=root;database=realmd;port=3306;password=root";
+
         public const int ServicesRefreshSeconds = 5;
+        public const int AccountsRefreshSeconds = 30;
     }
 }

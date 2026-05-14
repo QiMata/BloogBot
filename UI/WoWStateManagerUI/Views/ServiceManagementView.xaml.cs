@@ -2,9 +2,9 @@ using System.Windows.Controls;
 
 namespace WoWStateManagerUI.Views
 {
-    public partial class ActivitiesView : UserControl
+    public partial class ServiceManagementView : UserControl
     {
-        public ActivitiesView()
+        public ServiceManagementView()
         {
             InitializeComponent();
         }

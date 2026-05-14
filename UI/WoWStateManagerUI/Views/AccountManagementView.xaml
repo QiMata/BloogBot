@@ -5,10 +5,9 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:WoWStateManagerUI.ViewModels"
              d:DataContext="{d:DesignInstance Type=vm:AccountManagementViewModel}"
-             mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="560">
+             mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="500">
     <Grid Margin="8">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -16,24 +15,8 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Row 0: Connection bar -->
-        <Grid Grid.Row="0" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="200"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <Label Grid.Column="0" Content="Realmd DB:" VerticalAlignment="Center"/>
-            <TextBox Grid.Column="1" Text="{Binding ConnectionString, UpdateSourceTrigger=PropertyChanged}" Margin="4,2" VerticalAlignment="Center" FontSize="10"/>
-            <Label Grid.Column="2" Content="SOAP:" VerticalAlignment="Center"/>
-            <TextBox Grid.Column="3" Text="{Binding SoapUrl, UpdateSourceTrigger=PropertyChanged}" Margin="4,2" VerticalAlignment="Center"/>
-            <Button Grid.Column="4" Content="Connect" Command="{Binding ConnectCommand}" Margin="4,2" Padding="12,4"/>
-        </Grid>
-
-        <!-- Row 1: Summary stats -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
+        <!-- Row 0: Summary stats (no connection bar — auto-connected) -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock Text="Accounts: " FontWeight="SemiBold"/>
             <TextBlock Text="{Binding TotalAccounts}" Margin="0,0,16,0"/>
             <TextBlock Text="Total Characters: " FontWeight="SemiBold"/>
@@ -43,8 +26,8 @@
             <Button Content="Refresh" Command="{Binding RefreshCommand}" Padding="8,2" Margin="8,0,0,0"/>
         </StackPanel>
 
-        <!-- Row 2: Create account bar -->
-        <Border Grid.Row="2" BorderBrush="LightGray" BorderThickness="1" Padding="6" Margin="0,0,0,8" CornerRadius="3">
+        <!-- Row 1: Create account bar -->
+        <Border Grid.Row="1" BorderBrush="LightGray" BorderThickness="1" Padding="6" Margin="0,0,0,8" CornerRadius="3">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Create Account" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <Label Content="Name:" VerticalAlignment="Center"/>
@@ -61,8 +44,8 @@
             </StackPanel>
         </Border>
 
-        <!-- Row 3: Account DataGrid -->
-        <DataGrid Grid.Row="3" ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
+        <!-- Row 2: Account DataGrid -->
+        <DataGrid Grid.Row="2" ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
                   AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
                   SelectionMode="Single" GridLinesVisibility="Horizontal"
                   HeadersVisibility="Column" BorderThickness="1" BorderBrush="Gray"
@@ -82,8 +65,8 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- Row 4: Selected account actions -->
-        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,6,0,0">
+        <!-- Row 3: Selected account actions -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,6,0,0">
             <TextBlock Text="Selected:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
             <TextBlock Text="{Binding SelectedAccount.Username, FallbackValue=(none)}" VerticalAlignment="Center" Margin="0,0,16,0"/>
             <Button Content="Delete Account" Command="{Binding DeleteAccountCommand}" Padding="10,4" Margin="0,0,4,0"/>
@@ -93,7 +76,7 @@
             <Button Content="Ban/Unban" Command="{Binding BanAccountCommand}" Padding="10,4" Margin="4,0"/>
         </StackPanel>
 
-        <!-- Row 5: Status -->
-        <TextBlock Grid.Row="5" Text="{Binding StatusMessage}" Foreground="DarkSlateGray" Margin="0,6,0,0"/>
+        <!-- Row 4: Status -->
+        <TextBlock Grid.Row="4" Text="{Binding StatusMessage}" Foreground="DarkSlateGray" Margin="0,6,0,0"/>
     </Grid>
 </UserControl>

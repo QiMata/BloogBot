@@ -13,15 +13,9 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Row 0: Quick actions (auto-connected; no URL/auth boxes) -->
+        <!-- Row 0: Quick actions (raw GM command surface; account creation lives on Accounts) -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
             <Button Content="Server Info" Command="{Binding ServerInfoCommand}" Margin="0,0,4,0" Padding="8,4"/>
-            <Label Content="Account:" VerticalAlignment="Center"/>
-            <TextBox Text="{Binding AccountName, UpdateSourceTrigger=PropertyChanged}" Width="120" Margin="4,2" VerticalAlignment="Center"/>
-            <Button Content="Create Account" Command="{Binding CreateAccountCommand}" Margin="4,0" Padding="8,4"/>
-            <Label Content="GM Level:" VerticalAlignment="Center"/>
-            <TextBox Text="{Binding GmLevel, UpdateSourceTrigger=PropertyChanged}" Width="30" Margin="4,2" VerticalAlignment="Center"/>
-            <Button Content="Set GM Level" Command="{Binding SetGMLevelCommand}" Margin="4,0" Padding="8,4"/>
             <Button Content="Clear Log" Command="{Binding ClearLogCommand}" Margin="16,0,0,0" Padding="8,4"/>
         </StackPanel>
 

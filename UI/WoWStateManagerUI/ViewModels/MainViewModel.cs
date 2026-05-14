@@ -11,10 +11,8 @@ namespace WoWStateManagerUI.ViewModels
         public HealthCheckService HealthCheck { get; } = new();
         public UIListenerService Listener { get; }
         public DashboardViewModel Dashboard { get; }
-        public ServicesViewModel Services { get; }
+        public ServiceManagementViewModel ServiceManagement { get; } = new();
         public ConfigEditorViewModel ConfigEditor { get; } = new();
-        public AccountManagementViewModel AccountManagement { get; } = new();
-        public ActivitiesViewModel Activities { get; }
 
         public MainViewModel()
         {
@@ -26,8 +24,6 @@ namespace WoWStateManagerUI.ViewModels
                 new ListenerLogger());
 
             Dashboard = new DashboardViewModel(HealthCheck, Listener);
-            Activities = new ActivitiesViewModel(Listener);
-            Services = new ServicesViewModel();
 
             HealthCheck.Start();
         }
@@ -38,8 +34,7 @@ namespace WoWStateManagerUI.ViewModels
 
         public void Dispose()
         {
-            Activities.Dispose();
-            Services.Dispose();
+            ServiceManagement.Dispose();
             Listener.Dispose();
             HealthCheck.Dispose();
             Dashboard.Dispose();

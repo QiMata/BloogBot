@@ -42,14 +42,8 @@
             <TabItem Header="Dashboard">
                 <views:DashboardView DataContext="{Binding Dashboard}"/>
             </TabItem>
-            <TabItem Header="Services">
-                <views:ServicesView DataContext="{Binding Services}"/>
-            </TabItem>
-            <TabItem Header="Activities">
-                <views:ActivitiesView DataContext="{Binding Activities}"/>
-            </TabItem>
-            <TabItem Header="Accounts">
-                <views:AccountManagementView DataContext="{Binding AccountManagement}"/>
+            <TabItem Header="Service Management">
+                <views:ServiceManagementView DataContext="{Binding ServiceManagement}"/>
             </TabItem>
             <TabItem Header="Config Editor">
                 <views:ConfigEditorView DataContext="{Binding ConfigEditor}"/>

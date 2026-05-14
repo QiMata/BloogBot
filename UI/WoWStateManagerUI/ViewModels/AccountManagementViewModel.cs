@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Windows.Threading;
 using BotCommLayer;
 using Microsoft.Extensions.Logging;
 using WoWStateManagerUI.Handlers;
@@ -12,32 +13,20 @@ using WoWStateManagerUI.Services;
 
 namespace WoWStateManagerUI.ViewModels
 {
-    public sealed class AccountManagementViewModel : INotifyPropertyChanged
+    public sealed class AccountManagementViewModel : INotifyPropertyChanged, IDisposable
     {
         private AccountService? _accountService;
         private MangosSOAPClient? _soapClient;
-        private string _connectionString = "server=localhost;user=root;database=realmd;port=3306;password=root";
-        private string _soapUrl = "http://localhost:7878";
+        private readonly DispatcherTimer _refreshTimer;
         private string _newAccountName = string.Empty;
         private string _newAccountPassword = "PASSWORD";
         private int _newAccountGmLevel = 0;
         private AccountInfo? _selectedAccount;
-        private string _statusMessage = string.Empty;
+        private string _statusMessage = "Connecting to Realmd DB and SOAP...";
         private bool _isConnected;
+        private bool _refreshInFlight;
 
         public ObservableCollection<AccountInfo> Accounts { get; } = [];
-
-        public string ConnectionString
-        {
-            get => _connectionString;
-            set { _connectionString = value; OnPropertyChanged(); }
-        }
-
-        public string SoapUrl
-        {
-            get => _soapUrl;
-            set { _soapUrl = value; OnPropertyChanged(); }
-        }
 
         public string NewAccountName
         {
@@ -79,7 +68,6 @@ namespace WoWStateManagerUI.ViewModels
         public int TotalCharacters => Accounts.Sum(a => a.NumCharacters);
         public int OnlineAccounts => Accounts.Count(a => a.Online);
 
-        public ICommand ConnectCommand { get; }
         public ICommand RefreshCommand { get; }
         public ICommand CreateAccountCommand { get; }
         public ICommand DeleteAccountCommand { get; }
@@ -88,31 +76,45 @@ namespace WoWStateManagerUI.ViewModels
 
         public AccountManagementViewModel()
         {
-            ConnectCommand = new AsyncCommandHandler(ConnectAsync);
             RefreshCommand = new AsyncCommandHandler(RefreshAccountsAsync, () => IsConnected);
             CreateAccountCommand = new AsyncCommandHandler(CreateAccountAsync, () => IsConnected);
             DeleteAccountCommand = new AsyncCommandHandler(DeleteAccountAsync, () => IsConnected && _selectedAccount != null);
             SetGmLevelCommand = new AsyncCommandHandler(SetGmLevelAsync, () => IsConnected && _selectedAccount != null);
             BanAccountCommand = new AsyncCommandHandler(BanAccountAsync, () => IsConnected && _selectedAccount != null);
+
+            _refreshTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(UIConstants.AccountsRefreshSeconds)
+            };
+            _refreshTimer.Tick += async (_, _) => await TickAsync();
+
+            _ = AutoConnectAsync();
         }
 
-        private async Task ConnectAsync()
+        private async Task AutoConnectAsync()
         {
             try
             {
-                _accountService = new AccountService(ConnectionString);
+                _accountService = new AccountService(UIConstants.RealmdConnectionString);
                 var dbOk = await _accountService.TestConnectionAsync();
 
-                _soapClient = new MangosSOAPClient(SoapUrl, new MinimalLogger());
+                _soapClient = new MangosSOAPClient(
+                    UIConstants.MangosSoapUrl,
+                    new MinimalLogger(),
+                    UIConstants.MangosUsername,
+                    UIConstants.MangosPassword);
                 var soapOk = await _soapClient.CheckSOAPPortStatus();
 
                 IsConnected = dbOk && soapOk;
                 StatusMessage = IsConnected
-                    ? "Connected to realmd DB and SOAP"
+                    ? "Connected to Realmd DB and SOAP — auto-refreshing"
                     : $"Connection partial — DB: {(dbOk ? "OK" : "FAIL")}, SOAP: {(soapOk ? "OK" : "FAIL")}";
 
                 if (dbOk)
                     await RefreshAccountsAsync();
+
+                if (IsConnected)
+                    _refreshTimer.Start();
 
                 RefreshCanExecute();
             }
@@ -122,25 +124,42 @@ namespace WoWStateManagerUI.ViewModels
             }
         }
 
+        private async Task TickAsync()
+        {
+            if (_refreshInFlight || !IsConnected) return;
+            await RefreshAccountsAsync();
+        }
+
         private async Task RefreshAccountsAsync()
         {
             if (_accountService == null) return;
+            if (_refreshInFlight) return;
+            _refreshInFlight = true;
 
             try
             {
+                var selectedId = _selectedAccount?.Id;
                 var accounts = await _accountService.GetAllAccountsAsync();
                 Accounts.Clear();
                 foreach (var a in accounts)
                     Accounts.Add(a);
 
+                // Preserve selection by ID across refreshes
+                if (selectedId.HasValue)
+                    SelectedAccount = Accounts.FirstOrDefault(a => a.Id == selectedId.Value);
+
                 OnPropertyChanged(nameof(TotalAccounts));
                 OnPropertyChanged(nameof(TotalCharacters));
                 OnPropertyChanged(nameof(OnlineAccounts));
-                StatusMessage = $"Loaded {Accounts.Count} accounts ({TotalCharacters} total characters, {OnlineAccounts} online)";
+                StatusMessage = $"{Accounts.Count} accounts ({TotalCharacters} characters, {OnlineAccounts} online)";
             }
             catch (Exception ex)
             {
                 StatusMessage = $"Refresh failed: {ex.Message}";
+            }
+            finally
+            {
+                _refreshInFlight = false;
             }
         }
 
@@ -231,11 +250,15 @@ namespace WoWStateManagerUI.ViewModels
             (BanAccountCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
         }
 
+        public void Dispose()
+        {
+            _refreshTimer.Stop();
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-            // Refresh CanExecute when selection changes
             if (propertyName == nameof(SelectedAccount))
                 RefreshCanExecute();
         }
