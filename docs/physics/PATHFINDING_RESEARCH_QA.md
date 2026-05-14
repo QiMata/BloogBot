@@ -508,6 +508,20 @@ designer wanted" — only the `con->rad` distance check at bake time.
   Surface I will repeat Surface 4's negative.
 - **Dependencies.** Phase 4 managed consumer (off-mesh-aware path
   navigation); offmesh.txt format compatibility with current MmapGen.
+- **Status (2026-05-14, post Surface K).** SKIPPED. Dependency check
+  on commit `7a2a87a8`: `Services/PathfindingService/Repository/
+  Navigation.cs` has zero matches for `DT_POLYTYPE_OFFMESH_CONNECTION`
+  / `OffMesh` / `off.?mesh`. The managed repair pipeline still
+  capsule-validates every traversed polygon and would burn its budget
+  on each off-mesh link, repeating the prior negative (memory
+  `pfs-overhaul-brm-surface4-offmesh-negative`). Landing the managed
+  consumer's off-mesh awareness is **Phase 5 of the overhaul**
+  ("Managed repair retirement", target `Navigation.cs` < 500 LOC) —
+  multi-cycle work, exit criteria for this iteration loop. Surface I
+  cannot ship until Phase 5 lands. The native side
+  (`Exports/Navigation/PathFinder.cpp:1746-1817`) already handles
+  off-mesh polys in smooth-path generation, so when Phase 5 retires
+  the repair pipeline Surface I should ship cleanly.
 
 ### Surface J — Consumer-side `nearestPoint` snap for `getPolyHeight`
 - **Hypothesis.** The `ubrs_portal` surfaceZ=null isn't a bake bug; it's a
@@ -582,6 +596,26 @@ designer wanted" — only the `con->rad` distance check at bake time.
   `Cull` is implemented per the memory.
 - **Dependencies.** NavMeshTileEditor extension; detail-mesh
   re-tessellation logic.
+- **Status (2026-05-14, post Surface J + K).** **MULTI-CYCLE BLOCKER.**
+  Surface J already closed the property gate for the targeted poly
+  (`Walkable_AllFourPortals_HaveGroundPoly` is 14/14 GREEN via
+  consumer-side `nearestPoint` retry, commit `ebad865c`), so Surface
+  L's expected outcome is already achieved by a much cheaper consumer-
+  side change. Surface L remains valuable as a *bake-side* hardening
+  defense (eliminates the need for consumer retry on the targeted
+  poly) but no longer unblocks a live FG sub-test. The implementation
+  cost stays at the original >1000 LOC estimate: ExtendPoly needs
+  per-vertex mutation API, convexity validation, **detail-mesh sub-
+  triangulation rebuild for the modified poly** (the in-tree
+  Recast/Detour bake-time code path the bake doesn't expose at
+  runtime), **BV-tree AABB recomputation** for the modified poly's
+  enclosing branch, and atomic on-disk MMTILE rewrite with header
+  bookkeeping. Per the loop's multi-cycle-blocker exit criterion,
+  Surface L is deferred. Existing `Cull` mode in NavMeshTileEditor
+  remains the only edit operation; future Surface L work should land
+  alongside a regression suite that asserts dtPolyDetail tessellation
+  integrity after each mutation. See iteration handoff memo
+  `pfs-overhaul-brm-phase3-queue-exhausted`.
 
 ### Surface M — H_SCALE > 1.0 (weighted A*) for fragmented-bake tolerance
 - **Hypothesis.** F/G hangs were dominated by closed-node re-expansion
@@ -606,6 +640,22 @@ designer wanted" — only the `con->rad` distance check at bake time.
 - **Dependencies.** Codebase patch to the in-tree Detour copy
   (cleanly upstreamable since Recast/Detour upstream is open to this
   kind of configurability).
+- **Status (2026-05-14, post Surface K).** **DEPRIORITIZED — REDUNDANT
+  WITH SURFACE K.** Surface K (commit `7a2a87a8`) added a
+  `FindPathForAgentSliced` native export with a 30s wall-clock cap
+  that converts F/G-class hangs into deterministic timeouts. The
+  Surface M problem ("F/G fragmented tiles hang >9min") is already
+  bounded to <30s by Surface K, so the incremental Surface M win is
+  reduced to "F/G tiles return a sub-optimal completed path in <2s
+  instead of timing out at 30s". That is a real but small gain, and
+  it costs: changing `H_SCALE > 1.0` in the in-tree Detour copy
+  shifts path optimality across the entire monorepo, including the
+  WoW-classic and ARPG bot stacks that share this Detour. Without
+  Docker live FG verification this iteration, the path-quality
+  regression risk is unobserved and cannot be safely landed. Surface
+  M should be revisited in a session with Docker live FG access AND
+  after a real F/G timeout event in production (currently only an
+  expected/hypothesized failure mode). For now, **deferred**.
 
 ---
 
