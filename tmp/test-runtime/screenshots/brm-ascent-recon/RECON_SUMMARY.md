@@ -190,14 +190,68 @@ the green-or-red gate. `Corridor_*MustReachTarget` is the secondary
 gate — likely needs a separate fix in the BRM upper portal cluster
 tile.
 
-**Phase 2 not attempted in this session.** The targeted-cull
-(Surface E) is the most surgical option but requires identifying
-the right `NavMeshTileEditor` invocation; the per-tile cs tweak
-(Surface C) requires a focused bake + regression sweep; both
-require a fresh attempt cycle including the live FG validation that
-takes ~30-40 min per try. The Phase 1 commit lands the recon +
-property tests + this updated summary as the foundational handoff
-for the next session.
+**Phase 2 — Surface E targeted cull attempted, INCONCLUSIVE → REVERTED.**
+
+Cull executed on `D:\wwow-bot\prod-data\mmaps\0004635.mmtile`:
+`NavMeshTileEditor.exe ... --cull-polys 281475329039007` (polyref
+`0x0001000015001A9F`, polyIdx 6815 = the prod-data fc_stall polygon
+which has area=1 Ground but no detail-mesh surfaceZ — a phantom
+walkable poly per the recon's wide search). `wwow-pathfinding`
+restarted healthy.
+
+**MaNGOS/data vs prod-data discrepancy discovered during validation.**
+The `BrmAscentRenderingExpectations` property tests were authored
+against MaNGOS/data polyrefs (recon ran with
+`WWOW_DATA_DIR=D:\MaNGOS\data` set on the test process — the env
+var supersedes `PathfindingValidationFixture`'s default test-data
+preference because Navigation.dll resolves WWOW_DATA_DIR at first
+P/Invoke). Live FG runs against prod-data (Docker `wwow-pathfinding`
+serves `/data/mmaps` mounted from `D:\wwow-bot\prod-data\mmaps`).
+
+Polyref state at the same XY differs between bakes:
+- MaNGOS/data fc_stall: polyRef `0x0001000015001ECA` (the originally
+  hypothesized headline poly)
+- prod-data fc_stall: polyRef `0x0001000015001A9F`
+- MaNGOS/data has the 36y MAGMA polygon `0x0001000014F002AC` at
+  WP[663] of FC→UBRS smooth path. prod-data does NOT have a 27y
+  jump — its worst smooth-path WP-to-WP dz is 2.61y at idx 259
+  (-7673.9,-1746.2,136.0)→(-7679.0,-1747.5,133.4), still > 1.25y
+  WAYPOINT_VERTICAL_REACH_TOLERANCE but order-of-magnitude smaller.
+- prod-data has its own bugs: ubrs_portal coord
+  (-7524,-1233,287) resolves to polyRef `0x0001000014F02CDF`
+  (Ground) but with surfaceZ=null (no detail-mesh data). BWL
+  corridor terminates one poly short of literal portal poly.
+
+Live FG validation outcome: WoW.exe client CRASHED at
+`(1337.3,-4645.1,42.8)` map=1 (Orgrimmar deck-lip area) ~88s
+into the UBRS sub-test, BEFORE the bot's path query at FC could
+be evaluated. Cascading "no FG target" failures on the other 3
+sub-tests because the fixture state was disrupted. The crash
+trace shows `[MovementController] Post-teleport ground snap
+complete: ... groundZ=-200000.000` (the INVALID sentinel), which
+is a known PFS-OVERHAUL Round-3 cliff-fall code path symptom.
+
+**The crash is unrelated to the prod-data cull** (it happened on
+map=1, the cull was on map=0). But it prevents observing whether
+the Surface E cull would have helped. **Reverted** the prod-data
+tile from backup; `wwow-pathfinding` restarted healthy.
+
+Phase 2 candidate surfaces remaining:
+
+- **C (per-tile cs/maxSimplificationError tweak)** — would require
+  rebuilding both test-data and prod-data tiles via MmapGen.
+- **Surface E retry on a different attempt** — same poly cull but
+  the live test needs to clear the cross-map crash hazard first.
+  May need EnsureCleanSlateAsync replacement or per-test fresh
+  WoW.exe (instead of cross-test reuse).
+- **Property test data-source awareness** — the four RED tests
+  point at MaNGOS/data polyrefs. To validate Phase 2 against
+  prod-data, the tests need either two parallel polyref constants
+  (per-dataset) or a dynamic poly-discovery pattern.
+
+The Phase 1 + diagnostic commits remain the foundational handoff;
+Phase 2 needs more work before another cull attempt is
+fairly evaluable.
 
 ### Secondary finding — interior BRM coords are on the route
 

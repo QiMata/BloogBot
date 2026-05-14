@@ -1,5 +1,5 @@
 {
-  "generatedUtc": "2026-05-13T23:37:57.0100611Z",
+  "generatedUtc": "2026-05-14T00:55:09.3377020Z",
   "mapId": 0,
   "agent": {
     "radius": 1.0247,
@@ -29,7 +29,7 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x00010000151024C1",
+        "polyRef": "0x00010000151023C8",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -37,15 +37,15 @@
         "nearestPoint": {
           "x": -7518.7,
           "y": -2159.9,
-          "z": 132.22647
+          "z": 132.12407
         },
-        "surfaceZ": 132.22647,
-        "deltaZ": 0.32647705
+        "surfaceZ": 132.12407,
+        "deltaZ": 0.22407532
       },
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x00010000151024C1",
+        "polyRef": "0x00010000151023C8",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -53,10 +53,10 @@
         "nearestPoint": {
           "x": -7518.7,
           "y": -2159.9,
-          "z": 132.22647
+          "z": 132.12407
         },
-        "surfaceZ": 132.22647,
-        "deltaZ": 0.32647705
+        "surfaceZ": 132.12407,
+        "deltaZ": 0.22407532
       }
     },
     {
@@ -80,34 +80,34 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000015001ECA",
+        "polyRef": "0x0001000015001A9F",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
         "steepSlopes": false,
         "nearestPoint": {
           "x": -7519,
-          "y": -2100.4,
-          "z": 130.36626
+          "y": -2101.0667,
+          "z": 130.3524
         },
-        "surfaceZ": 130.36626,
-        "deltaZ": 0.06625366
+        "surfaceZ": null,
+        "deltaZ": null
       },
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000015001ECA",
+        "polyRef": "0x0001000015001A9F",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
         "steepSlopes": false,
         "nearestPoint": {
           "x": -7519,
-          "y": -2100.4,
-          "z": 130.36626
+          "y": -2101.0667,
+          "z": 130.3524
         },
-        "surfaceZ": 130.36626,
-        "deltaZ": 0.06625366
+        "surfaceZ": null,
+        "deltaZ": null
       }
     },
     {
@@ -131,7 +131,7 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x00010000150012C1",
+        "polyRef": "0x0001000015000F44",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -147,7 +147,7 @@
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x00010000150012C1",
+        "polyRef": "0x0001000015000F44",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -182,7 +182,7 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F002E5",
+        "polyRef": "0x0001000014F0027D",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -198,7 +198,7 @@
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F002E5",
+        "polyRef": "0x0001000014F0027D",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -233,7 +233,7 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F00CD2",
+        "polyRef": "0x0001000014F00BB8",
         "polyType": "Ground",
         "flagsHex": "0x0011",
         "area": 3,
@@ -241,15 +241,15 @@
         "nearestPoint": {
           "x": -7825.4,
           "y": -1129.2,
-          "z": 135.1768
+          "z": 135.4457
         },
-        "surfaceZ": 135.1768,
-        "deltaZ": 1.3768005
+        "surfaceZ": 135.4457,
+        "deltaZ": 1.6456909
       },
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F00CD2",
+        "polyRef": "0x0001000014F00BB8",
         "polyType": "Ground",
         "flagsHex": "0x0011",
         "area": 3,
@@ -257,10 +257,10 @@
         "nearestPoint": {
           "x": -7825.4,
           "y": -1129.2,
-          "z": 135.1768
+          "z": 135.4457
         },
-        "surfaceZ": 135.1768,
-        "deltaZ": 1.3768005
+        "surfaceZ": 135.4457,
+        "deltaZ": 1.6456909
       }
     },
     {
@@ -284,7 +284,7 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F02191",
+        "polyRef": "0x0001000014F01B21",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -292,15 +292,15 @@
         "nearestPoint": {
           "x": -7647.1,
           "y": -1197.1,
-          "z": 224.66457
+          "z": 224.27275
         },
-        "surfaceZ": 224.66457,
-        "deltaZ": 0.5354309
+        "surfaceZ": 224.27275,
+        "deltaZ": 0.9272461
       },
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F02191",
+        "polyRef": "0x0001000014F01B21",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -308,10 +308,10 @@
         "nearestPoint": {
           "x": -7647.1,
           "y": -1197.1,
-          "z": 224.66457
+          "z": 224.27275
         },
-        "surfaceZ": 224.66457,
-        "deltaZ": 0.5354309
+        "surfaceZ": 224.27275,
+        "deltaZ": 0.9272461
       }
     },
     {
@@ -335,7 +335,7 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F02191",
+        "polyRef": "0x0001000014F01B21",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -343,15 +343,15 @@
         "nearestPoint": {
           "x": -7640,
           "y": -1213.4,
-          "z": 227.93137
+          "z": 227.94832
         },
-        "surfaceZ": 227.93137,
-        "deltaZ": 0.46862793
+        "surfaceZ": 227.94832,
+        "deltaZ": 0.45167542
       },
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F02191",
+        "polyRef": "0x0001000014F01B21",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -359,10 +359,10 @@
         "nearestPoint": {
           "x": -7640,
           "y": -1213.4,
-          "z": 227.93137
+          "z": 227.94832
         },
-        "surfaceZ": 227.93137,
-        "deltaZ": 0.46862793
+        "surfaceZ": 227.94832,
+        "deltaZ": 0.45167542
       }
     },
     {
@@ -386,34 +386,34 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F038A3",
+        "polyRef": "0x0001000014F02CDF",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
         "steepSlopes": false,
         "nearestPoint": {
-          "x": -7524,
-          "y": -1233,
-          "z": 285.82565
+          "x": -7523.715,
+          "y": -1232.9683,
+          "z": 285.83835
         },
-        "surfaceZ": 285.82565,
-        "deltaZ": 1.1743469
+        "surfaceZ": null,
+        "deltaZ": null
       },
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F038A3",
+        "polyRef": "0x0001000014F02CDF",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
         "steepSlopes": false,
         "nearestPoint": {
-          "x": -7524,
-          "y": -1233,
-          "z": 285.82565
+          "x": -7523.715,
+          "y": -1232.9683,
+          "z": 285.83835
         },
-        "surfaceZ": 285.82565,
-        "deltaZ": 1.1743469
+        "surfaceZ": null,
+        "deltaZ": null
       }
     },
     {
@@ -437,7 +437,7 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F034C5",
+        "polyRef": "0x0001000014F029D1",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -445,15 +445,15 @@
         "nearestPoint": {
           "x": -7531,
           "y": -1226,
-          "z": 285.81598
+          "z": 285.7743
         },
-        "surfaceZ": 285.81598,
-        "deltaZ": 0.184021
+        "surfaceZ": 285.7743,
+        "deltaZ": 0.22570801
       },
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F034C5",
+        "polyRef": "0x0001000014F029D1",
         "polyType": "Ground",
         "flagsHex": "0x0001",
         "area": 1,
@@ -461,10 +461,10 @@
         "nearestPoint": {
           "x": -7531,
           "y": -1226,
-          "z": 285.81598
+          "z": 285.7743
         },
-        "surfaceZ": 285.81598,
-        "deltaZ": 0.184021
+        "surfaceZ": 285.7743,
+        "deltaZ": 0.22570801
       }
     },
     {
@@ -488,34 +488,34 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F01EA0",
+        "polyRef": "0x0001000014F01B1B",
         "polyType": "Ground",
         "flagsHex": "0x0011",
         "area": 3,
         "steepSlopes": true,
         "nearestPoint": {
-          "x": -7659,
-          "y": -1214,
-          "z": 289.63693
+          "x": -7658.667,
+          "y": -1214.4001,
+          "z": 290.24536
         },
-        "surfaceZ": 289.63693,
-        "deltaZ": 1.3630676
+        "surfaceZ": null,
+        "deltaZ": null
       },
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x0001000014F01EA0",
+        "polyRef": "0x0001000014F01B1B",
         "polyType": "Ground",
         "flagsHex": "0x0011",
         "area": 3,
         "steepSlopes": true,
         "nearestPoint": {
-          "x": -7659,
-          "y": -1214,
-          "z": 289.63693
+          "x": -7658.667,
+          "y": -1214.4001,
+          "z": 290.24536
         },
-        "surfaceZ": 289.63693,
-        "deltaZ": 1.3630676
+        "surfaceZ": null,
+        "deltaZ": null
       }
     },
     {
@@ -539,7 +539,7 @@
       "strict": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x00010000140023BB",
+        "polyRef": "0x0001000014001E56",
         "polyType": "Ground",
         "flagsHex": "0x0011",
         "area": 3,
@@ -547,15 +547,15 @@
         "nearestPoint": {
           "x": -7187,
           "y": -958,
-          "z": 253.35216
+          "z": 253.3226
         },
-        "surfaceZ": 253.35216,
-        "deltaZ": 0.6478424
+        "surfaceZ": 253.3226,
+        "deltaZ": 0.6773987
       },
       "wide": {
         "success": true,
         "hasPoly": true,
-        "polyRef": "0x00010000140023BB",
+        "polyRef": "0x0001000014001E56",
         "polyType": "Ground",
         "flagsHex": "0x0011",
         "area": 3,
@@ -563,10 +563,10 @@
         "nearestPoint": {
           "x": -7187,
           "y": -958,
-          "z": 253.35216
+          "z": 253.3226
         },
-        "surfaceZ": 253.35216,
-        "deltaZ": 0.6478424
+        "surfaceZ": 253.3226,
+        "deltaZ": 0.6773987
       }
     }
   ]
