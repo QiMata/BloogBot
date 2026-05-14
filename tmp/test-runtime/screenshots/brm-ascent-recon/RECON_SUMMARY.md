@@ -475,13 +475,20 @@ defects, none of which Surface E addresses:
   to extend polygon footprint toward source walkable boundary, or
   per-tile `cs`/`tileSize`/`maxVertsPerPoly=3` in the OG-zeppelin
   style).
-- **G. BWL corridor terminus extension by one poly.** Corridor ends
-  at `0x14F01877`, BWL portal poly is `0x14F01B1B`. Same tile cluster
-  as F. Surface F's negative result implies the same maxSimplificationError
-  knob won't close G either — a structurally different connectivity
-  fix is needed. Next attack: per-tile `walkableErosionRadius=0.0` (or
-  `walkableRadius` reduction localized to this tile) so the corridor
-  terminus can reach into the portal poly's XY footprint.
+- **G. BWL corridor terminus extension by one poly.** **ATTEMPTED
+  2026-05-14, REVERTED — see "Surface G NEGATIVE" section below.**
+  Corridor ends at `0x14F01877`, BWL portal poly is `0x14F01B1B`. Same
+  tile cluster as F. Tried per-tile `walkableErosionRadius=0.0` (the
+  Surface F negative had recommended this knob as polyIdx-stable).
+  Falsified — 0.0 erosion bake ALSO shifts the polygon graph and (a)
+  did NOT close the BWL terminus gate (still 1 poly short, just
+  different polyrefs), (b) regressed FcToUbrs+FcToLbrs corridor termini
+  (was GREEN, now RED — same regression as Surface F mse=1.2), and (c)
+  exploded SmoothPath A* >9min. Conclusion: ANY tile-3446 bake knob
+  that touches the walkable-cell map shifts the polygon graph; the
+  BWL/UBRS/LBRS corridor-terminus failures are robust to bake-fidelity
+  tightening. The 1-poly-short symptom is a fundamental tile-3446
+  intra-tile connectivity gap, not a bake-fidelity issue.
 - **H. Sub-3y smooth-path dz removal.** 4 WP-to-WP `dz > 1.8y`
   violations on FC→UBRS, worst 2.61y at idx 259 between
   `(-7673.9,-1746.2,136.0)` and `(-7679.0,-1747.5,133.4)`. These are
@@ -568,6 +575,53 @@ and A* runtime stays bounded). The Detour header agentRadius=1.0247y
 is preserved (no agent-capsule change). Next iteration should try
 this on Surface G first since G is now the only un-attempted F-tile
 gate that hasn't been ruled out.
+
+### Surface G NEGATIVE result (2026-05-14)
+
+Attempt: per-tile `walkableErosionRadius=0.0` on tile `3446` (vs the
+existing 0.2y baseline). Hypothesis from the Surface F memo: erosion-
+only changes preserve polyIdx stability while extending footprints
+toward the source walkable boundary.
+
+**The hypothesis was FALSIFIED.** Bake completed cleanly (3,020,100 →
+3,729,412 bytes, +23%; `erosionRadiusCells=0` vs `1` baseline). But:
+
+| Gate | Baseline (erosion=0.2) | erosion=0.0 attempt | Delta |
+|---|---|---|---|
+| Walkable_AllFourPortals_HaveGroundPoly | ❌ ubrs surfaceZ=null | ✅ GREEN | + (side effect, same as F) |
+| Corridor_FcToBwlPortal_TerminatesAtPortalPoly (G's target) | ❌ term=0x14F01877, portal=0x14F01B1B | ❌ STILL 1 poly short — term=0x14F02470, portal=0x14F024F1 | (target NOT closed) |
+| Corridor_FcToUbrsPortal_TerminatesAtPortalPoly | ✅ | ❌ term=0x14F047DB, portal=0x14F046E8 | **−** |
+| Corridor_FcToLbrsPortal_TerminatesAtPortalPoly | ✅ | ❌ term=0x14F047DB, portal=0x14F041A8 | **−** |
+| SmoothPath_FcToUbrsPortal_NoUnreasonableZJump | ❌ 4 violations | ❌ **HUNG >9min** | catastrophic perf regression |
+| **Aggregate** | **11/14** | **9/14 + fatal A* perf regression** | **net −2 gates + live-FG fatal latency** |
+
+**Root cause clarified.** ANY tile-3446 bake parameter change that
+touches the walkable-cell map (mse, erosionRadius, ch, cs,
+walkableSlopeAngle) shifts the entire polygon graph because
+rcBuildRegions / rcBuildContours / rcBuildPolyMesh are deterministic
+from the walkable input but sensitive to small perturbations. The
+BWL/UBRS/LBRS portal-terminus failures are **robust** to bake-knob
+tightening — the 1-poly-short symptom is a fundamental tile-3446
+intra-tile connectivity gap, not a bake-fidelity issue. Even the
+"polyIdx-stable" hypothesis for `walkableErosionRadius` was wrong;
+erosion changes _do_ shift polyIdx mappings.
+
+Reverted. Restored both tile files from backup
+`0004634.before_surface_G_attempt_{mangos,prod}.mmtile`.
+`wwow-pathfinding` restart healthy. 11/14 prod-data baseline confirmed.
+
+`tools/MmapGen/config.json` keeps the `_3446_NEGATIVE_RESULT_surface_G`
+README documenting the attempt.
+
+**Both F and G negative on tile 3446 with two different knobs.** The
+BWL corridor +1-poly gap and the UBRS/LBRS portal-terminus stability
+are NOT bake-knob accessible from this tile. Closing them likely
+needs either (a) Phase 4 off-mesh connections for the BRM upper
+portal cluster, or (b) the recognition that the WoW client's portal
+geometry has intentional connectivity gaps that the bake faithfully
+reproduces and that the smooth-path / corridor consumer must be
+made tolerant of. Phase 2 iteration moves to Surface H (a different
+tile in Ruins of Thaurissan) for the third attempt.
 
 ### Re-run recipe (data-source aware)
 
