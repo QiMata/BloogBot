@@ -72,6 +72,12 @@ public class LongPathingTests
     private const string DeckLipClimbEnvVar = "WWOW_DECKLIP_CLIMB_TEST";
     private const string BrmDungeonTravelEnvVar = "WWOW_BRM_DUNGEON_TRAVEL_TEST";
 
+    // Lava-zone exemptions for LavaHazardGuard. Tests targeting these maps are
+    // expected to take environmental damage during fights and should not auto-fail
+    // on continuous health loss.
+    private const int MoltenCoreMapId = 409;
+    private const int RagefireChasmMapId = 389;
+
     // Flame Crest — closest Horde flight master to Blackrock Mountain
     // (Burning Steppes, ~1000y south of the BRM mountain entrance).
     //
@@ -1010,6 +1016,15 @@ public class LongPathingTests
             LongTravelStallTimeout,
             LongTravelStallMovementYards);
 
+        // Fall-in-lava detector: if the bot is taking continuous non-combat damage
+        // outside MC/RFC it has almost certainly walked off a path into a lava
+        // pool. Fail fast rather than soldiering on through the 360 s travel
+        // timeout (the brief was: "If you fall in lava, that's a failed
+        // pathfinding test").
+        var lavaGuard = new LavaHazardGuard(
+            $"Flame Crest → {dungeon} portal",
+            exemptMapIds: new[] { MoltenCoreMapId, RagefireChasmMapId });
+
         var pollCounter = 0;
         // Flame Crest → BRM portals is ~1000-1700y of outdoor walking plus the
         // BRM tunnel ascent. 360s is generous; cancel earlier if the bot
@@ -1030,6 +1045,10 @@ public class LongPathingTests
                 stuckGuard.FailIfStalled(
                     snapshot,
                     (message, stallSnapshot) => FailWithScreenshot(message, target.AccountName, stallSnapshot));
+
+                lavaGuard.FailIfBurning(
+                    snapshot,
+                    (message, burnSnapshot) => FailWithScreenshot(message, target.AccountName, burnSnapshot));
 
                 if (snapshot?.RecentChatMessages != null)
                 {
