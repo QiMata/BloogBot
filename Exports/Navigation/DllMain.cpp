@@ -1116,6 +1116,15 @@ static SegmentValidationCode TryValidateWalkableSegmentWithPhysics(
     float bestY = start.Y;
     float bestZ = start.Z;
     int stalledSteps = 0;
+    // Wall-creep counter: catches "bot moves a tiny amount per step
+    // because it's grinding against a wall" — distinct from
+    // stalledSteps which requires progress < 0.01y. With wall-creep,
+    // progress can be 0.03y/step (above the stalled threshold) but
+    // still essentially blocked. blockedFraction < 0.50 + hitWall is
+    // the signal. Fast-exits long wall-grinding sequences that would
+    // otherwise run the full 96 inner iterations (~650ms each on
+    // dense Durotar/Crossroads physics) before giving up.
+    int wallCreepSteps = 0;
 
     for (int step = 0; step < maxSteps; ++step)
     {
@@ -1189,6 +1198,19 @@ static SegmentValidationCode TryValidateWalkableSegmentWithPhysics(
         else
             ++stalledSteps;
 
+        // Simpler heuristic: hitWall for N consecutive steps signals
+        // wall-creep regardless of blockedFraction semantics. The
+        // LOW_DISPLACEMENT diagnostic in PhysicsEngine.cpp:5968 only
+        // fires when `achieved < intendedDist * 0.5f`, so a hitWall=true
+        // step that emitted the log already means the bot is moving
+        // <50% of intended — independently of how blockedFraction is
+        // computed. Pure hitWall persistence is the cleanest stall
+        // signal.
+        if (output.hitWall)
+            ++wallCreepSteps;
+        else
+            wallCreepSteps = 0;
+
         if ((output.moveFlags & MOVEFLAG_FALLINGFAR) != 0 &&
             (start.Z - output.z) > PhysicsConstants::STEP_DOWN_HEIGHT + 0.25f)
         {
@@ -1204,7 +1226,9 @@ static SegmentValidationCode TryValidateWalkableSegmentWithPhysics(
             return SegmentValidationCode::StepDownTooFar;
         }
 
-        if (stalledSteps >= 6 || (output.hitWall && output.blockedFraction < 0.05f && stalledSteps >= 3))
+        if (stalledSteps >= 6
+            || (output.hitWall && output.blockedFraction < 0.05f && stalledSteps >= 3)
+            || wallCreepSteps >= 3)
             break;
 
         input.x = output.x;
