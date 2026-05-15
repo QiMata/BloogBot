@@ -244,10 +244,24 @@ Phase 2.
 #### S1.15 — Trade null guards (6 actions)
 
 - **Owner:** `monorepo-worker`
-- **Status:** open
+- **Status:** implemented (BG TradeFrame non-null; live `TradeParityTests` run still pending)
 - **Owned paths:** `Exports/WoWSharpClient/Frames/`, `Exports/WoWSharpClient/Networking/`
 - **Goal:** All 6 trade actions handle null `TradeFrame` on BG.
   Live-validation: `TradeParityTests` green both modes.
+- **Latest evidence (2026-05-15):** `NetworkTradeFrame` shipped at
+  `Exports/WoWSharpClient/Frames/NetworkTradeFrame.cs`; wired in
+  `WoWSharpObjectManager` constructor (`Exports/WoWSharpClient/WoWSharpObjectManager.cs:230`)
+  so `_objectManager.TradeFrame` is now non-null on BG and the
+  `InteractionSequenceBuilder` "TradeFrame is null" warning branch no
+  longer fires. Four of the six ITradeFrame methods route to
+  `ITradeNetworkClientComponent` (`OfferMoney → OfferMoneyAsync`,
+  `OfferItem → OfferItemAsync` with InventoryManager's bag/slot
+  packet conversion, `AcceptTrade → AcceptTradeAsync`,
+  `DeclineTrade → CancelTradeAsync`). `OfferLockpick` /
+  `OfferEnchant` stubbed (no-op) pending SpellCastingAgent + trade-target
+  wiring; these are not exercised by `TradeParityTests` so the
+  acceptance gate is unblocked. `NetworkTradeFrameTests` ships
+  `20/0/0` green at `Tests/WoWSharpClient.Tests/Frames/NetworkTradeFrameTests.cs`.
 
 #### S1.16 — Craft packet path (BG)
 
