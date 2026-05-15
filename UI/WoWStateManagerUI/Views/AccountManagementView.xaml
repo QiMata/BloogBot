@@ -5,7 +5,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:WoWStateManagerUI.ViewModels"
              d:DataContext="{d:DesignInstance Type=vm:AccountManagementViewModel}"
-             mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="500">
+             mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="600">
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -15,14 +15,12 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Row 0: Summary stats (no connection bar — auto-connected) -->
+        <!-- Row 0: Summary stats -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock Text="Accounts: " FontWeight="SemiBold"/>
             <TextBlock Text="{Binding TotalAccounts}" Margin="0,0,16,0"/>
             <TextBlock Text="Total Characters: " FontWeight="SemiBold"/>
             <TextBlock Text="{Binding TotalCharacters}" Margin="0,0,16,0"/>
-            <TextBlock Text="Online: " FontWeight="SemiBold"/>
-            <TextBlock Text="{Binding OnlineAccounts}" Margin="0,0,16,0"/>
             <Button Content="Refresh" Command="{Binding RefreshCommand}" Padding="8,2" Margin="8,0,0,0"/>
         </StackPanel>
 
@@ -38,42 +36,118 @@
                 </TextBox>
                 <Label Content="Password:" VerticalAlignment="Center"/>
                 <TextBox Text="{Binding NewAccountPassword, UpdateSourceTrigger=PropertyChanged}" Width="90" Margin="4,2" VerticalAlignment="Center"/>
-                <Label Content="GM Level:" VerticalAlignment="Center"/>
-                <TextBox Text="{Binding NewAccountGmLevel, UpdateSourceTrigger=PropertyChanged}" Width="30" Margin="4,2" VerticalAlignment="Center"/>
                 <Button Content="Create" Command="{Binding CreateAccountCommand}" Margin="8,0,0,0" Padding="10,4"/>
             </StackPanel>
         </Border>
 
-        <!-- Row 2: Account DataGrid -->
-        <DataGrid Grid.Row="2" ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
-                  AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
-                  SelectionMode="Single" GridLinesVisibility="Horizontal"
-                  HeadersVisibility="Column" BorderThickness="1" BorderBrush="Gray"
-                  CanUserSortColumns="True">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="45"/>
-                <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="130"/>
-                <DataGridTextColumn Header="GM" Binding="{Binding GmLevel}" Width="35"/>
-                <DataGridTextColumn Header="Chars" Binding="{Binding NumCharacters}" Width="45"/>
-                <DataGridCheckBoxColumn Header="Online" Binding="{Binding Online}" Width="50"/>
-                <DataGridCheckBoxColumn Header="Banned" Binding="{Binding Banned}" Width="55"/>
-                <DataGridCheckBoxColumn Header="Locked" Binding="{Binding Locked}" Width="50"/>
-                <DataGridTextColumn Header="Last IP" Binding="{Binding LastIp}" Width="100"/>
-                <DataGridTextColumn Header="Failed Logins" Binding="{Binding FailedLogins}" Width="85"/>
-                <DataGridTextColumn Header="Join Date" Binding="{Binding JoinDate, StringFormat=yyyy-MM-dd}" Width="85"/>
-                <DataGridTextColumn Header="Last Login" Binding="{Binding LastLogin, StringFormat=yyyy-MM-dd HH:mm}" Width="*"/>
-            </DataGrid.Columns>
-        </DataGrid>
+        <!-- Row 2: 2-pane layout — Accounts grid (left) + Account Details (right) -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Accounts list -->
+            <DataGrid Grid.Column="0" ItemsSource="{Binding Accounts}" SelectedItem="{Binding SelectedAccount}"
+                      AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                      SelectionMode="Single" GridLinesVisibility="Horizontal"
+                      HeadersVisibility="Column" BorderThickness="1" BorderBrush="Gray"
+                      CanUserSortColumns="True">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="45"/>
+                    <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="*"/>
+                    <DataGridTextColumn Header="Chars" Binding="{Binding NumCharacters}" Width="60"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="LightGray"/>
+
+            <!-- Right: Account Details panel -->
+            <Border Grid.Column="2" BorderBrush="Gray" BorderThickness="1">
+                <Grid IsEnabled="{Binding HasSelectedAccount}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Padding="6,4" Background="#22000000" FontWeight="SemiBold">
+                        <Run Text="Account Details — "/>
+                        <Run Text="{Binding SelectedAccount.Username, FallbackValue='(select an account)'}"/>
+                    </TextBlock>
+
+                    <TextBlock Grid.Row="1" Text="Realms" FontWeight="SemiBold" Padding="6,4,6,2"/>
+
+                    <DataGrid Grid.Row="2" Margin="6,0,6,4"
+                              ItemsSource="{Binding SelectedAccountRealms}"
+                              AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                              BorderThickness="1" BorderBrush="LightGray" FontSize="11"
+                              MaxHeight="160">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="35"/>
+                            <DataGridTextColumn Header="Realm" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="100"/>
+                            <DataGridTextColumn Header="Port" Binding="{Binding Port}" Width="50"/>
+                            <DataGridTextColumn Header="Pop." Binding="{Binding Population, StringFormat=F2}" Width="55"/>
+                            <DataGridTextColumn Header="Chars" Binding="{Binding CharactersOnRealm}" Width="50"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <Grid Grid.Row="3" Margin="6,4,6,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Characters" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <TextBox Text="{Binding NewCharacterName, UpdateSourceTrigger=PropertyChanged}"
+                                     Width="120" Margin="0,0,4,0" VerticalAlignment="Center"
+                                     ToolTip="Name of the new character to create"/>
+                            <Button Content="+ Create Character" Command="{Binding CreateCharacterCommand}"
+                                    Padding="8,2" Margin="0,0,4,0"
+                                    ToolTip="Phase 2: launches a transient BG client to send CMSG_CHAR_CREATE"/>
+                            <Button Content="− Erase Character" Command="{Binding EraseCharacterCommand}"
+                                    Padding="8,2"
+                                    ToolTip=".character erase &lt;name&gt; via SOAP"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <DataGrid Grid.Row="4" Margin="6,0,6,4"
+                              ItemsSource="{Binding SelectedAccountCharacters}"
+                              SelectedItem="{Binding SelectedCharacter}"
+                              AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                              SelectionMode="Single" HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal" BorderThickness="1" BorderBrush="LightGray"
+                              FontSize="11">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="GUID" Binding="{Binding Guid}" Width="60"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="Lv" Binding="{Binding Level}" Width="35"/>
+                            <DataGridTextColumn Header="Race" Binding="{Binding RaceName}" Width="80"/>
+                            <DataGridTextColumn Header="Class" Binding="{Binding ClassName}" Width="80"/>
+                            <DataGridTextColumn Header="Gender" Binding="{Binding GenderName}" Width="60"/>
+                            <DataGridTextColumn Header="Map" Binding="{Binding MapId}" Width="50"/>
+                            <DataGridTextColumn Header="Zone" Binding="{Binding ZoneId}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TextBlock Grid.Row="5" Padding="6,2,6,4" Foreground="DarkSlateGray" FontStyle="Italic">
+                        <Run Text="Create-character is a Phase 2 stub: the design uses a transient BG client to send CMSG_CHAR_CREATE."/>
+                    </TextBlock>
+                </Grid>
+            </Border>
+        </Grid>
 
         <!-- Row 3: Selected account actions -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,6,0,0">
             <TextBlock Text="Selected:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
             <TextBlock Text="{Binding SelectedAccount.Username, FallbackValue=(none)}" VerticalAlignment="Center" Margin="0,0,16,0"/>
             <Button Content="Delete Account" Command="{Binding DeleteAccountCommand}" Padding="10,4" Margin="0,0,4,0"/>
-            <Label Content="Set GM:" VerticalAlignment="Center"/>
-            <TextBox Text="{Binding NewAccountGmLevel, UpdateSourceTrigger=PropertyChanged}" Width="30" Margin="4,2" VerticalAlignment="Center"/>
-            <Button Content="Apply GM Level" Command="{Binding SetGmLevelCommand}" Padding="10,4" Margin="4,0"/>
-            <Button Content="Ban/Unban" Command="{Binding BanAccountCommand}" Padding="10,4" Margin="4,0"/>
         </StackPanel>
 
         <!-- Row 4: Status -->

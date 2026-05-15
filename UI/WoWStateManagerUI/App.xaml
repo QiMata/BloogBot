@@ -2,12 +2,19 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:WoWStateManagerUI"
+             xmlns:conv="clr-namespace:WoWStateManagerUI.Converters"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/WoWTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <conv:BoolToVisibilityConverter x:Key="BoolToVis"/>
+            <conv:CountToVisibilityConverter x:Key="CountToVis"/>
+            <conv:StringToVisibilityConverter x:Key="StringToVis"/>
+            <!-- ComboBoxItem spacing lives in Themes/WoWTheme.xaml; that style
+                 has a full Template so it overrides any implicit style here. -->
+
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -1,0 +1,105 @@
+{
+  "Name": "Default",
+  "Description": "Starter config in the hierarchical schema. Type=Leveling, Sub-Type=Questing, Alliance.",
+  "Activities": [
+    {
+      "ActivityId": "acquire.levels.questing",
+      "DisplayName": "Questing",
+      "Family": "Leveling",
+      "Location": "(varies by zone/dungeon)",
+      "MinPlayers": 1,
+      "MaxPlayers": 40,
+      "LevelMin": 1,
+      "LevelMax": 60,
+      "FactionRestriction": "Alliance",
+      "StateChangeGoal": "Increment level by running quests in a chosen zone per bracket",
+      "Repeat": false,
+      "ResetStateOnStart": false,
+      "AttunementRequirements": [],
+      "Parameters": [
+        {
+          "Key": "LevelStart",
+          "Value": "1",
+          "Description": "Current level to begin from",
+          "IsRequired": true
+        },
+        {
+          "Key": "LevelEnd",
+          "Value": "60",
+          "Description": "Stop once characters reach this level",
+          "IsRequired": true
+        },
+        {
+          "Key": "Zone (1-10)",
+          "Value": "Elwynn Forest",
+          "Description": "Starter zone for 1-10",
+          "IsRequired": false,
+          "Choices": [
+            "Auto", "Elwynn Forest", "Dun Morogh", "Teldrassil",
+            "Durotar", "Mulgore", "Tirisfal Glades"
+          ]
+        },
+        {
+          "Key": "Zone (10-20)",
+          "Value": "Westfall",
+          "Description": "Zone for 10-20",
+          "IsRequired": false,
+          "Choices": [
+            "Auto", "Westfall", "Loch Modan", "Darkshore",
+            "The Barrens", "Silverpine Forest",
+            "Redridge Mountains", "Duskwood",
+            "Stonetalon Mountains", "Ashenvale"
+          ]
+        },
+        {
+          "Key": "Zone (20-30)",
+          "Value": "Wetlands",
+          "Description": "Zone for 20-30",
+          "IsRequired": false,
+          "Choices": [
+            "Auto", "Wetlands", "Hillsbrad Foothills",
+            "Thousand Needles", "Arathi Highlands",
+            "Stranglethorn Vale (Grom'gol/Booty Bay south)",
+            "Ashenvale (upper)", "Duskwood (upper)"
+          ]
+        },
+        {
+          "Key": "Zone (30-40)",
+          "Value": "Stranglethorn Vale (Nesingwary, Zuuldaia)",
+          "Description": "Zone for 30-40",
+          "IsRequired": false,
+          "Choices": [
+            "Auto", "Desolace",
+            "Stranglethorn Vale (Nesingwary, Zuuldaia)",
+            "Dustwallow Marsh", "Swamp of Sorrows",
+            "Arathi Highlands (upper)", "Badlands"
+          ]
+        },
+        {
+          "Key": "Zone (40-50)",
+          "Value": "Tanaris",
+          "Description": "Zone for 40-50",
+          "IsRequired": false,
+          "Choices": [
+            "Auto", "Searing Gorge", "Tanaris",
+            "Feralas", "The Hinterlands", "Azshara",
+            "Un'Goro Crater (lower)", "Blasted Lands (lower)"
+          ]
+        },
+        {
+          "Key": "Zone (50-60)",
+          "Value": "Eastern Plaguelands",
+          "Description": "Zone for 50-60",
+          "IsRequired": false,
+          "Choices": [
+            "Auto", "Burning Steppes", "Felwood",
+            "Western Plaguelands", "Eastern Plaguelands",
+            "Winterspring", "Silithus", "Blasted Lands",
+            "Un'Goro Crater (upper)"
+          ]
+        }
+      ],
+      "Characters": []
+    }
+  ]
+}

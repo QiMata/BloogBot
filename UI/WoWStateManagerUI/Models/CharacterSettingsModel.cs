@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using WoWStateManagerUI.Services;
 
 namespace WoWStateManagerUI.Models
 {
@@ -26,12 +27,14 @@ namespace WoWStateManagerUI.Models
         private float _neuroticism = 1.0f;
         private bool _shouldRun = true;
         private BotRunnerType _runnerType = BotRunnerType.Foreground;
-        private int _gmLevel = 6;
         private int? _targetProcessId;
         private string? _characterClass;
         private string? _characterRace;
         private string? _characterGender;
         private int? _characterNameAttemptOffset;
+        private string? _startingState;
+        private string? _endState;
+        private CharacterInfo? _selectedCharacterInfo;
 
         [JsonProperty("AccountName")]
         public string AccountName { get => _accountName; set { _accountName = value; OnPropertyChanged(); } }
@@ -57,9 +60,6 @@ namespace WoWStateManagerUI.Models
         [JsonProperty("RunnerType")]
         public BotRunnerType RunnerType { get => _runnerType; set { _runnerType = value; OnPropertyChanged(); } }
 
-        [JsonProperty("GmLevel")]
-        public int GmLevel { get => _gmLevel; set { _gmLevel = value; OnPropertyChanged(); } }
-
         [JsonProperty("TargetProcessId", NullValueHandling = NullValueHandling.Ignore)]
         public int? TargetProcessId { get => _targetProcessId; set { _targetProcessId = value; OnPropertyChanged(); } }
 
@@ -74,6 +74,42 @@ namespace WoWStateManagerUI.Models
 
         [JsonProperty("CharacterNameAttemptOffset", NullValueHandling = NullValueHandling.Ignore)]
         public int? CharacterNameAttemptOffset { get => _characterNameAttemptOffset; set { _characterNameAttemptOffset = value; OnPropertyChanged(); } }
+
+        /// <summary>Per-character starting state for this Activity (free-form for now; e.g. "level 30, in Hillsbrad, 12g").
+        /// Drives the runtime decision of where to teleport / what gear to set before the activity kicks off.</summary>
+        [JsonProperty("StartingState", NullValueHandling = NullValueHandling.Ignore)]
+        public string? StartingState { get => _startingState; set { _startingState = value; OnPropertyChanged(); } }
+
+        /// <summary>Per-character desired end state — what character-state change this Activity should produce
+        /// (e.g. "level 40", "Argent Dawn Honored", "Mining 225").</summary>
+        [JsonProperty("EndState", NullValueHandling = NullValueHandling.Ignore)]
+        public string? EndState { get => _endState; set { _endState = value; OnPropertyChanged(); } }
+
+        /// <summary>
+        /// The DB <see cref="CharacterInfo"/> this row is pointing at. Driven by
+        /// the inline ComboBox in the Characters grid — picking from the
+        /// dropdown copies AccountName / class / race / gender from the picked
+        /// row. Not serialized; rehydrated on load by name match against the
+        /// characters DB list.
+        /// </summary>
+        [JsonIgnore]
+        public CharacterInfo? SelectedCharacterInfo
+        {
+            get => _selectedCharacterInfo;
+            set
+            {
+                if (ReferenceEquals(_selectedCharacterInfo, value)) return;
+                _selectedCharacterInfo = value;
+                OnPropertyChanged();
+                if (value != null)
+                {
+                    AccountName = value.Name;
+                    CharacterClass = value.ClassName;
+                    CharacterRace = value.RaceName;
+                    CharacterGender = value.GenderName;
+                }
+            }
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)

@@ -4,9 +4,39 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:WoWStateManagerUI.ViewModels"
-             xmlns:models="clr-namespace:WoWStateManagerUI.Models"
+             xmlns:m="clr-namespace:WoWStateManagerUI.Models"
+             xmlns:conv="clr-namespace:WoWStateManagerUI.Converters"
              d:DataContext="{d:DesignInstance Type=vm:ConfigEditorViewModel}"
-             mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="560">
+             mc:Ignorable="d" d:DesignWidth="1240" d:DesignHeight="720">
+    <UserControl.Resources>
+        <DataTemplate x:Key="StringParamTemplate" DataType="{x:Type m:ActivityParameter}">
+            <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0"/>
+        </DataTemplate>
+        <DataTemplate x:Key="ChoiceParamTemplate" DataType="{x:Type m:ActivityParameter}">
+            <ComboBox ItemsSource="{Binding Choices}"
+                      SelectedItem="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                      IsEditable="True" BorderThickness="0"/>
+        </DataTemplate>
+        <!-- Search-typed value cell: TextBox holds the picked Name; 🔍 button
+             opens the SearchPickerDialog which queries name + entry id in
+             parallel. Picking a result writes the Name back into Value. -->
+        <DataTemplate x:Key="SearchParamTemplate" DataType="{x:Type m:ActivityParameter}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0"/>
+                <Button Grid.Column="1" Content="🔍" Click="OnParameterSearchClick"
+                        Padding="8,0" Margin="2,0,0,0"
+                        ToolTip="Search the world DB by name or entry id"/>
+            </Grid>
+        </DataTemplate>
+        <conv:ParameterValueTemplateSelector x:Key="ParamValueSelector"
+                                             StringTemplate="{StaticResource StringParamTemplate}"
+                                             ChoiceTemplate="{StaticResource ChoiceParamTemplate}"
+                                             SearchTemplate="{StaticResource SearchParamTemplate}"/>
+    </UserControl.Resources>
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -15,147 +45,261 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Row 0: Profile toolbar -->
+        <!-- Row 0: File toolbar -->
         <Grid Grid.Row="0" Margin="0,0,0,6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Button Grid.Column="0" Content="Browse..." Command="{Binding BrowseDirectoryCommand}" Padding="10,4" Margin="0,0,6,0"/>
-            <ComboBox Grid.Column="1" ItemsSource="{Binding ProfilePaths}" SelectedItem="{Binding SelectedProfilePath}"
-                      Margin="0,0,6,0" VerticalContentAlignment="Center">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding Converter={x:Static vm:PathToFilenameConverter.Instance}}"/>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-            <Button Grid.Column="2" Content="Load" Command="{Binding LoadProfileCommand}" Padding="10,4" Margin="0,0,4,0"/>
-            <Button Grid.Column="3" Content="Save" Command="{Binding SaveProfileCommand}" Padding="10,4" Margin="0,0,4,0"/>
-            <Button Grid.Column="4" Content="Save As..." Command="{Binding SaveAsProfileCommand}" Padding="10,4" Margin="0,0,4,0"/>
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button Content="New" Command="{Binding NewConfigCommand}" Padding="10,4" Margin="0,0,4,0"/>
+                <Button Content="Browse..." Command="{Binding BrowseDirectoryCommand}" Padding="10,4" Margin="0,0,4,0"/>
+                <Button Content="Load" Command="{Binding LoadConfigCommand}" Padding="10,4" Margin="0,0,4,0"/>
+                <Button Content="Save" Command="{Binding SaveConfigCommand}" Padding="10,4" Margin="0,0,4,0"/>
+                <Button Content="Save As..." Command="{Binding SaveAsConfigCommand}" Padding="10,4" Margin="0,0,4,0"/>
+            </StackPanel>
+            <TextBlock Grid.Column="1" Text="{Binding SelectedConfigName, StringFormat='File: {0}'}"
+                       VerticalAlignment="Center" Margin="16,0,0,0" Foreground="DarkSlateGray"/>
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <TextBlock Text="Config name:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <TextBox Text="{Binding Config.Name, UpdateSourceTrigger=PropertyChanged}" Width="180" VerticalAlignment="Center"/>
+            </StackPanel>
         </Grid>
 
-        <!-- Row 1: Character action buttons -->
+        <!-- Row 1: Profile picker -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
-            <Button Content="Add Character" Command="{Binding AddCharacterCommand}" Padding="10,4" Margin="0,0,4,0"/>
-            <Button Content="Remove" Command="{Binding RemoveCharacterCommand}" Padding="10,4" Margin="0,0,4,0"/>
-            <Button Content="Duplicate" Command="{Binding DuplicateCharacterCommand}" Padding="10,4" Margin="0,0,4,0"/>
+            <TextBlock Text="Available configs:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <ComboBox ItemsSource="{Binding ConfigPaths}" SelectedItem="{Binding SelectedConfigPath}" Width="380"/>
         </StackPanel>
 
-        <!-- Row 2: Main content — character list + detail editor -->
+        <!-- Row 2: 2-pane layout — activity list on left, full-page detail on right -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="320"/>
-                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="240"/>
+                <ColumnDefinition Width="5"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Left: Character list -->
-            <DataGrid Grid.Column="0" ItemsSource="{Binding Characters}" SelectedItem="{Binding SelectedCharacter}"
-                      AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
-                      SelectionMode="Single" CanUserSortColumns="True" GridLinesVisibility="Horizontal"
-                      HeadersVisibility="Column" BorderThickness="1" BorderBrush="Gray">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Account" Binding="{Binding AccountName}" Width="120"/>
-                    <DataGridTextColumn Header="Class" Binding="{Binding CharacterClass}" Width="70"/>
-                    <DataGridTextColumn Header="Runner" Binding="{Binding RunnerType}" Width="80"/>
-                    <DataGridCheckBoxColumn Header="Run" Binding="{Binding ShouldRun}" Width="40"/>
-                </DataGrid.Columns>
-            </DataGrid>
-
-            <!-- Right: Detail editor -->
-            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
-                <Grid DataContext="{Binding SelectedCharacter}" IsEnabled="{Binding DataContext.SelectedCharacter, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={x:Static vm:NullToBoolConverter.Instance}}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="130"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+            <!-- Pane A: Activity list -->
+            <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="1">
+                <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="16"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-
-                    <!-- Identity -->
-                    <Label Grid.Row="0" Content="Account Name:" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding AccountName, UpdateSourceTrigger=PropertyChanged}" Margin="0,2"/>
-
-                    <Label Grid.Row="1" Content="Character Class:" VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding DataContext.AvailableClasses, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                              SelectedItem="{Binding CharacterClass}" Margin="0,2"/>
-
-                    <Label Grid.Row="2" Content="Character Race:" VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding DataContext.AvailableRaces, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                              SelectedItem="{Binding CharacterRace}" Margin="0,2"/>
-
-                    <Label Grid.Row="3" Content="Gender:" VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding DataContext.AvailableGenders, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                              SelectedItem="{Binding CharacterGender}" Margin="0,2"/>
-
-                    <Label Grid.Row="4" Content="Runner Type:" VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="4" Grid.Column="1" SelectedItem="{Binding RunnerType}" Margin="0,2">
-                        <models:BotRunnerType>Foreground</models:BotRunnerType>
-                        <models:BotRunnerType>Background</models:BotRunnerType>
-                    </ComboBox>
-
-                    <Label Grid.Row="5" Content="GM Level (0-6):" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding GmLevel, UpdateSourceTrigger=PropertyChanged}" Width="50" HorizontalAlignment="Left" Margin="0,2"/>
-
-                    <Label Grid.Row="6" Content="Should Run:" VerticalAlignment="Center"/>
-                    <CheckBox Grid.Row="6" Grid.Column="1" IsChecked="{Binding ShouldRun}" VerticalAlignment="Center" Margin="0,4"/>
-
-                    <!-- Personality traits -->
-                    <TextBlock Grid.Row="8" Grid.ColumnSpan="2" Text="Personality Traits" FontWeight="SemiBold" Margin="0,0,0,4"/>
-
-                    <Label Grid.Row="9" Content="Openness:" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="9" Grid.Column="1" Margin="0,2">
-                        <TextBox DockPanel.Dock="Right" Text="{Binding Openness, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="4,0,0,0"/>
-                        <Slider Minimum="0" Maximum="1" Value="{Binding Openness}" TickFrequency="0.1" IsSnapToTickEnabled="False"/>
-                    </DockPanel>
-
-                    <Label Grid.Row="10" Content="Conscientiousness:" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="10" Grid.Column="1" Margin="0,2">
-                        <TextBox DockPanel.Dock="Right" Text="{Binding Conscientiousness, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="4,0,0,0"/>
-                        <Slider Minimum="0" Maximum="1" Value="{Binding Conscientiousness}" TickFrequency="0.1" IsSnapToTickEnabled="False"/>
-                    </DockPanel>
-
-                    <Label Grid.Row="11" Content="Extraversion:" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="11" Grid.Column="1" Margin="0,2">
-                        <TextBox DockPanel.Dock="Right" Text="{Binding Extraversion, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="4,0,0,0"/>
-                        <Slider Minimum="0" Maximum="1" Value="{Binding Extraversion}" TickFrequency="0.1" IsSnapToTickEnabled="False"/>
-                    </DockPanel>
-
-                    <Label Grid.Row="12" Content="Agreeableness:" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="12" Grid.Column="1" Margin="0,2">
-                        <TextBox DockPanel.Dock="Right" Text="{Binding Agreeableness, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="4,0,0,0"/>
-                        <Slider Minimum="0" Maximum="1" Value="{Binding Agreeableness}" TickFrequency="0.1" IsSnapToTickEnabled="False"/>
-                    </DockPanel>
-
-                    <Label Grid.Row="13" Content="Neuroticism:" VerticalAlignment="Center"/>
-                    <DockPanel Grid.Row="13" Grid.Column="1" Margin="0,2">
-                        <TextBox DockPanel.Dock="Right" Text="{Binding Neuroticism, StringFormat=F2, UpdateSourceTrigger=PropertyChanged}" Width="45" Margin="4,0,0,0"/>
-                        <Slider Minimum="0" Maximum="1" Value="{Binding Neuroticism}" TickFrequency="0.1" IsSnapToTickEnabled="False"/>
-                    </DockPanel>
+                    <TextBlock Grid.Row="0" Text="Activities" FontWeight="SemiBold" Padding="6,4" Background="#22000000"/>
+                    <ListBox Grid.Row="1" ItemsSource="{Binding Config.Activities}"
+                             SelectedItem="{Binding SelectedActivity}"
+                             BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type m:ActivityModel}">
+                                <StackPanel Margin="2">
+                                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                    <TextBlock FontSize="10" Foreground="DarkSlateGray">
+                                        <Run Text="{Binding Family, Mode=OneWay}"/>
+                                        <Run Text=" · "/>
+                                        <Run Text="{Binding Characters.Count, Mode=OneWay}"/>
+                                        <Run Text="/"/>
+                                        <Run Text="{Binding MaxPlayers, Mode=OneWay}"/>
+                                        <Run Text=" chars"/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="4">
+                        <Button Content="+ Add Activity" Command="{Binding AddActivityCommand}" Padding="8,2" Margin="0,0,4,0"
+                                ToolTip="Add a placeholder activity; pick its family/instance in the detail panel"/>
+                        <Button Content="− Remove" Command="{Binding RemoveActivityCommand}" Padding="8,2"/>
+                    </StackPanel>
                 </Grid>
-            </ScrollViewer>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="LightGray"/>
+
+            <!-- Pane B: Activity Detail (full-page; characters list directly below parameters) -->
+            <Border Grid.Column="2" BorderBrush="Gray" BorderThickness="1">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid IsEnabled="{Binding HasSelectedActivity}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Row 0: Faction + Family + Instance pickers
+                             (Instance hidden for single-instance families) -->
+                        <Grid Grid.Row="0" Margin="8,8,8,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="65"/>
+                                <ColumnDefinition Width="110"/>
+                                <ColumnDefinition Width="55"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="65"/>
+                                <ColumnDefinition Width="2*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Faction:" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding FactionOptions}"
+                                      SelectedItem="{Binding SelectedActivity.FactionRestriction}"
+                                      Margin="4,0"
+                                      ToolTip="Alliance / Horde / Either — drives the Character dropdown filter"/>
+                            <TextBlock Grid.Column="2" Text="Type:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            <ComboBox Grid.Column="3"
+                                      ItemsSource="{Binding ActivityFamilies}"
+                                      SelectedItem="{Binding SelectedActivityFamily}"
+                                      DisplayMemberPath="FamilyName"
+                                      Margin="4,0"
+                                      ToolTip="Activity type (Battleground / Dungeon-Raid / Leveling / Reputation / Skill / Earn Gold / Acquisition / Questing)"/>
+                            <TextBlock Grid.Column="4" Text="Sub-Type:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0,0,0"
+                                       Visibility="{Binding IsMultiInstanceFamily, Converter={StaticResource BoolToVis}}"/>
+                            <ComboBox Grid.Column="5"
+                                      ItemsSource="{Binding SelectedActivityFamily.Instances}"
+                                      SelectedItem="{Binding ActiveActivityTemplate}"
+                                      DisplayMemberPath="DisplayName"
+                                      Margin="4,0"
+                                      Visibility="{Binding IsMultiInstanceFamily, Converter={StaticResource BoolToVis}}"
+                                      ToolTip="Specific sub-type within the Type (e.g. WSG 20-29 for BG, UBRS for Dungeon/Raid)"/>
+                        </Grid>
+
+                        <!-- Row 1: Repeat + Reset checkboxes -->
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="8,4,8,4">
+                            <CheckBox Content="Repeat"
+                                      IsChecked="{Binding SelectedActivity.Repeat}"
+                                      VerticalAlignment="Center" Margin="0,0,16,0"
+                                      ToolTip="If checked, StateManager loops this Activity after each conclusion"/>
+                            <CheckBox Content="Reset State on Start"
+                                      IsChecked="{Binding SelectedActivity.ResetStateOnStart}"
+                                      VerticalAlignment="Center"
+                                      ToolTip="If checked, in-flight Activity state is cleared before kickoff (otherwise resume)"/>
+                        </StackPanel>
+
+                        <!-- Row 2: One-line info banner (catalog metadata, read-only) -->
+                        <Border Grid.Row="2" Margin="8,2,8,4" Padding="6,4" Background="#11000000" BorderBrush="LightGray" BorderThickness="1">
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="DarkSlateGray">
+                                <Run Text="{Binding SelectedActivity.DisplayName, Mode=OneWay}" FontWeight="SemiBold"/>
+                                <Run Text=" · "/>
+                                <Run Text="{Binding SelectedActivity.Location, Mode=OneWay}"/>
+                                <Run Text=" · level "/>
+                                <Run Text="{Binding SelectedActivity.LevelMin, Mode=OneWay}"/>
+                                <Run Text="-"/>
+                                <Run Text="{Binding SelectedActivity.LevelMax, Mode=OneWay}"/>
+                                <Run Text=" · "/>
+                                <Run Text="{Binding SelectedActivity.MinPlayers, Mode=OneWay}"/>
+                                <Run Text="-"/>
+                                <Run Text="{Binding SelectedActivity.MaxPlayers, Mode=OneWay}"/>
+                                <Run Text=" players · "/>
+                                <Run Text="{Binding SelectedActivity.FactionRestriction, Mode=OneWay}"/>
+                            </TextBlock>
+                        </Border>
+
+                        <!-- Row 3: State-change goal (catalog-derived, one-liner) -->
+                        <Border Grid.Row="3" Margin="8,0,8,4" Padding="6,4"
+                                Visibility="{Binding SelectedActivity.StateChangeGoal, Converter={StaticResource StringToVis}}">
+                            <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="DarkSlateBlue">
+                                <Run Text="State-change goal: " FontWeight="SemiBold"/>
+                                <Run Text="{Binding SelectedActivity.StateChangeGoal, Mode=OneWay}"/>
+                            </TextBlock>
+                        </Border>
+
+                        <!-- Row 4: Parameters header (hidden when activity has no parameters, e.g. dungeons) -->
+                        <TextBlock Grid.Row="4" Text="Parameters" FontWeight="SemiBold" Margin="8,6,8,2"
+                                   Visibility="{Binding SelectedActivity.Parameters.Count, Converter={StaticResource CountToVis}}"/>
+
+                        <!-- Row 5: Parameters labeled-rows panel -->
+                        <ItemsControl Grid.Row="5" Margin="8,0,8,4"
+                                      Visibility="{Binding SelectedActivity.Parameters.Count, Converter={StaticResource CountToVis}}"
+                                      ItemsSource="{Binding SelectedActivity.Parameters}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type m:ActivityParameter}">
+                                    <Grid Margin="0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="160"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Key}" FontWeight="SemiBold"/>
+                                            <TextBlock Text=" *" Foreground="Crimson" FontWeight="SemiBold"
+                                                       Visibility="{Binding IsRequired, Converter={StaticResource BoolToVis}}"
+                                                       ToolTip="Required"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" BorderBrush="LightGray" BorderThickness="1" Padding="2"
+                                                ToolTip="{Binding Description}">
+                                            <ContentControl Content="{Binding}"
+                                                            ContentTemplateSelector="{StaticResource ParamValueSelector}"/>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Row 6: Characters section (below the activity detail; same page) -->
+                        <Grid Grid.Row="6" Margin="8,8,8,8">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Characters" FontWeight="SemiBold" Padding="0,4"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="+ Add" Command="{Binding AddCharacterCommand}" Padding="8,2" Margin="0,0,4,0"
+                                            ToolTip="Add an empty row; pick the character in the Character column dropdown"/>
+                                    <Button Content="Fill to Min" Command="{Binding FillToMinCommand}" Padding="8,2" Margin="0,0,4,0"
+                                            ToolTip="Fill empty rows up to the activity's MinPlayers"/>
+                                    <Button Content="Fill to Max" Command="{Binding FillToMaxCommand}" Padding="8,2" Margin="0,0,4,0"
+                                            ToolTip="Fill empty rows up to the activity's MaxPlayers"/>
+                                    <Button Content="− Remove" Command="{Binding RemoveCharacterCommand}" Padding="8,2" Margin="0,0,4,0"/>
+                                    <Button Content="↻" Command="{Binding RefreshAvailableCharactersCommand}" Padding="6,2"
+                                            ToolTip="Refresh from characters DB"/>
+                                </StackPanel>
+                            </Grid>
+                            <DataGrid Grid.Row="2" Margin="0,4,0,0"
+                                      ItemsSource="{Binding SelectedActivity.Characters}"
+                                      SelectedItem="{Binding SelectedCharacter}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False"
+                                      HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                      BorderThickness="1" BorderBrush="LightGray"
+                                      MinHeight="160">
+                                <DataGrid.Columns>
+                                    <!-- Account column: inline ComboBox filtered to activity's faction.
+                                         Picking a row copies AccountName/Class/Race/Gender via
+                                         CharacterSettingsModel.SelectedCharacterInfo setter. -->
+                                    <DataGridTemplateColumn Header="Character" Width="160">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate DataType="{x:Type m:CharacterSettingsModel}">
+                                                <ComboBox ItemsSource="{Binding DataContext.AvailableCharactersForActivity, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                          SelectedItem="{Binding SelectedCharacterInfo, UpdateSourceTrigger=PropertyChanged}"
+                                                          DisplayMemberPath="Name"
+                                                          BorderThickness="0"
+                                                          ToolTip="{Binding AccountName}"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Class" Binding="{Binding CharacterClass}" Width="80" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Race" Binding="{Binding CharacterRace}" Width="80" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="Gender" Binding="{Binding CharacterGender}" Width="60" IsReadOnly="True"/>
+                                    <DataGridCheckBoxColumn Header="Run" Binding="{Binding ShouldRun}" Width="40"/>
+                                    <DataGridTextColumn Header="Starting state" Binding="{Binding StartingState, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                    <DataGridTextColumn Header="End state" Binding="{Binding EndState, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Grid>
+                </ScrollViewer>
+            </Border>
         </Grid>
 
-        <!-- Row 3: Status bar -->
         <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Foreground="DarkSlateGray" Margin="0,6,0,0"/>
     </Grid>
 </UserControl>

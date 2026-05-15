@@ -9,44 +9,35 @@
     <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="140"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Row 0: Refresh + WWoW stack operations (no project filter; this UI is WWoW-specific) -->
+        <!-- Row 0: Per-container actions (no whole-stack buttons; the list IS the stack) -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
-            <Button Content="Refresh" Command="{Binding RefreshCommand}" Padding="10,4" Margin="0,0,12,0"/>
-            <Button Content="Start WWoW Stack" Command="{Binding StartWwowStackCommand}" Padding="8,4" Margin="0,0,4,0"/>
-            <Button Content="Restart WWoW Stack" Command="{Binding RestartWwowStackCommand}" Padding="8,4" Margin="0,0,4,0"/>
-            <Button Content="Stop WWoW Stack" Command="{Binding StopWwowStackCommand}" Padding="8,4"/>
-        </StackPanel>
-
-        <!-- Row 1: Selected container actions -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock Text="Selected:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
             <TextBlock Text="{Binding SelectedName}" VerticalAlignment="Center" Margin="0,0,12,0" MinWidth="120"/>
             <Button Content="Start" Command="{Binding StartCommand}" Padding="10,4" Margin="0,0,4,0"/>
             <Button Content="Stop" Command="{Binding StopCommand}" Padding="10,4" Margin="0,0,4,0"/>
             <Button Content="Restart" Command="{Binding RestartCommand}" Padding="10,4" Margin="0,0,4,0"/>
             <Button Content="View Logs" Command="{Binding ViewLogsCommand}" Padding="10,4" Margin="0,0,4,0"/>
+            <Button Content="Refresh" Command="{Binding RefreshCommand}" Padding="10,4" Margin="16,0,0,0"/>
         </StackPanel>
 
-        <!-- Row 2: Container DataGrid -->
-        <DataGrid Grid.Row="2" ItemsSource="{Binding Containers}" SelectedItem="{Binding SelectedContainer}"
+        <!-- Row 1: Container DataGrid (no Project column; list is WWoW-only) -->
+        <DataGrid Grid.Row="1" ItemsSource="{Binding Containers}" SelectedItem="{Binding SelectedContainer}"
                   AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
                   SelectionMode="Single" GridLinesVisibility="Horizontal"
                   HeadersVisibility="Column" BorderThickness="1" BorderBrush="Gray"
                   CanUserSortColumns="True">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Project" Binding="{Binding Project}" Width="75"/>
-                <DataGridTextColumn Header="Container" Binding="{Binding Name}" Width="140"/>
-                <DataGridTextColumn Header="Image" Binding="{Binding Image}" Width="200"/>
-                <DataGridTextColumn Header="State" Binding="{Binding State}" Width="65"/>
-                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="160"/>
-                <DataGridCheckBoxColumn Header="Healthy" Binding="{Binding IsHealthy}" Width="55"/>
+                <DataGridTextColumn Header="Container" Binding="{Binding Name}" Width="160"/>
+                <DataGridTextColumn Header="Image" Binding="{Binding Image}" Width="240"/>
+                <DataGridTextColumn Header="State" Binding="{Binding State}" Width="75"/>
+                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="180"/>
+                <DataGridCheckBoxColumn Header="Healthy" Binding="{Binding IsHealthy}" Width="60"/>
                 <DataGridTextColumn Header="Ports" Binding="{Binding Ports}" Width="*"/>
             </DataGrid.Columns>
             <DataGrid.RowStyle>
@@ -63,18 +54,18 @@
             </DataGrid.RowStyle>
         </DataGrid>
 
-        <!-- Row 3: Log label -->
-        <TextBlock Grid.Row="3" Text="Container Logs" FontWeight="SemiBold" Margin="0,6,0,2"/>
+        <!-- Row 2: Log label -->
+        <TextBlock Grid.Row="2" Text="Container Logs" FontWeight="SemiBold" Margin="0,6,0,2"/>
 
-        <!-- Row 4: Log output -->
-        <Border Grid.Row="4" BorderBrush="Gray" BorderThickness="1">
+        <!-- Row 3: Log output -->
+        <Border Grid.Row="3" BorderBrush="Gray" BorderThickness="1">
             <TextBox Text="{Binding LogOutput, Mode=OneWay}" IsReadOnly="True"
                      FontFamily="Consolas" FontSize="10" TextWrapping="NoWrap"
                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                      BorderThickness="0"/>
         </Border>
 
-        <!-- Row 5: Status -->
-        <TextBlock Grid.Row="5" Text="{Binding StatusMessage}" Foreground="DarkSlateGray" Margin="0,6,0,0"/>
+        <!-- Row 4: Status -->
+        <TextBlock Grid.Row="4" Text="{Binding StatusMessage}" Foreground="DarkSlateGray" Margin="0,6,0,0"/>
     </Grid>
 </UserControl>

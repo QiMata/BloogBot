@@ -16,17 +16,24 @@ namespace WoWStateManagerUI.ViewModels
     public sealed class AccountManagementViewModel : INotifyPropertyChanged, IDisposable
     {
         private AccountService? _accountService;
+        private AccountDetailService? _detailService;
         private MangosSOAPClient? _soapClient;
         private readonly DispatcherTimer _refreshTimer;
         private string _newAccountName = string.Empty;
         private string _newAccountPassword = "PASSWORD";
-        private int _newAccountGmLevel = 0;
         private AccountInfo? _selectedAccount;
+        private CharacterInfo? _selectedCharacter;
         private string _statusMessage = "Connecting to Realmd DB and SOAP...";
         private bool _isConnected;
         private bool _refreshInFlight;
 
         public ObservableCollection<AccountInfo> Accounts { get; } = [];
+
+        /// <summary>Realms the selected account has accessed (one row per realmlist entry).</summary>
+        public ObservableCollection<RealmInfo> SelectedAccountRealms { get; } = [];
+
+        /// <summary>Characters owned by the selected account (from the characters DB).</summary>
+        public ObservableCollection<CharacterInfo> SelectedAccountCharacters { get; } = [];
 
         public string NewAccountName
         {
@@ -40,16 +47,31 @@ namespace WoWStateManagerUI.ViewModels
             set { _newAccountPassword = value; OnPropertyChanged(); }
         }
 
-        public int NewAccountGmLevel
-        {
-            get => _newAccountGmLevel;
-            set { _newAccountGmLevel = value; OnPropertyChanged(); }
-        }
-
         public AccountInfo? SelectedAccount
         {
             get => _selectedAccount;
-            set { _selectedAccount = value; OnPropertyChanged(); }
+            set
+            {
+                _selectedAccount = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasSelectedAccount));
+                _ = LoadSelectedAccountDetailAsync();
+            }
+        }
+
+        public bool HasSelectedAccount => _selectedAccount != null;
+
+        public CharacterInfo? SelectedCharacter
+        {
+            get => _selectedCharacter;
+            set { _selectedCharacter = value; OnPropertyChanged(); RefreshCanExecute(); }
+        }
+
+        private string _newCharacterName = string.Empty;
+        public string NewCharacterName
+        {
+            get => _newCharacterName;
+            set { _newCharacterName = value; OnPropertyChanged(); }
         }
 
         public string StatusMessage
@@ -71,16 +93,18 @@ namespace WoWStateManagerUI.ViewModels
         public ICommand RefreshCommand { get; }
         public ICommand CreateAccountCommand { get; }
         public ICommand DeleteAccountCommand { get; }
-        public ICommand SetGmLevelCommand { get; }
-        public ICommand BanAccountCommand { get; }
+        public ICommand EraseCharacterCommand { get; }
+        public ICommand CreateCharacterCommand { get; }
 
         public AccountManagementViewModel()
         {
             RefreshCommand = new AsyncCommandHandler(RefreshAccountsAsync, () => IsConnected);
             CreateAccountCommand = new AsyncCommandHandler(CreateAccountAsync, () => IsConnected);
             DeleteAccountCommand = new AsyncCommandHandler(DeleteAccountAsync, () => IsConnected && _selectedAccount != null);
-            SetGmLevelCommand = new AsyncCommandHandler(SetGmLevelAsync, () => IsConnected && _selectedAccount != null);
-            BanAccountCommand = new AsyncCommandHandler(BanAccountAsync, () => IsConnected && _selectedAccount != null);
+            EraseCharacterCommand = new AsyncCommandHandler(EraseSelectedCharacterAsync,
+                () => IsConnected && _selectedCharacter != null);
+            CreateCharacterCommand = new AsyncCommandHandler(CreateCharacterAsync,
+                () => IsConnected && _selectedAccount != null && !string.IsNullOrWhiteSpace(_newCharacterName));
 
             _refreshTimer = new DispatcherTimer
             {
@@ -96,6 +120,9 @@ namespace WoWStateManagerUI.ViewModels
             try
             {
                 _accountService = new AccountService(UIConstants.RealmdConnectionString);
+                _detailService = new AccountDetailService(
+                    UIConstants.RealmdConnectionString,
+                    UIConstants.CharactersConnectionString);
                 var dbOk = await _accountService.TestConnectionAsync();
 
                 _soapClient = new MangosSOAPClient(
@@ -172,12 +199,6 @@ namespace WoWStateManagerUI.ViewModels
                 var result = await _soapClient.CreateAccountAsync(NewAccountName);
                 StatusMessage = $"Create '{NewAccountName}': {(string.IsNullOrEmpty(result) ? "(no response)" : result)}";
 
-                if (NewAccountGmLevel > 0)
-                {
-                    var gmResult = await _soapClient.SetGMLevelAsync(NewAccountName, NewAccountGmLevel);
-                    StatusMessage += $" | GM level: {(string.IsNullOrEmpty(gmResult) ? "(no response)" : gmResult)}";
-                }
-
                 NewAccountName = string.Empty;
                 await RefreshAccountsAsync();
             }
@@ -185,6 +206,61 @@ namespace WoWStateManagerUI.ViewModels
             {
                 StatusMessage = $"Create failed: {ex.Message}";
             }
+        }
+
+        private async Task LoadSelectedAccountDetailAsync()
+        {
+            SelectedAccountRealms.Clear();
+            SelectedAccountCharacters.Clear();
+            SelectedCharacter = null;
+
+            if (_detailService == null || _selectedAccount == null) return;
+
+            try
+            {
+                var realms = await _detailService.GetRealmsForAccountAsync(_selectedAccount.Id);
+                foreach (var r in realms)
+                    SelectedAccountRealms.Add(r);
+
+                var chars = await _detailService.GetCharactersForAccountAsync(_selectedAccount.Id);
+                foreach (var c in chars)
+                    SelectedAccountCharacters.Add(c);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Detail load failed: {ex.Message}";
+            }
+        }
+
+        private async Task EraseSelectedCharacterAsync()
+        {
+            if (_soapClient == null || _detailService == null || _selectedCharacter == null) return;
+            var name = _selectedCharacter.Name;
+
+            try
+            {
+                var result = await _detailService.EraseCharacterAsync(_soapClient, name);
+                StatusMessage = $"Erase '{name}': {result}";
+                await LoadSelectedAccountDetailAsync();
+                await RefreshAccountsAsync();
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Erase '{name}' failed: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// Stub for character creation. The user's design has a transient BG
+        /// client issue <c>CMSG_CHAR_CREATE</c> — that's Phase 2 work that
+        /// requires the BG client packet path to be reachable from the UI
+        /// process. Today we report what would happen.
+        /// </summary>
+        private Task CreateCharacterAsync()
+        {
+            StatusMessage = $"Create '{NewCharacterName}' on account '{_selectedAccount?.Username}': " +
+                            "Phase 2 — needs transient BG client to send CMSG_CHAR_CREATE. Not wired yet.";
+            return Task.CompletedTask;
         }
 
         private async Task DeleteAccountAsync()
@@ -206,48 +282,13 @@ namespace WoWStateManagerUI.ViewModels
             }
         }
 
-        private async Task SetGmLevelAsync()
-        {
-            if (_soapClient == null || _selectedAccount == null) return;
-
-            try
-            {
-                var result = await _soapClient.SetGMLevelAsync(_selectedAccount.Username, NewAccountGmLevel);
-                StatusMessage = $"Set GM level {NewAccountGmLevel} for '{_selectedAccount.Username}': {(string.IsNullOrEmpty(result) ? "(no response)" : result)}";
-                await RefreshAccountsAsync();
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Set GM level failed: {ex.Message}";
-            }
-        }
-
-        private async Task BanAccountAsync()
-        {
-            if (_soapClient == null || _selectedAccount == null) return;
-
-            try
-            {
-                var cmd = _selectedAccount.Banned
-                    ? $".unban account {_selectedAccount.Username}"
-                    : $".ban account {_selectedAccount.Username} 0 UI-ban";
-                var result = await _soapClient.ExecuteGMCommandAsync(cmd);
-                StatusMessage = $"{(_selectedAccount.Banned ? "Unban" : "Ban")} '{_selectedAccount.Username}': {(string.IsNullOrEmpty(result) ? "(no response)" : result)}";
-                await RefreshAccountsAsync();
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Ban/unban failed: {ex.Message}";
-            }
-        }
-
         private void RefreshCanExecute()
         {
             (RefreshCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
             (CreateAccountCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
             (DeleteAccountCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
-            (SetGmLevelCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
-            (BanAccountCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
+            (EraseCharacterCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
+            (CreateCharacterCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
         }
 
         public void Dispose()

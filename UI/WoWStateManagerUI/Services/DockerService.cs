@@ -23,16 +23,17 @@ namespace WoWStateManagerUI.Services
     /// </summary>
     public class DockerService
     {
-        /// <summary>Map container name prefixes to project groups for display.</summary>
-        private static readonly (string Prefix, string Project)[] ProjectMappings =
+        /// <summary>Map container name substrings to project groups.
+        /// Substring (not prefix) match so e.g. "wow-mangosd" resolves correctly.</summary>
+        private static readonly (string Token, string Project)[] ProjectMappings =
         [
+            ("wwow-", "WWoW"),
             ("mangos", "WWoW"),
             ("realmd", "WWoW"),
             ("maria-db", "WWoW"),
-            ("pathfinding", "WWoW"),
-            ("scene-data", "WWoW"),
             ("war-", "Warhammer"),
             ("ffxi-", "FFXI"),
+            ("ffixbot-", "FFXI"),
         ];
 
         public async Task<List<ContainerInfo>> ListContainersAsync()
@@ -89,9 +90,9 @@ namespace WoWStateManagerUI.Services
 
         private static string ResolveProject(string containerName)
         {
-            foreach (var (prefix, project) in ProjectMappings)
+            foreach (var (token, project) in ProjectMappings)
             {
-                if (containerName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                if (containerName.Contains(token, StringComparison.OrdinalIgnoreCase))
                     return project;
             }
             return "Other";

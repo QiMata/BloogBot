@@ -5,145 +5,177 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:WoWStateManagerUI.ViewModels"
              d:DataContext="{d:DesignInstance Type=vm:DashboardViewModel}"
-             mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="600">
-    <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-    </UserControl.Resources>
-    <Grid Margin="10">
+             mc:Ignorable="d" d:DesignWidth="1240" d:DesignHeight="680">
+    <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Row 0: Realm/World/Pop summary + StateManager launch controls -->
-        <Grid Grid.Row="0" Margin="0,0,0,6">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <Label Grid.Column="0" Content="Realm:" VerticalAlignment="Center" HorizontalContentAlignment="Right"/>
-            <Label Grid.Column="1" Content="{Binding RealmState}" d:Content="UP" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
-            <Label Grid.Column="2" Content="World:" VerticalAlignment="Center" HorizontalContentAlignment="Right"/>
-            <Label Grid.Column="3" Content="{Binding WorldState}" d:Content="UP" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
-            <Label Grid.Column="4" Content="Pop.:" VerticalAlignment="Center" HorizontalContentAlignment="Right"/>
-            <Label Grid.Column="5" Content="{Binding TotalPopulation}" d:Content="3000" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+        <!-- Row 0: Config bar (realm/world state is shown by the status circles in the title bar) -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+            <Button Content="Load Config..." Command="{Binding BrowseConfigCommand}" Padding="10,4" Margin="0,0,12,0"/>
+            <TextBlock Text="Config:" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+            <TextBlock Text="{Binding ConfigName}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+            <TextBlock Text="{Binding ConfigFileDisplay, StringFormat='({0})'}" VerticalAlignment="Center" Foreground="DarkSlateGray"/>
+        </StackPanel>
 
-            <Button Grid.Column="7" Margin="4,0" Padding="8,4" Content="Exe..." Command="{Binding BrowseExeCommand}" ToolTip="Select StateManager executable"/>
-            <Button Grid.Column="8" Margin="4,0" Padding="8,4" Content="Launch SM" Command="{Binding LaunchStateManagerCommand}"/>
-            <Button Grid.Column="9" Margin="4,0" Padding="8,4" Content="Stop SM" Command="{Binding StopStateManagerCommand}"/>
-        </Grid>
+        <!-- Row 1: Unassigned bots (only visible when there are any) -->
+        <Expander Grid.Row="1" Header="Unassigned live bots (not matched to any configured activity)"
+                  Margin="0,0,0,6"
+                  Visibility="{Binding UnassignedSnapshots.Count, Converter={StaticResource CountToVis}}">
+            <DataGrid ItemsSource="{Binding UnassignedSnapshots}"
+                      AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                      HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                      MaxHeight="160" BorderThickness="1" BorderBrush="LightGray">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Account" Binding="{Binding AccountName}" Width="120"/>
+                    <DataGridTextColumn Header="Character" Binding="{Binding CharacterName}" Width="120"/>
+                    <DataGridTextColumn Header="Lv" Binding="{Binding Level}" Width="35"/>
+                    <DataGridTextColumn Header="Race" Binding="{Binding RaceDisplay}" Width="80"/>
+                    <DataGridTextColumn Header="Class" Binding="{Binding ClassDisplay}" Width="80"/>
+                    <DataGridTextColumn Header="Area" Binding="{Binding AreaDisplay}" Width="*"/>
+                    <DataGridTextColumn Header="Action" Binding="{Binding CurrentAction}" Width="120"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Expander>
 
-        <!-- Row 1: Status message + selected exe path (read-only display) -->
-        <Grid Grid.Row="1" Margin="0,0,0,6">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="{Binding StatusMessage}" Foreground="DarkSlateGray" VerticalAlignment="Center"/>
-            <TextBlock Grid.Column="1" Text="{Binding StateManagerExePath}" Foreground="DarkSlateGray" VerticalAlignment="Center" FontStyle="Italic" Margin="8,0,0,0"/>
-        </Grid>
-
-        <!-- Row 2: Live bot grid (left) + selected bot detail (right) -->
+        <!-- Row 2: Two-pane layout — Activities on left, character detail on right -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="5"/>
                 <ColumnDefinition Width="360"/>
             </Grid.ColumnDefinitions>
 
-            <DataGrid Grid.Column="0" ItemsSource="{Binding Bots}" SelectedItem="{Binding SelectedBot}"
-                      AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
-                      SelectionMode="Single" GridLinesVisibility="Horizontal"
-                      HeadersVisibility="Column" BorderThickness="1" BorderBrush="Gray">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Account" Binding="{Binding AccountName}" Width="100"/>
-                    <DataGridTextColumn Header="Character" Binding="{Binding CharacterName}" Width="110"/>
-                    <DataGridTextColumn Header="Race" Binding="{Binding RaceDisplay}" Width="75"/>
-                    <DataGridTextColumn Header="Class" Binding="{Binding ClassDisplay}" Width="60"/>
-                    <DataGridTextColumn Header="Lvl" Binding="{Binding Level}" Width="40"/>
-                    <DataGridTextColumn Header="Area" Binding="{Binding AreaDisplay}" Width="120"/>
-                    <DataGridTextColumn Header="Action" Binding="{Binding CurrentAction}" Width="*"/>
-                </DataGrid.Columns>
-            </DataGrid>
-
-            <Border Grid.Column="2" BorderBrush="Gray" BorderThickness="1">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="8">
-                        <TextBlock Text="Selected Bot" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                        <Grid Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="100"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <TextBlock Grid.Column="0" Grid.Row="0" Text="Account:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding SelectedDetail.Snapshot.AccountName}"/>
-                            <TextBlock Grid.Column="0" Grid.Row="1" Text="Character:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding SelectedDetail.Snapshot.CharacterName}"/>
-                            <TextBlock Grid.Column="0" Grid.Row="2" Text="Race:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="2" Text="{Binding SelectedDetail.Snapshot.RaceDisplay}"/>
-                            <TextBlock Grid.Column="0" Grid.Row="3" Text="Class:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="3" Text="{Binding SelectedDetail.Snapshot.ClassDisplay}"/>
-                            <TextBlock Grid.Column="0" Grid.Row="4" Text="Level:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="4" Text="{Binding SelectedDetail.Snapshot.Level}"/>
-                            <TextBlock Grid.Column="0" Grid.Row="5" Text="Area:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="5" Text="{Binding SelectedDetail.Snapshot.AreaDisplay}"/>
-                            <TextBlock Grid.Column="0" Grid.Row="6" Text="Position:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="6" Text="{Binding SelectedDetail.Snapshot.Position}"/>
-                            <TextBlock Grid.Column="0" Grid.Row="7" Text="Health:" Foreground="DarkSlateGray"/>
-                            <StackPanel Grid.Column="1" Grid.Row="7" Orientation="Horizontal">
-                                <TextBlock Text="{Binding SelectedDetail.Snapshot.Health}"/>
-                                <TextBlock Text=" / "/>
-                                <TextBlock Text="{Binding SelectedDetail.Snapshot.MaxHealth}"/>
-                            </StackPanel>
-                            <TextBlock Grid.Column="0" Grid.Row="8" Text="Travel:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="8" Text="{Binding SelectedDetail.Travel}" TextWrapping="Wrap"/>
-                            <TextBlock Grid.Column="0" Grid.Row="9" Text="Loadout:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="9" Text="{Binding SelectedDetail.LoadoutStatus}"/>
-                            <TextBlock Grid.Column="0" Grid.Row="10" Text="Action:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="10" Text="{Binding SelectedDetail.Snapshot.CurrentAction}"/>
-                            <TextBlock Grid.Column="0" Grid.Row="11" Text="Spells:" Foreground="DarkSlateGray"/>
-                            <TextBlock Grid.Column="1" Grid.Row="11" Text="{Binding SelectedDetail.SpellCount}"/>
-                        </Grid>
-                        <Separator Margin="0,8"/>
-                        <TextBlock Text="Stats" FontWeight="SemiBold" Margin="0,0,0,4"
-                                   Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}"/>
-                        <DataGrid ItemsSource="{Binding SelectedDetail.Stats}" AutoGenerateColumns="False"
-                                  IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column"
-                                  GridLinesVisibility="Horizontal" BorderThickness="0"
-                                  Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
-                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="80"/>
-                            </DataGrid.Columns>
-                        </DataGrid>
-                        <TextBlock Text="Select a bot to view details." FontStyle="Italic" Foreground="DarkSlateGray"
-                                   Visibility="{Binding HasNoSelection, Converter={StaticResource BoolToVis}}"/>
-                    </StackPanel>
+            <!-- Pane A: Config → Activities → Characters tree (ItemsControl + Expanders) -->
+            <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="1">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Activities}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:DashboardActivityViewModel}">
+                                <Expander IsExpanded="True" Margin="2">
+                                    <Expander.Header>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" FontSize="13" Margin="0,0,12,0"/>
+                                            <TextBlock Text="{Binding Summary}" Foreground="DarkSlateGray"/>
+                                        </StackPanel>
+                                    </Expander.Header>
+                                    <DataGrid ItemsSource="{Binding Characters}"
+                                              SelectedItem="{Binding DataContext.SelectedCharacter, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                                              HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                              BorderThickness="0" Margin="20,4,4,4"
+                                              MaxHeight="240" FontSize="11">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Account" Binding="{Binding AccountName}" Width="120"/>
+                                            <DataGridTextColumn Header="Character" Binding="{Binding LiveCharacterName}" Width="120"/>
+                                            <DataGridTextColumn Header="Lv" Binding="{Binding LiveLevel}" Width="35"/>
+                                            <DataGridTextColumn Header="Race" Binding="{Binding Race}" Width="80"/>
+                                            <DataGridTextColumn Header="Class" Binding="{Binding Class}" Width="80"/>
+                                            <DataGridTextColumn Header="Area" Binding="{Binding LiveAreaDisplay}" Width="*"/>
+                                            <DataGridTextColumn Header="HP" Width="80">
+                                                <DataGridTextColumn.Binding>
+                                                    <MultiBinding StringFormat="{}{0}/{1}">
+                                                        <Binding Path="LiveHealth"/>
+                                                        <Binding Path="LiveMaxHealth"/>
+                                                    </MultiBinding>
+                                                </DataGridTextColumn.Binding>
+                                            </DataGridTextColumn>
+                                            <DataGridTextColumn Header="Action" Binding="{Binding LiveAction}" Width="120"/>
+                                            <DataGridTextColumn Header="Status" Binding="{Binding LiveStatus}" Width="60"/>
+                                        </DataGrid.Columns>
+                                        <DataGrid.RowStyle>
+                                            <Style TargetType="DataGridRow">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsLive}" Value="False">
+                                                        <Setter Property="Foreground" Value="Gray"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DataGrid.RowStyle>
+                                    </DataGrid>
+                                </Expander>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </ScrollViewer>
             </Border>
+
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="LightGray"/>
+
+            <!-- Pane B: Selected character detail (stats / spells / travel) -->
+            <Border Grid.Column="2" BorderBrush="Gray" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Padding="6,4" Background="#22000000" FontWeight="SemiBold">
+                        <Run Text="Character Detail — "/>
+                        <Run Text="{Binding SelectedCharacter.AccountName, FallbackValue='(select a row)'}"/>
+                    </TextBlock>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="8" Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}">
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                    <RowDefinition/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Character" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedCharacter.LiveCharacterName}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Level" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedCharacter.LiveLevel}"/>
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Race" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedCharacter.Race}"/>
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Class" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedCharacter.Class}"/>
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Area" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedCharacter.LiveAreaDisplay}"/>
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Action" FontWeight="SemiBold"/>
+                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedCharacter.LiveAction}"/>
+                            </Grid>
+
+                            <TextBlock Text="Stats" FontWeight="SemiBold" Margin="0,6,0,2"/>
+                            <DataGrid ItemsSource="{Binding SelectedDetail.Stats}"
+                                      AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                                      HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                      MaxHeight="200" FontSize="11">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Stat" Binding="{Binding Name}" Width="*"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="80"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <TextBlock Margin="0,8,0,0">
+                                <Run Text="Spells:" FontWeight="SemiBold"/>
+                                <Run Text="{Binding SelectedDetail.SpellCount, FallbackValue=0}"/>
+                            </TextBlock>
+                            <TextBlock>
+                                <Run Text="Travel:" FontWeight="SemiBold"/>
+                                <Run Text="{Binding SelectedDetail.Travel, FallbackValue='(none)'}"/>
+                            </TextBlock>
+                            <TextBlock>
+                                <Run Text="Loadout:" FontWeight="SemiBold"/>
+                                <Run Text="{Binding SelectedDetail.LoadoutStatus, FallbackValue='—'}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
         </Grid>
+
+        <!-- Row 3: Status message -->
+        <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Foreground="DarkSlateGray" Margin="0,6,0,0"/>
     </Grid>
 </UserControl>

@@ -25,4 +25,14 @@
     <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
   </ItemGroup>
 
+  <!-- Pull centralized configs into the UI's build output so the editor's
+       Configs dropdown reads from the same source the test fixtures and
+       StateManager consume. Files stay tracked under Services/WoWStateManager/. -->
+  <ItemGroup>
+    <None Include="..\..\Services\WoWStateManager\Settings\Configs\*.config.json"
+          Link="Settings\Configs\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

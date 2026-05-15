@@ -261,7 +261,7 @@
                 Background="Transparent"/>
     </ControlTemplate>
 
-    <Style TargetType="ComboBox">
+    <Style TargetType="ComboBox" xmlns:behaviors="clr-namespace:WoWStateManagerUI.Behaviors">
         <Setter Property="Background" Value="{StaticResource WoW.InputBgBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource WoW.GoldBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource WoW.BorderBrush}"/>
@@ -272,6 +272,9 @@
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Padding" Value="6,4"/>
         <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <!-- Auto-select Items[0] once the ItemsSource fills, but only when
+             nothing else is selected — preserves bound values. -->
+        <Setter Property="behaviors:ComboBoxBehaviors.AutoSelectFirst" Value="True"/>
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
         <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
@@ -352,9 +355,10 @@
     <Style TargetType="ComboBoxItem">
         <Setter Property="Foreground" Value="{StaticResource WoW.TextBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Padding" Value="6,4"/>
+        <Setter Property="Padding" Value="10,7"/>
+        <Setter Property="MinHeight" Value="28"/>
         <Setter Property="FontFamily" Value="Palatino Linotype, Book Antiqua, Georgia, serif"/>
-        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontSize" Value="12"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>

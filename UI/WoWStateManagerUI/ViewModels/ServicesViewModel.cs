@@ -14,11 +14,14 @@ namespace WoWStateManagerUI.ViewModels
     /// <summary>
     /// Docker container management for the running WWoW stack. Auto-connects on
     /// startup and auto-refreshes every <see cref="UIConstants.ServicesRefreshSeconds"/>.
-    /// Project filtering is intentionally absent — this UI is WWoW-specific; each
-    /// other game solution ships its own UI.
+    /// Project filtering is intentionally absent — this UI is WWoW-specific and the
+    /// container list is filtered to Project=='WWoW' so other game stacks (FFXI, etc.)
+    /// running alongside on the same Docker host don't show.
     /// </summary>
     public sealed class ServicesViewModel : INotifyPropertyChanged, IDisposable
     {
+        private const string WwowProject = "WWoW";
+
         private readonly DockerService _docker = new();
         private readonly DispatcherTimer _refreshTimer;
         private ContainerInfo? _selectedContainer;
@@ -60,9 +63,6 @@ namespace WoWStateManagerUI.ViewModels
         public ICommand StopCommand { get; }
         public ICommand RestartCommand { get; }
         public ICommand ViewLogsCommand { get; }
-        public ICommand RestartWwowStackCommand { get; }
-        public ICommand StopWwowStackCommand { get; }
-        public ICommand StartWwowStackCommand { get; }
 
         public ServicesViewModel()
         {
@@ -71,9 +71,6 @@ namespace WoWStateManagerUI.ViewModels
             StopCommand = new AsyncCommandHandler(StopSelectedAsync, () => IsConnected && _selectedContainer != null);
             RestartCommand = new AsyncCommandHandler(RestartSelectedAsync, () => IsConnected && _selectedContainer != null);
             ViewLogsCommand = new AsyncCommandHandler(ViewLogsAsync, () => IsConnected && _selectedContainer != null);
-            RestartWwowStackCommand = new AsyncCommandHandler(() => StackOperationAsync("WWoW", "restart"), () => IsConnected);
-            StopWwowStackCommand = new AsyncCommandHandler(() => StackOperationAsync("WWoW", "stop"), () => IsConnected);
-            StartWwowStackCommand = new AsyncCommandHandler(() => StackOperationAsync("WWoW", "start"), () => IsConnected);
 
             _refreshTimer = new DispatcherTimer
             {
@@ -108,20 +105,22 @@ namespace WoWStateManagerUI.ViewModels
             _refreshInFlight = true;
             try
             {
-                var containers = await _docker.ListContainersAsync();
+                var all = await _docker.ListContainersAsync();
+                var wwow = all.Where(c => string.Equals(c.Project, WwowProject, StringComparison.OrdinalIgnoreCase)).ToList();
+
                 var selectedName = _selectedContainer?.Name;
 
                 Containers.Clear();
-                foreach (var c in containers)
+                foreach (var c in wwow)
                     Containers.Add(c);
 
                 // Preserve selection by name across refresh cycles
                 if (selectedName != null)
                     SelectedContainer = Containers.FirstOrDefault(c => c.Name == selectedName);
 
-                var running = containers.Count(c => c.State == "running");
-                var healthy = containers.Count(c => c.IsHealthy);
-                StatusMessage = $"{containers.Count} containers ({running} running, {healthy} healthy)";
+                var running = wwow.Count(c => c.State == "running");
+                var healthy = wwow.Count(c => c.IsHealthy);
+                StatusMessage = $"{wwow.Count} WWoW containers ({running} running, {healthy} healthy)";
             }
             catch (Exception ex)
             {
@@ -168,37 +167,6 @@ namespace WoWStateManagerUI.ViewModels
             StatusMessage = $"Showing last 100 lines from {_selectedContainer.Name}";
         }
 
-        private async Task StackOperationAsync(string project, string operation)
-        {
-            var targets = Containers.Where(c => c.Project == project).ToList();
-            if (targets.Count == 0)
-            {
-                StatusMessage = $"No {project} containers found";
-                return;
-            }
-
-            // Order matters for start (DB first) and stop (services first)
-            var ordered = operation == "start"
-                ? targets.OrderBy(c => c.Name.Contains("maria") || c.Name.Contains("db") ? 0 : 1)
-                : targets.OrderBy(c => c.Name.Contains("maria") || c.Name.Contains("db") ? 1 : 0);
-
-            StatusMessage = $"{operation} {targets.Count} {project} containers...";
-
-            foreach (var container in ordered)
-            {
-                StatusMessage = $"{operation} {container.Name}...";
-                switch (operation)
-                {
-                    case "start": await _docker.StartContainerAsync(container.Name); break;
-                    case "stop": await _docker.StopContainerAsync(container.Name); break;
-                    case "restart": await _docker.RestartContainerAsync(container.Name); break;
-                }
-            }
-
-            StatusMessage = $"{operation} complete for {targets.Count} {project} containers";
-            await RefreshAsync();
-        }
-
         private void RefreshCanExecute()
         {
             (RefreshCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
@@ -206,9 +174,6 @@ namespace WoWStateManagerUI.ViewModels
             (StopCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
             (RestartCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
             (ViewLogsCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
-            (RestartWwowStackCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
-            (StopWwowStackCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
-            (StartWwowStackCommand as AsyncCommandHandler)?.RaiseCanExecuteChanged();
         }
 
         public void Dispose()
