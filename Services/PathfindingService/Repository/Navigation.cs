@@ -1609,7 +1609,7 @@ namespace PathfindingService.Repository
         }
 
         private static bool IsCompleteUsablePath(XYZ requestedStart, XYZ requestedEnd, NavigationPathResult result)
-            => !result.BlockedSegmentIndex.HasValue
+            => (!result.BlockedSegmentIndex.HasValue || IsManagedRepairResult(result.Result))
                 && HasUsableNativeEndpointAnchors(requestedStart, requestedEnd, result.Path, out _);
 
         private static bool IsDynamicOverlayBlockReason(string? blockedReason)
@@ -1715,6 +1715,43 @@ namespace PathfindingService.Repository
             float agentRadius,
             float agentHeight)
         {
+            // Trust native repair metadata. When the native resolver has
+            // already repaired around a blocked segment (signaled via
+            // NativePathResolution.WasRepairedAroundBlockedSegment=true,
+            // which causes BuildOverlayPathAttempt to set
+            // SuccessResult="repaired_dynamic_overlay" and propagate the
+            // native BlockedSegmentIndex/BlockedReason verbatim), skip
+            // ApplyNativeSegmentValidation entirely. Re-running managed
+            // validation on an already-repaired path (a) drops the native
+            // reason metadata (validatedResult.BlockedReason ends up
+            // "none" since the repaired path has no remaining blocks) and
+            // (b) double-charges segment probes, breaking the
+            // WithoutManagedRediscovery contract.
+            //
+            // The fingerprint (IsUsable + BlockedSegmentIndex.HasValue +
+            // SuccessResult=="repaired_dynamic_overlay") is unique to the
+            // native-repaired branch in BuildOverlayPathAttempt:
+            //  - IsUsable: HasPath && !PathBlocked, guaranteed by the
+            //    caller (CalculateValidatedPathCore filters on IsUsable).
+            //  - BlockedSegmentIndex.HasValue: set only when native
+            //    BlockedSegmentIndex was non-null OR endpoint anchors
+            //    failed (PathBlocked=true in that case, IsUsable=false).
+            //  - SuccessResult literal "repaired_dynamic_overlay" appears
+            //    only at line ~1567 of BuildOverlayPathAttempt; other
+            //    paths use the caller's successResult (e.g. "native_path",
+            //    "native_path_alternate_mode").
+            if (attempt.IsUsable
+                && attempt.BlockedSegmentIndex.HasValue
+                && attempt.SuccessResult == "repaired_dynamic_overlay")
+            {
+                return new NavigationPathResult(
+                    attempt.Path,
+                    attempt.Path,
+                    attempt.SuccessResult,
+                    attempt.BlockedSegmentIndex.Value,
+                    attempt.BlockedReason);
+            }
+
             var dynamicOverlayActive = HasActiveDynamicObjectOverlay();
             var validationSmoothPath = ShouldUseSmoothValidation(smoothPath, attempt.ResolutionKind);
             var validatedResult = ApplyNativeSegmentValidation(
