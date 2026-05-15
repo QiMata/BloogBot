@@ -273,9 +273,20 @@ Phase 2.
 #### S1.17 — Vendor merchant null handling
 
 - **Owner:** `monorepo-worker`
-- **Status:** open
+- **Status:** implemented (BG MerchantFrame non-null; live VendorParityTests run still pending)
 - **Goal:** `Buyback`, single-slot Repair pathways work via packet
   fallback when `MerchantFrame` is null.
+- **Latest evidence (2026-05-15):** `NetworkMerchantFrame` shipped at
+  `Exports/WoWSharpClient/Frames/NetworkMerchantFrame.cs`; wired in
+  `WoWSharpObjectManager` constructor next to `NetworkTradeFrame`. All
+  `IMerchantFrame` methods (Buy/Sell/Buyback/RepairAll/RepairByEquipSlot/
+  Close/CanRepair/RepairCost/IsItemAvaible/VendorByGuid) route through
+  `IVendorNetworkClientComponent`. `RepairByEquipSlot` mirrors FG's
+  shape (per-slot cost not exposed by WoW protocol; returns total cost
+  and triggers `RepairAllItemsAsync` when player can afford it).
+  `BuyItem` converts the FG-side 1-based vendor slot to the BG packet's
+  0-based vendorSlot. `NetworkMerchantFrameTests` ships `28/0/0` green
+  at `Tests/WoWSharpClient.Tests/Frames/NetworkMerchantFrameTests.cs`.
 
 #### S1.18 — Taxi packet path (BG)
 

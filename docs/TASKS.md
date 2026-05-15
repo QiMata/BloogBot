@@ -74,7 +74,9 @@ Phase 0: **done.** S1.0 (IBotTask migration): **done.**
 | `S1.3` | PathfindingService stability sweep | `monorepo-worker` | **blocked (red baseline)** | `CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes` passed 20/23; three OG zeppelin-tower cases fail physics/path support and route to MmapGen/physics under the freeze |
 | `S1.4..S1.14` | 11 family slots (Travel, Combat, Questing, Dungeon, BG, Gather, Craft, Economy, Social, Recovery, Raid-formation) | various | **open (no dry-run yet)** | family files have per-task detail; family slots may opt to native `TickAsync` override |
 | `S1.15` | Trade null guards (6 actions) | `monorepo-worker` | **implemented (2026-05-15; live TradeParityTests pending)** | `NetworkTradeFrame` shipped at `Exports/WoWSharpClient/Frames/NetworkTradeFrame.cs`; wired in `WoWSharpObjectManager:230`; 4 of 6 actions route through `ITradeNetworkClientComponent` (Money/Item/Accept/Decline), `OfferLockpick`/`OfferEnchant` stubbed pending SpellCastingAgent wire. `NetworkTradeFrameTests` ships 20/0/0 green. |
-| `S1.16..S1.19` | FG-only gap closures (craft BG, vendor null, taxi BG, trainer/talent/gossip BG) | `monorepo-worker` | **open (no dry-run yet)** | |
+| `S1.16` | Craft packet path (BG) | `monorepo-worker` | **open (no dry-run yet)** | |
+| `S1.17` | Vendor merchant null handling | `monorepo-worker` | **implemented (2026-05-15; live VendorParityTests pending)** | `NetworkMerchantFrame` shipped at `Exports/WoWSharpClient/Frames/NetworkMerchantFrame.cs`; wired in `WoWSharpObjectManager:231`; all IMerchantFrame methods route through `IVendorNetworkClientComponent`. `NetworkMerchantFrameTests` ships 28/0/0 green. |
+| `S1.18..S1.19` | FG-only gap closures (taxi BG, trainer/talent/gossip BG) | `monorepo-worker` | **open (no dry-run yet)** | |
 | `S1.20` | One-hour shake-out test | `monorepo-test-runner` | **open (depends on all of S1.1..S1.19)** | Phase 1 acceptance gate |
 
 **Files shipped by S1.0:**

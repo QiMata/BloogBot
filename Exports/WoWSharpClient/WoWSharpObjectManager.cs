@@ -228,6 +228,7 @@ namespace WoWSharpClient
             _characterSelectScreen = new(_woWClient);
             LootFrame = new NetworkLootFrame(() => _agentFactoryAccessor?.Invoke()?.LootingAgent);
             TradeFrame = new NetworkTradeFrame(() => _agentFactoryAccessor?.Invoke()?.TradeAgent);
+            MerchantFrame = new NetworkMerchantFrame(() => _agentFactoryAccessor?.Invoke()?.VendorAgent);
         }
 
         private void InitializeMovementController()
