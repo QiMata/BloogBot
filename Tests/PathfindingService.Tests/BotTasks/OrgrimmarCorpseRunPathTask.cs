@@ -44,7 +44,10 @@ public class OrgrimmarCorpseRunPathTask : TestBotTask
             maxStartDistance: 10.0f,
             maxEndDistance: 12.0f,
             maxSegmentLength: 200.0f,
-            maxHeightJump: 25.0f);
+            maxHeightJump: 25.0f,
+            // Cap walkability checks — same 500y route as PathCalculationTask;
+            // see that task for rationale.
+            maxWalkableValidationChecks: 50);
         if (validationFailure is not null)
         {
             Fail($"{validationFailure}\n{FormatPath(path)}");

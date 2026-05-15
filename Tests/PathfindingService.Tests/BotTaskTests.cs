@@ -12,35 +12,42 @@ public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<
 {
     private readonly NavigationFixture _fixture = fixture;
 
-    // SKIPPED 2026-05-15: CalculatePath HANGS indefinitely on the
-    // 500y Durotar→Crossroads route (1177.8,-4464.2,21.4)→
-    // (1629.4,-4373.4,31.3). Exposed by the Navigation.dll rebuild
-    // (commit 200a9696); the prior on-disk DLL had been stale so this
-    // never made it to the visible test report — the suite always
-    // timed out at 600s, with the result row never recorded.
+    // SKIPPED 2026-05-15 (loop iteration 9): the 500y Durotar→Crossroads
+    // route hang is multi-layered. Loop iteration 8 instrumented
+    // BuildPointPath and localized one hang site:
+    // PathFinder::RefinePathForSteepUphill iterates ~1070 path points
+    // calling ValidateWalkableSegment (96-step physics sim) per detour
+    // attempt. Iteration 8 capped that at MaxRefinementTotalCalls=500
+    // calls AND added a 2-second wall-clock budget (this commit), which
+    // closes that layer.
     //
-    // Verified 2026-05-15: in isolation under
-    // RunConfiguration.TestSessionTimeout=420000, the test loads map 1
-    // tiles successfully (`[Navigation] Map 1: loaded 785 tiles`) and
-    // then produces ZERO output for the remaining ~6.5 minutes. No
-    // [PATH_NATIVE], no scene-cache prints — CalculatePath itself is
-    // looping. Counter total=0 in
-    // tmp/test-runtime/results-pathfinding/path_calc_isolated.trx.
+    // BUT the test still hangs because the managed planner's
+    // Services/PathfindingService/Repository/Navigation.cs::
+    // ApplyNativeSegmentValidationCore runs MULTIPLE additional repair
+    // passes on the densified 1070-point path:
+    //   * RepairLongLineOfSightBreaks
+    //   * DensifyPath
+    //   * NormalizeEarlySupportLayer
+    //   * RemoveShortVerticalLayerSpikes
+    //   * RemoveShortHorizontalDetourSpikes
+    //   * RepairEarlyStaticBreaks
+    // Each of these can call ValidateWalkableSegment on every segment
+    // (1000+ on this route). The path-side maxWalkableValidationChecks
+    // cap I added to PathRouteAssertions (test-side) doesn't propagate
+    // into the planner's repair passes — those have their own
+    // unbounded loops.
     //
-    // Likely regression source: native FindPathCorridor / sliced-find-
-    // path changes (3c845e12 "Shape native paths against grounded
-    // route validation"; 7a2a87a8 "Surface K sliced-find-path
-    // infrastructure"). The shorter Kalimdor route in
-    // PathSegmentValidation (~21y) does NOT hang — it returns in
-    // 3m42s with a BlockedGeometry — so this is path-length-sensitive,
-    // consistent with an A* explosion or repair-pipeline loop that
-    // amplifies with corridor length.
+    // Fix surface for the next iteration: add a wall-clock budget to
+    // ApplyNativeSegmentValidationCore similar to the
+    // RefinePathForSteepUphillBudgetMs pattern. Or skip the densify-
+    // and-repair passes when the input path already exceeds some
+    // length threshold (the path is already smooth-pathed; further
+    // densification + repair is best-effort).
     //
-    // Next loop investigation surface: add early-out diagnostics to
-    // PathFinder.cpp's path repair / sliced-find-path pipeline, run
-    // the test under a short native timeout, and bisect the recent
-    // PathFinder.cpp commits (ebad865c forward).
-    [Fact(Skip = "CalculatePath hangs on 500y Durotar route post-rebuild; see comment + TASKS.md")]
+    // The C++ RefinePathForSteepUphill budget fix is kept across this
+    // re-skip — it independently protects against future long-route
+    // hangs in production code, even if the test still skips.
+    [Fact(Skip = "Managed planner ApplyNativeSegmentValidationCore loops over 1000+ segments on long routes; see comment + TASKS.md")]
     public void PathCalculation_ShouldReturnValidWaypointPath()
     {
         var task = new PathCalculationTask(_fixture.Navigation);
@@ -89,13 +96,10 @@ public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<
         task.AssertSuccess();
     }
 
-    // SKIPPED 2026-05-15: same Durotar→Crossroads route as the
-    // already-skipped PathCalculation_ShouldReturnValidWaypointPath
-    // above (start/end coords identical; only validation thresholds
-    // differ). CalculatePath hangs on this route, so this test cannot
-    // complete either. Re-enable together with PathCalculation when
-    // the underlying native pathfinder regression is fixed.
-    [Fact(Skip = "CalculatePath hangs on same Durotar route as PathCalculation; see PathCalculation comment + TASKS.md")]
+    // SKIPPED 2026-05-15 (loop iteration 9): same Durotar→Crossroads
+    // route as PathCalculation; the managed planner's repair-pass
+    // pipeline is the remaining hang site (see PathCalculation comment).
+    [Fact(Skip = "Managed planner repair-pass pipeline; see PathCalculation comment + TASKS.md")]
     public void OrgrimmarCorpseRunPath_ShouldReturnValidWaypointPath()
     {
         var task = new OrgrimmarCorpseRunPathTask(_fixture.Navigation);

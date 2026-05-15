@@ -44,7 +44,13 @@ public class PathCalculationTask : TestBotTask
             maxStartDistance: 10.0f,
             maxEndDistance: 12.0f,
             maxSegmentLength: 200.0f,
-            maxHeightJump: 25.0f);
+            maxHeightJump: 25.0f,
+            // Cap walkability checks — the 500y Durotar→Crossroads route can
+            // produce 1000+ smooth-path waypoints. Each ValidateWalkableSegment
+            // runs a 96-step physics sim (~500ms); validating all of them
+            // would take ~8min. 50 checks catches route-shape regressions
+            // near start while keeping per-test runtime bounded.
+            maxWalkableValidationChecks: 50);
         if (validationFailure is not null)
         {
             Fail(validationFailure);

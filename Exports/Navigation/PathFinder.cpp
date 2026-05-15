@@ -621,10 +621,25 @@ namespace
             pathPoints.swap(refined);
     }
 
+    // Wall-clock budget for RefinePathForSteepUphill. Each
+    // TryAppendSteepUphillWindowDetour / TryAppendSteepUphillDetourSegment
+    // call can invoke ValidateWalkableSegment, which runs up to 96 physics
+    // simulation steps (~500ms wall-time per call on dense meshes). With
+    // MaxRefinementTotalCalls=500, the worst-case wall time is ~4 minutes
+    // — a real hang on long routes (confirmed 2026-05-15 on the 500y
+    // Durotar→Crossroads route via PathCalculation_ShouldReturnValidWaypointPath).
+    // Refinement is best-effort path beautification, not correctness-
+    // critical; this budget converts hangs into bounded slowdowns.
+    constexpr int RefinePathForSteepUphillBudgetMs = 2000;
+
     void RefinePathForSteepUphill(uint32_t mapId, PointsArray& pathPoints, float radius, float height)
     {
         if (pathPoints.size() < 2)
             return;
+
+        const auto deadline = std::chrono::steady_clock::now()
+            + std::chrono::milliseconds(RefinePathForSteepUphillBudgetMs);
+        bool budgetExceeded = false;
 
         PointsArray refined;
         refined.reserve(pathPoints.size() * 2);
@@ -634,6 +649,27 @@ namespace
         int totalCalls = 0;
         for (size_t i = 1; i < pathPoints.size();)
         {
+            // Convert hangs into bounded slowdowns: once the wall-clock
+            // budget is gone, append the remaining source path verbatim
+            // (skipping all further detour attempts) and exit. Detour's
+            // string-pulled path is still walkable; the refinement layer
+            // is purely an optimization.
+            if (!budgetExceeded && std::chrono::steady_clock::now() >= deadline)
+            {
+                budgetExceeded = true;
+                fprintf(stderr,
+                    "[NAV-PERF] RefinePathForSteepUphill budget exceeded map=%u at i=%zu of %zu pts totalCalls=%d budgetMs=%d\n",
+                    mapId, i, pathPoints.size(), totalCalls, RefinePathForSteepUphillBudgetMs);
+                fflush(stderr);
+            }
+
+            if (budgetExceeded)
+            {
+                refined.push_back(pathPoints[i]);
+                ++i;
+                continue;
+            }
+
             const Vector3 start = refined.back();
             const Vector3 end = pathPoints[i];
 
