@@ -455,6 +455,129 @@ namespace PathfindingService.Repository
             out float supportDelta,
             out float travelFraction);
 
+        // Per-CalculatePath memoization for ValidateWalkableSegment. The five
+        // repair passes inside ApplyNativeSegmentValidationCore
+        // (RepairLongLineOfSightBreaks, DensifyPath, NormalizeEarlySupport,
+        // RemoveShortVerticalLayerSpikes, RemoveShortHorizontalDetourSpikes,
+        // RepairEarlyStaticBreaks) plus the four resolver attempts in
+        // CalculateValidatedPathCore each re-validate the same segments.
+        // Cache by (mapId, start, end, radius, height) — bit-identical
+        // floats hit, anything else falls through to the native call.
+        // ThreadStatic so concurrent CalculatePath calls do not share
+        // (each PathfindingService worker thread gets its own cache).
+        // Cleared at CalculateValidatedPath entry; bounded only by the
+        // number of distinct segments seen during one call.
+        private readonly record struct SegmentValidationKey(
+            uint MapId,
+            float StartX, float StartY, float StartZ,
+            float EndX, float EndY, float EndZ,
+            float Radius, float Height);
+
+        private readonly record struct SegmentValidationCachedResult(
+            uint Code,
+            float ResolvedEndZ,
+            float SupportDelta,
+            float TravelFraction);
+
+        [ThreadStatic]
+        private static Dictionary<SegmentValidationKey, SegmentValidationCachedResult>? _segmentValidationCache;
+
+        [ThreadStatic]
+        private static int _segmentValidationCacheHits;
+
+        [ThreadStatic]
+        private static int _segmentValidationCacheMisses;
+
+        [ThreadStatic]
+        private static (int Hits, int Misses) _lastCompletedSegmentValidationScope;
+
+        private static uint MemoizedValidateWalkableSegment(
+            uint mapId,
+            NativeXyz start,
+            NativeXyz end,
+            float radius,
+            float height,
+            out float resolvedEndZ,
+            out float supportDelta,
+            out float travelFraction)
+        {
+            var cache = _segmentValidationCache;
+            if (cache is null)
+            {
+                return ValidateWalkableSegment(mapId, start, end, radius, height,
+                    out resolvedEndZ, out supportDelta, out travelFraction);
+            }
+
+            var key = new SegmentValidationKey(
+                mapId, start.X, start.Y, start.Z,
+                end.X, end.Y, end.Z, radius, height);
+
+            if (cache.TryGetValue(key, out var cached))
+            {
+                _segmentValidationCacheHits++;
+                resolvedEndZ = cached.ResolvedEndZ;
+                supportDelta = cached.SupportDelta;
+                travelFraction = cached.TravelFraction;
+                return cached.Code;
+            }
+
+            var code = ValidateWalkableSegment(mapId, start, end, radius, height,
+                out resolvedEndZ, out supportDelta, out travelFraction);
+
+            cache[key] = new SegmentValidationCachedResult(code, resolvedEndZ, supportDelta, travelFraction);
+            _segmentValidationCacheMisses++;
+            return code;
+        }
+
+        // Returns a disposable that ends the cache scope. Null when an outer
+        // scope is already active (so nested CalculateValidatedPath calls
+        // share the parent's cache rather than tearing it down on exit).
+        // `using (BeginSegmentValidationCacheScope()) { ... }` is safe on
+        // null — C# `using` on null is a no-op.
+        private static IDisposable? BeginSegmentValidationCacheScope()
+        {
+            if (_segmentValidationCache is not null)
+                return null;
+            _segmentValidationCache = new Dictionary<SegmentValidationKey, SegmentValidationCachedResult>(capacity: 256);
+            _segmentValidationCacheHits = 0;
+            _segmentValidationCacheMisses = 0;
+            return new SegmentValidationCacheScope();
+        }
+
+        private sealed class SegmentValidationCacheScope : IDisposable
+        {
+            private bool _disposed;
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                var hits = _segmentValidationCacheHits;
+                var misses = _segmentValidationCacheMisses;
+                _lastCompletedSegmentValidationScope = (hits, misses);
+                if (hits + misses > 0)
+                {
+                    Console.Error.WriteLine(
+                        $"[NAV-PERF] SegmentValidationCache hits={hits} misses={misses} hit-rate={(hits * 100.0 / (hits + misses)):F1}%");
+                }
+                _segmentValidationCache = null;
+                _segmentValidationCacheHits = 0;
+                _segmentValidationCacheMisses = 0;
+            }
+        }
+
+        // Exposes hit/miss counters for the currently active scope. Reads
+        // thread-local state, so must be called on the same thread that
+        // ran CalculateValidatedPath, and before the scope is disposed.
+        public static (int Hits, int Misses) GetSegmentValidationCacheCounters()
+            => (_segmentValidationCacheHits, _segmentValidationCacheMisses);
+
+        // Snapshot of hit/miss counters captured when the most recently
+        // completed validation cache scope was disposed. Survives across
+        // the dispose, so unit tests can run a full CalculateValidatedPath
+        // and then read the counts. Per-thread.
+        public static (int Hits, int Misses) GetLastCompletedSegmentValidationCacheCounters()
+            => _lastCompletedSegmentValidationScope;
+
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern float GetGroundZ(
             uint mapId,
@@ -655,9 +778,12 @@ namespace PathfindingService.Repository
             float agentRadius = 0.6f, float agentHeight = 2.0f)
         {
             var stopwatch = Stopwatch.StartNew();
-            var result = CalculateValidatedPathCore(mapId, start, end, smoothPath, agentRadius, agentHeight);
-            NavigationPerformanceMetrics.RecordValidatedPath(stopwatch.Elapsed, result);
-            return result;
+            using (BeginSegmentValidationCacheScope())
+            {
+                var result = CalculateValidatedPathCore(mapId, start, end, smoothPath, agentRadius, agentHeight);
+                NavigationPerformanceMetrics.RecordValidatedPath(stopwatch.Elapsed, result);
+                return result;
+            }
         }
 
         /// <summary>
@@ -5861,7 +5987,7 @@ namespace PathfindingService.Repository
         {
             try
             {
-                return (SegmentValidationCode)ValidateWalkableSegment(
+                return (SegmentValidationCode)MemoizedValidateWalkableSegment(
                     mapId,
                     new NativeXyz(from),
                     new NativeXyz(to),
@@ -6466,7 +6592,7 @@ namespace PathfindingService.Repository
                 float resolvedEndZ;
                 try
                 {
-                    validationCode = (SegmentValidationCode)ValidateWalkableSegment(
+                    validationCode = (SegmentValidationCode)MemoizedValidateWalkableSegment(
                         mapId,
                         new NativeXyz(segStart),
                         new NativeXyz(segEnd),
@@ -6568,9 +6694,9 @@ namespace PathfindingService.Repository
                     // Validate start→mid and mid→end
                     try
                     {
-                        uint v1 = ValidateWalkableSegment(mapId, new NativeXyz(segStart), new NativeXyz(midPoint),
+                        uint v1 = MemoizedValidateWalkableSegment(mapId, new NativeXyz(segStart), new NativeXyz(midPoint),
                             radius, height, out _, out _, out _);
-                        uint v2 = ValidateWalkableSegment(mapId, new NativeXyz(midPoint), new NativeXyz(segEnd),
+                        uint v2 = MemoizedValidateWalkableSegment(mapId, new NativeXyz(midPoint), new NativeXyz(segEnd),
                             radius, height, out _, out _, out _);
 
                         if (v1 == 0 && v2 == 0)
@@ -6707,7 +6833,7 @@ namespace PathfindingService.Repository
             var current = start;
             foreach (var waypoint in waypoints)
             {
-                var validation = (SegmentValidationCode)ValidateWalkableSegment(
+                var validation = (SegmentValidationCode)MemoizedValidateWalkableSegment(
                     mapId,
                     new NativeXyz(current),
                     new NativeXyz(waypoint),
