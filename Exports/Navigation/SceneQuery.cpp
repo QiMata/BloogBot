@@ -1839,6 +1839,15 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
     // warm for the entire sim plus minor lateral wandering.
     constexpr float kExtractExpansionMargin = 64.0f;
 
+    // When a query falls outside the existing cache, UNION the existing
+    // bounds with the new query (instead of replacing). This grows the
+    // cache monotonically to envelope the active route and prevents the
+    // two-region thrash where alternating queries discard each other's
+    // cache. Capped at 512y on each axis so the cache doesn't grow
+    // unbounded on cross-zone routes; beyond that we fall back to the
+    // older replace-with-fresh-extract behaviour.
+    constexpr float kUnionMaxSpanY = 512.0f;
+
     auto* scCache = GetSceneCache(mapId);
     if (scCache)
     {
@@ -1853,25 +1862,43 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
         if (!cacheCoversQuery)
         {
             SceneCache::ExtractBounds extractBounds;
-            extractBounds.minX = boxMin.x - kExtractExpansionMargin;
-            extractBounds.minY = boxMin.y - kExtractExpansionMargin;
-            extractBounds.maxX = boxMax.x + kExtractExpansionMargin;
-            extractBounds.maxY = boxMax.y + kExtractExpansionMargin;
+            extractBounds.minX = std::min(bounds.minX, boxMin.x - kExtractExpansionMargin);
+            extractBounds.minY = std::min(bounds.minY, boxMin.y - kExtractExpansionMargin);
+            extractBounds.maxX = std::max(bounds.maxX, boxMax.x + kExtractExpansionMargin);
+            extractBounds.maxY = std::max(bounds.maxY, boxMax.y + kExtractExpansionMargin);
+
+            const float spanX = extractBounds.maxX - extractBounds.minX;
+            const float spanY = extractBounds.maxY - extractBounds.minY;
+            const bool unionWithinCap = spanX <= kUnionMaxSpanY && spanY <= kUnionMaxSpanY;
+            if (!unionWithinCap)
+            {
+                // Union grew beyond the cap; fall back to a fresh
+                // query-centred extract so the cache doesn't grow
+                // unbounded on cross-zone routes.
+                extractBounds.minX = boxMin.x - kExtractExpansionMargin;
+                extractBounds.minY = boxMin.y - kExtractExpansionMargin;
+                extractBounds.maxX = boxMax.x + kExtractExpansionMargin;
+                extractBounds.maxY = boxMax.y + kExtractExpansionMargin;
+            }
 
             auto* newCache = SceneCache::Extract(mapId, m_vmapManager, m_mapLoader, extractBounds);
             if (newCache)
             {
                 fprintf(stderr,
-                        "[SceneQuery] Query bounds (%.1f,%.1f)-(%.1f,%.1f) fall outside cached scene map %u bounds (%.1f,%.1f)-(%.1f,%.1f); promoting expanded bounded extract.\n",
+                        "[SceneQuery] Query bounds (%.1f,%.1f)-(%.1f,%.1f) %s cached map %u (%.1f,%.1f)-(%.1f,%.1f); %s extract span=%.0fx%.0f.\n",
                         boxMin.x,
                         boxMin.y,
                         boxMax.x,
                         boxMax.y,
+                        unionWithinCap ? "extend" : "exceed-cap",
                         mapId,
                         bounds.minX,
                         bounds.minY,
                         bounds.maxX,
-                        bounds.maxY);
+                        bounds.maxY,
+                        unionWithinCap ? "union-grown" : "replace-with-fresh",
+                        extractBounds.maxX - extractBounds.minX,
+                        extractBounds.maxY - extractBounds.minY);
                 SetSceneCache(mapId, newCache);
                 scCache = newCache;
             }
