@@ -97,7 +97,7 @@ public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<
     // tmp/test-runtime/results-pathfinding/path_segment_isolated.trx
     // (look for [PATH_NATIVE] map=1 mode=smooth and [PHYS][ERR][MOVE]
     // LOW_DISPLACEMENT lines).
-    [Fact(Skip = "Bake/physics parity break on Durotar short route; see comment + TASKS.md")]
+    [Fact]
     public void PathSegmentValidation_ShouldProduceWalkableSegments()
     {
         var task = new PathSegmentValidationTask(_fixture.Navigation);
