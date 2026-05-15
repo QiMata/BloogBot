@@ -201,6 +201,14 @@ public static class NativeLocalPhysics
     {
         if (TestGetWalkableGroundZOverride != null)
             return TestGetWalkableGroundZOverride(mapId, x, y, z, maxSearchDist, walkableMinNormalZ);
+        // Backward-compat shim for unit tests that predate the round-4
+        // iter-5 GetGroundZ → GetWalkableGroundZ switch (commit a6d6fa79
+        // for the OG cliff-fall fix). If a test sets only the regular
+        // TestGetGroundZOverride, treat that as the walkable result too.
+        // Production code paths never hit this — TestGetGroundZOverride
+        // is null at runtime.
+        if (TestGetGroundZOverride != null)
+            return TestGetGroundZOverride(mapId, x, y, z, maxSearchDist);
 
         EnsureInitialized();
         float gz = NativePhysics.GetWalkableGroundZ(mapId, x, y, z, maxSearchDist, walkableMinNormalZ);
