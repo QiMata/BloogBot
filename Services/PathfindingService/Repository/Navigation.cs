@@ -88,6 +88,12 @@ namespace PathfindingService.Repository
         private const float SmoothCorridorExpansionMinSegmentLength = 6f;
         private const float SmoothFallbackAfterStraightStaticBreakMinDistance = 50f;
         private const float SmoothPathDensifySpacing = 6f;
+        // Above this path length, BuildUsablePathResult bypasses the
+        // repair pipeline (RepairAffordanceBreaks etc.) which has per-
+        // segment ValidateWalkableSegment physics-sim costs that don't
+        // scale beyond ~500 segments. See BuildUsablePathResult comment
+        // and project_pfs_calculatepath_hang_durotar memory.
+        private const int MaxValidationPipelinePathLength = 500;
         private const int EarlyStaticRepairScanLimit = 256;
         private const int PostAffordanceStaticRepairScanLimit = 32;
         private const int OverlayStraightStaticRepairScanLimit = 32;
@@ -1749,6 +1755,37 @@ namespace PathfindingService.Repository
                     attempt.Path,
                     attempt.SuccessResult,
                     attempt.BlockedSegmentIndex.Value,
+                    attempt.BlockedReason);
+            }
+
+            // Bypass the ApplyNativeSegmentValidation repair pipeline for
+            // very long smooth-paths. Each pass (RepairAffordanceBreaks,
+            // RepairEarlyStaticBreaks, NormalizeLocalPhysicsReachableLayers,
+            // …) is bounded by per-pass segment scan limits like
+            // AffordanceRepairCumulativeSmoothScanLimit=384, but EACH
+            // scanned segment can run a 96-step ValidateWalkableSegment
+            // physics simulation (~500ms). With multiple passes calling
+            // ValidateWalkableSegment on hundreds of segments, the
+            // pipeline can spend 6+ minutes on a 500y+ Durotar route —
+            // a real hang observed 2026-05-15 (loop iteration 9). The
+            // bot's runtime physics re-validates each segment during
+            // path execution, so the planner-side repair pipeline is an
+            // optimization, not a correctness guarantee. For long paths,
+            // emit the smooth-path output verbatim — Detour's
+            // string-pulled corridor is already walkable.
+            //
+            // 500 is well above the corridor-first medium threshold (450y
+            // ÷ ~1y per smooth-path segment) so short and medium routes
+            // remain fully validated.
+            if (attempt.IsUsable && attempt.Path.Length > MaxValidationPipelinePathLength)
+            {
+                Console.Error.WriteLine(
+                    $"[NAV-PERF] BuildUsablePathResult bypass pipeline map={mapId} pts={attempt.Path.Length} > {MaxValidationPipelinePathLength}");
+                return new NavigationPathResult(
+                    attempt.Path,
+                    attempt.Path,
+                    attempt.SuccessResult,
+                    attempt.BlockedSegmentIndex,
                     attempt.BlockedReason);
             }
 

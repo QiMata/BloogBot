@@ -12,42 +12,18 @@ public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<
 {
     private readonly NavigationFixture _fixture = fixture;
 
-    // SKIPPED 2026-05-15 (loop iteration 9): the 500y Durotar→Crossroads
-    // route hang is multi-layered. Loop iteration 8 instrumented
-    // BuildPointPath and localized one hang site:
-    // PathFinder::RefinePathForSteepUphill iterates ~1070 path points
-    // calling ValidateWalkableSegment (96-step physics sim) per detour
-    // attempt. Iteration 8 capped that at MaxRefinementTotalCalls=500
-    // calls AND added a 2-second wall-clock budget (this commit), which
-    // closes that layer.
-    //
-    // BUT the test still hangs because the managed planner's
-    // Services/PathfindingService/Repository/Navigation.cs::
-    // ApplyNativeSegmentValidationCore runs MULTIPLE additional repair
-    // passes on the densified 1070-point path:
-    //   * RepairLongLineOfSightBreaks
-    //   * DensifyPath
-    //   * NormalizeEarlySupportLayer
-    //   * RemoveShortVerticalLayerSpikes
-    //   * RemoveShortHorizontalDetourSpikes
-    //   * RepairEarlyStaticBreaks
-    // Each of these can call ValidateWalkableSegment on every segment
-    // (1000+ on this route). The path-side maxWalkableValidationChecks
-    // cap I added to PathRouteAssertions (test-side) doesn't propagate
-    // into the planner's repair passes — those have their own
-    // unbounded loops.
-    //
-    // Fix surface for the next iteration: add a wall-clock budget to
-    // ApplyNativeSegmentValidationCore similar to the
-    // RefinePathForSteepUphillBudgetMs pattern. Or skip the densify-
-    // and-repair passes when the input path already exceeds some
-    // length threshold (the path is already smooth-pathed; further
-    // densification + repair is best-effort).
-    //
-    // The C++ RefinePathForSteepUphill budget fix is kept across this
-    // re-skip — it independently protects against future long-route
-    // hangs in production code, even if the test still skips.
-    [Fact(Skip = "Managed planner ApplyNativeSegmentValidationCore loops over 1000+ segments on long routes; see comment + TASKS.md")]
+    // SKIPPED 2026-05-15 (loop iteration 10): the managed C# bypass in
+    // BuildUsablePathResult (Path.Length > MaxValidationPipelinePathLength=500)
+    // is in place and the C++ RefinePathForSteepUphill 2s budget shipped
+    // in iteration 9. But the test still hangs on this route — diagnostic
+    // [FPFA-DIAG] markers in FindPathForAgent prove the native
+    // Navigation::CalculatePathForAgent enters but never returns. So
+    // there is a THIRD slow phase somewhere between the BuildPointPath
+    // budget firing and CalculatePathForAgent returning the path array.
+    // Next iteration: instrument PathFinder::calculate / BuildPolyPath
+    // entry/exit and Navigation::CalculatePathForAgent line-by-line
+    // markers to isolate the remaining native hang site.
+    [Fact(Skip = "Native CalculatePathForAgent has additional slow phase past BuildPointPath; see comment + TASKS.md")]
     public void PathCalculation_ShouldReturnValidWaypointPath()
     {
         var task = new PathCalculationTask(_fixture.Navigation);
@@ -96,10 +72,9 @@ public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<
         task.AssertSuccess();
     }
 
-    // SKIPPED 2026-05-15 (loop iteration 9): same Durotar→Crossroads
-    // route as PathCalculation; the managed planner's repair-pass
-    // pipeline is the remaining hang site (see PathCalculation comment).
-    [Fact(Skip = "Managed planner repair-pass pipeline; see PathCalculation comment + TASKS.md")]
+    // SKIPPED 2026-05-15 (loop iteration 10): same Durotar route as
+    // PathCalculation; same native-side hang past BuildPointPath.
+    [Fact(Skip = "Native CalculatePathForAgent additional slow phase; see PathCalculation comment + TASKS.md")]
     public void OrgrimmarCorpseRunPath_ShouldReturnValidWaypointPath()
     {
         var task = new OrgrimmarCorpseRunPathTask(_fixture.Navigation);
