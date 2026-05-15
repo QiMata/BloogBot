@@ -2160,6 +2160,39 @@ extern "C" __declspec(dllexport) CorridorResult FindPathCorridor(
             {
                 SetCorridorBlockMetadata(result, segmentIndex, instanceId, guid, displayId, false);
             }
+            else
+            {
+                // Mirror PathFinder::CaptureFirstDynamicOverlayBlock — when no
+                // corner segment intersects an overlay, the corner output IS
+                // the repaired path (Detour string-pulled around an obstacle
+                // sitting on the requested start→end direct line). Probe the
+                // direct line; if blocked, mark the corridor as
+                // OverlayRepaired so callers can distinguish "no overlay at
+                // all" from "overlay present but route detoured around it".
+                auto* registry = DynamicObjectRegistry::Instance();
+                if (registry)
+                {
+                    uint32_t directInstanceId = 0;
+                    uint64_t directGuid = 0;
+                    uint32_t directDisplayId = 0;
+                    if (registry->FindFirstIntersectingObject(
+                        mapId,
+                        G3D::Vector3(start.X, start.Y, start.Z),
+                        G3D::Vector3(end.X, end.Y, end.Z),
+                        &directInstanceId,
+                        &directGuid,
+                        &directDisplayId))
+                    {
+                        SetCorridorBlockMetadata(
+                            result,
+                            0,
+                            directInstanceId,
+                            directGuid,
+                            directDisplayId,
+                            /*repaired=*/true);
+                    }
+                }
+            }
         }
         fprintf(stderr, "[CORRIDOR] handle=%u corners=%d pos=(%.1f,%.1f,%.1f)\n",
                 handle, straightCount, result.posX, result.posY, result.posZ);
