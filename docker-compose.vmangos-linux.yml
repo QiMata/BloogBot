@@ -78,6 +78,11 @@ services:
       Navigation__EnableDynamicObjectOverlay: "false"
       WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY: "0"
       WWOW_ROUTE_PACK_STARTUP_WARMUP: "0"
+      # Enable the CalculateValidatedPath repair pipeline so the per-call
+      # segment-validation memoization (commit 3b296ea4) actually fires
+      # on production queries. Without this flag set, CalculateRawPath is
+      # used and returns raw Detour output without engaging the cache.
+      WWOW_ENABLE_PATH_REPAIR: "1"
     networks:
       - gameserver-net
     ports:
