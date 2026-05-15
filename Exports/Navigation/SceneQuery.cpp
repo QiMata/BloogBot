@@ -1829,8 +1829,17 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
     EnsureMapLoaded(mapId);
     outContacts.clear();
 
+    // Expand live-extract bounds by this margin (each side) so each
+    // cache miss pulls in a larger region. Subsequent queries within
+    // the expanded extent hit the cache instead of triggering another
+    // 50ms+ VMAP extract per ValidateWalkableSegment physics step.
+    // 64y was chosen because path-following queries typically advance
+    // <1y per frame and ValidateWalkableSegment's 96-step physics sim
+    // covers <50y of horizontal travel; a 64y margin keeps the cache
+    // warm for the entire sim plus minor lateral wandering.
+    constexpr float kExtractExpansionMargin = 64.0f;
+
     auto* scCache = GetSceneCache(mapId);
-    std::unique_ptr<SceneCache> extractedCache;
     if (scCache)
     {
         const SceneCache::ExtractBounds bounds = scCache->GetExtractBounds();
@@ -1844,16 +1853,16 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
         if (!cacheCoversQuery)
         {
             SceneCache::ExtractBounds extractBounds;
-            extractBounds.minX = boxMin.x;
-            extractBounds.minY = boxMin.y;
-            extractBounds.maxX = boxMax.x;
-            extractBounds.maxY = boxMax.y;
+            extractBounds.minX = boxMin.x - kExtractExpansionMargin;
+            extractBounds.minY = boxMin.y - kExtractExpansionMargin;
+            extractBounds.maxX = boxMax.x + kExtractExpansionMargin;
+            extractBounds.maxY = boxMax.y + kExtractExpansionMargin;
 
-            extractedCache.reset(SceneCache::Extract(mapId, m_vmapManager, m_mapLoader, extractBounds));
-            if (extractedCache)
+            auto* newCache = SceneCache::Extract(mapId, m_vmapManager, m_mapLoader, extractBounds);
+            if (newCache)
             {
                 fprintf(stderr,
-                        "[SceneQuery] Query bounds (%.1f,%.1f)-(%.1f,%.1f) fall outside cached scene map %u bounds (%.1f,%.1f)-(%.1f,%.1f); using live bounded extract.\n",
+                        "[SceneQuery] Query bounds (%.1f,%.1f)-(%.1f,%.1f) fall outside cached scene map %u bounds (%.1f,%.1f)-(%.1f,%.1f); promoting expanded bounded extract.\n",
                         boxMin.x,
                         boxMin.y,
                         boxMax.x,
@@ -1863,28 +1872,30 @@ int SceneQuery::TestTerrainAABB(uint32_t mapId,
                         bounds.minY,
                         bounds.maxX,
                         bounds.maxY);
-                scCache = extractedCache.get();
+                SetSceneCache(mapId, newCache);
+                scCache = newCache;
             }
         }
     }
     else
     {
         SceneCache::ExtractBounds extractBounds;
-        extractBounds.minX = boxMin.x;
-        extractBounds.minY = boxMin.y;
-        extractBounds.maxX = boxMax.x;
-        extractBounds.maxY = boxMax.y;
-        extractedCache.reset(SceneCache::Extract(mapId, m_vmapManager, m_mapLoader, extractBounds));
-        if (extractedCache)
+        extractBounds.minX = boxMin.x - kExtractExpansionMargin;
+        extractBounds.minY = boxMin.y - kExtractExpansionMargin;
+        extractBounds.maxX = boxMax.x + kExtractExpansionMargin;
+        extractBounds.maxY = boxMax.y + kExtractExpansionMargin;
+        auto* newCache = SceneCache::Extract(mapId, m_vmapManager, m_mapLoader, extractBounds);
+        if (newCache)
         {
             fprintf(stderr,
-                    "[SceneQuery] No cached scene for map %u; using live bounded extract for query bounds (%.1f,%.1f)-(%.1f,%.1f).\n",
+                    "[SceneQuery] No cached scene for map %u; promoting expanded live extract for query bounds (%.1f,%.1f)-(%.1f,%.1f).\n",
                     mapId,
                     boxMin.x,
                     boxMin.y,
                     boxMax.x,
                     boxMax.y);
-            scCache = extractedCache.get();
+            SetSceneCache(mapId, newCache);
+            scCache = newCache;
         }
     }
 
