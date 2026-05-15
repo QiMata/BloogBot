@@ -632,10 +632,33 @@ namespace
     // critical; this budget converts hangs into bounded slowdowns.
     constexpr int RefinePathForSteepUphillBudgetMs = 2000;
 
+    // Long-path skip threshold. RefinePathForSteepUphill's iteration can
+    // call TryAppendSteepUphillWindowDetour, whose inner triple-nested
+    // loop (3 along × 6 lateral × 2 sign = 36 candidates) can each invoke
+    // ValidateWalkableSegment — a 96-step physics simulation. On long
+    // smooth-paths (1000+ pts), even a single outer iteration can exceed
+    // the wall-clock budget, and the per-iteration budget check at the
+    // top of the loop never gets a chance to fire. Skip refinement
+    // entirely for paths over this threshold; Detour's string-pulled
+    // smooth-path output is already walkable, and refinement is a
+    // best-effort beautification pass not a correctness pass. Mirrors
+    // the C# planner-side MaxValidationPipelinePathLength=500 bypass in
+    // Services/PathfindingService/Repository/Navigation.cs::BuildUsablePathResult.
+    constexpr size_t RefinePathForSteepUphillMaxPathLength = 500;
+
     void RefinePathForSteepUphill(uint32_t mapId, PointsArray& pathPoints, float radius, float height)
     {
         if (pathPoints.size() < 2)
             return;
+
+        if (pathPoints.size() > RefinePathForSteepUphillMaxPathLength)
+        {
+            fprintf(stderr,
+                "[NAV-PERF] RefinePathForSteepUphill skip-long-path map=%u pts=%zu > %zu\n",
+                mapId, pathPoints.size(), RefinePathForSteepUphillMaxPathLength);
+            fflush(stderr);
+            return;
+        }
 
         const auto deadline = std::chrono::steady_clock::now()
             + std::chrono::milliseconds(RefinePathForSteepUphillBudgetMs);

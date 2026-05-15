@@ -23,7 +23,22 @@ public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<
     // Next iteration: instrument PathFinder::calculate / BuildPolyPath
     // entry/exit and Navigation::CalculatePathForAgent line-by-line
     // markers to isolate the remaining native hang site.
-    [Fact(Skip = "Native CalculatePathForAgent has additional slow phase past BuildPointPath; see comment + TASKS.md")]
+    // SKIPPED 2026-05-15 (loop iteration 11): the C++ skip-long-path in
+    // RefinePathForSteepUphill (>500 pts) and the C# bypass in
+    // BuildUsablePathResult (>500 pts) BOTH fire correctly on the 500y
+    // Durotar route, and CalculatePath now returns a 34-corner path
+    // (visible via [PATH_NATIVE] log). The remaining hang is test-side:
+    // PathRouteAssertions.GetValidationFailure runs maxWalkableValidation-
+    // Checks ValidateWalkableSegment calls — each runs a 96-step
+    // PhysicsStepV2 simulation that emits hundreds of [SceneCache]
+    // extracts (470 in the latest run). Even with the cap dropped to 5,
+    // the test exceeds 4 minutes. Per-call cost is dominated by
+    // SceneCache misses; the cache key seems to refresh on each query's
+    // floating-point bounds (each subsequent call rounds to slightly
+    // different cells). The remaining fix is a SceneCache key-coarsening
+    // or per-call physics-step iteration budget — out of scope for this
+    // iteration.
+    [Fact(Skip = "Test-side ValidateWalkableSegment 96-step physics × 470+ SceneCache misses; see comment + TASKS.md")]
     public void PathCalculation_ShouldReturnValidWaypointPath()
     {
         var task = new PathCalculationTask(_fixture.Navigation);
