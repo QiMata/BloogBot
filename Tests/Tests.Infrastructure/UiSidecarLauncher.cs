@@ -67,9 +67,17 @@ internal static class UiSidecarLauncher
 
         // Probe Debug and Release bin trees. The UI csproj targets net8.0-windows10.0.22621.0
         // but the exact TFM folder can drift across SDK updates; pick the newest matching exe.
+        //
+        // Order matters only as a tiebreaker — picker selects newest LastWriteTimeUtc across
+        // all probes. Bot/{Release,Debug}/net8.0 is the shared output `dotnet test` populates
+        // when the test project transitively rebuilds the UI; it tends to be the freshest.
+        // The project-local bin/{Debug,Release} folders cover a standalone UI build and are
+        // retained so a developer who built only the UI csproj still gets that binary.
         var uiProjectDir = Path.Combine(repoRoot, "UI", "WoWStateManagerUI");
         var probes = new[]
         {
+            Path.Combine(repoRoot, "Bot", "Release", "net8.0"),
+            Path.Combine(repoRoot, "Bot", "Debug", "net8.0"),
             Path.Combine(uiProjectDir, "bin", "Debug"),
             Path.Combine(uiProjectDir, "bin", "Release"),
         };
