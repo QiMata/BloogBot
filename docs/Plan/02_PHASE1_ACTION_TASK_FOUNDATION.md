@@ -297,10 +297,30 @@ Phase 2.
 #### S1.19 — Trainer/Talent/Gossip packet paths (BG)
 
 - **Owner:** `monorepo-worker`
-- **Status:** open
+- **Status:** implemented (BG TrainerFrame/TalentFrame/GossipFrame non-null; live parity tests still pending)
 - **Goal:** TrainerFrame, TalentFrame, GossipFrame have packet
   equivalents that BG's `TrainerAgent`, `TalentAgent`, `GossipAgent`
   drive.
+- **Latest evidence (2026-05-15):** Three frames shipped at
+  `Exports/WoWSharpClient/Frames/{NetworkTrainerFrame,NetworkTalentFrame,NetworkGossipFrame}.cs`,
+  wired in `WoWSharpObjectManager` constructor next to S1.15/S1.17
+  frames. **TrainerFrame**: routes `TrainSpell(idx) → LearnSpellByIndexAsync`,
+  `Close → CloseTrainerAsync`; `Spells` returns default-constructed
+  `TrainerSpellItem` placeholders sized to `GetAvailableServices()` so
+  the dispatcher's `Spells.ElementAt(spellIndex).Cost` gate proceeds
+  (server-side cost check via CMSG_TRAINER_BUY_SPELL is the authority).
+  **TalentFrame**: routes `LearnTalent(spellId) → LearnTalentAsync`,
+  `TalentPointsAvailable / Spent / All` from agent state; Tabs returns
+  empty (TalentTab has no public ctor — out of scope to extend).
+  **GossipFrame**: routes `SelectGossipOption / SelectFirstGossipOfType`
+  via `SelectGossipOptionAsync`; `Options` reflects live menu data
+  through a private `BgGossipOption` subclass enabled by adding
+  `protected set` to `GossipOption.Type` / `Text` (non-breaking
+  extension to `Exports/GameData.Core/Frames/IGossipFrame.cs`).
+  `NetworkTrainerFrameTests`, `NetworkTalentFrameTests`,
+  `NetworkGossipFrameTests` ship `32/0/0` green at
+  `Tests/WoWSharpClient.Tests/Frames/NetworkTrainerTalentGossipFrameTests.cs`.
+  Combined Frames suite: 84/0/0 green.
 
 ### Phase 1 acceptance test
 

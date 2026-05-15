@@ -229,6 +229,9 @@ namespace WoWSharpClient
             LootFrame = new NetworkLootFrame(() => _agentFactoryAccessor?.Invoke()?.LootingAgent);
             TradeFrame = new NetworkTradeFrame(() => _agentFactoryAccessor?.Invoke()?.TradeAgent);
             MerchantFrame = new NetworkMerchantFrame(() => _agentFactoryAccessor?.Invoke()?.VendorAgent);
+            TrainerFrame = new NetworkTrainerFrame(() => _agentFactoryAccessor?.Invoke()?.TrainerAgent);
+            TalentFrame = new NetworkTalentFrame(() => _agentFactoryAccessor?.Invoke()?.TalentAgent);
+            GossipFrame = new NetworkGossipFrame(() => _agentFactoryAccessor?.Invoke()?.GossipAgent);
         }
 
         private void InitializeMovementController()

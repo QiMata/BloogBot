@@ -24,7 +24,7 @@ namespace GameData.Core.Frames
         /// <value>
         ///     The type.
         /// </value>
-        public GossipTypes Type { get; }
+        public GossipTypes Type { get; protected set; }
 
         /// <summary>
         ///     The text of the Gossip Item
@@ -32,6 +32,6 @@ namespace GameData.Core.Frames
         /// <value>
         ///     The text.
         /// </value>
-        public string Text { get; } = string.Empty;
+        public string Text { get; protected set; } = string.Empty;
     }
 }

@@ -76,7 +76,8 @@ Phase 0: **done.** S1.0 (IBotTask migration): **done.**
 | `S1.15` | Trade null guards (6 actions) | `monorepo-worker` | **implemented (2026-05-15; live TradeParityTests pending)** | `NetworkTradeFrame` shipped at `Exports/WoWSharpClient/Frames/NetworkTradeFrame.cs`; wired in `WoWSharpObjectManager:230`; 4 of 6 actions route through `ITradeNetworkClientComponent` (Money/Item/Accept/Decline), `OfferLockpick`/`OfferEnchant` stubbed pending SpellCastingAgent wire. `NetworkTradeFrameTests` ships 20/0/0 green. |
 | `S1.16` | Craft packet path (BG) | `monorepo-worker` | **open (no dry-run yet)** | |
 | `S1.17` | Vendor merchant null handling | `monorepo-worker` | **implemented (2026-05-15; live VendorParityTests pending)** | `NetworkMerchantFrame` shipped at `Exports/WoWSharpClient/Frames/NetworkMerchantFrame.cs`; wired in `WoWSharpObjectManager:231`; all IMerchantFrame methods route through `IVendorNetworkClientComponent`. `NetworkMerchantFrameTests` ships 28/0/0 green. |
-| `S1.18..S1.19` | FG-only gap closures (taxi BG, trainer/talent/gossip BG) | `monorepo-worker` | **open (no dry-run yet)** | |
+| `S1.18` | Taxi packet path (BG) | `monorepo-worker` | **open (no dry-run yet)** | |
+| `S1.19` | Trainer/Talent/Gossip packet paths (BG) | `monorepo-worker` | **implemented (2026-05-15; live parity tests pending)** | `NetworkTrainerFrame` + `NetworkTalentFrame` + `NetworkGossipFrame` shipped in `Exports/WoWSharpClient/Frames/`; wired in `WoWSharpObjectManager:232-234`. `GossipOption.Type`/`Text` got `protected set` so a private BG subclass can populate live menu state. 32 new frame tests + 84 total Frames tests green. |
 | `S1.20` | One-hour shake-out test | `monorepo-test-runner` | **open (depends on all of S1.1..S1.19)** | Phase 1 acceptance gate |
 
 **Files shipped by S1.0:**
