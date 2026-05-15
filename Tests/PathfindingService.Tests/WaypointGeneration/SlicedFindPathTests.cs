@@ -91,6 +91,44 @@ public class SlicedFindPathTests : IClassFixture<PathfindingValidationFixture>
             + $"sliced=0x{sliced.PolyRefs[^1]:X16}");
     }
 
+    /// <summary>
+    /// Diagnostic: the 500y Durotar→Crossroads route at
+    /// (1177.8,-4464.2,21.4)→(1629.4,-4373.4,31.3) on Kalimdor (map 1)
+    /// is the route where the synchronous `CalculatePath` hangs
+    /// indefinitely post-2026-05-15 Navigation.dll rebuild (see
+    /// PathfindingBotTaskTests.PathCalculation skip in commit 356fb418).
+    /// This test exercises the same route through the sliced API with a
+    /// 30s wall-clock budget to localize the hang. Two outcomes both
+    /// load-bearing:
+    ///   * Success in &lt;30s: confirms the hang is in the unbounded
+    ///     synchronous findPath — fix is wiring sliced into the live
+    ///     planner for long routes.
+    ///   * AStarTimeout: hang is real A* explosion (Detour can't reach
+    ///     endRef on this navmesh within budget) — needs bake or
+    ///     filter work, not just planner rewiring.
+    /// Test passes either way — its job is to print the outcome.
+    /// </summary>
+    [Fact]
+    public void Sliced_DurotarToCrossroads_LocalizesPathCalculationHang()
+    {
+        const uint durotarMapId = 1;
+        var durotarStart = new XYZ(1177.8f, -4464.2f, 21.4f);
+        var crossroadsEnd = new XYZ(1629.4f, -4373.4f, 31.3f);
+
+        var sliced = NavigationInterop.QueryPathPolygonsSliced(
+            durotarMapId, durotarStart, crossroadsEnd, AgentRadius, AgentHeight,
+            maxOut: 4096, maxWallClockMs: 30000);
+
+        _output.WriteLine(
+            $"# Durotar 500y route: success={sliced.Success} status={sliced.Status} "
+            + $"count={sliced.PolyRefs.Length} elapsedMs={sliced.ElapsedMs} "
+            + $"iters={sliced.SliceIterations} "
+            + $"start=0x{(sliced.PolyRefs.Length > 0 ? sliced.PolyRefs[0] : 0):X16} "
+            + $"end=0x{(sliced.PolyRefs.Length > 0 ? sliced.PolyRefs[^1] : 0):X16}");
+
+        Assert.True(sliced.Success, "sliced infra must succeed (status reports actual outcome)");
+    }
+
     [Fact]
     public void Sliced_WithSubMillisecondBudget_ReturnsAStarTimeout()
     {
