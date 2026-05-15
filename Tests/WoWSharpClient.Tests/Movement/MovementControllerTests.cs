@@ -2034,6 +2034,15 @@ namespace WoWSharpClient.Tests.Movement
         public void Update_IdleAuthoritativeRelocation_PrimesGroundSnapAndRefreshesEnvironment()
         {
             var stepCallCount = 0;
+            // Stub the ground probe so PrimeAirborneTeleportFallIfNeeded
+            // doesn't fall back to the no-walkable-support branch (which
+            // sets MOVEFLAG_FALLINGFAR and keeps _needsGroundSnap true,
+            // blocking the second Update's DetectAuthoritativeRelocation
+            // from firing). Round-4 iter-5 (commit a6d6fa79) switched
+            // Prime to GetWalkableGroundZ; the NativeLocalPhysics shim
+            // falls back to GetGroundZ when only the legacy override is
+            // set, so a single override stubs both paths.
+            NativeLocalPhysics.TestGetGroundZOverride = (_, _, _, queryZ, _) => (queryZ - 0.5f, true);
             NativeLocalPhysics.TestStepOverride = input =>
             {
                 stepCallCount++;
