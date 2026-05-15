@@ -56,7 +56,7 @@ public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<
     // CalculatePath now fails FAST (not hangs) on this route, which is
     // production-correct behavior — runtime callers should handle the
     // partial-path result by chaining the next leg from path[^1].
-    [Fact(Skip = "Smooth-path truncated at MAX_POINT_PATH_LENGTH=1024 leaves 119y gap; needs route-leg chaining; see comment + TASKS.md")]
+    [Fact]
     public void PathCalculation_ShouldReturnValidWaypointPath()
     {
         var task = new PathCalculationTask(_fixture.Navigation);
@@ -111,7 +111,7 @@ public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<
     // as PathCalculation; see that comment for diagnosis.
     // SKIPPED 2026-05-15 (loop iter 14): same path-truncation issue as
     // PathCalculation; see that test's comment + TASKS.md.
-    [Fact(Skip = "Smooth-path truncation at 1024 WP on long Durotar route; see PathCalculation comment + TASKS.md")]
+    [Fact]
     public void OrgrimmarCorpseRunPath_ShouldReturnValidWaypointPath()
     {
         var task = new OrgrimmarCorpseRunPathTask(_fixture.Navigation);

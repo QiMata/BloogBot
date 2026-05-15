@@ -1824,10 +1824,26 @@ namespace PathfindingService.Repository
             // 500 is well above the corridor-first medium threshold (450y
             // ÷ ~1y per smooth-path segment) so short and medium routes
             // remain fully validated.
-            if (attempt.IsUsable && attempt.Path.Length > MaxValidationPipelinePathLength)
+            // Bypass also triggers for CorridorFallback resolutions
+            // regardless of path length. Corridor-fallback paths are
+            // string-pulled polygon corridors (typically 30-50 corners
+            // for long routes) where adjacent corners can be 10+ yards
+            // apart. The validation pipeline densifies and re-validates
+            // each segment, which adds up to dozens of
+            // ValidateWalkableSegment calls — the same hang shape as
+            // long paths just from many segments instead of many points.
+            // The corridor-fallback result is already a usable corridor
+            // by construction (Detour returned it), so re-validating is
+            // redundant.
+            var isLongPath = attempt.IsUsable && attempt.Path.Length > MaxValidationPipelinePathLength;
+            var isCorridorFallback = attempt.IsUsable
+                && (attempt.ResolutionKind == NativePathResolutionKind.CorridorFallback
+                    || attempt.ResolutionKind == NativePathResolutionKind.CorridorFirst
+                    || attempt.ResolutionKind == NativePathResolutionKind.CorridorFirstExpanded);
+            if (isLongPath || isCorridorFallback)
             {
                 Console.Error.WriteLine(
-                    $"[NAV-PERF] BuildUsablePathResult bypass pipeline map={mapId} pts={attempt.Path.Length} > {MaxValidationPipelinePathLength}");
+                    $"[NAV-PERF] BuildUsablePathResult bypass pipeline map={mapId} pts={attempt.Path.Length} reason={(isLongPath ? "long-path" : "corridor-fallback")} kind={attempt.ResolutionKind}");
                 return new NavigationPathResult(
                     attempt.Path,
                     attempt.Path,
