@@ -1092,6 +1092,20 @@ namespace PathfindingService.Repository
         private NavigationPathResult CalculateValidatedPathCore(uint mapId, XYZ start, XYZ end, bool smoothPath,
             float agentRadius, float agentHeight)
         {
+            // Total wall-clock budget for path resolution. CalculateValidatedPathCore
+            // can run up to FOUR resolver attempts (preferred, alternate,
+            // corridor_fallback, and the blocked-result-repair flow each
+            // call BuildUsablePathResult → ApplyNativeSegmentValidation
+            // → multiple ValidateWalkableSegment calls). With each
+            // ValidateWalkableSegment running a wall-creep-bounded but
+            // still-non-trivial physics simulation, a long route's
+            // resolver attempts can compound into multi-minute hangs
+            // even after iter-9-13 fixes. Cap the total at 30s; when
+            // exceeded, skip remaining attempts and return the best
+            // candidate seen so far.
+            var totalDeadline = DateTime.UtcNow.AddMilliseconds(30000);
+            bool BudgetExceeded() => DateTime.UtcNow >= totalDeadline;
+
             var preferredAttempt = EvaluateOverlayAwarePath(mapId, start, end, smoothPath, agentRadius, agentHeight, "native_path");
             NavigationPathResult? preferredValidatedResult = null;
             if (preferredAttempt.IsUsable)
@@ -1110,6 +1124,17 @@ namespace PathfindingService.Repository
                     return preferredResult;
             }
 
+            if (BudgetExceeded())
+            {
+                Console.Error.WriteLine(
+                    $"[NAV-PERF] CalculateValidatedPathCore budget exceeded after preferred map={mapId}; returning preferred result");
+                return preferredValidatedResult ?? new NavigationPathResult(
+                    preferredAttempt.Path,
+                    preferredAttempt.Path,
+                    preferredAttempt.SuccessResult,
+                    null);
+            }
+
             var alternateAttempt = EvaluateOverlayAwarePath(mapId, start, end, !smoothPath, agentRadius, agentHeight, "native_path_alternate_mode");
             NavigationPathResult? alternateValidatedResult = null;
             if (alternateAttempt.IsUsable)
@@ -1126,6 +1151,17 @@ namespace PathfindingService.Repository
                 LogPathSelectionCandidate("alternate", alternateResult);
                 if (IsCompleteUsablePath(start, end, alternateResult))
                     return alternateResult;
+            }
+
+            if (BudgetExceeded())
+            {
+                Console.Error.WriteLine(
+                    $"[NAV-PERF] CalculateValidatedPathCore budget exceeded after alternate map={mapId}; returning best candidate");
+                return alternateValidatedResult ?? preferredValidatedResult ?? new NavigationPathResult(
+                    preferredAttempt.Path,
+                    preferredAttempt.Path,
+                    preferredAttempt.SuccessResult,
+                    null);
             }
 
             var corridorFallbackResolution = FindPathCorridorResolution(
@@ -1156,6 +1192,17 @@ namespace PathfindingService.Repository
                 LogPathSelectionCandidate("corridor_fallback", corridorFallbackResult);
                 if (IsCompleteUsablePath(start, end, corridorFallbackResult))
                     return corridorFallbackResult;
+            }
+
+            if (BudgetExceeded())
+            {
+                Console.Error.WriteLine(
+                    $"[NAV-PERF] CalculateValidatedPathCore budget exceeded after corridor_fallback map={mapId}; returning best candidate");
+                var bestCandidate = corridorFallbackValidatedResult
+                    ?? alternateValidatedResult
+                    ?? preferredValidatedResult;
+                if (bestCandidate.HasValue)
+                    return bestCandidate.Value;
             }
 
             var blockedResults = new[]
