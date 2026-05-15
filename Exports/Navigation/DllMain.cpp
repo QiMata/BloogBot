@@ -2696,6 +2696,19 @@ extern "C" __declspec(dllexport) bool FindPathCornersForAgent(
 // outPosOverPoly to distinguish "Z at requested XY" from "Z at boundary-
 // snapped XY". See docs/physics/PATHFINDING_RESEARCH_QA.md §Q1.
 //
+// Surface J FINAL (2026-05-14 retry): the snapped nearestPoint XY can
+// still be outside ALL detail triangles when the polygon's detail mesh
+// is more restrictive than its base footprint — getPolyHeight then
+// fails on the snap point too. findNearestPoly internally calls
+// closestPointOnPoly, which leaves nearest[1] populated with the
+// detail-tri height (when a detail tri matched) OR a lerped base-edge
+// Z (when no detail tri matched on the boundary point). Either is a
+// valid polygon surface Z. We use nearest[1] as the final fallback
+// instead of returning NaN. This is bake-neutral and closes the
+// ubrs_portal Walkable_AllFourPortals gate without shifting the
+// polygon graph (tile 3446 bake-knob attempts F/G regressed the
+// corridor tests; this consumer-side fix has no such side effect).
+//
 // Returns false only on true infrastructure failure (no query/navmesh,
 // invalid args, SEH).
 extern "C" __declspec(dllexport) bool GetPolyAtCoord(
@@ -2827,11 +2840,31 @@ extern "C" __declspec(dllexport) bool GetPolyAtCoord(
                         height,
                         posOverPoly ? 1 : 0);
                 }
-                // else: leave NaN sentinel — both the requested XY and the
-                // snapped XY failed getPolyHeight, which is structurally
-                // impossible for ground polys (dtPointInPolygon on a boundary
-                // point) so it's an off-mesh-connection or genuinely bad
-                // poly. The caller treats NaN as a validation failure.
+                else if (poly && poly->getType() != DT_POLYTYPE_OFFMESH_CONNECTION)
+                {
+                    // Surface J FINAL fallback: nearest[1] was set by
+                    // findNearestPoly's internal closestPointOnPoly. It
+                    // is the detail-tri Z (when a detail tri contained
+                    // the snapped XY) or a lerped base-edge Z (when no
+                    // detail tri matched on the boundary). Either way
+                    // it's a valid polygon surface Z. Reject only for
+                    // off-mesh-connection polys, which have no detail
+                    // mesh and no meaningful interior surface.
+                    *outSurfaceZ = nearest[1];
+                    fprintf(stderr,
+                        "[POLYAT] surfaceJ FINAL fallback to nearest[1]=%.2f for poly 0x%llx at "
+                        "requested=(%.2f,%.2f,%.2f) snapped=(%.2f,%.2f,%.2f) posOverPoly=%d "
+                        "(both getPolyHeight calls failed; detail-mesh tighter than base hull)\n",
+                        nearest[1],
+                        (unsigned long long)polyRef,
+                        coord.X, coord.Y, coord.Z,
+                        outNearestPoint ? outNearestPoint->X : nearest[2],
+                        outNearestPoint ? outNearestPoint->Y : nearest[0],
+                        nearest[1],
+                        posOverPoly ? 1 : 0);
+                }
+                // else: leave NaN sentinel for off-mesh-connection polys
+                // (no detail mesh, no meaningful surface Z).
             }
         }
 
