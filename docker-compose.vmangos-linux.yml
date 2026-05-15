@@ -94,6 +94,13 @@ services:
       - ${WWOW_BOT_PROD_DATA_DIR:-D:/wwow-bot/prod-data}/mmaps:/wwow-data/mmaps:ro
       - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}/maps:/wwow-data/maps:ro
       - ${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}/vmaps:/wwow-data/vmaps:ro
+      # scenes/ mount lets SceneQuery::EnsureMapLoaded hit the fast-path
+      # LoadFromFile (~750ms) instead of falling through to live VMAP
+      # extract (~30s) on first-path queries. Without this mount, the
+      # 30s vs 754ms gap from project_pfs_overhaul_006_test_data_latency
+      # re-emerges per service start. Sourced from prod-data per
+      # project_prod_data_scenes_deployed (2026-05-15).
+      - ${WWOW_BOT_PROD_DATA_DIR:-D:/wwow-bot/prod-data}/scenes:/wwow-data/scenes:ro
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/5001' || exit 1"]
       interval: 30s
