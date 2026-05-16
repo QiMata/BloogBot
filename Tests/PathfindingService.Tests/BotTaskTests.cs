@@ -8,7 +8,8 @@ namespace PathfindingService.Tests;
 /// These require Navigation.dll and mmaps data to be available.
 /// </summary>
 [Trait(TestCategories.Feature, TestCategories.Pathfinding)]
-public class PathfindingBotTaskTests(NavigationFixture fixture) : IClassFixture<NavigationFixture>
+[Collection(NavigationCollection.Name)]
+public class PathfindingBotTaskTests(NavigationFixture fixture)
 {
     private readonly NavigationFixture _fixture = fixture;
 

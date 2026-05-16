@@ -8,7 +8,8 @@ using System.Threading.Tasks;
 
 namespace PathfindingService.Tests
 {
-    public class PathfindingTests(NavigationFixture fixture) : IClassFixture<NavigationFixture>
+    [Collection(NavigationCollection.Name)]
+    public class PathfindingTests(NavigationFixture fixture)
     {
         private readonly Navigation _navigation = fixture.Navigation;
 

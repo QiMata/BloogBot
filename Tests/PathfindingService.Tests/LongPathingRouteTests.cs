@@ -13,7 +13,8 @@ using Xunit.Abstractions;
 
 namespace PathfindingService.Tests;
 
-public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper output) : IClassFixture<NavigationFixture>
+[Collection(NavigationCollection.Name)]
+public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper output)
 {
     private const uint Kalimdor = 1;
     private const uint EasternKingdoms = 0;

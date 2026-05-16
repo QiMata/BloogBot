@@ -7,6 +7,25 @@ using System.Linq;
 namespace PathfindingService.Tests;
 
 /// <summary>
+/// xUnit collection that serializes every test class touching
+/// <see cref="NavigationFixture"/>. Native `Navigation.dll` exports take a
+/// shared <c>g_navigationMutex</c>, so parallel Detour queries from sibling
+/// classes (BotTaskTests, SegmentValidationCacheTests,
+/// PathfindingSocketServerIntegrationTests, PathingAndOverlapTests) blow the
+/// 30s `CalculateValidatedPathCore.totalDeadline` of LongPathing Theory
+/// cases under batch mode. `DisableParallelization` also prevents the 6
+/// WaypointGeneration classes (PathfindingValidationFixture, which P/Invokes
+/// the same DLL) from racing against this collection. See
+/// `feedback_pfs_test_state_contamination` and
+/// `project_pfs_og_city_groundz_snap`.
+/// </summary>
+[CollectionDefinition(NavigationCollection.Name, DisableParallelization = true)]
+public class NavigationCollection : ICollectionFixture<NavigationFixture>
+{
+    public const string Name = "Navigation";
+}
+
+/// <summary>
 /// xUnit fixture that provides a shared <see cref="Navigation"/> instance.
 /// Performs preflight checks for Navigation.dll and nav data (mmaps/).
 /// Used by: PathfindingTests, PathfindingBotTaskTests.

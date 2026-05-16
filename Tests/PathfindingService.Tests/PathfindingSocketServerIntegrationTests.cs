@@ -13,7 +13,8 @@ using System.Reflection;
 
 namespace PathfindingService.Tests;
 
-public sealed class PathfindingSocketServerIntegrationTests(NavigationFixture fixture) : IClassFixture<NavigationFixture>
+[Collection(NavigationCollection.Name)]
+public sealed class PathfindingSocketServerIntegrationTests(NavigationFixture fixture)
 {
     private readonly NavigationFixture _fixture = fixture;
 

@@ -5,7 +5,8 @@ using Tests.Infrastructure;
 namespace PathfindingService.Tests;
 
 [Trait(TestCategories.Feature, TestCategories.Pathfinding)]
-public sealed class SegmentValidationCacheTests : IClassFixture<NavigationFixture>
+[Collection(NavigationCollection.Name)]
+public sealed class SegmentValidationCacheTests
 {
     private readonly NavigationFixture _fixture;
 
