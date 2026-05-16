@@ -2,7 +2,11 @@
 <RunSettings>
   <RunConfiguration>
     <TargetPlatform>x64</TargetPlatform>
-    <!-- Hard stop for hangs so dotnet test does not run indefinitely. -->
-    <TestSessionTimeout>600000</TestSessionTimeout>
+    <!-- Hard stop for hangs so dotnet test does not run indefinitely.
+         Raised 2026-05-15 from 600000 (10 min) to 1800000 (30 min) so the
+         parameterized `CrossroadsToUndercity_CriticalWalkLegs` sweep (12+
+         cases, several taking 60–300s through the smooth-from-corridor
+         expansion path) can complete without aborting mid-suite. -->
+    <TestSessionTimeout>1800000</TestSessionTimeout>
   </RunConfiguration>
 </RunSettings>
