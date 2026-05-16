@@ -198,22 +198,71 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
 #### S1.3 — PathfindingService stability sweep
 
 - **Owner:** `monorepo-worker`
-- **Status:** blocked (2026-05-12 red baseline)
+- **Status:** partial-green (2026-05-15 in-progress)
 - **Owned paths:**
   - `Services/PathfindingService/`
 - **Goal:** No-route-pack baseline: every catalog activity's
   `TravelTarget` resolves to a path within 30s P99 across a sample of
   source positions covering all primary zones. Failures are slots
   routed to MmapGen (Plan/10).
-- **Latest evidence:** 2026-05-12
-  `LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes`
-  passed `20/23` and failed three OG zeppelin tower cases
-  (`tmp/test-runtime/results-pathfinding/s1_3_critical_walk_legs.trx`):
-  `orgrimmar_city_live_vertical_replan_recovery`,
-  `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`, and
-  `orgrimmar_zeppelin_tower_friction_recovery`. Per the pathfinding freeze,
-  these should become mesh/physics-side proof or MmapGen follow-up work, not
-  managed route repairs.
+- **Latest evidence (2026-05-15):** Commits `6a5f4b42`
+  (bypass-result densification + smooth-corridor join Z correction)
+  and `f3861b95` (`TestSessionTimeout` 600s → 1800s) turn the row
+  partial-green from the 2026-05-12 baseline (20/23 critical walk-legs
+  red).
+  - Two surgical resolver fixes shipped in
+    `Services/PathfindingService/Repository/Navigation.cs`:
+    1. `BuildUsablePathResult` long-path / corridor-fallback bypass
+       now appends a `EnsureMaxHorizontalSegmentLength` post-pass at
+       `BypassMaxHorizontalSegmentLength=6f`. Detour string-pulled
+       corridors on OG-city → zeppelin routes have adjacent corners
+       10–300+ yards apart; the previous bypass returned those
+       verbatim and the parameterized `CriticalWalkLegs` tests
+       rejected them at the 8y segment-length contract. The bypass
+       continues to fire for `CorridorFirst`/`CorridorFirstExpanded`
+       (so the Durotar 500y route's validation-pipeline hang stays
+       avoided per `f343ecbf`) but every returned segment is now
+       ≤ 6y horizontal. Endpoints are preserved exactly so
+       `HasUsableNativeEndpointAnchors` / `IsCompleteUsablePath` still
+       see the same anchors.
+    2. `AppendPathSkippingDuplicateStart` now uses 2D distance for
+       the tail match (was 3D), and when an XY-duplicate is detected
+       it rewrites the existing tail Z with the appended smooth-
+       segment's first waypoint Z. The OG zeppelin tower deck
+       overlaps the lower city floor by ~16y, so the corridor corner
+       (deck Z ≈ 51.5) and the
+       `closestPointOnPolyBoundary`-projected smooth-segment start
+       (lower floor Z ≈ 35) used to land as adjacent waypoints with
+       a ~16y dz that violated `maxHeightJump` and the bot's
+       MovementController auto-step. Trusting the smooth-segment's
+       surface projection over the corridor corner closes the join
+       continuously.
+  - Confirmed PASS on prod-data
+    (`Tests/PathfindingService.Tests/TestResults/og-fix4.trx`,
+    individual-filter and class-sweep runs):
+    - `orgrimmar_city_to_zeppelin_tower_lower_approach`
+    - `orgrimmar_flight_master_to_zeppelin_tower_full_route`
+    - `orgrimmar_flight_master_tower_descent`
+    - `orgrimmar_flight_master_tower_hover_stall_exact_live_recovery`
+    - `orgrimmar_flight_master_tower_descent_live_stall_recovery`
+    - `PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_ReroutesAroundBlockedDirectLine`
+    - `PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_StraightRequestCompletesWithinBudget`
+  - Still to verify in the next loop (6 OG-city cases):
+    `support_stall_screenshot_recovery`,
+    `support_stall_exact_live_recovery`,
+    `hallway_exit_live_stall_recovery`,
+    `hallway_exit_live_stall_recovery_corridor`,
+    `hallway_live_wall_stall_recovery`,
+    `city_live_vertical_replan_recovery`. Tests are flaky in batch
+    mode (some pass alone, fail in the sweep — likely shared
+    `NavigationFixture` + `SegmentValidationCache` contamination per
+    `feedback_pfs_test_state_contamination`).
+  - No regression: 3/0/0 Docker validation, 135/0/0
+    RecordedTests.PathingTests, 182/0/1 Navigation.Physics.Tests.
+  - Memory references: [[project_pfs_og_city_resolver_fix]],
+    [[feedback_pfs_test_state_contamination]],
+    [[project_pfs_calculatepath_hang_durotar]] (the 14-iter Durotar
+    hang that prompted the broader bypass, now preserved).
 
 ### Task family completeness
 
