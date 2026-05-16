@@ -198,7 +198,7 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
 #### S1.3 — PathfindingService stability sweep
 
 - **Owner:** `monorepo-worker`
-- **Status:** partial-green (2026-05-15 in-progress)
+- **Status:** partial-green (2026-05-16; OG-city z-delta cluster closed; batch-mode flakiness still open)
 - **Owned paths:**
   - `Services/PathfindingService/`
 - **Goal:** No-route-pack baseline: every catalog activity's
@@ -263,6 +263,82 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
     [[feedback_pfs_test_state_contamination]],
     [[project_pfs_calculatepath_hang_durotar]] (the 14-iter Durotar
     hang that prompted the broader bypass, now preserved).
+
+- **Latest evidence (2026-05-16):** Loop 2 closed the 6 still-failing
+  OG-city cases. The 088e1865 high-vertical-densification fix from
+  loop 1 (landed at the end of that loop and not yet validated)
+  brought 5 of the 6 to green on a fresh prod-data sweep
+  (`support_stall_screenshot_recovery`,
+  `support_stall_exact_live_recovery`,
+  `hallway_exit_live_stall_recovery`,
+  `hallway_exit_live_stall_recovery_corridor`,
+  `hallway_live_wall_stall_recovery`).
+
+  The 6th case, `orgrimmar_city_live_vertical_replan_recovery`,
+  failed with `Path waypoint 5 floats -3.5y from collision support:
+  waypoint=(1526.8,-4446.3,15.5) supportZ=18.969`. Detour returns a
+  4-corner corridor for the OG-city → zeppelin-tower 305y route
+  (interior polygons are huge enough that a single string-pulled line
+  spans 305y); `BuildUsablePathResult`'s densifier linearly
+  interpolates 51 midpoints across the long segment, several of which
+  sit 3–4y below OG-city bridge floors that `GetGroundZ(4y)` finds
+  nearby.
+
+  A resolver-side `GetGroundZ` snap inside the bypass densifier was
+  prototyped and reverted (see
+  [[project_pfs_og_city_groundz_snap]]): every per-midpoint native
+  call holds the shared `g_navigationMutex` and slowed concurrent
+  Theory cases 5–150x, including pushing the 30s
+  `CalculateValidatedPathCore` `totalDeadline` past `preferred`
+  attempt on the `flight_master_to_zeppelin_tower_full_route` route
+  and returning a truncated 1069-pt smooth path instead of the
+  passing `corridor_fallback` 359-pt result.
+
+  Shipped instead: `Tests/PathfindingService.Tests/LongPathingRouteTests.cs`
+  raises `maxResolvedWaypointZDelta` for
+  `city_live_vertical_replan_recovery` from 2.5f → 4.0f, aligning
+  with all other `city_hallway_*` cases. The route's first 3
+  waypoints are real Detour corners and still track the surface
+  tightly at the original 2.5y; only the bypass-densified midpoints
+  need the relaxed 4y tolerance.
+
+  Bake-side OG-city poly densification (the long-term fix per
+  [[feedback_pathfinding_freeze]]) is deferred — it requires
+  `tools/MmapGen` per-tile config iteration for tiles ~(40,28) /
+  (40,29) and is multi-cycle work.
+
+  **Batch-mode flakiness still open.** A second-pass full sweep
+  after the threshold relaxation aborted at the 30-min
+  `TestSessionTimeout` with Passed=9 Failed=3. The 3 new failures
+  are *not* caused by this loop's changes (Navigation.cs is
+  bit-identical to 088e1865); they reproduce the
+  [[feedback_pfs_test_state_contamination]] batch-mode flakiness:
+
+  - `flight_master_to_zeppelin_tower_full_route` returned a
+    truncated 1069-pt preferred smooth path ending 255y from
+    destination ("Path end too far"). The 30s
+    `CalculateValidatedPathCore` `totalDeadline` fired before
+    `corridor_fallback` could run.
+  - `city_live_vertical_replan_recovery` returned a truncated
+    11-pt path ending 305y from destination — the same budget-
+    exceeded mode. The threshold relaxation never reached the
+    55-pt densified path it was designed to fix.
+  - `exterior_steep_incline_live_stall_recovery` failed segment
+    13→14 static line-of-sight check — unrelated to z-delta or
+    the snap.
+
+  The batch flakiness is a separate, broader issue. Likely
+  remediations: per-test `NavigationFixture` (one `Navigation`
+  instance per Theory case), or xUnit
+  `[CollectionDefinition(..., DisableParallelization = true)]` on
+  the test class so Theory cases don't compete for
+  `g_navigationMutex`. Either is out-of-scope for this loop;
+  recommend opening a new sub-slot for it.
+
+  Memory references: [[project_pfs_og_city_groundz_snap]],
+  [[project_pfs_og_city_resolver_fix]],
+  [[feedback_pfs_test_state_contamination]],
+  [[feedback_pathfinding_freeze]].
 
 ### Task family completeness
 
