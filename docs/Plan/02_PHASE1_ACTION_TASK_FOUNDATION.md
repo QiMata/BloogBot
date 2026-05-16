@@ -340,6 +340,92 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[feedback_pfs_test_state_contamination]],
   [[feedback_pathfinding_freeze]].
 
+- **Latest evidence (2026-05-16 loop 3):** The cross-class
+  `g_navigationMutex` contention that drove the batch-mode flakiness
+  is closed by adding a shared xUnit collection over the five
+  `NavigationFixture`-using test classes:
+
+  - `Tests/PathfindingService.Tests/NavigationFixture.cs` gains
+    `[CollectionDefinition("Navigation", DisableParallelization=true)]`
+    + `NavigationCollection : ICollectionFixture<NavigationFixture>`.
+  - The five classes (`LongPathingRouteTests`, `PathfindingBotTaskTests`,
+    `SegmentValidationCacheTests`,
+    `PathfindingSocketServerIntegrationTests`,
+    `PathfindingTests`) switch from `IClassFixture<NavigationFixture>`
+    to `[Collection(NavigationCollection.Name)]`.
+
+  `DisableParallelization = true` is critical: it makes the entire
+  collection non-parallel-with-anything else, not just internally —
+  important because `WaypointGeneration/*.cs`'s
+  `PathfindingValidationFixture` classes also P/Invoke Navigation.dll
+  and would otherwise race against ours.
+
+  Targeted `CrossroadsToUndercity_CriticalWalkLegs` Theory sweep
+  comparison on `WWOW_DATA_DIR=D:/wwow-bot/prod-data`, parity
+  Navigation.cs (bit-identical to `088e1865`):
+
+  | Loop | Result | 13th case | Notes |
+  |---|---|---|---|
+  | loop 2 (no collection) | 9 pass / 3 fail | aborted at 30m, before 13th started | sibling-class Detour contention dominant |
+  | loop 3 (collection fix) | 11 pass / 2 fail | aborted at 30m on 13th-case completion | contention removed, 13th case fully executed |
+
+  **Both contention-induced loop-2 failures flipped to PASS:**
+
+  - `orgrimmar_flight_master_to_zeppelin_tower_full_route` (670y from
+    OG flight master to UC zeppelin boarding) — loop 2 returned a
+    1069-pt smooth path 255y short ("Path end too far") in 3m52s.
+    Loop 3 returns a clean smooth path passing all per-waypoint
+    checks in 4m18s. The earlier truncation pathology was a
+    contention-induced budget overflow inside
+    `CalculateValidatedPathCore`, not a real smooth-path limit.
+  - `orgrimmar_city_live_vertical_replan_recovery` — loop 2 truncated
+    to an 11-pt path in 4m20s (the loop-2 4.0y z-delta relaxation
+    never reached the 55-pt densified path it was designed to
+    validate). Loop 3 produces the full densified path with the
+    relaxed threshold and passes in 2m6s.
+
+  **The remaining 2 failures are NOT contention-driven** (this
+  reverses the prior loop's hypothesis):
+
+  - `orgrimmar_exterior_steep_incline_live_stall_recovery` (1m46s
+    fail in loop 3, vs 7m37s fail in loop 2 — same failure shape):
+    static LOS at segment 13→14
+    `from=(1373.5,-4385.2,28.2) to=(1370.6,-4390.3,30.0)
+    result=native_path blocked=none`. The path has 156 corners, only
+    this one segment fails. Bypass densifier branch
+    `reason=corridor-fallback kind=CorridorFirstExpanded` is
+    producing a segment geometrically valid for the bot capsule but
+    failing the test-side static LOS heuristic at
+    `minLineOfSightValidationSegmentLength=2.5`.
+  - `orgrimmar_exterior_incline_live_stall_exact_recovery` (5m37s
+    fail in loop 3; was abort-pre-execution in loop 2). Same family:
+    nearby start `(1381.3,-4370.6,26)` heading to UC zeppelin
+    boarding via the same Durotar-east-of-OG corridor.
+
+  **10 cases #14–23 (zeppelin-tower routes + UC arrival) did not
+  execute** — the sweep hit `TestSessionTimeout=1800s` after the 13th
+  case at 26m total elapsed. Long routes back to pre-contention
+  timing (5 cases @ 1–5 min each plus the 670y at 4m18s) consume
+  most of the 30-min budget per Theory case.
+
+  **No code-side changes**: Navigation.dll, PathFinder.cpp, and
+  Navigation.cs are bit-identical to 088e1865. The fix is purely
+  test-infrastructure.
+
+  **Next-loop work** (out of scope here):
+
+  - Investigate `exterior_*_incline_live_stall_recovery` LOS-13→14
+    failure: classify as bake-fidelity (per
+    [[feedback_pathfinding_freeze]] — per-tile MmapGen tuning) vs
+    test-side heuristic too strict for densified corridors.
+  - Decide budget strategy for cases #14–23: bump
+    `TestSessionTimeout`, split Theory into faster/slower
+    partitions, or accept partial-sweep coverage as the SLA.
+
+  Memory references: [[project_pfs_navigation_collection_serialization]],
+  [[feedback_pfs_test_state_contamination]],
+  [[project_pfs_og_city_groundz_snap]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family
