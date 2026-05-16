@@ -426,6 +426,86 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[feedback_pfs_test_state_contamination]],
   [[project_pfs_og_city_groundz_snap]].
 
+- **Latest evidence (2026-05-16 loop 4):** Diagnosis-only outcome —
+  no code shipped, working tree bit-identical to loop 3. The
+  `exterior_*_incline_live_stall_recovery` LOS-13→14 failures
+  classified via `tools/PathPhysicsProbe.exe` (the
+  [[mmo-physics-pathing-probe]] canonical R13 canary):
+
+  - **Single straight segment** `(1373.5,-4385.2,28.2) →
+    (1370.6,-4390.3,30.0)` returns `affordance=JumpGap
+    validation=MissingSupport hDist=5.87 vDelta=1.80
+    climb=1.80 slope=12.01deg`. Target Z=30.0 floats 0.53y above
+    ADT support 29.47. The runtime classifier says NOT walkable as
+    a straight line.
+  - **Detour `findPath(smooth=true)` on the same endpoints in
+    isolation** returns **7 walkable corners** with a `Walk Clear`
+    3y backtrack at idx 4 — the bake admits a walkable route, but
+    a 7-corner zig-zag, not the 2-corner straight line.
+  - The failing pair is **INSIDE one corridor segment's
+    smooth-expansion output**, not a corridor pair. Production
+    logs `[PATH_NATIVE] map=1 mode=smooth_from_corridor
+    corridorLen=8 expandedLen=143 expandedSegments=4` confirm
+    8-corner corridor with 4 segments smooth-expanded into 143
+    sub-corners. Detour's `findStraightPath` string-pulled
+    polygon-adjacent corners whose shared polygon edge crosses
+    unwalkable terrain — a polygon-graph defect on tile (40, 29),
+    same tile as [[project_pfs_overhaul_006_decklip_solution]].
+
+  **Two resolver-side fix attempts in
+  `Services/PathfindingService/Repository/Navigation.cs::TryExpandCorridorWithSmoothNativeSegments`**
+  (LOS-gated smooth re-expansion of short corridor segments)
+  were attempted and reverted:
+
+  1. **`LosThreshold = 2.5f`** (matching the test's
+     `minLineOfSightValidationSegmentLength`): too broad. The
+     670y `flight_master_to_zeppelin_tower_full_route` regressed
+     loop-3 pass (4m18s, full smooth path) → fail (3m19s,
+     1069-pt truncated path) — the preferred-smooth attempt
+     exhausted the 30s `CalculateValidatedPathCore.totalDeadline`
+     under hundreds of LOS calls + cascaded findPath calls.
+
+  2. **`LosThreshold = 5f` + `|dz| >= 1f` gate**: budget-clean (no
+     regression on flight_master, ~2m9s), but **had no effect on
+     the exterior_*_incline failures** — segment 13→14 isn't a
+     corridor pair, it's a sub-corner pair inside a smooth-
+     expansion output. Corridor-level gates can't see sub-pairs.
+
+  Both reverts left the working tree bit-identical to loop 3.
+  See [[project_pfs_exterior_incline_los_smooth_expand]] for
+  probe data + the corridor-level vs sub-corner-level taxonomy.
+
+  **Two viable next-loop fix surfaces:**
+
+  1. **Bake-side per-tile config on tile (40, 29)** — regenerate
+     with stricter `rcFilterLedgeSpans` / smaller `cs`/`ch` so
+     the polygon contour breaks at the slope defect between the
+     `(1373.5,...)` / `(1370.6,...)` polygons. Canonical per
+     [[feedback_pathfinding_freeze]]. Reference precedent:
+     [[project_pfs_overhaul_006_decklip_solution]] (same tile).
+
+  2. **Resolver-side smooth-expansion-output post-processing** —
+     inside `TryExpandCorridorWithSmoothNativeSegments` after
+     `TryFindPathNative` returns, walk sub-pairs and recursively
+     respath those in the narrow `[LosThreshold,
+     MinSegmentLength)` band with `|dz| >= 1f` where LOS fails.
+     Needs careful gating + recursion limit + per-route cost
+     measurement (the flight_master 1535-corner smooth expansion
+     is the budget-stress case).
+
+  **Don't relax `minLineOfSightValidationSegmentLength`** for
+  these cases test-side. The probe confirmed the straight line
+  is genuinely unwalkable; relaxing the test would let the bot
+  stall in the field. The fix has to be planner-side or
+  bake-side.
+
+  Memory references:
+  [[project_pfs_exterior_incline_los_smooth_expand]],
+  [[project_pfs_navigation_collection_serialization]],
+  [[feedback_pfs_test_state_contamination]],
+  [[feedback_pathfinding_freeze]],
+  [[mmo-physics-pathing-probe]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family
