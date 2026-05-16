@@ -96,6 +96,17 @@ namespace PathfindingService.Repository
         // validation threshold so linear-interp densification doesn't trip a
         // false LOS break.
         private const float BypassMaxHorizontalSegmentLength = 6f;
+        // Maximum vertical-Z delta allowed between adjacent waypoints in any
+        // bypass-pipeline result. `findSmoothPath`'s end-of-path handler
+        // (`dtVcopy(iterPos, targetPos)`) appends `targetPos` directly without
+        // Z-delta interpolation, so when `closestPointOnPolyBoundary` projects
+        // the segment-end onto a polygon at a different Z than the
+        // approaching iteration's last polygon (e.g. OG zeppelin tower's
+        // upper deck overlapping the lower city floor), adjacent output
+        // waypoints can carry a 12y+ vertical jump that violates the
+        // `maxHeightJump` test contract. Densifying the segment splits the
+        // jump into sub-step ≤ this value increments.
+        private const float BypassMaxVerticalSegmentDelta = 5f;
         private const float SmoothFallbackAfterStraightStaticBreakMinDistance = 50f;
         private const float SmoothPathDensifySpacing = 6f;
         // Above this path length, BuildUsablePathResult bypasses the
@@ -2026,11 +2037,12 @@ namespace PathfindingService.Repository
             {
                 var bypassPath = attempt.Path;
                 var densifiedSegments = 0;
-                if (HasOversizeHorizontalSegment(bypassPath, BypassMaxHorizontalSegmentLength))
+                if (HasOversizeSegment(bypassPath, BypassMaxHorizontalSegmentLength, BypassMaxVerticalSegmentDelta))
                 {
-                    bypassPath = EnsureMaxHorizontalSegmentLength(
+                    bypassPath = EnsureMaxSegmentDimensions(
                         bypassPath,
                         BypassMaxHorizontalSegmentLength,
+                        BypassMaxVerticalSegmentDelta,
                         out densifiedSegments);
                 }
                 Console.Error.WriteLine(
@@ -2713,9 +2725,13 @@ namespace PathfindingService.Repository
         }
 
         // Returns true if any adjacent waypoint pair exceeds maxHorizontalLength
-        // in 2D distance. Used as a cheap predicate before invoking
-        // EnsureMaxHorizontalSegmentLength on bypass results.
-        private static bool HasOversizeHorizontalSegment(XYZ[] path, float maxHorizontalLength)
+        // in 2D distance OR exceeds maxVerticalDelta in absolute Z change. Used
+        // as a cheap predicate before invoking EnsureMaxSegmentDimensions on
+        // bypass results.
+        private static bool HasOversizeSegment(
+            XYZ[] path,
+            float maxHorizontalLength,
+            float maxVerticalDelta)
         {
             if (path.Length < 2)
                 return false;
@@ -2724,26 +2740,33 @@ namespace PathfindingService.Repository
             {
                 if (Distance2D(path[i], path[i + 1]) > maxHorizontalLength)
                     return true;
+                if (MathF.Abs(path[i + 1].Z - path[i].Z) > maxVerticalDelta)
+                    return true;
             }
 
             return false;
         }
 
         // Linearly densifies any segment whose 2D distance exceeds
-        // maxHorizontalLength so the result satisfies the test-side segment
-        // contract. Z is linearly interpolated; for the bypass scenarios this
+        // maxHorizontalLength OR whose absolute vertical delta exceeds
+        // maxVerticalDelta so the result satisfies the test-side segment +
+        // maxHeightJump contracts. The split granularity is the larger of
+        // (horizontal/maxHorizontalLength) and (|dz|/maxVerticalDelta) sub-
+        // steps. Z is linearly interpolated; for the bypass scenarios this
         // post-pass targets — Detour string-pulled corridors where the
         // polygon corridor is by construction walkable — linear-interp Z
-        // tracks the corridor surface closely enough for the maxHeightJump
-        // checks. Short segments (<= maxHorizontalLength) pass through
-        // verbatim; endpoints are preserved exactly.
-        private static XYZ[] EnsureMaxHorizontalSegmentLength(
+        // tracks the corridor surface closely enough. Short shallow segments
+        // pass through verbatim; endpoints are preserved exactly so
+        // HasUsableNativeEndpointAnchors / IsCompleteUsablePath still see the
+        // same anchors.
+        private static XYZ[] EnsureMaxSegmentDimensions(
             XYZ[] path,
             float maxHorizontalLength,
+            float maxVerticalDelta,
             out int densifiedSegmentCount)
         {
             densifiedSegmentCount = 0;
-            if (path.Length < 2 || maxHorizontalLength <= 0f)
+            if (path.Length < 2 || maxHorizontalLength <= 0f || maxVerticalDelta <= 0f)
                 return path;
 
             var densified = new List<XYZ>(path.Length) { path[0] };
@@ -2751,9 +2774,18 @@ namespace PathfindingService.Repository
             {
                 var from = path[i];
                 var to = path[i + 1];
-                if (Distance2D(from, to) > maxHorizontalLength)
+                var horizontal = Distance2D(from, to);
+                var vertical = MathF.Abs(to.Z - from.Z);
+                if (horizontal > maxHorizontalLength || vertical > maxVerticalDelta)
                 {
-                    AppendDensifiedSegment(densified, from, to, maxHorizontalLength);
+                    var horizontalSteps = horizontal > 0f
+                        ? Math.Max(1, (int)MathF.Ceiling(horizontal / maxHorizontalLength))
+                        : 1;
+                    var verticalSteps = vertical > 0f
+                        ? Math.Max(1, (int)MathF.Ceiling(vertical / maxVerticalDelta))
+                        : 1;
+                    var steps = Math.Max(horizontalSteps, verticalSteps);
+                    AppendDensifiedSegmentBySteps(densified, from, to, steps);
                     densifiedSegmentCount++;
                 }
                 else
@@ -2763,6 +2795,33 @@ namespace PathfindingService.Repository
             }
 
             return densified.ToArray();
+        }
+
+        // Densifies a single segment by inserting `steps - 1` linearly-
+        // interpolated midpoints plus the endpoint `to`. Always preserves the
+        // endpoint exactly.
+        private static void AppendDensifiedSegmentBySteps(
+            List<XYZ> waypoints,
+            XYZ from,
+            XYZ to,
+            int steps)
+        {
+            if (steps <= 1)
+            {
+                AppendWaypointIfDistinct(waypoints, to);
+                return;
+            }
+
+            for (var step = 1; step <= steps; step++)
+            {
+                var t = step / (float)steps;
+                AppendWaypointIfDistinct(
+                    waypoints,
+                    new XYZ(
+                        from.X + ((to.X - from.X) * t),
+                        from.Y + ((to.Y - from.Y) * t),
+                        from.Z + ((to.Z - from.Z) * t)));
+            }
         }
 
         private static XYZ[] DensifyStaticLineOfSightBreaks(uint mapId, XYZ[] path)
