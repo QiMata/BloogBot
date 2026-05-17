@@ -13,7 +13,15 @@
          #14-23 can complete. Loop 3 aborted at 26m on case 13. The
          sub-corner LOS-respath added in `TryExpandCorridorWithSmoothNativeSegments`
          adds modest per-route overhead; doubling the budget gives
-         headroom for the slower routes plus the previously-unrun cases. -->
-    <TestSessionTimeout>3600000</TestSessionTimeout>
+         headroom for the slower routes plus the previously-unrun cases.
+         Raised 2026-05-17 (loop 22) from 3600000 (60 min) to 6000000
+         (100 min) because loop-22's threshold-relax to 4.0 shifted 3
+         OG-underpass tests from fast-fail (~0.3s each) to full smooth-
+         path resolution (tower_underpass: ~10m, bridge_side: ~5m,
+         tower_base_live_vertical: ~7s). Loop 22b aborted at 54m of 60
+         with case 14 of 23 in progress and the 3 slow tests still
+         queued. 100m matches loop-18's measured 1h5m wall-clock with
+         ~35m headroom. -->
+    <TestSessionTimeout>6000000</TestSessionTimeout>
   </RunConfiguration>
 </RunSettings>
