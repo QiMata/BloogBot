@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-17 (specs + plan reorganized for end-state coverage; AOTA architecture deep-dive landed 2026-05-16; pathfinding Phase 1 S1.3 sweep at 19/4 with 0 unrun under 100-min budget; loop 20 unblocked the bake-validation cull pipeline via commit `0b2164d9` but the cull radii do not yet reach the actual trap polyrefs — next-cycle work is corner-poly emission so single-poly surgical cull becomes possible; the 4 remaining failures are tile (40,29) bake-side polygon-graph defects scheduled as multi-cycle MmapGen work in Plan/10).
+Last refresh: 2026-05-17 (specs + plan reorganized for end-state coverage; AOTA architecture deep-dive landed 2026-05-16; pathfinding Phase 1 S1.3 sweep at 19/4 with 0 unrun under 100-min budget; loop 20 unblocked the bake-validation cull pipeline via commit `0b2164d9`; loop 21 shipped `tools/PathPhysicsProbe.exe --dump-polyrefs` (commit `c4415201`) and definitively diagnosed the 4 tile (40,29) failures as a mix of 20+ deep phantom stacks (coord 2) and smooth-path air-interpolation corners (coords 1, 3) — cull architecture cannot close them; real fix is tile re-bake or native PathFinder.cpp air-interpolation detection, both multi-cycle work tracked in Plan/10).
 
 ## Rules
 
@@ -53,7 +53,7 @@ Last refresh: 2026-05-17 (specs + plan reorganized for end-state coverage; AOTA 
 | `S1.0` | `IBotTask` contract migration | `monorepo-worker` | **done** (2026-05-12) |
 | `S1.1` | Physics parity wrap-up | `monorepo-worker` | open (guard green 12/12 OG; need representative checkpoints per family) |
 | `S1.2` | MovementController parity audit | `monorepo-worker` | audit green (2026-05-12, 33/33) |
-| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-17 loop 20; 19/4 + 0 unrun; cull pipeline now functional via commit `0b2164d9` but cull radii not yet calibrated against actual trap polyrefs — see Plan/02 §S1.3 loop-20 evidence; remaining 4 failures are tile (40,29) bake-side defects scheduled in Plan/10) |
+| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-17 loop 21; 19/4 + 0 unrun; cull pipeline functional + `--dump-polyrefs` diagnostic shipped — see Plan/02 §S1.3 loop-21 evidence; remaining 4 failures DIAGNOSED as 20+ deep phantom stacks (coord 2) + smooth-path air-interpolation (coords 1, 3); cull architecture cannot close them; real fix is tile re-bake or native PathFinder.cpp work in Plan/10) |
 | `S1.4..S1.14` | 11 family slots (Travel, Combat, Questing, Dungeon, BG, Gather, Craft, Economy, Social, Recovery, Raid-formation) | various | open (no dry-run yet) |
 | `S1.15` | Trade null guards (6 actions) | `monorepo-worker` | implemented (2026-05-15; live TradeParityTests pending) |
 | `S1.16` | Craft packet path (BG) | `monorepo-worker` | open |

@@ -857,6 +857,108 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[project_pfs_overhaul_006_brm_phase4_findings]],
   [[feedback_pathfinding_freeze]].
 
+- **Latest evidence (2026-05-17 loop 21 — trap diagnosis):**
+  Commit `c4415201` adds `tools/PathPhysicsProbe.exe
+  --dump-polyrefs` for per-corner polyref dumps along resolved
+  smooth paths. Used to definitively localize the 4 remaining
+  failures' root causes. **Tile (40, 29) failures are NOT
+  closable by polyref cull alone.** Tally remains 19/4/0.
+
+  **Per-route diagnosis via `--detour-resolve --smooth --dump-polyrefs`:**
+
+  | Test | Smooth-path corners | Failure pattern at WP |
+  |---|---|---|
+  | `tower_underpass` | 104 | Stacked phantoms at coord 2 |
+  | `tower_base_live_vertical` | 194 | Interpolated-air corners |
+  | `bridge_side` | 1031 | Interpolated-air corners |
+  | `exterior_steep_incline` | 1033 | Interpolated-air corners |
+
+  **Coord 2 `(1350.2,-4528.6,34.0)` — stacked phantoms (20+ deep):**
+
+  Iterative cull-then-reprobe at `(1350.174, -4528.553, 33.962)`
+  found 20 distinct polyrefs, all with `posOverPoly=0` and
+  `surfaceZ ∈ [34.9, 35.9]`. Each cull just shifts findNearestPoly
+  to the next-best sibling at the same XY/Z.
+
+  Vertical Z-scan at the same XY revealed the **legitimate ground
+  polyref `281475331147742`** at Z=37.46 with `posOverPoly=1`
+  (matches failure's reported supportZ=37.245 within 0.2y). But
+  Detour's findNearestPoly uses default `zExtent=1.8y`, so from
+  the WP Z=33.96 the legitimate ground at Z=37.46 (3.5y away) is
+  out of reach. The phantom stack is what Detour can see; the
+  legitimate ground is what physics raycasting reports.
+
+  **Coords 1 + 3 — interpolated-air WPs:**
+
+  Vertical Z-scan at `(1347.3, -4540.6, anyZ ∈ [33, 42])` and
+  `(1348.0, -4537.7, anyZ ∈ [33, 42])` returns `polyref=0` for
+  ALL probed Z values. No navmesh polygon exists at these XYs
+  in any reasonable Z range. Yet the failing tests report `Path
+  waypoint X` at these exact coords.
+
+  Cross-referencing the smooth-path corner dumps for
+  `tower_base_live_vertical` and `tower_underpass`: corners 115,
+  122, 123, 124, 129, 131, 138-141 (and similar ranges) ALL have
+  `polyref=0`. They are **synthetic densifier midpoints
+  interpolated between anchor corners** that themselves sit on
+  polys; the interpolated midpoint lands in air. The failure
+  WPs (e.g. WP42 = `(1347.3,-4540.6,35.8)`) are these
+  air-interpolated points. There is no polyref AT all to cull.
+
+  **Net conclusion — cull architecture cannot close these:**
+
+  1. Coord 2's phantoms are 20+ deep; culling them as a stack
+     regresses passing tests (loop-20 attempt 1 demonstrated).
+     The legitimate ground poly is out of reach from the WP Z
+     given Detour's default zExtent.
+  2. Coords 1 + 3 have NO polys to cull. The trap is the
+     smooth-path generator's air-interpolation, not a polygon.
+
+  **Real fix surfaces (multi-cycle, out of this session's scope):**
+
+  1. **Re-bake tile (40, 29)** with denser navmesh coverage so
+     the air-interpolation corners land on real polys. Per-tile
+     config knobs need fresh validation against probe data. High
+     regression risk against 19 passing cases
+     ([[project_pfs_overhaul_006_brm_singletile_negative]]).
+  2. **Modify smooth-path generator** to detect
+     `polyref=0` corners and re-route them through adjacent
+     legitimate polys. Resolver-side fix at the native level
+     (`Exports/Navigation/PathFinder.cpp`) — needs sign-off
+     against the pathfinding freeze
+     ([[feedback_pathfinding_freeze]]).
+  3. **Increase Detour's findNearestPoly zExtent** in the test's
+     query path so the legitimate ground at Z=37.46 is reachable
+     from WP Z=34. Risk of catching wrong polys in narrow
+     vertical contexts (mine shafts, stacked decks).
+
+  **What did ship:** `tools/PathPhysicsProbe.exe --dump-polyrefs`
+  (commit `c4415201`) is a reusable diagnostic. Future
+  bake-debugging sessions can use the recipe documented in
+  [[project_pfs_loop21_trap_diagnosis]] to triage any "Path
+  waypoint floats from collision support" failure into one of
+  three categories (air-interpolation / phantom-stack / threshold)
+  without re-deriving the methodology.
+
+  **Cycle 3 — Adjacent suite regression sweep:** SKIPPED. The
+  Cycle 1 commit `c4415201` touches only `tools/PathPhysicsProbe/`;
+  no test-runtime code changed. Tile (40, 29) at baseline hash
+  `cc0d89c4` matches loop-18's verified state.
+
+  **Loop 21 sweep tally (prod-data, `WWOW_DATA_DIR=D:/wwow-bot/prod-data`):**
+
+  | Tally | Loop 18 baseline | Loop 19 | Loop 20 final | Loop 21 final |
+  |---|---|---|---|---|
+  | Pass | 19/23 | 19/23 (no work) | 19/23 | **19/23** |
+  | Fail | 4/23 | 4/23 | 4/23 | **4/23** |
+  | Unrun | 0/23 | 0/23 | 0/23 | **0/23** |
+
+  Memory references:
+  [[project_pfs_loop21_trap_diagnosis]] (new),
+  [[project_pfs_loop20_cull_pipeline_unblock]],
+  [[project_pfs_overhaul_006_brm_singletile_negative]],
+  [[feedback_pathfinding_freeze]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family
