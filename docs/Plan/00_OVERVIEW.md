@@ -58,31 +58,72 @@ Loop halts on: unresolved ambiguity blocking >50% of in-progress
 slots, hardware failure, server downtime >1h, spec PR in review,
 novel crash cluster after 3 failed triage attempts.
 
-## Phase map (revised 2026-05-12)
+## Phase map (revised 2026-05-17)
 
 ```
-Phase 0 — Spec hardening (current; partial)
+Phase 0 — Spec hardening (DONE 2026-05-12)
   ↓
-Phase 1 — Action / Task Foundation     ← physics, IBotTask, MovementController, path execution
+Phase 1 — Action / Task Foundation       ← physics, IBotTask, MovementController, path execution
   ↓
-Phase 2 — OnDemand Engine               ← spawn pool bots, gear, party, teleport, hand-off to human
+Phase 2 — OnDemand Engine                 ← spawn pool bots, gear, party, teleport, hand-off to human
   ↓
-Phase 3 — UI Default + Test Host       ← WoWStateManagerUI is the default app; tests host through it
+Phase 3 — UI Default + Test Host         ← WoWStateManagerUI is the default app; tests host through it
   ↓
-Phase 4 — Activity Registry            ← catalog lookups + autonomous-mode legality validator
+Phase 4 — Activity Registry              ← catalog lookups + autonomous-mode legality validator
   ↓
-Phase 5 — Observability                 ← meters, Grafana, derived counters, long-term history panel
+Phase 5 — Observability                   ← meters, Grafana, derived counters, long-term history panel
   ↓
-Phase 6 — Automated Progression        ← RosterPlanner + ProgressionPlanner; organic group formation
+Phase 6 — Automated Progression          ← RosterPlanner + ProgressionPlanner; organic group formation
   ↓
-Phase 7 — Pathfinding/Scene Scale      ← route packs, batch queries, sharding
+Phase 7 — Pathfinding/Scene Scale        ← route packs, batch queries, sharding
   ↓
-Phase 8 — Living-server Load            ← iterative: 80 → measure → optimize → buy hardware → re-measure
+Phase 8 — Living-server Load              ← iterative: 80 → measure → optimize → buy hardware → re-measure
+  ↓
+Phase 9 — Catalog completeness  (new)    ← Scarlet Monastery, Stockades, holiday events, escort family,
+                                            dungeon-quest catalogs, mage-port / warlock-summon services
+  ↓
+Phase 10 — Decision-Engine integration (new) ← wire DecisionEngineService into IActivity composer;
+                                                ML-aided reward selection; threat-aware combat advice
+  ↓
+Phase 11 — Social fabric  (new)          ← trade-chat, AH chatter, guild events, mail traffic,
+                                            whisper responsiveness, gossip-driven city traffic
+  ↓
+Phase 12 — Behavioral variation  (new)   ← per-bot personality knobs for indistinguishability:
+                                            response-time variance, route variance, AH posting strategy
 
-Parallel tracks:
-  Phase 10 — Blackrock bake-fidelity (multi-cycle MmapGen)
-  Phase 11 — Skill refinement (package every WWoW pattern as a portable skill)
+Parallel tracks (unchanged numbering):
+  Plan/10 — Blackrock bake-fidelity (multi-cycle MmapGen)
+  Plan/11 — Skill refinement (package every WWoW pattern as a portable skill)
+  Plan/12 — Test isolation refactor (depends on Phase 2 S2.0)
 ```
+
+**Phases 9–12 (new 2026-05-17).** Phases 0–8 cover the foundational
+substrate (Phase 1), the headline OnDemand capability (Phase 2), the
+UI + autonomous-progression + scale phases (3–8). The vision in
+[`Spec/00_VISION.md`](../Spec/00_VISION.md) calls for *full-game*
+coverage — every Activity, every Objective, every Task, every Action
+correctly performed as if a human player. The 86-row initial catalog
+plus the 11 family Task surfaces are not enough to satisfy that
+acceptance criterion. Phases 9–12 close the gap:
+
+- **Phase 9** fills missing catalog rows (Scarlet Monastery's 4 wings,
+  Stockades, dungeon-quest sub-Activities, holiday events, escort
+  family, mage-portal / warlock-summon services). End-state: every
+  legal player activity has a catalog row.
+- **Phase 10** wires the existing `DecisionEngineService` ML layer
+  into the runtime `IActivity` / `IObjective` composer (Phase 2's
+  S2.0). End-state: rotation, threat, reward, and Objective selection
+  use ML advice when available.
+- **Phase 11** adds the social fabric — chat, mail, AH chatter, guild
+  events — so the server *feels* alive at a protocol level, not just
+  combat-functional. End-state: trade chat is non-empty, AH posts
+  rotate, mail flows between characters.
+- **Phase 12** layers behavioral variation onto the homogeneous bots
+  Phase 1–8 ship. End-state: at the protocol level, a fresh observer
+  cannot pick out the bots vs a thin live-human population.
+
+Phases 9–12 can run in parallel with Phase 8 load tuning; they do not
+strictly serialize after Phase 8.
 
 The reordering: **action/task work comes before everything else.** If
 bots cannot reliably travel, fight, quest, gather, craft, or recover,

@@ -76,7 +76,7 @@ public interface IStateManagerModeHandler
 Existing implementations live at `Services/WoWStateManager/Modes/` —
 `TestModeHandler.cs` and `AutomatedModeHandler.cs` shipped. The third
 handler, `OnDemandActivitiesModeHandler.cs`, is Phase 2 work
-(see [`Plan/03_PHASE2_ACTIVITY_REGISTRY.md`](../Plan/03_PHASE2_ACTIVITY_REGISTRY.md)).
+(see [`Plan/03_PHASE2_ONDEMAND_ENGINE.md`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md)).
 
 ## Config schema
 

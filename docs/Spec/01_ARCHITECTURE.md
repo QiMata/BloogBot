@@ -14,8 +14,8 @@
                                                       |                      |
 +--------------------+        Snapshots                |                      |
 |   FG/BG Bot N      |  ----------------------------> |  - mode handler      |
-+--------------------+                                 |  - lease ledger     |
-                                                      |  - activity sched.   |
++--------------------+                                 |  - reserved pool     |
+                                                      |  - OnDemand launcher  |
 +--------------------+        Path/scene queries       |  - coordinators     |
 | PathfindingService |  <---------------------------- |  - metrics/log out   |
 |   (port 5001)      |                                +-----+----------------+
@@ -44,7 +44,7 @@ These are hard. Crossing them is an architecture bug.
 
 | Owner | Owns | Does not own |
 |---|---|---|
-| **StateManager** | Bot lifecycle, mode dispatch, activity registry, lease ledger, coordinators, snapshot cache, metrics rollup, config persistence | Game memory, packets, game-world geometry, behavior tree execution |
+| **StateManager** | Bot lifecycle, mode dispatch, activity registry, OnDemand launcher + reserved pool, coordinators, snapshot cache, metrics rollup, config persistence | Game memory, packets, game-world geometry, behavior tree execution. **No `LeaseLedger` / `ActivityScheduler`** — dropped 2026-05-12; bots are always on, OnDemand uses siloed pool. |
 | **BotRunner** | Behavior tree execution, IBotTask stack, IObjectManager calls, action dispatch, FG/BG-shared activity logic | Activity selection (StateManager decides), world geometry (PathfindingService), config (StateManager pushes) |
 | **PathfindingService** | A* paths, Detour navmesh, route packs, path caches | Per-bot state, activity decisions, scene tiles (delegates to SceneDataService) |
 | **SceneDataService** | Collision tiles, 3×3 grid slices, ground-Z queries, scene cache | Pathfinding decisions |
@@ -72,24 +72,33 @@ Bot --(WoWActivitySnapshot proto)--> StateManager
 ```
 Human (UI or in-game whisper) --> StateManager.RequestActivity
   → ActivityRegistry.Resolve(activity, location, levelRange, params)
-  → LegalityValidator.Check(request, candidates)
-  → BotSelector.Score(candidates) → top-N picks
-  → LeaseLedger.Reserve(picks, ActivityInstance)
-  → Coordinator (Dungeon/BG/Raid/...).Launch(picks, instance)
+  → LegalityValidator.Check(request, candidates) — fixup mode for OnDemand
+  → ReservedPoolManager.TryReserve(role, faction, count)
+  → OnDemandActivityLauncher.LaunchAsync(activityId, humanGuid, params)
+    → Spawning → Outfitting → Partying → Travelling → Engaged → TearDown
+  → Coordinator (Dungeon/BG/Raid/...).LaunchAsync(def, pool, parameters)
   → Coordinator dispatches ActionMessages → bots execute
-  → On completion → LeaseLedger.Release → bots resume progression
+  → On completion / disengage → TearDown → pool slots freed; characters recycled or deleted
 ```
+
+See [`Spec/23_ONDEMAND_API.md`](23_ONDEMAND_API.md) for the request DSL.
 
 ### 3. Automated progression tick
 
 ```
 StateManager mode handler `OnSnapshotAsync` (Automated mode)
   → ProgressionPlanner.NextObjective(character, snapshot)
-  → ActivityScheduler.TryAcquireLease(objective)
-    → if lease granted: coordinator launches
-    → if no group needed: BotRunner gets direct action
-  → snapshot delta proves progress; loop continues
+  → ActivityResolver.Parse(AssignedActivity) → IBotTask pushed
+  → snapshot delta proves progress
+  → on completion → ProgressionPlanner picks next; loop continues
+  → group quorums detected by coordinators → organic group invites fire
 ```
+
+There is no `ActivityScheduler` and no lease. Bots run their own behavior
+trees continuously; coordinators react to snapshot conditions
+(Coordinator quorum policy in [`Spec/21_SOCIAL_FABRIC.md`](21_SOCIAL_FABRIC.md);
+runtime `IActivity` / `IObjective` contracts in
+[`Spec/19_AOTA_RUNTIME.md`](19_AOTA_RUNTIME.md)).
 
 ### 4. Path query
 

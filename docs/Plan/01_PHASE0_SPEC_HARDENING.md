@@ -1,4 +1,15 @@
-# Plan 01 — Phase 0: Spec Hardening
+# Plan 01 — Phase 0: Spec Hardening — **DONE (closed 2026-05-12)**
+
+> **Status.** All 12 slots (S0.1–S0.12) closed on 2026-05-12. Phase 0
+> exit criteria met. Phase 1 is now the active phase; see
+> [`02_PHASE1_ACTION_TASK_FOUNDATION.md`](02_PHASE1_ACTION_TASK_FOUNDATION.md).
+>
+> This file remains as the canonical Phase 0 record — slot detail is
+> preserved for future archaeological reference. The executive summary
+> is in [`../ARCHIVE.md#phase-0-closure-2026-05-12`](../ARCHIVE.md#phase-0-closure-2026-05-12).
+>
+> Decisions of record (R19–R26) made during Phase 0 closure are listed
+> in the ARCHIVE entry.
 
 ## Goal
 

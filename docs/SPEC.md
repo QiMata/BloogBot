@@ -71,6 +71,12 @@ Companion top-level docs:
 | [`Spec/16_REALMS_AND_ACCOUNTS.md`](Spec/16_REALMS_AND_ACCOUNTS.md) | Two realms (Westworld-Test + Westworld), explicit account/character lists, OnDemand reserved pool |
 | [`Spec/17_LOADOUT.md`](Spec/17_LOADOUT.md) | LoadoutSpec field reference, GM-command translation, proto mapping |
 | [`Spec/18_TERMINOLOGY.md`](Spec/18_TERMINOLOGY.md) | Activity/Objective/Task/Action four-layer hierarchy (canonical glossary; adopted from D2Bot) |
+| [`Spec/19_AOTA_RUNTIME.md`](Spec/19_AOTA_RUNTIME.md) | Runtime `IActivity` + `IObjective` contracts, `ObjectiveType` enum, composer entry point (Phase 2 S2.0) |
+| [`Spec/20_DECISION_ENGINE.md`](Spec/20_DECISION_ENGINE.md) | DecisionEngineService advisory contract — rotation / threat / reward / objective advice, fail-soft, three maturity phases |
+| [`Spec/21_SOCIAL_FABRIC.md`](Spec/21_SOCIAL_FABRIC.md) | Chat / mail / guild / AH chatter / whisper / city ambient — what makes the server *feel* alive |
+| [`Spec/22_WORLD_CYCLES.md`](Spec/22_WORLD_CYCLES.md) | Calendar / weekly reset / holiday events / world-buff windows / world-boss respawn cadence |
+| [`Spec/23_ONDEMAND_API.md`](Spec/23_ONDEMAND_API.md) | OnDemand request DSL, response shapes, rejection codes, Shodan whisper parser |
+| [`Spec/24_BEHAVIORAL_VARIATION.md`](Spec/24_BEHAVIORAL_VARIATION.md) | `PersonalityProfile` per-bot knobs for indistinguishability (timing / route / economy / social) |
 
 ## Implementation plan (Plan/)
 
@@ -88,7 +94,20 @@ Companion top-level docs:
 | [`Plan/09_PHASE8_LOAD.md`](Plan/09_PHASE8_LOAD.md) | 8 | Iterative scale: 80 → measure → optimize → hardware decision |
 | [`Plan/10_PARALLEL_BRM_BAKE.md`](Plan/10_PARALLEL_BRM_BAKE.md) | parallel | Blackrock bake-fidelity (multi-cycle MmapGen) |
 | [`Plan/11_PARALLEL_SKILL_REFINEMENT.md`](Plan/11_PARALLEL_SKILL_REFINEMENT.md) | parallel | Package WWoW patterns as portable skills so other games auto-bootstrap |
+| [`Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md`](Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md) | parallel | Roslyn analyzer + xUnit collection enforcement of the "Tests drive Activities, not Actions" rule |
+| [`Plan/13_PHASE9_CATALOG_FILL.md`](Plan/13_PHASE9_CATALOG_FILL.md) | **9** | Scarlet Monastery 4 wings, Stockades, dungeon-quest sub-Activities, holiday events, escort family, social services |
+| [`Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md`](Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md) | **10** | Wire DecisionEngineService into composer, reward selector, rotation, threat |
+| [`Plan/15_PHASE11_SOCIAL_FABRIC.md`](Plan/15_PHASE11_SOCIAL_FABRIC.md) | **11** | Trade-chat, mail flow, guild events, whisper SLA, mage-port / warlock-summon services |
+| [`Plan/16_PHASE12_BEHAVIORAL_VARIATION.md`](Plan/16_PHASE12_BEHAVIORAL_VARIATION.md) | **12** | `PersonalityProfile` knob wiring, mix config, operator override UI |
 | [`Plan/Crashes/`](Plan/Crashes/) | research | WoW.exe crash clusters + WER capture infrastructure |
+
+### End-state coverage (added 2026-05-17)
+
+Phases 0–8 ship the foundational substrate, OnDemand launcher, UI/test
+host, autonomous progression, and scale. Phases **9–12** close the
+gap to the Vision acceptance criteria — every legal Activity covered,
+DecisionEngine wired, social fabric alive, behavioral variation in
+place. They can run in parallel with Phase 8 load tuning.
 
 Activity detail (consumed by Phases 2–4):
 

@@ -2905,3 +2905,132 @@ D1: Physics.dll split, x86/x64 resolver, post-build copy, NavigationDllResolver
 - Tests: `SceneSliceModeTests.cs` deleted, SetSceneSliceMode test overrides removed from 6 test files
 
 **Result:** BG bots load Physics.dll (~774KB, no mmaps/VMAPs). Navigation.dll (~5MB+, full pathfinding) only loaded by FG bots and PathfindingService. No more OOM from duplicate VMAP loading.
+
+---
+
+## Phase 0 closure (2026-05-12)
+
+Phase 0 — Spec hardening — closed. Full slot detail still lives in
+[`Plan/01_PHASE0_SPEC_HARDENING.md`](Plan/01_PHASE0_SPEC_HARDENING.md); this
+section is the executive summary for ARCHIVE consumers.
+
+| Slot | Title | Outcome |
+|---|---|---|
+| `S0.1` | Land the spec tree | done — every `Spec/*` file landed and internally consistent |
+| `S0.2` | Author Plan/ phase files | done — 11 Plan files + Activities/* family files (reordered 2026-05-12) |
+| `S0.3` | Compiled `ActivityCatalog.cs` | done — 86 rows, 15 record/enum types, IActivityCatalog DI singleton wired in `Program.cs:372` |
+| `S0.4` | Catalog tests | done — 17 tests green (7 invariants + 1 markdown-drift + 9 deliberately-bad-row) |
+| `S0.5` | `FailureReason` enum | done — 48 values; drift test 2/2 green at `Tests/BotRunner.Tests/Spec/` |
+| `S0.6` | `Plan/Activities/00_INDEX.md` | done |
+| `S0.7` | Self-sufficiency dry-run | done — S1.0 dry-run surfaced 4 gaps; resolved as R22–R25 |
+| `S0.8.1..16` | Per-task-family detail (16 sub-slots) | done — Wave 1 + Wave 2 + R19 dual-surface fixup |
+| `S0.9.1..5` | Catalog row authorship (86 rows across 5 shards + index) | done — `Plan/Activities/01_CATALOG_ROWS.md` |
+| `S0.10` | `LoadoutSpec` schema | done — `Spec/17_LOADOUT.md` |
+| `S0.11` | `ActivityConfig` JSON schema + 10 examples + xUnit stub | done |
+| `S0.12` | `Bot/named-locations.{json,schema.json}` (86 entries) | done |
+
+**Decisions of record (R19–R26) from 2026-05-12:**
+
+- R19: `IBotTask` spec is Phase 1 target; current code is bare `void Update()`. Family files document both surfaces. S1.0 closes the gap.
+- R20: Talent-grant verb (`.add talent`) provisional; Phase 2 verifier confirms.
+- R21: xUnit is the repo test-framework standard.
+- R22: `IMetricsSink` two-method interface; shipped with S1.0.
+- R23: `ChatSink` delegate `(channel, text)`; shipped with S1.0.
+- R24: `OnChildFailedAsync` `true` = absorb / parent keeps running; `false` = escalate.
+- R25: S1.0 owned-paths extended to `BotProfiles/*/Tasks/**`; shim-only migration.
+- R26: DIM defaults on `IBotTask` are body, not contract surface. Future abstract additions follow the same pattern.
+
+**Phase-2-deferred verification questions (non-blocking):** Q-S0.9.3-1 (UBRS Seal of Ascension item triple), Q-S0.9.3-2 (Scholo skeleton key gate), Q-S0.9.5-1/-2/-3 (Cenarion/Thorium/Zandalar faction ids). Phase 2 legality validator cross-checks against MaNGOS DB.
+
+## Phase 1 substrate landed (S1.0 + S1.15 + S1.17 + S1.19, 2026-05-12 → 2026-05-15)
+
+### S1.0 — IBotTask contract migration (landed 2026-05-12)
+
+Shim-only async migration of the bare `void Update()` interface to the
+four-method async contract (`TickAsync` / `OnPushedAsync` / `OnPoppedAsync` /
+`OnChildFailedAsync` + `Name` + `Status`).
+
+Files shipped:
+
+- `Exports/BotRunner/Interfaces/IBotTask.cs` (rewritten, 12→58 lines, DIM defaults per R26)
+- `Exports/BotRunner/Interfaces/BotTaskStatus.cs` (new)
+- `Exports/BotRunner/Tasks/BotTaskContext.cs` (new)
+- `Exports/BotRunner/Tasks/IMetricsSink.cs` (new)
+- `Exports/BotRunner/Tasks/TaskStackDriver.cs` (new — extracted lifecycle driver for testability)
+- `Exports/BotRunner/Tasks/BotTask.cs` (shim layer; 209→308 lines; reflection-cached `Update()` invocation)
+- `Exports/BotRunner/BotRunnerService.cs` (loop ~line 444; +27 lines)
+- `Tests/BotRunner.Tests/Unit/Tasks/IBotTaskContractTests.cs` (new; 6 tests green)
+- 14 `docs/Plan/Activities/*.md` (R19 drift closed)
+
+220 tasks shimmed (68 in BotRunner + 152 in BotProfiles). 19-baseline-green
+on the existing unit and live-validation suites; 6 new contract tests
+green.
+
+### S1.15 — Trade null guards (landed 2026-05-15)
+
+`NetworkTradeFrame` shipped at `Exports/WoWSharpClient/Frames/NetworkTradeFrame.cs`;
+wired in `WoWSharpObjectManager:230`. 4 of 6 trade actions (Money / Item /
+Accept / Decline) route through `ITradeNetworkClientComponent`;
+`OfferLockpick`/`OfferEnchant` stubbed pending `SpellCastingAgent` wire.
+`NetworkTradeFrameTests` ships 20/0/0 green.
+
+### S1.17 — Vendor merchant null handling (landed 2026-05-15)
+
+`NetworkMerchantFrame` shipped at `Exports/WoWSharpClient/Frames/NetworkMerchantFrame.cs`;
+wired in `WoWSharpObjectManager:231`. All `IMerchantFrame` methods route
+through `IVendorNetworkClientComponent`. `NetworkMerchantFrameTests`
+ships 28/0/0 green.
+
+### S1.19 — Trainer/Talent/Gossip packet paths (landed 2026-05-15)
+
+`NetworkTrainerFrame` + `NetworkTalentFrame` + `NetworkGossipFrame` shipped
+in `Exports/WoWSharpClient/Frames/`; wired in `WoWSharpObjectManager:232-234`.
+`GossipOption.Type`/`Text` got `protected set` so a private BG subclass
+can populate live menu state. 32 new frame tests + 84 total Frames tests
+green.
+
+## TASKS.md rolling-board history (2026-05-10 → 2026-05-17)
+
+The 2026-05-10 → 2026-05-16 rolling-board entries (loop iterations 1–18 of
+the pathfinding sweep, the OG zeppelin tile-coord work, the BRM bake
+attempts, the Phase 1 substrate landings, the AOTA architecture deep-dive)
+were consolidated into this archive on 2026-05-17. The active board now
+lives at [`TASKS.md`](TASKS.md). High-impact iteration findings — that
+are also reflected in code commits, the Plan/02 slot notes, and per-tile
+memory entries — include:
+
+- **Pathfinding sweep, loops 1–18 (S1.3 stability):** 11/13 → 19/4 (with 0
+  unrun in a 100-min budget) on the `LongPathingRouteTests` Theory sweep.
+  Five-layer exterior-incline fix (corridor-level LOS gate, sub-corner
+  recursive validation, pre-densifier oversize bypass, test-side LOS-walkable
+  fallback, deadline raised 30s→120s) plus `SceneCache::GetGroundZ`
+  order-independence fix (closest-absolute tri-Z) plus xUnit
+  `[CollectionDefinition("Navigation", DisableParallelization=true)]`
+  serialization. Remaining 4 failures are all bake-side polygon-graph
+  defects on tile (40, 29) `0012940.mmtile`; scheduled as Plan/10 BRM
+  bake-fidelity work.
+- **AOTA architecture deep-dive (2026-05-16):** new `docs/architecture/aota/`
+  tree (8 files, ~2,583 lines) — recursive composition rules, WoW game-loop
+  decomposition, dynamic Objective composition from MaNGOS DB,
+  quest-chain DAG, item-requirement DAG, worked examples, cross-game
+  portability template. Pointer hooks added from CLAUDE.md / SPEC.md /
+  Spec/18_TERMINOLOGY.md. Commit `e2e30c1e`.
+- **OG zeppelin tile-coord convention (2026-05-13):** the CLI tile argument
+  uses `X,Y` while the runtime filename uses `<map><Y><X>`. The OG
+  zeppelin tile is `X=40, Y=29` → `0012940.mmtile`; the prior `(29,40)`
+  bake attempts produced a different tile entirely. Documented in
+  [[feedback_promote_mmaps_tile_arg_xy]].
+- **BRM bake-side closure attempts (2026-05-13/14):** three reverted
+  approaches (terrain-only-52, both-sides-52, runtime NAV_STEEP_SLOPES
+  exclude) proved that intra-tile-3446 BRM ascent gap is robust to
+  bake-knob tightening and requires off-mesh connections or per-tile
+  steep-slope fragmentation — multi-cycle MmapGen work tracked in
+  Plan/10.
+- **Phase 1 substrate landed:** S1.0 (IBotTask contract migration), S1.15
+  (Trade), S1.17 (Vendor), S1.19 (Trainer/Talent/Gossip) — see the
+  per-slot sections above. S1.16 (Craft BG) + S1.18 (Taxi BG) remain
+  open with the `Network*Frame` adapter pattern established.
+
+For the canonical day-by-day iteration log, see commit history on `origin/main`
+and the per-feature `MEMORY.md` entries in
+`~/.claude/projects/e--repos/memory/`.
