@@ -15,7 +15,7 @@ final decision; the caller may discard the advice without consequence.
 This separation keeps the deterministic Activity stack testable while
 the ML layer evolves.
 
-Three call sites consume DecisionEngine advice:
+Five call sites consume DecisionEngine advice:
 
 1. **`IActivityComposer.Compose(...)`** — the planner's Objective
    sequencing (which Objective comes next when multiple are eligible).
@@ -25,6 +25,11 @@ Three call sites consume DecisionEngine advice:
 3. **Combat rotation tasks** — `PvERotationTask` and per-class spec
    tasks call DecisionEngine for spell-pick and threat-target
    recommendations.
+4. **Chat template selection** (Plan/15 surface) — `IChatGenerator`
+   in [`Spec/21_SOCIAL_FABRIC.md §3.3`](21_SOCIAL_FABRIC.md#33-message-generator)
+   picks one template from a hand-authored library at
+   `Bot/chat-templates/<channel>/*.txt`. See §2.2 below for the
+   additional advisory RPC.
 
 ## 2. Service surface
 
@@ -35,8 +40,16 @@ public interface IDecisionEngineClient
     Task<ThreatAdvice>       GetThreatAdviceAsync(ThreatContext ctx, CancellationToken ct);
     Task<RewardAdvice>       GetRewardAdviceAsync(RewardContext ctx, CancellationToken ct);
     Task<ObjectiveAdvice>    GetObjectiveAdviceAsync(ObjectiveContext ctx, CancellationToken ct);
+    Task<ChatTemplateAdvice> GetChatTemplateAdviceAsync(ChatTemplateContext ctx, CancellationToken ct);
 }
 ```
+
+### 2.2 ChatTemplate advisor
+
+The fifth advisor is owned by Plan/15 (Social fabric) but lives on
+this contract surface so the wire shape is centralized. It is a
+template-id picker over a closed candidate set produced by the bot's
+local template library scan; not a free-form generator.
 
 All four calls are **fail-soft**:
 
@@ -73,10 +86,11 @@ import "communication.proto";   // for game.WoWPlayer, ObjectiveType, etc.
 // --- Request envelope ---
 message AdviceRequest {
     oneof body {
-        RotationContext  rotation  = 1;
-        ThreatContext    threat    = 2;
-        RewardContext    reward    = 3;
-        ObjectiveContext objective = 4;
+        RotationContext     rotation      = 1;
+        ThreatContext       threat        = 2;
+        RewardContext       reward        = 3;
+        ObjectiveContext    objective     = 4;
+        ChatTemplateContext chat_template = 5;
     }
     uint64 request_id  = 10;     // monotonic; echoed in response for trace correlation
     uint64 issued_at_ms = 11;    // client clock; used for round-trip metric
@@ -86,11 +100,12 @@ message AdviceRequest {
 // --- Response envelope ---
 message AdviceResponse {
     oneof body {
-        RotationAdvice  rotation  = 1;
-        ThreatAdvice    threat    = 2;
-        RewardAdvice    reward    = 3;
-        ObjectiveAdvice objective = 4;
-        NoAdvice        no_advice = 5;
+        RotationAdvice     rotation      = 1;
+        ThreatAdvice       threat        = 2;
+        RewardAdvice       reward        = 3;
+        ObjectiveAdvice    objective     = 4;
+        NoAdvice           no_advice     = 5;
+        ChatTemplateAdvice chat_template = 6;
     }
     uint64 request_id    = 10;
     uint64 served_at_ms  = 11;
@@ -177,6 +192,23 @@ message ObjectiveContext {
     repeated float roster_goal_distance = 12;    // 8 floats per Spec/05
 }
 
+message ChatTemplateContext {
+    uint32 bot_level         = 1;
+    uint32 bot_class         = 2;
+    uint32 bot_spec          = 3;
+    uint32 chat_channel      = 4;       // ChatChannel enum (Trade/LFG/Guild/Whisper-reply)
+    uint32 chattiness        = 5;       // ChattyLevel enum from Spec/24 (0=Quiet, 1=Normal, 2=Talkative)
+    string trigger_kind      = 6;       // "wts" | "wtb" | "lfg-seeking" | "ding" | "epic-loot" | "whisper-reply-friendly" | "whisper-reply-stranger"
+    repeated string candidate_template_ids = 7;  // file basenames under Bot/chat-templates/<channel>/; up to 16
+    repeated uint32 candidate_recent_use_count = 8;  // parallel to candidate_template_ids; bot-local hourly counter
+    string slot_item_name    = 9;       // for wts/wtb; empty otherwise
+    uint32 slot_count        = 10;
+    uint32 slot_price_copper = 11;
+    string slot_dungeon_name = 12;      // for lfg-seeking
+    uint32 ding_level        = 13;      // for ding/epic-loot
+    string slot_zone         = 14;
+}
+
 // --- Advice messages (responses) ---
 message RotationAdvice {
     int32 recommended_spell_id = 1;   // -1 = no recommendation; client treats as NoAdvice
@@ -201,6 +233,13 @@ message ObjectiveAdvice {
     string recommended_objective_id = 1;  // empty = no recommendation
     float confidence                 = 2;
     string rationale                 = 3;
+}
+
+message ChatTemplateAdvice {
+    string recommended_template_id = 1;   // empty = no recommendation; must equal one of
+                                          //         ChatTemplateContext.candidate_template_ids
+    float confidence                = 2;
+    string rationale                = 3;
 }
 ```
 
@@ -271,10 +310,11 @@ rotation/threat, 15 ms for reward, 50 ms for objective.
     "maxConcurrentRequests": 64      // bounded server-side queue
   },
   "advisors": {
-    "rotation": { "mode": "Trivial", "modelVersion": null, "budgetMs": 5 },
-    "threat":   { "mode": "Trivial", "modelVersion": null, "budgetMs": 5 },
-    "reward":   { "mode": "Rules",   "modelVersion": null, "budgetMs": 15 },
-    "objective":{ "mode": "Trivial", "modelVersion": null, "budgetMs": 50 }
+    "rotation":      { "mode": "Trivial", "modelVersion": null, "budgetMs": 5  },
+    "threat":        { "mode": "Trivial", "modelVersion": null, "budgetMs": 5  },
+    "reward":        { "mode": "Rules",   "modelVersion": null, "budgetMs": 15 },
+    "objective":     { "mode": "Trivial", "modelVersion": null, "budgetMs": 50 },
+    "chat_template": { "mode": "Trivial", "modelVersion": null, "budgetMs": 20 }
   },
   "telemetry": {
     "traceEnabled": false,
@@ -302,6 +342,7 @@ Names match the proto context message fields.
 | Threat | `[1, 80]` (bot_level, bot_class, current_target_guid_hash, then 8 candidate stripes of 9 fields each padded) | `[1, 9]` → (focus_candidate_index, 8 avoid-mask bits) | Discrete pick over candidates |
 | Reward | `[1, 56]` (level, class, spec, quest_entry, 4 reward stripes of 12 fields + active_spec_role + padding) | `[1, 2]` → (choice_index, confidence) | Discrete pick over 4 rewards |
 | Objective | `[1, 96]` (level, class, race, position[3], zone_id, map_id, inventory_value_copper, 8 tied-objective stripes of 4 fields each, 8 roster-goal-distance floats, padding) | `[1, 9]` → (tied_index, confidence) | Discrete pick over up to 8 tied objectives |
+| ChatTemplate | `[1, 48]` (level, class, spec, channel, chattiness, trigger_kind one-hot[8], 16 candidate stripes of 2 fields (recent_use_count + bag-of-words feature hash), slot_count, slot_price_copper) | `[1, 2]` → (candidate_index, confidence) | Discrete pick over up to 16 templates |
 
 Padded slots use `0.0` for floats and `0` for indexed enums; the
 service is responsible for normalizing context to fixed-width tensors.
