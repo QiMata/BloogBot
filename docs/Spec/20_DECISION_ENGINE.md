@@ -30,17 +30,23 @@ Five call sites consume DecisionEngine advice:
    picks one template from a hand-authored library at
    `Bot/chat-templates/<channel>/*.txt`. See §2.2 below for the
    additional advisory RPC.
+5. **Activity-request disambiguation** (Plan/03 S2.6 surface) — Shodan
+   whisper parser in [`Spec/23_ONDEMAND_API.md §5`](23_ONDEMAND_API.md#5-shodan-whisper-parser)
+   resolves ambiguous shorthand (e.g. `!run brd` → upper-brd /
+   lower-brd / arena) by picking among catalog candidate ids. See §2.3
+   below.
 
 ## 2. Service surface
 
 ```csharp
 public interface IDecisionEngineClient
 {
-    Task<RotationAdvice>     GetRotationAdviceAsync(RotationContext ctx, CancellationToken ct);
-    Task<ThreatAdvice>       GetThreatAdviceAsync(ThreatContext ctx, CancellationToken ct);
-    Task<RewardAdvice>       GetRewardAdviceAsync(RewardContext ctx, CancellationToken ct);
-    Task<ObjectiveAdvice>    GetObjectiveAdviceAsync(ObjectiveContext ctx, CancellationToken ct);
-    Task<ChatTemplateAdvice> GetChatTemplateAdviceAsync(ChatTemplateContext ctx, CancellationToken ct);
+    Task<RotationAdvice>        GetRotationAdviceAsync(RotationContext ctx, CancellationToken ct);
+    Task<ThreatAdvice>          GetThreatAdviceAsync(ThreatContext ctx, CancellationToken ct);
+    Task<RewardAdvice>          GetRewardAdviceAsync(RewardContext ctx, CancellationToken ct);
+    Task<ObjectiveAdvice>       GetObjectiveAdviceAsync(ObjectiveContext ctx, CancellationToken ct);
+    Task<ChatTemplateAdvice>    GetChatTemplateAdviceAsync(ChatTemplateContext ctx, CancellationToken ct);
+    Task<ActivityRequestAdvice> GetActivityRequestAdviceAsync(ActivityRequestContext ctx, CancellationToken ct);
 }
 ```
 
@@ -50,6 +56,16 @@ The fifth advisor is owned by Plan/15 (Social fabric) but lives on
 this contract surface so the wire shape is centralized. It is a
 template-id picker over a closed candidate set produced by the bot's
 local template library scan; not a free-form generator.
+
+### 2.3 ActivityRequest advisor
+
+The sixth advisor is owned by Plan/03 slot S2.6 (Shodan whisper
+parser, [`Spec/23_ONDEMAND_API.md §5`](23_ONDEMAND_API.md#5-shodan-whisper-parser))
+but lives here for the same reason as §2.2. It is an Activity-id
+picker over a closed candidate set produced by the whisper parser's
+shorthand-lookup phase (e.g. `!run brd` parses to candidates
+`[dungeon.brd-upper, dungeon.brd-lower, dungeon.brd-arena]`); the
+advisor picks one. Not free-form NLP.
 
 All four calls are **fail-soft**:
 
@@ -86,11 +102,12 @@ import "communication.proto";   // for game.WoWPlayer, ObjectiveType, etc.
 // --- Request envelope ---
 message AdviceRequest {
     oneof body {
-        RotationContext     rotation      = 1;
-        ThreatContext       threat        = 2;
-        RewardContext       reward        = 3;
-        ObjectiveContext    objective     = 4;
-        ChatTemplateContext chat_template = 5;
+        RotationContext        rotation         = 1;
+        ThreatContext          threat           = 2;
+        RewardContext          reward           = 3;
+        ObjectiveContext       objective        = 4;
+        ChatTemplateContext    chat_template    = 5;
+        ActivityRequestContext activity_request = 6;
     }
     uint64 request_id  = 10;     // monotonic; echoed in response for trace correlation
     uint64 issued_at_ms = 11;    // client clock; used for round-trip metric
@@ -100,12 +117,13 @@ message AdviceRequest {
 // --- Response envelope ---
 message AdviceResponse {
     oneof body {
-        RotationAdvice     rotation      = 1;
-        ThreatAdvice       threat        = 2;
-        RewardAdvice       reward        = 3;
-        ObjectiveAdvice    objective     = 4;
-        NoAdvice           no_advice     = 5;
-        ChatTemplateAdvice chat_template = 6;
+        RotationAdvice        rotation         = 1;
+        ThreatAdvice          threat           = 2;
+        RewardAdvice          reward           = 3;
+        ObjectiveAdvice       objective        = 4;
+        NoAdvice              no_advice        = 5;
+        ChatTemplateAdvice    chat_template    = 6;
+        ActivityRequestAdvice activity_request = 7;
     }
     uint64 request_id    = 10;
     uint64 served_at_ms  = 11;
@@ -192,6 +210,22 @@ message ObjectiveContext {
     repeated float roster_goal_distance = 12;    // 8 floats per Spec/05
 }
 
+message ActivityRequestContext {
+    string raw_whisper_text   = 1;       // verbatim text after !verb
+    string verb               = 2;       // "run" | "raid" | "bg" | "fish" | "port" | "summon" | "group"
+    uint64 requesting_human_guid = 3;
+    uint32 requesting_human_level = 4;
+    uint32 requesting_faction = 5;
+    string requesting_human_zone = 6;
+    repeated string candidate_activity_ids = 7;  // pre-filtered by Spec/23 §5 parser; up to 8
+    repeated uint32 candidate_min_level    = 8;
+    repeated uint32 candidate_max_level    = 9;
+    repeated uint32 candidate_pool_available = 10; // reserved-pool slots free, per role-template
+    repeated bool   candidate_lockout_active = 11; // per Spec/22 §2 LockoutVerifier
+    repeated uint32 candidate_expected_engaged_seconds = 12; // launcher's heuristic
+    uint64 issued_at_ms       = 13;
+}
+
 message ChatTemplateContext {
     uint32 bot_level         = 1;
     uint32 bot_class         = 2;
@@ -238,6 +272,13 @@ message ObjectiveAdvice {
 message ChatTemplateAdvice {
     string recommended_template_id = 1;   // empty = no recommendation; must equal one of
                                           //         ChatTemplateContext.candidate_template_ids
+    float confidence                = 2;
+    string rationale                = 3;
+}
+
+message ActivityRequestAdvice {
+    string recommended_activity_id = 1;   // empty = no recommendation; must equal one of
+                                          //         ActivityRequestContext.candidate_activity_ids
     float confidence                = 2;
     string rationale                = 3;
 }
@@ -314,7 +355,8 @@ rotation/threat, 15 ms for reward, 50 ms for objective.
     "threat":        { "mode": "Trivial", "modelVersion": null, "budgetMs": 5  },
     "reward":        { "mode": "Rules",   "modelVersion": null, "budgetMs": 15 },
     "objective":     { "mode": "Trivial", "modelVersion": null, "budgetMs": 50 },
-    "chat_template": { "mode": "Trivial", "modelVersion": null, "budgetMs": 20 }
+    "chat_template": { "mode": "Trivial", "modelVersion": null, "budgetMs": 20 },
+    "activity_request": { "mode": "Trivial", "modelVersion": null, "budgetMs": 30 }
   },
   "telemetry": {
     "traceEnabled": false,
@@ -343,6 +385,7 @@ Names match the proto context message fields.
 | Reward | `[1, 56]` (level, class, spec, quest_entry, 4 reward stripes of 12 fields + active_spec_role + padding) | `[1, 2]` → (choice_index, confidence) | Discrete pick over 4 rewards |
 | Objective | `[1, 96]` (level, class, race, position[3], zone_id, map_id, inventory_value_copper, 8 tied-objective stripes of 4 fields each, 8 roster-goal-distance floats, padding) | `[1, 9]` → (tied_index, confidence) | Discrete pick over up to 8 tied objectives |
 | ChatTemplate | `[1, 48]` (level, class, spec, channel, chattiness, trigger_kind one-hot[8], 16 candidate stripes of 2 fields (recent_use_count + bag-of-words feature hash), slot_count, slot_price_copper) | `[1, 2]` → (candidate_index, confidence) | Discrete pick over up to 16 templates |
+| ActivityRequest | `[1, 72]` (verb one-hot[8], requester level, requester faction, requester zone-hash, 8 candidate stripes of 6 fields (min_level, max_level, pool_available, lockout_bit, expected_engaged_seconds, raw-whisper-bag-of-words feature hash)) | `[1, 2]` → (candidate_index, confidence) | Discrete pick over up to 8 catalog ids |
 
 Padded slots use `0.0` for floats and `0` for indexed enums; the
 service is responsible for normalizing context to fixed-width tensors.
