@@ -80,4 +80,18 @@ public enum FailureReason
     // --- catalog ---
     catalog_drift,
     catalog_invalid,
+
+    // --- AOTA runtime (Spec/19 §8 mapping; added by spec-fill-loop pass 15) ---
+    objective_end_state_unreachable,
+
+    // --- social fabric (Spec/21 §10; added by spec-fill-loop pass 15) ---
+    mail_recipient_invalid,
+    chat_denylist_rejection,
+    social_channel_join_failed,
+
+    // --- world cycles (Spec/22 §10; added by spec-fill-loop pass 15) ---
+    world_buff_window_missed,
+
+    // --- OnDemand launcher (Spec/23 §11; added by spec-fill-loop pass 15) ---
+    ondemand_stage_timeout,
 }
