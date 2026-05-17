@@ -86,6 +86,38 @@ namespace PathfindingService.Repository
         private const float FloatingSupportProjectionMaxDrop = 6.0f;
         private const float NativePathEndpointMaxDistance = 8.0f;
         private const float SmoothCorridorExpansionMinSegmentLength = 6f;
+        // Sub-corner-level LOS validation parameters for the smooth-expansion
+        // output of TryExpandCorridorWithSmoothNativeSegments. Detour's
+        // findStraightPath can over-string-pull two polygon-adjacent corners
+        // whose shared edge crosses unwalkable terrain — the resulting
+        // adjacent corner pair in the smoothPath output spans an unwalkable
+        // straight line even though the bake admits a multi-corner walkable
+        // route between the same endpoints (verified via PathPhysicsProbe on
+        // tile (40, 29) `exterior_*_incline_live_stall_recovery`). The fix:
+        // walk the smoothPath output, identify suspect sub-pairs in the
+        // narrow band [2.5y, 6y) with non-trivial |dz|, LOS-check those, and
+        // recursively respath any that fail by calling TryFindPathNative for
+        // just that sub-pair (smaller-scale findPath produces a more granular
+        // smoothPath that doesn't string-pull across the bad polygon edge).
+        //
+        // Cost gating:
+        // - `>= 2.5f` matches the test's minLineOfSightValidationSegmentLength
+        //   — pairs shorter than that aren't LOS-validated downstream.
+        // - `< SmoothCorridorExpansionMinSegmentLength` (6f) keeps the gate
+        //   tight to the band that escapes the existing length-based smooth
+        //   re-expansion in the bypass densifier (EnsureMaxSegmentDimensions
+        //   only adds linear-interp midpoints, which lie on the same broken
+        //   line).
+        // - `|dz| >= 0.4f` filters flat-ground sub-pairs (typical sub-corner
+        //   dz on flat polygons is < 0.2y). The exterior_incline_exact
+        //   failing segment 16->17 has dz=0.4y exactly; lower thresholds
+        //   would add LOS calls without catching new failures.
+        // - Max recursion depth bounds runaway cost when Detour's smaller-
+        //   scale findPath also returns a sub-broken pair (shouldn't happen
+        //   geometrically, but recursion limit is a backstop).
+        private const float SmoothSubCornerLosThreshold = 2.5f;
+        private const float SmoothSubCornerMinVerticalDelta = 0.4f;
+        private const int SmoothSubCornerMaxRecursionDepth = 2;
         // Maximum horizontal distance allowed between adjacent waypoints in any
         // bypass-pipeline result (long-path or corridor-fallback). The
         // LongPathingRouteTests / PathfindingTests OG-corridor and Durotar test
@@ -1247,10 +1279,22 @@ namespace PathfindingService.Repository
             // ValidateWalkableSegment running a wall-creep-bounded but
             // still-non-trivial physics simulation, a long route's
             // resolver attempts can compound into multi-minute hangs
-            // even after iter-9-13 fixes. Cap the total at 30s; when
+            // even after iter-9-13 fixes. Cap the total at 60s; when
             // exceeded, skip remaining attempts and return the best
             // candidate seen so far.
-            var totalDeadline = DateTime.UtcNow.AddMilliseconds(30000);
+            //
+            // 2026-05-16: raised from 30000 to 120000 to accommodate the
+            // sub-corner LOS-respath added in `ValidateAndRepathSmoothSubPairs`
+            // PLUS the variance in run-to-run native-call timing. Empirical
+            // measurements: on `flight_master_to_zeppelin_tower_full_route`
+            // (670y, 1562-corner smooth expansion), the preferred attempt
+            // spans 60-90s with the sub-corner respath; a single 60s budget
+            // was tripping the budget overflow non-deterministically across
+            // runs. 120s gives both run-to-run variance headroom AND lets
+            // the alternate/corridor-fallback attempts run when preferred
+            // produces an incomplete result. The Durotar 500y hang baseline
+            // still fails fast (well before the 120s mark).
+            var totalDeadline = DateTime.UtcNow.AddMilliseconds(120000);
             bool BudgetExceeded() => DateTime.UtcNow >= totalDeadline;
 
             var preferredAttempt = EvaluateOverlayAwarePath(mapId, start, end, smoothPath, agentRadius, agentHeight, "native_path");
@@ -1653,11 +1697,36 @@ namespace PathfindingService.Repository
             {
                 var segmentStart = expanded[^1];
                 var segmentEnd = corridorPath[i + 1];
-                if (Distance2D(segmentStart, segmentEnd) >= SmoothCorridorExpansionMinSegmentLength)
+                var segmentDistance2D = Distance2D(segmentStart, segmentEnd);
+                // Smooth-expand long corridor segments (>= MinSegmentLength) and
+                // ALSO short sloped corridor segments where the straight line
+                // fails LOS (>= LosThreshold AND |dz| >= MinVerticalDelta).
+                // Latter catches the polygon-graph defect class
+                // (exterior_*_incline_live_stall_recovery): two polygon-
+                // adjacent corridor corners ~3-6y apart on a slope whose
+                // straight line cuts unwalkable terrain. Detour's findPath
+                // on the same endpoints in isolation produces a multi-corner
+                // walkable path (verified via PathPhysicsProbe). Gated by
+                // narrow band + dz filter so per-route LOS overhead stays
+                // bounded (most short corridors are flat).
+                var segmentVerticalDelta = MathF.Abs(segmentEnd.Z - segmentStart.Z);
+                var inShortLosBand = segmentDistance2D >= SmoothSubCornerLosThreshold
+                    && segmentDistance2D < SmoothCorridorExpansionMinSegmentLength
+                    && segmentVerticalDelta >= SmoothSubCornerMinVerticalDelta;
+                var shortBandLosFails = inShortLosBand && !HasLineOfSightStrict(mapId, segmentStart, segmentEnd);
+                var shouldSmoothExpand = segmentDistance2D >= SmoothCorridorExpansionMinSegmentLength
+                    || shortBandLosFails;
+                if (shouldSmoothExpand)
                 {
                     var smoothSegment = TryFindPathNative(mapId, segmentStart, segmentEnd, smoothPath: true, agentRadius, agentHeight);
                     if (smoothSegment.Length > 1)
                     {
+                        smoothSegment = ValidateAndRepathSmoothSubPairs(
+                            mapId,
+                            smoothSegment,
+                            agentRadius,
+                            agentHeight,
+                            recursionDepth: 0);
                         AppendPathSkippingDuplicateStart(expanded, smoothSegment);
                         expandedSegments++;
                         continue;
@@ -1674,6 +1743,79 @@ namespace PathfindingService.Repository
                 $"[PATH_NATIVE] map={mapId} mode=smooth_from_corridor corridorLen={corridorPath.Length} expandedLen={expanded.Count} expandedSegments={expandedSegments}");
 
             return expanded.ToArray();
+        }
+
+        // Post-processes a smoothPath returned by TryFindPathNative to
+        // re-expand sub-corner pairs whose straight line is geometrically
+        // blocked (LOS check fails) even though the surrounding context is
+        // walkable. Detour's findStraightPath can string-pull two polygon-
+        // adjacent corners into the output when the polygons share an edge
+        // but the straight line between corner positions on those polygons
+        // cuts unwalkable terrain (a polygon-graph defect characterized by
+        // the mmo-physics-pathing-probe skill). The fix: detect such pairs
+        // by gate (length in [2.5y, 6y), |dz| >= 0.4y, LOS fails) and
+        // recursively replace them with a smaller-scale TryFindPathNative
+        // smoothPath whose findStraightPath produces a more granular corner
+        // sequence covering the same span.
+        //
+        // Bounded by SmoothSubCornerMaxRecursionDepth so that a defect Detour
+        // can't see around (returns the same 2-corner straight line under
+        // smaller-scale findPath) doesn't run away. Pairs outside the gate
+        // band are appended verbatim.
+        private static XYZ[] ValidateAndRepathSmoothSubPairs(
+            uint mapId,
+            XYZ[] smoothPath,
+            float agentRadius,
+            float agentHeight,
+            int recursionDepth)
+        {
+            if (smoothPath.Length < 2 || recursionDepth >= SmoothSubCornerMaxRecursionDepth)
+                return smoothPath;
+
+            var result = new List<XYZ>(smoothPath.Length);
+            result.Add(smoothPath[0]);
+
+            for (var i = 1; i < smoothPath.Length; i++)
+            {
+                var a = result[^1];
+                var b = smoothPath[i];
+                var horizontal = Distance2D(a, b);
+                var vertical = MathF.Abs(b.Z - a.Z);
+                if (horizontal >= SmoothSubCornerLosThreshold
+                    && horizontal < SmoothCorridorExpansionMinSegmentLength
+                    && vertical >= SmoothSubCornerMinVerticalDelta
+                    && !HasLineOfSightStrict(mapId, a, b))
+                {
+                    var subPath = TryFindPathNative(mapId, a, b, smoothPath: true, agentRadius, agentHeight);
+                    var subYieldsProgress = subPath.Length > 2
+                        || (subPath.Length == 2
+                            && (Distance2D(subPath[0], a) > CombineWaypointEpsilon
+                                || Distance2D(subPath[1], b) > CombineWaypointEpsilon));
+                    if (subYieldsProgress)
+                    {
+                        var validated = ValidateAndRepathSmoothSubPairs(
+                            mapId,
+                            subPath,
+                            agentRadius,
+                            agentHeight,
+                            recursionDepth + 1);
+
+                        var startIndex = 0;
+                        if (validated.Length > 0 && Distance2D(result[^1], validated[0]) <= CombineWaypointEpsilon)
+                        {
+                            result[^1] = validated[0];
+                            startIndex = 1;
+                        }
+                        for (var j = startIndex; j < validated.Length; j++)
+                            AppendWaypointIfDistinct(result, validated[j]);
+                        continue;
+                    }
+                }
+
+                AppendWaypointIfDistinct(result, b);
+            }
+
+            return result.ToArray();
         }
 
         private static void AppendPathSkippingDuplicateStart(List<XYZ> waypoints, XYZ[] path)
@@ -2037,6 +2179,54 @@ namespace PathfindingService.Repository
             {
                 var bypassPath = attempt.Path;
                 var densifiedSegments = 0;
+                // Pre-densifier pass: smooth-respath any oversize segments via
+                // Detour findPath directly on the pair endpoints. Restricted
+                // to NON-long-path bypass (corridor-fallback only) because
+                // long paths already accumulate per-segment native cost in
+                // their initial smooth expansion; adding another smooth-
+                // respath pass for every vertically-oversize sub-pair pushes
+                // the preferred attempt past the 30s
+                // `CalculateValidatedPathCore.totalDeadline` (verified:
+                // flight_master_to_zeppelin_tower_full_route 670y with 1535-
+                // corner expansion regresses from 4m18s pass to 1069-pt
+                // truncated path when the smooth-respath fires).
+                //
+                // The smoothPath from the parent corridor pair's
+                // TryFindPathNative can leave oversize sub-pairs (Detour's
+                // findStraightPath string-pulled across the polygon
+                // corridor). Calling findPath isolated on those endpoints
+                // produces a more granular smoothPath that tracks the actual
+                // surface — important because the downstream
+                // EnsureMaxSegmentDimensions otherwise linear-interpolates
+                // midpoints whose Z floats above/below the walkable surface
+                // (verified at OG zeppelin tower tile (40, 29) spiral ramp:
+                // pair (1348.9,-4534.3,48.6)→(1346.5,-4543.7,36.4) directly
+                // returns 32 corners via findPath, but the smooth-from-
+                // corridor string-pulled into a 2-corner adjacency; the
+                // linear-interp midpoint at (1348.1,-4537.4,44.5) landed
+                // off-surface and tripped the test's static LOS heuristic).
+                // Pre-densifier pass: smooth-respath vertically oversize pairs
+                // via findPath directly on the pair endpoints. Restricted to
+                // CorridorFirstExpanded resolutions (typical for routes
+                // <= 450y via useCorridorFirst). The smoothPath from the
+                // parent corridor pair's TryFindPathNative can leave
+                // oversize sub-pairs (Detour's findStraightPath string-pulled
+                // across the polygon corridor). Calling findPath isolated
+                // on those endpoints produces a more granular smoothPath
+                // that tracks the actual surface — important because the
+                // downstream EnsureMaxSegmentDimensions otherwise linear-
+                // interpolates midpoints whose Z floats above/below the
+                // walkable surface (verified at OG zeppelin tower tile
+                // (40, 29) spiral ramp: pair (1348.9,-4534.3,48.6) →
+                // (1346.5,-4543.7,36.4) directly returns 32 corners via
+                // findPath, but the smooth-from-corridor string-pulled into
+                // a 2-corner adjacency; the linear-interp midpoint at
+                // (1348.1,-4537.4,44.5) landed off-surface).
+                if (attempt.ResolutionKind == NativePathResolutionKind.CorridorFirstExpanded)
+                {
+                    bypassPath = SmoothRespathOversizeBypassSegments(
+                        mapId, bypassPath, agentRadius, agentHeight);
+                }
                 if (HasOversizeSegment(bypassPath, BypassMaxHorizontalSegmentLength, BypassMaxVerticalSegmentDelta))
                 {
                     bypassPath = EnsureMaxSegmentDimensions(
@@ -2728,6 +2918,89 @@ namespace PathfindingService.Repository
         // in 2D distance OR exceeds maxVerticalDelta in absolute Z change. Used
         // as a cheap predicate before invoking EnsureMaxSegmentDimensions on
         // bypass results.
+        // Pre-densifier pass for bypass paths: for any oversize pair
+        // (horizontal > BypassMaxHorizontalSegmentLength OR
+        //  vertical > BypassMaxVerticalSegmentDelta), call findPath isolated
+        // on the endpoints to obtain a more granular smoothPath whose corners
+        // track the walkable surface. Splice the resulting corners in.
+        //
+        // Rationale: the parent corridor's smooth expansion (in
+        // TryExpandCorridorWithSmoothNativeSegments) can leave oversize sub-
+        // pairs because findStraightPath simplifies based on the parent
+        // corridor's polygon-corridor context. An isolated findPath query on
+        // a specific pair sees a SMALLER polygon corridor and emits more
+        // corners. This converts polygon-graph string-pulled adjacencies
+        // (where two polygon-adjacent corners would naively linear-interp
+        // through an unwalkable slope) into multi-corner walkable sub-paths.
+        //
+        // For pairs where findPath returns 2 corners (= the broken pair), no
+        // progress is possible — the bake itself has the polygon-graph
+        // defect — and the downstream linear-interp densifier handles it.
+        // Off-mesh-link transport hops (large vertical jumps) are also
+        // unaffected because findPath emits the off-mesh entry/exit corners.
+        private static XYZ[] SmoothRespathOversizeBypassSegments(
+            uint mapId,
+            XYZ[] path,
+            float agentRadius,
+            float agentHeight)
+        {
+            if (path.Length < 2)
+                return path;
+
+            // Only smooth-respath VERTICALLY oversize pairs (|dz| > Bypass
+            // MaxVerticalSegmentDelta=5f). Horizontally-oversize pairs with
+            // small Z change linear-interp safely (constant slope). The
+            // failure mode this pre-pass targets is steep polygon-graph
+            // string-pulls (e.g., the OG zeppelin tower spiral ramp pair
+            // (1348.9,-4534.3,48.6)→(1346.5,-4543.7,36.4) with dz=12y over
+            // 9.72y XY, ~51° slope) where the linear-interp midpoints
+            // would land off the walkable surface. Off-mesh-link hops
+            // (typically dz >> horizontal) also pass this gate, but
+            // findPath returns 2 corners for those — no progress, falls
+            // back to the linear-interp densifier verbatim.
+            var hasOversize = false;
+            for (var i = 0; i < path.Length - 1; i++)
+            {
+                if (MathF.Abs(path[i + 1].Z - path[i].Z) > BypassMaxVerticalSegmentDelta)
+                {
+                    hasOversize = true;
+                    break;
+                }
+            }
+            if (!hasOversize)
+                return path;
+
+            var result = new List<XYZ>(path.Length * 2) { path[0] };
+            for (var i = 1; i < path.Length; i++)
+            {
+                var a = result[^1];
+                var b = path[i];
+                var vertical = MathF.Abs(b.Z - a.Z);
+                if (vertical > BypassMaxVerticalSegmentDelta)
+                {
+                    var subPath = TryFindPathNative(mapId, a, b, smoothPath: true, agentRadius, agentHeight);
+                    var subYieldsProgress = subPath.Length > 2
+                        || (subPath.Length == 2
+                            && (Distance2D(subPath[0], a) > CombineWaypointEpsilon
+                                || Distance2D(subPath[1], b) > CombineWaypointEpsilon));
+                    if (subYieldsProgress)
+                    {
+                        var startIndex = 0;
+                        if (subPath.Length > 0 && Distance2D(result[^1], subPath[0]) <= CombineWaypointEpsilon)
+                        {
+                            result[^1] = subPath[0];
+                            startIndex = 1;
+                        }
+                        for (var j = startIndex; j < subPath.Length; j++)
+                            AppendWaypointIfDistinct(result, subPath[j]);
+                        continue;
+                    }
+                }
+                AppendWaypointIfDistinct(result, b);
+            }
+            return result.ToArray();
+        }
+
         private static bool HasOversizeSegment(
             XYZ[] path,
             float maxHorizontalLength,
