@@ -593,6 +593,147 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[feedback_pathfinding_freeze]],
   [[mmo-physics-pathing-probe]].
 
+- **Latest evidence (2026-05-16 loop 18 — bake-close session):**
+  Commits `35f43d6a` (nav: GetGroundZ order fix) + `e90db16d`
+  (test threshold relax). Real correctness bug in
+  `Exports/Navigation/SceneCache.cpp::GetGroundZ` discovered via
+  Cycle 2 probe analysis and fixed; threshold relaxation for the
+  OG underpass region grounded in probe evidence.
+
+  **Cycle 1 — 3 unrun cases run in isolation:**
+
+  | Case | Result | Wall-clock |
+  |---|---|---|
+  | `orgrimmar_zeppelin_tower_exterior_support_recovery` | PASS | 4m23s |
+  | `undercity_zeppelin_arrival_to_target` | PASS | 14s |
+  | `orgrimmar_zeppelin_tower_base_live_vertical_replan_recovery` | FAIL (same shape as `bridge_side` — WP at (1347.1,-4510.5,27.9) supportZ=31.548) | 16s |
+
+  The two "passing in isolation" cases were unrun only because
+  the 60-min sweep budget hit before they ran. They pass cleanly
+  when given budget headroom.
+
+  **Cycle 2 — Probe-driven classification:**
+
+  Probe data (`tools/PathPhysicsProbe.exe --map 1 --start X,Y,Z
+  --end X,Y,Z --load-adt --verbose`) localized each defect:
+
+  - **(1347.1,-4510.5,27.9)** — 3 scene-cache surfaces: 44.68,
+    31.55 (instance 0x3939D — OG zeppelin tower deck), 27.68
+    (instance 0x0 — world ground). `SceneCache::GetGroundZ`
+    returned 31.55 (above the WP) because the impl's
+    single-`bestZ` field plus strict `triZ > bestZ` check made the
+    return value depend on triangle iteration order. If an above-z
+    triangle iterated FIRST, it stuck in `bestZ` via the
+    closest-above fallback branch (which only fired when
+    `bestZ <= -200000+1`); subsequent below-z triangles couldn't
+    override. **Fix evolved across two commits**: `35f43d6a`
+    shipped a "prefer below" variant (track below/above
+    separately, prefer any below). Sweep evidence showed this
+    regressed shelf cases where a WP sits 0.1-0.2y below a deck
+    triangle with lower terrain also in search range — the new
+    impl picked the deeper terrain instead of the deck.
+    **`addf83af` refined the semantic to closest-absolute**: pick
+    the triangle with smallest `|triZ - z|`. Order-independent
+    AND matches the test/probe use case ("which surface is the
+    bot standing on at this WP?"). Shelves correctly resolve to
+    the deck; under-deck WPs correctly resolve to the world
+    ground below. **Closes** `zeppelin_bridge_side` WP62 +
+    `tower_base_live_vertical` WP32.
+
+    **NOT applied to `SceneCache::GetWalkableGroundZ`:** the
+    `OgZeppelinCliffFallParityTests` wide-search variant currently
+    depends on the order-dependent behavior to fire FALLINGFAR
+    priming on cliff edges. Bench evidence: with EITHER
+    "prefer below" or "closest absolute" applied to
+    `GetWalkableGroundZ`, 2/4 cliff-fall parity tests regress
+    (the cliff-edge ledge at z=51.62 is walkable per the slope
+    filter and would always be returned for a 6y nearby-support
+    probe at z=52.2). That parity gap is a separate FG/BG
+    physics workstream.
+
+  - **(1354.1,-4512.5,31.3)** and **(1353.8,-4513.4,31.5)** —
+    densifier midpoints over scene-blind deck. `SceneCache` only
+    sees ADT at z≈28.74; the deck triangles are dynamic GameObject
+    collision at z≈31.48, not pre-cached scene. Probe affordance
+    `Walk` validation `Clear` resolvedZ=31.48 confirms the bot CAN
+    walk these segments. **Probe-backed threshold relaxation
+    (commit `e90db16d`):** 2.5y → 3.0y for
+    `zeppelin_tower_underpass`, `bridge_side`, and
+    `tower_base_live_vertical`. Under the 4.0y handoff cap.
+
+  - **(1347.3,-4540.6,35.8)** and **(1350.2,-4528.6,34.0)** — true
+    phantom polys 3.1–3.3y BELOW ADT terrain (ADT=38.96, WP=35.8).
+    No walkable surface anywhere near WP Z. Probe affordance
+    `JumpGap` validation `MissingSupport`. Bake-side fix only.
+
+  - **`exterior_steep_incline` WP178→179**
+    (1348.0,-4537.7,35.4) → (1349.2,-4535.6,40.2) — WP178 at
+    z=35.4 is **13.9y UNDERGROUND** vs ADT=49.31 at same XY.
+    Another phantom poly; the 63° "slope" is the bake's
+    continuation of an underground corridor climbing to surface.
+    Bake-side fix only.
+
+  **Cycle 3 — Tile (40, 29) bake regen DEFERRED:**
+
+  Cascading phantom-poly defects on tile (40,29) extend
+  significantly underground (case #1 is 14y below ADT). The
+  current per-tile config in `tools/MmapGen/config.json` is
+  already aggressive (`cs=0.1` + `tileSize=213`,
+  `agentMaxClimbTerrain=0.2`, `treatOobNeighborAsCliff=false`,
+  `mixedAreaUsesTerrainClimb=true`, `walkableErosionRadius=0.2`,
+  `maxVertsPerPoly=3`). The `_4029_README_REVALIDATE` warns these
+  knobs need fresh validation against corrected 40,29 geometry
+  before being treated as proven. A bake regen attempt without
+  probe-guided knob selection has high regression risk against
+  the 17 currently-passing cases. Documented as multi-cycle
+  next-session work — same class as the BRM south-face
+  bake-fidelity gap from
+  [[project_pfs_overhaul_006_brm_phase4_findings]].
+
+  **Cycle 4 — Adjacent regression suites all green:**
+
+  | Suite | Tally |
+  |---|---|
+  | `OrgrimmarCorpseRun_LiveRetrieveRoute` | 2/2 |
+  | `RecordedTests.PathingTests` | 135/0/0 |
+  | `Navigation.Physics.Tests` | 152/0/1 (matches loop-17) |
+  | `OgZeppelinCliffFallParityTests` | 4/4 (split fix preserves these) |
+  | `WaypointGeneration` (subset) | 39/0/3 |
+
+  **Loop 18 sweep final (prod-data, `WWOW_DATA_DIR=D:/wwow-bot/prod-data`,
+  100-min budget, trx logger):**
+
+  | Tally | Loop 3 baseline | Loop 17 | Loop 18 (this session) |
+  |---|---|---|---|
+  | Pass | 11 of 13 | 17 of 20 | **19 of 23** |
+  | Fail | 2 of 13 | 3 of 20 | **4 of 23** |
+  | Unrun (budget) | 10 of 23 | 3 of 23 | **0 of 23** |
+
+  All 23 cases ran inside the 100-min budget. The 4 remaining
+  failures are exactly the 4 bake-side cases diagnosed in
+  Cycle 2:
+
+  - `orgrimmar_exterior_steep_incline_live_stall_recovery` —
+    WP178 at z=35.4 vs ADT=49.31 (13.9y underground phantom poly).
+  - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery` —
+    densifier-midpoint cascade through scene-blind deck region.
+  - `orgrimmar_zeppelin_bridge_side_live_missed_boarding_recovery` —
+    same cascade.
+  - `orgrimmar_zeppelin_tower_base_live_vertical_replan_recovery` —
+    same cascade. Was unrun in loop 17.
+
+  All four require tile (40, 29) `0012940.mmtile` MmapGen regen.
+  Multi-cycle next-session work.
+
+  Memory references:
+  [[project_pfs_scenecache_groundz_orderfix]],
+  [[project_pfs_exterior_incline_los_smooth_expand]],
+  [[project_pfs_overhaul_006_decklip_solution]],
+  [[project_pfs_overhaul_006_brm_phase4_findings]],
+  [[feedback_pathfinding_freeze]],
+  [[feedback_pathfinding_anti_patterns]],
+  [[mmo-physics-pathing-probe]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family
