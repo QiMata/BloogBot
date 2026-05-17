@@ -914,14 +914,20 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
     uint32_t start = m_cellStart[ci];
     uint32_t count = m_cellCount[ci];
 
-    // Track below-z and above-z candidates separately so the final result is
-    // order-independent. Iterating triangles in arbitrary order otherwise lets
-    // an above-z triangle "stick" in bestZ and then reject a later below-z
-    // triangle via `triZ > bestZ`. The intent (per comment below) is to PREFER
-    // any below-z surface and only fall back to above if none below exists.
-    float bestBelowZ = -200000.0f;     // highest at-or-below query z
-    float bestAboveZ = -200000.0f;     // lowest above query z (closest)
-    float bestAboveErr = std::numeric_limits<float>::max();
+    // Pick the surface CLOSEST to the query Z (absolute distance). This is
+    // order-independent and matches the test/probe use case: "which surface
+    // is the bot standing on at this WP?". Shelves/decks slightly above a
+    // lower terrain layer correctly resolve to the shelf when the WP sits
+    // right on it. Under-bridge / under-deck WPs correctly resolve to the
+    // world ground below when the deck is several yards above.
+    //
+    // The previous implementation tracked a single bestZ and updated it in
+    // the below-z branch only when triZ > bestZ. When an above-z triangle
+    // was iterated FIRST, the else-if branch (gated on bestZ uninit) stored
+    // it; subsequent below-z triangles could not override because the
+    // strict-greater check failed. Result was order-dependent.
+    float bestZ = -200000.0f;
+    float bestErr = std::numeric_limits<float>::max();
     float zMax = z + maxSearchDist; // symmetric search: accept ground above too
     float zMin = z - maxSearchDist; // search below
 
@@ -961,25 +967,15 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
         // Interpolate Z
         float triZ = st.az + u * (st.cz - st.az) + v * (st.bz - st.az);
 
-        // Pick the highest surface AT OR BELOW the query Z (downward ray).
-        // WoW.exe ground detection casts downward — surfaces above the query
-        // point are ceilings/roofs, not ground. Only accept triZ <= z.
-        // Fall back to closest-above if nothing is below (standing on top of geometry).
-        if (triZ >= zMin && triZ <= z) {
-            if (triZ > bestBelowZ)
-                bestBelowZ = triZ;
-        } else if (triZ > z && triZ <= zMax) {
-            float err = triZ - z;
-            if (err < bestAboveErr) {
-                bestAboveErr = err;
-                bestAboveZ = triZ;
-            }
+        if (triZ < zMin || triZ > zMax) continue;
+        float err = std::fabs(triZ - z);
+        if (err < bestErr) {
+            bestErr = err;
+            bestZ = triZ;
         }
     }
 
-    if (bestBelowZ > -200000.0f + 1.0f)
-        return bestBelowZ;
-    return bestAboveZ;
+    return bestZ;
 }
 
 float SceneCache::GetWalkableGroundZ(float x, float y, float z, float maxSearchDist,
