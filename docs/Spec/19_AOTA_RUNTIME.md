@@ -134,22 +134,37 @@ proto-additive (rule R10 in the monorepo CLAUDE.md).
 
 ## 5. Snapshot projection
 
-`WoWActivitySnapshot` gains three identity fields (proto3 additive,
-S2.0 delivers):
+`WoWActivitySnapshot` gains four identity / advice-trace fields (proto3
+additive — slot **S2.0** delivers; today's highest assigned field is
+`has_pending_group_invite = 32`):
 
-```
-string  current_activity_id   = N;   // catalog id; empty when no Activity
-string  current_objective_id  = N+1; // Objective id; empty when between
-ObjectiveType current_objective_type = N+2;
+```protobuf
+string        current_activity_id     = 33;   // catalog id; empty when no Activity
+string        current_objective_id    = 34;   // Objective id; empty when between
+ObjectiveType current_objective_type  = 35;   // enum mirror of section 4
+repeated AdviceLogEntry advice_log    = 36;   // ring buffer cap 8 — Spec/20 RPCs land here
+
+// New companion message — declared in the same proto file
+message AdviceLogEntry {
+    string advisor     = 1;   // "objective" | "reward" | "rotation" | "threat"
+    string rationale   = 2;   // Spec/20 RotationAdvice.Rationale et al.
+    float  confidence  = 3;
+    uint32 used_index  = 4;   // composer's actually-picked index (or 0xFFFFFFFF when discarded)
+    uint32 timestamp   = 5;   // unix-seconds of the advice request
+}
 ```
 
 Plus the existing top-of-stack `currentTaskName` (Task) and
-`RecentCommandAcks[]` (Actions).
+`recent_command_acks` (Actions). Both retain their existing field
+numbers; no renames.
 
 This is the **only** way a test or the UI observes Activity / Objective
 identity. Per [`CLAUDE.md → Test Isolation Rules`](../../CLAUDE.md#test-isolation-rules--critical),
 tests assert on these snapshot fields, never on internal `IActivity` /
-`IObjective` instances.
+`IObjective` instances. The `advice_log` ring buffer is also the only
+legal way a test asserts that DecisionEngine advice reached the
+composer (Spec/20 §3 forbids tests from poking the
+`IDecisionEngineClient` mock directly).
 
 ## 6. Composition entry point
 
@@ -202,29 +217,179 @@ each tick:
        if Status == Failed: OnChildFailedAsync chain
 ```
 
-## 8. Test contract
+## 8. Failure-reason taxonomy
 
-Phase 2 slot S2.0 ships three contract tests at
-`Tests/BotRunner.Tests/Activities/IActivityContractTests.cs`:
+`FailureReason` is a closed enum, mirrored to proto3 for snapshot
+projection. Plan/14 (DecisionEngine integration) and Plan/12 (test
+isolation) consume these values when classifying failed Objectives.
+
+```csharp
+public enum FailureReason
+{
+    None = 0,
+    GateUnsatisfied         = 1,  // ObjectiveGate predicate returned false on entry
+    EndStateUnreachable     = 2,  // composer determined no path satisfies IObjectiveEndState
+    TaskAborted             = 3,  // child IBotTask returned BotTaskStatus.Aborted
+    SnapshotTimeout         = 4,  // CheckCompletion still false past Activity-level deadline
+    EntryRequirementMissing = 5,  // ActivityDefinition.EntryRequirements unmet after precondition pass
+    LockoutActive           = 6,  // raid/dungeon lockout blocks entry (per Spec/22 World Cycles)
+    DecisionEngineRejected  = 7,  // ObjectiveAdvice with confidence < 0 returned veto (rare, Phase 3)
+    ExternalCancellation    = 8,  // operator/cancel-token canceled the Activity
+    UnknownObjectiveType    = 9,  // composer emitted an ObjectiveType the BotRunner cannot drive
+}
+```
+
+Snapshot projection (additive field on `WoWActivitySnapshot`, S2.0):
+
+```protobuf
+FailureReason last_objective_failure = 37;   // None when current Objective is healthy
+```
+
+## 9. ML integration — Composer tiebreaker
+
+**Surface.** `IActivityComposer.Compose(...)` is deterministic by
+default (topological sort + priority + travel-cost). When two or more
+Objectives tie on all stable-sort keys (priority, soonest expiring,
+travel cost, unlock fan-out), the composer queries
+`IDecisionEngineClient.GetObjectiveAdviceAsync(ctx, ct)` (Spec/20 §2)
+and uses the returned `ObjectiveAdvice.RecommendedObjectiveId` as the
+tiebreaker.
+
+**Why advisory not authoritative.** Per Spec/20 §1, the composer
+treats `NoAdvice` (timeout, service down, model failure) as "fall
+through to the deterministic id-lexicographic tie-break". The composed
+list shape is therefore stable under DecisionEngine outages.
+
+**Input feature vector** (`ObjectiveContext`, fixed shape, declared in
+`Services/DecisionEngineService/Contexts/ObjectiveContext.cs`):
+
+| Field | Shape | Source |
+|---|---|---|
+| `bot_level` | uint8 | snapshot.Player.Level |
+| `bot_class` | uint8 | snapshot.Player.Class |
+| `bot_race` | uint8 | snapshot.Player.Race |
+| `bot_position` | float[3] | snapshot.MovementData.Position |
+| `current_zone_id` | uint16 | snapshot.Player.ZoneId |
+| `current_map_id` | uint16 | snapshot.CurrentMapId |
+| `inventory_value_copper` | uint32 | snapshot-derived (sum of `BankItems` + bag inventory sell prices) |
+| `tied_objective_ids` | string[N] | composer's tie set (N ≤ 8 — composer truncates) |
+| `tied_objective_types` | ObjectiveType[N] | parallel to tied_objective_ids |
+| `tied_objective_costs` | float[N] | composer's travel-cost estimates |
+| `tied_unlock_fanout` | uint16[N] | composer's downstream-unlock counts |
+| `roster_goal_distance` | float[8] | distance-to-CharacterRosterGoal per axis (Spec/05): level, gear tier, attunement step, rep tier, gold target, mount tier, PvP rank, profession-skill cap |
+
+**Output shape** (`ObjectiveAdvice`, declared in Spec/20 §3):
+
+```csharp
+public sealed record ObjectiveAdvice(
+    string? RecommendedObjectiveId,   // must equal one of ObjectiveContext.tied_objective_ids
+    float   Confidence,                 // 0..1
+    string  Rationale);
+```
+
+**Maturity phases** (per Spec/20 §5):
+
+| Phase | Source | Live when |
+|---|---|---|
+| 1 — Heuristic | `Services/DecisionEngineService/Heuristics/ObjectiveTieHeuristic.cs` — picks lowest `tied_objective_costs` then lowest `Id` | S2.0 ships |
+| 2 — Rules + lookup | `Config/decision-engine/objective-tie-rules.json` — per `(ActivityFamily, ObjectiveType)` precedence table | Plan/14 slot S10.3 |
+| 3 — ONNX | `Services/DecisionEngineService/Models/objective/v1.onnx` — trained on labeled traces under `tmp/test-runtime/traces/<test-name>/<timestamp>.jsonl` | Plan/14 slot S10.7 |
+
+**Fail-soft fallback.** Composer drops back to deterministic id-lex
+tie-break when `ObjectiveAdvice.RecommendedObjectiveId` is null, has
+`Confidence < 0.5`, or does not appear in
+`ObjectiveContext.tied_objective_ids`.
+
+**Live-validation guard.** Plan/14 slot S10.8 ships
+`Tests/BotRunner.Tests/Activities/ObjectiveAdviceContractTests.cs`
+asserting that for every snapshot in
+`tmp/test-runtime/traces/<test-name>/<timestamp>.jsonl`, replacing the
+advice with a `NoAdvice` causes the same Activity to **still complete**
+within the spec's wall-clock budget. This is the canary that proves ML
+cannot break correctness — only nudge.
+
+## 10. Dynamic-progressive invariant
+
+The composed Objective list MUST satisfy two properties on every
+`TickAsync`:
+
+1. **Dynamic.** `IActivityComposer.Compose(def, snapshot1, db, unlocks, params)`
+   and `Compose(def, snapshot2, db, unlocks, params)` produce
+   different orderings when `snapshot1` and `snapshot2` differ in any
+   bot-relevant axis: `Player.Race`, `Player.Class`, `Player.Level`,
+   `Player.Faction`, `Inventory.Items`, `QuestsCompleted`,
+   `Reputation.Standings`, `Attunements`. Identical snapshots produce
+   identical orderings (deterministic stable sort).
+2. **Progressive.** Every `ActivityCompletion { IsComplete = true }`
+   strictly reduces the `RosterPlanner.Distance(snapshot, goal)`
+   metric defined in [`Spec/05_PROGRESSION.md`](05_PROGRESSION.md). The
+   invariant is checked once per Activity completion; it is **not**
+   required per Objective (some Objectives are setup-only and do not
+   close goal distance).
+
+Both properties are testable from the snapshot stream alone — no
+private `IActivity` state needed. Slot S2.0 ships the contract test
+that asserts both (named in section 11 below).
+
+## 11. Test contract
+
+Phase 2 slot S2.0 ships **four** contract tests at
+`Tests/BotRunner.Tests/Activities/IActivityContractTests.cs`. The first
+three are the deterministic-composer tests; the fourth asserts the
+dynamic-progressive invariant.
 
 1. **`NextObjective_ReturnsTopologicalNext`** — given a snapshot at the
    start of an Activity, the *first* Objective is the one with no
-   unmet predecessors and the highest priority.
+   unmet predecessors and the highest priority. Asserts via
+   `WoWActivitySnapshot.current_objective_id`.
 2. **`NextObjective_SkipsCompletedObjectives`** — advancing the
    snapshot to reflect Objective[0] completion causes Objective[1] to
-   be returned next.
+   be returned next. Asserts via the
+   `(current_activity_id, current_objective_id)` snapshot pair.
 3. **`ComposeObjectives_HonorsEntryRequirements`** — missing required
    item / quest / rep causes the composed list to **prepend** the
-   precondition Objectives, not fail outright.
+   precondition Objectives, not fail outright. Asserts via the
+   prefix sequence emitted in `WoWActivitySnapshot.current_objective_id`
+   across N composer ticks.
+4. **`AotaRuntime_DynamicProgressive_ComposerProducesDifferentOrderingsPerSnapshotTest`** —
+   the dynamic-progressive invariant from §10. Drives
+   `IActivityComposer.Compose(...)` against ≥3 distinct synthetic
+   snapshots that differ in `(Race, Class, Level, QuestsCompleted)`
+   and asserts (a) the composed `Objectives` lists differ in either
+   contents or order, and (b) each successful Activity completion
+   reduces `RosterPlanner.Distance(snapshot, goal)`.
+
+Two additional ML-surface contract tests ship alongside slot **S10.8**
+(Plan/14) — they are listed here so the test surface is colocated:
+
+5. **`ObjectiveComposer_NoAdvice_FallsThroughToDeterministicTieBreak`** —
+   `NoAdvice` from DecisionEngineClient produces a stable id-lex
+   tie-break.
+6. **`ObjectiveComposer_AdviceOutsideTieSet_IsIgnored`** — advice that
+   names an `Id` not in `ObjectiveContext.tied_objective_ids` is
+   discarded and the deterministic tie-break is used. Asserts via
+   `WoWActivitySnapshot.advice_log[].used_index == 0xFFFFFFFF`.
 
 Live-validation tests are named per
 [`Spec/18_TERMINOLOGY.md#test-naming-convention`](18_TERMINOLOGY.md#test-naming-convention):
 `<Activity>_<Objective>_Tests.cs`. They drive a real bot through the
 Activity end-to-end and assert that the snapshot's
 `(current_activity_id, current_objective_id)` pairs match the composed
-sequence in order.
+sequence in order, AND that the
+[`AotaRuntime_DynamicProgressive_*`](#11-test-contract) invariant holds
+across the trajectory.
 
-## 9. Backward-compatibility
+## 12. Plan-slot cross-reference
+
+| Slot | Files | Ships |
+|---|---|---|
+| [`Plan/03/S2.0`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md#s20--iactivity--iobjective-runtime-contracts) | `Exports/BotRunner/Activities/IActivity.cs`, `IObjective.cs`, `ActivityResolver.cs`, `Exports/BotCommLayer/Models/ProtoDef/communication.proto`, `Tests/BotRunner.Tests/Activities/IActivityContractTests.cs` | Sections §2-§7 of this spec, plus the four tests in §11. |
+| [`Plan/13/S9.x`](../Plan/13_PHASE9_CATALOG_FILL.md) | per-Activity `Config/activities/<id>.json` rows | Composer's seed-objective synthesis from full catalog (§6). |
+| [`Plan/14/S10.3`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md) | `Config/decision-engine/objective-tie-rules.json`, `Services/DecisionEngineService/Heuristics/ObjectiveTieHeuristic.cs` | ML integration Phase 2 (§9). |
+| [`Plan/14/S10.7`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md) | `Services/DecisionEngineService/Models/objective/v1.onnx` | ML integration Phase 3 (§9). |
+| [`Plan/14/S10.8`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md) | `Tests/BotRunner.Tests/Activities/ObjectiveAdviceContractTests.cs` | Tests #5 and #6 in §11; live-validation correctness guard. |
+
+## 13. Backward-compatibility
 
 `ActivityResolver` continues to accept the legacy `AssignedActivity`
 string and produce an `IBotTask` directly *until S2.0 lands*. After
@@ -238,7 +403,7 @@ Category-A LiveValidation tests cataloged in
 to drive `Activity × Objective` instead of constructing raw
 `ActionMessage` objects in the test body.
 
-## 10. Why this is its own spec
+## 14. Why this is its own spec
 
 Before this spec, the `IActivity` / `IObjective` runtime shape was
 documented across three files: a paragraph in `Spec/18_TERMINOLOGY.md`,

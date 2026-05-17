@@ -6,7 +6,7 @@
 
 | # | File | Owner type | ML hook | Status | Outcome |
 |---|------|------------|---------|--------|---------|
-| 1 | [docs/Spec/19_AOTA_RUNTIME.md](../Spec/19_AOTA_RUNTIME.md) | Spec | Composer-tiebreaker advice | not-started | |
+| 1 | [docs/Spec/19_AOTA_RUNTIME.md](../Spec/19_AOTA_RUNTIME.md) | Spec | Composer-tiebreaker advice | done | Added proto fields 33-37 (current_activity_id/_objective_id/_objective_type/advice_log/last_objective_failure), FailureReason enum, ObjectiveContext feature shape, three-phase ML maturity, §10 dynamic-progressive invariant; 4 Skip-stubbed contract tests in IActivityContractTests.cs. |
 | 2 | [docs/Spec/20_DECISION_ENGINE.md](../Spec/20_DECISION_ENGINE.md) | Spec | This IS the ML surface | not-started | |
 | 3 | [docs/Spec/21_SOCIAL_FABRIC.md](../Spec/21_SOCIAL_FABRIC.md) | Spec | Chat-template selection | not-started | |
 | 4 | [docs/Spec/22_WORLD_CYCLES.md](../Spec/22_WORLD_CYCLES.md) | Spec | World-buff-window forecasting | not-started | |
