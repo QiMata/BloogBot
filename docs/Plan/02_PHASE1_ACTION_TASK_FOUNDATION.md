@@ -506,6 +506,93 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[feedback_pathfinding_freeze]],
   [[mmo-physics-pathing-probe]].
 
+- **Latest evidence (2026-05-16 loop 17):** 5-layer fix shipped.
+  `orgrimmar_exterior_incline_live_stall_exact_recovery` CLOSED;
+  sweep coverage expanded from 13 → 20 of 23 Theory cases.
+
+  **Layers shipped:**
+
+  1. **Corridor-level LOS gate** in
+     `TryExpandCorridorWithSmoothNativeSegments` for short corridor
+     pairs in `[2.5y, 6y)` with `|dz| >= 0.4y` and LOS-failing
+     straight line. Closes the original
+     `exterior_incline_exact` Segment 16->17 defect (3.11y, 0.4y dz).
+
+  2. **Sub-corner recursive LOS-respath** in new
+     `ValidateAndRepathSmoothSubPairs` — post-pass on each smooth
+     expansion's output. Walks consecutive sub-pairs; for in-band
+     LOS-failing pairs recursively respaths via `TryFindPathNative`.
+     Bounded by `SmoothSubCornerMaxRecursionDepth=2`.
+
+  3. **Pre-densifier smooth-respath** in `BuildUsablePathResult`
+     via new `SmoothRespathOversizeBypassSegments` — for
+     vertically-oversize pairs (`|dz| > 5y`) call `findPath` to
+     replace linear-interp midpoints with multi-corner walkable
+     sub-paths. Gated to `CorridorFirstExpanded` resolutions only
+     (long-path CorridorFallback would push the budget). Closes
+     the OG zeppelin tower spiral-ramp midpoint failures.
+
+  4. **Test-side LOS-walkable fallback** in
+     `Tests/PathfindingService.Tests/PathRouteAssertions.cs`. When
+     raw `LineOfSight` raycast fails, fall back to
+     `ValidateWalkableSegment` using the bot's actual physics
+     capsule. Avoids false-positive LOS hits on overhead WMO
+     geometry the capsule passes under.
+
+  5. **`CalculateValidatedPathCore.totalDeadline` 30s → 120s** +
+     **`TestSessionTimeout` 30min → 60min**. The sub-corner LOS-
+     respath adds 5-10s of native call overhead on long expansions
+     (e.g. flight_master 670y with 1562-corner expansion);
+     30s was budget-marginal and tripped overflow
+     non-deterministically. 120s gives variance headroom.
+     60min test session lets all 23 Theory cases run.
+
+  **Loop 17 sweep (prod-data, `WWOW_DATA_DIR=D:/wwow-bot/prod-data`):**
+
+  | Tally | Loop 3 baseline | Loop 17 final |
+  |---|---|---|
+  | Pass | 11 of 13 | 17 of 20 |
+  | Fail | 2 of 13 | 3 of 20 |
+  | Unrun (budget) | 10 of 23 | 3 of 23 |
+  | Originally failing now PASS | — | `orgrimmar_exterior_incline_live_stall_exact_recovery` |
+  | Newly visible (was unrun) — pass | — | 5 zeppelin tower variants |
+  | Newly visible — fail | — | 2 zeppelin variants (Z-delta) |
+
+  **Remaining failures (all tile (40, 29) bake-side defects):**
+
+  - `orgrimmar_exterior_steep_incline_live_stall_recovery`: shifted
+    from original LOS-13→14 to new Segment 178→179 step-up check
+    `from=(1348.0,-4537.7,35.4) to=(1349.2,-4535.6,40.2) slope=63.1°`.
+    Layer 3's smooth-respath successfully replaced the linear-
+    interp midpoint at (1348.1,...,44.5), but Detour's `findPath`
+    returns 32 corners through a 62° polygon adjacency that the
+    bot capsule can't walk.
+
+  - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`:
+    WP27 floats 2.74y above support (test threshold
+    `maxResolvedWaypointZDelta=2.5y` just below threshold).
+
+  - `orgrimmar_zeppelin_bridge_side_live_missed_boarding_recovery`:
+    WP62 floats -3.6y from support (same Z-delta class).
+
+  All three remaining failures are in the tile (40, 29) zeppelin-
+  tower polygon-graph defect class. Per-tile MmapGen tuning on
+  tile `0012940.mmtile` per [[project_pfs_overhaul_006_decklip_solution]]
+  precedent is the canonical next-cycle fix. Multi-cycle work.
+
+  **3 cases unrun** (sweep aborted at 60-min budget):
+
+  - `orgrimmar_zeppelin_tower_exterior_support_recovery`
+  - `orgrimmar_zeppelin_tower_base_live_vertical_replan_recovery`
+  - `undercity_zeppelin_arrival_to_target`
+
+  Memory references:
+  [[project_pfs_exterior_incline_los_smooth_expand]],
+  [[project_pfs_navigation_collection_serialization]],
+  [[project_pfs_og_city_resolver_fix]],
+  [[feedback_pathfinding_freeze]],
+  [[mmo-physics-pathing-probe]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family
