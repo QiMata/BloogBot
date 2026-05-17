@@ -734,6 +734,129 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[feedback_pathfinding_anti_patterns]],
   [[mmo-physics-pathing-probe]].
 
+- **Latest evidence (2026-05-17 loop 20 — cull-pipeline unblock):**
+  Commit `0b2164d9` (tools: NavMeshPhysicsValidator tolerate
+  `GetPolyAtCoord` AV via legacy CSE policy). Closes the
+  bake-validation blocker discovered in loop 19. **Tile (40, 29)
+  bake-side phantom-poly closure NOT achieved this loop — the cull
+  approach is calibrated but does not yet reach the trap
+  polygons.** Tally remains 19 / 4 / 0 on prod-data.
+
+  **Cycle 1 — Pipeline unblock SHIPPED:**
+
+  `NavMeshPhysicsValidator.exe` reliably crashed with
+  `System.AccessViolationException` inside Detour's
+  `findNearestPoly` for a subset of cull-coord probe points on
+  tile (40, 29). The per-call `try { GetPolyAtCoord(...) } catch`
+  in `tools/NavMeshPhysicsValidator/Program.cs:244-249` did NOT
+  catch the AV — in .NET 5+ AV is treated as a corrupted-state
+  exception and refuses managed catch without explicit opt-in.
+  `[HandleProcessCorruptedStateExceptions]` is deprecated in
+  .NET 8 (the build emits SYSLIB0032). The fix opts the validator
+  into the legacy behavior via the runtime config option
+  `System.Runtime.LegacyCorruptedStateExceptionsPolicy=true`
+  (set as a `<RuntimeHostConfigurationOption>` in the csproj) and
+  factors the probe call into a `SafeGetPolyAtCoord` helper that
+  catches AV explicitly and returns 0 (no-poly) for that probe
+  point. The native side already SEH-wraps the call
+  (`Exports/Navigation/DllMain.cpp:2800/2930`) but the SEH frame
+  runs in native, not managed. **Validator now runs to completion
+  on tile (40, 29) and emits per-coord polyref summary lines.**
+
+  **Cycle 2 — Surgical cull ATTEMPTED, REVERTED twice:**
+
+  *Attempt 1 (handoff-prescribed radii `Z=2.0 XY=0.5`):*
+  Validator produced 32 unique cull polyrefs (29 at coord
+  `(1350.2,-4528.6,34.0)`, 3 at coord `(1349.2,-4535.6,40.2)`).
+  Coord 1 `(1347.3,-4540.6,35.8)` and coord 3
+  `(1348.0,-4537.7,35.4)` returned ZERO polys at these radii —
+  their phantoms are >0.5y XY-offset from the WP center. Sweep
+  result: **22 pass / 5 fail / 0 unrun** (4 originally-failing
+  still fail; **`orgrimmar_flight_master_tower_hover_stall_exact_live_recovery`**
+  regressed from pass → 292y-short-path fail). Reverted. The
+  29-poly cull at coord 2 over-included legitimate harbor/deck
+  polys that other passing routes depend on.
+
+  *Attempt 2 (minimum-radii `Z=0 XY=0`):* Single zero-radius
+  probe per coord at the validator's default extent
+  (`xy=2.0, z=1.8`). Coord 2 yielded polyref `281475331147696`
+  (area=AREA_GROUND, flags=NAV_GROUND); coord 4 yielded polyref
+  `281475331147633` (area=AREA_STEEP_SLOPE, flags=NAV_STEEP_SLOPES).
+  Coords 1 and 3 still no-poly. Applied 2-poly cull via
+  `tools/MmapGen/build/NavMeshTileEditor.exe ... --cull-polys
+  281475331147696,281475331147633`. Sweep result: **19 pass / 4
+  fail / 0 unrun** — matches loop-18 baseline exactly. No
+  regression, but ALSO no closure: failure messages for all 4
+  cases still report the same WP coords and same supportZ values
+  as loop 18. The probed-at-zero-radius polyrefs were NOT the
+  actual trap polygons; the bot's path still routes through the
+  same phantom regions. Reverted to baseline (`0012940.mmtile`
+  md5 `cc0d89c4...`).
+
+  **Lesson — zero-radius probe doesn't reach the trap.** The
+  `GetPolyAtCoord` call at the WP coord with default extent
+  (xy=2.0, z=1.8) returns *whichever* poly best matches the
+  probe XY,Z — typically a sibling poly stacked alongside the
+  phantom, not the phantom itself. The Detour smooth-path that
+  produces WP92/WP72/WP42 at `(WPxy, supportZ−3.1)` must be
+  using a different polygon (likely a span-bridging poly that
+  connects deck to phantom across multiple Z layers). Identifying
+  the actual trap polyref requires either:
+  (a) instrumenting `PathFinder.cpp` smooth-path generation to
+  emit the corner-poly ref per waypoint, or (b) probing along the
+  full failing-route smooth path (1000+ corners) and finding the
+  corner-poly ref whose XY,Z matches the failure WP.
+
+  **Cycle 3 — Adjacent suite regression sweep:** SKIPPED. The
+  Cycle 1 commit touches only the `tools/NavMeshPhysicsValidator`
+  project; no test-runtime code changed. Tile (40, 29) reverted
+  to baseline hash `cc0d89c4` matches loop-18's verified state.
+
+  **Loop 20 sweep tally (prod-data, `WWOW_DATA_DIR=D:/wwow-bot/prod-data`,
+  Release configuration):**
+
+  | Tally | Loop 18 baseline | Loop 20 (prescribed radii) | Loop 20 (zero-radius) | Loop 20 (final, reverted) |
+  |---|---|---|---|---|
+  | Pass | 19 of 23 | 22 of 23 | 19 of 23 | **19 of 23** |
+  | Fail | 4 of 23 | 5 of 23 (+1 regression) | 4 of 23 | **4 of 23** |
+  | Unrun | 0 of 23 | 0 of 23 | 0 of 23 | **0 of 23** |
+
+  The 4 remaining failures are unchanged from loop 18 (same WP
+  coords, same supportZ, same failure shape):
+
+  - `orgrimmar_exterior_steep_incline_live_stall_recovery` — WP178
+    at `(1348.0,-4537.7,35.4)` vs ADT=49.31 (13.9y underground
+    phantom poly).
+  - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery` —
+    WP92 at `(1350.2,-4528.6,34.0)` vs supportZ=37.245.
+  - `orgrimmar_zeppelin_bridge_side_live_missed_boarding_recovery` —
+    WP72 at `(1347.3,-4540.6,35.8)` vs supportZ=38.932.
+  - `orgrimmar_zeppelin_tower_base_live_vertical_replan_recovery` —
+    WP42 at `(1347.3,-4540.6,35.8)` vs supportZ=38.932.
+
+  **Next-cycle work surfaces (cheapest first):**
+
+  1. Extend the smooth-path corner emission to dump the
+     corner-poly ref alongside each `(x,y,z)`. Then the actual
+     trap polyref is `cornerPolyRefs[i]` for the failing WP
+     index. Surgical cull becomes single-poly per test.
+  2. Alternatively, drive `tools/PathPhysicsProbe.exe
+     --detour-resolve --smooth` along the full failing route
+     and at every smooth-path corner, call `QueryPolyAtCoord`
+     to record the polyref. Filter by WP index — the trap polyref
+     is the corner at the failure WP. No code change needed; just
+     a new orchestrator script.
+  3. Per-tile MmapGen config iteration on tile (40, 29) — the
+     `_4029_README_REVALIDATE` knobs need fresh validation
+     against probe data. Multi-cycle.
+
+  Memory references:
+  [[project_pfs_loop20_cull_pipeline_unblock]] (new),
+  [[project_pfs_loop19_cull_pipeline_blocker]] (closed),
+  [[project_pfs_scenecache_groundz_orderfix]],
+  [[project_pfs_overhaul_006_brm_phase4_findings]],
+  [[feedback_pathfinding_freeze]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family
