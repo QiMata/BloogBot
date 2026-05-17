@@ -35,7 +35,76 @@ public sealed record CharacterRosterGoal
 }
 ```
 
-Coverage rules the RosterPlanner enforces (in order):
+### `RosterPlanner.Distance` — the canonical progression metric
+
+The dynamic-progressive invariant referenced across [`Spec/19 §10`](19_AOTA_RUNTIME.md#10-dynamic-progressive-invariant),
+[`Spec/20 §10`](20_DECISION_ENGINE.md#10-dynamic-progressive-invariant),
+[`Spec/21 §12`](21_SOCIAL_FABRIC.md#12-dynamic-progressive-invariant),
+[`Spec/22 §12`](22_WORLD_CYCLES.md#12-dynamic-progressive-invariant),
+[`Spec/23 §13`](23_ONDEMAND_API.md#13-dynamic-progressive-invariant),
+and [`Spec/24 §12`](24_BEHAVIORAL_VARIATION.md#12-dynamic-progressive-invariant)
+is grounded here. `RosterPlanner.Distance(snapshot, goal)` returns a
+scalar that **strictly decreases** every time an Activity completes
+that closes part of `CharacterRosterGoal`.
+
+```csharp
+public sealed record RosterPlannerDistance
+{
+    public required float TotalScalar { get; init; }              // sum of weighted axes; tests assert delta <= 0
+    public required IReadOnlyDictionary<DistanceAxis, float> PerAxis { get; init; }
+}
+
+public enum DistanceAxis
+{
+    Level             = 0,  // (TargetLevel - Player.Level) / TargetLevel    (0..1)
+    GearTier          = 1,  // (TargetGearTier - GearTier(currentEquipped)) / TargetGearTier
+    AttunementStep    = 2,  // unmet attunement step count / total attunement steps
+    ReputationTier    = 3,  // sum_i max(0, GoalStanding_i - CurrentStanding_i) / sum_i GoalStanding_i
+    GoldTargetPct     = 4,  // max(0, GoldTargetCopper - Player.gold) / GoldTargetCopper
+    MountTier         = 5,  // (TargetMountTier - CurrentMountTier) / TargetMountTier
+    PvPRank           = 6,  // (TargetPvPRank - CurrentPvPRank) / 14
+    ProfessionSkill   = 7,  // sum_p max(0, TargetSkill_p - CurrentSkill_p) / (300 * |Professions|)
+}
+
+public static class RosterPlanner
+{
+    /// <summary>
+    /// Computes the bot's distance to its CharacterRosterGoal.
+    /// Pure function over (snapshot, goal) - no I/O, no DB lookups.
+    /// </summary>
+    public static RosterPlannerDistance Distance(
+        WoWActivitySnapshot snapshot,
+        CharacterRosterGoal goal);
+
+    /// <summary>
+    /// Default weights summing to 1.0; tests pin via the optional
+    /// `weights` argument for determinism.
+    /// </summary>
+    public static IReadOnlyDictionary<DistanceAxis, float> DefaultWeights { get; }
+        // Level=0.18, GearTier=0.18, AttunementStep=0.15, ReputationTier=0.10,
+        // GoldTargetPct=0.05, MountTier=0.08, PvPRank=0.08, ProfessionSkill=0.18
+}
+```
+
+`TotalScalar` is computed as `sum(weights[axis] * perAxis[axis])` so
+that a fully-achieved goal returns `TotalScalar = 0` and a fresh
+level-1 character with no professions / no gold returns `TotalScalar
+≈ 1`.
+
+`roster_distance_delta` per Activity (used in trace
+`outcome.roster_distance_delta` per Spec/20 §6.1) is computed as
+`Distance(post-Activity snapshot, goal).TotalScalar -
+Distance(pre-Activity snapshot, goal).TotalScalar`. **Strictly
+non-positive** for any progressive Activity completion. Cosmetic-only
+completions return 0; the loop's contract is `≤ 0`, never positive.
+
+`Distance` is intentionally a pure function — no DB hits, no service
+calls — because it is computed every snapshot tick by the trace writer
+(Spec/20 §6.1 `kind="outcome"` lines emit the delta). The 8-axis
+breakdown is what the `ObjectiveContext.roster_goal_distance` 8-float
+array (Spec/20 §2.1) carries.
+
+### Coverage rules the RosterPlanner enforces (in order):
 
 1. **Faction-side bootstrap.** If the account plan needs a Shaman and
    the account has 0 Horde characters, the planner schedules a Horde
@@ -153,6 +222,155 @@ public sealed record AccountRoster
 Account state is **not on per-character snapshots.** It lives in
 StateManager memory (rebuildable from snapshots) and is persisted to a
 small JSON file on shutdown.
+
+## Snapshot projection
+
+Progression state surfaces on `WoWActivitySnapshot` via one additive
+proto field (field numbering continues after Spec/24's field 45):
+
+```protobuf
+message RosterPlannerDistanceProj {
+    float  total_scalar         = 1;            // RosterPlannerDistance.TotalScalar
+    float  axis_level           = 2;            // PerAxis[DistanceAxis.Level]
+    float  axis_gear_tier       = 3;
+    float  axis_attunement_step = 4;
+    float  axis_reputation_tier = 5;
+    float  axis_gold_target_pct = 6;
+    float  axis_mount_tier      = 7;
+    float  axis_pvp_rank        = 8;
+    float  axis_profession_skill = 9;
+    float  last_completion_delta = 10;           // delta produced by the most recent
+                                                 //   Activity completion; <= 0 invariant
+    string roster_template_name = 11;            // e.g. "FuryWarriorPreRaid"
+}
+
+// New field on WoWActivitySnapshot (continues after Spec/24 field 45):
+RosterPlannerDistanceProj roster_distance = 46;
+```
+
+Per CLAUDE.md Test Isolation Rules, tests assert on this snapshot
+projection rather than reading `RosterPlanner.Distance(...)` directly
+from in-process state. Live-validation guards on the dynamic-progressive
+invariant scan `outcome.roster_distance_delta` in JSONL traces (Spec/20
+§6.1).
+
+## Failure-reason mapping
+
+Progression failures map onto [`Spec/12`](12_ERROR_TAXONOMY.md):
+
+| Failure | Spec/12 reason | Notes |
+|---|---|---|
+| `CharacterRosterGoal` references a missing template | `catalog_invalid` | exists |
+| Account-level coverage rule unsatisfiable (e.g. account banned, faction unavailable) | `task_unrecoverable` | RosterPlanner emits a single warning per session |
+| Distance computation throws (corrupted snapshot) | `task_unrecoverable` | defensive — wrap in try/catch; default to MaxValue distance |
+| Server caps disable a goal axis (e.g. PvPRank impossible on this server) | (no FailureReason; just exclude axis from sum) | `weights[PvPRank] = 0` for that realm |
+
+No new Spec/12 values needed; existing taxonomy covers this surface.
+
+## ML integration — Objective scoring
+
+**Surface.** `ProgressionPlanner.PickNextObjective(snapshot, db)`
+ranks candidate Activities by expected `roster_distance_delta`. When
+two candidates tie within an epsilon of `1e-3`, the planner consults
+`IDecisionEngineClient.GetObjectiveAdviceAsync(ObjectiveContext, ct)`
+([`Spec/20 §2.1`](20_DECISION_ENGINE.md#21-proto-wire-shapes)) with the
+tied catalog ids and the bot's current 8-axis `roster_goal_distance`.
+The advisor returns a tie-breaker; fail-soft to lowest-id lex tie-break.
+
+**Why advisory not authoritative.** The deterministic ranker (expected
+delta computed from catalog `EstimatedRewardValue` + travel cost)
+suffices; the advisor only kicks in on ties — and only nudges,
+never vetoes. A bot with the advisor pinned to `NoAdvice` still
+converges on its goals, just less optimally.
+
+**Input feature vector.** `ObjectiveContext.roster_goal_distance[8]`
+is the per-axis distance from this Spec. The advisor receives the
+candidate Activity ids in `tied_objective_ids` and the per-axis
+distance vector — see [`Spec/20 §4.2`](20_DECISION_ENGINE.md#42-onnx-feature-tensor-shapes-per-advisor)
+Objective row for the tensor shape.
+
+**Output shape.** `ObjectiveAdvice.RecommendedObjectiveId` — must be
+in the tied set per Spec/19 §9.
+
+**Three maturity phases** per [`Spec/20 §5`](20_DECISION_ENGINE.md):
+
+| Phase | Source | Wire |
+|---|---|---|
+| 1 — Heuristic | Lowest catalog-id lex among ties | `ProgressionPlanner` default |
+| 2 — Rules + lookup | `Config/decision-engine/objective-tie-rules.json` per `(ActivityFamily, level_band)` | Plan/14 S10.6 |
+| 3 — ONNX | `Models/objective/v1.onnx` trained on labeled traces | Plan/14 S10.6 Mode=Ml |
+
+**Fail-soft fallback.** `NoAdvice` or out-of-set recommendation →
+lowest-id lex tie-break. Asserted by Plan/14 slot S10.8
+`DecisionEngine_DynamicProgressive_AllAdvisorsForcedToNoAdvice`.
+
+**Live-validation guard.** Replaying any progression trace with the
+Objective advisor forced to `NoAdvice` MUST still produce
+`outcome.roster_distance_delta ≤ 0`. The deterministic ranker can
+make slower choices but never anti-progressive ones.
+
+## Dynamic-progressive invariant
+
+This spec defines the invariant referenced across the loop:
+
+1. **Dynamic.** `ProgressionPlanner.PickNextObjective(snapshot, db)`
+   produces different Objective choices when snapshot inputs differ in
+   bot-relevant axes (race / class / level / faction / inventory /
+   QuestsCompleted / Reputation / Attunements). Identical snapshots
+   produce identical choices (deterministic stable ranking).
+2. **Progressive.** Every Activity assignment, after CheckCompletion,
+   MUST measurably reduce `RosterPlanner.Distance(snapshot, goal).TotalScalar`
+   — i.e. `roster_distance_delta ≤ 0`. Cosmetic-only completions
+   return 0; the loop's contract is `≤ 0`, never positive.
+
+The 8-axis breakdown is `(level, gear_tier, attunement_step,
+reputation_tier, gold_target_pct, mount_tier, pvp_rank,
+profession_skill)`. Failed Activities do NOT advance distance; the
+*selection* MUST be progressive in expectation (highest expected
+positive delta first), not every individual run.
+
+## Plan-slot cross-reference
+
+| Slot | Owns | Section here |
+|---|---|---|
+| (no slot yet) | `Services/WoWStateManager/Progression/RosterPlanner.cs` (new) | §RosterPlanner.Distance |
+| (no slot yet) | `Services/WoWStateManager/Progression/ProgressionPlanner.cs` (existing — but no slot in the current Plan) | §ProgressionPlanner |
+| [`Plan/14/S10.2`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s102--objective-composer-tie-breaker) | Tie-breaker via `GetObjectiveAdviceAsync` | §ML integration |
+| [`Plan/14/S10.5`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s105--advicelog-snapshot-projection) | `WoWActivitySnapshot.roster_distance` field 46 (extend the projection slot) | §Snapshot projection |
+| [`Plan/14/S10.7`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s107--training-trace-plumbing) | Trace writes `outcome.roster_distance_delta` | §RosterPlanner.Distance |
+
+Two "no slot yet" rows tracked as a follow-up in
+[`Plan/SPEC_FILL_LOOP.md`](../Plan/SPEC_FILL_LOOP.md). RosterPlanner +
+ProgressionPlanner are referenced as "existing code" by §Existing code
+anchors but have no implementation slot in any current Plan — likely
+homes are a new Plan/18 (Progression) phase or sub-slots inside
+Plan/03 (Phase 2).
+
+## Test surface
+
+Contract tests live at
+`Tests/BotRunner.Tests/Progression/ProgressionContractTests.cs`.
+Assertions go through `snapshot.roster_distance` (proto field 46) and
+trace JSONL `outcome.roster_distance_delta` lines per Test Isolation
+Rules.
+
+- **`RosterPlannerDistance_PureFunctionOfSnapshotAndGoal`** — calling
+  `RosterPlanner.Distance(...)` twice with identical inputs returns
+  identical scalars (no clock/state dependence).
+- **`RosterPlannerDistance_FullyAchievedGoalReturnsZero`** — a snapshot
+  matching the `CharacterRosterGoal` exactly returns
+  `TotalScalar == 0.0f`.
+- **`RosterPlannerDistance_PerAxisSumEqualsTotalScalar`** — sum of
+  `weights[axis] * perAxis[axis]` equals `TotalScalar` within `1e-5`.
+- **`ProgressionPlanner_ObjectiveAdvisorRespectsTieSet`** — when
+  DecisionEngine returns `ObjectiveAdvice` outside the tied set, the
+  planner falls back to lowest-id lex tie-break.
+- **`Progression_DynamicProgressive_DistanceStrictlyDecreasesPerActivityTest`** —
+  the dynamic-progressive invariant. Replays a representative trace
+  and asserts every `outcome.roster_distance_delta ≤ 0` line; also
+  asserts that two synthetic snapshots that differ in
+  `(class, level, attunements)` produce DIFFERENT
+  `PickNextObjective(...)` choices.
 
 ## Existing code anchors
 
