@@ -217,32 +217,41 @@ each tick:
        if Status == Failed: OnChildFailedAsync chain
 ```
 
-## 8. Failure-reason taxonomy
+## 8. Failure-reason mapping
 
-`FailureReason` is a closed enum, mirrored to proto3 for snapshot
-projection. Plan/14 (DecisionEngine integration) and Plan/12 (test
-isolation) consume these values when classifying failed Objectives.
+`FailureReason` is **owned by [`Spec/12_ERROR_TAXONOMY.md`](12_ERROR_TAXONOMY.md)** —
+that file is the single source of truth. The `OnObjectiveFailed(IObjective,
+FailureReason)` callback in §2 and the `ActivityCompletion.Reason` field
+both take the same enum.
 
-```csharp
-public enum FailureReason
-{
-    None = 0,
-    GateUnsatisfied         = 1,  // ObjectiveGate predicate returned false on entry
-    EndStateUnreachable     = 2,  // composer determined no path satisfies IObjectiveEndState
-    TaskAborted             = 3,  // child IBotTask returned BotTaskStatus.Aborted
-    SnapshotTimeout         = 4,  // CheckCompletion still false past Activity-level deadline
-    EntryRequirementMissing = 5,  // ActivityDefinition.EntryRequirements unmet after precondition pass
-    LockoutActive           = 6,  // raid/dungeon lockout blocks entry (per Spec/22 World Cycles)
-    DecisionEngineRejected  = 7,  // ObjectiveAdvice with confidence < 0 returned veto (rare, Phase 3)
-    ExternalCancellation    = 8,  // operator/cancel-token canceled the Activity
-    UnknownObjectiveType    = 9,  // composer emitted an ObjectiveType the BotRunner cannot drive
-}
-```
+Objective-shaped failures map onto Spec/12 reasons as follows:
+
+| Objective failure surface | Spec/12 `FailureReason` |
+|---|---|
+| `ObjectiveGate` predicate returns false on entry | `task_precondition_failed` |
+| `IObjectiveEndState` unsatisfiable for current snapshot | `task_unrecoverable` |
+| Child `IBotTask` returned `BotTaskStatus.Aborted` | `task_cancelled` |
+| `CheckCompletion` still false past Activity-level deadline | `task_timeout` |
+| `ActivityDefinition.EntryRequirements` unmet after precondition pass | one of `missing_attunement`, `missing_key`, `missing_reputation`, `missing_level`, `missing_flight_path`, or `illegal_activity_request` per Spec/12 |
+| Raid/dungeon lockout blocks entry (Spec/22 World Cycles) | `lockout_active` |
+| `ObjectiveType` the BotRunner cannot drive | `catalog_invalid` |
+| Operator / cancel-token canceled the Activity | `task_cancelled` |
+
+Two new values **may need adding** to Spec/12 once the runtime ships
+and reveals failure modes Spec/12 cannot label cleanly. Tracked as
+follow-ups in [`Plan/SPEC_FILL_LOOP.md`](../Plan/SPEC_FILL_LOOP.md)
+rather than committed here:
+
+- `objective_end_state_unreachable` — distinct from `task_unrecoverable`
+  if composer-vs-runtime disagreement is a category we want to alert on.
+- `objective_decision_engine_rejected` — only matters if Phase-3 ML
+  ever returns a hard veto rather than a confidence value.
 
 Snapshot projection (additive field on `WoWActivitySnapshot`, S2.0):
 
 ```protobuf
-FailureReason last_objective_failure = 37;   // None when current Objective is healthy
+FailureReason last_objective_failure = 37;   // mirror of Spec/12 enum;
+                                               // empty/none when current Objective is healthy
 ```
 
 ## 9. ML integration — Composer tiebreaker
@@ -291,9 +300,9 @@ public sealed record ObjectiveAdvice(
 
 | Phase | Source | Live when |
 |---|---|---|
-| 1 — Heuristic | `Services/DecisionEngineService/Heuristics/ObjectiveTieHeuristic.cs` — picks lowest `tied_objective_costs` then lowest `Id` | S2.0 ships |
-| 2 — Rules + lookup | `Config/decision-engine/objective-tie-rules.json` — per `(ActivityFamily, ObjectiveType)` precedence table | Plan/14 slot S10.3 |
-| 3 — ONNX | `Services/DecisionEngineService/Models/objective/v1.onnx` — trained on labeled traces under `tmp/test-runtime/traces/<test-name>/<timestamp>.jsonl` | Plan/14 slot S10.7 |
+| 1 — Heuristic | `Services/DecisionEngineService/Heuristics/ObjectiveTieHeuristic.cs` — picks lowest `tied_objective_costs` then lowest `Id` | Plan/14 slot S10.2 + S10.6 (Mode=Trivial) |
+| 2 — Rules + lookup | `Config/decision-engine/objective-tie-rules.json` — per `(ActivityFamily, ObjectiveType)` precedence table | Plan/14 slot S10.6 (Mode=Rules) |
+| 3 — ONNX | `Services/DecisionEngineService/Models/objective/v1.onnx` — trained on labeled traces under `tmp/test-runtime/traces/<test-name>/<timestamp>.jsonl` (Plan/14 slot S10.7) | Plan/14 slot S10.6 (Mode=Ml) once trained |
 
 **Fail-soft fallback.** Composer drops back to deterministic id-lex
 tie-break when `ObjectiveAdvice.RecommendedObjectiveId` is null, has
@@ -385,9 +394,11 @@ across the trajectory.
 |---|---|---|
 | [`Plan/03/S2.0`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md#s20--iactivity--iobjective-runtime-contracts) | `Exports/BotRunner/Activities/IActivity.cs`, `IObjective.cs`, `ActivityResolver.cs`, `Exports/BotCommLayer/Models/ProtoDef/communication.proto`, `Tests/BotRunner.Tests/Activities/IActivityContractTests.cs` | Sections §2-§7 of this spec, plus the four tests in §11. |
 | [`Plan/13/S9.x`](../Plan/13_PHASE9_CATALOG_FILL.md) | per-Activity `Config/activities/<id>.json` rows | Composer's seed-objective synthesis from full catalog (§6). |
-| [`Plan/14/S10.3`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md) | `Config/decision-engine/objective-tie-rules.json`, `Services/DecisionEngineService/Heuristics/ObjectiveTieHeuristic.cs` | ML integration Phase 2 (§9). |
-| [`Plan/14/S10.7`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md) | `Services/DecisionEngineService/Models/objective/v1.onnx` | ML integration Phase 3 (§9). |
-| [`Plan/14/S10.8`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md) | `Tests/BotRunner.Tests/Activities/ObjectiveAdviceContractTests.cs` | Tests #5 and #6 in §11; live-validation correctness guard. |
+| [`Plan/14/S10.2`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s102--objective-composer-tie-breaker) | per-family `*Composer.cs` consults `GetObjectiveAdviceAsync` on tie | ML integration entry point (§9). |
+| [`Plan/14/S10.5`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s105--advicelog-snapshot-projection) | `WoWActivitySnapshot.advice_log` (field 36 here) | Composer-advice trace projection (§5). |
+| [`Plan/14/S10.6`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s106--mode-aware-advisor-activation) | `Config/decision-engine/objective-tie-rules.json`, `Services/DecisionEngineService/Heuristics/ObjectiveTieHeuristic.cs`, `ModelDescriptor.cs` | Phase-1/2/3 mode selection (§9). |
+| [`Plan/14/S10.7`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s107--training-trace-plumbing) | `Services/DecisionEngineService/Models/objective/v1.onnx` + trace producer | Phase 3 ONNX inference (§9). |
+| [`Plan/14/S10.8`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s108--livevalidation-for-advisor-wire) | `Tests/BotRunner.Tests/Activities/ObjectiveAdviceContractTests.cs` | Tests #5 and #6 in §11; live-validation correctness guard. |
 
 ## 13. Backward-compatibility
 

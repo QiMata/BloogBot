@@ -7,7 +7,7 @@
 | # | File | Owner type | ML hook | Status | Outcome |
 |---|------|------------|---------|--------|---------|
 | 1 | [docs/Spec/19_AOTA_RUNTIME.md](../Spec/19_AOTA_RUNTIME.md) | Spec | Composer-tiebreaker advice | done | Added proto fields 33-37 (current_activity_id/_objective_id/_objective_type/advice_log/last_objective_failure), FailureReason enum, ObjectiveContext feature shape, three-phase ML maturity, §10 dynamic-progressive invariant; 4 Skip-stubbed contract tests in IActivityContractTests.cs. |
-| 2 | [docs/Spec/20_DECISION_ENGINE.md](../Spec/20_DECISION_ENGINE.md) | Spec | This IS the ML surface | not-started | |
+| 2 | [docs/Spec/20_DECISION_ENGINE.md](../Spec/20_DECISION_ENGINE.md) | Spec | This IS the ML surface | done | Added §2.1 full proto wire shape (AdviceRequest/Response + 4 Context + 4 Advice + NoAdvice + AdviceError + AdvisorMode) with normative field numbers; §4.1 Config/decision-engine.json schema with hot-reload semantics; §4.2 ONNX feature tensor shapes per advisor; §6.1 JSONL trace schema + §6.2 correctness contract; §10 dynamic-progressive invariant; §11 Plan/14 slot table; 5 Skip-stubbed contract tests in DecisionEngineClientTests.cs incl. dynamic-progressive. Also fixed Spec/19 slot refs to point at S10.2/S10.5/S10.6/S10.7 (not S10.3) and replaced its duplicate FailureReason enum with a mapping table to Spec/12. |
 | 3 | [docs/Spec/21_SOCIAL_FABRIC.md](../Spec/21_SOCIAL_FABRIC.md) | Spec | Chat-template selection | not-started | |
 | 4 | [docs/Spec/22_WORLD_CYCLES.md](../Spec/22_WORLD_CYCLES.md) | Spec | World-buff-window forecasting | not-started | |
 | 5 | [docs/Spec/23_ONDEMAND_API.md](../Spec/23_ONDEMAND_API.md) | Spec | Request-disambiguation NLP | not-started | |
@@ -40,3 +40,5 @@
 ## Follow-ups (added in-pass)
 
 <!-- Append discovered work as bullets. Do not delete completed entries; strike them with `~~text~~`. -->
+
+- **(pass 2)** Spec/12 `FailureReason` may need two additions once S2.0 runtime ships: `objective_end_state_unreachable` (distinct from `task_unrecoverable` if composer-vs-runtime disagreement is a metric we want) and `objective_decision_engine_rejected` (only matters if Phase-3 ML ever returns a hard veto). Defer until live failure modes are observed; row 15 (Spec/12) pass should re-evaluate.
