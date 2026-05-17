@@ -27,6 +27,8 @@
 // the bake-vs-runtime-rejected edges from the .mmtile before deployment.
 
 using System.Globalization;
+using System.Runtime.ExceptionServices;
+using System.Security;
 using System.Text.Json;
 using Navigation.Physics.Tests;
 using static Navigation.Physics.Tests.NavigationInterop;
@@ -240,13 +242,7 @@ internal static class Program
                     if (zR <= 0f)
                     {
                         var probe = new Vector3(coord.X + dx, coord.Y + dy, coord.Z);
-                        ulong polyRef = 0;
-                        try
-                        {
-                            GetPolyAtCoord(opts.MapId, probe, 2f, 1.8f,
-                                out polyRef, out _, out _, out _, out _);
-                        }
-                        catch { /* tolerate */ }
+                        var polyRef = SafeGetPolyAtCoord(opts.MapId, probe, 2f, 1.8f);
                         if (polyRef != 0) foundPolys.Add(polyRef);
                     }
                     else
@@ -254,13 +250,7 @@ internal static class Program
                         for (float dz = -zR; dz <= zR + 1e-3f; dz += zStep)
                         {
                             var probe = new Vector3(coord.X + dx, coord.Y + dy, coord.Z + dz);
-                            ulong polyRef = 0;
-                            try
-                            {
-                                GetPolyAtCoord(opts.MapId, probe, 2f, zSearchExtent,
-                                    out polyRef, out _, out _, out _, out _);
-                            }
-                            catch { /* tolerate */ }
+                            var polyRef = SafeGetPolyAtCoord(opts.MapId, probe, 2f, zSearchExtent);
                             if (polyRef != 0) foundPolys.Add(polyRef);
                         }
                     }
@@ -403,6 +393,45 @@ internal static class Program
             pairs.Add((SnapToGround(sx, sy), SnapToGround(ex, ey)));
         }
         return pairs;
+    }
+
+    /// <summary>
+    /// Cull-coord helper. Wraps <see cref="GetPolyAtCoord"/> with an AV-tolerant
+    /// try/catch.
+    ///
+    /// On tile (40, 29) prod-data `GetPolyAtCoord` reliably triggers an
+    /// `AccessViolationException` inside Detour's `findNearestPoly` for a
+    /// subset of probe coords. The native side already wraps the call in
+    /// `try { ... } catch (...)` (DllMain.cpp:2800/2930) but in .NET 5+ the
+    /// runtime treats AV as a corrupted-state exception and refuses to let it
+    /// be caught by managed code without opt-in. The csproj sets
+    /// `LegacyCorruptedStateExceptionsPolicy=true`; this attribute opts this
+    /// method into the legacy "catchable AV" behavior so a per-probe crash
+    /// degrades to a missed polyref instead of aborting the whole cull-coord
+    /// enumeration. See `project_pfs_loop19_cull_pipeline_blocker`.
+    /// </summary>
+    [HandleProcessCorruptedStateExceptions]
+    [SecurityCritical]
+    private static ulong SafeGetPolyAtCoord(uint mapId, Vector3 coord, float xyExtent, float zExtent)
+    {
+        try
+        {
+            GetPolyAtCoord(mapId, coord, xyExtent, zExtent,
+                out var polyRef, out _, out _, out _, out _);
+            return polyRef;
+        }
+        catch (AccessViolationException ex)
+        {
+            Console.Error.WriteLine(
+                $"# SafeGetPolyAtCoord: AV at ({coord.X:F2},{coord.Y:F2},{coord.Z:F2}) xyExt={xyExtent:F2} zExt={zExtent:F2}: {ex.Message}");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"# SafeGetPolyAtCoord: {ex.GetType().Name} at ({coord.X:F2},{coord.Y:F2},{coord.Z:F2}): {ex.Message}");
+            return 0;
+        }
     }
 
     private static void MaybeLoadAdt(uint mapId, int tileX, int tileY)

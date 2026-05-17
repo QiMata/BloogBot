@@ -19,4 +19,16 @@
     -->
     <Compile Include="..\..\Tests\Navigation.Physics.Tests\NavigationInterop.cs" Link="Interop\NavigationInterop.cs" />
   </ItemGroup>
+
+  <!--
+    Opt into legacy corrupted-state-exception propagation. By default in .NET 5+
+    an AccessViolationException raised in native code tears down the process
+    even when a managed try/catch wraps the P/Invoke. The GetPolyAtCoord cull
+    path on tile (40, 29) reliably triggers an AV inside Detour's
+    findNearestPoly that we want to tolerate and move past, not abort over.
+    See project_pfs_loop19_cull_pipeline_blocker memory.
+  -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Runtime.LegacyCorruptedStateExceptionsPolicy" Value="true" />
+  </ItemGroup>
 </Project>
