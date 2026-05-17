@@ -35,6 +35,11 @@ Five call sites consume DecisionEngine advice:
    resolves ambiguous shorthand (e.g. `!run brd` → upper-brd /
    lower-brd / arena) by picking among catalog candidate ids. See §2.3
    below.
+6. **Personality-cluster sampling** (Plan/16 S12.1 surface) —
+   `PersonalityFactory.Create(accountName)` in
+   [`Spec/24_BEHAVIORAL_VARIATION.md §3`](24_BEHAVIORAL_VARIATION.md#3-generation-policy)
+   picks one of N learned personality clusters at profile-generation
+   time (one-shot per bot, not per-tick). See §2.4 below.
 
 ## 2. Service surface
 
@@ -46,7 +51,8 @@ public interface IDecisionEngineClient
     Task<RewardAdvice>          GetRewardAdviceAsync(RewardContext ctx, CancellationToken ct);
     Task<ObjectiveAdvice>       GetObjectiveAdviceAsync(ObjectiveContext ctx, CancellationToken ct);
     Task<ChatTemplateAdvice>    GetChatTemplateAdviceAsync(ChatTemplateContext ctx, CancellationToken ct);
-    Task<ActivityRequestAdvice> GetActivityRequestAdviceAsync(ActivityRequestContext ctx, CancellationToken ct);
+    Task<ActivityRequestAdvice>    GetActivityRequestAdviceAsync(ActivityRequestContext ctx, CancellationToken ct);
+    Task<PersonalityClusterAdvice> GetPersonalityClusterAdviceAsync(PersonalityClusterContext ctx, CancellationToken ct);
 }
 ```
 
@@ -66,6 +72,21 @@ picker over a closed candidate set produced by the whisper parser's
 shorthand-lookup phase (e.g. `!run brd` parses to candidates
 `[dungeon.brd-upper, dungeon.brd-lower, dungeon.brd-arena]`); the
 advisor picks one. Not free-form NLP.
+
+### 2.4 PersonalityCluster advisor
+
+The seventh advisor is owned by Plan/16 slot S12.1 (PersonalityFactory).
+It is a **one-shot at bot-profile-generation time** advisor — fires
+exactly once per `IPersonalityFactory.Create(accountName)` call, not
+per-tick. The advisor returns a cluster id whose centroid biases the
+knob distribution used to sample the final `PersonalityProfile`. Off
+by default; enabling it requires the Plan/16 trace-export pipeline to
+have produced a labeled cluster set from real-population traces.
+
+Because this advisor fires once per bot lifetime (per account, modulo
+deliberate re-roll), its `budgetMs` is much larger (500 ms default)
+and `Mode=Trivial` simply samples uniformly from the
+`Config/personalities.json` `PersonalityMix` per [`Spec/24 §3`](24_BEHAVIORAL_VARIATION.md#3-generation-policy).
 
 All four calls are **fail-soft**:
 
@@ -102,12 +123,13 @@ import "communication.proto";   // for game.WoWPlayer, ObjectiveType, etc.
 // --- Request envelope ---
 message AdviceRequest {
     oneof body {
-        RotationContext        rotation         = 1;
-        ThreatContext          threat           = 2;
-        RewardContext          reward           = 3;
-        ObjectiveContext       objective        = 4;
-        ChatTemplateContext    chat_template    = 5;
-        ActivityRequestContext activity_request = 6;
+        RotationContext           rotation             = 1;
+        ThreatContext             threat               = 2;
+        RewardContext             reward               = 3;
+        ObjectiveContext          objective            = 4;
+        ChatTemplateContext       chat_template        = 5;
+        ActivityRequestContext    activity_request     = 6;
+        PersonalityClusterContext personality_cluster  = 7;
     }
     uint64 request_id  = 10;     // monotonic; echoed in response for trace correlation
     uint64 issued_at_ms = 11;    // client clock; used for round-trip metric
@@ -117,13 +139,14 @@ message AdviceRequest {
 // --- Response envelope ---
 message AdviceResponse {
     oneof body {
-        RotationAdvice        rotation         = 1;
-        ThreatAdvice          threat           = 2;
-        RewardAdvice          reward           = 3;
-        ObjectiveAdvice       objective        = 4;
-        NoAdvice              no_advice        = 5;
-        ChatTemplateAdvice    chat_template    = 6;
-        ActivityRequestAdvice activity_request = 7;
+        RotationAdvice           rotation             = 1;
+        ThreatAdvice             threat               = 2;
+        RewardAdvice             reward               = 3;
+        ObjectiveAdvice          objective            = 4;
+        NoAdvice                 no_advice            = 5;
+        ChatTemplateAdvice       chat_template        = 6;
+        ActivityRequestAdvice    activity_request     = 7;
+        PersonalityClusterAdvice personality_cluster  = 8;
     }
     uint64 request_id    = 10;
     uint64 served_at_ms  = 11;
@@ -210,6 +233,18 @@ message ObjectiveContext {
     repeated float roster_goal_distance = 12;    // 8 floats per Spec/05
 }
 
+message PersonalityClusterContext {
+    string account_name        = 1;
+    uint32 bot_class           = 2;
+    uint32 bot_race            = 3;
+    uint32 bot_faction         = 4;
+    uint32 target_level        = 5;       // from CharacterRosterGoal
+    string realm               = 6;       // "Westworld" | "Westworld-Test"
+    repeated string available_cluster_ids = 7;  // learned cluster centroids; up to 16
+    repeated float  cluster_population_share = 8; // parallel to ids; sums to 1.0
+    uint64 issued_at_ms        = 9;
+}
+
 message ActivityRequestContext {
     string raw_whisper_text   = 1;       // verbatim text after !verb
     string verb               = 2;       // "run" | "raid" | "bg" | "fish" | "port" | "summon" | "group"
@@ -281,6 +316,13 @@ message ActivityRequestAdvice {
                                           //         ActivityRequestContext.candidate_activity_ids
     float confidence                = 2;
     string rationale                = 3;
+}
+
+message PersonalityClusterAdvice {
+    string recommended_cluster_id = 1;    // empty = no recommendation; must equal one of
+                                          //         PersonalityClusterContext.available_cluster_ids
+    float confidence              = 2;
+    string rationale              = 3;
 }
 ```
 
@@ -356,7 +398,8 @@ rotation/threat, 15 ms for reward, 50 ms for objective.
     "reward":        { "mode": "Rules",   "modelVersion": null, "budgetMs": 15 },
     "objective":     { "mode": "Trivial", "modelVersion": null, "budgetMs": 50 },
     "chat_template": { "mode": "Trivial", "modelVersion": null, "budgetMs": 20 },
-    "activity_request": { "mode": "Trivial", "modelVersion": null, "budgetMs": 30 }
+    "activity_request": { "mode": "Trivial", "modelVersion": null, "budgetMs": 30 },
+    "personality_cluster": { "mode": "Trivial", "modelVersion": null, "budgetMs": 500 }
   },
   "telemetry": {
     "traceEnabled": false,
@@ -386,6 +429,7 @@ Names match the proto context message fields.
 | Objective | `[1, 96]` (level, class, race, position[3], zone_id, map_id, inventory_value_copper, 8 tied-objective stripes of 4 fields each, 8 roster-goal-distance floats, padding) | `[1, 9]` → (tied_index, confidence) | Discrete pick over up to 8 tied objectives |
 | ChatTemplate | `[1, 48]` (level, class, spec, channel, chattiness, trigger_kind one-hot[8], 16 candidate stripes of 2 fields (recent_use_count + bag-of-words feature hash), slot_count, slot_price_copper) | `[1, 2]` → (candidate_index, confidence) | Discrete pick over up to 16 templates |
 | ActivityRequest | `[1, 72]` (verb one-hot[8], requester level, requester faction, requester zone-hash, 8 candidate stripes of 6 fields (min_level, max_level, pool_available, lockout_bit, expected_engaged_seconds, raw-whisper-bag-of-words feature hash)) | `[1, 2]` → (candidate_index, confidence) | Discrete pick over up to 8 catalog ids |
+| PersonalityCluster | `[1, 40]` (account-name hash bucket[8], class, race, faction, target_level, realm-hash, 16 cluster_population_share floats, padding) | `[1, 2]` → (cluster_index, confidence) | One-shot pick over up to 16 learned clusters |
 
 Padded slots use `0.0` for floats and `0` for indexed enums; the
 service is responsible for normalizing context to fixed-width tensors.
