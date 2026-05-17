@@ -914,8 +914,14 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
     uint32_t start = m_cellStart[ci];
     uint32_t count = m_cellCount[ci];
 
-    float bestZ = -200000.0f;
-    float bestErr = std::numeric_limits<float>::max();
+    // Track below-z and above-z candidates separately so the final result is
+    // order-independent. Iterating triangles in arbitrary order otherwise lets
+    // an above-z triangle "stick" in bestZ and then reject a later below-z
+    // triangle via `triZ > bestZ`. The intent (per comment below) is to PREFER
+    // any below-z surface and only fall back to above if none below exists.
+    float bestBelowZ = -200000.0f;     // highest at-or-below query z
+    float bestAboveZ = -200000.0f;     // lowest above query z (closest)
+    float bestAboveErr = std::numeric_limits<float>::max();
     float zMax = z + maxSearchDist; // symmetric search: accept ground above too
     float zMin = z - maxSearchDist; // search below
 
@@ -960,22 +966,20 @@ float SceneCache::GetGroundZ(float x, float y, float z, float maxSearchDist) con
         // point are ceilings/roofs, not ground. Only accept triZ <= z.
         // Fall back to closest-above if nothing is below (standing on top of geometry).
         if (triZ >= zMin && triZ <= z) {
-            // Below or at query Z — prefer the highest (closest below)
-            if (triZ > bestZ) {
-                bestZ = triZ;
-                bestErr = z - triZ;
-            }
-        } else if (triZ > z && triZ <= zMax && bestZ <= -200000.0f + 1.0f) {
-            // Above query Z — only use if nothing below was found
+            if (triZ > bestBelowZ)
+                bestBelowZ = triZ;
+        } else if (triZ > z && triZ <= zMax) {
             float err = triZ - z;
-            if (err < bestErr) {
-                bestZ = triZ;
-                bestErr = err;
+            if (err < bestAboveErr) {
+                bestAboveErr = err;
+                bestAboveZ = triZ;
             }
         }
     }
 
-    return bestZ;
+    if (bestBelowZ > -200000.0f + 1.0f)
+        return bestBelowZ;
+    return bestAboveZ;
 }
 
 float SceneCache::GetWalkableGroundZ(float x, float y, float z, float maxSearchDist,
@@ -999,6 +1003,14 @@ float SceneCache::GetWalkableGroundZ(float x, float y, float z, float maxSearchD
     uint32_t start = m_cellStart[ci];
     uint32_t count = m_cellCount[ci];
 
+    // NOTE: this function intentionally keeps the legacy "first-wins" behavior
+    // on the closest-above fallback (see OgZeppelinCliffFallParityTests). The
+    // PrimeAirborneTeleportFallIfNeeded / TrySnapToNearbyTeleportSupport code
+    // path depends on the wide-search variant returning a "no walkable in
+    // standing zone" classification at the cliff-fall coord. Changing the
+    // semantic here regresses those parity tests even though the change is
+    // mechanically the same as the GetGroundZ fix above. Track that as a
+    // separate FG/BG physics parity workstream.
     float bestZ = -200000.0f;
     float bestErr = std::numeric_limits<float>::max();
     float zMax = z + maxSearchDist;
