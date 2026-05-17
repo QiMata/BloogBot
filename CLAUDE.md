@@ -20,6 +20,13 @@ those map onto these four layers and using them as synonyms drifts the
 spec. Worked example: `dungeon.ubrs` Activity → `reach-flame-crest`
 Objective → `TravelToTask(coord)` Task → `ActionMessage{ActionType=TravelTo,...}` Action.
 
+For the deeper architecture treatment (recursive composition rules,
+how DecisionEngine builds Objectives dynamically from the MaNGOS
+database, quest-chain DAG, item-requirement DAG, worked examples,
+cross-game portability template) read
+[`docs/architecture/aota/`](docs/architecture/aota/) — especially
+`README.md`, `01_LAYERS.md`, and `03_DYNAMIC_COMPOSITION.md`.
+
 ## Monorepo Shared Contract
 
 - Also follow the root monorepo rules in [../CLAUDE.md](../CLAUDE.md) and [../AGENTS.md](../AGENTS.md).

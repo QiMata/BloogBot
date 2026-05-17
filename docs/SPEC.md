@@ -37,6 +37,7 @@ which owner*.
 | [`Spec/`](Spec/) | Stable contracts — vision, architecture, components, telemetry, testing. |
 | [`Plan/`](Plan/) | Phased implementation roadmap with dispatch-ready task slots. |
 | [`Plan/Activities/`](Plan/Activities/) | Per-activity-family implementation detail (one file per family). |
+| [`architecture/aota/`](architecture/aota/) | Architecture deep-dive on the Activity/Objective/Task/Action model and the dynamic Objective composition algorithm (extends `Spec/18_TERMINOLOGY.md`). Cross-game portable. |
 | [`Reference/`](Reference/) → see [`physics/`](physics/), [`server-protocol/`](server-protocol/), [`leveling-guide/`](leveling-guide/) | Reverse-engineered + game-knowledge reference. Read-only authority. |
 | [`Audits/`](Audits/) | Point-in-time captures (capability, livevalidation, dll-separation). |
 | [`Archive/`](Archive/) | Completed handoffs and superseded specs. Do not delete; do not edit. |

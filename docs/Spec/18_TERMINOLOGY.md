@@ -78,6 +78,7 @@ Rules](../../CLAUDE.md#test-isolation-rules) for the enforcement contract.
 
 ## Related files
 
+- [`architecture/aota/`](../architecture/aota/) — **Architecture deep-dive on the four layers, recursive composition rules, dynamic Objective composition from the MaNGOS DB, and cross-game portability template.** Extends this canonical glossary.
 - [`Spec/03_BOTRUNNER.md`](03_BOTRUNNER.md) — IBotRunner / IBotTask contract
 - [`Spec/04_ACTIVITIES.md`](04_ACTIVITIES.md) — ActivityDefinition catalog + OnDemand legality
 - [`Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md`](../Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md) — Phase-1 IBotTask closure
