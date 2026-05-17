@@ -222,6 +222,237 @@ APIs, not directly from Prometheus. Mapping:
 Power users can query Prometheus / Grafana directly using the names
 above. The UI does not embed Grafana.
 
+## Anomaly detection
+
+The metric surface above gives us raw signals. **Anomaly detection** is
+the layer that turns those signals into actionable alerts: a bot whose
+XP/hr drops 4× below its level-band median, a `wwow.physics.parity_break_total`
+spike, an unexpected `wwow.pathfinding.path.timeout_total` ramp, a
+`wwow.statemanager.activity.failed_total` cluster on a single map.
+
+### New metrics
+
+```
+wwow.statemanager.anomaly.detected_total{kind, severity, source}
+wwow.statemanager.anomaly.active                                  // gauge
+wwow.statemanager.anomaly.suppressed_total{kind, reason}          // when an anomaly was detected but masked
+wwow.statemanager.anomaly.resolved_total{kind}                    // operator-acknowledged
+```
+
+### `AnomalyKind` enum (closed set; proto-mirrored)
+
+```csharp
+public enum AnomalyKind
+{
+    Unknown                       = 0,
+    XpRateBelowMedian             = 1,  // bot's xp/hr < median * threshold for level band
+    GoldRateBelowMedian           = 2,
+    KillRateBelowMedian           = 3,
+    DeathRateAboveMedian          = 4,
+    StuckRateAboveMedian          = 5,
+    PathTimeoutSpike              = 6,
+    PhysicsParityBreakCluster     = 7,
+    ActivityFailureCluster        = 8,  // > N failures of same activity in M minutes
+    AdvisorTimeoutSpike           = 9,  // DecisionEngine NoAdvice rate above threshold
+    AhListingsZeroGrowth          = 10, // economy AH listings flat for > M minutes
+    ChatBudgetExhaustionPattern   = 11, // multiple bots hit per-channel cap simultaneously
+    LoadoutStuckPattern           = 12, // > N bots stuck in LOADOUT_IN_PROGRESS for > M minutes
+    SnapshotIngestLatencyP99Spike = 13,
+    OndemandPoolExhaustionPattern = 14, // repeated RejectionCode.POOL_EXHAUSTED
+    RosterDistanceRegression      = 15, // outcome.roster_distance_delta > 0 (anti-progressive)
+}
+
+public enum AnomalySeverity
+{
+    Info     = 0,  // log only
+    Warning  = 1,  // surface to UI; operator can acknowledge
+    Critical = 2,  // page on-call (when configured)
+}
+
+public enum AnomalySource
+{
+    RuleEngine = 0,
+    OnnxModel  = 1,
+}
+```
+
+`AnomalyKind` is mirrored to proto for the snapshot projection. New
+values are proto-additive.
+
+### `Anomaly` event surface
+
+```protobuf
+message Anomaly {
+    AnomalyKind     kind             = 1;
+    AnomalySeverity severity         = 2;
+    AnomalySource   source           = 3;
+    uint64          detected_at_ms   = 4;
+    string          subject          = 5;   // account name | activity_id | map_id | empty
+    string          metric_name      = 6;   // e.g. "wwow.statemanager.bot.xp_delta_total"
+    float           observed_value   = 7;
+    float           expected_value   = 8;
+    float           threshold        = 9;
+    string          rationale        = 10;  // operator-facing
+    string          correlation_id   = 11;  // for log/trace correlation
+    bool            acknowledged     = 12;
+    uint64          acknowledged_at_ms = 13;
+}
+```
+
+### Snapshot projection
+
+Operator-visible anomalies surface on `WoWActivitySnapshot` via field 47
+(continues after Spec/05's field 46):
+
+```protobuf
+repeated Anomaly active_anomalies = 47;   // ring buffer cap 16 — UI consumes for the Error triage panel
+```
+
+Tests assert on `snapshot.active_anomalies[]` (Test Isolation Rules);
+direct reads of `AnomalyDetector` internal state are reserved to the
+service that *produces* the projection.
+
+## Failure-reason mapping
+
+Anomaly-detection failures map onto [`Spec/12`](12_ERROR_TAXONOMY.md):
+
+| Failure | Spec/12 reason | Notes |
+|---|---|---|
+| Anomaly detector process down | `server_unavailable` | UI shows "anomaly detector offline" badge; no anomalies emitted |
+| ONNX model load failure (Phase 3) | `catalog_invalid` | fall back to Phase-1 rules |
+| Metric exporter scrape failure | `socket_disconnect_unexpected` | Prometheus alert; no anomaly emission until recovery |
+| False-positive flood (rules misconfigured) | (no FailureReason; operator silences via UI) | Severity flips to `Info`; counter still increments |
+
+No new Spec/12 values needed.
+
+## ML integration — Anomaly detection
+
+**Surface.** Anomaly detection is **observational ML**, not decision
+ML — it watches the metric stream and emits `Anomaly` events; it does
+NOT consume the Spec/20 advisor RPC surface (those are decision RPCs).
+But it consumes the **Spec/20 §6 trace pipeline** as labeled-data
+input. Three maturity phases mirror the Spec/20 §5 pattern:
+
+| Phase | Source | `AnomalySource` |
+|---|---|---|
+| 1 — Heuristic | Per-metric static thresholds in `Config/anomaly-thresholds.json` (e.g. "xp/hr < median × 0.25 → XpRateBelowMedian.Warning") | `AnomalySource.RuleEngine` |
+| 2 — Rules + lookup | Per-`(level_band, spec)` thresholds learned off-line from baseline traces; emitted as updated thresholds JSON | `AnomalySource.RuleEngine` |
+| 3 — ONNX | `Services/DecisionEngineService/Models/anomaly/v1.onnx` is a time-series outlier model (e.g. isolation forest exported via skl2onnx) over rolling windows of `(metric_name, level_band, value)` tuples | `AnomalySource.OnnxModel` |
+
+The Phase-3 model lives **inside** `DecisionEngineService` for
+process-management reuse, but it does NOT extend the
+`IDecisionEngineClient` interface — there is no per-tick `Get<...>Advice`
+call. Instead, a periodic (1 Hz) `IAnomalyDetector` worker inside
+DecisionEngineService scans the local metric subscriber + Spec/20 §6
+trace stream and pushes detected anomalies into `Anomaly` events on the
+`WoWStateManager` snapshot bus.
+
+**Input feature vector** (Phase 3):
+
+| Feature | Source |
+|---|---|
+| metric_name one-hot[64] | from the §Required-counters / histograms inventory |
+| level_band one-hot[12] | bracket bins |
+| value (last 5 1-minute samples) | Prometheus scrape |
+| trace_outcome_completion_rate (rolling 5 min) | `tmp/test-runtime/traces/*/outcome.jsonl` aggregation |
+| advice_log_count_total | snapshot.advice_log[] aggregation |
+| ondemand_active_count | snapshot.ondemand_instances[] |
+
+**Output shape.** A single `(AnomalyKind, AnomalySeverity, observed,
+expected, threshold)` tuple per detected outlier. Emitted as an
+`Anomaly` event AND incremented on
+`wwow.statemanager.anomaly.detected_total`.
+
+**Fail-soft fallback.** If Phase-3 ONNX is unavailable, the detector
+runs Phase-1 rules from `Config/anomaly-thresholds.json`. If the
+config file is also missing, the detector emits nothing — silent
+fallback, since false negatives are preferred over false positives in
+the alerting domain.
+
+**Live-validation guard.** Replaying a healthy production trace
+through the detector with all phases enabled MUST NOT emit any
+`AnomalyKind.RosterDistanceRegression` events for outcomes that are
+genuinely progressive (`outcome.roster_distance_delta ≤ 0`). The
+detector cannot flip a healthy bot to anomalous; only genuine
+regression triggers it. Asserted by
+`AnomalyDetector_HealthyTraceProducesNoRegressionAnomaliesTest` in
+the test surface.
+
+## Dynamic-progressive invariant
+
+Anomaly detection is the **observational guard** on the loop's
+dynamic-progressive invariant. The detector's job is precisely to
+fire when the invariant breaks:
+
+- **AnomalyKind.RosterDistanceRegression** fires when
+  `outcome.roster_distance_delta > 0` is observed (anti-progressive
+  completion). This is the canary for any ML pass that drifts the
+  population away from goals.
+- **AnomalyKind.XpRateBelowMedian** / `GoldRateBelowMedian` /
+  `KillRateBelowMedian` fire when bots fall behind their level-band
+  median (the *expected* rate of progression).
+
+Tests assert that the detector preserves these invariants:
+
+1. **Dynamic.** Healthy bots at different level bands have different
+   median rates; an anomaly detector that fires on level-15 bots' XP/hr
+   when applied to level-50 bots is mis-configured. The detector MUST
+   bucket by `level_band` before applying thresholds.
+2. **Progressive.** A healthy trace (every outcome has
+   `roster_distance_delta ≤ 0`) MUST produce zero
+   `RosterDistanceRegression` anomalies. Conversely, an injected
+   anti-progressive trace MUST trigger the detection.
+
+Asserted at the test surface by
+`Anomaly_DynamicProgressive_HealthyTraceClearMatchesRegressionTraceTriggers`.
+
+## Plan-slot cross-reference
+
+| Slot | Owns | Section |
+|---|---|---|
+| **(no slot yet — Plan follow-up)** | `Services/DecisionEngineService/Anomaly/AnomalyDetector.cs`, `Anomaly/AnomalyThresholds.cs`, `Config/anomaly-thresholds.json` | §Anomaly detection (production) |
+| [`Plan/14/S10.7`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s107--training-trace-plumbing) | Trace pipeline that feeds Phase 2/3 baseline learning | §ML Phase 2/3 input |
+| [`Plan/14/S10.5`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s105--advicelog-snapshot-projection) | Snapshot projection — extend with `active_anomalies` field 47 | §Snapshot projection |
+| (UI side) [`Plan/06`](../Plan/06_PHASE5_OBSERVABILITY.md) | Error triage panel renders `active_anomalies[]` | §Dashboard summary API mapping above |
+
+The "no slot yet" row joins the Plan-follow-up roster (six orphan
+services through pass 11; `AnomalyDetector` makes seven).
+
+## Test surface
+
+Contract tests live at
+`Tests/BotRunner.Tests/Metrics/AnomalyDetectionContractTests.cs`.
+Assertions go through `snapshot.active_anomalies[]` (field 47) per Test
+Isolation Rules.
+
+- **`AnomalyKindEnum_ContainsExpectedKindsAndIsClosedSet`** — the
+  `AnomalyKind` enum has the 16 named values from §Anomaly detection
+  and no unnamed gaps in the proto encoding.
+- **`AnomalyDetector_StaticThresholdRulesFireOnSyntheticBadInput`** —
+  given a synthetic metric stream where `wwow.statemanager.bot.xp_delta_total`
+  for a level-15 bot is 4× below the configured median threshold, the
+  next snapshot's `active_anomalies[]` contains exactly one
+  `AnomalyKind.XpRateBelowMedian` entry with severity `Warning`.
+- **`AnomalyDetector_LevelBandBucketing_NoCrossBandFalsePositive`** —
+  a level-50 bot at typical level-50 XP/hr produces NO anomaly even
+  when the level-15 median threshold would flag it.
+- **`AnomalyDetector_HealthyTraceProducesNoRegressionAnomaliesTest`** —
+  replaying a production trace where every `outcome.roster_distance_delta`
+  is ≤ 0 produces ZERO `RosterDistanceRegression` anomalies.
+- **`AnomalyDetector_RegressionTraceTriggersRegressionAnomaly`** —
+  conversely, an injected trace with an `outcome.roster_distance_delta
+  = +0.05` line triggers exactly one `RosterDistanceRegression`
+  anomaly with `expected_value <= 0`, `observed_value == 0.05`.
+- **`AnomalyDetector_FailSoftOnConfigMissing`** — when
+  `Config/anomaly-thresholds.json` is absent, the detector emits no
+  anomalies (silent fallback per §ML integration).
+- **`Anomaly_DynamicProgressive_HealthyTraceClearMatchesRegressionTraceTriggersTest`** —
+  the dynamic-progressive invariant. The same detector configuration,
+  fed a healthy trace, produces zero `RosterDistanceRegression` events;
+  fed an injected anti-progressive trace, produces ≥ 1. Asserts the
+  detector is sensitive *only* to the invariant violation, not to
+  metric noise.
+
 ## Existing code anchors
 
 | Concept | File |
