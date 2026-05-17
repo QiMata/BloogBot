@@ -198,6 +198,205 @@ LiveValidation test that:
 These are added by the activity-family slots in
 [`Plan/Activities/`](../Plan/Activities/).
 
+## Training-trace capture
+
+Every **LiveValidation** test produces a structured JSONL trace per
+[`Spec/20 §6.1`](20_DECISION_ENGINE.md#61-trace-line-schema) at:
+
+```
+tmp/test-runtime/traces/<TestClass.TestMethod>/<timestamp>.jsonl
+```
+
+This is the ML pipeline's labeled-data substrate — Spec/20 §5 Phase-3
+ONNX models for the seven advisors all train against these traces.
+The capture is **mandatory for LiveValidation** and **off for unit /
+contract / component** tests (those layers are too low to produce
+meaningful (snapshot, decision, outcome) tuples).
+
+### Opt-out
+
+A test can opt out via an attribute:
+
+```csharp
+[Fact, NoTrainingTrace("explicit reason; e.g. fixture-stress test that produces no advice calls")]
+public async Task SomeFixtureLevelTest() { ... }
+```
+
+The default-on policy is intentional — every accidental trace
+omission costs the training corpus a data point. Opt-out requires a
+human-readable reason that the trace harness logs at fixture
+teardown.
+
+### Trace writer lifecycle
+
+`WoWStateManagerUIFixture` (the new test host per §UI as the test
+host) opens a per-test `TraceWriter` at fixture init and flushes it
+on teardown. The writer:
+
+1. Subscribes to the StateManager snapshot stream and writes
+   `kind="snapshot"` lines on each tick.
+2. Subscribes to `IDecisionEngineClient` request/response events and
+   writes `kind="advice_request"` + `kind="advice_response"` lines.
+3. Subscribes to `IActivity.NextObjective` transitions and writes
+   `kind="objective_transition"` lines.
+4. Subscribes to `IBotTask` terminal callbacks (Phase 1 substrate)
+   and writes `kind="task_terminal"` lines.
+5. On `IActivity.OnComplete` (or test-end if Activity never reached
+   completion), writes a final `kind="outcome"` line carrying
+   `wall_clock_ms`, `xp_gained`, `gear_slots_filled`,
+   `gold_delta_copper`, and the critical
+   `roster_distance_delta` field (Spec/05 `RosterPlanner.Distance`
+   delta).
+
+### Correctness contract
+
+The trace writer enforces Spec/20 §6.2 invariants at fixture teardown:
+
+1. Every `advice_request` line has exactly one matching
+   `advice_response` with the same `request_id`.
+2. Every `objective_transition` line is preceded by a `snapshot` line
+   whose `current_objective_id` equals `from_objective_id`.
+3. The final `outcome` line's `roster_distance_delta ≤ 0` when
+   `completion="complete"`.
+
+A failing contract assertion is a **test failure** (not just a
+warning). The trace itself is corrupt evidence.
+
+### What does NOT go into traces
+
+- Raw chat strings (Spec/21 §8 anti-griefing posture; templates are
+  hashed before write).
+- Bot account passwords or session tokens.
+- Player names from foreign accounts (only the test bot's own account
+  name is captured).
+- High-cardinality coordinates beyond 1-meter precision (per Spec/10
+  cardinality budget; positions are rounded).
+
+### File rotation + cleanup
+
+`tmp/test-runtime/traces/` is git-ignored. CI uploads the directory
+as a build artifact on test failure; on pass, the local directory is
+kept for off-line training pulls. There is no automatic cleanup —
+disk pressure is the operator's signal to prune.
+
+## Failure-reason mapping
+
+Test-fixture failures map onto [`Spec/12`](12_ERROR_TAXONOMY.md):
+
+| Failure | Spec/12 reason | Notes |
+|---|---|---|
+| Snapshot polling timeout | `task_timeout` | with detail `"<predicate-label> <elapsed>"` |
+| Bot crash during test | `bot_crash` | fixture auto-attaches WER mini-dump path |
+| Disconnect mid-test | `bot_disconnected` | test fails fast unless the disconnect is the explicit assertion target |
+| Trace correctness contract violation | `catalog_invalid` (with detail `trace_contract_<which>`) | fail-test-and-keep-trace as evidence |
+
+No new Spec/12 values needed; row-15 added the broader six.
+
+## ML integration — Test surface as labeled-data origin
+
+**Surface.** This spec is the **producer** for the Spec/20 §6 trace
+pipeline. The seven Spec/20 advisor RPCs all consume labeled data
+that originates here — without LiveValidation tests, there is no
+training corpus.
+
+**No new advisor.** The test surface is observational, not decisional.
+It writes traces; ML pipelines read them.
+
+**Three maturity phases** per the trace consumer (mirrors Spec/20 §5):
+
+| Phase | Source | Test-side responsibility |
+|---|---|---|
+| 1 — Heuristic | All seven advisors hand-rolled per their owning spec | Trace just records; no model exists yet |
+| 2 — Rules + lookup | Per-advisor `Config/decision-engine/*-rules.json` populated from trace aggregation | Trace contributes to operator-curated rule files |
+| 3 — ONNX | Per-advisor `Models/<advisor>/v<n>.onnx` trained on labeled traces | Trace IS the training input |
+
+**Input feature vector for the off-line trainer.** A trace JSONL file
+maps directly onto the ONNX feature shapes in
+[`Spec/20 §4.2`](20_DECISION_ENGINE.md#42-onnx-feature-tensor-shapes-per-advisor) —
+the JSONL `advice_request.context` field deserializes to the proto
+`<Advisor>Context` message that becomes the input tensor.
+
+**Output.** Off-line Python tooling produces an `.onnx` file under
+`Services/DecisionEngineService/Models/<advisor>/v<n>.onnx`. The C#
+runtime loads it via `ModelDescriptor` per [`Spec/20 §4`](20_DECISION_ENGINE.md#4-model-lifecycle).
+
+**Fail-soft fallback.** If trace capture is broken (writer crashes,
+disk full, etc.), the test STILL passes its behavioral assertions —
+the trace is supplementary evidence, not the pass/fail signal (per
+§The contract). Trainer pipelines downstream just skip the affected
+test until the next clean run.
+
+**Live-validation guard.** A "Phase-1 baseline" trace replay
+(`Tests/BotRunner.Tests/Metrics/TrainingTraceCaptureContractTests.cs`
+below) asserts that the corpus of currently-passing LiveValidation
+tests produces a non-zero count of `kind="outcome"` lines with
+`roster_distance_delta ≤ 0`. A regression that strips outcome
+emission silently is caught by this guard.
+
+## Dynamic-progressive invariant
+
+The trace pipeline is the **test-side enforcement layer** for the
+loop's dynamic-progressive invariant. Per the per-spec invariants
+across Spec/19/20/21/22/23/24/05, every LiveValidation trace's
+`outcome` line MUST carry `roster_distance_delta ≤ 0` for
+`completion="complete"` outcomes.
+
+The §Training-trace capture correctness contract enforces this at
+fixture teardown — a trace whose final `outcome.roster_distance_delta
+> 0` AND `completion="complete"` fails the test (the activity
+*looked* successful but did not actually advance any roster goal,
+which means either the activity is cosmetic or `RosterPlanner.Distance`
+is mis-computed; either case is a regression).
+
+Asserted by
+`Testing_DynamicProgressive_LiveValidationProducesNonPositiveRosterDeltaTest`
+in §Test surface below.
+
+## Plan-slot cross-reference
+
+| Slot | Owns | Section here |
+|---|---|---|
+| [`Plan/14/S10.7`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s107--training-trace-plumbing) | `TraceWriter.cs`, `tmp/test-runtime/traces/` directory contract, trace-correctness-contract tests | §Training-trace capture |
+| [`Plan/14/S10.5`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s105--advicelog-snapshot-projection) | Snapshot field 36 `advice_log[]` that traces re-emit | §Trace writer lifecycle step 2 |
+| [`Plan/14/S10.8`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s108--livevalidation-for-advisor-wire) | LiveValidation suite that exercises trace capture | §Live test fixture contract |
+| [`Plan/03`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md) Phase 2 OnDemand slots | Per-Activity LiveValidation tests that produce per-Activity traces | §Required new test families |
+| **(no slot yet)** | `WoWStateManagerUIFixture` (new test host) | §UI as the test host |
+
+The "no slot yet" row joins the Plan-follow-up roster (9 orphan
+services through this pass: 6 from pass 11 + AnomalyDetector pass 14
++ FailureClusterer pass 15 + WoWStateManagerUIFixture).
+
+## Test surface (trace capture itself)
+
+Contract tests live at
+`Tests/BotRunner.Tests/Metrics/TrainingTraceCaptureContractTests.cs`.
+Tests assert against the trace JSONL surface, not internal
+`TraceWriter` state.
+
+- **`TraceCapture_LiveValidationFixtureEmitsOutcomeLine`** — running
+  a representative LiveValidation test produces a JSONL file in
+  `tmp/test-runtime/traces/<TestClass.TestMethod>/<timestamp>.jsonl`
+  containing at least one `kind="outcome"` line.
+- **`TraceCapture_NoTrainingTraceAttribute_SkipsCapture`** — a test
+  decorated with `[NoTrainingTrace("reason")]` produces no JSONL
+  file (or an empty file with a single `kind="opt-out"` marker line).
+- **`TraceCapture_AdviceRequestPairsWithResponse`** — for every
+  `advice_request` line in a captured trace, exactly one
+  `advice_response` exists with the same `request_id`. (Spec/20
+  §6.2 correctness contract enforced at the test surface.)
+- **`TraceCapture_ObjectiveTransitionFollowsSnapshot`** — every
+  `objective_transition` line is preceded by a `snapshot` line whose
+  `current_objective_id` equals `from_objective_id`.
+- **`TraceCapture_OutcomeRosterDistanceDeltaPresent`** — every
+  `outcome` line has a non-null numeric `roster_distance_delta` field
+  (even when the value is 0).
+- **`Testing_DynamicProgressive_LiveValidationProducesNonPositiveRosterDeltaTest`** —
+  scan all `tmp/test-runtime/traces/*/*.jsonl` from the last
+  representative-suite run; every `kind="outcome"` line with
+  `completion="complete"` MUST have `roster_distance_delta ≤ 0`.
+  Cosmetic-only completions (delta = 0) are allowed but a strictly-
+  positive delta is a regression.
+
 ## Existing code anchors
 
 | Concept | File |
