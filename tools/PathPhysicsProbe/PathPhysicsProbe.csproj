@@ -20,4 +20,16 @@
     -->
     <Compile Include="..\..\Tests\Navigation.Physics.Tests\NavigationInterop.cs" Link="Interop\NavigationInterop.cs" />
   </ItemGroup>
+
+  <!--
+    Opt into legacy corrupted-state-exception propagation. GetPolyAtCoord on
+    tile (40, 29) prod-data can raise an AccessViolationException inside
+    Detour's findNearestPoly for some probe coords. In .NET 5+ the runtime
+    treats AV as a corrupted-state exception and refuses managed catch
+    without this opt-in. Same fix pattern as NavMeshPhysicsValidator.csproj.
+    See project_pfs_loop20_cull_pipeline_unblock memory.
+  -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Runtime.LegacyCorruptedStateExceptionsPolicy" Value="true" />
+  </ItemGroup>
 </Project>

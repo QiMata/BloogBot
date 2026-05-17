@@ -24,6 +24,7 @@
 //              2 = Blocked/UnsafeDrop somewhere  |  3 = arg/init failure
 
 using System.Globalization;
+using System.Security;
 using System.Text.Json;
 using Navigation.Physics.Tests;
 using static Navigation.Physics.Tests.NavigationInterop;
@@ -49,6 +50,17 @@ internal static class Program
 
             if (opts.LoadAdt)
                 MaybeLoadAdtForCorners(opts, corners);
+
+            // --dump-polyrefs takes priority over segment classification: it
+            // answers "what polyref is each smooth-path corner standing on"
+            // so the operator can cull the exact polyref the bot landed on.
+            // Skips the per-segment affordance probe (~10ms × 1000 corners
+            // is wasted work when we only want polyrefs).
+            if (opts.DumpPolyrefs)
+            {
+                EmitPolyrefs(opts, corners);
+                return 0;
+            }
 
             var probe = new SegmentProbe(opts.Radius, opts.Height, opts.Verbose);
             var results = new List<ProbeResult>(corners.Count - 1);
@@ -196,6 +208,109 @@ internal static class Program
     }
 
     /// <summary>
+    /// --dump-polyrefs implementation. Probes <see cref="NavigationInterop.GetPolyAtCoord"/>
+    /// at every corner in <paramref name="corners"/> and emits a TSV/JSON
+    /// table of `idx, x, y, z, polyref, polyrefHex, polyType, surfaceZ,
+    /// posOverPoly`.
+    ///
+    /// Use case: after `--detour-resolve --smooth` has resolved a smooth-path
+    /// corner sequence for a failing route, run this to learn which polyref
+    /// each corner sits on. The corner at the failing WP index reveals the
+    /// trap polyref, which can be fed to `NavMeshTileEditor --cull-polys`
+    /// for surgical (single-poly) tile mutation.
+    /// </summary>
+    private static void EmitPolyrefs(Args opts, List<Vector3> corners)
+    {
+        var entries = new List<PolyrefEntry>(corners.Count);
+        for (int i = 0; i < corners.Count; i++)
+        {
+            var c = corners[i];
+            var entry = SafeQueryPolyAtCoord(opts.MapId, c, opts.DumpPolyrefXyExtent, opts.DumpPolyrefZExtent);
+            entries.Add(new PolyrefEntry(i, c, entry.Ok, entry.PolyRef, entry.PolyType, entry.SurfaceZ, entry.PosOverPoly));
+        }
+
+        if (opts.JsonOutput)
+        {
+            var doc = new
+            {
+                map = opts.MapId,
+                radius = opts.Radius,
+                height = opts.Height,
+                polyrefXyExtent = opts.DumpPolyrefXyExtent,
+                polyrefZExtent = opts.DumpPolyrefZExtent,
+                cornerCount = entries.Count,
+                corners = entries,
+            };
+            Console.WriteLine(JsonSerializer.Serialize(doc, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                IncludeFields = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            }));
+            return;
+        }
+
+        Console.WriteLine("idx\tx\ty\tz\tok\tpolyref\tpolyrefHex\tpolyType\tsurfaceZ\tposOverPoly");
+        foreach (var e in entries)
+        {
+            Console.WriteLine(string.Join('\t', new[]
+            {
+                e.Index.ToString(CultureInfo.InvariantCulture),
+                e.Coord.X.ToString("F3", CultureInfo.InvariantCulture),
+                e.Coord.Y.ToString("F3", CultureInfo.InvariantCulture),
+                e.Coord.Z.ToString("F3", CultureInfo.InvariantCulture),
+                e.Ok ? "1" : "0",
+                e.PolyRef.ToString(CultureInfo.InvariantCulture),
+                "0x" + e.PolyRef.ToString("X"),
+                e.PolyType.ToString(CultureInfo.InvariantCulture),
+                float.IsNaN(e.SurfaceZ) ? "nan" : e.SurfaceZ.ToString("F3", CultureInfo.InvariantCulture),
+                e.PosOverPoly.ToString(CultureInfo.InvariantCulture),
+            }));
+        }
+        Console.Error.WriteLine($"# dump-polyrefs: {entries.Count} corners; xyExt={opts.DumpPolyrefXyExtent:F2} zExt={opts.DumpPolyrefZExtent:F2}");
+    }
+
+    /// <summary>
+    /// AV-tolerant wrapper around <see cref="NavigationInterop.GetPolyAtCoord"/>.
+    /// Tile (40, 29) prod-data triggers an AccessViolationException inside
+    /// Detour's findNearestPoly for some probe coords; the csproj's
+    /// LegacyCorruptedStateExceptionsPolicy runtime config makes the AV
+    /// catchable here.
+    /// </summary>
+    [SecurityCritical]
+    private static (bool Ok, ulong PolyRef, byte PolyType, float SurfaceZ, byte PosOverPoly) SafeQueryPolyAtCoord(
+        uint mapId, Vector3 coord, float xyExtent, float zExtent)
+    {
+        try
+        {
+            bool ok = GetPolyAtCoord(mapId, coord, xyExtent, zExtent,
+                out var polyRef, out var polyType, out _, out var surfaceZ, out var posOverPoly);
+            return (ok, polyRef, polyType, surfaceZ, posOverPoly);
+        }
+        catch (AccessViolationException ex)
+        {
+            Console.Error.WriteLine(
+                $"# SafeQueryPolyAtCoord: AV at ({coord.X:F2},{coord.Y:F2},{coord.Z:F2}): {ex.Message}");
+            return (false, 0UL, (byte)0xFF, float.NaN, (byte)0xFF);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"# SafeQueryPolyAtCoord: {ex.GetType().Name} at ({coord.X:F2},{coord.Y:F2},{coord.Z:F2}): {ex.Message}");
+            return (false, 0UL, (byte)0xFF, float.NaN, (byte)0xFF);
+        }
+    }
+
+    internal sealed record PolyrefEntry(
+        int Index,
+        Vector3 Coord,
+        bool Ok,
+        ulong PolyRef,
+        byte PolyType,
+        float SurfaceZ,
+        byte PosOverPoly);
+
+    /// <summary>
     /// Initialize the runtime physics MapLoader and pre-load every tile the
     /// corner sequence crosses. Without this, runtime physics queries return
     /// -200000 sentinels (no ADT data) for the probed XYs, polluting the
@@ -265,6 +380,9 @@ internal sealed class Args
     public bool JsonOutput;
     public bool LoadAdt;
     public string? AdtDataDir;
+    public bool DumpPolyrefs;
+    public float DumpPolyrefXyExtent = 2.0f;
+    public float DumpPolyrefZExtent = 1.8f;
 
     public static readonly string UsageText =
         "Usage: PathPhysicsProbe --map <id> --start X,Y,Z --end X,Y,Z [options]\n" +
@@ -279,7 +397,15 @@ internal sealed class Args
         "  --load-adt [PATH]   auto-init MapLoader against PATH (or $WWOW_DATA_DIR)\n" +
         "                      and pre-load every tile the corner sequence crosses,\n" +
         "                      so GroundZ vmap/adt/bih return real values instead of\n" +
-        "                      -200000 sentinels at probe-data-blind XYs\n";
+        "                      -200000 sentinels at probe-data-blind XYs\n" +
+        "  --dump-polyrefs     instead of per-segment classification, call\n" +
+        "                      GetPolyAtCoord at every corner and emit\n" +
+        "                      (idx, x, y, z, polyref, polyType, surfaceZ).\n" +
+        "                      Use after --detour-resolve --smooth to learn\n" +
+        "                      which polyref each smooth-path corner sits on;\n" +
+        "                      the failing WP's polyref is the trap to cull.\n" +
+        "  --polyref-xy-extent R  XY search extent for --dump-polyrefs (default 2.0)\n" +
+        "  --polyref-z-extent R   Z search extent for --dump-polyrefs (default 1.8)\n";
 
     public static Args Parse(string[] argv)
     {
@@ -307,6 +433,15 @@ internal sealed class Args
                     // Optional positional path arg: only consume if it doesn't start with --
                     if (i + 1 < argv.Length && !argv[i + 1].StartsWith("--"))
                         a.AdtDataDir = argv[++i];
+                    break;
+                case "--dump-polyrefs":
+                    a.DumpPolyrefs = true;
+                    break;
+                case "--polyref-xy-extent":
+                    a.DumpPolyrefXyExtent = float.Parse(Next(argv, ref i, "--polyref-xy-extent"), CultureInfo.InvariantCulture);
+                    break;
+                case "--polyref-z-extent":
+                    a.DumpPolyrefZExtent = float.Parse(Next(argv, ref i, "--polyref-z-extent"), CultureInfo.InvariantCulture);
                     break;
                 case "-h":
                 case "--help":
