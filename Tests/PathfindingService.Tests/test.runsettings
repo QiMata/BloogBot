@@ -6,7 +6,14 @@
          Raised 2026-05-15 from 600000 (10 min) to 1800000 (30 min) so the
          parameterized `CrossroadsToUndercity_CriticalWalkLegs` sweep (12+
          cases, several taking 60–300s through the smooth-from-corridor
-         expansion path) can complete without aborting mid-suite. -->
-    <TestSessionTimeout>1800000</TestSessionTimeout>
+         expansion path) can complete without aborting mid-suite.
+         Raised 2026-05-16 (loop 5) from 1800000 (30 min) to 3600000 (60
+         min) so all 23 `CrossroadsToUndercity_CriticalWalkLegs` Theory
+         cases including the 10 zeppelin-tower / UC-arrival variants
+         #14-23 can complete. Loop 3 aborted at 26m on case 13. The
+         sub-corner LOS-respath added in `TryExpandCorridorWithSmoothNativeSegments`
+         adds modest per-route overhead; doubling the budget gives
+         headroom for the slower routes plus the previously-unrun cases. -->
+    <TestSessionTimeout>3600000</TestSessionTimeout>
   </RunConfiguration>
 </RunSettings>

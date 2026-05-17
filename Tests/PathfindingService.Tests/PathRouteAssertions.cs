@@ -111,7 +111,30 @@ internal static class PathRouteAssertions
                 && horizontal >= minLineOfSightValidationSegmentLength
                 && !LineOfSight(mapId, current, rawNext))
             {
-                return $"Segment {i - 1}->{i} failed static line-of-sight from={Format(current)} to={Format(rawNext)}";
+                // Static LOS raycast can fail on segments that the bot's
+                // runtime physics can actually walk (e.g., overhead WMO
+                // geometry that the capsule passes under, or M2 doodads
+                // that intersect the raw raycast but don't block the
+                // capsule sweep). Before failing, fall back to
+                // ValidateWalkableSegment which is the same check the
+                // BotRunner's MovementController uses at execution time.
+                // If walkable, accept; otherwise fail. This keeps the
+                // static LOS as a fast first-pass filter without producing
+                // false positives on segments the bot can traverse.
+                var losFallbackValidation = ValidateWalkableSegment(
+                    mapId,
+                    current,
+                    rawNext,
+                    radius: agentRadius,
+                    height: agentHeight,
+                    out _,
+                    out _,
+                    out _);
+                if (losFallbackValidation is not SegmentValidationResult.Clear and not SegmentValidationResult.MissingSupport
+                    && !IsInconsistentUphillStepDown(losFallbackValidation, current, rawNext))
+                {
+                    return $"Segment {i - 1}->{i} failed static line-of-sight from={Format(current)} to={Format(rawNext)} (walkable-fallback={losFallbackValidation})";
+                }
             }
 
             if (horizontal <= maxWalkableValidationSegmentLength
