@@ -181,12 +181,187 @@ Raid-attuned 60s respond to weekly reset by re-evaluating raid-Activity
 eligibility (most go from "lockout active" → "lockout clear" → "raid
 candidate"). Pre-raid buff Activities re-prioritize accordingly.
 
-## 9. Test surface
+## 9. Snapshot projection
 
-- **`WorldCycleTests.WeeklyReset_ClearsRaidLockouts`** — at simulated weekly reset, `character_instance` rows referencing the test bot's raid lockouts are cleared and the bot is eligible for the raid Activity again.
-- **`WorldCycleTests.WorldBuffWindow_HoldsRaidQuorum`** — quorum formed inside the buff-decay window proceeds; quorum formed outside the window pivots bots to buff Activities first.
-- **`WorldCycleTests.GameEvent_EnablesEventActivity`** — STV Fishing Extravaganza becomes a selectable Activity only when the `game_event` row is active.
-- **`WorldBossWatcherTests.SpawnedEvent_TriggersCoordinatorQuorum`** — DB transition `dead → alive` fires the world-boss Coordinator quorum within 30 s.
+World-cycle state surfaces on `WoWActivitySnapshot` via three additive
+proto fields (continue numbering after Spec/19/21 land):
+
+```protobuf
+message WorldBuffWindowProj {
+    string buff_name              = 1;   // "OnyxiaBuff" | "Songflower" | "DireMaulTribute" | "ZGHeart" | "BlackLotusPickup"
+    uint64 opens_at_ms            = 2;
+    uint64 expected_next_raid_at_ms = 3; // 0 when no raid scheduled
+    uint32 decay_budget_seconds   = 4;
+    bool   currently_active       = 5;   // true when bot already has the buff aura
+}
+
+message LockoutStateProj {
+    uint32 raid_map_id            = 1;
+    uint32 instance_id            = 2;   // MaNGOS character_instance.instance
+    bool   permanent              = 3;
+    uint64 reset_at_ms            = 4;   // weekly reset timestamp
+}
+
+message ActiveGameEventProj {
+    uint32 event_id               = 1;
+    string name                   = 2;
+    uint64 started_at_ms          = 3;
+    uint64 ends_at_ms             = 4;
+    repeated string affected_activity_ids = 5;
+}
+
+// New fields on WoWActivitySnapshot:
+repeated WorldBuffWindowProj world_buff_windows = 40;
+repeated LockoutStateProj    current_lockouts   = 41;
+repeated ActiveGameEventProj active_game_events = 42;
+```
+
+Tests assert via these snapshot fields per CLAUDE.md Test Isolation
+Rules; direct reads against `character_instance` MySQL or
+`game_event` rows are reserved for the StateManager service-side code
+that **produces** these projections.
+
+## 10. Failure-reason mapping
+
+World-cycle failures map onto Spec/12's `FailureReason` enum:
+
+| Failure | Spec/12 reason | Notes |
+|---|---|---|
+| Raid lockout active when Activity assigned | `lockout_active` | exists in Spec/12 today |
+| World boss already dead, respawn window closed | `task_precondition_failed` | log only; bot picks alternative Activity |
+| Buff source on cooldown when bot arrives | `task_timeout` | with detail string `world_buff_window_missed` |
+| `game_event` row absent when event Activity assigned | `task_precondition_failed` | composer must filter event Activities by `IGameEventProvider.GetActiveEvents()` first |
+| Weekly-reset event delivery missed (subscriber disconnected) | `server_unavailable` | StateManager re-broadcasts on reconnect |
+
+One new value **may be needed** depending on metric granularity:
+
+- `world_buff_window_missed` *(new)* — distinguished from
+  `task_timeout` because it is a routing decision (we chose to chase
+  the buff and lost) not a stall. Defer to row-15 Spec/12 pass.
+
+## 11. ML integration — Buff-window pivot
+
+**Surface.** When a raid candidate is forming and the buff-decay
+window is the tipping decision (Spec/22 §6 step 2b), the
+`RaidCompositionService` consults
+`IDecisionEngineClient.GetObjectiveAdviceAsync(ObjectiveContext, ct)`
+with the tied Objectives populated as:
+
+- `continue-current-objective`
+- `pivot-to-dm-tribute`
+- `pivot-to-songflower`
+- `pivot-to-onyxia-rend-pickup`
+- `wait-for-raid-quorum`
+
+The advisor returns the recommended pivot id; the deterministic
+fallback (Phase 1) is "pivot to the lowest travel-cost buff source
+with the highest decay budget remaining."
+
+**Why use the existing Objective advisor, not a new one.** This
+decision *is* an Objective-tiebreaker per
+[`Spec/19 §9`](19_AOTA_RUNTIME.md#9-ml-integration--composer-tiebreaker) —
+the candidates are real Objective ids and the rationale is
+`RosterPlanner.Distance` reduction. Adding a `BuffWindow` advisor
+would duplicate Spec/20's surface.
+
+**Input feature additions.** `ObjectiveContext.roster_goal_distance[]`
+(the 8-element vector from Spec/20 §2.1) gains a normalized
+"raid-readiness deficit" axis: how far the bot is from a buffed,
+attuned, gear-ready raid slot. This is computed locally by the
+RaidCompositionService before the advisor call; no new proto field
+needed.
+
+**Three maturity phases** per [`Spec/20 §5`](20_DECISION_ENGINE.md):
+
+| Phase | Source | Owned by |
+|---|---|---|
+| 1 — Heuristic | Lowest travel cost × highest decay budget | RaidCompositionService default |
+| 2 — Rules + lookup | `Config/decision-engine/buff-pivot-rules.json` per `(class, expected_raid_at, current_zone)` | Plan/14 slot S10.6 |
+| 3 — ONNX | `Services/DecisionEngineService/Models/objective/v1.onnx` (the same model as the Objective advisor — buff-window axis is a feature, not a separate model) | Plan/14 slot S10.6 (Mode=Ml) |
+
+**Fail-soft fallback.** When advice is `NoAdvice`, low confidence, or
+recommends an id outside the tied set, fall back to Phase 1.
+
+**Live-validation guard.** Replaying any raid-formation trace with
+buff-pivot advisor forced to `NoAdvice` MUST still produce a
+`roster_distance_delta ≤ 0` outcome line (the deterministic pivot
+still closes goal distance, just less optimally).
+
+## 12. Dynamic-progressive invariant
+
+A bot's response to a world-cycle event MUST satisfy both properties:
+
+1. **Dynamic.** A weekly-reset event for two bots with different
+   `(class, attunement, raid lockouts, current_zone, current_buffs)`
+   MUST produce different Activity selections on the next composer
+   call. Identical inputs produce identical selections.
+2. **Progressive.** Every Activity assignment triggered by a
+   world-cycle event (raid lockout cleared → raid attempt; world buff
+   open → buff pickup; game event start → event Activity) MUST close
+   `RosterPlanner.Distance` *to a measurable extent*:
+   - raid lockout-cleared → raid kill = gear-tier-filled axis
+   - buff pickup → raid clear time decreases (measurable in trace
+     `outcome.wall_clock_ms`)
+   - event Activity → event-reward unique-item axis closes
+   Failed Activities do NOT advance distance, but the *selection* MUST
+   be progressive in expectation.
+
+Asserted via `WorldCycle_DynamicProgressive_WeeklyResetTriggersRaidPickupTest`
+in §13.
+
+## 13. Plan-slot cross-reference
+
+| Slot | Owns | Section |
+|---|---|---|
+| [`Plan/03/S2.4`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md#s24--legalityvalidator-fixup-mode) | `LockoutVerifier.cs` | §2, §10 `lockout_active` |
+| [`Plan/14/S10.5`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s105--advicelog-snapshot-projection) | Snapshot projection broadcaster (extend for §9 fields) | §9 fields 40-42 |
+| [`Plan/14/S10.6`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s106--mode-aware-advisor-activation) | `buff-pivot-rules.json` | §11 Phase 2 |
+| **(no slot yet — follow-up)** | `Services/WoWStateManager/WorldCycles/GameEventProvider.cs` | §5 |
+| **(no slot yet — follow-up)** | `Services/WoWStateManager/WorldCycles/WorldBossWatcher.cs` | §4 |
+| **(no slot yet — follow-up)** | `Services/WoWStateManager/WorldCycles/WorldBuffWindowTracker.cs` | §3 |
+| **(no slot yet — follow-up)** | `Services/WoWStateManager/WorldCycles/CalendarResetService.cs` | §7, §8 |
+
+The four "no slot yet" rows are tracked as a follow-up in
+[`Plan/SPEC_FILL_LOOP.md`](../Plan/SPEC_FILL_LOOP.md). They probably
+fit best as a new Plan/17 phase or as Plan/13 (Catalog completeness)
+sub-slots since the game-event provider feeds catalog eligibility.
+
+## 14. Test surface
+
+Contract tests at
+`Tests/BotRunner.Tests/WorldCycles/WorldCycleContractTests.cs`. All
+`Skip("contract pending S<phase>.<n>")` until the matching slot lands.
+
+- **`WeeklyReset_ClearsRaidLockouts`** — at simulated weekly reset,
+  `snapshot.current_lockouts[]` is empty for the test bot and the
+  bot becomes eligible for the raid Activity again (asserted via
+  `snapshot.current_activity_id` transitioning from
+  `"econ.vendor-loop"` to a raid id). Slot S2.4 + (no slot)
+  CalendarResetService.
+- **`WorldBuffWindow_HoldsRaidQuorum`** — quorum formed inside the
+  buff-decay window proceeds; quorum formed outside the window
+  pivots bots to buff Activities first. Asserted via
+  `snapshot.current_objective_id` matching one of
+  `{"pivot-to-dm-tribute", "pivot-to-songflower",
+  "pivot-to-onyxia-rend-pickup"}` in the buff-pivot case.
+- **`GameEvent_EnablesEventActivity`** — STV Fishing Extravaganza
+  becomes a selectable Activity only when
+  `snapshot.active_game_events[]` contains `event_id=26`.
+- **`WorldBossWatcher_SpawnedEventTriggersCoordinatorQuorum`** — DB
+  transition `dead → alive` fires the world-boss Coordinator quorum
+  within 30 s; asserted via 20 bot snapshots transitioning to
+  `boss.azuregos` (or other world-boss id) `current_activity_id`.
+- **`BuffPivot_AdvisorRespectsCandidateSet`** — when ObjectiveAdvice
+  recommends a `RecommendedObjectiveId` outside the buff-pivot tied
+  set, the RaidCompositionService falls back to the Phase-1 heuristic
+  (lowest travel cost × highest decay budget).
+- **`WorldCycle_DynamicProgressive_WeeklyResetTriggersRaidPickupTest`** —
+  the dynamic-progressive invariant from §12. For ≥2 distinct synthetic
+  snapshots that differ in `(class, attunement, raid lockout, current
+  buffs)`, the post-weekly-reset Activity selection differs in either
+  the chosen Activity id or its parameters AND each selection closes
+  `RosterPlanner.Distance(snapshot, goal)` in expectation. Slot
+  (no slot) CalendarResetService.
 
 Live validation: `Westworld-Test` runs accelerated timers, so weekly
 reset can be exercised in a 30-min test cycle.
