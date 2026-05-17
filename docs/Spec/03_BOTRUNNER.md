@@ -205,28 +205,131 @@ public interface IRewardSelector
 }
 ```
 
-The selection algorithm evolves through three phases:
+### Three maturity phases (matches [`Spec/20 §5`](20_DECISION_ENGINE.md#5-three-maturity-phases-per-advisor))
 
-1. **Phase 2 — trivial selector** (initial release). Picks the first
-   valid reward by index. Always non-null. This is enough to satisfy
-   the "always picks" invariant.
-2. **Phase 4 — ProgressionPlanner selector**. Reads the bot's
-   `CharacterBuildConfig.TargetGearSet` and picks the reward that
-   advances the BiS gear plan; falls back to highest vendor value for
-   non-gear rewards (consumables, recipes). See
-   [`Spec/05_PROGRESSION.md`](05_PROGRESSION.md).
-3. **Future — ML-augmented selector**. Once min/max progression data is
-   available, an ML model picks the reward that best advances the
-   roster goal under current market prices and lockout state. Tracked
-   under [`Plan/10_PARALLEL_SKILL_REFINEMENT.md`](../Plan/10_PARALLEL_SKILL_REFINEMENT.md)
-   as a future skill.
+The selection algorithm evolves through three phases. Each phase has
+a corresponding `AdvisorMode` (Spec/20 §2.1) flip in
+`Config/decision-engine.json`'s `advisors.reward.mode` per
+[`Spec/20 §4.1`](20_DECISION_ENGINE.md#41-configdecision-enginejson-schema).
+Per the Plan/14 exit criteria, Reward is the first advisor to ship all
+three phases.
 
-Tests assert the invariant per selector phase:
+| Phase | `AdvisorMode` | Source | Wire |
+|---|---|---|---|
+| 1 — Heuristic (trivial) | `ADVISOR_MODE_TRIVIAL` | First valid reward by index. Always non-null. Satisfies the "always picks" invariant. | `RewardSelector.SelectQuestRewardFallback(rewardSet)` in this slot's owner. |
+| 2 — Rules + lookup | `ADVISOR_MODE_RULES` | Reads `CharacterBuildConfig.TargetGearSet` + the per-class BiS table at `Config/decision-engine/reward-rules.json`. Falls back to highest vendor value when no gear option matches the BiS slot. Spec/24 `RewardPriority` knob biases the scorer (Plan/16 S12.7). | Plan/14 slot S10.6 ships the rules-file consumer. |
+| 3 — ONNX | `ADVISOR_MODE_ML` | `Services/DecisionEngineService/Models/reward/v1.onnx` trained on labeled `outcome` traces (Spec/20 §6.1). Picks the reward that best advances the roster goal under current market prices and lockout state. | Plan/14 slot S10.6 flips mode to `ADVISOR_MODE_ML` once the model file is present. |
 
-- Phase 2: no quest turn-in ever results in `selected_reward = null`.
-- Phase 4: for each test class/spec, the selector picks the reward that
-  matches the spec's `TargetGearSet` slot if any reward option fits.
-- Future: ML model accuracy vs hand-labelled "best choice" baseline.
+### Spec/20 wire (Phase 2 and Phase 3)
+
+For Phase 2 and Phase 3, `RewardSelector` consumes
+`IDecisionEngineClient.GetRewardAdviceAsync(RewardContext, ct)` per
+[`Spec/20 §2`](20_DECISION_ENGINE.md#2-service-surface). The wire is
+owned by Plan/14 slot S10.1 (`Reward selector advisor wire`):
+
+```csharp
+public sealed class RewardSelector : IRewardSelector
+{
+    public async Task<int> SelectQuestRewardAsync(QuestRewardChoice choice, BotContext ctx, CancellationToken ct)
+    {
+        // Phase 1 fallback always available:
+        int trivial = SelectQuestRewardFallback(choice);
+
+        // Phase 2/3 attempt via advisor:
+        var rewardCtx = BuildRewardContext(choice, ctx);
+        var advice = await _decisionEngine.GetRewardAdviceAsync(rewardCtx, ct);
+
+        if (advice.RecommendedChoiceIndex is int idx
+            && advice.Confidence >= 0.5f
+            && idx >= 0 && idx < choice.Options.Count)
+        {
+            EmitAdviceLog(advisor: "reward", advice, used_index: idx);
+            return idx;
+        }
+
+        EmitAdviceLog(advisor: "reward", advice, used_index: 0xFFFFFFFFu);  // discarded
+        return trivial;
+    }
+    // ... LootRollIntent + VendorPurchase follow the same pattern.
+}
+```
+
+Fail-soft semantics: `NoAdvice` of any kind, advice with index outside
+the option range, or confidence < 0.5 falls through to the Phase-1
+trivial selector. Tests pin `Mode=Trivial` for determinism per Plan/14
+S10.6.
+
+### `RewardContext` build for Phase 2/3
+
+`BuildRewardContext` populates the proto message per
+[`Spec/20 §2.1`](20_DECISION_ENGINE.md#21-proto-wire-shapes):
+
+| Field | Source |
+|---|---|
+| `bot_level`, `bot_class`, `bot_spec` | `BotContext.Snapshot.Player` |
+| `quest_entry` | `QuestRewardChoice.QuestEntry` |
+| `reward_item_ids[]` | `QuestRewardChoice.Options[].ItemId` |
+| `reward_item_quality[]` | `item_template.Quality` (DB lookup via `IMangosCatalog`) |
+| `reward_item_slot[]` | `item_template.InventoryType` |
+| `reward_item_sell_price[]` | `item_template.SellPrice` |
+| `currently_equipped_in_slot[]` | `BotContext.Snapshot.Player.Equipment[slot]` |
+| `active_spec_role` | derived from `BotContext.Snapshot.personality.reward_priority` + `Class.PrimaryRole` |
+
+The context is **pure** over `(choice, snapshot)` plus a single
+`IMangosCatalog` DB read per item id (cached per quest entry to avoid
+re-reads). No network calls beyond the advisor RPC.
+
+### Tests assert the invariant per selector phase
+
+Naming follows [`Spec/18 #test-naming-convention`](18_TERMINOLOGY.md#test-naming-convention):
+
+- **`RewardSelectorTests.QuestTurnIn_NeverReturnsNull`** (Phase 1, S10.1) —
+  no quest turn-in ever results in `selected_reward = null`. `Mode=Trivial`
+  pinned for determinism.
+- **`RewardSelectorTests.PrefersDecisionEngineAdvice`** (Phase 2/3, S10.1) —
+  advisor returns `RewardAdvice { choice_index=2, confidence=0.9 }`;
+  the selector picks index 2 and `snapshot.advice_log[0].advisor =
+  "reward"` with `used_index = 2`.
+- **`RewardSelectorTests.FallsBackOnNoAdvice`** (Phase 2/3, S10.1) —
+  advisor returns `NoAdvice`; selector returns the trivial Phase-1
+  pick; `snapshot.advice_log[0].used_index = 0xFFFFFFFD`
+  (ServiceDown) or similar `AdviceError.*` sentinel per Spec/20 §2.
+- **`RewardSelectorTests.RejectsAdviceForUnknownChoiceIndex`** (Phase 2/3,
+  S10.1) — advice with `RecommendedChoiceIndex` outside the actual
+  choice list is discarded; trivial fallback wins; `advice_log[0].used_index
+  = 0xFFFFFFFFu` (discarded sentinel per Spec/19 §5).
+- **`RewardSelectorTests.PerSpecBiSSlotPreference`** (Phase 2, S10.6) —
+  for each test class/spec, when one option matches the spec's
+  `TargetGearSet` slot, the selector picks it.
+- **`BotRunner_DynamicProgressive_RewardSelectionClosesBisDistanceTest`** (Phase 2/3, S10.8) —
+  the dynamic-progressive invariant. For ≥2 synthetic snapshots
+  differing in `(class, spec, currently_equipped_in_slot)`, the selector
+  picks DIFFERENT reward indices AND each pick reduces the GearTier
+  axis of `RosterPlanner.Distance` (Spec/05). Replay with `Mode=Trivial`
+  still completes; ML mode optimizes the BiS axis specifically.
+
+### Snapshot projection — reward selection state
+
+The reward decision projects via the existing `advice_log[]`
+(field 36 per Spec/19 §5). No new proto field for reward selection;
+the `(advisor="reward", confidence, used_index)` triple from
+`AdviceLogEntry` is sufficient for tests.
+
+Additionally, the bot's recent reward picks contribute to
+`outcome.roster_distance_delta` in trace JSONL per Spec/20 §6.1 — that's
+the live-validation path that ties this slot to the dynamic-progressive
+invariant.
+
+### Plan-slot cross-reference
+
+| Slot | Owns | Phase covered |
+|---|---|---|
+| [`Plan/14/S10.1`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s101--reward-selector-advisor-wire) | `RewardSelector.cs` advisor wire | All phases (consumer side) |
+| [`Plan/14/S10.6`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s106--mode-aware-advisor-activation) | `Config/decision-engine/reward-rules.json` + mode flip | Phase 2 + Phase 3 |
+| [`Plan/14/S10.7`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s107--training-trace-plumbing) | Trace pipeline that feeds Phase 3 training | Phase 3 input |
+| [`Plan/14/S10.8`](../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s108--livevalidation-for-advisor-wire) | LiveValidation including `DecisionEngine_RewardSelection_GuidedByAdvice` | All phases (correctness guard) |
+| [`Plan/16/S12.7`](../Plan/16_PHASE12_BEHAVIORAL_VARIATION.md#s127--reward-knob-consumer) | `RewardPriority` knob biases the Phase-1 fallback path | All phases |
+| [`Plan/03/S2.9`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md#s29--rewardselector-trivial-phase-4-has-the-upgrade) | Trivial Phase-1 selector (initial ship) | Phase 1 |
 
 ## Loadout
 
