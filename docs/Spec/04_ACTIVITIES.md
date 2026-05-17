@@ -319,6 +319,78 @@ Weights are tunable per activity family via `BotSelectionPolicy` on the
 **ship homogeneous defaults first**; per-family tuning waits for
 measured data. Future: LLM-augmented personality affects selection.
 
+### Scoring formula (normative)
+
+`BotSelectionScorer.Score(bot, activity)` returns an `int` computed as:
+
+```csharp
+public static int Score(PoolBot bot, ActivityDefinition activity)
+{
+    int score = 0;
+    BotSelectionPolicy w = activity.BotSelectionPolicy;
+
+    score += w.RoleFitWeight              * Bool(bot.MatchesRole(activity.RoleTemplate));
+    score += w.LevelFitWeight             * Bool(activity.LevelRange.Contains(bot.Level));
+    score += w.InterruptibilityWeight     * Bool(bot.CanInterruptCurrentActivity);
+    score += w.TravelEtaWeight            * Normalize(activity.TravelEtaSeconds(bot), max: 600);
+    score += w.GearReadinessWeight        * Bool(bot.HasMinimumGearForFamily(activity.Family));
+    score += w.ClassUtilityWeight         * activity.ClassUtilityFor(bot.Class);          // 0..2
+    score += w.ProgressionOpportunityWeight * Bool(bot.WouldGainProgress(activity));
+    score += w.RecentFailurePenaltyWeight * bot.RecentFailureCount(activity);             // already negative
+    score += w.HumanPreferenceWeight      * Bool(bot.IsHumanPreferred(activity));
+
+    return score;
+}
+
+// Helpers:
+//   Bool(b) = b ? 1 : 0
+//   Normalize(x, max) = 1 - Math.Clamp(x / max, 0, 1)   // closer travel = higher score
+```
+
+Tie-breaks (in order, when two bots tie on `Score`):
+
+1. Lower `bot.RecentFailureCount(activity)` wins.
+2. Lower `bot.AccountName` lex order (deterministic; only for stable replay).
+
+The score is **pure** over `(bot, activity)` inputs — `RecentFailureCount`
+reads from a per-bot in-memory counter populated by the trace pipeline
+(Spec/20 §6.1 `outcome.completion="failed"` lines). Tests pin this
+counter to 0 for determinism.
+
+### `ClassUtilityFor` — per-activity class table
+
+`ClassUtilityFor(class)` returns an `int` in `[0, 2]` based on
+per-Activity class affinities. Defaults to 0 (neutral) unless declared:
+
+```json
+{
+  "activityId": "dungeon.stratholme-undead",
+  "classUtility": {
+    "Priest":  2,   // Holy Nova on plague drops; mass dispel
+    "Mage":    2,   // AoE the undead packs
+    "Paladin": 1,   // tank or holy still viable
+    "Warrior": 1
+  }
+}
+```
+
+Catalog rows that omit `classUtility` get 0 for all classes; the
+weight contribution is 0 (homogeneous default per the user's direction).
+Per-family tuning happens in `Config/activities/<id>.json` (Plan/03
+S2.7) and is hot-reloaded.
+
+### Failure-reason mapping (selection-time only)
+
+Bot-selection failures map onto [`Spec/12`](12_ERROR_TAXONOMY.md):
+
+| Failure | Spec/12 reason | Notes |
+|---|---|---|
+| No candidate scores above 0 (no role-fit, level mismatch, etc.) | `missing_role` | existing; surfaces as `RejectionCode.POOL_EXHAUSTED` to OnDemand |
+| Selected bot disconnects between `LegalityChecked` and `Spawning` | `bot_disconnected` | existing; launcher re-runs selection |
+| `BotSelectionPolicy.HumanPreferenceWeight` reference points at a non-existent human GUID | `task_precondition_failed` | defensive; should never happen in OnDemand path |
+
+No new Spec/12 values needed.
+
 ## OnDemand activity instance lifecycle
 
 The lifecycle is driven by
@@ -393,6 +465,145 @@ Default `HumanIdleTimeout`: 5 minutes for short activities (dungeons),
 (2026-05-12): loot priority does not matter during OnDemand because
 the instance is siloed and characters are ephemeral — the field is
 omitted.
+
+## Snapshot projection
+
+Bot-selection state surfaces on `OnDemandInstanceProj` (Spec/23 §10
+field 43) — extending that message rather than `WoWActivitySnapshot`
+directly because selection is an OnDemand-only concern. Plan/03 S2.5
+owns the projection.
+
+```protobuf
+// Extension of OnDemandInstanceProj (Spec/23 §10):
+message BotSelectionEntry {
+    string  account_name        = 1;
+    int32   score               = 2;     // BotSelectionScorer.Score output
+    bool    selected            = 3;     // true iff this bot ended up in the activity
+    repeated string score_components = 4; // human-readable breakdown:
+                                          //   "RoleFit:100", "LevelFit:50", "TravelEta:18", ...
+}
+
+message OnDemandInstanceProj {
+    // ... existing fields 1-9 from Spec/23 §10 ...
+    repeated BotSelectionEntry selection_results = 10;  // top 8 candidates by score
+}
+```
+
+Tests assert against this projection rather than reading
+`BotSelectionScorer` internal state.
+
+## ML integration — Selection-weight learning
+
+**Surface.** `BotSelectionScorer.Score(...)` uses the
+`BotSelectionPolicy` weight tuple defined on the catalog row. The
+**ML hook** is an off-line tool that learns better weight tuples by
+analyzing outcome traces (Spec/20 §6.1) for OnDemand activities. The
+runtime path stays deterministic — no new advisor RPC.
+
+**Why no new advisor RPC.** Selection runs at most once per OnDemand
+launch (≤1 per minute at production scale); per-launch advisor calls
+would dominate the budget. The Phase-2 lookup table approach is
+sufficient: a learned weight tuple is just a config delta on the
+`ActivityDefinition.BotSelectionPolicy` defaults.
+
+**Three maturity phases** (matches the Spec/20 §5 pattern even though
+no Spec/20 RPC is consumed):
+
+| Phase | Source | Owned by |
+|---|---|---|
+| 1 — Heuristic | `BotSelectionPolicy` record defaults (homogeneous across families) | this Spec |
+| 2 — Rules + lookup | Per-family overrides in `Config/activities/<id>.json` | Plan/03 slot S2.7 (Per-activity config files) |
+| 3 — Learned weights | Off-line tool fits a gradient-boosted regressor over `(bot, activity, outcome)` traces; output is a PR for `Config/activities/<id>.json` BotSelectionPolicy block | (no slot yet — Plan follow-up) |
+
+**Input feature vector** for the off-line learner:
+
+| Feature | Source |
+|---|---|
+| `bot.level`, `bot.class`, `bot.spec`, `bot.gear_tier` | `outcome` line per Spec/20 §6.1 |
+| `activity.family`, `activity.level_range`, `activity.role_template` | catalog snapshot |
+| `bot.recent_failure_count` (last 24h) | trace aggregation |
+| `bot.travel_eta_seconds` | snapshot at selection time |
+| `outcome.completion == "complete"` | label (0/1) |
+| `outcome.wall_clock_ms` | continuous regression target |
+| `outcome.roster_distance_delta` | progressive label per Spec/05 |
+
+**Output.** Per-Activity weight tuple proposal: 9 ints in
+`[-100, +200]` range matching `BotSelectionPolicy` fields. Tool emits
+JSON snippet for human review.
+
+**Fail-soft fallback.** No learned weights → defaults apply. The
+learner is **always off-line**; runtime never blocks on it.
+
+**Live-validation guard.** Replaying any OnDemand trace with weights
+reset to defaults MUST still produce a completed activity — selection
+optimality may degrade but never to the point of preventing completion.
+Asserted via `BotSelection_DefaultWeights_StillCompleteActivityTest`
+in §Test surface.
+
+## Dynamic-progressive invariant
+
+Activity selection MUST satisfy both properties:
+
+1. **Dynamic.** Two OnDemand requests for the same Activity but
+   different `(requesting_human, pool_state)` MUST sometimes select
+   different bot rosters. Identical inputs produce identical
+   selections (deterministic given fixed weights + tie-break order).
+2. **Progressive.** The selected bot roster's resulting Activity
+   completion MUST close someone's `RosterPlanner.Distance`. Selection
+   that pulls bots from progressive Activities into a low-value
+   OnDemand request (e.g. an ambient port service) is allowed only
+   when the human's distance reduction exceeds the bots' aggregate
+   distance reduction loss. Tracked at the trace surface via the
+   `outcome.roster_distance_delta_aggregate` field (Spec/23 §13).
+
+Asserted by `Activities_DynamicProgressive_BotSelectionRespectsProgressionCostTest`
+in the test surface section.
+
+## Plan-slot cross-reference
+
+| Slot | Owns | Section here |
+|---|---|---|
+| [`Plan/03/S2.7`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md#s27--per-activity-config-files) | `Config/activities/<id>.json` (per-row `BotSelectionPolicy` overrides + `classUtility`) | §ClassUtilityFor, §ML Phase 2 |
+| [`Plan/03/S2.5`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md#s25--ondemandactivitylauncher) | OnDemand launcher invokes `BotSelectionScorer.Score(...)` during Spawning stage; emits `selection_results[]` projection | §Snapshot projection |
+| [`Plan/13/S9.1-S9.7`](13_PHASE9_CATALOG_FILL.md) | Catalog row authoring for new Activities; `BotSelectionPolicy` defaults inherited from this Spec | §ActivityDefinition |
+| **(no slot yet — Plan follow-up)** | `BotSelectionScorer.cs`, off-line weight-learner tool | §ML Phase 3 |
+
+The "no slot yet" row joins the orphan-services follow-up tracked in
+[`Plan/SPEC_FILL_LOOP.md`](../Plan/SPEC_FILL_LOOP.md). Likely home is a
+new Plan/18 phase or a sub-slot under Plan/03.
+
+## Test surface
+
+Contract tests live at
+`Tests/BotRunner.Tests/Activities/BotSelectionContractTests.cs`. Tests
+assert against `OnDemandInstanceProj.selection_results[]` (proto field
+43.10) per Test Isolation Rules.
+
+- **`BotSelectionScorer_PureFunctionOfBotAndActivity`** — calling
+  `Score(bot, activity)` twice with identical inputs (including
+  `RecentFailureCount=0`) returns the same integer.
+- **`BotSelectionScorer_RoleFitWeightDominates`** — a candidate with
+  role-fit + level-fit beats a candidate with level-fit + class-utility
+  unless `ClassUtilityWeight > RoleFitWeight + LevelFitWeight` — i.e.
+  the default policy puts role first.
+- **`BotSelectionScorer_TieBreakIsLowestRecentFailureThenLexAccountName`** —
+  given two candidates with identical scores, the bot with fewer
+  recent failures wins; given equal failures, the lex-lowest
+  `AccountName` wins. Deterministic.
+- **`BotSelectionPolicy_PerFamilyOverrideRespected`** — when
+  `Config/activities/dungeon.stratholme-undead.json` declares
+  `classUtility.Priest=2`, the selector prefers Priests over other
+  classes of equal role+level fit.
+- **`BotSelection_DefaultWeights_StillCompleteActivityTest`** — replay
+  a representative OnDemand trace with all `BotSelectionPolicy`
+  weights reset to defaults; the same activity completes within 1.5×
+  its baseline wall clock. Plan/14 S10.8 guard.
+- **`Activities_DynamicProgressive_BotSelectionRespectsProgressionCostTest`** —
+  the dynamic-progressive invariant. For two OnDemand requests with
+  identical `activity_id` but different pool states (one with attuned
+  raiders idle, one with attuned raiders mid-quest-chain), the selector
+  picks different rosters AND the resulting
+  `outcome.roster_distance_delta_aggregate` is ≤ 0 in both cases.
 
 ## Existing code anchors
 
