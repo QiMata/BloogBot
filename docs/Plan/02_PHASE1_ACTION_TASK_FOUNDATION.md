@@ -1185,6 +1185,84 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[feedback_pathfinding_freeze]],
   [[project_mmapgen_offmesh_axis_swap]].
 
+- **Latest evidence (2026-05-18 loop 24 — Phase A1 main-emit
+  polyref==0 guard, NEUTRAL):** Executed loop-23's
+  "what's left as multi-cycle work" item #1 (Surface B at the
+  right layer). Added a private helper
+  `PathFinder::isCornerOnNavmesh(const float*)` that calls
+  `findNearestPoly` with DEFAULT extents (`2.0, 1.8, 2.0` — user
+  constraint, no widening) and inserted **SKIP-then-bail-after-3**
+  guards at TWO sites in `Exports/Navigation/PathFinder.cpp`:
+  (a) `findSmoothPath` main `iterPos` emit at line 1936
+  (per-iteration corner) — guards every smooth-path corner; and
+  (b) `BuildPointPath` post-process of `findStraightPath` output —
+  filters interior corners (preserves start/end). Total +78 LOC,
+  within the 75-LOC budget after revert. Build via MSBuild
+  (`Exports/Navigation/Navigation.vcxproj -p:Configuration=Release
+  -p:Platform=x64 -p:PlatformToolset=v145`) green.
+
+  **Result tally on prod-data (`WWOW_DATA_DIR=D:/wwow-bot/prod-data`,
+  Release, 100-min `TestSessionTimeout`):**
+
+  | Suite | Baseline | Phase A1 | Δ |
+  |---|---|---|---|
+  | `OgZeppelinCliffFallParityTests` | 4/0/0 | 4/0/0 | 0 (critical gate held) |
+  | `CrossroadsToUndercity_CriticalWalkLegs` | 19/4/0 | **19/4/0** | 0 (no closure, no regression) |
+  | `RecordedTests.PathingTests` | 135/0/0 | 135/0/0 | 0 |
+  | `Navigation.Physics.Tests` (full) | 152/0/1 | 159/1/1 | +7 passed (new tests since loop-18 baseline), +1 fail in WIP commit `1af02831` (`SceneEnvironmentFlagTests.StepPhysicsV2_KnownIndoorSupport_BlocksMountByEnvironment`) — unrelated to PathFinder.cpp |
+
+  CriticalWalkLegs sweep duration: 1 h 4 m.
+
+  **Root cause of the no-op:** the failing test
+  `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+  emits a smooth-path corner 42 at `(1347.3, -4540.6, 35.8)` —
+  exactly **coord 1 from loop-21's diagnosis**. Loop 21 established
+  that coord 1 has NO polys at any Z in [33, 42] under default
+  extents (it IS a true air corner). My guard SHOULD have caught
+  it — except corner 42 is **a densifier midpoint emitted at lines
+  1919-1931, NOT the main iterPos emit at line 1936**. The
+  corner-spacing evidence in the dumped path (consecutive dz ≈
+  0.9y, well below the 2y `SMOOTH_PATH_STEP_SIZE`) confirms the
+  densifier loop is the corner-producing layer. Loop 21's
+  analytical finding ("failure WPs are smooth-path interpolated
+  midpoints in AIR between anchor corners") was correct; loop 23's
+  claim that the failing corners are at iterPos:1936 was wrong.
+
+  **Why Phase A1's approach is fundamentally insufficient:** the
+  spec correctly forbade touching the densifier (loop-23 Surface
+  B `+33 LOC at 1900-1933` regressed
+  `orgrimmar_exterior_incline_live_stall_exact_recovery` because
+  its Z-snap raised a corner into obstructed geometry; the
+  densifier midpoints are load-bearing for slope ascent per
+  Cycle 17e). So Phase A1 placed the guard at the main emit
+  instead. But the failing corners ARE in the densifier — and any
+  variant of densifier-layer guard hits the loop-23 Surface B
+  regression mode. Either way, **the underlying problem (no ground
+  at coord 1) is unfixable from inside the smooth-path generator.**
+  No PathFinder.cpp-layer fix can close the 4 remaining failures.
+
+  **Cleanup:** PathFinder.cpp + PathFinder.h reverted to baseline
+  via `git checkout`. Navigation.dll rebuilt clean. Working tree
+  clean. Tile (40, 29) md5 `cc0d89c42d9abf4737ba52a369c5f3f7`
+  unchanged.
+
+  **Loop 24 sweep tally:** Unchanged at **19 / 4 / 0**.
+
+  **Next iteration — Phase A2:** Extend
+  `tools/PathPhysicsProbe` with `--dump-poly-stack` enumerating
+  ALL `dtPoly` entries whose AABB overlaps a probe coord ±10y Z
+  window via DIRECT tile poly iteration (NOT `findNearestPoly`).
+  Output TSV with polyref, surfaceZ, posOverPoly, area, flags,
+  vertCount. Diagnostic only; output feeds Phase A3 (multi-knob
+  bake regen) and Phase A4 (validator-driven targeted cull). No
+  live test impact this phase.
+
+  Memory references:
+  [[project_pfs_loop24_phase_a1_neutral]] (new),
+  [[project_pfs_loop23_close_attempt_three_surfaces]],
+  [[project_pfs_loop21_trap_diagnosis]],
+  [[feedback_pathfinding_freeze]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family

@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-17 (specs + plan reorganized for end-state coverage; AOTA architecture deep-dive landed 2026-05-16; pathfinding Phase 1 S1.3 sweep at 19/4 with 0 unrun under 100-min budget; loop 20 unblocked the bake-validation cull pipeline via commit `0b2164d9`; loop 21 shipped `tools/PathPhysicsProbe.exe --dump-polyrefs` (commit `c4415201`); loop 22 confirmed the bake-fidelity ceiling via threshold-relax cascade discovery — relaxing Z-delta exposes deeper LOS+local-physics failures at the START of each route, all catching the same tile (40,29) bake issue at different assertion layers; real fix is tile re-bake, native PathFinder.cpp air-interp detection, or off-mesh connections, all multi-cycle work tracked in Plan/10).
+Last refresh: 2026-05-18 (loop 24 — dual-track /loop "Pathfinding Close-Out" started; Phase A1 executed end-to-end: PathFinder.cpp polyref==0 guard at main `iterPos:1936` + `findStraightPath` post-process with DEFAULT extents (2.0, 1.8, 2.0), +78 LOC, MSBuild green. OG zeppelin 4/4 critical gate held. CriticalWalkLegs **19/4/0 unchanged** — no closure, no regression. Root cause of no-op: failing corner `(1347.3,-4540.6,35.8)` = loop-21 coord 1 IS a densifier midpoint at lines 1919-1931, NOT the iterPos main emit — loop 23 mis-identified the layer. No PathFinder.cpp-layer fix can close the 4 remaining failures (densifier-layer guards already proven to regress per loop-23 Surface B). Reverted to baseline; advancing to Phase A2 (probe `--dump-poly-stack` for full polyref enumeration at coord ±10y Z window). See "Pathfinding Close-Out" section below.).
 
 ## Rules
 
@@ -53,7 +53,7 @@ Last refresh: 2026-05-17 (specs + plan reorganized for end-state coverage; AOTA 
 | `S1.0` | `IBotTask` contract migration | `monorepo-worker` | **done** (2026-05-12) |
 | `S1.1` | Physics parity wrap-up | `monorepo-worker` | open (guard green 12/12 OG; need representative checkpoints per family) |
 | `S1.2` | MovementController parity audit | `monorepo-worker` | audit green (2026-05-12, 33/33) |
-| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-17 loop 22; 19/4 + 0 unrun; ARCHITECTURAL CEILING confirmed via threshold-relax cascade — 4 failures have nested assertion layers (Z-delta → LOS → local physics → slope) all catching the same tile (40,29) bake issue; whack-a-mole proven; real fix is tile re-bake / native PathFinder.cpp / off-mesh connections in Plan/10; test.runsettings TestSessionTimeout bumped 60→100min as safety margin) |
+| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-18 loop 24; 19/4 + 0 unrun; Phase A1 (`PathFinder.cpp` polyref==0 SKIP-then-bail guard at main `iterPos:1936` + `findStraightPath` post-process, DEFAULT extents) executed: OG zep 4/4 green, CriticalWalkLegs **unchanged** at 19/4/0, **no regression**. Failing corner 42 `(1347.3,-4540.6,35.8)` = loop-21 coord 1 is a DENSIFIER MIDPOINT (line 1919-1931) NOT iterPos:1936; loop-23 mis-identified the layer. Densifier-layer guards proven to regress (loop-23 Surface B). PathFinder.cpp-layer fix architecturally insufficient. Reverted; advancing to Phase A2 = probe `--dump-poly-stack` diagnostic.) |
 | `S1.4..S1.14` | 11 family slots (Travel, Combat, Questing, Dungeon, BG, Gather, Craft, Economy, Social, Recovery, Raid-formation) | various | open (no dry-run yet) |
 | `S1.15` | Trade null guards (6 actions) | `monorepo-worker` | implemented (2026-05-15; live TradeParityTests pending) |
 | `S1.16` | Craft packet path (BG) | `monorepo-worker` | open |
@@ -117,6 +117,65 @@ docker restart wwow-pathfinding  # after MmapGen tile regen
 # Validation harness (OG zeppelin)
 dotnet test Tests/Navigation.Physics.Tests --filter "OgZeppelin"
 ```
+
+## Pathfinding Close-Out (loop 24+, started 2026-05-18)
+
+Dual-track /loop driven by
+[`Plan/Handoffs/2026-05-17-pathfinding-close-23-parallel.md`](Plan/Handoffs/2026-05-17-pathfinding-close-23-parallel.md)
+follow-on plan. Closes the 4 remaining tile (40,29) failures (Track A)
+OR exhausts options and accepts 19/4 (A6). Track B prototypes a
+skip-voxelization bake pipeline as a long-term replacement.
+
+### State
+- Current tile (40,29) md5: `cc0d89c42d9abf4737ba52a369c5f3f7` (baseline)
+- Last CriticalWalkLegs tally: **19/4/0**
+- Last iteration: **loop 24, Phase A1 (NEUTRAL — no closure, no regression, reverted)**
+- Last commit: pending (this loop's docs commit)
+
+### Track A — Close-23 (sequential phases)
+- [x] **A1: Surface B at right layer** — 2026-05-18 NEUTRAL. PathFinder.cpp polyref==0 SKIP-then-bail guard at main `iterPos:1936` + `findStraightPath` post-process (default extents). +78 LOC, MSBuild green. OG zep 4/4 critical gate held; CriticalWalkLegs **19/4/0 unchanged**, no regression. Reverted. Root cause: failing corners are densifier midpoints (line 1919-1931), not iterPos main emit — loop 23 mis-identified the layer. See [[project_pfs_loop24_phase_a1_neutral]].
+- [ ] **A2: Probe coord-stack widening (diagnostic only)** — extend `tools/PathPhysicsProbe` with `--dump-poly-stack` enumerating ALL `dtPoly` entries whose AABB overlaps probe coord ±10y Z window via direct tile poly iteration (not `findNearestPoly`). Output TSV with polyref, surfaceZ, posOverPoly, area, flags, vertCount. Dump full stacks at coords 1, 2, 3 to `/tmp/wwow-loop24-probes/`. **No live test impact. Always commits.**
+- [ ] A3: Multi-knob coordinated bake regen (1 attempt, calibrated from A2 data)
+- [ ] A4: Validator-driven targeted cull (using A2 stack data)
+- [ ] A5: Navigation.cs off-mesh awareness (multi-iteration)
+  - [ ] A5.1: Audit 8 repair phases, identify off-mesh-blind functions
+  - [ ] A5.2: DT_POLYTYPE_OFFMESH_CONNECTION skip-checks for Phase 1 + unit test
+  - [ ] A5.3: Repeat for Phases 2-8 of the repair pipeline
+  - [ ] A5.4: E2E test against an existing OG zeppelin offmesh entry
+  - [ ] A5.5: Add Surface C's 4 new offmesh entries, regen, sweep
+- [ ] A6: Accept 19/4 as permanent (fallback if A1-A5 all attempted, no winner)
+
+### Track B — Skip-voxelization bake prototype
+- [ ] B1: Project scaffold (`tools/SkipVoxBake/`, smoke I/O round-trip on baseline mmtile)
+- [ ] B2: Synthetic input harness (hand-crafted triangle soup for tile (40,29))
+- [ ] B3: Walkable triangle tagging (slope + material/area flags)
+- [ ] B4: 2D walkable region computation per Z layer (Clipper2)
+- [ ] B5: Agent-radius erosion (Minkowski offset)
+- [ ] B6: Polygonize into Detour polys (≤6 verts per polygon)
+- [ ] B7: Inter-layer off-mesh detection
+- [ ] B8: Emit Detour mmtile (bit-compare to Recast bake)
+- [ ] B9: ADT terrain input adapter
+- [ ] B10: WMO input adapter
+- [ ] B11: GO collision adapter
+- [ ] B12: Bake tile (40,29) end-to-end against full MaNGOS data
+- [ ] B13: Probe candidate tile (`--dump-poly-stack` from A2 against skipvox tile)
+- [ ] B14: Live sweep against skipvox tile (23/0 target, full regression)
+- [ ] B15+: Generalize to other tiles
+
+### Next iteration action
+**Phase A2** — extend `tools/PathPhysicsProbe.exe` with `--dump-poly-stack`
+flag that enumerates all `dtPoly` entries whose AABB overlaps a given
+coord ±10y Z window via direct tile iteration (`dtMeshTile->polys[]`),
+NOT `findNearestPoly` (which is loop-21's tool already). Output TSV
+columns: `polyref`, `surfaceZ`, `posOverPoly`, `area`, `flags`,
+`vertCount`. Dump stacks at coords 1 `(1347.3, -4540.6)`, 2 `(1350.2,
+-4528.6)`, 3 `(1348.0, -4537.7)` to `/tmp/wwow-loop24-probes/`. The
+stack data feeds Phase A3 + A4. **No live test impact. Always commits.
+Always advances to Phase A3 (single attempt) regardless of stack
+content.**
+
+### Blocked / questions for user
+None as of 2026-05-18.
 
 ## History
 
