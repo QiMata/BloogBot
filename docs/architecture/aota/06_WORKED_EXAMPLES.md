@@ -414,3 +414,316 @@ AcceptBattlegroundInvite               ← CMSG_BATTLEFIELD_PORT
    travel. Crafting decomposes into reagent sourcing which may
    decompose into gathering routes. The leaf primitives stay small;
    the composition does the heavy lifting.
+
+5. **ML accelerates, never reverses.** Example 5 below threads six
+   advisor consultations through a single Activity: Activity
+   selection ([aota/03 §9](03_DYNAMIC_COMPOSITION.md#9-ml-aided-composition-the-composer-learning-loop)),
+   quest-chain ordering ([aota/04 §11](04_QUEST_CHAINS.md#11-ml-aided-quest-chain-ordering-the-optimizer)),
+   cheapest-source learner ([aota/05 §9](05_ITEM_REQUIREMENTS.md#9-ml-aided-cheapest-source-learner)),
+   sub-Objective tie-break, reward selector ([Spec/03 §Reward selection](../../Spec/03_BOTRUNNER.md#reward-selection)),
+   and the one-shot personality cluster ([Spec/24 §11](../../Spec/24_BEHAVIORAL_VARIATION.md#11-ml-integration--personality-clustering)).
+   Each advisor has a fall-soft path; the worst-case "every advisor
+   NoAdvice" run still completes the chain and still closes roster
+   distance — just ~25-30% slower. The deterministic stack is the
+   floor; ML is the ceiling, not a wall.
+
+## Example 5 — ML-aided composition for a level-40 Mage zone transition
+
+Setup:
+
+- Bot: Gnome Frost Mage, level 40, Alliance, currently in **Eastern
+  Plaguelands** (Light's Hope Chapel). Quests completed: most of the
+  Plaguelands starter quests (level 35-42 bracket exhausted),
+  including the Argent Dawn intro turn-in. Reputation: Argent Dawn
+  *Friendly* (3000/6000 toward Honored).
+- `CharacterRosterGoal.TargetLevel = 60`,
+  `Reputations = [{factionId=529 ArgentDawn, MinStanding=Revered}]`,
+  `Attunements = ["attune.naxx"]` (Argent Dawn Revered is a Naxx
+  prerequisite).
+- Snapshot's 8-axis `roster_goal_distance` (Spec/05):
+  `Level=0.33, GearTier=0.42, AttunementStep=0.62, ReputationTier=0.18,
+   GoldTargetPct=0.10, MountTier=0.50, PvPRank=0.00,
+   ProfessionSkill=0.40`. Total scalar ≈ 0.31; **AttunementStep is
+  dominant**.
+
+The composer just completed `quest.zone.eastern-plaguelands` and is
+picking the next Activity. Three Activities pass §3 algorithm
+filtering for this bot:
+
+| Candidate Activity | Family | Heuristic priority |
+|---|---|---|
+| `quest.zone.western-plaguelands` | ZoneQuesting | 500 (default) |
+| `reputation.argent-dawn` | Reputation | 500 (default) |
+| `dungeon.stratholme-undead` (UD wing) | Dungeon | 500 (default) |
+
+All three tie on band, tie on roster-priority, tie on level fit. The
+deterministic §3 step 5 sort would lex-sort by Activity Id and pick
+`dungeon.stratholme-undead`. The ML-aided composer (Plan/14 S10.6 ML
+mode active) does six advisor consultations during the ensuing
+Activity. Each consultation is shown below with the **Phase-1
+fallback**, the **Phase-3 ML pick**, and the **resulting trace
+line**.
+
+### Consultation 1 — Activity selection (composer learning loop)
+
+Surface: `GetObjectiveAdviceAsync` ([aota/03 §9](03_DYNAMIC_COMPOSITION.md#9-ml-aided-composition-the-composer-learning-loop)).
+
+```
+ObjectiveContext sent:
+  tied_objective_ids = [
+    "activity-quest-zone-western-plaguelands",
+    "activity-reputation-argent-dawn",
+    "activity-dungeon-stratholme-undead"
+  ]
+  tied_objective_costs = [estimated 4h, estimated 3h, estimated 1.5h]
+  tied_unlock_fanout = [12, 28, 7]  # AD-rep unlocks the most
+  roster_goal_distance = [0.33, 0.42, 0.62, 0.18, 0.10, 0.50, 0.00, 0.40]
+
+Phase-1 fallback:
+  Lex sort → "activity-dungeon-stratholme-undead" wins. Bot starts
+  Strat-UD pug attempt.
+
+Phase-3 ML pick (model trained on 200+ similar L40-attune-grind traces):
+  RecommendedObjectiveId = "activity-reputation-argent-dawn"
+  Confidence = 0.78
+  Rationale = "AttunementStep axis (0.62) dominates roster distance.
+               Argent Dawn rep grind closes 0.16 of that axis per hour
+               (turn-in chains in WPL accept Scourgestone +
+               Bone-fragment caches, which incidentally drop from WPL
+               mobs the bot will fight regardless). Stratholme-UD
+               would close the same axis only on group quorum, which
+               is unreliable solo."
+
+Trace line produced:
+  {"ts":..., "kind":"advice_response", "request_id": 9001,
+   "advisor": "objective", "mode_used": "Ml", "model_version": "v1.0.3",
+   "advice": {"recommended_objective_id": "activity-reputation-argent-dawn",
+              "confidence": 0.78,
+              "rationale": "AttunementStep axis dominates..."},
+   "used_by_caller": true}
+```
+
+Bot picks **`reputation.argent-dawn`**. The composer §3 algorithm
+then synthesizes its Objective sequence per
+[03_DYNAMIC_COMPOSITION.md §4](03_DYNAMIC_COMPOSITION.md#4-worked-composequestingobjectives).
+
+### Consultation 2 — Quest-chain ordering optimizer
+
+Surface: `GetObjectiveAdviceAsync` ([aota/04 §11](04_QUEST_CHAINS.md#11-ml-aided-quest-chain-ordering-the-optimizer)).
+
+The composer's per-bot DAG filter (aota/04 §4) returns three
+concurrently-eligible chain heads in WPL:
+
+- `accept-5505` "Glyphic Letter" (Argent Dawn turn-in chain head;
+  rewards 250 rep).
+- `accept-5901` "The Crimson Courier" (side quest, rewards 25 rep +
+  4g80s).
+- `accept-5805` "Scourge Bones" (collect Bone Fragments; rewards 75
+  rep per turn-in, repeatable until Revered).
+
+```
+ObjectiveContext:
+  tied_objective_ids = ["accept-5505", "accept-5901", "accept-5805"]
+  tied_objective_costs = [35min, 22min, 18min]    # heuristic
+  tied_unlock_fanout = [3, 0, 0]                  # only 5505 chains
+
+Phase-1 fallback (lex sort): "accept-5505" first.
+
+Phase-3 ML pick: "accept-5805" first.
+  Rationale = "Repeatable bone-fragment turn-in stacks empirically;
+               bot's bag has 4 Scourge Bones from EPL transit
+               already. Turn-in NOW yields 300 rep with zero
+               additional kill time. 5505 chain head is best after
+               5805 immediate turn-in."
+```
+
+The composer pushes `accept-5805` first. After turnin, the optimizer
+re-queries — now with the bot in WPL central plot — and picks
+`accept-5505` (the chain) next, since the bone-fragment opportunistic
+gain is realized.
+
+### Consultation 3 — Cheapest-source learner (item gate)
+
+Surface: `GetObjectiveAdviceAsync` ([aota/05 §9](05_ITEM_REQUIREMENTS.md#9-ml-aided-cheapest-source-learner)).
+
+`accept-5505` "Glyphic Letter" is itself a precondition-gated quest:
+the bot must already have a **Scourgestone** in inventory
+(itemId=12840). §4 walks the provenance DAG:
+
+```
+ResolveItemSource(12840, bot, db, market):
+  sources = [
+    Source(DROP, creature="Wandering Skeleton", chance=0.04,
+           est_cost=15min, hotspot=WPL Felstone Field),
+    Source(DROP, creature="Plaguebat", chance=0.02,
+           est_cost=28min, hotspot=WPL Northridge Lumber Camp),
+    Source(AH, listing={item:12840, count:1, buyout:1g50s},
+           bot.Coinage=8g50s ≥ 1g50s, est_cost=10min travel-to-Booty-Bay-AH),
+  ]
+```
+
+```
+Phase-1 fallback: sources.minBy(s => s.cost) → AH (10min).
+
+Phase-3 ML pick: DROP (Wandering Skeleton).
+  Rationale = "AH listing 4 minutes old; market scrape stale rate
+               historically ~30% for L40-band 1g listings — bot
+               races to AH, listing gone, takes 20+min real time.
+               Wandering Skeleton historical actual_cost_p50 for
+               L40 Mage = 12min (heuristic 15min overestimate).
+               DROP also yields ~80 XP per kill on the way, closing
+               Level axis (0.33 → 0.31)."
+```
+
+Bot heads to Felstone Field and farms Wandering Skeletons. Within
+14 wall-clock minutes the Scourgestone drops. Bot now has the
+prerequisite item.
+
+### Consultation 4 — Composer tie-break on next sub-Objective
+
+Surface: same `GetObjectiveAdviceAsync` ([aota/03 §9](03_DYNAMIC_COMPOSITION.md#9-ml-aided-composition-the-composer-learning-loop)) but at a sub-Objective scope.
+
+After the Scourgestone drops, the composer must decide between two
+tied Objectives in the bot's queue:
+
+- `travel-to-5505-pickup` (Glyphic Letter pickup at Light's Hope).
+- `turnin-5805` (Scourge Bones repeatable turn-in at Chillwind Camp).
+
+Both are valid; both close `AttunementStep` and `ReputationTier`.
+
+```
+Phase-1 fallback (lex sort): "travel-to-5505-pickup" first.
+
+Phase-3 ML pick: "turnin-5805" first.
+  Rationale = "Light's Hope and Chillwind are both 4-5min flight;
+               Chillwind has the AH and mailbox the bot needs to
+               liquidate the 6 Bone-Fragment-side-drop items
+               (Sharp Claw, etc., ~3g vendor each). Travel to
+               Chillwind first amortizes the city-services side
+               quests; bot's GoldTargetPct (0.10) also closes."
+```
+
+### Consultation 5 — Reward selector
+
+Surface: `GetRewardAdviceAsync` ([Spec/03 §Reward selection](../../Spec/03_BOTRUNNER.md#reward-selection)).
+
+`turnin-5505` "Glyphic Letter" offers 3 reward choices: a head item,
+a chest item, an off-hand frill. Bot is a Mage; the head and chest
+both match the spec's `TargetGearSet`.
+
+```
+RewardContext:
+  reward_item_ids = [18746, 18747, 18748]   # synthetic ids
+  reward_item_quality = [3, 3, 2]            # both head + chest are blue
+  reward_item_slot = [HEAD, CHEST, BACK]
+  reward_item_sell_price = [400c, 350c, 80c]
+  currently_equipped_in_slot = [18001, 18002, 18003]   # bot's current
+
+Phase-1 fallback (first-valid by index): index 0 (HEAD).
+
+Phase-2 rules (BiS table at Config/decision-engine/reward-rules.json):
+  FrostMage @ L40 reward-rules.json declares head=BiS-priority,
+  chest=second. Picks index 0 (HEAD).
+
+Phase-3 ML pick: index 1 (CHEST).
+  Rationale = "Bot's current head (18001) is already mid-tier blue;
+               chest slot (18002) is the lower-quality green that
+               the Mage spec's BiS rule book flags as 'upgrade soon'.
+               Picking CHEST closes more GearTier-axis distance.
+               PersonalityProfile.RewardPriority=Bis honors this."
+```
+
+### Consultation 6 — Personality jitter applied on every Tick
+
+Surface: `PersonalityProfile.Jitter("ReactionTimeJitterMs")` ([Spec/24 §6](../../Spec/24_BEHAVIORAL_VARIATION.md#6-variance-application-via-task-base-class)).
+
+Every Task pop / push adds 50-250 ms of reaction-time jitter from
+the bot's `PersonalityProfile` (deterministic per accountName). This
+is the *only* per-tick advisor consultation — actually no advisor
+call; the personality is a one-shot at profile generation
+([Spec/24 §11](../../Spec/24_BEHAVIORAL_VARIATION.md#11-ml-integration--personality-clustering)).
+
+For this bot ("GNOMEFROST07" hash → cluster `talkative-altoholic`),
+`ReactionTimeJitterMs = 187` and `IntraRotationJitterMs = 64`. Two
+other bots running the same Activity at the same time emit
+discernibly different `dispatchedAtMs` cadence in their traces.
+
+### Outcome and the dynamic-progressive invariant
+
+After 2h 15min (vs 3h heuristic estimate; the ML path saved 45min),
+the bot reaches AD *Honored* (4500/6000 → 6000/6000 Honored, 750/8400
+into Revered). Outcome trace line:
+
+```json
+{"ts":..., "kind":"outcome",
+ "activity_id":"reputation.argent-dawn",
+ "completion":"complete",
+ "wall_clock_ms": 8100000,
+ "xp_gained": 18750,
+ "gear_slots_filled": 1,       // chest swap from consult 5
+ "gold_delta_copper": +24500,  // bone-fragment side-drops sold
+ "roster_distance_delta": -0.087}
+```
+
+`roster_distance_delta = -0.087` — the Activity strictly closed
+distance. Replaying the same scenario with **all six advisors forced
+to `NoAdvice`** (Mode=Trivial) would have produced
+`roster_distance_delta ≈ -0.061` over 3h (the Phase-1 fallback path
+is slower but still progressive). The ML path saved 45 minutes AND
+closed +0.026 additional distance — but **the deterministic floor is
+preserved**: ML accelerates closure; it cannot reverse it.
+
+This is the dynamic-progressive invariant in concrete form:
+
+- **Dynamic.** A bot with `Level`-axis dominance instead of
+  `AttunementStep`-axis dominance (e.g. a different roster goal)
+  would have gotten Consultation 1's advice toward `quest.zone.western-plaguelands`
+  instead of `reputation.argent-dawn` — same composer, different
+  pick, different trace.
+- **Progressive.** Every advisor's pick had a fall-soft path. The
+  worst-case ML outage (every advisor returns `NoAdvice`) still
+  completes the chain and still closes roster distance — just
+  ~25-30% slower.
+
+## Plan-slot cross-reference (ML-aided example)
+
+The six advisor consultations in Example 5 each pin to a Plan/14
+slot:
+
+| Consultation | Surface | Plan/14 slot |
+|---|---|---|
+| 1 Activity selection | `GetObjectiveAdviceAsync` (composer-level) | [S10.2](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s102--objective-composer-tie-breaker) |
+| 2 Quest-chain ordering | `GetObjectiveAdviceAsync` (chain-head tied set) | [S10.2](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s102--objective-composer-tie-breaker) |
+| 3 Cheapest-source learner | `GetObjectiveAdviceAsync` (source-candidate tied set) | [S10.2](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s102--objective-composer-tie-breaker) |
+| 4 Sub-Objective tie-break | `GetObjectiveAdviceAsync` (composer-level again) | [S10.2](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s102--objective-composer-tie-breaker) |
+| 5 Reward selector | `GetRewardAdviceAsync` | [S10.1](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s101--reward-selector-advisor-wire) |
+| 6 Personality cluster | `GetPersonalityClusterAdviceAsync` (one-shot at profile gen) | [S10.11](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s1011--personalitycluster-advisor-wire) |
+
+Trace capture for the example is owned by [`Plan/14 S10.7`](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s107--training-trace-plumbing);
+the live-validation guard is [`Plan/14 S10.8`](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s108--livevalidation-for-advisor-wire).
+
+## Test surface (Example 5 specifically)
+
+Contract tests live at
+`Tests/BotRunner.Tests/Activities/MlAidedWorkedExampleContractTests.cs`.
+Assertions go through trace JSONL files emitted to
+`tmp/test-runtime/traces/MlAidedWorkedExample_*/` plus
+`snapshot.advice_log[]` (Spec/19 field 36) entries.
+
+- **`MlAidedWorkedExample_Consultation1_FallsBackOnNoAdvice`** —
+  replaying the Example 5 scenario with the Activity-selection
+  advisor pinned to `NoAdvice` produces the Phase-1 lex-fallback pick
+  (`dungeon.stratholme-undead`), and the Activity still completes
+  with `outcome.roster_distance_delta ≤ 0`.
+- **`MlAidedWorkedExample_AllSixConsultationsLogged`** — a real Ml-
+  mode run produces ≥ 6 `advice_log` entries across the Activity,
+  one per Consultation in §Example 5, with `advisor` values covering
+  `{objective, reward, personality_cluster}`.
+- **`MlAidedWorkedExample_DynamicProgressive_OutcomeDeltaIsNonPositiveTest`** —
+  the dynamic-progressive guard. Two synthetic snapshots identical
+  except for axis dominance (`AttunementStep` vs `Level`) produce
+  different Consultation 1 picks (`reputation.argent-dawn` vs
+  `quest.zone.western-plaguelands`); both completions trace
+  `outcome.roster_distance_delta ≤ 0`. The all-advisors-NoAdvice
+  replay also completes with non-positive delta — the deterministic
+  floor.
