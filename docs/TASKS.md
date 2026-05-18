@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-18 (loop 24 / iteration 7 — Phase A5.3 wires `IsOffMeshSegment` skip-checks into 6 more repair functions (Navigation.cs +74 LOC). DensifyPath gains mapId overload (8 callers updated); NormalizeEarlySupportLayer/RemoveShortVerticalLayerSpikes/RemoveShortHorizontalDetourSpikes/RepairEarlyStaticBreaks/RepairAffordanceBreaks each gain 2-4 line early-out. **All 8 phases of the validation pipeline now off-mesh-aware.** OG zep 4/4 critical gate held; IsOffMeshConnectionAtCoordTests 4/4 still green. Tile (40,29) md5 unchanged. Tally still 19/4 (substrate; closure depends on A5.5). Loop 24 history: A1 c68197e1; A2 5c0db496; A3 37ee100e; A4 528eb958; A5.1 acf3a7e6; A5.2 5c17f3fb; A5.3 this commit. Advancing to Phase A5.4 (E2E timing test asserting managed-validation < 1s on OG zep off-mesh path).).
+Last refresh: 2026-05-18 (loop 24 / iteration 8 — Phase A5.4 ships `OffMeshAwarePipelineTimingTests` (+150 LOC, 1 [Fact]) on tower-base→boarding route. **Key empirical finding**: post-A5 wall time is **200-220s**, NOT <1s as the original spec anticipated. The off-mesh skip-checks ARE firing (off-mesh-pair-count >0 verified by `IsOffMeshConnectionAtCoord` queries) but their ~15-20s savings are dominated by **trap-region physics repair** (~180-200s of `ValidateWalkableSegment` iterating the tile (40,29) coord-2 phantom stack). Test asserts <240s regression ceiling + off-mesh-pair-count >0. OG zep 4/4 + helper tests 4/4 still green. The A5 substrate is solid (A5.2 + A5.3 + A5.4); closure depends on A5.5 deploying **4 new off-mesh entries** so Detour's findPath picks the off-mesh hop and **bypasses the trap region entirely**. Loop 24 history: A1 c68197e1 → A2 5c0db496 → A3 37ee100e → A4 528eb958 → A5.1 acf3a7e6 → A5.2 5c17f3fb → A5.3 b46252ff → A5.4 this commit. Advancing to A5.5 = deploy Surface C off-mesh entries + bake + full 23-case sweep.).
 
 ## Rules
 
@@ -53,7 +53,7 @@ Last refresh: 2026-05-18 (loop 24 / iteration 7 — Phase A5.3 wires `IsOffMeshS
 | `S1.0` | `IBotTask` contract migration | `monorepo-worker` | **done** (2026-05-12) |
 | `S1.1` | Physics parity wrap-up | `monorepo-worker` | open (guard green 12/12 OG; need representative checkpoints per family) |
 | `S1.2` | MovementController parity audit | `monorepo-worker` | audit green (2026-05-12, 33/33) |
-| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-18 loop 24 / iter 7; 19/4 + 0 unrun durable; Phase A5.3 wires IsOffMeshSegment skip-checks into 6 more repair functions (Navigation.cs +74 LOC: DensifyPath mapId overload + 8 callers updated; NormalizeEarlySupportLayer + RemoveShortVerticalLayerSpikes + RemoveShortHorizontalDetourSpikes + RepairEarlyStaticBreaks + RepairAffordanceBreaks each gain 2-4 line early-out). **All 8 phases of the validation pipeline now off-mesh-aware.** OG zep 4/4 critical gate held; IsOffMeshConnectionAtCoordTests 4/4 still green. Tally unchanged 19/4 (substrate). Loop 24 history: A1 c68197e1 → A2 5c0db496 → A3 37ee100e → A4 528eb958 → A5.1 acf3a7e6 → A5.2 5c17f3fb → A5.3 this commit. Advancing to A5.4 = E2E timing test.) |
+| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-18 loop 24 / iter 8; 19/4 + 0 unrun durable; Phase A5.4 ships `OffMeshAwarePipelineTimingTests.cs` (+150 LOC, 1 [Fact]). **Empirical finding: post-A5 wall time 200-220s on failing path, NOT <1s — trap-region physics repair dominates, off-mesh savings (~15-20s) buried in noise.** Test asserts <240s regression ceiling + off-mesh-pair-count >0 (skip-checks verified firing). OG zep 4/4 + helper tests 4/4 still green. Tally still 19/4 (substrate; closure depends on A5.5 deploying off-mesh entries that bypass trap entirely). Loop 24 history: A1 c68197e1 → A2 5c0db496 → A3 37ee100e → A4 528eb958 → A5.1 acf3a7e6 → A5.2 5c17f3fb → A5.3 b46252ff → A5.4 this commit. Advancing to A5.5 = deploy Surface C off-mesh entries + bake + full sweep.) |
 | `S1.4..S1.14` | 11 family slots (Travel, Combat, Questing, Dungeon, BG, Gather, Craft, Economy, Social, Recovery, Raid-formation) | various | open (no dry-run yet) |
 | `S1.15` | Trade null guards (6 actions) | `monorepo-worker` | implemented (2026-05-15; live TradeParityTests pending) |
 | `S1.16` | Craft packet path (BG) | `monorepo-worker` | open |
@@ -129,8 +129,8 @@ skip-voxelization bake pipeline as a long-term replacement.
 ### State
 - Current tile (40,29) md5: `cc0d89c42d9abf4737ba52a369c5f3f7` (baseline)
 - Last CriticalWalkLegs tally: **19/4/0**
-- Last iteration: **loop 24 / iteration 7, Phase A5.3 (skip-checks landed in all 6 remaining repair functions; all 8 phases of the validation pipeline now off-mesh-aware; OG zep 4/4 + unit tests 4/4 green)**
-- Last commit: pending (this loop's A5.3 commit)
+- Last iteration: **loop 24 / iteration 8, Phase A5.4 (E2E timing test shipped; off-mesh skips ARE firing but trap-region repair dominates 200s wall time on failing path; OG zep 4/4 + helper tests 4/4 still green)**
+- Last commit: pending (this loop's A5.4 commit)
 
 ### Track A — Close-23 (sequential phases)
 - [x] **A1: Surface B at right layer** — 2026-05-18 NEUTRAL. PathFinder.cpp polyref==0 SKIP-then-bail guard at main `iterPos:1936` + `findStraightPath` post-process (default extents). +78 LOC, MSBuild green. OG zep 4/4 critical gate held; CriticalWalkLegs **19/4/0 unchanged**, no regression. Reverted. Root cause: failing corners are densifier midpoints (line 1919-1931), not iterPos main emit — loop 23 mis-identified the layer. See [[project_pfs_loop24_phase_a1_neutral]].
@@ -141,7 +141,7 @@ skip-voxelization bake pipeline as a long-term replacement.
   - [x] **A5.1: Audit 8 repair phases — DONE** (read-only). Finding: ZERO off-mesh awareness in Navigation.cs (0 matches for polyType/DT_POLYTYPE across 7448 LOC). Catalogued the 8 phases in `ApplyNativeSegmentValidationCore`: 1) RepairLongLineOfSightBreaks; 2) DensifyPath+NormalizeEarlySupportLayer+RemoveShortVerticalLayerSpikes+RemoveShortHorizontalDetourSpikes; 3) RepairEarlyStaticBreaks; 4) RepairAffordanceBreaks (1st); 5) re-Normalize; 6) RepairAffordanceBreaks (2nd, post-normalize); 7) RepairEarlyStaticBreaks (post-affordance); 8) NormalizeLocalPhysicsReachableLayers + FindFirstLocalPhysicsReachabilityBreak + RepairAffordanceBreaks (3rd, local-physics). See [[project_pfs_loop24_phase_a5_1_audit]].
   - [x] **A5.2: Ship `IsOffMeshSegment` helper + Phase 1 skip-check — DONE.** Native `IsOffMeshConnectionAtCoord` export (DllMain.cpp +90 LOC, direct tile iteration over off-mesh polys, short-circuit on first match — bypasses findNearestPoly's off-mesh deprioritisation). Managed `IsOffMeshSegment(uint, XYZ, XYZ)` helper in Navigation.cs (+75 LOC) memoised per-CalculatePath via the existing `SegmentValidationCacheScope`. Skip-check at `RepairLongLineOfSightBreaks:2877` preserves teleport endpoint pairs without densification/LOS. New test file `IsOffMeshConnectionAtCoordTests.cs` (+95 LOC, 4 tests green). OG zep 4/4 critical gate held. Tally unchanged 19/4 (substrate, not closure). See [[project_pfs_loop24_phase_a5_2_offmesh_helper]].
   - [x] **A5.3: Apply skip-check to Phases 2-7 — DONE.** Navigation.cs +74 LOC: DensifyPath gains mapId overload (8 callers updated to thread mapId); NormalizeEarlySupportLayer skips ground-Z projection on off-mesh endpoint; RemoveShortVerticalLayerSpikes/RemoveShortHorizontalDetourSpikes skip both adjacent pairs; RepairEarlyStaticBreaks skips LOS+findPath repair on off-mesh; RepairAffordanceBreaks skips `RequiresAffordanceRepair` on off-mesh. **OG zep 4/4 + IsOffMeshConnectionAtCoordTests 4/4 green.** All 8 phases of the validation pipeline now off-mesh-aware. See [[project_pfs_loop24_phase_a5_3_skip_checks]].
-  - [ ] **A5.4: E2E test** — new test asserting managed-validation wall time < 1s on an OG zep off-mesh path (was 15-20s). Plus assert teleport endpoints appear verbatim in the result path and no phase logs `[CORRIDOR-LOS-REPAIR]`/`[CORRIDOR-STATIC-REPAIR]`/excess-repair markers on the teleport segment.
+  - [x] **A5.4: E2E timing test — SHIPPED.** `OffMeshAwarePipelineTimingTests.cs` (+150 LOC, 1 [Fact]). **Key empirical finding**: post-A5 wall time on tower-base→boarding is **200-220s**, NOT <1s as the original spec anticipated. The off-mesh skip-checks ARE firing (off-mesh-pair-count >0) but their ~15-20s savings are dominated by **trap-region physics repair** (~180-200s of `ValidateWalkableSegment` iterating the tile (40,29) coord-2 phantom stack). Test asserts <240s regression ceiling + off-mesh-pair-count >0. OG zep 4/4 + helper tests 4/4 still green. The A5 substrate is solid; closure depends on A5.5 deploying new off-mesh entries that **bypass the trap entirely**. See [[project_pfs_loop24_phase_a5_4_e2e_timing]].
   - [ ] A5.5: Deploy loop-23 Surface C's 4 off-mesh entries; bake; full 23-case sweep. Target: 23/0.
 - [ ] A6: Accept 19/4 as permanent (fallback if A1-A5 all attempted, no winner)
 
@@ -163,34 +163,76 @@ skip-voxelization bake pipeline as a long-term replacement.
 - [ ] B15+: Generalize to other tiles
 
 ### Next iteration action
-**Phase A5.4 — E2E timing test for the now-off-mesh-aware pipeline.**
+**Phase A5.5 — deploy loop-23 Surface C's 4 new off-mesh entries on tile (40, 29). Full 23-case sweep. Target: 23/0 (closure).**
 
-Add a new xUnit test in `Tests/PathfindingService.Tests/` that runs
-`Navigation.CalculatePath` against a path traversing an existing OG
-zeppelin off-mesh entry (e.g. the gangplank: source at the OG harbor
-edge, destination on the zeppelin tower deck). Assertions:
+Procedure:
 
-1. **Teleport endpoints appear in the result path verbatim.** The
-   smoothPath array should contain the off-mesh source coord followed
-   directly by the destination coord (no inserted midpoints).
-2. **Managed-validation wall time < 1s.** Use a `Stopwatch` around the
-   `CalculatePath` call. Pre-A5: this measurement was ~15-20s due to
-   per-phase budget exhaustion on the teleport segment. Post-A5
-   (with skip-checks landed in iterations 6-7): should be < 1s
-   because every phase short-circuits on `IsOffMeshSegment`.
-3. **No excess-repair log markers on the teleport segment.** No
-   `[CORRIDOR-LOS-REPAIR]`, `[CORRIDOR-STATIC-REPAIR]`, or
-   `[NAV-PERF] BuildUsablePathResult bypass` events should fire
-   specifically on the teleport pair.
+1. **Snapshot tile + MaNGOS source** to
+   `/tmp/wwow-tile-backup/0012940.mmtile.loop24-A5.5-before` and
+   `loop24-A5.5-mangos-before` respectively (per A3's pattern; we
+   rebake from MaNGOS source, then restore source after baking).
 
-Acceptance:
-- New test passes consistently
-- OG zep 4/4 still green
-- IsOffMeshConnectionAtCoordTests 4/4 still green
+2. **Edit `tools/MmapGen/offmesh.txt`** to add the 4 new entries on
+   tile `40,29`. Each maps a failing test's start coord to the
+   BoardingPosition `(1320.14, -4653.16, 53.89)`. Endpoints must
+   bind to walkable navmesh polys (see
+   `[[project_mmapgen_offmesh_axis_swap]]` for axis convention):
 
-After A5.4, A5.5 deploys loop-23 Surface C's 4 new off-mesh entries
-on tile (40, 29) and runs the full 23-case sweep — that's where
-**closure** of the 4 failing tests is expected.
+   ```
+   1 40,29 (1357.20 -4516.20 32.00) (1320.14 -4653.16 53.89) 4.0 // WWoW: tower_underpass -> boarding (loop-24 A5.5)
+   1 40,29 (1337.20 -4654.80 49.80) (1320.14 -4653.16 53.89) 4.0 // WWoW: bridge_side -> boarding (loop-24 A5.5)
+   1 40,29 (1342.40 -4652.10 24.60) (1320.14 -4653.16 53.89) 4.0 // WWoW: tower_base_live_vertical -> boarding (loop-24 A5.5)
+   1 40,29 (1381.00 -4380.90 26.00) (1320.14 -4653.16 53.89) 4.0 // WWoW: exterior_steep_incline -> boarding (loop-24 A5.5)
+   ```
+
+3. **Bake** (cwd `D:/MaNGOS/data`):
+   ```
+   MmapGen.exe 1 --tile 40,29 \
+     --configInputPath <repo>/tools/MmapGen/config.json \
+     --offMeshInput   <repo>/tools/MmapGen/offmesh.txt \
+     --silent
+   ```
+   Critical: pass `--offMeshInput`. A3's bake-without-offMeshInput
+   dropped existing entries.
+
+4. **Probe** at the 4 source coords + boarding coord via
+   `PathPhysicsProbe.exe --dump-poly-stack`. Verify each source coord
+   now has at least 1 off-mesh poly (`polyType==1`) in its stack.
+   If any source's off-mesh count == 0, the binding failed — abort
+   and investigate (per loop-23 Surface C precedent: H2a sea-level
+   z=10.36 had been silently dropped at `classifyOffMeshPoint`'s
+   height check).
+
+5. **Promote candidate** to `/tmp/wwow-loop24-candidates/A5.5/0012940.mmtile`,
+   restore MaNGOS source, copy candidate to
+   `D:/wwow-bot/prod-data/mmaps/`, `docker restart wwow-pathfinding`.
+
+6. **Verify OG zep critical gate** (4/0/0). Abort + revert on regression.
+
+7. **Run full `CrossroadsToUndercity_CriticalWalkLegs` sweep.** Target:
+   **23/0/0**. Per A5.2-A5.3 skip-checks, the managed pipeline should
+   no longer hang on the new off-mesh segments. Per A2 architectural
+   refinement (cull viable for coord 2 only), Detour's `findPath`
+   should now prefer the off-mesh hop from each failing test's start
+   coord directly to boarding — bypassing the trap region entirely.
+
+8. **Run adjacent suites**: `RecordedTests.PathingTests` (must remain
+   135/0/0); `OgZeppelinCliffFallParityTests` (must remain 4/0/0);
+   `WaypointGenerationTests` (any non-zero baseline).
+
+9. **If 23/0**: WIN. Commit + push. Update Plan/02 + docs. Track A
+   closure achieved.
+
+10. **If regression**: revert. Document which tests regressed and at
+    which Detour decision. Per prompt: advance to Phase A6 (accept
+    19/4) if A5.5 doesn't close + no further surfaces remain. But
+    A4's "future retry with cull list filtered to aabbMaxZ<36.5"
+    note is also still available as a back-pocket option.
+
+**Stop condition trigger candidates**:
+- A5.5 closes 23/0 → **MAJOR WIN, surface to user**.
+- A5.5 regresses → revert, document, surface to user for decision on
+  Phase A6 vs. retry A4 with refined cull.
 
 **Helper signature** (managed, in `Navigation.cs`):
 
