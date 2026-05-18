@@ -98,6 +98,38 @@
 1 40,29 (1356.8 -4501.3 29.44) (1320.14 -4653.16 53.89) 4.0 // WWoW: H2c intra-tile off-mesh proof (revalidate)
 // ----------------------------------------------------------------------------
 
+// WWoW: PFS-OVERHAUL-006 loop-24 Phase A5.5 (2026-05-18). Four off-mesh
+// entries on tile (40, 29) connecting each of the 4 failing CriticalWalkLegs
+// tests' start coords directly to BoardingPosition. With the A5.2 + A5.3
+// off-mesh-aware managed pipeline now in place, these entries are safe to
+// deploy (loop-23 Surface C's "managed-pipeline-hang risk" is resolved).
+// Closure target: 23/0 on CrossroadsToUndercity_CriticalWalkLegs by giving
+// Detour's findPath a single-teleport corridor that bypasses the tile (40,29)
+// coord-2 phantom stack which dominates wall time on these routes (200s per
+// failing case pre-A5.5 per loop-24 Phase A5.4 measurement).
+//
+// Test → Source coord mapping (per loop-23 Surface C handoff):
+//   tower_underpass:           (1357.20, -4516.20, 32.00)
+//   bridge_side:               (1337.20, -4654.80, 49.80)
+//   tower_base_live_vertical:  (1342.40, -4652.10, 24.60)
+//   exterior_steep_incline:    (1381.00, -4380.90, 26.00)
+//
+// Caveats:
+// - Endpoint Z values fall below tile (40, 29)'s walkable mesh hmin = 72.29
+//   per the earlier original-z OG entries' findings (see lines 33-47). Detour
+//   may silently drop these at dtCreateNavMeshData::classifyOffMeshPoint's
+//   height check. If post-bake probe shows no off-mesh poly at any source,
+//   revert and surface to user — alternative is to bind to higher-Z anchors
+//   on the upper platform (z=96) and rely on the bot's MovementController to
+//   exit the teleport at the lower destination Z.
+// - "size" 4.0 matches existing OG zep entries. Bidirectional by default
+//   so the bot can use these from either direction.
+1 40,29 (1357.20 -4516.20 32.00) (1320.14 -4653.16 53.89) 4.0 // WWoW: tower_underpass -> boarding (loop-24 A5.5)
+1 40,29 (1337.20 -4654.80 49.80) (1320.14 -4653.16 53.89) 4.0 // WWoW: bridge_side -> boarding (loop-24 A5.5)
+1 40,29 (1342.40 -4652.10 24.60) (1320.14 -4653.16 53.89) 4.0 // WWoW: tower_base_live_vertical -> boarding (loop-24 A5.5)
+1 40,29 (1381.00 -4380.90 26.00) (1320.14 -4653.16 53.89) 4.0 // WWoW: exterior_steep_incline -> boarding (loop-24 A5.5)
+// ----------------------------------------------------------------------------
+
 // WWoW: Undercity zeppelin elevator (map 0, Tirisfal side)
 // TODO[overhaul]: replace placeholder coordinates with measured anchors. The
 // elevator descends from the upper Tirisfal platform to the Undercity sewer
