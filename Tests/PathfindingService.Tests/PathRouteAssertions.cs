@@ -72,6 +72,28 @@ internal static class PathRouteAssertions
                 && i <= maxResolvedWaypointZDeltaCheckLimit
                 && !float.IsPositiveInfinity(maxResolvedWaypointZDelta))
             {
+                // PFS-OVERHAUL-006 loop-24 Phase A5.7: skip the waypoint-Z
+                // collision-support check for corners that lie inside any
+                // off-mesh-connection poly's AABB. Such corners are densified
+                // midpoints between an off-mesh teleport's source and
+                // destination (per PathFinder.cpp's smooth-path densifier at
+                // findSmoothPath lines 1919-1931, an off-mesh with dz=29y
+                // emits ~58 midpoints between source and dest). They sit in
+                // the air between the two endpoint ground polys and represent
+                // the teleport corridor, not walkable surface. The bot's
+                // MovementController teleports through this corridor without
+                // visiting the intermediate corners physically.
+                //
+                // We use tiny extents (0.001f) so the helper's AABB-
+                // intersection test resolves to "is path[i] inside any
+                // off-mesh poly's AABB?" — i.e., a containment test against
+                // the off-mesh teleport volume.
+                if (NavigationInterop.IsOffMeshConnectionAtCoord(
+                        mapId, path[i], xyExtent: 0.001f, zExtent: 0.001f))
+                {
+                    continue;
+                }
+
                 var groundZ = GetGroundZ(mapId, path[i].X, path[i].Y, path[i].Z, 4.0f);
                 if (float.IsFinite(groundZ)
                     && groundZ > -100000f

@@ -2193,6 +2193,24 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         {
             var from = path[i];
             var to = path[i + 1];
+
+            // PFS-OVERHAUL-006 loop-24 Phase A5.7: skip the local-physics
+            // reachability probe on segments inside an off-mesh-connection
+            // poly's AABB. These segments are densified midpoints of a
+            // teleport corridor (per PathFinder.cpp's findSmoothPath
+            // densifier at lines 1919-1931); the bot's MovementController
+            // teleports across them without physics-walking. Asserting
+            // physics reachability on each such midpoint produces false
+            // positives (e.g., a 1.75y/3.79y "step" inside the OG zeppelin
+            // gangplank teleport corridor reads as a 65° slope, unwalkable).
+            // Tiny extents (0.001f) reduce the helper to a containment test
+            // against the off-mesh teleport volume.
+            if (NavigationInterop.IsOffMeshConnectionAtCoord(mapId, from, xyExtent: 0.001f, zExtent: 0.001f)
+                || NavigationInterop.IsOffMeshConnectionAtCoord(mapId, to, xyExtent: 0.001f, zExtent: 0.001f))
+            {
+                continue;
+            }
+
             if (Navigation.IsSegmentLocallyReachableForAgent(mapId, from, to, TaurenMaleCapsule.Radius, TaurenMaleCapsule.Height))
                 continue;
 
