@@ -150,6 +150,58 @@ directly** for character/server mutation.
 - `.reset` subcommands strip test state between runs:
   `.reset honor|level|spells|stats|talents|items|all`.
 
+## Test staging mode — OnDemand-equivalent by default
+
+The vast majority of LiveValidation tests **stage state with GM
+commands** before asserting on a specific gameplay surface — this
+mirrors the OnDemand circumvention pattern from
+[`Spec/04 §OnDemand vs Autonomous — siloed`](04_ACTIVITIES.md#ondemand-vs-autonomous--siloed).
+The staging mode is correct: tests are not trying to prove that real
+progression works (that's the autonomous side's job — see below);
+they're proving that a specific gameplay surface (fishing, AH,
+raid-formation, BG queue, dungeon clear) works **once the bot is in
+the right pre-condition**.
+
+Two staging modes:
+
+| Mode | Used by | Pre-condition setup |
+|---|---|---|
+| **OnDemand-equivalent** (default) | ~95% of LiveValidation tests | `.character level <N>`, `.reset items`, `.additem`, `.modify reputation`, `.tele`, `.learn`, `.setskill` issued by `LiveBotFixture` helpers (`StageBotRunner*Async`, `EnsureShodanAdminLoadoutAsync`, `EnsureLevelAtLeastAsync`, `ApplyLoadoutAsync`). Bot lands in the desired state in seconds. |
+| **Autonomous-progression** | Tests under [`Tests/BotRunner.Tests/LiveValidation/Progression/`](../../Tests/BotRunner.Tests/LiveValidation/Progression/) | NO `.character level` / NO `.additem` / NO `.modify reputation`. Test resets the character to a true L1 baseline (`.reset all`) and exercises `ProgressionPlanner.PickNextObjective` + the composer + the IBotTask chain end-to-end. The bot reaches L60 through real quest XP, real loot, real AH purchases — over simulated hours. The accelerated `Westworld-Test` realm timers (per [`Spec/16`](16_REALMS_AND_ACCOUNTS.md)) make this tractable in CI. |
+
+### Why the two-mode split is load-bearing
+
+The OnDemand-equivalent path lets the suite stay fast — each test
+runs in seconds-to-minutes, not hours. But it **does not exercise**:
+
+- `ProgressionPlanner.PickNextObjective(...)` actually composing an
+  Objective list from a real L1 snapshot.
+- The composer's quest-chain DAG walk per
+  [`aota/04`](../architecture/aota/04_QUEST_CHAINS.md).
+- The cheapest-source learner per [`aota/05 §9`](../architecture/aota/05_ITEM_REQUIREMENTS.md#9-ml-aided-cheapest-source-learner)
+  resolving real item gates with no GM-applied inventory shortcut.
+- The dynamic-progressive invariant from
+  [`Spec/05 §RosterPlanner.Distance`](05_PROGRESSION.md#rosterplannerdistance--the-canonical-progression-metric)
+  closing real axis distance over an Activity sequence.
+
+The autonomous-progression tests probe those surfaces specifically.
+**One autonomous test per major bracket** (L1→10 starter, L10→25
+Westfall/Barrens-equivalent, L25→40 Stranglethorn-equivalent,
+L40→58 Plaguelands, L58→60 attunement push) is sufficient — the
+gameplay-surface tests (run in OnDemand-equivalent mode) cover the
+individual surfaces.
+
+### The pivotal autonomous test: fresh-L1 first-Objective
+
+The starting test of the autonomous-progression suite asserts that
+**a freshly-created L1 character whose `CharacterRosterGoal` points
+at L60 BiS + mounts + achievements** has its
+`ProgressionPlanner.PickNextObjective` return a *quest pickup*
+Objective (not a gear-chase, not a raid attempt, not an
+attune-step). This is the canonical "the autonomous loop knows where
+to start" assertion. See
+[`Tests/BotRunner.Tests/LiveValidation/Progression/AutonomousFreshL1ProgressionTests.cs`](../../Tests/BotRunner.Tests/LiveValidation/Progression/AutonomousFreshL1ProgressionTests.cs).
+
 ## Test categories (existing)
 
 | Category | Project | Coverage |

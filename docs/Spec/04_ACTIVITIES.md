@@ -244,6 +244,29 @@ for autonomous progression decisions, but for OnDemand, StateManager
 A human OnDemand request never gets rejected for "missing attunement"
 or "lockout active" — the StateManager fixes the bot's state first.
 
+**Test fixtures default to OnDemand-equivalent staging.** The vast
+majority of LiveValidation tests under `Tests/BotRunner.Tests/LiveValidation/`
+need to exercise a *specific* gameplay surface (fishing, AH, raid
+formation, BG queue, dungeon clear) without paying the wall-clock
+cost of simulated progression. They follow the OnDemand circumvention
+pattern: `LiveBotFixture` issues `.character level <N>` /
+`.reset items` / `.additem` / `.modify reputation` / `.tele` GM
+commands via SOAP (port 7878) per [`Spec/13 §GM command policy`](13_TESTING.md#gm-command-policy)
+to drop the bot into the desired pre-condition, then asserts on the
+behavior under test. **This is correct** — the staging mode mirrors
+how OnDemand activities ship; if the OnDemand launcher is allowed to
+GM-command a bot into a state, a test fixture testing that same
+gameplay surface is also allowed.
+
+The exception is **autonomous progression tests** under
+[`Tests/BotRunner.Tests/LiveValidation/Progression/`](../../Tests/BotRunner.Tests/LiveValidation/Progression/)
+(new folder; see [`Spec/13 §Test staging mode`](13_TESTING.md#test-staging-mode--ondemand-equivalent-by-default)),
+which by design start from a true L1 baseline and exercise the
+ProgressionPlanner + composer end-to-end without any
+`.character level` shortcuts. Those are the tests that prove the
+autonomous side actually works — the OnDemand-equivalent tests only
+prove the gameplay surfaces work *after* state is staged.
+
 ## Legality validation
 
 Legality validation has two callers:
