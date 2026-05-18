@@ -1044,6 +1044,147 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[feedback_pathfinding_freeze]],
   [[project_mmapgen_offmesh_axis_swap]].
 
+- **Latest evidence (2026-05-17 loop 23 — three parallel surfaces, no winner):**
+  Per user sign-off on 2026-05-17, three scope expansions were
+  authorized: (1) native `Exports/Navigation/PathFinder.cpp`
+  modifications, (2) tile (40, 29) bake regen with zero-regression
+  tolerance, (3) off-mesh entries in `tools/MmapGen/offmesh.txt`.
+  Three `monorepo-worker` agents ran in parallel via
+  `isolation: "worktree"` against `agent-afd78d8b84c3eef14` /
+  `agent-a9ae9f2846619d8a3` / `agent-a26ee6bbf1dc67d6d`. Each
+  produced a candidate artifact under
+  `/tmp/wwow-loop23-candidates/{A,B,C}/`; the lead reconciled.
+
+  **Surface A — bake regen (knob: `maxVertsPerPoly: 3 → 6` on
+  tile-4029 override).** New tile md5
+  `dcf6f88281e1b3b59699ec4d22e0f312` (size −37.6% vs baseline,
+  confirming `rcBuildPolyMesh` merge took effect). Probe via
+  `PathPhysicsProbe --dump-polyrefs` against the regenerated tile:
+  at coord 2 `(1350.174, -4528.553)` the phantom-stack depth is
+  structurally unchanged across Z=[33, 36.5] with `posOver=0`,
+  legitimate ground polyref still at z≈37.48 (3.5y gap > Detour's
+  1.8y zExtent — same trap geometry). At coords 1+3 `(1347.3,
+  -4540.6)` / `(1348.0, -4537.7)`, polyref=0 at every Z in [33,
+  42] — coverage gap unchanged. The merge-step knob shifted poly
+  count without altering walkable classification or filtering, so
+  it could not close any failure. Self-reported confidence LOW.
+  No sweep run; candidate retained at
+  `/tmp/wwow-loop23-candidates/A/`.
+
+  **Surface B — native PathFinder.cpp B2 patch.** 33-line addition
+  to the Cycle-17e densifier midpoint emit block at
+  `Exports/Navigation/PathFinder.cpp:1900-1933`: each interpolated
+  corner does a `findNearestPoly` with expanded extents
+  `(2.0, 4.0, 2.0)` and snaps Z to the nearest legitimate poly's
+  surface (fallback to prior `getPolyHeight(polys[0],...)` if
+  none). Full regression run in worktree against
+  `WWOW_DATA_DIR=D:/wwow-bot/prod-data`:
+
+  | Suite | Baseline | Surface B | Δ |
+  |---|---|---|---|
+  | `OgZeppelinCliffFallParityTests` | 4/0/0 | 4/0/0 | 0 (held the critical gate) |
+  | `CrossroadsToUndercity_CriticalWalkLegs` | 19/4/0 | **18/5/0** | **−1 pass, +1 fail** |
+  | `Navigation.Physics.Tests` (full) | 152/0/1 | 186/1/1 | +1 unrelated WIP regression |
+  | `RecordedTests.PathingTests` | 135/0/0 | 135/0/0 | 0 |
+
+  REGRESSION: `orgrimmar_exterior_incline_live_stall_exact_recovery`
+  flipped to fail with `Segment 349->350 failed static
+  line-of-sight (walkable-fallback=BlockedGeometry)` — the Z snap
+  raised a densifier midpoint into obstructed geometry. The 4
+  baseline failures STILL failed with the same modes. Root cause
+  of the miss: the failing routes' problem corners are in the
+  main per-iteration `iterPos` emit at line 1936, NOT in the
+  densifier midpoints the patch covered (and
+  `tower_base_live_vertical` runs `smoothPath: False` so the
+  patch did not fire on that route at all — its problem is in
+  `findStraightPath` at line 1371). Wrong layer. Definitive
+  negative result; candidate not viable.
+
+  **Surface C — 4 off-mesh entries on tile (40, 29).** Each entry
+  bridges a failing test's start-region poly to BoardingPoint
+  `(1320.14, -4653.16, 53.89)`. All 4 endpoints bound via
+  `findNearestPoly` (bake-time `[OFFLINK] LINKED` traces confirm,
+  no `classifyOffMeshPoint` height-check dropouts). New tile md5
+  `68b4f4cb07ce2ab8e9007bc02856c110`. Post-regen smooth-path
+  probe via `PathPhysicsProbe --detour-resolve --smooth
+  --dump-polyrefs`: only 2 of 4 failing routes
+  (`tower_underpass`, `exterior_steep_incline`) show off-mesh
+  teleport jumps in their smooth paths; `bridge_side` has a clean
+  13-corner deck walk (vs 1031 baseline corners — A* corridor
+  selection shifted but no obvious teleport segments);
+  `tower_base_live_vertical` looks like it routed via the
+  existing H2c entry rather than the new one. **Trap region NOT
+  bypassed for `tower_underpass`:** corners 8-12 of the new
+  smooth path still traverse NULL polys + `posOver=0` at the
+  phantom region. Detour's A* preferred the natural multi-corner
+  walk through the trap over the 1-step off-mesh hop.
+  Compounding: the test-side `GetLocalPhysicsReachabilityFailure`
+  and `GetSteepUphillSegmentFailure` validators (which the 4
+  baseline failures depend on) physics-simulate every segment in
+  the `[0.75y, 8y]` projection range — the off-mesh teleport at
+  corner 75→76 (horizontal=3.2y, rise=+31.9y) fits the range and
+  fails the simulation (cannot climb 31.9y in 3.2y horizontal).
+  Plus the BRM revert risk (`offmesh.txt:108-152`): the managed
+  `Services/PathfindingService/Repository/Navigation.cs` 8-phase
+  repair pipeline hangs >25s on corridors containing off-mesh
+  polys (`[PATH_REQ] still-running elapsed>=25s`); the 4 failing
+  tests would route through the new off-mesh polys for the first
+  time and may trigger the BRM-style hang. Best case: 1/4 fixed.
+  Worst case: <19/4 + docker hang. Self-reported confidence LOW.
+  No sweep run (destructive failure-mode risk); candidate
+  retained at `/tmp/wwow-loop23-candidates/C/`.
+
+  **Reconciliation:** no surface meets the 23/0 acceptance gate.
+  Surface B is empirically dead (regression in worktree). Surface
+  A's probe-backed prediction is strong negative (trap unchanged).
+  Surface C's probe-backed prediction is strong negative (1/4
+  best case) with a destructive failure mode (managed-pipeline
+  hang). Per handoff explicit authorization: 19/4 accepted as
+  the durable resting state.
+
+  **Cleanup:** three worktrees torn down. Parent worktree clean.
+  Both `D:/MaNGOS/data/mmaps/0012940.mmtile` and
+  `D:/wwow-bot/prod-data/mmaps/0012940.mmtile` verified at
+  baseline md5 `cc0d89c42d9abf4737ba52a369c5f3f7`. Docker
+  `wwow-pathfinding` not restarted (no live sweep run for A or C
+  because both had strong negative probe predictions).
+
+  **Loop 23 sweep tally:** Unchanged at **19 / 4 / 0** (no live
+  sweep run; Surface B's in-worktree run is the only live data and
+  it regressed, not advanced).
+
+  **What's left as multi-cycle work** (next session, not this
+  one):
+  1. **Surface B layered (right layer):** apply the air-interp
+     `findNearestPoly` snap to the MAIN per-iteration `iterPos`
+     corner emit at `PathFinder.cpp:1936` (NOT the densifier
+     midpoints) AND to `findStraightPath` at line 1371 (for
+     routes where `smoothPath: False`). MUCH higher blast radius
+     — every smooth-path corner from every route in every tile.
+     Needs careful extent calibration to avoid the
+     `exterior_incline_exact` regression Surface B saw.
+  2. **Surface A continued:** the next-untried bake-only knob is
+     `walkableErosionRadius` 0.2 → 0.3 / 0.4 (likely worsens
+     coord 1+3 coverage, low prior). After that, the bake-only
+     surface is exhausted on this tile.
+  3. **Coord-stack widening at probe time:** modify
+     `PathPhysicsProbe`'s `--dump-polyrefs` to enumerate ALL
+     polys at a coord across a wider Z range (currently only
+     reports `findNearestPoly` winners). Diagnostic-only — does
+     not close failures but supports the next bake iteration.
+  4. **Off-mesh + managed-pipeline awareness:** the Surface C
+     architecture is correct at the Detour level but blocked on
+     Phase 4 sub-deliverable of PATHFINDING_OVERHAUL (making
+     `Navigation.cs` off-mesh-aware). Out of current freeze.
+
+  Memory references:
+  [[project_pfs_loop23_close_attempt_three_surfaces]] (new),
+  [[project_pfs_loop22_threshold_cascade]],
+  [[project_pfs_loop21_trap_diagnosis]],
+  [[project_pfs_overhaul_006_brm_singletile_negative]],
+  [[feedback_pathfinding_freeze]],
+  [[project_mmapgen_offmesh_axis_swap]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family
