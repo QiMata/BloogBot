@@ -495,6 +495,17 @@ namespace PathfindingService.Repository
             uint mapId, float x, float y, float z, float searchRadius,
             out float outX, out float outY, out float outZ);
 
+        // PFS-OVERHAUL-006 loop-24 Phase A5.2 — used by IsOffMeshSegment to detect
+        // teleport segments so the managed repair pipeline can skip per-phase
+        // repair on them. See native side in Exports/Navigation/DllMain.cpp.
+        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl, EntryPoint = "IsOffMeshConnectionAtCoord")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool IsOffMeshConnectionAtCoordNative(
+            uint mapId,
+            NativeXyz coord,
+            float xyExtent,
+            float zExtent);
+
         // ── Segment Validation P/Invoke ──
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
@@ -592,6 +603,8 @@ namespace PathfindingService.Repository
             if (_segmentValidationCache is not null)
                 return null;
             _segmentValidationCache = new Dictionary<SegmentValidationKey, SegmentValidationCachedResult>(capacity: 256);
+            // Phase A5.2: piggyback on the same scope for off-mesh memoisation.
+            _offMeshCoordCache = new Dictionary<OffMeshCoordKey, bool>(capacity: 64);
             _segmentValidationCacheHits = 0;
             _segmentValidationCacheMisses = 0;
             return new SegmentValidationCacheScope();
@@ -613,6 +626,7 @@ namespace PathfindingService.Repository
                         $"[NAV-PERF] SegmentValidationCache hits={hits} misses={misses} hit-rate={(hits * 100.0 / (hits + misses)):F1}%");
                 }
                 _segmentValidationCache = null;
+                _offMeshCoordCache = null;
                 _segmentValidationCacheHits = 0;
                 _segmentValidationCacheMisses = 0;
             }
@@ -630,6 +644,62 @@ namespace PathfindingService.Repository
         // and then read the counts. Per-thread.
         public static (int Hits, int Misses) GetLastCompletedSegmentValidationCacheCounters()
             => _lastCompletedSegmentValidationScope;
+
+        // PFS-OVERHAUL-006 loop-24 Phase A5.2 — off-mesh-connection
+        // detection cache, lifetime tied to the SegmentValidationCacheScope
+        // (initialised in BeginSegmentValidationCacheScope, cleared in
+        // SegmentValidationCacheScope.Dispose). Each unique probe coord
+        // queries the native `IsOffMeshConnectionAtCoord` export once per
+        // CalculatePath; cache hits avoid the native lock (g_navigationMutex)
+        // for repeat probes from each of the 8 repair phases.
+        private readonly record struct OffMeshCoordKey(uint MapId, float X, float Y, float Z);
+
+        [ThreadStatic]
+        private static Dictionary<OffMeshCoordKey, bool>? _offMeshCoordCache;
+
+        // XY/Z extents for the native off-mesh AABB-intersection query.
+        // XY matches `GetPolyAtCoord` default (2.0y). Z extent is wider
+        // (4y) because off-mesh polys span the teleport Z range (e.g. OG
+        // zep gangplank: ~24y harbor floor → tower deck). A query at any
+        // point along a teleport segment still intersects the off-mesh
+        // AABB with this window.
+        private const float OffMeshSegmentXyExtent = 2.0f;
+        private const float OffMeshSegmentZExtent  = 4.0f;
+
+        /// <summary>
+        /// Returns true if either endpoint of a smooth-path segment lies
+        /// near an off-mesh-connection (`DT_POLYTYPE_OFFMESH_CONNECTION`)
+        /// poly. Memoised per-`CalculatePath` via the thread-static
+        /// <see cref="_offMeshCoordCache"/>.
+        ///
+        /// Used by the repair pipeline phases to skip ground-walkable
+        /// assumptions (slope/LOS/ledge checks, ground projection, spike
+        /// removal, etc.) on teleport segments — those segments have
+        /// dz>>dxy and the managed pipeline's classifiers (Cliff/SteepClimb,
+        /// vertical-spike removers, ground-Z projection) mis-handle them,
+        /// causing the repair budgets to time out (loop-23 Surface C's
+        /// managed-pipeline-hang root cause).
+        /// </summary>
+        private static bool IsOffMeshSegment(uint mapId, XYZ start, XYZ end)
+            => IsOffMeshAtCoord(mapId, start) || IsOffMeshAtCoord(mapId, end);
+
+        private static bool IsOffMeshAtCoord(uint mapId, XYZ coord)
+        {
+            var cache = _offMeshCoordCache;
+            var key = new OffMeshCoordKey(mapId, coord.X, coord.Y, coord.Z);
+            if (cache is not null && cache.TryGetValue(key, out var cached))
+                return cached;
+
+            var result = IsOffMeshConnectionAtCoordNative(
+                mapId,
+                new NativeXyz(coord),
+                OffMeshSegmentXyExtent,
+                OffMeshSegmentZExtent);
+
+            if (cache is not null)
+                cache[key] = result;
+            return result;
+        }
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern float GetGroundZ(
@@ -2872,6 +2942,21 @@ namespace PathfindingService.Repository
             {
                 var segmentStart = repaired[^1];
                 var segmentEnd = path[i + 1];
+
+                // PFS-OVERHAUL-006 loop-24 Phase A5.2 — skip LOS-repair AND
+                // densification on teleport segments. An off-mesh-connection
+                // segment has dz>>dxy (e.g. OG zep gangplank: 0y horiz, 29y
+                // vert); LOS rays through air would fail spuriously,
+                // densification would insert linear-interp midpoints in air,
+                // and the downstream repair phases would mis-classify the
+                // jump as a cliff. The teleport segment is by construction
+                // LOS-valid via the off-mesh contract.
+                if (IsOffMeshSegment(mapId, segmentStart, segmentEnd))
+                {
+                    repaired.Add(segmentEnd);
+                    continue;
+                }
+
                 var horizontal = Distance2D(segmentStart, segmentEnd);
 
                 if (horizontal > LongSegmentLosRepairThreshold

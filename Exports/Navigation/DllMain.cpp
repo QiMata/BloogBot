@@ -3096,6 +3096,93 @@ extern "C" __declspec(dllexport) int EnumeratePolysAtCoord(
     }
 }
 
+// PFS-OVERHAUL-006 loop-24 Phase A5.2 — detect whether any
+// off-mesh-connection (`DT_POLYTYPE_OFFMESH_CONNECTION`) polygon has an
+// AABB that intersects the {coord ± xyExtent} × {coord.z ± zExtent}
+// window. Used by managed `Navigation.cs::IsOffMeshSegment` to skip
+// per-phase repair on teleport segments. Direct tile iteration (NOT
+// `findNearestPoly`, which deprioritises off-mesh polys in its
+// "nearest" ranking — verified loop-21 trap diagnosis: at coord 1
+// `findNearestPoly` returned polyref=0 even though
+// `EnumeratePolysAtCoord` found the off-mesh poly). Short-circuits on
+// first match for low per-segment overhead.
+//
+// Returns true on first off-mesh hit; false on no match OR
+// infrastructure failure (callers treat as "not off-mesh" — same as
+// the managed pipeline's current pre-A5.2 behaviour).
+extern "C" __declspec(dllexport) bool IsOffMeshConnectionAtCoord(
+    uint32_t mapId,
+    XYZ coord,
+    float xyExtent,
+    float zExtent)
+{
+    if (xyExtent < 0.0f || zExtent < 0.0f) return false;
+
+    try
+    {
+        if (!g_initialized) InitializeAllSystems();
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+        dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
+        if (!query) return false;
+        const dtNavMesh* navMesh = query->getAttachedNavMesh();
+        if (!navMesh) return false;
+
+        // WoW (X, Y, Z) -> Detour (pos.0=Y_wow, pos.1=Z_wow vertical, pos.2=X_wow)
+        const float pos[3] = { coord.Y, coord.Z, coord.X };
+        int tx = 0, ty = 0;
+        navMesh->calcTileLoc(pos, &tx, &ty);
+
+        const float xMin = coord.X - xyExtent, xMax = coord.X + xyExtent;
+        const float yMin = coord.Y - xyExtent, yMax = coord.Y + xyExtent;
+        const float zMin = coord.Z - zExtent,  zMax = coord.Z + zExtent;
+
+        for (int dyy = -1; dyy <= 1; ++dyy)
+        {
+            for (int dxx = -1; dxx <= 1; ++dxx)
+            {
+                static const int MAX_LAYERS = 16;
+                const dtMeshTile* tiles[MAX_LAYERS] = {};
+                int tileCount = navMesh->getTilesAt(tx + dxx, ty + dyy, tiles, MAX_LAYERS);
+                for (int ti = 0; ti < tileCount; ++ti)
+                {
+                    const dtMeshTile* tile = tiles[ti];
+                    if (!tile || !tile->header) continue;
+
+                    for (int pi = 0; pi < tile->header->polyCount; ++pi)
+                    {
+                        const dtPoly* poly = &tile->polys[pi];
+                        if (poly->getType() != DT_POLYTYPE_OFFMESH_CONNECTION) continue;
+
+                        // AABB from the two endpoint verts (vertCount=2 for off-mesh).
+                        float pMinX = 1e30f, pMaxX = -1e30f;
+                        float pMinY = 1e30f, pMaxY = -1e30f;
+                        float pMinZ = 1e30f, pMaxZ = -1e30f;
+                        for (int vi = 0; vi < poly->vertCount; ++vi)
+                        {
+                            const float* v = &tile->verts[poly->verts[vi] * 3];
+                            const float wx = v[2], wy = v[0], wz = v[1];
+                            if (wx < pMinX) pMinX = wx; if (wx > pMaxX) pMaxX = wx;
+                            if (wy < pMinY) pMinY = wy; if (wy > pMaxY) pMaxY = wy;
+                            if (wz < pMinZ) pMinZ = wz; if (wz > pMaxZ) pMaxZ = wz;
+                        }
+                        if (pMaxX < xMin || pMinX > xMax) continue;
+                        if (pMaxY < yMin || pMinY > yMax) continue;
+                        if (pMaxZ < zMin || pMinZ > zMax) continue;
+                        return true; // first match wins
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    catch (...)
+    {
+        fprintf(stderr, "[OFFMESH-CHECK] SEH exception\n");
+        return false;
+    }
+}
+
 // Test-only diagnostic export (2026-05-13 runtime NAV_STEEP_SLOPES exclude):
 // returns the user-flag bits and area type of a polygon given its polyRef.
 // Used by FlameCrestUbrsSmoothPath_AvoidsSteepSlopePolys to prove that no

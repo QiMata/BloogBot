@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-18 (loop 24 / iteration 5 — Phase A5.1 read-only audit of Services/PathfindingService/Repository/Navigation.cs (7448 LOC). **Definitive finding: ZERO off-mesh-type awareness anywhere in the file** (0 matches for polyType / DT_POLYTYPE). Located 8 repair phases in ApplyNativeSegmentValidationCore; every phase mis-handles teleport segments (off-mesh dz=29y in dx=0y → Cliff/SteepClimb → repair detour-attempts → infinite until budget timeout = loop-23 Surface C's hang risk root cause). A5.2-A5.5 backlog: ship `IsOffMeshSegment(mapId,start,end)` helper via existing GetPolyAtCoord export + 2-3 line skip-check at entry of each phase function + E2E test + deploy Surface C's 4 off-mesh entries. Loop 24 tally remains 19/4/0 (A1 c68197e1; A2 5c0db496; A3 37ee100e; A4 528eb958; A5.1 this commit).).
+Last refresh: 2026-05-18 (loop 24 / iteration 6 — Phase A5.2 ships off-mesh detection substrate. New native export `IsOffMeshConnectionAtCoord` (DllMain.cpp +90 LOC, direct tile iteration over off-mesh polys, short-circuit on first match — bypasses findNearestPoly's off-mesh deprioritisation per loop-21). Managed `IsOffMeshSegment` helper (Navigation.cs +75 LOC, memoised per-CalculatePath via existing SegmentValidationCacheScope). Skip-check at `RepairLongLineOfSightBreaks:2877` skips densification + LOS on teleport segments. 4 new unit tests green (`IsOffMeshConnectionAtCoordTests`, +95 LOC). OG zep 4/4 critical gate held. Tally unchanged 19/4 (substrate, not closure — closure depends on A5.5). Loop 24 history: A1 c68197e1; A2 5c0db496; A3 37ee100e; A4 528eb958; A5.1 acf3a7e6; A5.2 this commit. Advancing to Phase A5.3 (apply same skip-check pattern to Phases 2-7).).
 
 ## Rules
 
@@ -53,7 +53,7 @@ Last refresh: 2026-05-18 (loop 24 / iteration 5 — Phase A5.1 read-only audit o
 | `S1.0` | `IBotTask` contract migration | `monorepo-worker` | **done** (2026-05-12) |
 | `S1.1` | Physics parity wrap-up | `monorepo-worker` | open (guard green 12/12 OG; need representative checkpoints per family) |
 | `S1.2` | MovementController parity audit | `monorepo-worker` | audit green (2026-05-12, 33/33) |
-| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-18 loop 24 / iter 5; 19/4 + 0 unrun durable; Phase A5.1 audit (READ-ONLY) confirms **Navigation.cs has ZERO off-mesh-type awareness** (0 matches for polyType/DT_POLYTYPE across 7448 LOC); located 8 repair phases in ApplyNativeSegmentValidationCore; every phase mis-handles teleport segments → root cause of loop-23 Surface C hang risk. A5.2-A5.5 backlog: `IsOffMeshSegment` helper + per-phase skip-checks + E2E test + deploy Surface C's 4 off-mesh entries. Phase A4 (iter 4) cull verified end-to-end but regressed 18/5, reverted 528eb958. Phase A3 (iter 3) bake regen NEGATIVE 37ee100e. Phase A2 (iter 2) `--dump-poly-stack` SHIPPED 5c0db496. Phase A1 (iter 1) NEUTRAL c68197e1. Advancing to Phase A5.2 = ship `IsOffMeshSegment` helper + Phase 1 skip-check + unit test.) |
+| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-18 loop 24 / iter 6; 19/4 + 0 unrun durable; Phase A5.2 SHIPS off-mesh detection substrate. New native `IsOffMeshConnectionAtCoord` export (DllMain.cpp +90 LOC, direct tile iteration short-circuit) + managed `IsOffMeshSegment` helper (Navigation.cs +75 LOC, memoised per-CalculatePath) + skip-check at `RepairLongLineOfSightBreaks:2877` (preserves teleport endpoints without densification/LOS) + 4 new unit tests in `IsOffMeshConnectionAtCoordTests.cs` (+95 LOC) all green. OG zep 4/4 critical gate held. Tally unchanged 19/4 (substrate, not closure). Loop 24 history: A1 c68197e1 (NEUTRAL); A2 5c0db496 (--dump-poly-stack SHIPPED); A3 37ee100e (NEGATIVE bake regen); A4 528eb958 (cull verified, list calibration regressed); A5.1 acf3a7e6 (audit catalogue); A5.2 this commit. Advancing to A5.3 = apply skip-check to Phases 2-7.) |
 | `S1.4..S1.14` | 11 family slots (Travel, Combat, Questing, Dungeon, BG, Gather, Craft, Economy, Social, Recovery, Raid-formation) | various | open (no dry-run yet) |
 | `S1.15` | Trade null guards (6 actions) | `monorepo-worker` | implemented (2026-05-15; live TradeParityTests pending) |
 | `S1.16` | Craft packet path (BG) | `monorepo-worker` | open |
@@ -129,8 +129,8 @@ skip-voxelization bake pipeline as a long-term replacement.
 ### State
 - Current tile (40,29) md5: `cc0d89c42d9abf4737ba52a369c5f3f7` (baseline)
 - Last CriticalWalkLegs tally: **19/4/0**
-- Last iteration: **loop 24 / iteration 5, Phase A5.1 (read-only audit; ZERO off-mesh awareness in Navigation.cs; 8 phases catalogued; A5.2-A5.5 backlog ready)**
-- Last commit: pending (this loop's docs commit)
+- Last iteration: **loop 24 / iteration 6, Phase A5.2 (off-mesh helper + Phase 1 skip-check SHIPPED; OG zep 4/4 held; 4 unit tests green)**
+- Last commit: pending (this loop's A5.2 ship commit)
 
 ### Track A — Close-23 (sequential phases)
 - [x] **A1: Surface B at right layer** — 2026-05-18 NEUTRAL. PathFinder.cpp polyref==0 SKIP-then-bail guard at main `iterPos:1936` + `findStraightPath` post-process (default extents). +78 LOC, MSBuild green. OG zep 4/4 critical gate held; CriticalWalkLegs **19/4/0 unchanged**, no regression. Reverted. Root cause: failing corners are densifier midpoints (line 1919-1931), not iterPos main emit — loop 23 mis-identified the layer. See [[project_pfs_loop24_phase_a1_neutral]].
@@ -139,8 +139,8 @@ skip-voxelization bake pipeline as a long-term replacement.
 - [x] **A4: Validator-driven targeted cull (using A2 stack data)** — 2026-05-18 cull-pipeline VERIFIED end-to-end but cull-list calibration regressed. `NavMeshTileEditor.exe --cull-polys-file` culled all 63 phantoms at coord 2 preserving legit polyIdx 18398. Probe verified mechanically (63 polys with area=0/flags=0, 1 surviving). OG zep 4/4 held; CriticalWalkLegs **18/5 (−1 regression)**. 12 culled polys at aabbMinZ ≥ 36.8 (deck region) were load-bearing. Reverted. See [[project_pfs_loop24_phase_a4_neutral]]. Future retry candidate: cull list filtered to aabbMaxZ<36.5 (51 polys, deck-safe) — logged for after A5 if needed.
 - [ ] **A5: Navigation.cs off-mesh awareness (multi-iteration)**
   - [x] **A5.1: Audit 8 repair phases — DONE** (read-only). Finding: ZERO off-mesh awareness in Navigation.cs (0 matches for polyType/DT_POLYTYPE across 7448 LOC). Catalogued the 8 phases in `ApplyNativeSegmentValidationCore`: 1) RepairLongLineOfSightBreaks; 2) DensifyPath+NormalizeEarlySupportLayer+RemoveShortVerticalLayerSpikes+RemoveShortHorizontalDetourSpikes; 3) RepairEarlyStaticBreaks; 4) RepairAffordanceBreaks (1st); 5) re-Normalize; 6) RepairAffordanceBreaks (2nd, post-normalize); 7) RepairEarlyStaticBreaks (post-affordance); 8) NormalizeLocalPhysicsReachableLayers + FindFirstLocalPhysicsReachabilityBreak + RepairAffordanceBreaks (3rd, local-physics). See [[project_pfs_loop24_phase_a5_1_audit]].
-  - [ ] **A5.2: Ship `IsOffMeshSegment(mapId, start, end)` helper + Phase 1 skip-check + unit test** — helper queries existing `GetPolyAtCoord` native export at both segment endpoints; returns true iff either has `outPolyType == 1` (DT_POLYTYPE_OFFMESH_CONNECTION). Memoize per-`CalculatePath` on `(mapId, x, y, z)` keys similar to `_segmentValidationCache` (Navigation.cs:535-583). Single skip-check at `RepairLongLineOfSightBreaks:2877-2878`. Unit test the helper + regression test on an existing OG zep off-mesh path. **Build + targeted test only — NO full sweep yet (that's A5.4).**
-  - [ ] A5.3: Apply skip-check to Phases 2-7 (6 functions: DensifyPath, NormalizeEarlySupportLayer, RemoveShortVerticalLayerSpikes, RemoveShortHorizontalDetourSpikes, RepairEarlyStaticBreaks, RepairAffordanceBreaks). 2-3 line early-out per function.
+  - [x] **A5.2: Ship `IsOffMeshSegment` helper + Phase 1 skip-check — DONE.** Native `IsOffMeshConnectionAtCoord` export (DllMain.cpp +90 LOC, direct tile iteration over off-mesh polys, short-circuit on first match — bypasses findNearestPoly's off-mesh deprioritisation). Managed `IsOffMeshSegment(uint, XYZ, XYZ)` helper in Navigation.cs (+75 LOC) memoised per-CalculatePath via the existing `SegmentValidationCacheScope`. Skip-check at `RepairLongLineOfSightBreaks:2877` preserves teleport endpoint pairs without densification/LOS. New test file `IsOffMeshConnectionAtCoordTests.cs` (+95 LOC, 4 tests green). OG zep 4/4 critical gate held. Tally unchanged 19/4 (substrate, not closure). See [[project_pfs_loop24_phase_a5_2_offmesh_helper]].
+  - [ ] **A5.3: Apply skip-check to Phases 2-7 (6 functions)** — same `if (IsOffMeshSegment(mapId, segmentStart, segmentEnd)) continue;` pattern at the entry of: `DensifyPath` (2905), `NormalizeEarlySupportLayer` (3124), `RemoveShortVerticalLayerSpikes` (3302), `RemoveShortHorizontalDetourSpikes` (3350), `RepairEarlyStaticBreaks` (4026), `RepairAffordanceBreaks` (4103). Expected diff ≈ 30-40 LOC across the 6 functions.
   - [ ] A5.4: E2E test — new test asserting managed-validation wall time < 1s on an OG zep off-mesh path (was 15-20s).
   - [ ] A5.5: Deploy loop-23 Surface C's 4 off-mesh entries; bake; full 23-case sweep. Target: 23/0.
 - [ ] A6: Accept 19/4 as permanent (fallback if A1-A5 all attempted, no winner)
@@ -163,11 +163,38 @@ skip-voxelization bake pipeline as a long-term replacement.
 - [ ] B15+: Generalize to other tiles
 
 ### Next iteration action
-**Phase A5.2 — ship `IsOffMeshSegment` helper + Phase 1 skip-check.**
+**Phase A5.3 — apply `IsOffMeshSegment` skip-check to Phases 2-7.**
 
-Calibrated from the Phase A5.1 audit findings. Single-function
-helper + single skip-check + unit test. Build + targeted test only
-(no full sweep — that's A5.4 after Phases 2-7 also have skip-checks).
+Same pattern as A5.2's `RepairLongLineOfSightBreaks` skip-check, applied
+to 6 more repair functions. Each addition is 2-3 lines at the per-segment
+loop entry. Expected total diff ≈ 30-40 LOC across 6 functions.
+
+Functions to modify (line numbers from current head):
+
+1. `DensifyPath` (2905) — when off-mesh pair, append `end` directly (no
+   midpoints).
+2. `NormalizeEarlySupportLayer` (3124) — skip the ground-Z projection;
+   off-mesh endpoints' Z is intentional, not an off-surface error.
+3. `RemoveShortVerticalLayerSpikes` (3302) — don't classify the off-mesh
+   Z-jump as a spike.
+4. `RemoveShortHorizontalDetourSpikes` (3350) — don't classify dx=0 ridge
+   as a detour spike.
+5. `RepairEarlyStaticBreaks` (4026) — skip LOS+findPath repair on off-mesh
+   segments; teleport endpoints are LOS-valid by contract.
+6. `RepairAffordanceBreaks` (4103) — skip `RequiresAffordanceRepair` on
+   off-mesh segments; affordance classifiers (Cliff/SteepClimb) mis-handle
+   them and trigger the loop-23 hang loop.
+
+Verification per phase:
+- MSBuild + dotnet build green
+- OG zep 4/4 (critical gate)
+- IsOffMeshConnectionAtCoordTests still 4/4
+- New regression test on a 3-corner synthetic path with an off-mesh middle
+  segment: verify NO phase fires repair on the middle pair.
+
+NO full 23-case sweep yet — that's A5.4 after all 7 phases are
+off-mesh-aware. Closure depends on A5.5 (deploy Surface C's 4 new
+off-mesh entries on tile 40,29).
 
 **Helper signature** (managed, in `Navigation.cs`):
 

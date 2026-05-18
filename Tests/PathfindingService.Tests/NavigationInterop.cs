@@ -73,6 +73,17 @@ internal static class NavigationInterop
         int maxOut,
         out int outCount);
 
+    // PFS-OVERHAUL-006 loop-24 Phase A5.2 — used by IsOffMeshConnectionAtCoordTests
+    // to verify the off-mesh AABB-intersection detector reports the expected
+    // truth at known OG-zeppelin off-mesh entry coordinates.
+    [DllImport(NavigationDll, EntryPoint = "IsOffMeshConnectionAtCoord", CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    public static extern bool IsOffMeshConnectionAtCoord(
+        uint mapId,
+        XYZ coord,
+        float xyExtent,
+        float zExtent);
+
     // Phase 3 Surface K: sliced-find-path with wall-clock cap.
     [DllImport(NavigationDll, EntryPoint = "FindPathForAgentSliced", CallingConvention = CallingConvention.Cdecl)]
     [return: MarshalAs(UnmanagedType.I1)]

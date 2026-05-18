@@ -1539,6 +1539,75 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[project_mmapgen_offmesh_axis_swap]],
   [[feedback_pathfinding_freeze]].
 
+- **Latest evidence (2026-05-18 loop 24 — Phase A5.2 ships off-mesh
+  detection substrate + Phase 1 skip-check):** First code change of
+  Phase A5 series. Three modules updated; +260 LOC + 1 new test file.
+
+  - **Native (`Exports/Navigation/DllMain.cpp`, +90 LOC):** New
+    export `IsOffMeshConnectionAtCoord(uint32_t mapId, XYZ coord,
+    float xyExtent, float zExtent) -> bool`. Iterates the coord's
+    tile + 8 grid neighbours via `getTilesAt`; for each poly with
+    `type == DT_POLYTYPE_OFFMESH_CONNECTION`, computes AABB from
+    the 2 endpoint verts and tests intersection with the
+    `{coord ± xyExtent} × {coord.Z ± zExtent}` window.
+    **Short-circuits on first match.** Bypasses `findNearestPoly`'s
+    off-mesh deprioritisation (loop-21 trap diagnosis: at coord 1
+    `findNearestPoly` returned polyref=0; only direct iteration
+    finds the off-mesh poly).
+  - **Managed (`Services/PathfindingService/Repository/Navigation.cs`,
+    +75 LOC):** DllImport for the new export; thread-static
+    `_offMeshCoordCache` keyed by `(MapId, X, Y, Z)` with lifetime
+    tied to the existing `SegmentValidationCacheScope`. New helpers
+    `IsOffMeshSegment(uint, XYZ, XYZ)` and `IsOffMeshAtCoord(uint, XYZ)`.
+    Skip-check at `RepairLongLineOfSightBreaks:2877-2878` preserves
+    teleport endpoint pairs without densification or LOS repair.
+    Constants: `OffMeshSegmentXyExtent=2.0`, `OffMeshSegmentZExtent=4.0`
+    (wider than the `GetPolyAtCoord` default 1.8y because off-mesh
+    AABBs span the teleport Z range).
+  - **Test (`Tests/PathfindingService.Tests/IsOffMeshConnectionAtCoordTests.cs`,
+    +95 LOC, new file):** 4 unit tests in the existing `Navigation`
+    collection. Asserts: (a) coord 1 detected as off-mesh; (b) coord 3
+    detected; (c) Crossroads ground coord returns false; (d) negative
+    extents return false without crash. All 4 green in 11s on prod-data.
+
+  **Verification:**
+
+  | Check | Result |
+  |---|---|
+  | MSBuild Navigation.vcxproj Release x64 | green |
+  | dotnet build PathfindingService Release | green |
+  | dotnet build PathfindingService.Tests Release | green (0 warnings) |
+  | dotnet build Navigation.Physics.Tests Release | green |
+  | `OgZeppelinCliffFallParityTests` (CRITICAL GATE) | **4/0/0 — held** |
+  | `IsOffMeshConnectionAtCoordTests` (new) | **4/0/0** |
+
+  OG zep 4/4 still green confirms the skip-check doesn't disrupt the
+  existing off-mesh handling — the short-circuit emits the same end
+  coord without inserting midpoints that the downstream phases would
+  mis-handle.
+
+  **Tile state:** no mutation. Prod-data + MaNGOS source both at
+  baseline md5 `cc0d89c42d9abf4737ba52a369c5f3f7`. Docker
+  `wwow-pathfinding` not restarted (no tile change).
+
+  **Loop 24 A5.2 tally:** Unchanged at **19 / 4 / 0**. A5.2 ships
+  substrate, not closure — Phase A5.5 deploys the 4 new off-mesh
+  entries that will exercise the now-aware managed pipeline.
+
+  **Next iteration — Phase A5.3:** apply the same skip-check
+  pattern at the entry of 6 more repair functions (`DensifyPath`
+  2905, `NormalizeEarlySupportLayer` 3124, `RemoveShortVerticalLayerSpikes`
+  3302, `RemoveShortHorizontalDetourSpikes` 3350, `RepairEarlyStaticBreaks`
+  4026, `RepairAffordanceBreaks` 4103). Expected diff ≈ 30-40 LOC.
+
+  Memory references:
+  [[project_pfs_loop24_phase_a5_2_offmesh_helper]] (new),
+  [[project_pfs_loop24_phase_a5_1_audit]],
+  [[project_pfs_loop24_phase_a2_polystack]],
+  [[project_pfs_loop21_trap_diagnosis]],
+  [[feedback_pathfinding_freeze]] (which Phase A5 explicitly unlocks
+  for off-mesh awareness work).
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family
