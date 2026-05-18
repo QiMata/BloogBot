@@ -1389,6 +1389,86 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[project_pfs_overhaul_006_brm_singletile_negative]] (precedent
   for single-tile knob regression risk).
 
+- **Latest evidence (2026-05-18 loop 24 — Phase A4 validator-driven
+  cull pipeline VERIFIED end-to-end; cull-list calibration
+  regressed, reverted):** First end-to-end execution of the
+  validator-cull pipeline (commit `0b2164d9` AV-tolerance + commit
+  `c4415201` probe + this loop's `--dump-poly-stack`). Built cull
+  list from Phase A2's coord-2 stack dump: all 64 polys with AABB
+  intersecting the ±10y Z window, minus the legitimate ground
+  polyref `281475331147742` (polyIdx 18398). 63 polyrefs in cull
+  file.
+
+  Snapshotted tile, copied to candidate, ran
+  `NavMeshTileEditor.exe --cull-polys-file ...`. Output: `culled=63
+  skipped=0 requested=63`. Candidate md5
+  `7072a30d85a0c0ca7aabf9fddf7fa0c1` (vs baseline
+  `cc0d89c42d9abf4737ba52a369c5f3f7`). Promoted to prod-data,
+  `docker restart wwow-pathfinding`.
+
+  **Probe verification (Phase A2's `--dump-poly-stack`):**
+
+  | Bucket | Polys | State |
+  |---|---|---|
+  | Culled (area=0, flags=0x0000) | 63 | Detour query filter rejects on path queries |
+  | Surviving (area=3, flags=0x0011) | 1 | polyIdx 18398, surfaceZ=37.509, posOverPoly=1 — legit ground intact |
+
+  **Cull architecture works mechanically.** This is the first time
+  the full validator-cull pipeline ran end-to-end through both
+  the probe and the runtime — Loops 20-23 had partial coverage
+  (validator unblock, probe shipment, single-poly culls). Loop 24
+  Phase A2-A4 together complete the pipeline.
+
+  **Sweep tally:**
+
+  | Suite | Baseline | After A4 cull | Δ |
+  |---|---|---|---|
+  | `OgZeppelinCliffFallParityTests` | 4/0/0 | **4/0/0** | 0 (critical gate held) |
+  | `CrossroadsToUndercity_CriticalWalkLegs` | 19/4/0 | **18/5/0** | **−1 pass, +1 fail (REGRESSION)** |
+
+  Sweep duration: 18m 39s (vs baseline 1h 4m — cull shortened
+  many paths because Detour reroutes around culled corridors).
+  Verbosity=minimal hid per-test labels; cull-list composition
+  analysis suggests the 12 culled polys with aabbMinZ ≥ 36.8
+  (deck-region: polyIdx 18391-18395, 18399, 18285-18293) were
+  load-bearing for adjacent legit routes. A more conservative
+  cull list of "only polys with aabbMaxZ < 36.5" (51 polys
+  instead of 63) would protect the deck region.
+
+  **Decision: revert and advance to Phase A5** per prompt's
+  "ONE cull attempt per iteration. If A4 loses, advance to A5"
+  rule. A4 retry with refined cull list is logged for future
+  consideration if A5 doesn't close coord 2 either. Coord-2 closure
+  remains uncertain regardless: even a perfect cull leaves the
+  legit poly at z=37.509 unreachable from WP Z=34.0 via Detour's
+  default 1.8y findNearestPoly extent (3.5y gap). Closing coord 2
+  needs either (a) PathFinder.cpp smooth-path Z-snap beyond loop-23
+  Surface B, or (b) off-mesh-connection routing — which is
+  Phase A5's domain.
+
+  **Cleanup verification:**
+
+  | Surface | Md5 / state |
+  |---|---|
+  | `D:/wwow-bot/prod-data/mmaps/0012940.mmtile` | `cc0d89c4…` (baseline) ✓ |
+  | `D:/MaNGOS/data/mmaps/0012940.mmtile` | `cc0d89c4…` (untouched — NavMeshTileEditor mutated only the candidate) ✓ |
+  | `wwow-pathfinding` docker | restarted, healthy ✓ |
+  | Working tree | clean (no code/config changes this iteration) |
+  | Cull list + candidate retained | `/tmp/wwow-loop24-probes/A4-cull-polyrefs.txt` + `/tmp/wwow-loop24-candidates/A4/0012940.mmtile` |
+
+  **Loop 24 A4 tally:** Durable state at baseline; remains **19 / 4 / 0**.
+
+  **Next iteration — Phase A5.1:** Audit `Services/PathfindingService/
+  Repository/Navigation.cs`'s 8 repair phases; identify
+  off-mesh-blind functions; document findings in TASKS.md. READ-ONLY
+  iteration — no code or tile changes.
+
+  Memory references:
+  [[project_pfs_loop24_phase_a4_neutral]] (new),
+  [[project_pfs_loop24_phase_a2_polystack]],
+  [[project_pfs_loop20_cull_pipeline_unblock]],
+  [[project_pfs_overhaul_006_polyref_polyidx_decoding]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family

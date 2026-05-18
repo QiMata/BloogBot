@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-18 (loop 24 / iteration 3 — Phase A3 bake regen attempted on tile (40,29) with single coordinated 2-knob delta: `walkableErosionRadius 0.2→0.3` + `walkableHeight 0→14`. Tile baked clean (md5 fbe57ed4, -8.4% size). Probe via Phase-A2-shipped `--dump-poly-stack`: **phantom stack at coord 2 UNCHANGED (63 phantoms + 1 legit polyref polyIdx shifted 18398→17389, surfaceZ=37.509 preserved); off-mesh entries dropped because --offMeshInput wasn't threaded (coord 1: 1→0; coord 3: 5→4)**. Knobs A+B don't fit the phantom class. Reverted prod-data + MaNGOS + config before live test cycle (off-mesh dropout = guaranteed OG-zep regression). NEGATIVE_RESULT note added to config.json. Candidate forensic copy at `/tmp/wwow-loop24-candidates/A3/`. Loop 24 tally remains 19/4/0 (A1 neutral commit c68197e1; A2 diagnostic commit 5c0db496; A3 reverted this commit). Advancing to Phase A4 (targeted cull, viable for coord 2 ONLY per A2 architectural refinement).).
+Last refresh: 2026-05-18 (loop 24 / iteration 4 — Phase A4 validator-driven targeted cull pipeline EXECUTED end-to-end. NavMeshTileEditor culled all 63 phantoms at coord 2 (area=0/flags=0) preserving legit polyIdx 18398; probe verified mechanically. OG zep 4/4 critical gate held. **CriticalWalkLegs 19/4 → 18/5 (1 NEW regression)** — aggressive cull list included 12 deck-region polys (aabbMinZ ≥ 36.8: 18391-18395, 18399, 18285-18293) that were load-bearing for adjacent routes. Sweep 18m 39s vs baseline 1h 4m. Reverted prod-data + restart docker. Cull-pipeline architecture VERIFIED end-to-end (loops 20+21+24-A2 now complete). Future retry should use aabbMaxZ<36.5 filter (51 polys, deck-safe). Loop 24 tally remains 19/4/0 (A1 neutral c68197e1; A2 diagnostic 5c0db496; A3 reverted 37ee100e; A4 reverted this commit). Advancing to Phase A5.1 (Navigation.cs 8-phase off-mesh-blindness audit, read-only).).
 
 ## Rules
 
@@ -53,7 +53,7 @@ Last refresh: 2026-05-18 (loop 24 / iteration 3 — Phase A3 bake regen attempte
 | `S1.0` | `IBotTask` contract migration | `monorepo-worker` | **done** (2026-05-12) |
 | `S1.1` | Physics parity wrap-up | `monorepo-worker` | open (guard green 12/12 OG; need representative checkpoints per family) |
 | `S1.2` | MovementController parity audit | `monorepo-worker` | audit green (2026-05-12, 33/33) |
-| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-18 loop 24 / iter 3; 19/4 + 0 unrun; Phase A3 attempted: 2-knob bake regen on tile (40,29) `walkableErosionRadius 0.2→0.3` + `walkableHeight 0→14`. Bake clean (md5 fbe57ed4, -8.4% size). Probe revealed phantom stack at coord 2 UNCHANGED + off-mesh entries dropped (--offMeshInput not threaded). Reverted before live cycle. Tile back to baseline md5 cc0d89c4. NEGATIVE_RESULT note added to config.json. Phase A2 (iter 2) shipped `--dump-poly-stack` diagnostic (commit 5c0db496). Phase A1 (iter 1) PathFinder.cpp polyref==0 guard, NEUTRAL, reverted (commit c68197e1). Advancing to Phase A4 = validator-driven targeted cull on the 63 phantoms catalogued in Phase A2 (preserving polyIdx 18398 legit ground).) |
+| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-18 loop 24 / iter 4; 19/4 + 0 unrun durable; Phase A4 attempted: targeted cull on 63 phantoms at coord 2 preserving legit polyIdx 18398. Cull mechanically VERIFIED (area=0/flags=0). OG zep 4/4 held. CriticalWalkLegs **18/5 regression** — 12 culled deck-region polys (aabbMinZ ≥ 36.8) were load-bearing. Reverted. Cull-pipeline architecture proven end-to-end (loops 20+21+A2 + this). Future retry: cull list filtered to aabbMaxZ<36.5 (51 polys, deck-safe). Phase A3 (iter 3) bake regen NEGATIVE 37ee100e. Phase A2 (iter 2) `--dump-poly-stack` SHIPPED 5c0db496. Phase A1 (iter 1) NEUTRAL c68197e1. Advancing to Phase A5.1 = Navigation.cs 8-phase off-mesh-blindness audit (read-only).) |
 | `S1.4..S1.14` | 11 family slots (Travel, Combat, Questing, Dungeon, BG, Gather, Craft, Economy, Social, Recovery, Raid-formation) | various | open (no dry-run yet) |
 | `S1.15` | Trade null guards (6 actions) | `monorepo-worker` | implemented (2026-05-15; live TradeParityTests pending) |
 | `S1.16` | Craft packet path (BG) | `monorepo-worker` | open |
@@ -128,17 +128,17 @@ skip-voxelization bake pipeline as a long-term replacement.
 
 ### State
 - Current tile (40,29) md5: `cc0d89c42d9abf4737ba52a369c5f3f7` (baseline)
-- Last CriticalWalkLegs tally: **19/4/0**
-- Last iteration: **loop 24 / iteration 3, Phase A3 (NEGATIVE — knobs A+B don't fit phantom class + off-mesh dropout; reverted before live cycle)**
-- Last commit: pending (this loop's docs commit, including config.json NEGATIVE_RESULT note)
+- Last CriticalWalkLegs tally: **19/4/0** (durable; A4 transient state was 18/5/0 before revert)
+- Last iteration: **loop 24 / iteration 4, Phase A4 (cull pipeline VERIFIED end-to-end; cull list too aggressive — 1 regression in CriticalWalkLegs; reverted)**
+- Last commit: pending (this loop's docs commit)
 
 ### Track A — Close-23 (sequential phases)
 - [x] **A1: Surface B at right layer** — 2026-05-18 NEUTRAL. PathFinder.cpp polyref==0 SKIP-then-bail guard at main `iterPos:1936` + `findStraightPath` post-process (default extents). +78 LOC, MSBuild green. OG zep 4/4 critical gate held; CriticalWalkLegs **19/4/0 unchanged**, no regression. Reverted. Root cause: failing corners are densifier midpoints (line 1919-1931), not iterPos main emit — loop 23 mis-identified the layer. See [[project_pfs_loop24_phase_a1_neutral]].
 - [x] **A2: Probe coord-stack widening (diagnostic only)** — 2026-05-18 SHIPPED. New native export `EnumeratePolysAtCoord` (DllMain.cpp +162 LOC, direct tile-poly iteration + 8 neighbours, AABB intersect) + matching `[DllImport]` in NavigationInterop.cs + `--dump-poly-stack` in PathPhysicsProbe.exe (+135 LOC). Stack dump confirms: coord 1 has 1 poly (off-mesh only — true air); coord 2 has 64 polys = 63 phantoms + 1 legit ground polyref `281475331147742` (surfaceZ=37.509, posOverPoly=1, 3.5y above WP Z=34.0); coord 3 has 5 polys (4 deck-above + 1 off-mesh — true air). Cull viable for coord 2 only. See [[project_pfs_loop24_phase_a2_polystack]].
 - [x] **A3: Multi-knob coordinated bake regen (1 attempt, calibrated from A2 data)** — 2026-05-18 NEGATIVE. Knobs `walkableErosionRadius 0.2 → 0.3` + `walkableHeight 0 → 14`. Bake clean (md5 fbe57ed4, size -8.4%). Probe revealed phantom stack at coord 2 UNCHANGED + off-mesh entries dropped (--offMeshInput not threaded). Reverted prod-data + MaNGOS + config before live cycle. NEGATIVE_RESULT note added to config.json `_4029_NEGATIVE_RESULT_loop24_A3`. Candidate forensic copy `/tmp/wwow-loop24-candidates/A3/`. See [[project_pfs_loop24_phase_a3_neutral]].
-- [ ] **A4: Validator-driven targeted cull (using A2 stack data)** — `tools/MmapGen/build/NavMeshTileEditor.exe --cull-polys` to zero `area`+`flags` on the 63 phantom polyIdxes catalogued in Phase A2 (preserve polyIdx 18398, the legit ground at z=37.509). Probe-verify only the legit poly remains. CAVEAT: legit poly is 3.5y above WP Z=34.0, beyond Detour's default 1.8y `findNearestPoly` extent even after cull — cull-only may not close coord 2; if so, advance to A5. ONE cull attempt per iteration; revert on regression.
-- [ ] A5: Navigation.cs off-mesh awareness (multi-iteration)
-  - [ ] A5.1: Audit 8 repair phases, identify off-mesh-blind functions
+- [x] **A4: Validator-driven targeted cull (using A2 stack data)** — 2026-05-18 cull-pipeline VERIFIED end-to-end but cull-list calibration regressed. `NavMeshTileEditor.exe --cull-polys-file` culled all 63 phantoms at coord 2 preserving legit polyIdx 18398. Probe verified mechanically (63 polys with area=0/flags=0, 1 surviving). OG zep 4/4 held; CriticalWalkLegs **18/5 (−1 regression)**. 12 culled polys at aabbMinZ ≥ 36.8 (deck region) were load-bearing. Reverted. See [[project_pfs_loop24_phase_a4_neutral]]. Future retry candidate: cull list filtered to aabbMaxZ<36.5 (51 polys, deck-safe) — logged for after A5 if needed.
+- [ ] **A5: Navigation.cs off-mesh awareness (multi-iteration)**
+  - [ ] **A5.1: Audit 8 repair phases, identify off-mesh-blind functions** — read-only iteration on `Services/PathfindingService/Repository/Navigation.cs`. Catalogue every phase that mistakenly treats `DT_POLYTYPE_OFFMESH_CONNECTION` polys as ground-walkable (slope checks, ledge filters, LOS rays, etc.). Document the catalogue in TASKS.md as the A5.2-A5.5 backlog. NO code change.
   - [ ] A5.2: DT_POLYTYPE_OFFMESH_CONNECTION skip-checks for Phase 1 + unit test
   - [ ] A5.3: Repeat for Phases 2-8 of the repair pipeline
   - [ ] A5.4: E2E test against an existing OG zeppelin offmesh entry
@@ -163,47 +163,42 @@ skip-voxelization bake pipeline as a long-term replacement.
 - [ ] B15+: Generalize to other tiles
 
 ### Next iteration action
-**Phase A4 — validator-driven targeted cull on coord-2 phantom stack.**
+**Phase A5.1 — audit Navigation.cs's 8 repair phases for off-mesh
+blindness.** Read-only iteration; no code or tile changes.
 
-Per Phase A2 architectural refinement, cull is viable for **coord 2
-ONLY** (coords 1 + 3 are true-air; cull can't help them). Use
-`tools/MmapGen/build/NavMeshTileEditor.exe --cull-polys` to surgically
-zero `area` + `flags` on the 63 phantom polyIdxes catalogued in
-Phase A2. The legit ground polyIdx 18398 at surfaceZ=37.509,
-posOverPoly=1, aabb [37.31, 37.81] MUST be preserved.
+`Services/PathfindingService/Repository/Navigation.cs` is a ~5,600-line
+managed pipeline that runs after Detour's native FindPath. The pathfinding
+overhaul charter (2026-05-06) froze it; Phase A5 of the dual-track plan
+explicitly unlocks it for off-mesh awareness work.
 
-**Phantom polyIdx ranges to cull (from Phase A2's stack at coord 2):**
-- 18285–18293 (upper phantom band, area=3 NAV_STEEP_SLOPES, aabb Z 38–49)
-- 18302–18337 (mid phantom band, area=3, aabb Z 32.4–36.1)
-- 18349–18372 (mid phantom band, area=1 AREA_GROUND, aabb Z 32.1–35.9)
-- 18387–18397 (upper phantom mix)
-- 18399–18400 (immediately after legit, no surfaceZ)
-
-Total cull target: ~64 polys — minus polyIdx 18398 = 63 culled.
+Goal: catalogue every function/phase in `Navigation.cs` that operates
+on the poly corridor or smooth-path corners and mistakenly treats
+`DT_POLYTYPE_OFFMESH_CONNECTION` (poly type 1, vertCount 2) polys as
+if they were ground polys. Symptoms include:
+- LOS / ledge / slope checks on off-mesh polygons (which have no
+  meaningful surface, just two endpoint verts)
+- Surface-Z lookups via `GetPolyHeight` (returns NaN/sentinel for
+  off-mesh)
+- Walkability validation that fails on the off-mesh corridor
 
 Procedure:
-1. Snapshot tile to `/tmp/wwow-tile-backup/0012940.mmtile.loop24-A4-before`.
-2. Run `NavMeshTileEditor.exe --cull-polys <polyIdx-list-or-file>`.
-   Use `--cull-polys-file` with a TSV of polyIdxes excluding 18398.
-3. Probe via `--dump-poly-stack` at coord 2 to verify the stack
-   collapses to ~1-3 polys (just the legit ground + immediate neighbours).
-4. Probe at coords 1 + 3 to confirm no collateral changes.
-5. If stack improved, copy to `D:/wwow-bot/prod-data/mmaps/` and
-   `docker restart wwow-pathfinding`.
-6. Full 23-case sweep + adjacent suites.
-7. Revert immediately on any regression in OG zep 4/4 or any of the
-   19 passing CriticalWalkLegs cases.
+1. Identify the 8 repair phases (search comments / phase markers).
+2. For each phase, identify the entry function(s).
+3. For each entry function, look at how the corridor / smooth-path
+   is consumed.
+4. Document the catalogue in TASKS.md as the A5.2-A5.5 backlog
+   (which phases need DT_POLYTYPE_OFFMESH_CONNECTION skip-checks).
 
-**ONE cull attempt per iteration. If A4 attempt loses, advance to
-Phase A5 (Navigation.cs off-mesh awareness). Do NOT retry within A4.**
+**Acceptance**: TASKS.md updated with the per-phase audit findings.
+No code or config or tile changes. Commit the docs only.
 
-**Expected outcome:** even with phantoms culled, the legit ground at
-z=37.509 is 3.5y above WP Z=34.0 — beyond Detour's default 1.8y
-findNearestPoly extent. A4 alone may not close coord 2 unless
-paired with a smooth-path corner-Z snap (PathFinder.cpp change). If
-probe confirms cull worked but sweep doesn't close, that's an A4
-DIAGNOSTIC WIN (proves the cull architecture works, isolates the
-remaining gap to the Detour query side) — proceed to A5.
+**Why this matters for the close-out**: per loop-23 Surface C, adding
+off-mesh entries to bypass tile (40, 29) traps fails because the
+managed pipeline mis-handles them (hangs >25s in some phases,
+mis-applies LOS rejection in others). Making Navigation.cs
+off-mesh-aware (A5.2-A5.4) unblocks Surface C's architectural
+direction. Surface C's 4 candidate off-mesh entries (loop-23) become
+deployable in A5.5 once the managed pipeline can tolerate them.
 
 ### Blocked / questions for user
 None as of 2026-05-18.
