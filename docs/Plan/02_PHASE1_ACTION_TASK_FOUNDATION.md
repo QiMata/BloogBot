@@ -1318,6 +1318,77 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[project_pfs_loop21_trap_diagnosis]],
   [[feedback_pathfinding_anti_patterns]].
 
+- **Latest evidence (2026-05-18 loop 24 — Phase A3 bake regen
+  attempted, NEGATIVE):** Single coordinated 2-knob delta on tile
+  (40, 29) override calibrated from Phase A2 stack data:
+  `walkableErosionRadius 0.2 → 0.3` (broader agent-radius exclusion,
+  targets the AREA_GROUND-tagged phantom band polyIdx 18349-18372
+  with narrow aabb Z extents) AND `walkableHeight 0 (auto=11) → 14`
+  (=3.5y, removes low-clearance phantom cells in the cluttered
+  z-stack region). Forbidden knobs respected.
+
+  Bake (`cd D:/MaNGOS/data; MmapGen.exe 1 --tile 40,29 --configInputPath ...`):
+  output md5 `fbe57ed439986b87c5613edf9bc39a59`, size 8070292 (-8.4%
+  from baseline 8805608). Bake LOG emitted
+  `loadOffMeshConnections:: input file offmesh.txt not found!` —
+  catalogue side-effect: existing OG-zeppelin off-mesh entries
+  dropped because `--offMeshInput` wasn't threaded.
+
+  **Probe outcome** (candidate copied to prod-data + docker restart,
+  probed via Phase A2's `--dump-poly-stack`, **then reverted**):
+
+  | Coord | Polys baseline | Polys A3 | Δ |
+  |---|---|---|---|
+  | 1 `(1347.3,-4540.6,35.8)` | 1 (off-mesh) | 0 | -1 (off-mesh dropped) |
+  | 2 `(1350.2,-4528.6,34.0)` | 64 (63 phantoms + 1 legit) | 64 | **0 (UNCHANGED)** |
+  | 3 `(1348.0,-4537.7,35.4)` | 5 (4 deck + 1 off-mesh) | 4 | -1 (off-mesh dropped) |
+
+  Polygon graph DID shift (polyIdx 18398 → 17389 for coord-2 legit
+  ground; surfaceZ=37.509 + posOverPoly=1 preserved). But the
+  phantom stack at coord 2 is structurally identical — 63 phantoms
+  in the same aabb Z windows. **Knobs A+B do not fit this phantom
+  class.** The 8.4% tile-size reduction came from cells elsewhere
+  in the tile, not from the trap region.
+
+  **Decision: revert before the live test cycle.** Two failure
+  modes: (a) phantom stack unchanged → no closure even with off-mesh
+  restored; (b) off-mesh dropout guaranteed regression mode (would
+  fail OG zeppelin 4/4 critical gate if promoted). Per prompt's
+  "ONE coordinated delta per iteration; revert immediately on
+  regression": advancing to Phase A4.
+
+  **Cleanup verification:**
+
+  | Surface | Md5 / state |
+  |---|---|
+  | `D:/wwow-bot/prod-data/mmaps/0012940.mmtile` | `cc0d89c4…` (baseline) ✓ |
+  | `D:/MaNGOS/data/mmaps/0012940.mmtile` | `cc0d89c4…` (baseline) ✓ |
+  | `config.json` tile-4029 | reverted; NEGATIVE_RESULT note added |
+  | `wwow-pathfinding` docker | restarted, healthy ✓ |
+  | Candidate forensic copy | `/tmp/wwow-loop24-candidates/A3/0012940.mmtile` |
+
+  **Loop 24 A3 tally:** Unchanged at **19 / 4 / 0** (reverted
+  before live tests).
+
+  **Next iteration — Phase A4 (validator-driven targeted cull):**
+  Per Phase A2 architectural refinement, cull is viable for coord 2
+  ONLY. Coords 1+3 are true-air, cull can't help them. A4 procedure:
+  use `tools/MmapGen/build/NavMeshTileEditor.exe --cull-polys` to
+  zero `area`+`flags` on the 63 phantom polyIdxes catalogued in
+  Phase A2 (preserve polyIdx 18398, the legit ground at z=37.509).
+  Probe-verify only the legit poly remains in the stack. CAVEAT:
+  the legit poly is 3.5y above WP Z=34.0, beyond Detour's default
+  1.8y findNearestPoly extent even after cull, so a cull-only attempt
+  may still leave coord 2 unreachable — advancing to A5 (Navigation.cs
+  off-mesh awareness) if so. ONE cull attempt per iteration.
+
+  Memory references:
+  [[project_pfs_loop24_phase_a3_neutral]] (new),
+  [[project_pfs_loop24_phase_a2_polystack]],
+  [[project_pfs_loop24_phase_a1_neutral]],
+  [[project_pfs_overhaul_006_brm_singletile_negative]] (precedent
+  for single-tile knob regression risk).
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family
