@@ -332,3 +332,247 @@ whose `(current_activity_id, current_objective_id)` pairs match the
 composed sequence in order. See
 [`Plan/Activities/00_INDEX.md`](../../Plan/Activities/00_INDEX.md)
 per-row "tests" column.
+
+## 9. ML-aided composition (the composer learning loop)
+
+The §3 algorithm is **deterministic by construction**. The same
+`(activity, snapshot, db, unlocks)` inputs always produce the same
+`Objective` list. But "deterministic" does not mean "optimal":
+
+- Step 5 (`TopologicalSortByObjectiveLevelDependencies`) returns *any*
+  valid topological order; many orders satisfy the dependencies but
+  some close `RosterPlanner.Distance` faster than others.
+- Step 6 (`AttachPriorityAndCostMetadata`) uses a hand-rolled cost
+  function. Real bots' observed wall-clock cost diverges from the
+  estimate as the world state shifts (transport timing, mob density,
+  drop-rate variance).
+- Section 4 `ComposeQuestingObjectives` builds the quest DAG from
+  `quest_template.PrevQuestId` / `NextQuestInChain`, but quest *value*
+  (XP per quest, drop value of the reward) is not in the DB — it's
+  measured empirically over time.
+
+The **composer learning loop** addresses these gaps by hooking
+`IActivityComposer.Compose(...)` into the Spec/20 advisor surface,
+**without** replacing the deterministic algorithm. The composer
+remains the single source of truth for *which Objectives appear* in
+the list; the advisor only nudges *ordering when the deterministic
+sort produces a tie*, and only when the operator has flipped that
+advisor to `AdvisorMode.Rules` or `AdvisorMode.Ml`.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Composer learning loop                                          │
+│                                                                  │
+│  ┌─────────────────┐    deterministic sort                      │
+│  │  §3 algorithm   │ ─────────────────────► [Obj_a, Obj_b, ...] │
+│  └─────────────────┘                                             │
+│                              │                                   │
+│                              ▼                                   │
+│              detect tied head (within ε of 1e-3 on               │
+│              priority + travel cost + unlock fanout)             │
+│                              │                                   │
+│                              ▼                                   │
+│   ┌──────────────────────────────────────────────────────────┐  │
+│   │ IDecisionEngineClient.GetObjectiveAdviceAsync(ctx, ct)   │  │
+│   │   per Spec/20 §2.1, fail-soft to NoAdvice                │  │
+│   └──────────────────────────────────────────────────────────┘  │
+│                              │                                   │
+│                              ▼                                   │
+│   accept advice if RecommendedObjectiveId ∈ tied_set            │
+│   AND confidence >= 0.5                                          │
+│                              │                                   │
+│                              ▼                                   │
+│   final Objective list = [chosen_tied_head, rest...]            │
+│                              │                                   │
+│                              ▼                                   │
+│              ┌──────────────────────────────┐                   │
+│              │  Activity runs               │                   │
+│              │  outcome.roster_distance_    │                   │
+│              │    delta emitted to trace    │                   │
+│              │    (Spec/20 §6.1)            │                   │
+│              └──────────────────────────────┘                   │
+│                              │                                   │
+│            ┌─────────────────┘                                   │
+│            ▼                                                     │
+│  Off-line training (Python):                                     │
+│  - Aggregates outcome lines per (ObjectiveContext, chosen_id)   │
+│  - Fits a per-(ActivityFamily, level_band) ranker                │
+│  - Exports ONNX → Models/objective/v<n>.onnx                     │
+│  - Plan/14 S10.6 flips Mode=Ml when the model file lands         │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Three maturity phases (matches Spec/20 §5)
+
+| Phase | Source | Effect on the §3 algorithm |
+|---|---|---|
+| 1 — Heuristic | `Services/WoWStateManager/Activities/Composers/ObjectiveTieHeuristic.cs` — lex-sort the tied set by `Id` | Step 5 stable-orders by Id when ties remain |
+| 2 — Rules + lookup | `Config/decision-engine/objective-tie-rules.json` keyed by `(ActivityFamily, ObjectiveType, level_band)` | Step 5 rule-table picks tied head |
+| 3 — ONNX | `Services/DecisionEngineService/Models/objective/v1.onnx` trained on labeled outcome traces | Step 5 picks the tied head with the lowest *predicted* `roster_distance_delta` |
+
+### Phase-3 input features
+
+`ObjectiveContext.tied_objective_ids[]` + `tied_objective_types[]` +
+`tied_objective_costs[]` + `tied_unlock_fanout[]` +
+`roster_goal_distance[8]` (the Spec/05 8-axis vector) plus snapshot
+position, zone, inventory value. Service-side ONNX tensor shape is
+`[1, 96]` per [`Spec/20 §4.2`](../../Spec/20_DECISION_ENGINE.md#42-onnx-feature-tensor-shapes-per-advisor)
+Objective row.
+
+### Fail-soft fallback
+
+`NoAdvice` (timeout / service down / model load failure /
+confidence < 0.5 / recommended id outside tied set) → fall back to
+Phase-1 lex tie-break. The composer's behavior is identical with or
+without the advisor when the input set is non-tied. The advisor
+*cannot break the dependency-correctness of the §3 algorithm* — it can
+only choose among already-valid orderings.
+
+### Live-validation guard
+
+Replaying any production composer trace with `objective` advisor
+forced to `NoAdvice` MUST still produce
+`outcome.roster_distance_delta ≤ 0` — the deterministic stack closes
+distance without ML; the advisor merely chooses among tied options.
+The guard is the Plan/14 S10.8
+`DecisionEngine_DynamicProgressive_AllAdvisorsForcedToNoAdvice` test.
+
+## 10. Worked example — ML-aided composition for "level 32 Westfall → STV transition"
+
+Setup:
+
+- Bot: Human Paladin, level 32, Alliance, Westfall hub-bound, 18 of
+  21 Westfall quests completed (`bot.QuestsCompleted` includes the
+  Defias chain and Sentinel Hill quests), 0 STV quests touched.
+- `CharacterRosterGoal.TargetLevel = 60`, `GearTier = PreRaid`.
+- Active Activity: `zone.westfall` (catalog row, `LevelRange=[10, 18]`).
+- `RosterPlanner.Distance(snapshot, goal).TotalScalar` ≈ 0.62
+  (Spec/05 §RosterPlanner.Distance; level axis dominant).
+
+Composer §3 algorithm produces:
+
+```
+seed = ComposeQuestingObjectives(zone.westfall, snapshot, db) returns:
+  [
+    travel-to-defias-windmill-pickup,    # (already completed)
+    accept-defias-windmill,              # (already completed)
+    ...
+    travel-to-westfall-hub-turnin,       # (already completed)
+    transition-to-next-zone              # appended by §4 step 4e because
+                                         # bot.Level (32) > LevelRange.Max - 1 (17)
+                                         # i.e. bot is over-leveled for Westfall
+  ]
+
+# After step 4 FILTER BY SNAPSHOT, only one Objective remains:
+remaining = [transition-to-next-zone]
+```
+
+Composer would normally pick the only remaining Objective and the
+algorithm would be done. But at this transition, the composer has a
+*choice* of which next-zone hub to head to:
+
+```
+NextZoneHubForFaction(Alliance) returns:
+  [
+    booty-bay-stv,             # level 30-45 (good fit)
+    duskwood-darkshire-hub,    # level 18-30 (too low)
+    redridge-lakeshire-hub,    # level 15-25 (too low)
+    stonetalon-cross-faction,  # cross-faction (gated)
+  ]
+```
+
+After filter by level fit and faction, two candidates remain:
+`booty-bay-stv` and (for some builds) a Wetlands→Arathi transition
+chain. The §3 step 5 deterministic sort breaks the tie by lex order,
+yielding `booty-bay-stv`. Without ML, this is the final answer.
+
+### With Phase-2 rules
+
+`Config/decision-engine/objective-tie-rules.json` declares:
+
+```jsonc
+{
+  "ZoneQuesting": {
+    "transition-to-next-zone": {
+      "level_band_30_40_alliance": {
+        "preferred_target": "stv",
+        "rationale": "STV's Defias trail rewards Paladin Holy/Ret gear; better xp/hr than Wetlands at L32"
+      }
+    }
+  }
+}
+```
+
+The composer's Phase-2 advisor reads this rule and returns
+`ObjectiveAdvice { RecommendedObjectiveId="transition-to-next-zone[target=booty-bay-stv]", Confidence=0.85, Rationale="..." }`.
+Same answer as Phase-1 lex sort by coincidence in this case, but the
+rule prevents the composer from accidentally picking a level-too-low
+zone if a future deterministic-sort change re-orders the candidates.
+
+### With Phase-3 ONNX
+
+The Phase-3 model has trained on `tmp/test-runtime/traces/*/outcome.jsonl`
+across 200+ prior Westfall-exhausted Alliance-Paladin transitions. The
+model knows from data that:
+
+- STV path takes 4–6 wall-clock hours to reach level 38.
+- An alternative path via Hillsbrad (cross-zone) takes 6–8 hours but
+  produces +0.04 more `roster_distance_delta` per hour (faster
+  GearTier closing via the Paladin Hillsbrad horse drop quest).
+
+Model returns:
+`ObjectiveAdvice { RecommendedObjectiveId="transition-to-next-zone[target=hillsbrad-cross]", Confidence=0.71, Rationale="hillsbrad cross-zone path historically dominates roster_distance_delta for L32-37 Paladins by +0.04/hr" }`.
+
+The composer accepts the recommendation (it's in the tied set since the
+catalog declares both STV and Hillsbrad routes are valid for L30-40
+Alliance) and the bot heads to Hillsbrad instead of STV.
+
+### Why this still satisfies the dynamic-progressive invariant
+
+- **Dynamic.** A Horde Paladin (Tauren only — Alliance-Paladin parallel
+  doesn't exist on Horde in vanilla, but for the abstract example) or
+  an Alliance Mage with the same input snapshot DOES produce a
+  different recommendation: Mage's Hillsbrad drop quest is not the
+  Paladin horse quest; the model doesn't apply.
+- **Progressive.** The Hillsbrad path still strictly reduces
+  `RosterPlanner.Distance.TotalScalar` (gear tier + level both
+  decrease). The deterministic STV fallback would also have produced
+  a non-positive delta; the ML pick is **better** but the **floor is
+  preserved**.
+
+The composer's contract is: the deterministic stack always closes
+distance; ML accelerates the closure but cannot reverse it.
+
+## 11. Dynamic-progressive invariant (composer-side)
+
+Per the loop's invariant (referenced across Spec/19 §10, Spec/20 §10,
+Spec/05 §Dynamic-progressive invariant), the composer MUST satisfy:
+
+1. **Dynamic.** `Compose(def, snapshot, db, unlocks, params)` produces
+   different `Objectives` lists when `snapshot` differs in any
+   bot-relevant axis (race / class / level / faction / inventory /
+   `QuestsCompleted` / `Reputation` / `Attunements`). Identical
+   snapshots produce identical lists — this is what makes the §3 step
+   5 "local-stable" requirement load-bearing.
+2. **Progressive.** Every `ActivityCompletion { IsComplete = true }`
+   strictly reduces `RosterPlanner.Distance(snapshot, goal).TotalScalar`
+   for the bot's `CharacterRosterGoal`. ML-aided composition cannot
+   weaken this — the advisor only chooses among *tied* options, all
+   of which produce non-positive delta by §3 algorithm construction
+   (step 6 priority/cost attachment).
+
+Asserted at the §8 test surface by
+`AotaDynamicComposition_LearningLoop_AdviceRespectsTieSetAndProgresses`
+(an addition to the slot S2.0 test class).
+
+## 12. Plan-slot cross-reference
+
+| Slot | Owns | Section here |
+|---|---|---|
+| [`Plan/03/S2.0`](../../Plan/03_PHASE2_ONDEMAND_ENGINE.md#s20--iactivity--iobjective-runtime-contracts) | `IActivityComposer.Compose(...)` runtime contract | §3 algorithm |
+| [`Plan/14/S10.2`](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s102--objective-composer-tie-breaker) | `Services/WoWStateManager/Activities/Composers/*Composer.cs` + `ObjectiveTieBreaker.cs` | §9 composer learning loop |
+| [`Plan/14/S10.6`](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s106--mode-aware-advisor-activation) | `Config/decision-engine/objective-tie-rules.json` + Mode flip | §9 Phase 2 + Phase 3 |
+| [`Plan/14/S10.7`](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s107--training-trace-plumbing) | Trace pipeline that feeds Phase-3 training | §9 training loop |
+| [`Plan/13`](../../Plan/13_PHASE9_CATALOG_FILL.md) | The ~88 → ~150 ActivityDefinition row expansion the composer walks | §1 inputs |
+| **(no slot yet — Plan follow-up)** | `Services/WoWStateManager/Progression/RosterPlanner.cs` (§Distance metric, Spec/05) | §10 worked example |
+| **(no slot yet — Plan follow-up)** | `Services/WoWStateManager/Activities/ComposerOutcomeRecorder.cs` (writes `outcome` lines from `ActivityCompletion`) | §9 training-data path |
