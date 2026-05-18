@@ -159,3 +159,144 @@ distinct `ActivityDefinition` literals. See
 [`01_CATALOG_ROWS.md`](01_CATALOG_ROWS.md) for the shard breakdown.
 `Tests/BotRunner.Tests/Activities/CatalogMarkdownDriftTests.cs`
 asserts the id sets here match the catalog.)
+
+## Phase 9 expansion (forward-reference)
+
+[`Plan/13_PHASE9_CATALOG_FILL.md`](../13_PHASE9_CATALOG_FILL.md) ships
+the catalog from 86 → ~150 rows across slots S9.1-S9.7. The
+`CatalogMarkdownDriftTests` row-count assertion was loosened (Plan/13
+S9.8) to accept the `[130, 180]` range during the expansion. Forward
+references the test surface targets:
+
+| Plan/13 slot | New rows (sketch) | New family file (if needed) |
+|---|---|---|
+| S9.1 | `dungeon.sm-graveyard`, `dungeon.sm-library`, `dungeon.sm-armory`, `dungeon.sm-cathedral` | extend [`dungeons.md`](dungeons.md) |
+| S9.2 | `dungeon.stockades` | extend [`dungeons.md`](dungeons.md) |
+| S9.3 | dungeon-quest sub-Activities (≥3 to start: BRD/Gnomeregan/LBRS) | extend [`dungeons.md`](dungeons.md) |
+| S9.4 | ≥10 escort-family rows (Tooga, Stinky, Cluck, etc.) | new [`escorts.md`](escorts.md) |
+| S9.5 | event.* rows for Lunar Festival / Hallow's End / Winter Veil / Midsummer / Children's Week / Darkmoon Faire | extend [`world-events.md`](world-events.md) |
+| S9.6 | `social.mage-port`, `social.warlock-summon`, `social.lfg-cycle`, `social.trade-chat-cycle`, `social.guild-events`, `social.city-ambient` | new [`social.md`](social.md) |
+| S9.7 | `wpvp.epl-graveyards`, `wpvp.silithyst-shard-runs` (gated) | extend [`dungeons.md`](dungeons.md) wpvp section |
+
+Each new row inherits the same training-trace contract below.
+
+## Training-trace contract (per row)
+
+Every catalog row, when run through LiveValidation per
+[`Spec/13 §Training-trace capture`](../../Spec/13_TESTING.md#training-trace-capture),
+produces a JSONL trace at
+`tmp/test-runtime/traces/<TestClass.TestMethod>/<timestamp>.jsonl`.
+This section pins **which Spec/20 advisors each family triggers** so
+the off-line trainer knows what features to extract. Trace lines
+follow [`Spec/20 §6.1`](../../Spec/20_DECISION_ENGINE.md#61-trace-line-schema).
+
+| Family | Spec/20 advisors triggered per Activity run | Expected outcome-line count per Activity | Per-Activity training value |
+|---|---|---|---|
+| Starter questing | `objective` (compose questing chain), `reward` (turn-in choices), `personality_cluster` (one-shot at bot creation) | 1 per Activity completion | medium — small chains, fast iteration, good for warm-start data on the L1-10 brackets |
+| Zone questing | `objective` × many (chain ordering, sub-Objective tie-breaks), `reward` × ~25 turn-ins, `chat_template` (LFG queue posts), `activity_request` (whisper-driven cross-zone hand-offs, rare) | 1-3 per Activity (Activity may chain into the next zone) | **high** — bulk of the leveling-loop training corpus; Phase-3 Objective model trains primarily on these |
+| Dungeons | `objective` (boss-pull tie-breaks), `threat` × many (tank target swaps), `rotation` × very many (combat ticks), `reward` (boss-loot rolls), `activity_request` (OnDemand `!run rfc` etc.) | 1 per full clear | **high** — combat-rotation training corpus origin; the rotation advisor's labeled data is mostly dungeon runs |
+| Raids | `objective` (encounter order), `threat` × very many, `rotation` × very many, `reward` × ~7-15 boss loot, `chat_template` (raid-recruit posts), `activity_request` (`!raid mc`) | 1 per boss kill or 1 per attempt | **highest** — per-encounter sub-traces; raid traces are gold for tank-swap and rotation training |
+| Battlegrounds | `objective` (cap/hold/escort sub-Objectives), `threat` (PvP target prioritization — different model from PvE!), `rotation` (PvP rotation diverges from PvE), `chat_template` (BG comms minimal) | 1 per match | medium — limited Phase-3 value for PvE models; high value for PvP-specific models |
+| Profession farming | `objective` (route ordering — interleave with side quests), `cheapest-source-learner` (when farming gathered mats has alternatives), `chat_template` (`wts` posts for surplus) | 1 per route completion | medium — economy training corpus |
+| Profession crafting | `objective` (recipe-priority ordering), `cheapest-source-learner` (reagent sourcing, recursive), `reward` (recipe choice when learning multiple) | 1 per craft cycle | medium |
+| Economy | `objective` (AH cycle vs vendor cycle), `chat_template` (`wts`/`wtb`/lfg posts), `personality_cluster` (chattiness + AhPostingUnderscutPercent) | 1 per cycle | **high for economy + chat ML** |
+| Reputations | `objective` (turn-in chain ordering — long-tail; e.g. Argent Dawn bone-fragments), `cheapest-source-learner` (rep-token sourcing) | 1 per Activity (often ranges into the next Activity if rep target is mid-tier) | high — these chains produce the longest contiguous Objective sequences, valuable for sequence-learning |
+| Attunements | `objective` (chain ordering across zones), `cheapest-source-learner` (gated item gates per [`aota/05`](../../architecture/aota/05_ITEM_REQUIREMENTS.md)) | 1 per full chain | **highest** — multi-Activity recursive chains, strong test of the Objective advisor's planning depth |
+| World events | `objective` (event sub-Objective ordering), `activity_request` (`!fish ratchet` etc.) | 1 per event Activity completion (event-time-windowed) | low — limited training-data volume |
+| World bosses | `objective` (timing decisions — pre-buff vs immediate), `threat`, `rotation`, `chat_template` (recruit posts) | 1 per attempt | low (volume); high per-trace value when they fire |
+| Social (Plan/13 S9.6) | `chat_template` × very many (every emitted post), `personality_cluster`, `activity_request` (whisper-driven mage-port / warlock-summon) | varied (mage-port is 1; trade-chat-cycle is N posts per cycle) | **highest for chat_template + activity_request ML** |
+| Escorts (Plan/13 S9.4) | `objective` (escort routing tie-breaks), `threat` (defending the escort target) | 1 per escort attempt | medium |
+| Holiday events (Plan/13 S9.5) | `objective`, `activity_request`, `personality_cluster` | varied | low–medium |
+
+The Phase-3 ONNX trainer per advisor picks its corpus from the family
+columns above:
+
+- **`objective` model**: trains primarily on Zone questing + Dungeons
+  + Raids + Reputations + Attunements traces (highest-volume Objective
+  diversity).
+- **`rotation` model**: trains primarily on Dungeons + Raids combat
+  ticks; PvP rotation is a separate model trained on Battlegrounds.
+- **`threat` model**: tank-only; trains primarily on Dungeons + Raids
+  tank traces; PvP threat is a separate model.
+- **`reward` model**: trains on every turn-in + boss kill across all
+  families.
+- **`chat_template` model**: trains on Social + Economy chat-emission
+  traces.
+- **`activity_request` model**: trains on the Shodan whisper handler's
+  operator-confirmation traces (every `!run/!raid/!bg/!port/!summon`
+  whisper that gets accepted contributes a label).
+- **`personality_cluster` model**: trains on per-bot
+  account-creation snapshots aggregated across all families.
+
+## Dynamic-progressive invariant (per-row trace assertion)
+
+Per [`Spec/13 §Dynamic-progressive invariant`](../../Spec/13_TESTING.md#dynamic-progressive-invariant),
+**every** catalog row's LiveValidation trace MUST produce an `outcome`
+line with `roster_distance_delta ≤ 0` when `completion="complete"`.
+This is enforced both:
+
+1. **At fixture teardown** (Spec/13 §Correctness contract — failing
+   trace = failing test).
+2. **Across the per-row test suite** by
+   `Testing_DynamicProgressive_LiveValidationProducesNonPositiveRosterDeltaTest`
+   (Spec/13 §Test surface).
+
+If a catalog row's trace consistently produces
+`roster_distance_delta = 0` (cosmetic-only completions) AND no
+trace shows strictly-negative delta over a representative sample,
+the row is **decoration**, not gameplay, and the row author must
+either:
+
+- Justify the decoration in the matching family file
+  (e.g. `quests.md`, `social.md`) with an explicit `Rationale` block,
+  OR
+- Adjust the Activity's Objective sequence so the completion closes
+  at least one axis of `RosterPlanner.Distance` (e.g. `social.city-ambient`
+  alone closes nothing; pairing it with mailbox + AH posts closes
+  the `GoldTargetPct` axis indirectly).
+
+## Plan-slot cross-reference
+
+| Slot | Owns | Section here |
+|---|---|---|
+| [`Plan/03/S2.0`](../03_PHASE2_ONDEMAND_ENGINE.md#s20--iactivity--iobjective-runtime-contracts) | `IActivityComposer.Compose(...)` (the runtime that walks every row in this index) | All rows |
+| [`Plan/13`](../13_PHASE9_CATALOG_FILL.md) | The 86 → ~150 catalog expansion | §Phase 9 expansion |
+| [`Plan/13/S9.8`](../13_PHASE9_CATALOG_FILL.md) | `CatalogMarkdownDriftTests` row-count + invariant tests | §Total: 86 rows |
+| [`Plan/14/S10.7`](../14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s107--training-trace-plumbing) | `TraceWriter.cs` (writes the JSONL traces this section consumes) | §Training-trace contract |
+| [`Plan/14/S10.8`](../14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s108--livevalidation-for-advisor-wire) | The dynamic-progressive guard suite | §Dynamic-progressive invariant |
+| Per-family Plan docs | `quests.md`, `dungeons.md`, `raids.md`, `bgs.md`, `professions.md`, `economy.md`, `reputations.md`, `attunements.md`, `world-events.md`, `world-bosses.md`, plus Plan/13 new `escorts.md` + `social.md` | per-row implementation slot tracking |
+
+## Test surface
+
+Contract tests for the index file itself live at
+`Tests/BotRunner.Tests/Activities/IndexTrainingTracePlanContractTests.cs`
+(complements the existing `CatalogMarkdownDriftTests.cs` from Plan/13
+S9.8). Tests assert against on-disk markdown structure and against
+trace JSONL files; never against composer internal state.
+
+- **`IndexTrainingTracePlan_EveryFamilyAppearsInTraceContractTable`** —
+  every `^## ` family heading in this file appears in the
+  §Training-trace contract table's left column. New families added
+  to the catalog without a corresponding trace-contract row fail
+  this test.
+- **`IndexTrainingTracePlan_AdvisorsListedAreSubsetOfSpec20Surface`** —
+  for every family, the listed advisors are a subset of
+  `{rotation, threat, reward, objective, chat_template,
+   activity_request, personality_cluster, cheapest-source-learner}`
+  (where `cheapest-source-learner` is a §aota/05-defined alias for
+  `objective` over source candidates). No advisor name typos.
+- **`IndexTrainingTracePlan_EveryRowProducesOutcomeLineAcrossSample`** —
+  scan the union of `tmp/test-runtime/traces/*/` from a
+  representative-suite run; assert that for EVERY catalog row id (as
+  enumerated by `IActivityCatalog`), at least one trace file contains
+  a `kind="outcome"` line referencing that row's `activity_id`.
+  Rows that never produce an outcome line in the representative
+  suite indicate a LiveValidation coverage gap.
+- **`Activities00Index_DynamicProgressive_NonPositiveRosterDeltaPerRowTest`** —
+  for every catalog row id, the union of outcome lines referencing
+  that row across `tmp/test-runtime/traces/*/` MUST contain at
+  least one entry with `roster_distance_delta < 0` (strictly
+  negative — proof that the row closes goal distance at least
+  sometimes). Rows whose every outcome has `delta = 0` are
+  flagged as **decoration** and must be justified in their family
+  file per §Dynamic-progressive invariant.
