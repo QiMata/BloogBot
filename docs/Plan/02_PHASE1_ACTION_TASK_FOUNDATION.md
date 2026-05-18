@@ -1469,6 +1469,76 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[project_pfs_loop20_cull_pipeline_unblock]],
   [[project_pfs_overhaul_006_polyref_polyidx_decoding]].
 
+- **Latest evidence (2026-05-18 loop 24 — Phase A5.1 Navigation.cs
+  audit, read-only):** Audited
+  `Services/PathfindingService/Repository/Navigation.cs` (7448 LOC).
+  **Definitive finding: ZERO off-mesh-type awareness anywhere in
+  the file** — `polyType` and `DT_POLYTYPE` both return 0 matches.
+  The only off-mesh mentions are 3 prose comments at lines 125,
+  2169, 2940 acknowledging that off-mesh links exist; no code
+  ever checks for them.
+
+  **The 8 repair phases** (mapped to `ApplyNativeSegmentValidationCore`'s
+  call sequence at lines 2339-2780):
+
+  | # | Phase | Entry function | Symptom on a teleport segment (0y horiz, 29y vert) |
+  |---|---|---|---|
+  | 1 | LOS repair | `RepairLongLineOfSightBreaks:2856` | 35y LOS threshold skips, but Phase 2's air midpoints get re-LOS'd here in later calls |
+  | 2 | Initial densify + normalize | `DensifyPath:2905` + `NormalizeEarlySupportLayer:3124` + `RemoveShortVerticalLayerSpikes:3302` + `RemoveShortHorizontalDetourSpikes:3350` | DensifyPath inserts linear midpoints in air; NormalizeEarlySupportLayer pulls them to harbor floor; spike removers see the 29y Z jump as a "spike" and try to flatten |
+  | 3 | Early static repair | `RepairEarlyStaticBreaks:4026` | Re-runs LOS+findPath repair on the pulled-down midpoints; Detour returns the same off-mesh corridor → loop until 5s `EarlyStaticRepairBudget` exhausts |
+  | 4 | Affordance repair (1st) | `RepairAffordanceBreaks:4103` | `ClassifyPathSegmentAffordance` returns Cliff/SteepClimb on dz=29y/dx=0y; pipeline detour-attempts until 8s `AffordanceRepairBudget` exhausts |
+  | 5 | Re-normalize | Same Phase-2 functions | Same symptoms as Phase 2 |
+  | 6 | Affordance repair (2nd, post-normalize) | `RepairAffordanceBreaks:4103` (re-entry) | Same as Phase 4 |
+  | 7 | Post-affordance static repair | `RepairEarlyStaticBreaks:4026` (re-entry) | Same as Phase 3 |
+  | 8 | Local-physics reachability | `NormalizeLocalPhysicsReachableLayers:3543` + `FindFirstLocalPhysicsReachabilityBreak:4374` + `RepairAffordanceBreaks:4103` (3rd, `includeLocalPhysicsReachabilityBreaks=true`) | `ValidateWalkableSegment` returns no-path on teleport → flagged `local_physics_layer` → 4th round of affordance repair attempts |
+
+  This is the root cause of loop-23 Surface C's "managed-pipeline-hang
+  risk". The existing OG zeppelin off-mesh entries survive because
+  the budgets sum to ~15-20s and short OG zep routes time-box out
+  with the original Detour smoothPath intact (managed repair fails
+  to write back). Longer routes with multiple off-mesh entries can
+  hang past 60s.
+
+  **A5.2 — ship `IsOffMeshSegment(mapId, start, end)` helper +
+  Phase 1 skip-check.** The helper uses the existing
+  `GetPolyAtCoord` native export (commits prior + loop-20 AV
+  tolerance) and queries `outPolyType` at both endpoints. Returns
+  true iff either endpoint's polyType == 1
+  (`DT_POLYTYPE_OFFMESH_CONNECTION`). Memoize per-`CalculatePath`
+  on `(mapId, x, y, z)` similar to `_segmentValidationCache`
+  (Navigation.cs:535-583). Single skip-check at
+  `RepairLongLineOfSightBreaks:2877-2878`. Unit test the helper +
+  a regression test on an existing OG zep off-mesh path. Build +
+  targeted test only (no full sweep yet — that's A5.4).
+
+  **A5.3 — apply the same skip-check at the 6 other phase
+  entries**: `DensifyPath`, `NormalizeEarlySupportLayer`,
+  `RemoveShortVerticalLayerSpikes`, `RemoveShortHorizontalDetourSpikes`,
+  `RepairEarlyStaticBreaks`, `RepairAffordanceBreaks`. Each
+  function gets a 2-3 line early-out.
+
+  **A5.4 — E2E test.** New test in `PathfindingService.Tests` that
+  runs `CalculatePath` against an existing OG zep off-mesh path;
+  assert managed-validation wall time < 1s (was 15-20s) and no
+  phase repair fired on teleport segments.
+
+  **A5.5 — deploy loop-23 Surface C's 4 new off-mesh entries.**
+  Edit `tools/MmapGen/offmesh.txt`, bake tile with
+  `--offMeshInput`, probe to verify binding, full 23-case sweep.
+  Target: 23/0.
+
+  **Cleanup:** working tree clean, no code/config/tile changes
+  this iteration.
+
+  **Loop 24 A5.1 tally:** Unchanged at **19 / 4 / 0** (read-only).
+
+  Memory references:
+  [[project_pfs_loop24_phase_a5_1_audit]] (new),
+  [[project_pfs_loop24_phase_a4_neutral]],
+  [[project_pfs_loop23_close_attempt_three_surfaces]],
+  [[project_mmapgen_offmesh_axis_swap]],
+  [[feedback_pathfinding_freeze]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family
