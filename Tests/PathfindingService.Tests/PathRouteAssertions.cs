@@ -102,6 +102,24 @@ internal static class PathRouteAssertions
             if (horizontal < 0.001f && MathF.Abs(rawNext.Z - current.Z) < 0.001f)
                 return $"Zero-length segment at index {i - 1}->{i}: {Format(current)} -> {Format(rawNext)}";
 
+            // PFS-OVERHAUL-006 loop-24 Phase A5.6: skip per-segment walkability
+            // assertions on off-mesh teleport segments. The bot's
+            // MovementController handles teleport transitions natively (without
+            // walking through the air between source and destination), so
+            // applying maxSegmentLength, static LOS, ValidateWalkableSegment,
+            // and maxHeightJump checks to these segments produces false
+            // positives. Mirrors the A5.2-A5.3 work in Navigation.cs which made
+            // the managed repair pipeline off-mesh-aware. The helper
+            // IsOffMeshConnectionAtCoord uses direct tile-poly iteration
+            // (NOT findNearestPoly, which deprioritises off-mesh polys per the
+            // loop-21 trap diagnosis).
+            if (NavigationInterop.IsOffMeshConnectionAtCoord(mapId, current, xyExtent: 2.0f, zExtent: 4.0f)
+                || NavigationInterop.IsOffMeshConnectionAtCoord(mapId, rawNext, xyExtent: 2.0f, zExtent: 4.0f))
+            {
+                current = rawNext;
+                continue;
+            }
+
             if (horizontal > maxSegmentLength)
                 return $"Segment {i - 1}->{i} horizontal distance {horizontal:F1}y exceeds max {maxSegmentLength}y";
 
