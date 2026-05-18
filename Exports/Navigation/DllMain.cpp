@@ -2934,6 +2934,168 @@ extern "C" __declspec(dllexport) bool GetPolyAtCoord(
     }
 }
 
+// PFS-OVERHAUL-006 loop-24 Phase A2 — direct tile-poly enumeration around
+// a probe coord. NOT findNearestPoly. For each loaded tile that covers the
+// (X, Y) cell containing `coord` plus its 8 grid neighbours (to handle
+// polys that straddle tile borders), enumerate every dtPoly whose 3D AABB
+// intersects the {coord ± xyExtent} × {coord.Z ± zExtent} window. The
+// caller learns the FULL vertical stack of polys at a probe coord
+// (including phantom polys whose surfaceZ is far from the requested Z),
+// which findNearestPoly can never reveal because Detour's z=1.8y default
+// extent and "nearest" ranking pick exactly one winner.
+//
+// Output arrays are caller-allocated and indexed in parallel:
+//   outPolyRefs[i]       full 64-bit poly ref (tile-base | poly-idx)
+//   outSurfaceZs[i]      getPolyHeight at coord.XY (NaN if outside detail)
+//   outAabbMinZs[i]      min vertex Z (WoW Z) of the polygon
+//   outAabbMaxZs[i]      max vertex Z (WoW Z) of the polygon
+//   outPosOverPolys[i]   1 if coord.XY lies inside the polygon's convex
+//                        footprint (closestPointOnPoly result), 0 if
+//                        snapped to the boundary
+//   outAreas[i]          6-bit area id
+//   outFlags[i]          16-bit user-defined poly flags
+//   outPolyTypes[i]      DT_POLYTYPE_GROUND (0) or DT_POLYTYPE_OFFMESH_CONNECTION (1)
+//   outVertCounts[i]     number of vertices in the polygon (<= 6)
+//
+// Returns the number of polygons written (capped at maxOut), or -1 on
+// infrastructure failure.
+extern "C" __declspec(dllexport) int EnumeratePolysAtCoord(
+    uint32_t mapId,
+    XYZ coord,
+    float xyExtent,
+    float zExtent,
+    uint64_t* outPolyRefs,
+    float* outSurfaceZs,
+    float* outAabbMinZs,
+    float* outAabbMaxZs,
+    uint8_t* outPosOverPolys,
+    uint8_t* outAreas,
+    uint16_t* outFlags,
+    uint8_t* outPolyTypes,
+    uint8_t* outVertCounts,
+    int maxOut)
+{
+    if (maxOut <= 0) return 0;
+    if (xyExtent < 0.0f || zExtent < 0.0f)
+    {
+        fprintf(stderr, "[POLYENUM] invalid extents: xy=%.3f z=%.3f\n", xyExtent, zExtent);
+        return -1;
+    }
+
+    try
+    {
+        if (!g_initialized) InitializeAllSystems();
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+        dtNavMeshQuery* query = GetMutableQueryForMap(mapId);
+        if (!query) { fprintf(stderr, "[POLYENUM] no query for map %u\n", mapId); return -1; }
+        const dtNavMesh* navMesh = query->getAttachedNavMesh();
+        if (!navMesh) { fprintf(stderr, "[POLYENUM] no navMesh for map %u\n", mapId); return -1; }
+
+        // WoW (X, Y, Z) -> Detour (pos.0=Y_wow, pos.1=Z_wow vertical, pos.2=X_wow).
+        const float pos[3] = { coord.Y, coord.Z, coord.X };
+        int tx = 0, ty = 0;
+        navMesh->calcTileLoc(pos, &tx, &ty);
+
+        const float xMin = coord.X - xyExtent, xMax = coord.X + xyExtent;
+        const float yMin = coord.Y - xyExtent, yMax = coord.Y + xyExtent;
+        const float zMin = coord.Z - zExtent,  zMax = coord.Z + zExtent;
+
+        int written = 0;
+
+        for (int dyy = -1; dyy <= 1 && written < maxOut; ++dyy)
+        {
+            for (int dxx = -1; dxx <= 1 && written < maxOut; ++dxx)
+            {
+                static const int MAX_LAYERS = 16;
+                const dtMeshTile* tiles[MAX_LAYERS] = {};
+                int tileCount = navMesh->getTilesAt(tx + dxx, ty + dyy, tiles, MAX_LAYERS);
+                for (int ti = 0; ti < tileCount && written < maxOut; ++ti)
+                {
+                    const dtMeshTile* tile = tiles[ti];
+                    if (!tile || !tile->header) continue;
+                    const dtPolyRef base = navMesh->getPolyRefBase(tile);
+
+                    for (int pi = 0; pi < tile->header->polyCount && written < maxOut; ++pi)
+                    {
+                        const dtPoly* poly = &tile->polys[pi];
+                        // Compute 3D AABB in WoW coords from the polygon's verts.
+                        // tile->verts[idx*3] is Detour order: [Y_wow, Z_wow, X_wow].
+                        float pMinX = 0, pMaxX = 0, pMinY = 0, pMaxY = 0, pMinZ = 0, pMaxZ = 0;
+                        bool first = true;
+                        for (int vi = 0; vi < poly->vertCount; ++vi)
+                        {
+                            const float* v = &tile->verts[poly->verts[vi] * 3];
+                            const float wx = v[2];
+                            const float wy = v[0];
+                            const float wz = v[1];
+                            if (first)
+                            {
+                                pMinX = pMaxX = wx;
+                                pMinY = pMaxY = wy;
+                                pMinZ = pMaxZ = wz;
+                                first = false;
+                            }
+                            else
+                            {
+                                if (wx < pMinX) pMinX = wx; else if (wx > pMaxX) pMaxX = wx;
+                                if (wy < pMinY) pMinY = wy; else if (wy > pMaxY) pMaxY = wy;
+                                if (wz < pMinZ) pMinZ = wz; else if (wz > pMaxZ) pMaxZ = wz;
+                            }
+                        }
+                        // Off-mesh polys store the two endpoint verts. Their AABB
+                        // is degenerate but still meaningful for the caller.
+                        if (first) continue;
+
+                        if (pMaxX < xMin || pMinX > xMax) continue;
+                        if (pMaxY < yMin || pMinY > yMax) continue;
+                        if (pMaxZ < zMin || pMinZ > zMax) continue;
+
+                        const dtPolyRef ref = base | static_cast<dtPolyRef>(pi);
+
+                        if (outPolyRefs)    outPolyRefs[written]    = static_cast<uint64_t>(ref);
+                        if (outAreas)       outAreas[written]       = static_cast<uint8_t>(poly->getArea() & 0x3F);
+                        if (outFlags)       outFlags[written]       = poly->flags;
+                        if (outPolyTypes)   outPolyTypes[written]   = poly->getType();
+                        if (outVertCounts)  outVertCounts[written]  = poly->vertCount;
+                        if (outAabbMinZs)   outAabbMinZs[written]   = pMinZ;
+                        if (outAabbMaxZs)   outAabbMaxZs[written]   = pMaxZ;
+
+                        if (outSurfaceZs || outPosOverPolys)
+                        {
+                            float height = std::numeric_limits<float>::quiet_NaN();
+                            if (poly->getType() != DT_POLYTYPE_OFFMESH_CONNECTION)
+                            {
+                                float h = 0.0f;
+                                dtStatus hSt = query->getPolyHeight(ref, pos, &h);
+                                if (dtStatusSucceed(hSt)) height = h;
+                            }
+                            if (outSurfaceZs) outSurfaceZs[written] = height;
+
+                            if (outPosOverPolys)
+                            {
+                                bool posOverPoly = false;
+                                float closest[3] = { 0.0f, 0.0f, 0.0f };
+                                dtStatus cpSt = query->closestPointOnPoly(ref, pos, closest, &posOverPoly);
+                                outPosOverPolys[written] = (dtStatusSucceed(cpSt) && posOverPoly) ? 1 : 0;
+                            }
+                        }
+
+                        ++written;
+                    }
+                }
+            }
+        }
+
+        return written;
+    }
+    catch (...)
+    {
+        fprintf(stderr, "[POLYENUM] SEH exception\n");
+        return -1;
+    }
+}
+
 // Test-only diagnostic export (2026-05-13 runtime NAV_STEEP_SLOPES exclude):
 // returns the user-flag bits and area type of a polygon given its polyRef.
 // Used by FlameCrestUbrsSmoothPath_AvoidsSteepSlopePolys to prove that no

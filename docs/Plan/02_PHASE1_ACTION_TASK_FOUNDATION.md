@@ -1263,6 +1263,61 @@ Phase 0 complete (Spec tree + compiled catalog + FailureReason enum).
   [[project_pfs_loop21_trap_diagnosis]],
   [[feedback_pathfinding_freeze]].
 
+- **Latest evidence (2026-05-18 loop 24 — Phase A2 diagnostic
+  ships `--dump-poly-stack`):** New native export
+  `EnumeratePolysAtCoord` in `Exports/Navigation/DllMain.cpp`
+  (+162 LOC) directly iterates `dtMeshTile->polys[]` for the
+  coord's tile + 8 neighbours, emitting every poly whose 3D AABB
+  intersects {coord ± xyExtent} × {coord.Z ± zExtent}. NOT
+  `findNearestPoly`. Surfaced via `--dump-poly-stack` in
+  `tools/PathPhysicsProbe.exe` (default ext `xy=2.0, z=10.0`).
+  Matching `[DllImport]` in `NavigationInterop.cs`. MSBuild
+  Navigation.vcxproj + dotnet build PathPhysicsProbe Release —
+  both green. No tile mutation; tile (40, 29) md5 unchanged at
+  `cc0d89c42d9abf4737ba52a369c5f3f7`.
+
+  **Stack dump at the 3 loop-21 trap coords on prod-data:**
+
+  | Coord | Poly count | Composition |
+  |---|---|---|
+  | 1 — `(1347.3,-4540.6,35.8)` | **1** | Off-mesh poly only (polyIdx 59748, type 1, vertCount 2, aabb Z 29.5-53.7). NO ground polys at any Z in [25.8, 45.8] at this XY. |
+  | 2 — `(1350.2,-4528.6,34.0)` | **64** | 63 phantom polys (area=3 NAV_STEEP_SLOPES `0x0011` + area=1 AREA_GROUND `0x0001`) at aabb Z 32-37, **plus the SINGLE legitimate ground polyref `281475331147742` (polyIdx 18398, area=3, aabb [37.31, 37.81], surfaceZ=37.509, posOverPoly=1)**. |
+  | 3 — `(1348.0,-4537.7,35.4)` | **5** | 4 deck-above ground polys (aabb Z 44.9-51.7) + 1 off-mesh. NO ground polys in [25.4, 45.4]. |
+
+  **Architectural refinement to loop 21's diagnosis:**
+
+  | Trap class | Coords | Fix surface |
+  |---|---|---|
+  | True air (no ground polys at the corner's Z window) | 1, 3 | Bake regen (A3) OR off-mesh + Navigation.cs awareness (A5) OR skipvox (B) |
+  | Phantom stack obscuring a far legitimate poly | 2 | Targeted cull (A4) + Z-snap mechanism (legit ground is 3.5y above the bot's WP Z, beyond default 1.8y findNearestPoly extent even after cull) |
+
+  Phase A4 (validator-driven targeted cull) is viable for coord 2
+  only. Coords 1 and 3 cannot be closed by culling — there's nothing
+  to cull because there's no ground at the corner's Z. A bake-regen
+  knob in Phase A3 must either (a) add ground polys at coord 1+3's XY,
+  or (b) shift the phantom-stack at coord 2 so the legit ground is
+  reachable from WP Z=34.0 within default extents.
+
+  **Probe artefacts** (regeneratable, not committed):
+  `/tmp/wwow-loop24-probes/coords.txt` + `poly-stack.tsv` + `stderr.log`.
+
+  **Loop 24 A2 tally:** Unchanged at **19 / 4 / 0** (diagnostic
+  phase; no live test run).
+
+  **Next iteration — Phase A3:** single coordinated multi-knob bake
+  regen on tile (40, 29). Two candidates calibrated against A2's
+  stack data: (a) `walkableErosionRadius 0.2 → 0.3`; (b)
+  `filterLedgeSpans` / `rcFilterWalkableLowHeightSpans` tuning.
+  Forbidden: `walkableSlopeAngle` / `walkableClimb` lowering;
+  `maxVertsPerPoly` change (loop 23 Surface A confirmed no-op).
+  ONE attempt per iteration; revert immediately on any regression.
+
+  Memory references:
+  [[project_pfs_loop24_phase_a2_polystack]] (new),
+  [[project_pfs_loop24_phase_a1_neutral]],
+  [[project_pfs_loop21_trap_diagnosis]],
+  [[feedback_pathfinding_anti_patterns]].
+
 ### Task family completeness
 
 Each below is a slot. The slot's done-when is: "task family

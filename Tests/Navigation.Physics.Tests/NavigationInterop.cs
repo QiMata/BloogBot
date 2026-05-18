@@ -1014,6 +1014,31 @@ public static partial class NavigationInterop
         out byte outPosOverPoly);
 
     /// <summary>
+    /// PFS-OVERHAUL-006 loop-24 Phase A2 — direct tile-poly enumeration around a
+    /// probe coord. NOT <c>findNearestPoly</c>. Returns ALL polys whose 3D AABB
+    /// intersects the {coord ± xyExtent} × {coord.Z ± zExtent} window across the
+    /// tile and its 8 neighbours. Output arrays are caller-allocated; values are
+    /// indexed in parallel. Returns the number of polys written (capped at
+    /// <paramref name="maxOut"/>) or -1 on infrastructure failure.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "EnumeratePolysAtCoord", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int EnumeratePolysAtCoord(
+        uint mapId,
+        Vector3 coord,
+        float xyExtent,
+        float zExtent,
+        [Out] ulong[] outPolyRefs,
+        [Out] float[] outSurfaceZs,
+        [Out] float[] outAabbMinZs,
+        [Out] float[] outAabbMaxZs,
+        [Out] byte[] outPosOverPolys,
+        [Out] byte[] outAreas,
+        [Out] ushort[] outFlags,
+        [Out] byte[] outPolyTypes,
+        [Out] byte[] outVertCounts,
+        int maxOut);
+
+    /// <summary>
     /// Phase 4 — total triangle count across every variant pool currently
     /// registered for the given map. Diagnostic.
     /// </summary>

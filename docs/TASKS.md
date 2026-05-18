@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-18 (loop 24 — dual-track /loop "Pathfinding Close-Out" started; Phase A1 executed end-to-end: PathFinder.cpp polyref==0 guard at main `iterPos:1936` + `findStraightPath` post-process with DEFAULT extents (2.0, 1.8, 2.0), +78 LOC, MSBuild green. OG zeppelin 4/4 critical gate held. CriticalWalkLegs **19/4/0 unchanged** — no closure, no regression. Root cause of no-op: failing corner `(1347.3,-4540.6,35.8)` = loop-21 coord 1 IS a densifier midpoint at lines 1919-1931, NOT the iterPos main emit — loop 23 mis-identified the layer. No PathFinder.cpp-layer fix can close the 4 remaining failures (densifier-layer guards already proven to regress per loop-23 Surface B). Reverted to baseline; advancing to Phase A2 (probe `--dump-poly-stack` for full polyref enumeration at coord ±10y Z window). See "Pathfinding Close-Out" section below.).
+Last refresh: 2026-05-18 (loop 24 / iteration 2 — Phase A2 ships `tools/PathPhysicsProbe.exe --dump-poly-stack` (new native export `EnumeratePolysAtCoord` direct tile poly iteration, +319 LOC across DllMain.cpp/NavigationInterop.cs/Program.cs, MSBuild + dotnet build green). Full polygon stack dumped at all 3 loop-21 trap coords. Definitive findings: **coord 1 (1347.3,-4540.6,35.8) has 1 poly (off-mesh only — true air); coord 2 (1350.2,-4528.6,34.0) has 64 polys = 63 phantoms + 1 legitimate ground polyref 281475331147742 (surfaceZ=37.509, posOverPoly=1, 3.5y above WP Z=34.0); coord 3 (1348.0,-4537.7,35.4) has 5 polys (4 deck-above + 1 off-mesh — true air)**. Architectural refinement: cull viable for coord 2 ONLY; coords 1+3 need bake regen (A3) OR off-mesh + Navigation.cs awareness (A5) OR skipvox (B). No live test impact this phase. Tile (40,29) md5 unchanged. Loop 24 tally remains 19/4/0. Phase A1 (previous iteration): NEUTRAL — see commit c68197e1.).
 
 ## Rules
 
@@ -53,7 +53,7 @@ Last refresh: 2026-05-18 (loop 24 — dual-track /loop "Pathfinding Close-Out" s
 | `S1.0` | `IBotTask` contract migration | `monorepo-worker` | **done** (2026-05-12) |
 | `S1.1` | Physics parity wrap-up | `monorepo-worker` | open (guard green 12/12 OG; need representative checkpoints per family) |
 | `S1.2` | MovementController parity audit | `monorepo-worker` | audit green (2026-05-12, 33/33) |
-| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-18 loop 24; 19/4 + 0 unrun; Phase A1 (`PathFinder.cpp` polyref==0 SKIP-then-bail guard at main `iterPos:1936` + `findStraightPath` post-process, DEFAULT extents) executed: OG zep 4/4 green, CriticalWalkLegs **unchanged** at 19/4/0, **no regression**. Failing corner 42 `(1347.3,-4540.6,35.8)` = loop-21 coord 1 is a DENSIFIER MIDPOINT (line 1919-1931) NOT iterPos:1936; loop-23 mis-identified the layer. Densifier-layer guards proven to regress (loop-23 Surface B). PathFinder.cpp-layer fix architecturally insufficient. Reverted; advancing to Phase A2 = probe `--dump-poly-stack` diagnostic.) |
+| `S1.3` | PathfindingService stability sweep | `monorepo-worker` | full-coverage-green (2026-05-18 loop 24 / iter 2; 19/4 + 0 unrun; Phase A2 ships `--dump-poly-stack` via new native `EnumeratePolysAtCoord` direct tile iteration (319 LOC across DllMain.cpp + NavigationInterop.cs + PathPhysicsProbe). Full stack at trap coords confirms: coord 1 + coord 3 are TRUE AIR (only off-mesh polys, no ground at any Z in ±10y); coord 2 has 63 phantoms + 1 legit ground polyref 281475331147742 surfaceZ=37.509 (3.5y above WP Z=34.0). Cull viable for coord 2 only; coords 1+3 need bake regen (A3) or off-mesh (A5) or skipvox (B). No test impact this phase. Phase A1 (prior iter): NEUTRAL, reverted — densifier midpoints (line 1919-1931), not iterPos:1936 — see commit c68197e1. Advancing to Phase A3.) |
 | `S1.4..S1.14` | 11 family slots (Travel, Combat, Questing, Dungeon, BG, Gather, Craft, Economy, Social, Recovery, Raid-formation) | various | open (no dry-run yet) |
 | `S1.15` | Trade null guards (6 actions) | `monorepo-worker` | implemented (2026-05-15; live TradeParityTests pending) |
 | `S1.16` | Craft packet path (BG) | `monorepo-worker` | open |
@@ -129,13 +129,13 @@ skip-voxelization bake pipeline as a long-term replacement.
 ### State
 - Current tile (40,29) md5: `cc0d89c42d9abf4737ba52a369c5f3f7` (baseline)
 - Last CriticalWalkLegs tally: **19/4/0**
-- Last iteration: **loop 24, Phase A1 (NEUTRAL — no closure, no regression, reverted)**
-- Last commit: pending (this loop's docs commit)
+- Last iteration: **loop 24 / iteration 2, Phase A2 (DIAGNOSTIC SHIPPED — full poly-stack data captured)**
+- Last commit: pending (this loop's tool + docs commit)
 
 ### Track A — Close-23 (sequential phases)
 - [x] **A1: Surface B at right layer** — 2026-05-18 NEUTRAL. PathFinder.cpp polyref==0 SKIP-then-bail guard at main `iterPos:1936` + `findStraightPath` post-process (default extents). +78 LOC, MSBuild green. OG zep 4/4 critical gate held; CriticalWalkLegs **19/4/0 unchanged**, no regression. Reverted. Root cause: failing corners are densifier midpoints (line 1919-1931), not iterPos main emit — loop 23 mis-identified the layer. See [[project_pfs_loop24_phase_a1_neutral]].
-- [ ] **A2: Probe coord-stack widening (diagnostic only)** — extend `tools/PathPhysicsProbe` with `--dump-poly-stack` enumerating ALL `dtPoly` entries whose AABB overlaps probe coord ±10y Z window via direct tile poly iteration (not `findNearestPoly`). Output TSV with polyref, surfaceZ, posOverPoly, area, flags, vertCount. Dump full stacks at coords 1, 2, 3 to `/tmp/wwow-loop24-probes/`. **No live test impact. Always commits.**
-- [ ] A3: Multi-knob coordinated bake regen (1 attempt, calibrated from A2 data)
+- [x] **A2: Probe coord-stack widening (diagnostic only)** — 2026-05-18 SHIPPED. New native export `EnumeratePolysAtCoord` (DllMain.cpp +162 LOC, direct tile-poly iteration + 8 neighbours, AABB intersect) + matching `[DllImport]` in NavigationInterop.cs + `--dump-poly-stack` in PathPhysicsProbe.exe (+135 LOC). Stack dump confirms: coord 1 has 1 poly (off-mesh only — true air); coord 2 has 64 polys = 63 phantoms + 1 legit ground polyref `281475331147742` (surfaceZ=37.509, posOverPoly=1, 3.5y above WP Z=34.0); coord 3 has 5 polys (4 deck-above + 1 off-mesh — true air). Cull viable for coord 2 only. See [[project_pfs_loop24_phase_a2_polystack]].
+- [ ] **A3: Multi-knob coordinated bake regen (1 attempt, calibrated from A2 data)** — single coordinated 2-knob delta on `tools/MmapGen/config.json` tile-4029 override. Candidates: (a) `walkableErosionRadius 0.2 → 0.3`; (b) `filterLedgeSpans` / `rcFilterWalkableLowHeightSpans` tuning. Forbidden: `walkableSlopeAngle`/`walkableClimb` lowering; `maxVertsPerPoly` change (loop-23 Surface A no-op). Snapshot tile to `/tmp/wwow-tile-backup/0012940.mmtile.loop24-A3-before` first; `MmapGen.exe --tile 40,29`; probe via `--dump-poly-stack` to verify stack changed; copy to prod-data + `docker restart wwow-pathfinding`; full 23-case sweep + adjacent suites. **Revert immediately on any regression.**
 - [ ] A4: Validator-driven targeted cull (using A2 stack data)
 - [ ] A5: Navigation.cs off-mesh awareness (multi-iteration)
   - [ ] A5.1: Audit 8 repair phases, identify off-mesh-blind functions
@@ -163,16 +163,29 @@ skip-voxelization bake pipeline as a long-term replacement.
 - [ ] B15+: Generalize to other tiles
 
 ### Next iteration action
-**Phase A2** — extend `tools/PathPhysicsProbe.exe` with `--dump-poly-stack`
-flag that enumerates all `dtPoly` entries whose AABB overlaps a given
-coord ±10y Z window via direct tile iteration (`dtMeshTile->polys[]`),
-NOT `findNearestPoly` (which is loop-21's tool already). Output TSV
-columns: `polyref`, `surfaceZ`, `posOverPoly`, `area`, `flags`,
-`vertCount`. Dump stacks at coords 1 `(1347.3, -4540.6)`, 2 `(1350.2,
--4528.6)`, 3 `(1348.0, -4537.7)` to `/tmp/wwow-loop24-probes/`. The
-stack data feeds Phase A3 + A4. **No live test impact. Always commits.
-Always advances to Phase A3 (single attempt) regardless of stack
-content.**
+**Phase A3** — single coordinated multi-knob bake regen on tile (40,
+29). Knob candidates from A2 stack data:
+
+1. **`walkableErosionRadius 0.2 → 0.3`** — broadens agent-radius
+   exclusion; targets the AREA_GROUND-tagged phantom band at coord 2
+   (polyIdx 18349-18372).
+2. **`filterLedgeSpans` / `rcFilterWalkableLowHeightSpans` tuning** —
+   phantom polys at z=32-37 may be `rcFilterLedgeSpans` artifacts.
+
+Procedure (per prompt):
+1. Snapshot tile to `/tmp/wwow-tile-backup/0012940.mmtile.loop24-A3-before`.
+2. Edit `tools/MmapGen/config.json` (tile-4029 override block).
+3. Regen via `MmapGen.exe --tile 40,29` (writes `0012940.mmtile`).
+4. Probe via `PathPhysicsProbe.exe --dump-poly-stack` at coords 1, 2,
+   3 to verify stack changed.
+5. If stacks improved, copy to `D:/wwow-bot/prod-data/mmaps/` and
+   `docker restart wwow-pathfinding`.
+6. Full 23-case sweep + adjacent suites.
+7. Revert immediately on any regression in OG zep 4/4 or any of the
+   19 passing CriticalWalkLegs cases.
+
+**ONE coordinated delta per iteration. If A3 attempt loses,
+advance to Phase A4. Do NOT retry within A3.**
 
 ### Blocked / questions for user
 None as of 2026-05-18.

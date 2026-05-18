@@ -62,6 +62,16 @@ internal static class Program
                 return 0;
             }
 
+            // --dump-poly-stack: enumerates the FULL polygon stack at each
+            // corner (direct tile-poly iteration via EnumeratePolysAtCoord,
+            // NOT findNearestPoly). Reveals phantom-poly stacks that the
+            // findNearestPoly winner heuristic conceals.
+            if (opts.DumpPolyStack)
+            {
+                EmitPolyStack(opts, corners);
+                return 0;
+            }
+
             var probe = new SegmentProbe(opts.Radius, opts.Height, opts.Verbose);
             var results = new List<ProbeResult>(corners.Count - 1);
             for (int i = 0; i < corners.Count - 1; i++)
@@ -311,6 +321,131 @@ internal static class Program
         byte PosOverPoly);
 
     /// <summary>
+    /// PFS-OVERHAUL-006 loop-24 Phase A2 — emit the FULL polygon stack at
+    /// each corner via the direct tile-poly iterator
+    /// <see cref="NavigationInterop.EnumeratePolysAtCoord"/> (NOT
+    /// findNearestPoly). Reveals phantom-poly stacks that
+    /// <c>--dump-polyrefs</c> conceals because findNearestPoly returns only
+    /// one winner per query.
+    ///
+    /// TSV output schema:
+    ///   corner, x, y, z, polyref, polyrefHex, polyIdx, polyType, area,
+    ///   flagsHex, vertCount, aabbMinZ, aabbMaxZ, surfaceZ, posOverPoly
+    /// </summary>
+    private static void EmitPolyStack(Args opts, List<Vector3> corners)
+    {
+        const int MaxPerCoord = 64;
+        var polyRefs       = new ulong[MaxPerCoord];
+        var surfaceZs      = new float[MaxPerCoord];
+        var aabbMinZs      = new float[MaxPerCoord];
+        var aabbMaxZs      = new float[MaxPerCoord];
+        var posOverPolys   = new byte[MaxPerCoord];
+        var areas          = new byte[MaxPerCoord];
+        var flags          = new ushort[MaxPerCoord];
+        var polyTypes      = new byte[MaxPerCoord];
+        var vertCounts     = new byte[MaxPerCoord];
+
+        if (!opts.JsonOutput)
+            Console.WriteLine("corner\tx\ty\tz\tpolyref\tpolyrefHex\tpolyIdx\tpolyType\tarea\tflagsHex\tvertCount\taabbMinZ\taabbMaxZ\tsurfaceZ\tposOverPoly");
+
+        var jsonCorners = opts.JsonOutput ? new List<object>(corners.Count) : null;
+        int totalEntries = 0;
+
+        for (int ci = 0; ci < corners.Count; ci++)
+        {
+            var c = corners[ci];
+            int written;
+            try
+            {
+                written = NavigationInterop.EnumeratePolysAtCoord(
+                    opts.MapId, c, opts.DumpPolyStackXyExtent, opts.DumpPolyStackZExtent,
+                    polyRefs, surfaceZs, aabbMinZs, aabbMaxZs,
+                    posOverPolys, areas, flags, polyTypes, vertCounts,
+                    MaxPerCoord);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"# EnumeratePolysAtCoord: {ex.GetType().Name} at corner {ci} ({c.X:F2},{c.Y:F2},{c.Z:F2}): {ex.Message}");
+                written = -1;
+            }
+            if (written < 0)
+            {
+                Console.Error.WriteLine($"# corner {ci}: enumerator returned error");
+                continue;
+            }
+            totalEntries += written;
+
+            if (opts.JsonOutput)
+            {
+                var entries = new List<object>(written);
+                for (int j = 0; j < written; j++)
+                {
+                    entries.Add(new
+                    {
+                        polyref      = polyRefs[j],
+                        polyrefHex   = "0x" + polyRefs[j].ToString("X"),
+                        polyIdx      = (uint)(polyRefs[j] & 0xFFFFF),
+                        polyType     = polyTypes[j],
+                        area         = areas[j],
+                        flagsHex     = "0x" + flags[j].ToString("X4"),
+                        vertCount    = vertCounts[j],
+                        aabbMinZ     = aabbMinZs[j],
+                        aabbMaxZ     = aabbMaxZs[j],
+                        surfaceZ     = float.IsNaN(surfaceZs[j]) ? null : (float?)surfaceZs[j],
+                        posOverPoly  = posOverPolys[j],
+                    });
+                }
+                jsonCorners!.Add(new { corner = ci, coord = new { c.X, c.Y, c.Z }, count = written, polys = entries });
+                continue;
+            }
+
+            for (int j = 0; j < written; j++)
+            {
+                Console.WriteLine(string.Join('\t', new[]
+                {
+                    ci.ToString(CultureInfo.InvariantCulture),
+                    c.X.ToString("F3", CultureInfo.InvariantCulture),
+                    c.Y.ToString("F3", CultureInfo.InvariantCulture),
+                    c.Z.ToString("F3", CultureInfo.InvariantCulture),
+                    polyRefs[j].ToString(CultureInfo.InvariantCulture),
+                    "0x" + polyRefs[j].ToString("X"),
+                    ((uint)(polyRefs[j] & 0xFFFFF)).ToString(CultureInfo.InvariantCulture),
+                    polyTypes[j].ToString(CultureInfo.InvariantCulture),
+                    areas[j].ToString(CultureInfo.InvariantCulture),
+                    "0x" + flags[j].ToString("X4"),
+                    vertCounts[j].ToString(CultureInfo.InvariantCulture),
+                    aabbMinZs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    aabbMaxZs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    float.IsNaN(surfaceZs[j]) ? "nan" : surfaceZs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    posOverPolys[j].ToString(CultureInfo.InvariantCulture),
+                }));
+            }
+        }
+
+        if (opts.JsonOutput)
+        {
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                map = opts.MapId,
+                polyStackXyExtent = opts.DumpPolyStackXyExtent,
+                polyStackZExtent = opts.DumpPolyStackZExtent,
+                cornerCount = corners.Count,
+                totalEntries,
+                corners = jsonCorners,
+            }, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                IncludeFields = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            }));
+        }
+        Console.Error.WriteLine(
+            $"# dump-poly-stack: {corners.Count} corners, {totalEntries} total poly entries; " +
+            $"xyExt={opts.DumpPolyStackXyExtent:F2} zExt={opts.DumpPolyStackZExtent:F2}");
+    }
+
+    /// <summary>
     /// Initialize the runtime physics MapLoader and pre-load every tile the
     /// corner sequence crosses. Without this, runtime physics queries return
     /// -200000 sentinels (no ADT data) for the probed XYs, polluting the
@@ -383,6 +518,9 @@ internal sealed class Args
     public bool DumpPolyrefs;
     public float DumpPolyrefXyExtent = 2.0f;
     public float DumpPolyrefZExtent = 1.8f;
+    public bool DumpPolyStack;
+    public float DumpPolyStackXyExtent = 2.0f;
+    public float DumpPolyStackZExtent  = 10.0f;
 
     public static readonly string UsageText =
         "Usage: PathPhysicsProbe --map <id> --start X,Y,Z --end X,Y,Z [options]\n" +
@@ -405,7 +543,18 @@ internal sealed class Args
         "                      which polyref each smooth-path corner sits on;\n" +
         "                      the failing WP's polyref is the trap to cull.\n" +
         "  --polyref-xy-extent R  XY search extent for --dump-polyrefs (default 2.0)\n" +
-        "  --polyref-z-extent R   Z search extent for --dump-polyrefs (default 1.8)\n";
+        "  --polyref-z-extent R   Z search extent for --dump-polyrefs (default 1.8)\n" +
+        "  --dump-poly-stack   loop-24 Phase A2 diagnostic. Enumerates the FULL\n" +
+        "                      polygon stack at every corner via direct tile-poly\n" +
+        "                      iteration (NOT findNearestPoly). Reveals phantom-\n" +
+        "                      poly stacks that --dump-polyrefs conceals because\n" +
+        "                      findNearestPoly returns only one winner. Output\n" +
+        "                      columns: corner, x, y, z, polyref, polyrefHex,\n" +
+        "                      polyIdx, polyType, area, flagsHex, vertCount,\n" +
+        "                      aabbMinZ, aabbMaxZ, surfaceZ, posOverPoly.\n" +
+        "  --poly-stack-xy-extent R  XY AABB-intersection window (default 2.0)\n" +
+        "  --poly-stack-z-extent R   Z AABB-intersection window (default 10.0,\n" +
+        "                            matches the loop-21 trap analysis ±10y rule)\n";
 
     public static Args Parse(string[] argv)
     {
@@ -442,6 +591,15 @@ internal sealed class Args
                     break;
                 case "--polyref-z-extent":
                     a.DumpPolyrefZExtent = float.Parse(Next(argv, ref i, "--polyref-z-extent"), CultureInfo.InvariantCulture);
+                    break;
+                case "--dump-poly-stack":
+                    a.DumpPolyStack = true;
+                    break;
+                case "--poly-stack-xy-extent":
+                    a.DumpPolyStackXyExtent = float.Parse(Next(argv, ref i, "--poly-stack-xy-extent"), CultureInfo.InvariantCulture);
+                    break;
+                case "--poly-stack-z-extent":
+                    a.DumpPolyStackZExtent = float.Parse(Next(argv, ref i, "--poly-stack-z-extent"), CultureInfo.InvariantCulture);
                     break;
                 case "-h":
                 case "--help":
