@@ -299,3 +299,220 @@ The JSON shape:
 
 `skipChains` allows a hand-curated "skip this dead-end chain" hint
 (e.g. green-XP chains that exist in DB but rarely worth the time).
+
+## 11. ML-aided quest-chain ordering (the optimizer)
+
+The §4 filter + §3 cross-reference (DAG topological sort) is **chain-
+correct** but not **chain-optimal**. Two independent observations
+explain why:
+
+- **Inter-chain interleaving.** When a bot in Westfall has the
+  Defias chain (§9) AND the side quests `coyote.cull` and
+  `westfall.gnoll-cleanup` all eligible, the topological sort gives
+  *one* valid linear order — but multiple are valid (the side quests
+  have no `PrevQuest` edges into the Defias chain, so they can
+  interleave anywhere). Different interleavings produce different
+  travel distances, different mob-density overlap, and therefore
+  different wall-clock-per-XP rates.
+- **Cross-zone hub timing.** Step 3 of §9 (Defias Part 2) takes the
+  bot to Stormwind. If the bot ALSO has `redridge.expedition.start`
+  (a side quest that begins in Stormwind), interleaving the
+  Stormwind side quest at that moment is "free" in travel cost. The
+  composer doesn't know this without empirical data — the per-zone
+  catalog (§10) hand-codes some of it; ML can learn more.
+
+The **quest-chain ordering optimizer** is the ML-aided counterpart
+to §4 + §9. It reuses the
+[`Spec/20 §2 GetObjectiveAdviceAsync`](../../Spec/20_DECISION_ENGINE.md#2-service-surface)
+advisor (no new RPC) but with `tied_objective_ids` populated from
+**concurrently-eligible chain heads** rather than just composer ties.
+
+```
+ComposeQuestingObjectives produces:
+  primary_chain  = [accept-132, ..., turnin-168]      # Defias §9
+  side_quest_q47 = [accept-47,  ..., turnin-47]       # coyote.cull
+  side_quest_q83 = [accept-83,  ..., turnin-83]       # gnoll-cleanup
+
+Topological sort produces multiple valid linearizations:
+  Order A: 132 → 47 → 135 → 83 → 138 → 142 → 155 → 168
+  Order B: 132 → 47 → 83 → 135 → 138 → 142 → 155 → 168
+  Order C: 132 → 135 → 47 → 138 → 142 → 83 → 155 → 168
+
+Optimizer queries GetObjectiveAdviceAsync with:
+  tied_objective_ids = ["accept-132", "accept-47", "accept-83"]
+  (the three chains' heads that are all currently eligible)
+
+Advisor returns the recommended FIRST step. Bot picks it up; on
+turnin, the optimizer queries again with the new tied set. The
+process iterates as the snapshot mutates.
+```
+
+### Three maturity phases (mirrors Spec/20 §5)
+
+| Phase | Source | Per-quest scoring used |
+|---|---|---|
+| 1 — Heuristic | Lowest current-zone travel distance + highest XP-per-step (XP from `quest_template.RewMoneyMaxLevel` + the bot's level XP curve) | `Services/WoWStateManager/Progression/QuestChainHeuristic.cs` |
+| 2 — Rules + lookup | `Bot/quests/zone-<name>.json` (§10) authoritative when present; per-bot-class overrides via `Config/decision-engine/quest-chain-rules.json` | per-zone JSON wins over DB-driven sort |
+| 3 — ONNX | `Services/DecisionEngineService/Models/objective/v1.onnx` extended with quest-chain features: in-zone-distance, XP-per-hour history, drop-rate stats, party-availability lookahead | trained on `tmp/test-runtime/traces/Quest_*/outcome.jsonl` |
+
+### Fail-soft fallback
+
+`NoAdvice` (timeout / service down / model unavailable / confidence
+< 0.5 / recommended id outside concurrently-eligible set) → fall
+back to the §3 deterministic topological sort + the §10 per-zone
+hand-authored order when present. The optimizer **cannot** invent
+quest IDs outside the per-bot-filtered DAG; it can only reorder
+already-valid options.
+
+### Live-validation guard
+
+Replaying any Quest_* trace with the optimizer forced to `NoAdvice`
+MUST still produce a completing quest chain whose
+`outcome.roster_distance_delta ≤ 0` (Spec/05 §RosterPlanner.Distance
+metric). The deterministic stack always closes the chain; the
+optimizer just trims wall-clock.
+
+## 12. Worked example — "Defias chain + 2 side quests, ML-aided"
+
+Setup (extends §9):
+
+- Bot: level-15 Alliance Warrior at Sentinel Hill, none of the §9
+  Defias chain completed.
+- Side quest A: `coyote.cull` (eligible, pickup at Sentinel Hill,
+  hotspot is the Westfall coyote pack 200 yd south).
+- Side quest B: `westfall.gnoll-cleanup` (eligible, pickup at
+  Sentinel Hill, hotspot is the gnoll camp 400 yd east).
+- Side quest C: `redridge.expedition.start` (eligible, pickup at
+  Lakeshire — but the §9 chain takes the bot through Stormwind on
+  step 3, so Lakeshire is "free travel" THEN).
+
+Composer §3 produces the topological order from §9 step 2 plus the
+side quests interleavable anywhere. Three concurrently-eligible
+chain heads at t=0: `accept-132` (Defias chain), `accept-coyote`
+(side A), `accept-gnoll` (side B). `accept-redridge` is also
+eligible but blocked by *spatial* gate (bot is in Westfall, Lakeshire
+is in Redridge — composer holds it for the cross-zone-hub trip).
+
+### With Phase-1 heuristic
+
+`QuestChainHeuristic.Score(chain_head, bot.Position)`:
+- `accept-132`: pickup at Sentinel Hill (0 yd); 8 mobs to kill;
+  estimated 12 minutes. Score by lowest travel: top.
+- `accept-coyote`: pickup at Sentinel Hill (0 yd) but hotspot 200
+  yd south; estimated 5 minutes.
+- `accept-gnoll`: pickup at Sentinel Hill (0 yd) but hotspot 400
+  yd east; estimated 8 minutes.
+
+Heuristic picks `accept-coyote` (lowest hotspot distance + shortest
+duration). After turnin, the optimizer queries again with
+`["accept-132", "accept-gnoll"]` and picks one based on the same
+heuristic.
+
+### With Phase-2 rules
+
+`Bot/quests/zone-westfall.json` declares:
+```jsonc
+{
+  "primaryChains": [["defias.132", "defias.135", "defias.138", ...]],
+  "sideQuests": ["coyote.cull", "westfall.gnoll-cleanup"],
+  "preferredInterleave": [
+    {"after": "defias.132", "insert": ["coyote.cull"]},
+    {"after": "defias.135", "insert": ["westfall.gnoll-cleanup"]}
+  ]
+}
+```
+
+Phase-2 advisor returns `RecommendedObjectiveId="accept-132"` first
+(the primary-chain head wins under hand-authored ordering).
+`accept-coyote` is inserted after `turnin-132` per `preferredInterleave`.
+
+### With Phase-3 ONNX
+
+The model has trained on 500+ Westfall L15-Alliance-Warrior traces.
+It learns:
+- `accept-132` first → bot stays at Sentinel Hill for kill-trapper +
+  turnin → only THEN does the coyote/gnoll fan out make sense
+  because the bot is mid-zone.
+- BUT if the bot has `CharacterRosterGoal.GoldTargetCopper` close to
+  goal (gold axis dominant in `RosterPlanner.Distance`), the model
+  picks `accept-coyote` first because coyote pelts vendor for 32c
+  each → faster gold-axis closure.
+
+Model returns advice that depends on `roster_goal_distance[8]`
+(Spec/20 §2.1) — the bot's current axis-distribution determines the
+order. **Dynamic-progressive invariant holds**: a different bot with
+gold-axis dominance gets a different recommendation; both bots'
+chains complete and close `RosterPlanner.Distance`.
+
+### Cross-zone optimization preserved
+
+Whichever phase is active, step 3 of §9 (Defias Part 2 turnin at
+Stormwind) is the trigger to evaluate `accept-redridge`. The
+optimizer queries with `tied_objective_ids = ["travel-to-138-turnin",
+"travel-to-redridge-expedition-pickup"]` — and the right answer is
+to do them together. Cross-zone-hub interleaving is the strongest
+empirical win the optimizer brings over the deterministic sort.
+
+## 13. Dynamic-progressive invariant (quest-chain-ordering side)
+
+Per the loop's invariant (Spec/19 §10, Spec/05 §Dynamic-progressive
+invariant), the quest-chain optimizer MUST satisfy:
+
+1. **Dynamic.** Two snapshots that differ in
+   `(Race, Class, Level, QuestsCompleted, Reputation,
+   roster_goal_distance)` MUST sometimes produce different
+   chain-head pick orders — the §12 example shows gold-axis
+   dominance flipping the Phase-3 pick from `accept-132` to
+   `accept-coyote`. Identical snapshots produce identical orders
+   (the optimizer is deterministic given fixed `Mode` and feature
+   inputs).
+2. **Progressive.** Every chain-head selection MUST belong to the
+   §4 filtered DAG and produce non-positive
+   `outcome.roster_distance_delta` on turnin. The optimizer cannot
+   pick a quest that gates progression backward — only one that
+   closes distance, possibly more efficiently than the
+   deterministic sort.
+
+Asserted at the §test surface by
+`AotaQuestChains_OptimizerProducesDifferentOrderPerRosterAxisDominance`
+in the test file below.
+
+## 14. Plan-slot cross-reference
+
+| Slot | Owns | Section here |
+|---|---|---|
+| [`Plan/03/S2.0`](../../Plan/03_PHASE2_ONDEMAND_ENGINE.md#s20--iactivity--iobjective-runtime-contracts) | `IActivityComposer.Compose(...)` (calls `ComposeQuestingObjectives`) | §3-§9 |
+| [`Plan/14/S10.2`](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s102--objective-composer-tie-breaker) | `ObjectiveTieBreaker.cs` (extended to consume chain-head tied sets) | §11 optimizer |
+| [`Plan/14/S10.6`](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s106--mode-aware-advisor-activation) | `Config/decision-engine/quest-chain-rules.json` + Mode flip | §11 Phase 2 + Phase 3 |
+| [`Plan/14/S10.7`](../../Plan/14_PHASE10_DECISION_ENGINE_INTEGRATION.md#s107--training-trace-plumbing) | Trace pipeline that feeds Phase-3 training | §11 ONNX input |
+| [`Plan/13`](../../Plan/13_PHASE9_CATALOG_FILL.md) | Per-zone quest catalogs `Bot/quests/zone-<name>.json` | §10 + §11 Phase 2 |
+| **(no slot yet — Plan follow-up)** | `Services/WoWStateManager/Progression/QuestChainHeuristic.cs` | §11 Phase 1 |
+
+The "no slot yet" entry joins the Plan-follow-up roster (12th
+orphan: `QuestChainHeuristic.cs`).
+
+## 15. Test surface (optimizer-side; deterministic §3 still tested by aota/03)
+
+Contract tests live at
+`Tests/BotRunner.Tests/Activities/QuestChainOrderingContractTests.cs`.
+Assertions go through `snapshot.current_objective_id` (Spec/19 field
+34) and `snapshot.advice_log[]` entries with `advisor="objective"`.
+
+- **`QuestChain_TopologicallyValidOrderingsAreAllAccepted`** — three
+  hand-built valid linearizations of the §9 Defias chain + side
+  quests all pass the topological-sort validation; the heuristic
+  picks one based on travel cost.
+- **`QuestChain_OptimizerCannotInventQuestOutsideFilteredDag`** — a
+  DecisionEngine stub returning `RecommendedObjectiveId="accept-9999"`
+  (not in the per-bot-filtered DAG) is discarded; the deterministic
+  fallback applies.
+- **`QuestChain_PreferredInterleaveJsonOverridesTopologicalOrder`** —
+  with `Bot/quests/zone-westfall.json` declaring `preferredInterleave:
+  [{after: "defias.132", insert: ["coyote.cull"]}]`, the composer
+  emits `accept-coyote` after `turnin-132` regardless of pure
+  topological sort.
+- **`AotaQuestChains_OptimizerProducesDifferentOrderPerRosterAxisDominance`** —
+  the dynamic-progressive invariant. For two synthetic snapshots
+  identical except for `roster_goal_distance[GoldTargetPct]` (one
+  near-goal, one far-from-goal), Phase-3 ONNX produces different
+  chain-head picks; both completions close `RosterPlanner.Distance`.
