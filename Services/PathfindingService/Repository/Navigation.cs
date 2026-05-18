@@ -994,7 +994,7 @@ namespace PathfindingService.Repository
 
             if (smoothPath)
             {
-                pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+                pathForValidation = DensifyPath(mapId, pathForValidation, SmoothPathDensifySpacing);
                 pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
                 pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
                 pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
@@ -1085,7 +1085,7 @@ namespace PathfindingService.Repository
                 return new NavigationPathResult(pathForValidation, rawPath, resultTag, finalBlockedIdx, finalBlockedReason);
             }
 
-            pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+            pathForValidation = DensifyPath(mapId, pathForValidation, SmoothPathDensifySpacing);
 
             if (FindFirstLineOfSightBreak(mapId, pathForValidation) is int losBlockedIdx)
             {
@@ -1156,7 +1156,7 @@ namespace PathfindingService.Repository
                     resultTag = staticRepairResult;
             }
 
-            pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+            pathForValidation = DensifyPath(mapId, pathForValidation, SmoothPathDensifySpacing);
             pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, int.MaxValue, agentRadius, agentHeight);
             pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
             pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight, int.MaxValue);
@@ -1276,7 +1276,7 @@ namespace PathfindingService.Repository
                 }
             }
 
-            pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+            pathForValidation = DensifyPath(mapId, pathForValidation, SmoothPathDensifySpacing);
             if (smoothPath && ShouldProbeLocalPhysicsReachability(pathForValidation))
             {
                 pathForValidation = RepairLocalPhysicsReachabilityBreaks(
@@ -1305,7 +1305,7 @@ namespace PathfindingService.Repository
                     pathForValidation = DensifyStaticLineOfSightBreaks(mapId, pathForValidation);
                 }
             }
-            pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+            pathForValidation = DensifyPath(mapId, pathForValidation, SmoothPathDensifySpacing);
 
             if (smoothPath &&
                 blockedIdx is null &&
@@ -2448,7 +2448,7 @@ namespace PathfindingService.Repository
             }
             if (smoothPath)
             {
-                pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+                pathForValidation = DensifyPath(mapId, pathForValidation, SmoothPathDensifySpacing);
                 pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, EarlySupportNormalizationLimit, agentRadius, agentHeight);
                 pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight);
                 pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight);
@@ -2577,7 +2577,7 @@ namespace PathfindingService.Repository
                         pathForValidation = DensifyStaticLineOfSightBreaks(mapId, pathForValidation);
                     }
 
-                    pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+                    pathForValidation = DensifyPath(mapId, pathForValidation, SmoothPathDensifySpacing);
 
                     if (FindFirstLocalPhysicsReachabilityBreak(
                             mapId,
@@ -2668,7 +2668,7 @@ namespace PathfindingService.Repository
                 // Keep them on the raw corridor so the caller can fall through quickly
                 // instead of spending tens of seconds on full segment validation.
                 pathForValidation = NormalizeEarlySupportLayer(mapId, pathForValidation, EarlySupportNormalizationLimit, agentRadius, agentHeight);
-                pathForValidation = DensifyPath(pathForValidation, SmoothPathDensifySpacing);
+                pathForValidation = DensifyPath(mapId, pathForValidation, SmoothPathDensifySpacing);
                 pathForValidation = RemoveShortVerticalLayerSpikes(mapId, pathForValidation, agentRadius, agentHeight);
                 pathForValidation = RemoveShortHorizontalDetourSpikes(mapId, pathForValidation, agentRadius, agentHeight);
                 var earlyStaticRepairScanLimit = dynamicOverlayActive
@@ -2999,6 +2999,31 @@ namespace PathfindingService.Repository
             return densified.ToArray();
         }
 
+        // PFS-OVERHAUL-006 loop-24 Phase A5.3 — off-mesh-aware overload.
+        // For pairs detected as teleport segments (IsOffMeshSegment), append
+        // the endpoint directly without linear-interp midpoints. Linear
+        // densification of a (harbor z=24, deck z=53) pair would land
+        // midpoints in air, which downstream Normalize/Spike/Affordance
+        // phases would mis-handle (loop-23 Surface C hang root cause). All
+        // repair-pipeline call sites have `mapId` in scope and should
+        // prefer this overload.
+        private static XYZ[] DensifyPath(uint mapId, XYZ[] path, float spacing)
+        {
+            if (path.Length < 2)
+                return path;
+
+            var densified = new List<XYZ>(path.Length) { path[0] };
+            for (var i = 0; i < path.Length - 1; i++)
+            {
+                if (IsOffMeshSegment(mapId, densified[^1], path[i + 1]))
+                    densified.Add(path[i + 1]);
+                else
+                    AppendDensifiedSegment(densified, densified[^1], path[i + 1], spacing);
+            }
+
+            return densified.ToArray();
+        }
+
         // Returns true if any adjacent waypoint pair exceeds maxHorizontalLength
         // in 2D distance OR exceeds maxVerticalDelta in absolute Z change. Used
         // as a cheap predicate before invoking EnsureMaxSegmentDimensions on
@@ -3222,6 +3247,12 @@ namespace PathfindingService.Repository
             for (var i = 1; i < checkEnd; i++)
             {
                 var candidate = normalized[i];
+                // PFS-OVERHAUL-006 loop-24 Phase A5.3: leave teleport-segment
+                // endpoints' Z unchanged. Off-mesh destination Z (e.g. OG zep
+                // deck z=53 over harbor) is intentional, not an off-surface
+                // error to project to GetGroundZ.
+                if (IsOffMeshSegment(mapId, normalized[i - 1], candidate))
+                    continue;
                 if (!TryGetNearbyGroundZ(mapId, candidate, out var groundZ))
                     continue;
 
@@ -3402,6 +3433,13 @@ namespace PathfindingService.Repository
                 var current = repaired[i];
                 var next = repaired[i + 1];
 
+                // PFS-OVERHAUL-006 loop-24 Phase A5.3: don't flag teleport
+                // Z-jumps as spikes. An off-mesh segment legitimately has
+                // dz>>dxy; collapsing it would remove the teleport endpoint.
+                if (IsOffMeshSegment(mapId, previous, current) ||
+                    IsOffMeshSegment(mapId, current, next))
+                    continue;
+
                 if (Distance2D(previous, current) > ShortVerticalLayerSpikeMaxLegLength ||
                     Distance2D(current, next) > ShortVerticalLayerSpikeMaxLegLength ||
                     Distance2D(previous, next) > ShortVerticalLayerSpikeMaxBridgeLength)
@@ -3449,6 +3487,16 @@ namespace PathfindingService.Repository
                 var previous = repaired[i - 1];
                 var current = repaired[i];
                 var next = repaired[i + 1];
+
+                // PFS-OVERHAUL-006 loop-24 Phase A5.3: don't collapse
+                // teleport endpoints as horizontal "detour spikes". The
+                // off-mesh's 0y horizontal makes the bridge length near zero
+                // which already short-circuits below, but the explicit check
+                // avoids the LOS/affordance probes the loop would otherwise
+                // make for an off-mesh-adjacent pair.
+                if (IsOffMeshSegment(mapId, previous, current) ||
+                    IsOffMeshSegment(mapId, current, next))
+                    continue;
 
                 var firstLeg = Distance2D(previous, current);
                 var secondLeg = Distance2D(current, next);
@@ -4138,6 +4186,14 @@ namespace PathfindingService.Repository
 
                 var from = repaired[i];
                 var to = repaired[i + 1];
+                // PFS-OVERHAUL-006 loop-24 Phase A5.3: skip LOS+findPath
+                // repair on teleport segments. Off-mesh endpoints are
+                // LOS-valid by contract; running RequiresLocalStaticRepair
+                // would mis-classify the 29y Z-jump as a static break and
+                // loop the repair attempts until the budget exhausts
+                // (loop-23 Surface C hang).
+                if (IsOffMeshSegment(mapId, from, to))
+                    continue;
                 if (!RequiresLocalStaticRepair(mapId, from, to, agentRadius, agentHeight, out var reason))
                     continue;
 
@@ -4216,6 +4272,16 @@ namespace PathfindingService.Repository
                 var scanEnd = Math.Min(repaired.Count - 1, Math.Max(0, maxScanSegments));
                 for (var i = 0; i < scanEnd && i < repaired.Count - 1 && stopwatch.Elapsed <= AffordanceRepairBudget; i++)
                 {
+                    // PFS-OVERHAUL-006 loop-24 Phase A5.3: skip affordance
+                    // repair on teleport segments. ClassifyPathSegmentAffordance
+                    // returns Cliff/SteepClimb on dz=29y/dx=0y off-mesh pairs;
+                    // the repair loop's detour-attempts return the same off-mesh
+                    // corridor and burn the 8s AffordanceRepairBudget (loop-23
+                    // Surface C hang). Off-mesh teleports are by contract a
+                    // walk-tolerated transition the bot handles separately.
+                    if (IsOffMeshSegment(mapId, repaired[i], repaired[i + 1]))
+                        continue;
+
                     var requiresRepair = false;
                     var reason = "none";
                     if (includeSegmentBreaks)
