@@ -89,59 +89,67 @@ vmap-extraction completeness OR Navigation.dll vmap consumer.
 
 ### State
 
-- Last iteration: loop-25 phase **B1 — done**.
+- Last iteration: loop-25 phase **B2 — done** (root cause + fix
+  surface documented; no code changes this phase).
 - Last sweep tally: 23/0 (CriticalWalkLegs), 4/0 (OG zep).
+- Last commit: `a78c86b7` (B1 native export + probe CLI).
 - Stall coord: (1616.7, -4242.4, 46.7) → (1614.7, -4242.1, 46.7) →
   (1612.7, -4237.7, 46.3) → (1610.7, -4233.2, 45.9) (descent on
   tile gridX=39 gridY=28, vmtile `001_28_39.vmtile`).
-- B1 ships `EnumerateStaticCollisionTriangles` native export +
-  `--enumerate-static-collision` PathPhysicsProbe CLI mode. Probe at
-  the stall coord (±5y AABB) returned **109 triangles** across 4
-  unique instances; the immediate cluster within 2y XY × 3y Z of the
-  stall coord is **3 walkable WMO-ground triangles (instance 223733)
-  + 10 NON-walkable vertical-wall triangles** split across two
-  standalone M2 doodads (instance 224791 near (1615.8, -4241.0) and
-  instance 224792 near (1616.7, -4244.0), both rootId=0 groupId=-1,
-  triangle Z spans 46.6→51.2y = ~4.6y vertical columns).
-- **Key finding**: the M2 doodads ARE in our vmap (TestTerrainAABB
-  returns them as non-walkable triangles). The gap is in the
-  CONSUMER, not the EXTRACTOR — B3 surface (b) is the path forward,
-  not (a).
-- Full B1 dump: `/tmp/wwow-loop25-probes/B1-stall-collision-dump.tsv`
-  (109 rows). Filtered cluster:
-  `/tmp/wwow-loop25-probes/B1-stall-cluster.tsv` (13 rows).
+- B1 identified the obstacles: 2 standalone M2 doodads (instances
+  224791 + 224792, rootId=0 groupId=-1), ~4.6y vertical columns.
+  Both ARE in our vmap data via `SceneQuery::TestTerrainAABB`.
+- B2 located the gap in the CONSUMER:
+  **`HasBlockingCapsuleOverlap`
+  ([DllMain.cpp:928](../Exports/Navigation/DllMain.cpp#L928))**
+  uses a STATIC-POSITION capsule overlap test filtered by
+  `PathValidationOverlapTolerance(radius) = max(0.12, radius*0.35) =
+  0.36y` for Tauren. At the segment-midpoint sample (1615.7,
+  -4242.25, 46.7), the closest wall surface from instance 224791
+  is 0.95y from the path centerline → bot capsule (radius 1.025y)
+  grazes the wall by **0.075y penetration** — far below the 0.36y
+  threshold. The bot's in-game continuous-motion swept-capsule
+  physics has no such threshold, so it stalls correctly; the
+  offline+pathfinding validators dismiss the wall as non-blocking.
+- B2 verification: probe at the segment midpoint with ±1.5y AABB
+  returned 10 non-walkable wall tris from instance 224791 within
+  reach. Probe at full stall path returned `Walk Clear` for all 3
+  segments (matches prompt's claim).
 
 ### Phase progress
 
 - [x] **B1**: identify blocking M2/WMO via static-collision dump —
-  done. Found two standalone M2 doodads (224791 + 224792).
-- [ ] **B2**: diagnose why offline PhysicsEngine /
-  `ClassifyPathSegmentAffordance` returns Walk Clear when
-  `SceneQuery::TestTerrainAABB` clearly returns these triangles.
-  Likely surfaces: the capsule-sweep code path against the SceneCache,
-  the SceneTriMetadata sourceType classification (B1's sweep tagged
-  all 109 triangles as `VMAP` even though instances 224790-224792 are
-  obvious standalone M2s), or `GetGroundZ`'s downward-ray-only
-  geometry test that misses vertical walls.
-- [ ] B3: implement fix (1 surface per iteration).
-- [ ] B4: regen affected tiles (only if extraction changes — current
-  evidence suggests this is not needed).
+  done. Two standalone M2 doodads (224791 + 224792).
+- [x] **B2**: diagnose extraction gap — done. Root cause is the
+  `HasBlockingCapsuleOverlap` penetration-tolerance filter; B3
+  fix surface is the offline static-overlap test, NOT extraction.
+- [ ] **B3**: implement fix. Two candidate surfaces, B3 picks one:
+  - (b1) Replace `HasBlockingCapsuleOverlap`'s static overlap
+    (`dir=0 distance=0`) with a true swept-capsule motion test
+    (`dir=segmentDir distance=chunkSize`). Larger blast radius
+    (all callers affected) but more principled.
+  - (b2) Lower `PathValidationOverlapTolerance` from
+    `radius * 0.35` to `max(0.05, radius * 0.05)` — 7× tighter
+    grazing-wall threshold. Smaller, surgical, but risks regressing
+    legitimate near-grazing surfaces (ramps with slight bumps).
+- [ ] B4: regen affected tiles (only if B3 forces re-bake — current
+  evidence suggests B3 is consumer-side, no tile mutation).
 - [ ] B5: full regression sweep (must hold 23/0 + 4/0 + 135/0).
 - [ ] B6: live bot test (ClimbOG green).
 - [ ] B7: catalog other OG city gap instances.
 
 ### Next iteration action
 
-Phase B2 — trace why `ClassifyPathSegmentAffordance` and the bot's
-runtime physics report Walk Clear when `TestTerrainAABB` returns the
-M2 wall triangles. Start at `Exports/Navigation/PhysicsEngine.cpp`'s
-capsule sweep entry vs `Exports/Navigation/SceneQuery.cpp`'s sweep
-implementations, plus the `BuildTerrainAABBContact` `sourceType=2`
-(WMO doodad M2) path that B1 never reached.
+Phase B3 attempt (b2) — lower `PathValidationOverlapTolerance`
+([`DllMain.cpp:923-926`](../Exports/Navigation/DllMain.cpp#L923-L926))
+to `max(0.05, radius * 0.05)` and re-run the stall probe. If the
+offline classifier flips to `BlockedGeometry` at the stall segment,
+proceed to B5 regression. If 23/0 sweep regresses, revert and try
+surface (b1) instead.
 
 ### Blocked / questions for user
 
-- (none yet — B1 result clarifies the fix surface)
+- (none — B3 path is clear, will iterate b2 → b1 if needed)
 
 ## Test baseline (refreshed 2026-05-15)
 
