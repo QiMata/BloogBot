@@ -64,6 +64,10 @@
       "walkableErosionRadius": 0.2,
       "maxVertsPerPoly": 3,
       "debugStageCropWow": [1316, -4664, 47, 1348, -4636, 67]
+    },
+    "_3928_README_doodad_gap": "loop-25 Phase C1 (2026-05-19): debug-only debugStageCropWow over the ClimbOrgrimmarZeppelinTowerRampToFrezza stall column. Two standalone M2 doodad instances 224791+224792 form a ~4.6y vertical-wall pair at approx (1615.3, -4240.85), z=46.66..51.30. Bot stalls at (1616.7,-4242.4,46.7) on the next walk segment toward (1614.7,-4242.1,46.7). The crop covers WoW (1614..1618, -4243..-4239) horizontally and z=46..52 vertically — sufficient to capture wall voxels at every Recast stage. No bake-parameter changes here; this is investigation-only and is expected to leave the mmtile bits byte-identical.",
+    "3928": {
+      "debugStageCropWow": [1614.0, -4243.0, 46.0, 1618.0, -4239.0, 52.0]
     }
   }
 }

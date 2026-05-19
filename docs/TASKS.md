@@ -89,8 +89,12 @@ vmap-extraction completeness OR Navigation.dll vmap consumer.
 
 ### State
 
-- Last iteration: loop-25 phase **B3 attempt (b2) — FAILED,
-  REVERTED**. Threshold-lowering hypothesis falsified empirically.
+- Last iteration: loop-25 phase **C1 — BAKE-TIME HYPOTHESIS FALSIFIED.
+  SURFACING TO USER.** Debug-heightfield CSV trace shows the bake
+  correctly voxelizes and erodes around the wall column; the
+  C-series fix surface (Recast pipeline in `tools/MmapGen/`) does
+  not contain the bug. See
+  [[project_pfs_loop25_phase_c1_hypothesis_falsified]].
 - Last sweep tally: 23/0 (CriticalWalkLegs), 4/0 (OG zep).
 - Last commit: `75aefb2b` (B2 docs-only).
 - Stall coord: (1616.7, -4242.4, 46.7) → (1614.7, -4242.1, 46.7) →
@@ -136,7 +140,53 @@ vmap-extraction completeness OR Navigation.dll vmap consumer.
 - [ ] B6: live bot test (ClimbOG green).
 - [ ] B7: catalog other OG city gap instances.
 
+### Phase C (bake-time investigation) — C1 FALSIFIED
+
+- [x] **C1: Debug-heightfield bake of tile (39,28) — FALSIFIED.**
+  Added `"3928": { "debugStageCropWow": [...] }` to
+  [tools/MmapGen/config.json](../tools/MmapGen/config.json),
+  re-baked with `--debug`, traced wall voxels through all 6
+  heightfield stages + 5 compact stages. Wall is rasterized
+  area=0, preserved through `filterLowHanging` /
+  `filterLedge` / `removeUseless` / `filterLowHeight` /
+  `waterInheritance`. Compact heightfield correctly omits
+  cells fully under the wall. `rcErodeWalkableArea` fires
+  with walkableErosionRadius=4 cells (1.066y) and eroded
+  140 cells around the column. Navmesh at stall coord
+  (1615.7,-4242.25,46.7) is polyIdx=26 area=1 walkable
+  surfaceZ=46.72 posOverPoly=1, with wall vertex 1.27y from
+  cell center (0.24y outside capsule). Bake is correct.
+  C2-C7 phases predicated on bake fix surface are moot.
+  See [[project_pfs_loop25_phase_c1_hypothesis_falsified]].
+- [-] C2-C7 — predicated on C1's hypothesis; not applicable.
+
 ### Next iteration action
+
+**SURFACING TO USER (loop-25 C1 finding).** The C-series investigation
+RE-CONVERGED on the B3 geometric dead-end from a different angle:
+the bake correctly handles the wall (CSV trace through all
+Recast stages + navmesh probe both confirm this), so there's no
+bake-time fix surface for this stall class. Possible next
+directions:
+
+A. **In-game stall trace** — capture FG screenshots + state dump
+   at stall time; cross-reference bot's actual position vs path
+   centerline to test the lateral-drift hypothesis (#1).
+B. **BG PhysicsGroundSnap drift instrumentation** — log
+   cumulative horizontal delta during a stall segment.
+C. **M2 instance scale inspection** — check ADT `scale` field
+   for instances 224791/224792; if > 1.0, runtime collision is
+   larger than our extracted geometry.
+D. **Bounded runtime overlay (B3 surface c)** — register
+   narrow-doodad collision overlays at the M2 instances.
+   Layering violation but bounded; closes specific stall
+   without resolving gap class.
+E. **Accept the stall** — one corridor of 100+ in OG city, gap
+   class may be rare, loop-24 close-out got us to 23/0
+   CriticalWalkLegs.
+
+The legacy B-series next-action below is preserved for context but
+superseded by this surface:
 
 **SURFACING TO USER.** B3 (b1) swept-capsule replacement was the
 planned next attempt, but a pre-implementation geometric check
