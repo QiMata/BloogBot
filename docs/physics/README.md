@@ -1,5 +1,23 @@
 # WWoW Physics System Documentation
 
+> **Current pathfinding/physics driver (as of 2026-05-19):**
+> See **[`../TASKS.md` → "Doodad Collision Gap (loop 25+)"](../TASKS.md)**.
+> CriticalWalkLegs achieved 23/0/0 close-out on 2026-05-18 (commit `a0385e1f`).
+> Loop-25 Phase C1 falsified the bake-time hypothesis on 2026-05-19; the bake
+> is correct and the active mismatch surface is **runtime collision physics**
+> (offline static-overlap vs. in-game swept-capsule). 4 remaining hypotheses
+> per memory `project_pfs_loop25_phase_b3_geometric_dead_end`: lateral drift,
+> wider runtime collision shape, CCD vs static-overlap, per-instance scale.
+>
+> **Historical session handoffs** (pre-loop-18, superseded by 23/0/0 close-out):
+> - [`../Archive/NEXT_SESSION_HANDOFF.md`](../Archive/NEXT_SESSION_HANDOFF.md) (May 11, OG cliff-fall framing)
+> - [`../Archive/NEXT_SESSION_PROMPT.md`](../Archive/NEXT_SESSION_PROMPT.md) (May 12, BRM / event-routing framing)
+> - [`../Archive/PATHFINDING_OVERHAUL.md`](../Archive/PATHFINDING_OVERHAUL.md) (May 10, original overhaul charter)
+> - [`../Archive/PATHFINDING_ITERATION.md`](../Archive/PATHFINDING_ITERATION.md) (May 7, iteration charter)
+> - [`../Archive/Handoffs/`](../Archive/Handoffs/) (May 15 – 17 cull / bake-close / parallel handoffs)
+>
+> The technical reference docs below remain canonical for the physics pipeline.
+
 This directory contains detailed documentation for the PhysX CCT-style character controller physics system used in WWoW's `Navigation.dll`.
 
 ## Overview

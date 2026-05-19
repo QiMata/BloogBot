@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-18 (loop 24 / iteration 11 — **🎯 TRACK A CLOSE-OUT COMPLETE: 23/0/0 FULL CLOSURE.** Phase A5.7 added off-mesh-AABB-containment skip-checks (xyExtent=0.001f, zExtent=0.001f) to (a) `PathRouteAssertions` waypoint-Z loop and (b) `LongPathingRouteTests.GetLocalPhysicsReachabilityFailure`. Sweep **23/0/0 in 10m 57s** (vs 1h 4m baseline = 6× faster; +4 closures from baseline 19/4). OG zep 4/4 + RecordedTests 135/0 + IsOffMeshConnectionAtCoordTests 4/4 + OffMeshAwarePipelineTimingTests 1/0 — all adjacent suites held. Tile (40,29) md5 `68b4f4cb...` is canonical post-close-out. **The 4 failures durable since loop 18 (>6 prior iteration phases) are closed.** Loop 24 history: A1 c68197e1 → A2 5c0db496 → A3 37ee100e → A4 528eb958 → A5.1 acf3a7e6 → A5.2 5c17f3fb → A5.3 b46252ff → A5.4 b8caece5 → A5.5 f7252cc6 → A5.6 8e0c5782 → A5.7 this commit. Track A done; Track B (skipvox bake) remains open but no longer urgent.).
+Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
 
 ## Rules
 
