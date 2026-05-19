@@ -631,6 +631,15 @@ public class NavigationPath(
     private string? _lastNearbyObjectOverlaySignature;
     private long _lastWaypointTick;
     private long _lastVerticalLayerReplanTick;
+    // D3 (loop-25): consecutive-fire counter for TryReplanFromNearVerticalLayerMismatch.
+    // After VERTICAL_LAYER_ESCALATION_THRESHOLD fires in the same z-band without
+    // intervening clean waypoint progress, escalate the next replan to
+    // MovementStuckRecovery so the safer-alternate path-rebuild branch in
+    // CalculatePath fires once before the counter resets. The position guard
+    // ensures normal long routes that hit one mismatch every few hundred
+    // waypoints don't spuriously escalate over a 20+ minute traversal.
+    private int _consecutiveVerticalLayerReplans;
+    private Position? _lastVerticalLayerReplanPosition;
     private Position[] _traceServiceWaypoints = [];
     private Position[] _tracePlannedWaypoints = [];
     private PathAffordanceInfo _traceAffordances = PathAffordanceInfo.Empty;
@@ -909,6 +918,11 @@ public class NavigationPath(
                 _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
                 _lastWaypointSampleDistance = float.NaN;
                 Metrics.IncrementCorridorAdvances();
+                // D3 (loop-25): sliding-along-wall progress also clears the VLM
+                // consecutive-fire counter (same forward-progress signal as a
+                // clean waypoint advance).
+                _consecutiveVerticalLayerReplans = 0;
+                _lastVerticalLayerReplanPosition = null;
             }
         }
         else
@@ -1109,6 +1123,13 @@ public class NavigationPath(
 
             _currentIndex++;
             Metrics.IncrementWaypointsReached();
+            // D3 (loop-25): a clean waypoint advance proves the bot is making
+            // forward progress, so the VLM consecutive-fire counter resets.
+            // Otherwise a 1000-waypoint route that hits one VLM mismatch per
+            // ~300 waypoints could escalate to MovementStuckRecovery spuriously
+            // over a 20+ minute traversal.
+            _consecutiveVerticalLayerReplans = 0;
+            _lastVerticalLayerReplanPosition = null;
             OnWaypointAdvanced(currentPosition, "in-radius");
         }
     }
@@ -1254,6 +1275,47 @@ public class NavigationPath(
             && nowTick - _lastVerticalLayerReplanTick < RECALCULATE_COOLDOWN_MS)
         {
             return false;
+        }
+
+        // D3 (loop-25): track consecutive VLM fires from the same z-band so we can
+        // escalate to MovementStuckRecovery — which routes through the safer-alternate
+        // rebuild branch in CalculatePath (line ~3771-3793) — when the VLM rebuild
+        // alone is not converging. Same-band == within the existing collision-layer
+        // drift tolerance and within stuck-recovery promotion radius. See loop-25 D3
+        // handoff for the ClimbOrgrimmarZeppelinTowerRampToFrezza evidence.
+        const int VERTICAL_LAYER_ESCALATION_THRESHOLD = 3;
+        var sameZBand = _lastVerticalLayerReplanPosition is { } prev
+            && MathF.Abs(prev.Z - currentPosition.Z) <= WAYPOINT_VERTICAL_LAYER_DRIFT_TOLERANCE
+            && prev.DistanceTo2D(currentPosition) <= STUCK_RECOVERY_PROMOTION_MAX_DISTANCE;
+        _consecutiveVerticalLayerReplans = sameZBand ? _consecutiveVerticalLayerReplans + 1 : 1;
+        _lastVerticalLayerReplanPosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
+
+        if (_consecutiveVerticalLayerReplans >= VERTICAL_LAYER_ESCALATION_THRESHOLD)
+        {
+            // Reset before escalating so the next-tick MovementStuckRecovery rebuild
+            // starts a fresh count; also bump _lastVerticalLayerReplanTick to the
+            // current tick so the VLM cooldown gate suppresses re-detection on the
+            // immediate next tick — this is a belt-and-suspenders against handoff
+            // §5 Unknown 2 (MovementStuckRecovery may NOT trigger the safer-alternate
+            // path in long-travel mode, leaving the head-mismatch predicate still
+            // primed to fire).
+            _consecutiveVerticalLayerReplans = 0;
+            _lastVerticalLayerReplanPosition = null;
+            _lastVerticalLayerReplanTick = nowTick;
+            _waypoints = [];
+            CalculatePath(
+                currentPosition,
+                destination,
+                mapId,
+                force: true,
+                reason: NavigationTraceReason.MovementStuckRecovery);
+            AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+
+            if (_currentIndex >= _waypoints.Length)
+                return true;
+
+            waypoint = _waypoints[_currentIndex];
+            return true;
         }
 
         _lastVerticalLayerReplanTick = nowTick;
@@ -3744,6 +3806,16 @@ public class NavigationPath(
         _nextSegmentBlocked = false;
         _lastProbeWaypointIndex = -1;
         _pendingDynamicBlockerReplan = false;
+        // D3 (loop-25): reset the VLM consecutive-fire counter whenever a rebuild
+        // is driven by any reason other than VerticalLayerMismatch. The escalation
+        // branch in TryReplanFromNearVerticalLayerMismatch zeroes the counter
+        // BEFORE calling CalculatePath(MovementStuckRecovery), so this guard does
+        // not interfere with the escalation cycle itself.
+        if (reason != NavigationTraceReason.VerticalLayerMismatch)
+        {
+            _consecutiveVerticalLayerReplans = 0;
+            _lastVerticalLayerReplanPosition = null;
+        }
 
         if (_pathfinding == null)
         {

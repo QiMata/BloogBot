@@ -26,7 +26,7 @@ namespace GameData.Core.Frames
         /// <value>
         ///     The status.
         /// </value>
-        public string Status { get; } = string.Empty;
+        public string Status { get; protected set; } = string.Empty;
 
         /// <summary>
         ///     The name of the taxi node (eg: Stormwind)
@@ -34,7 +34,7 @@ namespace GameData.Core.Frames
         /// <value>
         ///     The name.
         /// </value>
-        public string Name { get; } = string.Empty;
+        public string Name { get; protected set; } = string.Empty;
 
         /// <summary>
         ///     The cost in copper to take the taxi
@@ -42,7 +42,7 @@ namespace GameData.Core.Frames
         /// <value>
         ///     The cost.
         /// </value>
-        public int Cost { get; private set; }
+        public int Cost { get; protected set; }
 
         /// <summary>
         ///     The number of the node
@@ -50,6 +50,6 @@ namespace GameData.Core.Frames
         /// <value>
         ///     The node number.
         /// </value>
-        public int NodeNumber { get; }
+        public int NodeNumber { get; protected set; }
     }
 }

@@ -232,6 +232,8 @@ namespace WoWSharpClient
             TrainerFrame = new NetworkTrainerFrame(() => _agentFactoryAccessor?.Invoke()?.TrainerAgent);
             TalentFrame = new NetworkTalentFrame(() => _agentFactoryAccessor?.Invoke()?.TalentAgent);
             GossipFrame = new NetworkGossipFrame(() => _agentFactoryAccessor?.Invoke()?.GossipAgent);
+            CraftFrame = new NetworkCraftFrame(() => _agentFactoryAccessor?.Invoke()?.ProfessionsAgent);
+            TaxiFrame = new NetworkTaxiFrame(() => _agentFactoryAccessor?.Invoke()?.FlightMasterAgent);
         }
 
         private void InitializeMovementController()

@@ -2353,6 +2353,80 @@ public class NavigationPathTests
         Assert.Equal(1, trace.CurrentWaypointIndex);
     }
 
+    [Fact]
+    public void GetNextWaypoint_VerticalLayerMismatch_EscalatesToReplanAfterThreeConsecutiveFires()
+    {
+        // D3 (loop-25): when TryReplanFromNearVerticalLayerMismatch fires three
+        // times in a row from the same z-band without intervening waypoint
+        // progress, the third fire must escalate to MovementStuckRecovery so
+        // CalculatePath's safer-alternate-rebuild branch is invoked rather than
+        // looping on identical VLM rebuilds (see handoff
+        // docs/Plan/Handoffs/2026-05-19-loop25-d3-vertical-layer-mismatch-fix.md).
+        //
+        // Stub shape: every CalculatePath returns the same 3-waypoint plan with
+        // an uphill head 2y above and 2y away from the bot (horizontal <= 2.5y
+        // && upwardDelta > 1.25y triggers the VLM gate) and a far intermediate
+        // at 30y so TryPromoteLongTravelDestinationProgressWaypoint can't
+        // promote (LONG_TRAVEL_PROGRESS_PROMOTION_MAX_DISTANCE = 25y) and we
+        // fall through to the consecutive-fire counter.
+        var pathfindingCalls = 0;
+        long tick = 250;
+        var destination = new Position(40f, 0f, 0f);
+        var uphillHead = new Position(2f, 0f, 2f);
+        var farIntermediate = new Position(30f, 0f, 0f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            {
+                pathfindingCalls++;
+                return [uphillHead, farIntermediate, destination];
+            });
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => tick,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true);
+
+        var currentPosition = new Position(0f, 0f, 0f);
+
+        // Call 1: initial path build + first VLM fire. Counter goes 0 -> 1.
+        var waypoint1 = navPath.GetNextWaypoint(
+            currentPosition, destination, mapId: 1, allowDirectFallback: false);
+        var callsAfter1 = pathfindingCalls;
+        var trace1 = navPath.TraceSnapshot;
+        Assert.NotNull(waypoint1);
+        Assert.Equal(NavigationTraceReason.VerticalLayerMismatch, trace1.LastReplanReason);
+
+        // Call 2: bump tick past the 2000ms VLM cooldown -> second VLM fire.
+        // Counter goes 1 -> 2; still below the escalation threshold (3).
+        tick += 2_500;
+        var waypoint2 = navPath.GetNextWaypoint(
+            currentPosition, destination, mapId: 1, allowDirectFallback: false);
+        var callsAfter2 = pathfindingCalls;
+        var trace2 = navPath.TraceSnapshot;
+        Assert.NotNull(waypoint2);
+        Assert.Equal(NavigationTraceReason.VerticalLayerMismatch, trace2.LastReplanReason);
+        Assert.True(callsAfter2 > callsAfter1, "VLM rebuild should call pathfinding again.");
+
+        // Call 3: bump tick past the cooldown again -> third VLM fire escalates.
+        // Counter would go 2 -> 3 >= threshold; reset to 0; reason switches to
+        // MovementStuckRecovery and a fresh pathfinding call fires.
+        tick += 2_500;
+        var waypoint3 = navPath.GetNextWaypoint(
+            currentPosition, destination, mapId: 1, allowDirectFallback: false);
+        var callsAfter3 = pathfindingCalls;
+        var trace3 = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint3);
+        Assert.Equal(NavigationTraceReason.MovementStuckRecovery, trace3.LastReplanReason);
+        Assert.True(
+            callsAfter3 > callsAfter2,
+            $"Escalation must trigger a fresh pathfinding call (calls after 2: {callsAfter2}, after 3: {callsAfter3}).");
+    }
+
     [Fact(Skip = "PFS-OVERHAUL-006: tested the removed AdvanceReachableWaypoints skip/overshot/look-ahead heuristics. Layer-progression behavior now flows entirely through CanTreatWaypointAsReached's vertical check; the multi-waypoint shape this test asserts no longer occurs.")]
     public void GetNextWaypoint_LongTravelKeepsNearStepBeforeUphillLayerProgression()
     {

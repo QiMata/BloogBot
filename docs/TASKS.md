@@ -30,7 +30,7 @@ Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
 | Phase | File | Status |
 |---|---|---|
 | 0 — Spec hardening | [`Plan/01_PHASE0_SPEC_HARDENING.md`](Plan/01_PHASE0_SPEC_HARDENING.md) | **done** (closed 2026-05-12; details in [`ARCHIVE.md`](ARCHIVE.md#phase-0-closure-2026-05-12)) |
-| 1 — Action / Task Foundation | [`Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md`](Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md) | **in-progress** (S1.0 + S1.15 + S1.17 + S1.19 done; S1.1–S1.3 substrate green; S1.4–S1.14 + S1.16 + S1.18 + S1.20 open) |
+| 1 — Action / Task Foundation | [`Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md`](Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md) | **in-progress** (S1.0 + S1.15 + S1.16 + S1.17 + S1.18 + S1.19 done — all five Network*Frame BG packet paths landed; S1.1–S1.3 substrate green; S1.4–S1.14 + S1.20 open) |
 | 2 — OnDemand Engine | [`Plan/03_PHASE2_ONDEMAND_ENGINE.md`](Plan/03_PHASE2_ONDEMAND_ENGINE.md) | not-started (waiting on Phase 1) |
 | 3 — UI Default + Test Host | [`Plan/04_PHASE3_UI_DEFAULT.md`](Plan/04_PHASE3_UI_DEFAULT.md) | not-started |
 | 4 — Activity Registry | [`Plan/05_PHASE4_ACTIVITY_REGISTRY.md`](Plan/05_PHASE4_ACTIVITY_REGISTRY.md) | not-started |
@@ -56,18 +56,18 @@ Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
 | `S1.3` | PathfindingService stability sweep | `monorepo-worker` | **🎯 CLOSE-OUT WIN — 23/0/0 (2026-05-18 loop 24 / iter 11; +4 closures from baseline 19/4; sweep 10m 57s vs 1h 4m baseline = 6× faster).** A5.7 closed the final test (tower_underpass smoothPath=True) by adding off-mesh-AABB-containment skip-checks to (a) PathRouteAssertions waypoint-Z loop and (b) LongPathingRouteTests.GetLocalPhysicsReachabilityFailure. All adjacent suites held: OG zep 4/4, RecordedTests 135/0, IsOffMeshConnectionAtCoordTests 4/4, OffMeshAwarePipelineTimingTests 1/0. Tile (40,29) md5 `68b4f4cb...` is canonical post-close-out. Loop 24 history: A1 c68197e1 → A2 5c0db496 → A3 37ee100e → A4 528eb958 → A5.1 acf3a7e6 → A5.2 5c17f3fb → A5.3 b46252ff → A5.4 b8caece5 → A5.5 f7252cc6 → A5.6 8e0c5782 → A5.7 this commit. |
 | `S1.4..S1.14` | 11 family slots (Travel, Combat, Questing, Dungeon, BG, Gather, Craft, Economy, Social, Recovery, Raid-formation) | various | open (no dry-run yet) |
 | `S1.15` | Trade null guards (6 actions) | `monorepo-worker` | implemented (2026-05-15; live TradeParityTests pending) |
-| `S1.16` | Craft packet path (BG) | `monorepo-worker` | open |
+| `S1.16` | Craft packet path (BG) | `monorepo-worker` | implemented (2026-05-19; live CraftParityTests pending) |
 | `S1.17` | Vendor merchant null handling | `monorepo-worker` | implemented (2026-05-15; live VendorParityTests pending) |
-| `S1.18` | Taxi packet path (BG) | `monorepo-worker` | open |
+| `S1.18` | Taxi packet path (BG) | `monorepo-worker` | implemented (2026-05-19; `NetworkTaxiFrame` adapter over `IFlightMasterNetworkClientComponent`, 26 unit tests green 120/0/0; **agent-extension TODO**: `IFlightMasterNetworkClientComponent` lacks DBC node-name lookup, so `TaxiNode.Name` projects stringified DBC ids and `SelectNodeByName` expects the same form — server-side CMSG_ACTIVATETAXI is authoritative; live TaxiParityTests pending) |
 | `S1.19` | Trainer/Talent/Gossip packet paths (BG) | `monorepo-worker` | implemented (2026-05-15; live parity tests pending) |
 | `S1.20` | One-hour shake-out test | `monorepo-test-runner` | open (Phase 1 acceptance gate; depends on S1.1..S1.19) |
 
 ## Next pickup options
 
 1. **Land any open Phase 1 family slot** (S1.4..S1.14). Pick a family with a representative live-validation test the bot can drive end-to-end.
-2. **Close S1.16 / S1.18** (Craft + Taxi BG packet paths) — both follow the `Network*Frame` adapter pattern shipped in S1.15/17/19.
-3. **Run S1.20 dry-run** to expose any cross-family interaction bugs before opening Phase 2.
-4. **Pick up a Plan/13 (Phase 9) catalog-fill slot** in parallel with Phase 1; catalog rows are pure-data work that does not block on the substrate.
+2. **Run S1.20 dry-run** to expose any cross-family interaction bugs before opening Phase 2 — all five Network*Frame BG packet paths (S1.15/16/17/18/19) have now landed.
+3. **Pick up a Plan/13 (Phase 9) catalog-fill slot** in parallel with Phase 1; catalog rows are pure-data work that does not block on the substrate.
+4. **Extend `IFlightMasterNetworkClientComponent` with `GetNodeName(uint nodeId)`** so `NetworkTaxiFrame.Name` / `SelectNodeByName` work with human-readable names (S1.18 TODO).
 
 ## Parallel tracks
 
@@ -77,7 +77,20 @@ Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
 | Skill refinement | S10.1 — `activity-catalog-bootstrap` skill | `monorepo-worker` | open | [`Plan/11_PARALLEL_SKILL_REFINEMENT.md`](Plan/11_PARALLEL_SKILL_REFINEMENT.md) |
 | Test isolation refactor | (slots) | `monorepo-worker` | open (post Phase-2 S2.0) | [`Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md`](Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md) |
 
-## Doodad Collision Gap (loop 25+, started 2026-05-18)
+## Doodad Collision Gap (loop 25+, started 2026-05-18) — **CLOSED 2026-05-19**
+
+**Resolution (2026-05-19, lead):** Closed out — the pipeline IS already
+processing doodads (collision data extracted via `nBoundingTriangles` per
+B1 finding). The earlier hypotheses about missing M2 data were moot on
+investigation. Active failure mode shifted to D2/D3 (vertical-layer
+mismatch recovery loop), which is its own thread below. Doodad-extraction
+fix surface is exhausted; no further action on this thread.
+
+Original investigation thread preserved below for archival reference.
+
+---
+
+## Doodad Collision Gap (loop 25+, archival thread)
 
 Single-track follow-up to loop-24 close-out. The
 `ClimbOrgrimmarZeppelinTowerRampToFrezza` bot-level integration test
@@ -199,7 +212,66 @@ vmap-extraction completeness OR Navigation.dll vmap consumer.
 
 ### Next iteration action
 
-**D2 NEXT.** Start from the D1 stopping point, not from B/C bake or
+**D2 DIAGNOSIS COMPLETE (2026-05-19, impl-loop iter 3 — Claude-side DIAG after Codex zombie):**
+**Classification: (c) Genuine vertical-layer/jumppad transition the repair pipeline mishandles.**
+NOT D1 regression — geometric distance (370y NW of OG column) rules out D1 hold-logic.
+Evidence from `tmp/test-runtime/screenshots/long-pathing/timeline/ClimbOrgrimmarZeppelinTowerRampToFrezza/03-final-LPATHFG1-20260519T143904Z.json:34-38`:
+5 consecutive snapshots all show `reason=vertical_layer_mismatch resolution=waypoint plan=7 smooth=False`;
+bot IS progressing (waypoint idx 91→98→103→108→113 across the 5 samples)
+but stalls at idx 113 with `currentSpeed=0`. `hitWall=False`, `wall=(0.00,0.00)`,
+`blocked=1.00` — semantic block, no physical obstacle. Z-coords in window are
+16.2-19.6y (flat terrain with small layer hops, not a cliff). `afford=Drop`
+(recovery suggests dropping, but bot is on flat ground). `plan=7` means
+the bot has been REPLANNED 7 times trying to resolve the mismatch.
+
+**D3 IMPLEMENTED (2026-05-19, impl-loop iter 5).** Per handoff
+[`Plan/Handoffs/2026-05-19-loop25-d3-vertical-layer-mismatch-fix.md`](Plan/Handoffs/2026-05-19-loop25-d3-vertical-layer-mismatch-fix.md).
+Diff: `Exports/BotRunner/Movement/NavigationPath.cs` +72 LOC,
+`Tests/BotRunner.Tests/Movement/NavigationPathTests.cs` +74 LOC.
+Focused tests **113/0/7** (baseline 112 + new escalation Fact = 113).
+
+Handoff §5 Unknown 2 was CONFIRMED via static read: for the OG-zep ramp scenario
+`IsLongTravelStyleRoute()` is true, so escalating to `MovementStuckRecovery` does
+NOT trigger `preferSaferAlternateOnReplan` (the existing VLM reason already does).
+The escalation primarily delivers (a) a different trace tag, (b) a fresh `force=true`
+`CalculatePath`, (c) counter-reset cycle. Belt-and-suspenders `_lastVerticalLayerReplanTick = nowTick`
+added inside the escalation block so VLM predicate is cooldown-suppressed for the
+next 2000ms after escalation.
+
+**D3 REGRESSION SWEEP — GREEN for D3-touched code (2026-05-19, iter 6-7):**
+- `OgZeppelinCliffFallParityTests` — **4/0/0 in 11s** ✓ (baseline 4/0/0 held).
+- `RecordedTests.PathingTests` — **135/0/0 in 3s** ✓ (baseline 135/0 held).
+- `NavigationPathTests` (D3 IMPL self-test) — **113/0/7 in 208ms** ✓ (baseline 112 + 1 new escalation Fact).
+- `PathfindingService.Tests` full sweep — **143 passed / 14 failed (3 distinct) / 13 skipped in 33m 30s**.
+  3 distinct failures, ALL classified as NOT D3-attributable:
+  - `OffMeshAwarePipelineTimingTests.OgZepTowerBaseToBoardingPath_TraversesOffMeshAndPipelineCompletesUnderRegressionCeiling` — 348s vs 240s ceiling breach; **PASSED in isolation re-run in 2m 59s**. Environmental contention (D2Bot agents + dotnet-test were concurrent). Not D3.
+  - `LongPathingRouteTests.OrgrimmarZeppelinSupport_FirstCompactStep_IsWalkableForTaurenCapsule` (2ms, `BlockedGeometry` vs `Clear`) — static `ValidateWalkableSegment` check; D3 doesn't touch capsule or PathfindingService walkability. **Pre-existing.**
+  - `PathfindingSocketServerIntegrationTests.HandlePath_LiveCorpseRunRoute_ReturnsValidatedPathWithinBudget` (87ms, last corner 47.69y from destination vs ≤12y) — socket server path-completeness; D3 doesn't touch CalculatePath or socket server. **Pre-existing.**
+  Loop-24 close-out memory `project_pfs_loop24_close_out_win` only baselined the CriticalWalkLegs filter (23/0). The 2 pre-existing failures were outside that filter — surfaced now for first time, not regressions from D3 IMPL.
+
+**D3 PENDING live validation (StateManager + BotRunner driven, NOT user):**
+the `ClimbOrgrimmarZeppelinTowerRampToFrezza` LiveValidation test. Driver
+is StateManager orchestrating BotRunner — automatic via the existing
+live-fixture infrastructure (see `mmo-live-fixtures` skill). Next iter
+should DISPATCH the live run via that skill, not surface to user.
+If it still hangs at (1249.2,-3902.3,18.3) despite D3 escalation, D4
+contingency: (a) drop the `!IsLongTravelStyleRoute()` guard at
+`NavigationPath.cs:3772`, or (b) introduce a dedicated
+`VerticalLayerEscalation` reason that always triggers alternate-path
+comparison.
+
+**D3 NEXT.** The `vertical_layer_mismatch + resolution=waypoint` recovery is
+firing repeatedly without progress. Implementation brief landed in
+[`Plan/Handoffs/2026-05-19-loop25-d3-vertical-layer-mismatch-fix.md`](Plan/Handoffs/2026-05-19-loop25-d3-vertical-layer-mismatch-fix.md):
+adds consecutive-fire counter at `NavigationPath.cs:633`, escalates to
+`MovementStuckRecovery` reason on 3rd consecutive fire in same z-band
+(repurposing existing `preferSaferAlternateOnReplan` path).
+~12 LOC + 3 fields + 1 reset hook in `NavigationPath.cs:1252-1267`.
+Test gap covered in handoff §6 (`NavigationPathTests.cs` near line 2310).
+Tauren capsule, bake, and `Navigation.cs` 8-phase repair pipeline are NOT
+the fix surface.
+
+(Legacy D2 prompt below preserved for context.) Start from the D1 stopping point, not from B/C bake or
 scale hypotheses. The original column stall mechanism is a BotRunner
 LongTravel corner-skip: the active waypoint advanced past
 (1614.7,-4242.1,46.7) to (1612.7,-4237.7,46.3), cutting the doodad
