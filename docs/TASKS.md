@@ -138,20 +138,42 @@ vmap-extraction completeness OR Navigation.dll vmap consumer.
 
 ### Next iteration action
 
-Phase B3 attempt (b1) — swept-capsule replacement in
-`HasBlockingCapsuleOverlap`
-([`DllMain.cpp:928-962`](../Exports/Navigation/DllMain.cpp#L928-L962)).
-The bot's `playerFwd` direction is already passed in. Replace
-`SceneQuery::SweepCapsule(mapId, cap, (0,0,0), 0.0f, ...)` with
-`SceneQuery::SweepCapsule(mapId, cap, playerFwd, sweepDist, ...)`
-where `sweepDist ≈ 2*radius` (covers the chunk). Loosen the
-`hit.startPenetrating` requirement to handle swept-volume contacts.
-Rebuild, re-probe, expect Block classification.
+**SURFACING TO USER.** B3 (b1) swept-capsule replacement was the
+planned next attempt, but a pre-implementation geometric check
+falsified the hypothesis: a swept capsule along the segment also
+does NOT touch the wall (the wall is ≥0.97y outside the capsule's
+max-radius reach at every Z within the capsule body). All three
+B3 fix surfaces (a/b/c) are non-trivial:
+
+- (a) vmap-extractor change to extract M2 collision primitives —
+  broad blast radius, multi-day re-extraction
+- (b) navigation.dll capsule inflation when testing M2 tris —
+  risks 23/0 regression on legitimate near-grazing surfaces
+- (c) runtime dynamic-overlay registration of static doodads —
+  bounded but DynamicObjectRegistry layering violation; many
+  thousands of doodads in OG city alone
+
+The in-game collision must use geometry our pipeline doesn't see
+(M2 collision primitive separate from visual mesh, lateral
+PhysicsGroundSnap drift per BRM H2 analysis, or server-side
+collision data not in vmap). Need user direction before continuing.
 
 ### Blocked / questions for user
 
-- (none — (b1) is the correct geometric fix per B3 b2's empirical
-  evidence; B5 sweep will catch any regression)
+1. Pursue (a) vmap-extractor M2 collision primitive extraction?
+   Broad blast radius — affects every M2 in every tile across
+   every map, requires multi-day re-extraction.
+2. Pursue (b) capsule inflation in `HasBlockingCapsuleOverlap`
+   with M2-source filter? Risks 23/0 regression but may close
+   the gap for all M2 doodads if it holds.
+3. Pursue (c) runtime overlay registration? Bounded scope but
+   per-doodad registration cost and layering violation.
+4. Pursue (d) NEW: investigate lateral-drift mechanism (BRM
+   H2 hypothesis applied here) — fix `PhysicsGroundSnap` to
+   stop applying walkable-slope XY push that may be drifting
+   the bot off the path centerline INTO the wall.
+5. Pursue (e) NEW: extract M2 collision primitives only for
+   specific known-bad regions (OG city tiles) as a stopgap.
 
 ## Test baseline (refreshed 2026-05-15)
 
