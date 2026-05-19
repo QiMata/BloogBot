@@ -186,7 +186,7 @@ namespace ForegroundBotRunner
         private async Task<bool> RequestAccountAssignmentAsync(CancellationToken stoppingToken)
         {
             var stateManagerIp = _configuration["CharacterStateListener:IpAddress"] ?? "127.0.0.1";
-            var stateManagerPort = int.Parse(_configuration["CharacterStateListener:Port"] ?? "5002");
+            var stateManagerPort = int.Parse(_configuration["CharacterStateListener:Port"] ?? "9001");
             var requestedAccountName = ResolveStateManagerRegistrationAccount(
                 Environment.GetEnvironmentVariable("WWOW_ACCOUNT_NAME"));
 
@@ -703,7 +703,7 @@ namespace ForegroundBotRunner
                 try
                 {
                     var pfIp = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
-                    var pfPort = int.Parse(_configuration["PathfindingService:Port"] ?? "5001");
+                    var pfPort = int.Parse(_configuration["PathfindingService:Port"] ?? "9002");
                     _pathfindingClient = new PathfindingClient(pfIp, pfPort, _loggerFactory.CreateLogger<PathfindingClient>());
                     DiagLog($"Created PathfindingClient: {pfIp}:{pfPort}");
                 }

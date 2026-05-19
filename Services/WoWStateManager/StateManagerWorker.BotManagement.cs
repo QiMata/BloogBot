@@ -99,7 +99,7 @@ namespace WoWStateManager
             psi.Environment["WWOW_ACCOUNT_NAME"] = accountName;
             psi.Environment["WWOW_ACCOUNT_PASSWORD"] = "PASSWORD";
             psi.Environment["PathfindingService__IpAddress"] = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
-            psi.Environment["PathfindingService__Port"] = _configuration["PathfindingService:Port"] ?? "5001";
+            psi.Environment["PathfindingService__Port"] = _configuration["PathfindingService:Port"] ?? "9002";
             psi.Environment["SceneDataService__IpAddress"] =
                 _configuration["SceneDataService:IpAddress"]
                 ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP")
@@ -107,7 +107,7 @@ namespace WoWStateManager
             psi.Environment["SceneDataService__Port"] =
                 _configuration["SceneDataService:Port"]
                 ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT")
-                ?? "5003";
+                ?? "9003";
             // Forward WWOW_DATA_DIR so the BG bot's local Navigation.dll can find
             // terrain/collision data (maps/, vmaps/, scenes/). Without this, the local
             // physics engine has no geometry and the bot falls through the world.
@@ -116,7 +116,7 @@ namespace WoWStateManager
                 psi.Environment["WWOW_DATA_DIR"] = wwowDataDir;
 
             psi.Environment["CharacterStateListener__IpAddress"] = _configuration["CharacterStateClient:IpAddress"] ?? "127.0.0.1";
-            psi.Environment["CharacterStateListener__Port"] = _configuration["CharacterStateListener:Port"] ?? "5002";
+            psi.Environment["CharacterStateListener__Port"] = _configuration["CharacterStateListener:Port"] ?? "9001";
             psi.Environment["RealmEndpoint__IpAddress"] = _configuration["RealmEndpoint:IpAddress"] ?? "127.0.0.1";
             SetOrRemoveProcessEnvironment(psi.Environment, "WWOW_CHARACTER_CLASS", characterClass);
             SetOrRemoveProcessEnvironment(psi.Environment, "WWOW_CHARACTER_RACE", characterRace);

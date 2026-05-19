@@ -19,7 +19,7 @@ namespace WoWSharpClient.Tests.Movement;
 public sealed class SceneDataEnvironmentIntegrationTests(ITestOutputHelper output) : IDisposable
 {
     private const string SceneDataHost = "127.0.0.1";
-    private const int SceneDataPort = 5003;
+    private const int SceneDataPort = 9003;
 
     private static readonly ProbeLocation OutdoorLocation = new(
         MapId: 1,

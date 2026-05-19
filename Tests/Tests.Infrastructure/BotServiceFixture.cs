@@ -22,7 +22,7 @@ namespace Tests.Infrastructure;
 /// Safety:
 ///   - Named mutex prevents concurrent test processes from racing
 ///   - Stale processes (StateManager, WoW.exe, BackgroundBotRunner) are killed before launch
-///   - Port 8088 is verified free before starting a new StateManager
+///   - Port 9000 is verified free before starting a new StateManager
 ///   - MaNGOS session cleanup delay after killing WoW.exe
 ///
 /// Usage:
@@ -105,13 +105,13 @@ public class BotServiceFixture : IAsyncLifetime
     public bool ServicesReady { get; private set; }
 
     /// <summary>
-    /// Whether PathfindingService is listening on its configured port (default 5001).
+    /// Whether PathfindingService is listening on its configured port (default 9002).
     /// Tests that require pathfinding should check this in addition to <see cref="ServicesReady"/>.
     /// </summary>
     public bool PathfindingServiceReady { get; private set; }
 
     /// <summary>
-    /// Whether SceneDataService is listening on its configured port (default 5003).
+    /// Whether SceneDataService is listening on its configured port (default 9003).
     /// Tests that require scene data should check this in addition to <see cref="ServicesReady"/>.
     /// </summary>
     public bool SceneDataServiceReady { get; private set; }
@@ -299,14 +299,14 @@ public class BotServiceFixture : IAsyncLifetime
         Log($"  World server ({_mangosFixture.Config.WorldServerPort}): {_mangosFixture.IsWorldAvailable}");
         Log($"  MySQL ({_mangosFixture.Config.MySqlPort}): {_mangosFixture.IsMySqlAvailable}");
 
-        // Verify port 8088 is free before starting
-        if (IsPortInUse(8088))
+        // Verify port 9000 is free before starting
+        if (IsPortInUse(9000))
         {
-            Log("  [StateManager] WARNING: Port 8088 still in use after stale cleanup. Waiting 5s...");
+            Log("  [StateManager] WARNING: Port 9000 still in use after stale cleanup. Waiting 5s...");
             await Task.Delay(5000);
-            if (IsPortInUse(8088))
+            if (IsPortInUse(9000))
             {
-                UnavailableReason = "Port 8088 is occupied by another process after cleanup. Cannot start StateManager.";
+                UnavailableReason = "Port 9000 is occupied by another process after cleanup. Cannot start StateManager.";
                 Log($"SKIP: {UnavailableReason}");
                 return;
             }
@@ -316,7 +316,7 @@ public class BotServiceFixture : IAsyncLifetime
         Log("  [StateManager] Starting fresh instance...");
         var smReady = await TryStartStateManagerAsync();
 
-        Log($"  StateManager (8088): {smReady}");
+        Log($"  StateManager (9000): {smReady}");
 
         if (smReady)
         {
@@ -345,10 +345,10 @@ public class BotServiceFixture : IAsyncLifetime
 
             // Check if SceneDataService is available on its external endpoint.
             SceneDataServiceReady = await WaitForSceneDataServiceAsync();
-            Log($"  SceneDataService (5003): {SceneDataServiceReady}");
+            Log($"  SceneDataService (9003): {SceneDataServiceReady}");
             if (!SceneDataServiceReady)
             {
-                Log("  [SceneDataService] WARNING: SceneDataService is not available on port 5003.");
+                Log("  [SceneDataService] WARNING: SceneDataService is not available on port 9003.");
                 Log("  [SceneDataService] Likely cause: WWOW_DATA_DIR is not set or SceneDataService.dll is not built.");
                 Log("  [SceneDataService] BG workers will still launch and retry scene-slice refresh on demand once the service becomes available.");
             }
@@ -358,7 +358,7 @@ public class BotServiceFixture : IAsyncLifetime
         }
         else
         {
-            UnavailableReason = "WoWStateManager (port 8088) not available. Start it manually before running integration tests.";
+            UnavailableReason = "WoWStateManager (port 9000) not available. Start it manually before running integration tests.";
             Log($"SKIP: {UnavailableReason}");
         }
     }
@@ -430,11 +430,11 @@ public class BotServiceFixture : IAsyncLifetime
                         Log($"  [CrashMonitor] {msg}");
                     }
 
-                    // Check SceneDataService (port 5003)
-                    if (SceneDataServiceReady && !await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", 5003, 2000))
+                    // Check SceneDataService (port 9003)
+                    if (SceneDataServiceReady && !await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", 9003, 2000))
                     {
                         SceneDataServiceReady = false;
-                        var msg = $"SceneDataService (port 5003) stopped responding at {DateTime.Now:HH:mm:ss}";
+                        var msg = $"SceneDataService (port 9003) stopped responding at {DateTime.Now:HH:mm:ss}";
                         Log($"  [CrashMonitor] {msg}");
                     }
 
@@ -884,10 +884,10 @@ public class BotServiceFixture : IAsyncLifetime
     /// <summary>
     /// Waits for PathfindingService to become available on its configured port.
     /// The service is treated as an external dependency and must be launched separately
-    /// (e.g., via the Docker `wwow-pathfinding` container on port 5001, or via
+    /// (e.g., via the Docker `wwow-pathfinding` container on port 9002, or via
     /// `PathfindingTestFixture` on a test port like 5101 when WWOW_USE_LOCAL_PATHFINDING_SERVICE=1).
     /// PFS-OVERHAUL-006: now honors `WWOW_TEST_PATHFINDING_PORT` (via IntegrationTestConfig)
-    /// instead of hardcoding 5001, so test fixtures can spawn their own instance on a
+    /// instead of hardcoding 9002, so test fixtures can spawn their own instance on a
     /// free port without colliding with Docker.
     /// </summary>
     private async Task<bool> WaitForPathfindingServiceAsync()
@@ -923,12 +923,12 @@ public class BotServiceFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Waits for SceneDataService to become available on port 5003.
+    /// Waits for SceneDataService to become available on port 9003.
     /// The service is treated as an external dependency and must be launched separately.
     /// </summary>
     private async Task<bool> WaitForSceneDataServiceAsync()
     {
-        const int sceneDataPort = 5003;
+        const int sceneDataPort = 9003;
         const int maxWaitSeconds = 30;
 
         // If port is already in use, it's ready
@@ -1078,11 +1078,11 @@ public class BotServiceFixture : IAsyncLifetime
             psi.Environment["SceneDataService__IpAddress"] =
                 Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP") ?? "127.0.0.1";
             psi.Environment["SceneDataService__Port"] =
-                Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT") ?? "5003";
+                Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT") ?? "9003";
             psi.Environment["CharacterStateListener__IpAddress"] = "127.0.0.1";
-            psi.Environment["CharacterStateListener__Port"] = "5002";
+            psi.Environment["CharacterStateListener__Port"] = "9001";
             psi.Environment["StateManagerListener__IpAddress"] = "127.0.0.1";
-            psi.Environment["StateManagerListener__Port"] = "8088";
+            psi.Environment["StateManagerListener__Port"] = "9000";
             psi.Environment["RealmEndpoint__IpAddress"] = _mangosFixture.Config.AuthServerIp;
 
             var wowExePath = Environment.GetEnvironmentVariable("WWOW_WOW_EXE_PATH")
@@ -1101,7 +1101,7 @@ public class BotServiceFixture : IAsyncLifetime
                 return false;
             }
 
-            Log($"  [StateManager] Process started (PID: {_stateManagerProcess.Id}). Waiting for port 8088...");
+            Log($"  [StateManager] Process started (PID: {_stateManagerProcess.Id}). Waiting for port 9000...");
 
             _stateManagerProcess.OutputDataReceived += (_, e) =>
             {
@@ -1161,10 +1161,10 @@ public class BotServiceFixture : IAsyncLifetime
                     return false;
                 }
 
-                var ready = await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", 8088, 1000);
+                var ready = await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", 9000, 1000);
                 if (ready)
                 {
-                    Log($"  [StateManager] Ready on port 8088 after {i + 1}s.");
+                    Log($"  [StateManager] Ready on port 9000 after {i + 1}s.");
                     return true;
                 }
 

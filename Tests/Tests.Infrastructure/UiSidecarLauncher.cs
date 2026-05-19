@@ -12,7 +12,7 @@ namespace Tests.Infrastructure;
 ///
 /// Lifecycle:
 ///   1. BotServiceFixture.InitializeAsync calls <see cref="TryLaunch"/> after StateManager
-///      reaches ready state (port 8088 listening).
+///      reaches ready state (port 9000 listening).
 ///   2. The UI launches with WWOW_UI_AUTOCONNECT=1 and WWOW_UI_STATEMANAGER_URL pointing
 ///      at the StateManager's protobuf port. The UI's HealthCheckService starts auto-
 ///      polling immediately on construction, so no manual Connect click is required.
@@ -38,7 +38,7 @@ internal static class UiSidecarLauncher
 
     private const string UiBinaryName = "WoWStateManagerUI.exe";
     private const string UiProjectName = "WoWStateManagerUI.csproj";
-    private const string DefaultStateManagerUrl = "tcp://127.0.0.1:8088";
+    private const string DefaultStateManagerUrl = "tcp://127.0.0.1:9000";
 
     /// <summary>
     /// Attempts to launch the UI sidecar. Returns null when:

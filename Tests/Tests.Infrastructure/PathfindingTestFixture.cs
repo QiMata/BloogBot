@@ -44,7 +44,7 @@ public sealed class PathfindingTestFixture : IAsyncDisposable
 {
     private const string EnableEnvVar = "WWOW_USE_LOCAL_PATHFINDING_SERVICE";
     private const string PortEnvVar = "WWOW_TEST_PATHFINDING_PORT";
-    private const int DefaultTestPort = 5101;
+    private const int DefaultTestPort = 9020;
     private const int MaxStartupSeconds = 600; // mmap preload can take a while
 
     private Process? _process;

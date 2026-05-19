@@ -158,7 +158,7 @@ namespace WoWStateManager
         {
             var ipAddress = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
             var portValue = _configuration["PathfindingService:Port"];
-            var port = int.TryParse(portValue, out var parsedPort) ? parsedPort : 5001;
+            var port = int.TryParse(portValue, out var parsedPort) ? parsedPort : 9002;
 
             Console.WriteLine($"Waiting for PathfindingService at {ipAddress}:{port} (external dependency)...");
 
@@ -419,9 +419,9 @@ namespace WoWStateManager
             var portValue =
                 _configuration["SceneDataService:Port"]
                 ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT")
-                ?? "5003";
+                ?? "9003";
 
-            return int.TryParse(portValue, out var port) ? port : 5003;
+            return int.TryParse(portValue, out var port) ? port : 9003;
         }
     }
 }

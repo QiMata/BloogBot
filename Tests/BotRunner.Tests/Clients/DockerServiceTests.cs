@@ -20,39 +20,39 @@ public class DockerServiceTests
     [SkippableFact]
     public async Task PathfindingService_TcpConnect_Responds()
     {
-        // P3.2: Verify PathfindingService is reachable on port 5001
+        // P3.2: Verify PathfindingService is reachable on port 9002
         using var client = new TcpClient();
         try
         {
-            await client.ConnectAsync("127.0.0.1", 5001);
+            await client.ConnectAsync("127.0.0.1", 9002);
         }
         catch (SocketException)
         {
-            Skip.If(true, "PathfindingService not running on port 5001");
+            Skip.If(true, "PathfindingService not running on port 9002");
             return;
         }
 
         Assert.True(client.Connected, "Should be connected to PathfindingService");
-        _output.WriteLine("[P3.2] PathfindingService TCP connected on port 5001");
+        _output.WriteLine("[P3.2] PathfindingService TCP connected on port 9002");
     }
 
     [SkippableFact]
     public async Task SceneDataService_TcpConnect_Responds()
     {
-        // P4.2: Verify SceneDataService is reachable on port 5003
+        // P4.2: Verify SceneDataService is reachable on port 9003
         using var client = new TcpClient();
         try
         {
-            await client.ConnectAsync("127.0.0.1", 5003);
+            await client.ConnectAsync("127.0.0.1", 9003);
         }
         catch (SocketException)
         {
-            Skip.If(true, "SceneDataService not running on port 5003");
+            Skip.If(true, "SceneDataService not running on port 9003");
             return;
         }
 
         Assert.True(client.Connected, "Should be connected to SceneDataService");
-        _output.WriteLine("[P4.2] SceneDataService TCP connected on port 5003");
+        _output.WriteLine("[P4.2] SceneDataService TCP connected on port 9003");
     }
 
     [SkippableFact]
@@ -69,7 +69,7 @@ public class DockerServiceTests
                 using var client = new TcpClient();
                 try
                 {
-                    await client.ConnectAsync("127.0.0.1", 5001);
+                    await client.ConnectAsync("127.0.0.1", 9002);
                     if (client.Connected)
                         System.Threading.Interlocked.Increment(ref successCount);
                 }

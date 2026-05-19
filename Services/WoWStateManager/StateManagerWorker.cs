@@ -210,7 +210,7 @@ namespace WoWStateManager
         private async Task LogExternalDependencyStatusAsync(CancellationToken stoppingToken)
         {
             var pathfindingIp = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
-            var pathfindingPortStr = _configuration["PathfindingService:Port"] ?? "5001";
+            var pathfindingPortStr = _configuration["PathfindingService:Port"] ?? "9002";
             if (int.TryParse(pathfindingPortStr, out var pathfindingPort))
             {
                 await LogExternalDependencyStatusAsync(
@@ -231,7 +231,7 @@ namespace WoWStateManager
             var sceneDataPortStr =
                 _configuration["SceneDataService:Port"]
                 ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT")
-                ?? "5003";
+                ?? "9003";
             if (int.TryParse(sceneDataPortStr, out var sceneDataPort))
             {
                 await LogExternalDependencyStatusAsync(

@@ -1,6 +1,20 @@
 # WoWStateManager - Central Bot Orchestration
 
-Central orchestration service that manages both **Foreground** (DLL-injected into WoW.exe) and **Background** (headless protocol emulation) bots. Listens on **port 5002** (character state IPC) and **port 8088** (state manager API).
+Central orchestration service that manages both **Foreground** (DLL-injected into WoW.exe) and **Background** (headless protocol emulation) bots. Listens on **port 9001** (character state IPC) and **port 9000** (state manager API).
+
+## Port assignment
+
+WWoW services live in the **9000-9099 range** (post-2026-05-18 refactor; see commit history). This range gives wide separation from FFXIBot (which uses 5002 + 8088 — pre-refactor WWoW collided with both) and from any other game-bot solution under `E:\repos`. Each repo should pick its own 100-port block; service-specific assignments live in their respective appsettings.json.
+
+| Port | Service | Role |
+|---|---|---|
+| 9000 | WoWStateManager | StateManagerListener (test-fixture queries, API) |
+| 9001 | WoWStateManager | CharacterStateListener (bot snapshot poll) |
+| 9002 | PathfindingService | Detour/Recast route service (Docker: wwow-pathfinding) |
+| 9003 | SceneDataService | Local collision data (Docker: wwow-scene-data) |
+| 9020-9029 | Test fixtures | PathfindingTestFixture, PathfindingValidationFixture |
+
+MaNGOS server-side ports (3724 realm, 7878 SOAP, 8085 world) are unchanged — those are the WoW protocol's canonical ports.
 
 ## Key Files
 
@@ -32,7 +46,7 @@ Central orchestration service that manages both **Foreground** (DLL-injected int
   4. Polls for WoW window (15s timeout)
   5. `VirtualAllocEx` + `WriteProcessMemory` + `CreateRemoteThread(LoadLibraryW)` → injects Loader.dll
   6. Loader bootstraps .NET 8 hostfxr → loads ForegroundBotRunner.dll → calls `Loader.Load()`
-  7. ForegroundBotWorker connects back to StateManager on port 5002
+  7. ForegroundBotWorker connects back to StateManager on port 9001
   8. Monitoring task: checks process health every 5s, kills orphans after 60s
 
 ## Testing
@@ -47,6 +61,6 @@ Central orchestration service that manages both **Foreground** (DLL-injected int
 `appsettings.json`:
 - `GameClient:ExecutablePath` → path to WoW.exe (e.g. `D:\World of Warcraft\WoW.exe`)
 - `LoaderDllPath` → path to Loader.dll
-- `CharacterStateListener:Port` → 5002 (IPC for FG bots)
-- `PathfindingService:Port` → 5001 (navigation)
-- `StateManagerListener:Port` → 8088 (API)
+- `CharacterStateListener:Port` → 9001 (IPC for FG bots)
+- `PathfindingService:Port` → 9002 (navigation)
+- `StateManagerListener:Port` → 9000 (API)

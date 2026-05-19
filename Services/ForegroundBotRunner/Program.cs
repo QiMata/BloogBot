@@ -189,9 +189,9 @@ public static class Program
                 var configDict = new Dictionary<string, string?>
                 {
                     ["PathfindingService:IpAddress"] = "127.0.0.1",
-                    ["PathfindingService:Port"] = "5001",
+                    ["PathfindingService:Port"] = "9002",
                     ["CharacterStateListener:IpAddress"] = "127.0.0.1",
-                    ["CharacterStateListener:Port"] = "5002",
+                    ["CharacterStateListener:Port"] = "9001",
                     ["LoginServer:IpAddress"] = "127.0.0.1"
                 };
                 builder.AddInMemoryCollection(configDict);
@@ -203,7 +203,7 @@ public static class Program
                 {
                     var config = hostContext.Configuration;
                     var ip = config["PathfindingService:IpAddress"] ?? "127.0.0.1";
-                    var port = int.Parse(config["PathfindingService:Port"] ?? "5001");
+                    var port = int.Parse(config["PathfindingService:Port"] ?? "9002");
                     var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<BotRunner.Clients.PathfindingClient>();
                     return new BotRunner.Clients.PathfindingClient(ip, port, logger);
                 });

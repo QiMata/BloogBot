@@ -1,6 +1,6 @@
 # PathfindingService - A* Pathfinding Worker Service
 
-Stateless worker service that wraps the native `Navigation.dll` for path computation. Listens on **port 5001**.
+Stateless worker service that wraps the native `Navigation.dll` for path computation. Listens on **port 9002** (post-2026-05-18 port refactor — see `Services/WoWStateManager/CLAUDE.md` for the WWoW 9000-9099 port range).
 
 ## Key Files
 

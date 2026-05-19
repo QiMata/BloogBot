@@ -9,13 +9,13 @@ using Xunit;
 namespace PathfindingService.Tests;
 
 // Validation harness that hits the live Docker wwow-pathfinding container
-// on 127.0.0.1:5001 to confirm production behaviour. NOT auto-run — guard
+// on 127.0.0.1:9002 to confirm production behaviour. NOT auto-run — guard
 // with WWOW_RUN_DOCKER_VALIDATION=1.
 [Trait("Category", "DockerLive")]
 public sealed class DockerLiveValidationTests
 {
     private const string DockerHost = "127.0.0.1";
-    private const int DockerPort = 5001;
+    private const int DockerPort = 9002;
 
     [SkippableFact]
     public async Task DockerPathfinding_ShortDurotarRoute_RespondsWithinBudget()

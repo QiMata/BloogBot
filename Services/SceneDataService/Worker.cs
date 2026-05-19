@@ -12,7 +12,7 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var port = int.Parse(Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT") ?? "5003");
+        var port = int.Parse(Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT") ?? "9003");
         var ip = Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP") ?? "127.0.0.1";
 
         _logger.LogInformation("[SceneDataService] Starting on {Ip}:{Port}", ip, port);

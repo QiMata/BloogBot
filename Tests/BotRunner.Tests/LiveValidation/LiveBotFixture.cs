@@ -24,7 +24,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// WoWStateManager only after a test-specific settings file is known.
 ///
 /// Tests observe bots through <see cref="WoWActivitySnapshot"/> queries via
-/// port 8088 and command them through <see cref="ActionForwardRequest"/>.
+/// port 9000 and command them through <see cref="ActionForwardRequest"/>.
 /// GM commands for test setup (teleport, level, items) go through SOAP.
 ///
 /// Rules enforced:
@@ -158,14 +158,14 @@ public partial class LiveBotFixture : IAsyncLifetime
     protected virtual IReadOnlyCollection<string> KnownAccountNamesForCharacterResolution => Array.Empty<string>();
 
     /// <summary>
-    /// Whether PathfindingService is listening on port 5001.
+    /// Whether PathfindingService is listening on port 9002.
     /// Tests that require pathfinding (corpse run, movement, gathering) should
     /// check this via <c>Skip.IfNot(fixture.IsPathfindingReady, ...)</c>.
     /// </summary>
 
 
     /// <summary>
-    /// Whether PathfindingService is listening on port 5001.
+    /// Whether PathfindingService is listening on port 9002.
     /// Tests that require pathfinding (corpse run, movement, gathering) should
     /// check this via <c>Skip.IfNot(fixture.IsPathfindingReady, ...)</c>.
     /// </summary>
@@ -517,11 +517,11 @@ public partial class LiveBotFixture : IAsyncLifetime
             // 2b. Ensure GM commands are enabled in the command table
             await EnsureGmCommandsEnabledAsync();
 
-            // 3. Connect to StateManager on port 8088
-            _stateManagerClient = new StateManagerTestClient("127.0.0.1", 8088);
+            // 3. Connect to StateManager on port 9000
+            _stateManagerClient = new StateManagerTestClient("127.0.0.1", 9000);
             using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             await _stateManagerClient.ConnectAsync(connectCts.Token);
-            _logger.LogInformation("[FIXTURE] Connected to StateManager on port 8088.");
+            _logger.LogInformation("[FIXTURE] Connected to StateManager on port 9000.");
             SeedExpectedAccountsFromStateManagerSettings();
             await SeedExpectedCharacterNamesFromDatabaseAsync();
 
@@ -801,10 +801,10 @@ public partial class LiveBotFixture : IAsyncLifetime
 
         await EnsureGmCommandsEnabledAsync();
 
-        _stateManagerClient = new StateManagerTestClient("127.0.0.1", 8088);
+        _stateManagerClient = new StateManagerTestClient("127.0.0.1", 9000);
         using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await _stateManagerClient.ConnectAsync(connectCts.Token);
-        _logger.LogInformation("[FIXTURE] Reconnected to StateManager on port 8088.");
+        _logger.LogInformation("[FIXTURE] Reconnected to StateManager on port 9000.");
 
         SeedExpectedAccountsFromStateManagerSettings();
         await SeedExpectedCharacterNamesFromDatabaseAsync();

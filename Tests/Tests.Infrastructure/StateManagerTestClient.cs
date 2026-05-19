@@ -11,7 +11,7 @@ using Google.Protobuf;
 namespace Tests.Infrastructure;
 
 /// <summary>
-/// Test client for communicating with WoWStateManager on port 8088.
+/// Test client for communicating with WoWStateManager on port 9000.
 /// Provides snapshot queries, action forwarding, and wait-for-ready helpers.
 ///
 /// Wire protocol: [4-byte int32 LE length][1-byte compression flag][protobuf bytes]
@@ -32,7 +32,7 @@ public class StateManagerTestClient : IDisposable
 
     public StateManagerTestClient(
         string host = "127.0.0.1",
-        int port = 8088,
+        int port = 9000,
         TimeSpan? defaultRequestTimeout = null,
         TimeSpan? fullSnapshotRequestTimeout = null)
     {
@@ -84,7 +84,7 @@ public class StateManagerTestClient : IDisposable
 
     /// <summary>
     /// Forward an action to a specific bot via StateManager.
-    /// The action is queued and delivered on the bot's next poll to port 5002.
+    /// The action is queued and delivered on the bot's next poll to port 9001.
     /// </summary>
     public async Task<ResponseResult> ForwardActionAsync(string accountName, ActionMessage action, CancellationToken ct = default)
     {
@@ -182,7 +182,7 @@ public class StateManagerTestClient : IDisposable
             throw new InvalidOperationException("Not connected. Call ConnectAsync first.");
 
         // Per-request timeout: prevent indefinite hangs when StateManager is overloaded
-        // (e.g. 10 BG bots hammering port 5002 while we query port 8088).
+        // (e.g. 10 BG bots hammering port 9001 while we query port 9000).
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(requestTimeout);
         var linked = timeoutCts.Token;

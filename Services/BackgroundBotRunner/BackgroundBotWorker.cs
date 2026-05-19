@@ -201,7 +201,7 @@ namespace BackgroundBotRunner
                 var sceneDataPortStr =
                     configuration["SceneDataService:Port"]
                     ?? Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT")
-                    ?? "5003";
+                    ?? "9003";
                 var sceneDataEndpointValid = int.TryParse(sceneDataPortStr, out var sceneDataPort);
                 var runtimeMode = BackgroundPhysicsRuntimeModeResolver.Resolve(_physicsMode, sceneDataEndpointValid);
 

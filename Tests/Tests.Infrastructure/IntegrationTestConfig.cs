@@ -50,7 +50,7 @@ public class IntegrationTestConfig
     /// Override: WWOW_TEST_PATHFINDING_PORT
     /// </summary>
     public int PathfindingServicePort { get; init; } =
-        int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_PATHFINDING_PORT"), out var pfPort) ? pfPort : 5001;
+        int.TryParse(Environment.GetEnvironmentVariable("WWOW_TEST_PATHFINDING_PORT"), out var pfPort) ? pfPort : 9002;
 
     #endregion
 

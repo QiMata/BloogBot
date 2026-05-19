@@ -50,7 +50,7 @@ public class PathfindingShardRouter
     /// Create a default shard configuration for local machine.
     /// Generates N shards on sequential ports starting from basePort.
     /// </summary>
-    public static PathfindingShardRouter CreateLocal(int shardCount, int basePort = 5001)
+    public static PathfindingShardRouter CreateLocal(int shardCount, int basePort = 9002)
     {
         var shards = Enumerable.Range(0, shardCount)
             .Select(i => new ShardEndpoint("127.0.0.1", basePort + i, i))

@@ -31,7 +31,7 @@ public sealed class MovementParityTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int PathfindingServicePort = 5001;
+    private const int PathfindingServicePort = 9002;
     private const int KalimdorMapId = 1;
     private const int EasternKingdomsMapId = 0;
     private const float DurotarStartX = -500f;
@@ -199,7 +199,7 @@ public sealed class MovementParityTests
     [SkippableFact]
     public async Task TransportRide_FgBgParity()
     {
-        TestSkip.IfNot(_bot.IsPathfindingReady, "PathfindingService not available on port 5001.");
+        TestSkip.IfNot(_bot.IsPathfindingReady, "PathfindingService not available on port 9002.");
 
         var accounts = await EnsureDirectMovementAccountsAsync();
         await StagePairAtNamedUndercityAsync(accounts);

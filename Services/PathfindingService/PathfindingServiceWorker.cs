@@ -23,7 +23,7 @@ namespace PathfindingService
 
             // Start the socket server first so StateManager can connect immediately
             var ipAddress = _configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
-            var port = int.Parse(_configuration["PathfindingService:Port"] ?? "5001");
+            var port = int.Parse(_configuration["PathfindingService:Port"] ?? "9002");
 
             _logger.LogInformation($"Starting PathfindingService socket server on {ipAddress}:{port}...");
 

@@ -1959,7 +1959,7 @@ public partial class LiveBotFixture
             return closeSites;
 
         var playerPosition = new Position(centerX, centerY, centerZ);
-        var client = new PathfindingClient("127.0.0.1", 5001, _loggerFactory.CreateLogger<PathfindingClient>());
+        var client = new PathfindingClient("127.0.0.1", 9002, _loggerFactory.CreateLogger<PathfindingClient>());
         var reachable = new List<FishingPoolSpawnSite>();
         var diagnostics = new List<string>();
 

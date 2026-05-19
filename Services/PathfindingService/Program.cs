@@ -248,7 +248,7 @@ namespace PathfindingService
                         var logger = serviceProvider.GetRequiredService<ILogger<PathfindingSocketServer>>();
 
                         var ipAddress = configuration["PathfindingService:IpAddress"] ?? "127.0.0.1";
-                        var port = int.Parse(configuration["PathfindingService:Port"] ?? "5000");
+                        var port = int.Parse(configuration["PathfindingService:Port"] ?? "9002");
 
                         return new PathfindingSocketServer(ipAddress, port, logger, configuration);
                     });

@@ -43,7 +43,7 @@ services:
         target: C:\wwow-data
         read_only: true
     ports:
-      - "5001:5001"
+      - "9002:9002"
     depends_on:
       - vmangos-server
 
@@ -55,7 +55,7 @@ services:
     environment:
       DOTNET_ENVIRONMENT: Docker
       WWOW_SCENE_DATA_IP: 0.0.0.0
-      WWOW_SCENE_DATA_PORT: "5003"
+      WWOW_SCENE_DATA_PORT: "9003"
       WWOW_DATA_DIR: C:\wwow-data
     volumes:
       - type: bind
@@ -63,7 +63,7 @@ services:
         target: C:\wwow-data
         read_only: true
     ports:
-      - "5003:5003"
+      - "9003:9003"
     depends_on:
       - vmangos-server
 
@@ -80,11 +80,11 @@ services:
       WWOW_ACCOUNT_PASSWORD: ${WWOW_BG_ACCOUNT_PASSWORD:-PASSWORD}
       RealmEndpoint__IpAddress: vmangos-server
       PathfindingService__IpAddress: wwow-pathfinding
-      PathfindingService__Port: "5001"
+      PathfindingService__Port: "9002"
       SceneDataService__IpAddress: wwow-scene-data
-      SceneDataService__Port: "5003"
+      SceneDataService__Port: "9003"
       CharacterStateListener__IpAddress: ${WWOW_STATE_MANAGER_HOST:-host.docker.internal}
-      CharacterStateListener__Port: ${WWOW_STATE_MANAGER_PORT:-5002}
+      CharacterStateListener__Port: ${WWOW_STATE_MANAGER_PORT:-9001}
     depends_on:
       - vmangos-server
       - wwow-pathfinding

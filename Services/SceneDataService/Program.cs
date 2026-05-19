@@ -44,7 +44,7 @@ internal static class Program
                 ?? "127.0.0.1";
             var port = int.TryParse(Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_PORT"), out var parsedPort)
                 ? parsedPort
-                : int.TryParse(configuration["SceneData:Port"], out var configPort) ? configPort : 5003;
+                : int.TryParse(configuration["SceneData:Port"], out var configPort) ? configPort : 9003;
 
             WriteStartupInfo($"[SceneDataService] Starting on {ipAddress}:{port}");
 

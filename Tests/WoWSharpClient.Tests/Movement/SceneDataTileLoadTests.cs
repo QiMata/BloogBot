@@ -28,7 +28,7 @@ public sealed class SceneDataTileLoadTests
 {
     private readonly ITestOutputHelper _output;
     private const string ServiceIp = "127.0.0.1";
-    private const int ServicePort = 5003;
+    private const int ServicePort = 9003;
     private const float TileSize = 533.33333f;
 
     // Known locations across Kalimdor (map 1) and Eastern Kingdoms (map 0)

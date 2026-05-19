@@ -45,7 +45,7 @@ public sealed class PathfindingValidationFixture : IAsyncDisposable
     private const string EnableEnvVar = "WWOW_USE_VALIDATION_PATHFINDING_SERVICE";
     private const string PortEnvVar = "WWOW_VALIDATION_PATHFINDING_PORT";
     private const string DataDirEnvVar = "WWOW_VALIDATION_DATA_DIR";
-    private const int DefaultValidationPort = 5111;
+    private const int DefaultValidationPort = 9021;
     private const int MaxStartupSeconds = 600;
 
     private Process? _process;

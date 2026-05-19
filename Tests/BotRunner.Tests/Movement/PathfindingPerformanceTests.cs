@@ -27,7 +27,7 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
     private static readonly Position RazorHill = new(340f, -4686f, 19.54f);
     private static readonly Position Ratchet = new(-957f, -3755f, 5f);
 
-    private const int PathfindingServicePort = 5001;
+    private const int PathfindingServicePort = 9002;
 
     #region Unit-Level Benchmarks (DelegatePathfindingClient)
 
@@ -229,7 +229,7 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
 
     #endregion
 
-    #region Live Integration Benchmarks (PathfindingService on port 5001)
+    #region Live Integration Benchmarks (PathfindingService on port 9002)
 
     private static bool IsPathfindingServiceAvailable()
     {
@@ -253,7 +253,7 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
     [Trait(TestCategories.RequiresService, TestCategories.PathfindingService)]
     public void LivePath_ShortRoute_Under500ms()
     {
-        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 5001");
+        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 9002");
 
         using var client = CreateLiveClient();
         var nearValley = new Position(-600f, -4370f, 44f);
@@ -274,7 +274,7 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
     [Trait(TestCategories.RequiresService, TestCategories.PathfindingService)]
     public void LivePath_MediumRoute_Under2s()
     {
-        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 5001");
+        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 9002");
 
         using var client = CreateLiveClient();
 
@@ -294,7 +294,7 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
     [Trait(TestCategories.RequiresService, TestCategories.PathfindingService)]
     public void LivePath_LongRoute_Under5s()
     {
-        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 5001");
+        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 9002");
 
         using var client = CreateLiveClient();
 
@@ -314,7 +314,7 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
     [Trait(TestCategories.RequiresService, TestCategories.PathfindingService)]
     public void LivePath_ThroughputTest_10PathsUnder10s()
     {
-        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 5001");
+        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 9002");
 
         using var client = CreateLiveClient();
 
@@ -357,7 +357,7 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
     [Trait(TestCategories.RequiresService, TestCategories.PathfindingService)]
     public void LiveGroundZ_BatchVsSingle_BatchIsFaster()
     {
-        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 5001");
+        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 9002");
 
         using var client = CreateLiveClient();
 
@@ -400,7 +400,7 @@ public class PathfindingPerformanceTests(ITestOutputHelper output)
     [Trait(TestCategories.RequiresService, TestCategories.PathfindingService)]
     public void LiveLOS_RapidQueries_Under50msEach()
     {
-        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 5001");
+        global::Tests.Infrastructure.Skip.If(!IsPathfindingServiceAvailable(), "PathfindingService not available on port 9002");
 
         using var client = CreateLiveClient();
 
