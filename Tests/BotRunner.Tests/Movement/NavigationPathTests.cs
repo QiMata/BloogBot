@@ -2983,6 +2983,52 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_LongTravelKeepsCollisionCriticalCornerWhenShortcutHitsWall()
+    {
+        var stall = new Position(1616.7f, -4242.4f, 46.7f);
+        var corner = new Position(1614.7f, -4242.1f, 46.7f);
+        var blockedShortcutTarget = new Position(1612.7f, -4237.7f, 46.3f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                stall,
+                corner,
+                blockedShortcutTarget,
+                destination
+            ],
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            enableProbeHeuristics: false,
+            enableDynamicProbeSkipping: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            stall,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.Equal(corner.X, waypoint!.X, precision: 1);
+        Assert.Equal(corner.Y, waypoint.Y, precision: 1);
+        Assert.Equal(1, navPath.TraceSnapshot.CurrentWaypointIndex);
+    }
+
+    [Fact]
     public void GetNextWaypoint_LongTravelBodySizedAcceptanceAdvancesThroughExecutableDenseWiggles()
     {
         var pathfinding = new DelegatePathfindingClient(

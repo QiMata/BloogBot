@@ -89,6 +89,28 @@ vmap-extraction completeness OR Navigation.dll vmap consumer.
 
 ### State
 
+- **D1 stopping point (2026-05-19): waypoint skip root cause identified;
+  partial BotRunner fix committed.** Scale, bake, and lateral-drift
+  hypotheses are falsified. Runtime traces show the failing execution
+  skipped the collision-critical corner at (1614.7,-4242.1,46.7) and
+  drove directly toward (1612.7,-4237.7,46.3), which cuts the doodad
+  column. See [[project_pfs_loop25_phase_d1_waypoint_skip_root_cause]].
+- D1 code adds a corridor-preservation gate to in-radius waypoint
+  advancement and a long-travel FG geometry hold for non-native-local-
+  physics shortcut attempts that would skip a meaningful corner.
+- Focused validation at stop: `NavigationPathTests` 112 passed / 7
+  skipped. Live validation with the D1 guard got past the original
+  column, then timed out later on a separate-looking long alternate
+  route / vertical-layer mismatch near (1249.2,-3902.3,18.3). A brief
+  overshot-advance experiment that reintroduced the original stall was
+  removed before commit.
+- D1 falsified per-instance scale as a missing factor: vmap tile
+  instances 224791/224792 carry scale ~2.808 in both staging and
+  prod-data, and extractor/MmapGen propagation already applies it.
+- D1 also falsified lateral drift for the original failure: the live
+  stall coordinate is exactly the path start/corner area, not a
+  north-shifted PhysicsGroundSnap position.
+
 - Last iteration: loop-25 phase **C1 — BAKE-TIME HYPOTHESIS FALSIFIED.
   SURFACING TO USER.** Debug-heightfield CSV trace shows the bake
   correctly voxelizes and erodes around the wall column; the
@@ -120,6 +142,21 @@ vmap-extraction completeness OR Navigation.dll vmap consumer.
 
 ### Phase progress
 
+- [x] **D1**: verify cheap missing-factor hypotheses and root-cause
+  the live stall mechanism.
+  - [x] Per-instance M2 scale check: falsified as missing factor;
+    instance scale is already present/applied in vmap and MmapGen.
+  - [x] Lateral drift check: falsified for the original stall;
+    live coordinate remains at the planned start/corner area.
+  - [x] BotRunner waypoint skip identified: LongTravel in-radius
+    advancement could consume the collision-critical corner because
+    FG lacks reliable native local-physics segment queries.
+  - [x] Partial fix: hold meaningful non-native-local-physics corner
+    shortcuts and cover with `NavigationPathTests`.
+  - [ ] Remaining live issue: after passing the original column, the
+    route can still time out later through a long vertical-layer
+    mismatch alternate path. Treat this as the next D-series surface,
+    not as evidence that the bake/scale hypotheses revived.
 - [x] **B1**: identify blocking M2/WMO via static-collision dump —
   done. Two standalone M2 doodads (224791 + 224792).
 - [x] **B2**: diagnose gap — done (root cause was MIS-identified
@@ -161,6 +198,18 @@ vmap-extraction completeness OR Navigation.dll vmap consumer.
 - [-] C2-C7 — predicated on C1's hypothesis; not applicable.
 
 ### Next iteration action
+
+**D2 NEXT.** Start from the D1 stopping point, not from B/C bake or
+scale hypotheses. The original column stall mechanism is a BotRunner
+LongTravel corner-skip: the active waypoint advanced past
+(1614.7,-4242.1,46.7) to (1612.7,-4237.7,46.3), cutting the doodad
+column. The committed guard keeps that corner in the focused unit test
+and, in live validation, got past the original column once. The live
+test still times out later on a long alternate route /
+`vertical_layer_mismatch` near (1249.2,-3902.3,18.3), so D2 should
+instrument/repair the later stale-corner or vertical-layer recovery
+behavior without broadening `Navigation.cs` repairs or changing the
+Tauren capsule.
 
 **SURFACING TO USER (loop-25 C1 finding).** The C-series investigation
 RE-CONVERGED on the B3 geometric dead-end from a different angle:

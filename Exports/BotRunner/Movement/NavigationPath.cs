@@ -1079,11 +1079,10 @@ public class NavigationPath(
     /// If a waypoint is unreachable, the existing stuck-guard surfaces it;
     /// we don't paper over with skip logic.
     ///
-    /// Helpers (CanAdvancePastOvershotWaypoint, ShouldSkipProbeWaypoint,
-    /// CanAdvanceToNextWaypoint, CanSkipAheadOverDenseReversal,
-    /// TryLosSkipAhead, ShortcutPreservesWalkableCorridor) are now dead
-    /// code; left in place for now to avoid a large unrelated diff. To be
-    /// removed in a cleanup pass once strict advancement is proven.
+    /// Runtime advancement still uses CanAdvanceToNextWaypoint as the final
+    /// corridor-preservation gate once the bot is inside the acceptance radius:
+    /// adaptive radii are allowed to smooth dense breadcrumbs, but not to skip a
+    /// collision-critical corner into an unexecutable shortcut.
     /// </summary>
     private void AdvanceReachableWaypoints(Position currentPosition, uint mapId, float minWaypointDistance)
     {
@@ -1104,6 +1103,9 @@ public class NavigationPath(
 
             if (!CanTreatWaypointAsReached(currentPosition, wp))
                 break; // Within 2D radius but not on the same vertical layer.
+
+            if (!CanAdvanceToNextWaypoint(currentPosition, mapId, distanceToWaypoint))
+                break; // Corner is close, but the shortcut to the next waypoint is unsafe.
 
             _currentIndex++;
             Metrics.IncrementWaypointsReached();
@@ -1355,6 +1357,9 @@ public class NavigationPath(
             if (ShouldHoldNearWaypointBeforeTightDescendingTransition(currentPosition, _currentIndex, distanceToCurrentWaypoint2D))
                 return false;
 
+            if (ShouldHoldLongTravelCornerForShortcutGeometry(currentPosition, distanceToCurrentWaypoint2D))
+                return false;
+
             return ShortcutPreservesWalkableCorridor(currentPosition, _waypoints[_currentIndex + 1], mapId);
         }
 
@@ -1472,6 +1477,46 @@ public class NavigationPath(
         }
 
         return ShortcutPreservesWalkableCorridor(currentPosition, nextWaypoint, mapId);
+    }
+
+    private bool ShouldHoldLongTravelCornerForShortcutGeometry(
+        Position currentPosition,
+        float distanceToCurrentWaypoint2D)
+    {
+        if (!IsLongTravelStyleRoute()
+            || !_tightenDenseWaypointAcceptance
+            || _supportsNativeLocalPhysicsQueries
+            || _currentIndex + 1 >= _waypoints.Length)
+        {
+            return false;
+        }
+
+        if (distanceToCurrentWaypoint2D <= GetCornerCommitDistance())
+            return false;
+
+        var waypoint = _waypoints[_currentIndex];
+        var nextWaypoint = _waypoints[_currentIndex + 1];
+        var previousWaypoint = _currentIndex > 0
+            ? _waypoints[_currentIndex - 1]
+            : currentPosition;
+        var inboundDistance = previousWaypoint.DistanceTo2D(waypoint);
+        var outboundDistance = waypoint.DistanceTo2D(nextWaypoint);
+        if (inboundDistance <= MAX_PROBE_SEGMENT_DISTANCE
+            && outboundDistance <= MAX_PROBE_SEGMENT_DISTANCE)
+        {
+            return false;
+        }
+
+        if (outboundDistance <= MathF.Max(MAX_PROBE_SEGMENT_DISTANCE, _capsuleRadius * 4.0f))
+            return false;
+
+        var shortcutDistance = currentPosition.DistanceTo2D(nextWaypoint);
+        if (!float.IsFinite(shortcutDistance) || shortcutDistance <= PATH_POINT_DEDUP_EPSILON)
+            return false;
+
+        var cornerDeviation = PerpendicularDistance2D(waypoint, currentPosition, nextWaypoint);
+        var holdThreshold = MathF.Max(0.75f, _capsuleRadius * 0.75f);
+        return cornerDeviation > holdThreshold;
     }
 
     private bool HasCrossedCurrentWaypoint(Position currentPosition, float effectiveRadius)
