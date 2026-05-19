@@ -160,20 +160,43 @@ collision data not in vmap). Need user direction before continuing.
 
 ### Blocked / questions for user
 
-1. Pursue (a) vmap-extractor M2 collision primitive extraction?
-   Broad blast radius — affects every M2 in every tile across
-   every map, requires multi-day re-extraction.
-2. Pursue (b) capsule inflation in `HasBlockingCapsuleOverlap`
-   with M2-source filter? Risks 23/0 regression but may close
-   the gap for all M2 doodads if it holds.
-3. Pursue (c) runtime overlay registration? Bounded scope but
-   per-doodad registration cost and layering violation.
-4. Pursue (d) NEW: investigate lateral-drift mechanism (BRM
-   H2 hypothesis applied here) — fix `PhysicsGroundSnap` to
-   stop applying walkable-slope XY push that may be drifting
-   the bot off the path centerline INTO the wall.
-5. Pursue (e) NEW: extract M2 collision primitives only for
-   specific known-bad regions (OG city tiles) as a stopgap.
+User chose (a) and then "hidden M2 collision data" — both
+investigated and BOTH MOOT:
+- (a) vmap-extractor ALREADY extracts collision data via
+  `nBoundingTriangles`/`nBoundingVertices` (not visual mesh).
+- "hidden M2 data" — the `floats[14]` block in M2 ModelHeader
+  is silently dropped during extraction. It contains
+  `collision_box[2]` AABB + `collision_box_radius` sphere, but
+  these are almost certainly broad-phase rejection primitives
+  (used by client to quick-skip per-triangle tests), not a
+  hidden wider collision shape.
+
+The four remaining hypotheses for the in-game stall mechanism:
+1. **Lateral PhysicsGroundSnap drift** (BRM H2): bot drifts
+   off path centerline by 0.5-2y during motion, hits wall at
+   off-centerline position our analysis doesn't cover.
+2. **Different runtime collision shape**: in-game capsule may
+   be different from the offline `BuildFullHeightCapsule`
+   construction (e.g., wider radius for animated/scaled
+   doodads, or different hemisphere geometry).
+3. **CCD vs static-overlap**: in-game uses continuous
+   collision detection that catches grazing contacts the
+   offline static-overlap test misses.
+4. **Per-instance scale**: the M2 instance may be scaled
+   larger in-game than our extracted geometry (e.g., `doodad.Scale`
+   field — modelinstance.scale at extract time).
+
+**STOPPED FOR USER DIRECTION** — three iterations of
+investigation (B1 → B2 → B3) plus two surfaces to user have
+produced strong diagnostic understanding but no clear code
+fix. Suggested next directions:
+- Capture an actual in-game stall trace (screenshots + state
+  dump artifacts via existing live-test infrastructure) to
+  disambiguate the hypothesis space.
+- OR pursue (c) runtime overlay as bounded stopgap closing
+  the specific stall without resolving the gap class.
+- OR pursue (d) lateral-drift investigation per BRM H2
+  precedent.
 
 ## Test baseline (refreshed 2026-05-15)
 
