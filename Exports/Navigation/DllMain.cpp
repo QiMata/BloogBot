@@ -3183,6 +3183,91 @@ extern "C" __declspec(dllexport) bool IsOffMeshConnectionAtCoord(
     }
 }
 
+// Loop-25 Phase B1 (doodad collision gap) — enumerate the static
+// collision triangles in an AABB around a probe coord. Wraps
+// `SceneQuery::TestTerrainAABB` so an operator can identify which
+// static M2/WMO/ADT contributes the geometry an unexplained bot stall
+// is touching. Each AABBContact is decomposed into parallel out arrays:
+//   outSourceTypes[i]  0=static VMAP/WMO, 1=ADT terrain,
+//                      2=WMO doodad (M2), 3=dynamic runtime
+//   outInstanceIds[i]  ModelInstance::ID (0 for ADT terrain)
+//   outRootIds[i]      WMO root ID  (-1 when not applicable)
+//   outGroupIds[i]     WMO group ID (-1 when not applicable)
+//   outAx/Ay/Az[i]     triangle vertex A (world XYZ)
+//   outBx/By/Bz[i]     triangle vertex B
+//   outCx/Cy/Cz[i]     triangle vertex C
+//   outNormalX/Y/Z[i]  raw triangle winding normal (pre-orientation)
+//   outWalkable[i]     1 if signed normal.z >= walkable threshold
+// Returns the number of triangles written (capped at maxOut), or -1 on
+// infrastructure failure.
+extern "C" __declspec(dllexport) int EnumerateStaticCollisionTriangles(
+    uint32_t mapId,
+    float boxMinX, float boxMinY, float boxMinZ,
+    float boxMaxX, float boxMaxY, float boxMaxZ,
+    uint8_t* outSourceTypes,
+    uint32_t* outInstanceIds,
+    int32_t* outRootIds,
+    int32_t* outGroupIds,
+    float* outAxs, float* outAys, float* outAzs,
+    float* outBxs, float* outBys, float* outBzs,
+    float* outCxs, float* outCys, float* outCzs,
+    float* outNormalXs, float* outNormalYs, float* outNormalZs,
+    uint8_t* outWalkable,
+    int maxOut)
+{
+    if (maxOut <= 0) return 0;
+    if (boxMaxX < boxMinX || boxMaxY < boxMinY || boxMaxZ < boxMinZ)
+    {
+        fprintf(stderr,
+                "[STATICCOL] invalid AABB: min=(%.3f,%.3f,%.3f) max=(%.3f,%.3f,%.3f)\n",
+                boxMinX, boxMinY, boxMinZ, boxMaxX, boxMaxY, boxMaxZ);
+        return -1;
+    }
+
+    try
+    {
+        if (!g_initialized) InitializeAllSystems();
+        std::lock_guard<std::recursive_mutex> lock(g_navigationMutex);
+
+        std::vector<SceneQuery::AABBContact> contacts;
+        SceneQuery::TestTerrainAABB(
+            mapId,
+            G3D::Vector3(boxMinX, boxMinY, boxMinZ),
+            G3D::Vector3(boxMaxX, boxMaxY, boxMaxZ),
+            contacts);
+
+        const int count = std::min(static_cast<int>(contacts.size()), maxOut);
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& c = contacts[static_cast<size_t>(i)];
+            if (outSourceTypes) outSourceTypes[i] = static_cast<uint8_t>(c.sourceType & 0xFFu);
+            if (outInstanceIds) outInstanceIds[i] = c.instanceId;
+            if (outRootIds)     outRootIds[i]     = c.rootId;
+            if (outGroupIds)    outGroupIds[i]    = c.groupId;
+            if (outAxs)         outAxs[i]         = c.triangleA.x;
+            if (outAys)         outAys[i]         = c.triangleA.y;
+            if (outAzs)         outAzs[i]         = c.triangleA.z;
+            if (outBxs)         outBxs[i]         = c.triangleB.x;
+            if (outBys)         outBys[i]         = c.triangleB.y;
+            if (outBzs)         outBzs[i]         = c.triangleB.z;
+            if (outCxs)         outCxs[i]         = c.triangleC.x;
+            if (outCys)         outCys[i]         = c.triangleC.y;
+            if (outCzs)         outCzs[i]         = c.triangleC.z;
+            if (outNormalXs)    outNormalXs[i]    = c.rawNormal.x;
+            if (outNormalYs)    outNormalYs[i]    = c.rawNormal.y;
+            if (outNormalZs)    outNormalZs[i]    = c.rawNormal.z;
+            if (outWalkable)    outWalkable[i]    = c.walkable ? 1u : 0u;
+        }
+
+        return count;
+    }
+    catch (...)
+    {
+        fprintf(stderr, "[STATICCOL] SEH exception\n");
+        return -1;
+    }
+}
+
 // Test-only diagnostic export (2026-05-13 runtime NAV_STEEP_SLOPES exclude):
 // returns the user-flag bits and area type of a polygon given its polyRef.
 // Used by FlameCrestUbrsSmoothPath_AvoidsSteepSlopePolys to prove that no

@@ -42,9 +42,13 @@ internal static class Program
         {
             var opts = Args.Parse(args);
             var corners = LoadCorners(opts);
-            if (corners.Count < 2)
+            bool singleCornerMode = opts.DumpPolyrefs || opts.DumpPolyStack || opts.EnumerateStaticCollision;
+            int minCorners = singleCornerMode ? 1 : 2;
+            if (corners.Count < minCorners)
             {
-                Console.Error.WriteLine("error: need at least 2 corners (--start + --end, or --path with >=2 lines)");
+                Console.Error.WriteLine(singleCornerMode
+                    ? "error: need at least 1 corner (--start, or --path with >=1 line)"
+                    : "error: need at least 2 corners (--start + --end, or --path with >=2 lines)");
                 return 3;
             }
 
@@ -69,6 +73,18 @@ internal static class Program
             if (opts.DumpPolyStack)
             {
                 EmitPolyStack(opts, corners);
+                return 0;
+            }
+
+            // --enumerate-static-collision: dumps every static collision
+            // triangle (WMO + M2 doodad + ADT terrain + dynamic registry)
+            // inside an AABB around each corner. Identifies which M2/WMO
+            // doodad contributes the geometry an unexplained stall coord
+            // is touching. Wraps EnumerateStaticCollisionTriangles native
+            // export (loop-25 Phase B1).
+            if (opts.EnumerateStaticCollision)
+            {
+                EmitStaticCollisionTriangles(opts, corners);
                 return 0;
             }
 
@@ -120,6 +136,11 @@ internal static class Program
             }
             return pts;
         }
+
+        // Single-corner diagnostic modes (--dump-polyrefs, --dump-poly-stack,
+        // --enumerate-static-collision) only need --start; --end is optional.
+        if (opts.End == null)
+            return new List<Vector3> { opts.Start!.Value };
 
         var list = new List<Vector3> { opts.Start!.Value, opts.End!.Value };
 
@@ -446,6 +467,173 @@ internal static class Program
     }
 
     /// <summary>
+    /// Loop-25 Phase B1 — drive the native EnumerateStaticCollisionTriangles
+    /// export against every corner with the configured AABB extents and
+    /// emit a TSV row per triangle. Sources: 0=static VMAP/WMO, 1=ADT
+    /// terrain, 2=WMO doodad (M2), 3=dynamic runtime. The output is
+    /// designed to be sorted/grouped by (sourceLabel, instanceId, rootId)
+    /// to surface the specific doodad contributing collision at the probe
+    /// coord.
+    /// </summary>
+    private static void EmitStaticCollisionTriangles(Args opts, List<Vector3> corners)
+    {
+        int cap = Math.Max(1, opts.StaticCollisionMaxOut);
+        var sourceTypes  = new byte[cap];
+        var instanceIds  = new uint[cap];
+        var rootIds      = new int[cap];
+        var groupIds     = new int[cap];
+        var axs = new float[cap]; var ays = new float[cap]; var azs = new float[cap];
+        var bxs = new float[cap]; var bys = new float[cap]; var bzs = new float[cap];
+        var cxs = new float[cap]; var cys = new float[cap]; var czs = new float[cap];
+        var nxs = new float[cap]; var nys = new float[cap]; var nzs = new float[cap];
+        var walkable = new byte[cap];
+
+        if (!opts.JsonOutput)
+            Console.WriteLine("corner\tx\ty\tz\tsourceType\tsourceLabel\tinstanceId\trootId\tgroupId\twalkable\tcentroidX\tcentroidY\tcentroidZ\tax\tay\taz\tbx\tby\tbz\tcx\tcy\tcz\tnormalX\tnormalY\tnormalZ\tdistFromCorner");
+
+        var jsonCorners = opts.JsonOutput ? new List<object>(corners.Count) : null;
+        int totalTris = 0;
+
+        for (int ci = 0; ci < corners.Count; ci++)
+        {
+            var c = corners[ci];
+            float minX = c.X - opts.AabbExtentX, maxX = c.X + opts.AabbExtentX;
+            float minY = c.Y - opts.AabbExtentY, maxY = c.Y + opts.AabbExtentY;
+            float minZ = c.Z - opts.AabbExtentZ, maxZ = c.Z + opts.AabbExtentZ;
+
+            int written;
+            try
+            {
+                written = NavigationInterop.EnumerateStaticCollisionTriangles(
+                    opts.MapId,
+                    minX, minY, minZ, maxX, maxY, maxZ,
+                    sourceTypes, instanceIds, rootIds, groupIds,
+                    axs, ays, azs, bxs, bys, bzs, cxs, cys, czs,
+                    nxs, nys, nzs, walkable, cap);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(
+                    $"# EnumerateStaticCollisionTriangles: {ex.GetType().Name} at corner {ci} ({c.X:F2},{c.Y:F2},{c.Z:F2}): {ex.Message}");
+                written = -1;
+            }
+            if (written < 0)
+            {
+                Console.Error.WriteLine($"# corner {ci}: enumerator returned error");
+                continue;
+            }
+            totalTris += written;
+            if (written >= cap)
+                Console.Error.WriteLine(
+                    $"# corner {ci}: hit static-collision-max-out cap ({cap}); increase --static-collision-max-out to dump remaining triangles.");
+
+            var jsonEntries = opts.JsonOutput ? new List<object>(written) : null;
+            for (int j = 0; j < written; j++)
+            {
+                float cx = (axs[j] + bxs[j] + cxs[j]) / 3f;
+                float cy = (ays[j] + bys[j] + cys[j]) / 3f;
+                float cz = (azs[j] + bzs[j] + czs[j]) / 3f;
+                float dx = cx - c.X, dy = cy - c.Y, dz = cz - c.Z;
+                float dist = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+                string label = SourceTypeLabel(sourceTypes[j]);
+
+                if (opts.JsonOutput)
+                {
+                    jsonEntries!.Add(new
+                    {
+                        sourceType = sourceTypes[j],
+                        sourceLabel = label,
+                        instanceId = instanceIds[j],
+                        rootId = rootIds[j],
+                        groupId = groupIds[j],
+                        walkable = walkable[j] != 0,
+                        centroid = new { x = cx, y = cy, z = cz },
+                        a = new { x = axs[j], y = ays[j], z = azs[j] },
+                        b = new { x = bxs[j], y = bys[j], z = bzs[j] },
+                        c = new { x = cxs[j], y = cys[j], z = czs[j] },
+                        normal = new { x = nxs[j], y = nys[j], z = nzs[j] },
+                        distFromCorner = dist,
+                    });
+                    continue;
+                }
+
+                Console.WriteLine(string.Join('\t', new[]
+                {
+                    ci.ToString(CultureInfo.InvariantCulture),
+                    c.X.ToString("F3", CultureInfo.InvariantCulture),
+                    c.Y.ToString("F3", CultureInfo.InvariantCulture),
+                    c.Z.ToString("F3", CultureInfo.InvariantCulture),
+                    sourceTypes[j].ToString(CultureInfo.InvariantCulture),
+                    label,
+                    instanceIds[j].ToString(CultureInfo.InvariantCulture),
+                    rootIds[j].ToString(CultureInfo.InvariantCulture),
+                    groupIds[j].ToString(CultureInfo.InvariantCulture),
+                    walkable[j].ToString(CultureInfo.InvariantCulture),
+                    cx.ToString("F3", CultureInfo.InvariantCulture),
+                    cy.ToString("F3", CultureInfo.InvariantCulture),
+                    cz.ToString("F3", CultureInfo.InvariantCulture),
+                    axs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    ays[j].ToString("F3", CultureInfo.InvariantCulture),
+                    azs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    bxs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    bys[j].ToString("F3", CultureInfo.InvariantCulture),
+                    bzs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    cxs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    cys[j].ToString("F3", CultureInfo.InvariantCulture),
+                    czs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    nxs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    nys[j].ToString("F3", CultureInfo.InvariantCulture),
+                    nzs[j].ToString("F3", CultureInfo.InvariantCulture),
+                    dist.ToString("F3", CultureInfo.InvariantCulture),
+                }));
+            }
+
+            if (opts.JsonOutput)
+            {
+                jsonCorners!.Add(new
+                {
+                    corner = ci,
+                    coord = new { c.X, c.Y, c.Z },
+                    aabbMin = new { x = minX, y = minY, z = minZ },
+                    aabbMax = new { x = maxX, y = maxY, z = maxZ },
+                    count = written,
+                    triangles = jsonEntries,
+                });
+            }
+        }
+
+        if (opts.JsonOutput)
+        {
+            Console.WriteLine(JsonSerializer.Serialize(new
+            {
+                map = opts.MapId,
+                aabbExtent = new { x = opts.AabbExtentX, y = opts.AabbExtentY, z = opts.AabbExtentZ },
+                cornerCount = corners.Count,
+                totalTris,
+                corners = jsonCorners,
+            }, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                IncludeFields = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            }));
+        }
+
+        Console.Error.WriteLine(
+            $"# enumerate-static-collision: {corners.Count} corners, {totalTris} total triangles; " +
+            $"aabb=±({opts.AabbExtentX:F2},{opts.AabbExtentY:F2},{opts.AabbExtentZ:F2})");
+    }
+
+    private static string SourceTypeLabel(byte src) => src switch
+    {
+        0 => "VMAP",
+        1 => "ADT",
+        2 => "M2",
+        3 => "DYN",
+        _ => $"src{src}",
+    };
+
+    /// <summary>
     /// Initialize the runtime physics MapLoader and pre-load every tile the
     /// corner sequence crosses. Without this, runtime physics queries return
     /// -200000 sentinels (no ADT data) for the probed XYs, polluting the
@@ -521,6 +709,11 @@ internal sealed class Args
     public bool DumpPolyStack;
     public float DumpPolyStackXyExtent = 2.0f;
     public float DumpPolyStackZExtent  = 10.0f;
+    public bool EnumerateStaticCollision;
+    public float AabbExtentX = 5.0f;
+    public float AabbExtentY = 5.0f;
+    public float AabbExtentZ = 5.0f;
+    public int StaticCollisionMaxOut = 4096;
 
     public static readonly string UsageText =
         "Usage: PathPhysicsProbe --map <id> --start X,Y,Z --end X,Y,Z [options]\n" +
@@ -554,7 +747,24 @@ internal sealed class Args
         "                      aabbMinZ, aabbMaxZ, surfaceZ, posOverPoly.\n" +
         "  --poly-stack-xy-extent R  XY AABB-intersection window (default 2.0)\n" +
         "  --poly-stack-z-extent R   Z AABB-intersection window (default 10.0,\n" +
-        "                            matches the loop-21 trap analysis ±10y rule)\n";
+        "                            matches the loop-21 trap analysis ±10y rule)\n" +
+        "  --enumerate-static-collision\n" +
+        "                      loop-25 Phase B1 (doodad collision gap).\n" +
+        "                      For every corner emit every static collision\n" +
+        "                      triangle (WMO + M2 doodad + ADT terrain +\n" +
+        "                      dynamic) whose AABB intersects the\n" +
+        "                      {corner ± aabb-extent} cube. Identifies which\n" +
+        "                      M2/WMO contributes the geometry an unexplained\n" +
+        "                      stall coord is touching. Output columns:\n" +
+        "                      corner, x, y, z, sourceType, sourceLabel,\n" +
+        "                      instanceId, rootId, groupId, walkable,\n" +
+        "                      centroidX, centroidY, centroidZ,\n" +
+        "                      ax, ay, az, bx, by, bz, cx, cy, cz,\n" +
+        "                      normalX, normalY, normalZ, distFromCorner.\n" +
+        "  --aabb-extent X,Y,Z half-extents for --enumerate-static-collision\n" +
+        "                      (default 5,5,5)\n" +
+        "  --static-collision-max-out N  cap output triangles per corner\n" +
+        "                      (default 4096)\n";
 
     public static Args Parse(string[] argv)
     {
@@ -601,6 +811,20 @@ internal sealed class Args
                 case "--poly-stack-z-extent":
                     a.DumpPolyStackZExtent = float.Parse(Next(argv, ref i, "--poly-stack-z-extent"), CultureInfo.InvariantCulture);
                     break;
+                case "--enumerate-static-collision":
+                    a.EnumerateStaticCollision = true;
+                    break;
+                case "--aabb-extent":
+                    {
+                        var v = ParseVec(Next(argv, ref i, "--aabb-extent"), "--aabb-extent");
+                        a.AabbExtentX = v.X;
+                        a.AabbExtentY = v.Y;
+                        a.AabbExtentZ = v.Z;
+                        break;
+                    }
+                case "--static-collision-max-out":
+                    a.StaticCollisionMaxOut = int.Parse(Next(argv, ref i, "--static-collision-max-out"), CultureInfo.InvariantCulture);
+                    break;
                 case "-h":
                 case "--help":
                     throw new ArgException("(help requested)");
@@ -609,8 +833,11 @@ internal sealed class Args
             }
         }
         if (!sawMap) throw new ArgException("--map is required");
-        if (a.PathFile == null && (a.Start == null || a.End == null))
-            throw new ArgException("either --path or both --start and --end are required");
+        bool singleCornerMode = a.DumpPolyrefs || a.DumpPolyStack || a.EnumerateStaticCollision;
+        if (a.PathFile == null && a.Start == null)
+            throw new ArgException("--start (or --path) is required");
+        if (a.PathFile == null && a.End == null && !singleCornerMode)
+            throw new ArgException("--end is required unless one of --dump-polyrefs, --dump-poly-stack, --enumerate-static-collision is set");
         return a;
     }
 

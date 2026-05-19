@@ -1046,6 +1046,31 @@ public static partial class NavigationInterop
     public static extern ulong GetVariantTriangleCount(uint mapId);
 
     /// <summary>
+    /// Loop-25 Phase B1 (doodad collision gap) — enumerate static collision
+    /// triangles inside an AABB around a probe coord. Wraps the native
+    /// <c>SceneQuery::TestTerrainAABB</c> and returns per-triangle source
+    /// (0=static VMAP/WMO, 1=ADT terrain, 2=WMO doodad M2, 3=dynamic) plus
+    /// instance/root/group IDs, the three vertex positions, contact normal
+    /// and walkable flag. Returns the number of triangles written (capped
+    /// at <paramref name="maxOut"/>) or -1 on infrastructure failure.
+    /// </summary>
+    [DllImport(NavigationDll, EntryPoint = "EnumerateStaticCollisionTriangles", CallingConvention = CallingConvention.Cdecl)]
+    public static extern int EnumerateStaticCollisionTriangles(
+        uint mapId,
+        float boxMinX, float boxMinY, float boxMinZ,
+        float boxMaxX, float boxMaxY, float boxMaxZ,
+        [Out] byte[] outSourceTypes,
+        [Out] uint[] outInstanceIds,
+        [Out] int[] outRootIds,
+        [Out] int[] outGroupIds,
+        [Out] float[] outAxs, [Out] float[] outAys, [Out] float[] outAzs,
+        [Out] float[] outBxs, [Out] float[] outBys, [Out] float[] outBzs,
+        [Out] float[] outCxs, [Out] float[] outCys, [Out] float[] outCzs,
+        [Out] float[] outNormalXs, [Out] float[] outNormalYs, [Out] float[] outNormalZs,
+        [Out] byte[] outWalkable,
+        int maxOut);
+
+    /// <summary>
     /// Diagnostic: enumerate ALL surfaces (triangles) at (x,y) from scene cache.
     /// No Z acceptance window filtering — returns all surfaces at any height.
     /// </summary>

@@ -77,6 +77,72 @@ Last refresh: 2026-05-18 (loop 24 / iteration 11 — **🎯 TRACK A CLOSE-OUT CO
 | Skill refinement | S10.1 — `activity-catalog-bootstrap` skill | `monorepo-worker` | open | [`Plan/11_PARALLEL_SKILL_REFINEMENT.md`](Plan/11_PARALLEL_SKILL_REFINEMENT.md) |
 | Test isolation refactor | (slots) | `monorepo-worker` | open (post Phase-2 S2.0) | [`Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md`](Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md) |
 
+## Doodad Collision Gap (loop 25+, started 2026-05-18)
+
+Single-track follow-up to loop-24 close-out. The
+`ClimbOrgrimmarZeppelinTowerRampToFrezza` bot-level integration test
+([`Tests/BotRunner.Tests/LiveValidation/LongPathingTests.cs:628`](../Tests/BotRunner.Tests/LiveValidation/LongPathingTests.cs#L628))
+stalls at (1616.7, -4242.4, 46.7) on a static M2/WMO doodad that no
+WWoW collision source previously identified. Capsule sizing ruled out
+(loop-24 investigation, 5-size sweep all Walk Clear). Fix surface is
+vmap-extraction completeness OR Navigation.dll vmap consumer.
+
+### State
+
+- Last iteration: loop-25 phase **B1 — done**.
+- Last sweep tally: 23/0 (CriticalWalkLegs), 4/0 (OG zep).
+- Stall coord: (1616.7, -4242.4, 46.7) → (1614.7, -4242.1, 46.7) →
+  (1612.7, -4237.7, 46.3) → (1610.7, -4233.2, 45.9) (descent on
+  tile gridX=39 gridY=28, vmtile `001_28_39.vmtile`).
+- B1 ships `EnumerateStaticCollisionTriangles` native export +
+  `--enumerate-static-collision` PathPhysicsProbe CLI mode. Probe at
+  the stall coord (±5y AABB) returned **109 triangles** across 4
+  unique instances; the immediate cluster within 2y XY × 3y Z of the
+  stall coord is **3 walkable WMO-ground triangles (instance 223733)
+  + 10 NON-walkable vertical-wall triangles** split across two
+  standalone M2 doodads (instance 224791 near (1615.8, -4241.0) and
+  instance 224792 near (1616.7, -4244.0), both rootId=0 groupId=-1,
+  triangle Z spans 46.6→51.2y = ~4.6y vertical columns).
+- **Key finding**: the M2 doodads ARE in our vmap (TestTerrainAABB
+  returns them as non-walkable triangles). The gap is in the
+  CONSUMER, not the EXTRACTOR — B3 surface (b) is the path forward,
+  not (a).
+- Full B1 dump: `/tmp/wwow-loop25-probes/B1-stall-collision-dump.tsv`
+  (109 rows). Filtered cluster:
+  `/tmp/wwow-loop25-probes/B1-stall-cluster.tsv` (13 rows).
+
+### Phase progress
+
+- [x] **B1**: identify blocking M2/WMO via static-collision dump —
+  done. Found two standalone M2 doodads (224791 + 224792).
+- [ ] **B2**: diagnose why offline PhysicsEngine /
+  `ClassifyPathSegmentAffordance` returns Walk Clear when
+  `SceneQuery::TestTerrainAABB` clearly returns these triangles.
+  Likely surfaces: the capsule-sweep code path against the SceneCache,
+  the SceneTriMetadata sourceType classification (B1's sweep tagged
+  all 109 triangles as `VMAP` even though instances 224790-224792 are
+  obvious standalone M2s), or `GetGroundZ`'s downward-ray-only
+  geometry test that misses vertical walls.
+- [ ] B3: implement fix (1 surface per iteration).
+- [ ] B4: regen affected tiles (only if extraction changes — current
+  evidence suggests this is not needed).
+- [ ] B5: full regression sweep (must hold 23/0 + 4/0 + 135/0).
+- [ ] B6: live bot test (ClimbOG green).
+- [ ] B7: catalog other OG city gap instances.
+
+### Next iteration action
+
+Phase B2 — trace why `ClassifyPathSegmentAffordance` and the bot's
+runtime physics report Walk Clear when `TestTerrainAABB` returns the
+M2 wall triangles. Start at `Exports/Navigation/PhysicsEngine.cpp`'s
+capsule sweep entry vs `Exports/Navigation/SceneQuery.cpp`'s sweep
+implementations, plus the `BuildTerrainAABBContact` `sourceType=2`
+(WMO doodad M2) path that B1 never reached.
+
+### Blocked / questions for user
+
+- (none yet — B1 result clarifies the fix surface)
+
 ## Test baseline (refreshed 2026-05-15)
 
 | Suite | Passed | Failed | Notes |
