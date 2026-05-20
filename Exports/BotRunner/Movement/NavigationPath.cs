@@ -640,6 +640,11 @@ public class NavigationPath(
     // waypoints don't spuriously escalate over a 20+ minute traversal.
     private int _consecutiveVerticalLayerReplans;
     private Position? _lastVerticalLayerReplanPosition;
+    // D4 (loop-25): mirror D3's landed position-based VLM streak guard for the
+    // long-travel promotion branch, which can otherwise short-circuit before the
+    // D3 replan counter ever arms.
+    private int _consecutiveLongTravelVerticalLayerPromotions;
+    private Position? _lastLongTravelVerticalLayerPromotionPosition;
     private Position[] _traceServiceWaypoints = [];
     private Position[] _tracePlannedWaypoints = [];
     private PathAffordanceInfo _traceAffordances = PathAffordanceInfo.Empty;
@@ -923,6 +928,8 @@ public class NavigationPath(
                 // clean waypoint advance).
                 _consecutiveVerticalLayerReplans = 0;
                 _lastVerticalLayerReplanPosition = null;
+                _consecutiveLongTravelVerticalLayerPromotions = 0;
+                _lastLongTravelVerticalLayerPromotionPosition = null;
             }
         }
         else
@@ -1256,7 +1263,13 @@ public class NavigationPath(
             return false;
         }
 
-        if (IsLongTravelStyleRoute()
+        const int VerticalLayerEscalationThreshold = 3;
+        var nowTick = _tickProvider();
+        var suppressVerticalLayerReplan = _lastVerticalLayerReplanTick != 0
+            && nowTick - _lastVerticalLayerReplanTick < RECALCULATE_COOLDOWN_MS;
+
+        if (!suppressVerticalLayerReplan
+            && IsLongTravelStyleRoute()
             && TryPromoteLongTravelDestinationProgressWaypoint(
                 currentPosition,
                 destination,
@@ -1264,15 +1277,42 @@ public class NavigationPath(
                 requireCorridorPreservation: true,
                 traceReason: NavigationTraceReason.VerticalLayerMismatch))
         {
+            var sameLongTravelBand = _lastLongTravelVerticalLayerPromotionPosition is { } prevPromotion
+                && MathF.Abs(prevPromotion.Z - currentPosition.Z) <= WAYPOINT_VERTICAL_LAYER_DRIFT_TOLERANCE
+                && prevPromotion.DistanceTo2D(currentPosition) <= STUCK_RECOVERY_PROMOTION_MAX_DISTANCE;
+            _consecutiveLongTravelVerticalLayerPromotions = sameLongTravelBand
+                ? _consecutiveLongTravelVerticalLayerPromotions + 1
+                : 1;
+            _lastLongTravelVerticalLayerPromotionPosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
+
+            if (_consecutiveLongTravelVerticalLayerPromotions >= VerticalLayerEscalationThreshold)
+            {
+                _consecutiveLongTravelVerticalLayerPromotions = 0;
+                _lastLongTravelVerticalLayerPromotionPosition = null;
+                _lastVerticalLayerReplanTick = nowTick;
+                _waypoints = [];
+                CalculatePath(
+                    currentPosition,
+                    destination,
+                    mapId,
+                    force: true,
+                    reason: NavigationTraceReason.MovementStuckRecovery);
+                AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+
+                if (_currentIndex >= _waypoints.Length)
+                    return true;
+
+                waypoint = _waypoints[_currentIndex];
+                return true;
+            }
+
             waypoint = _currentIndex < _waypoints.Length
                 ? _waypoints[_currentIndex]
                 : null;
             return true;
         }
 
-        var nowTick = _tickProvider();
-        if (_lastVerticalLayerReplanTick != 0
-            && nowTick - _lastVerticalLayerReplanTick < RECALCULATE_COOLDOWN_MS)
+        if (suppressVerticalLayerReplan)
         {
             return false;
         }
@@ -1283,14 +1323,13 @@ public class NavigationPath(
         // alone is not converging. Same-band == within the existing collision-layer
         // drift tolerance and within stuck-recovery promotion radius. See loop-25 D3
         // handoff for the ClimbOrgrimmarZeppelinTowerRampToFrezza evidence.
-        const int VERTICAL_LAYER_ESCALATION_THRESHOLD = 3;
         var sameZBand = _lastVerticalLayerReplanPosition is { } prev
             && MathF.Abs(prev.Z - currentPosition.Z) <= WAYPOINT_VERTICAL_LAYER_DRIFT_TOLERANCE
             && prev.DistanceTo2D(currentPosition) <= STUCK_RECOVERY_PROMOTION_MAX_DISTANCE;
         _consecutiveVerticalLayerReplans = sameZBand ? _consecutiveVerticalLayerReplans + 1 : 1;
         _lastVerticalLayerReplanPosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
 
-        if (_consecutiveVerticalLayerReplans >= VERTICAL_LAYER_ESCALATION_THRESHOLD)
+        if (_consecutiveVerticalLayerReplans >= VerticalLayerEscalationThreshold)
         {
             // Reset before escalating so the next-tick MovementStuckRecovery rebuild
             // starts a fresh count; also bump _lastVerticalLayerReplanTick to the
@@ -3806,6 +3845,8 @@ public class NavigationPath(
         _nextSegmentBlocked = false;
         _lastProbeWaypointIndex = -1;
         _pendingDynamicBlockerReplan = false;
+        _consecutiveLongTravelVerticalLayerPromotions = 0;
+        _lastLongTravelVerticalLayerPromotionPosition = null;
         // D3 (loop-25): reset the VLM consecutive-fire counter whenever a rebuild
         // is driven by any reason other than VerticalLayerMismatch. The escalation
         // branch in TryReplanFromNearVerticalLayerMismatch zeroes the counter

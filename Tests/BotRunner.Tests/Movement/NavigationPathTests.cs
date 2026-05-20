@@ -2427,6 +2427,187 @@ public class NavigationPathTests
             $"Escalation must trigger a fresh pathfinding call (calls after 2: {callsAfter2}, after 3: {callsAfter3}).");
     }
 
+    [Fact]
+    public void GetNextWaypoint_LongTravelVerticalMismatchPromotions_EscalateAfterThreeConsecutiveFires_AndSuppressForCooldown()
+    {
+        var pathfindingCalls = 0;
+        long tick = 1_000;
+        var destination = new Position(40f, 0f, 0f);
+
+        Position[] BuildEscalationPlan(Position start)
+            => pathfindingCalls == 1
+                ? [
+                    new Position(2f, 0f, 2f),
+                    new Position(8f, 0f, 0f),
+                    new Position(10f, 0f, 2f),
+                    new Position(16f, 0f, 0f),
+                    new Position(18f, 0f, 2f),
+                    new Position(24f, 0f, 0f),
+                    destination,
+                ]
+                : [
+                    new Position(start.X + 2f, start.Y, start.Z + 2f),
+                    new Position(start.X + 8f, start.Y, start.Z),
+                    destination,
+                ];
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, _, _) =>
+            {
+                pathfindingCalls++;
+                return BuildEscalationPlan(start);
+            });
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => tick,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true);
+
+        var waypoint1 = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        Assert.NotNull(waypoint1);
+        Assert.Equal(8f, waypoint1!.X);
+        Assert.Equal(NavigationTraceReason.VerticalLayerMismatch, navPath.TraceSnapshot.LastReplanReason);
+        Assert.Equal(1, pathfindingCalls);
+
+        var waypoint2 = navPath.GetNextWaypoint(
+            new Position(8f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        Assert.NotNull(waypoint2);
+        Assert.Equal(16f, waypoint2!.X);
+        Assert.Equal(NavigationTraceReason.VerticalLayerMismatch, navPath.TraceSnapshot.LastReplanReason);
+        Assert.Equal(1, pathfindingCalls);
+
+        var waypoint3 = navPath.GetNextWaypoint(
+            new Position(16f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var traceAfterEscalation = navPath.TraceSnapshot;
+        Assert.NotNull(waypoint3);
+        Assert.Equal(NavigationTraceReason.MovementStuckRecovery, traceAfterEscalation.LastReplanReason);
+        Assert.Equal(2, pathfindingCalls);
+
+        tick += 1_000;
+        var waypoint4 = navPath.GetNextWaypoint(
+            new Position(16f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var traceDuringSuppression = navPath.TraceSnapshot;
+        Assert.NotNull(waypoint4);
+        Assert.Equal(2, pathfindingCalls);
+        Assert.Equal(
+            NavigationTraceReason.MovementStuckRecovery,
+            traceDuringSuppression.LastReplanReason);
+
+        tick += 1_100;
+        var waypoint5 = navPath.GetNextWaypoint(
+            new Position(16f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var traceAfterCooldown = navPath.TraceSnapshot;
+        Assert.NotNull(waypoint5);
+        Assert.Equal(24f, waypoint5!.X);
+        Assert.Equal(NavigationTraceReason.VerticalLayerMismatch, traceAfterCooldown.LastReplanReason);
+        Assert.Equal(2, pathfindingCalls);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelVerticalMismatchPromotions_ResetOnBandChange_AndOnCalculatePath()
+    {
+        var pathfindingCalls = 0;
+        var destination = new Position(64f, 0f, 0f);
+
+        static Position[] BuildBandResetPlan(Position start, Position destination)
+            =>
+            [
+                new Position(start.X + 2f, start.Y, start.Z + 2f),
+                new Position(start.X + 16f, start.Y, start.Z),
+                new Position(start.X + 18f, start.Y, start.Z + 2f),
+                new Position(start.X + 24f, start.Y, start.Z),
+                new Position(start.X + 26f, start.Y, start.Z + 2f),
+                new Position(start.X + 32f, start.Y, start.Z),
+                destination,
+            ];
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, end, _) =>
+            {
+                pathfindingCalls++;
+                return BuildBandResetPlan(start, end);
+            });
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true);
+
+        var waypoint1 = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        Assert.NotNull(waypoint1);
+        Assert.Equal(16f, waypoint1!.X);
+        Assert.Equal(1, pathfindingCalls);
+
+        var waypoint2 = navPath.GetNextWaypoint(
+            new Position(16f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        Assert.NotNull(waypoint2);
+        Assert.Equal(24f, waypoint2!.X);
+        Assert.Equal(1, pathfindingCalls);
+
+        var waypoint3 = navPath.GetNextWaypoint(
+            new Position(24f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var traceAfterBandReset = navPath.TraceSnapshot;
+        Assert.NotNull(waypoint3);
+        Assert.Equal(32f, waypoint3!.X);
+        Assert.Equal(NavigationTraceReason.VerticalLayerMismatch, traceAfterBandReset.LastReplanReason);
+        Assert.Equal(
+            1,
+            pathfindingCalls);
+
+        navPath.CalculatePath(
+            new Position(24f, 0f, 0f),
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathUnavailable);
+        Assert.Equal(2, pathfindingCalls);
+
+        var waypoint4 = navPath.GetNextWaypoint(
+            new Position(24f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var traceAfterCalculatePathReset = navPath.TraceSnapshot;
+        Assert.NotNull(waypoint4);
+        Assert.Equal(40f, waypoint4!.X);
+        Assert.Equal(NavigationTraceReason.VerticalLayerMismatch, traceAfterCalculatePathReset.LastReplanReason);
+        Assert.Equal(2, pathfindingCalls);
+    }
+
     [Fact(Skip = "PFS-OVERHAUL-006: tested the removed AdvanceReachableWaypoints skip/overshot/look-ahead heuristics. Layer-progression behavior now flows entirely through CanTreatWaypointAsReached's vertical check; the multi-waypoint shape this test asserts no longer occurs.")]
     public void GetNextWaypoint_LongTravelKeepsNearStepBeforeUphillLayerProgression()
     {

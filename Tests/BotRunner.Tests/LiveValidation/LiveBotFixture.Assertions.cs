@@ -316,7 +316,33 @@ public partial class LiveBotFixture
         // reset reaction flags when toggling .gm off, but leaving GM ON is worse.
         // All GM setup (.learn, .additem, .go xyz) should happen BEFORE this point.
         await SendGmChatCommandAsync(account, ".gm off");
+
+        // Step 5: Pathfinding fixtures opt in to leaving GM mode ON for route
+        // execution — aggressive mobs along long routes interfere with TravelTo
+        // completion, and pathfinding tests don't read UnitReaction. Combat /
+        // NPC / social / quest fixtures keep this OFF (default false) because
+        // they DO read UnitReaction (faction bits get corrupted by GM mode).
+        // See memory feedback-wwow-gm-on-pathfinding-tests (2026-05-19 directive).
+        if (EnableGmModeAfterCleanSlate)
+        {
+            _logger.LogInformation(
+                "[{Label}] CleanSlate enabling GM mode for pathfinding fixture (account={Account}).",
+                label,
+                account);
+            await SendGmChatCommandAsync(account, ".gm on");
+        }
     }
+
+    /// <summary>
+    /// When true, <see cref="EnsureCleanSlateAsync"/> issues <c>.gm on</c> after
+    /// the standard <c>.gm off</c> reset, leaving the bot in GM mode for the
+    /// test body. Defaults to <c>false</c> (combat / NPC / social / quest
+    /// fixtures need correct UnitReaction faction bits, which GM mode corrupts
+    /// on VMaNGOS). Pathfinding fixtures override to <c>true</c> — they don't
+    /// read UnitReaction and benefit from suppressed mob aggression during long
+    /// route execution. Memory key: feedback-wwow-gm-on-pathfinding-tests.
+    /// </summary>
+    protected virtual bool EnableGmModeAfterCleanSlate => false;
 
     public async Task QuiesceAccountsAsync(
         IEnumerable<string> accounts,

@@ -23,6 +23,17 @@ public sealed class LongPathingFixture : LiveBotFixture, IAsyncLifetime
 {
     private PathfindingTestFixture? _pathfindingFixture;
 
+    /// <summary>
+    /// Pathfinding fixtures leave bots in GM mode so aggressive mobs along long
+    /// routes don't interrupt TravelTo execution. Pathfinding tests don't read
+    /// UnitReaction, so the GM-mode faction-bit corruption that breaks combat /
+    /// NPC / social / quest tests is harmless here. This narrows the per-repo
+    /// "No .gm on in WWoW tests" rule (docs/Spec/00_VISION.md §7,
+    /// docs/Spec/13_TESTING.md, Tests/CLAUDE.md) to pathfinding-only.
+    /// Memory key: feedback-wwow-gm-on-pathfinding-tests (2026-05-19 directive).
+    /// </summary>
+    protected override bool EnableGmModeAfterCleanSlate => true;
+
     async Task IAsyncLifetime.InitializeAsync()
     {
         SetCustomSettingsPath(ResolveLongPathingSettingsPath());
