@@ -1,9 +1,9 @@
 # MSG_MOVE_TELEPORT / MSG_MOVE_TELEPORT_ACK
 
 ## Primary Evidence
-- `docs/physics/0x601580_disasm.txt`
-- `docs/physics/0x602780_disasm.txt`
-- `docs/physics/0x602FB0_disasm.txt`
+- `docs/disasm/0x601580_disasm.txt`
+- `docs/disasm/0x602780_disasm.txt`
+- `docs/disasm/0x602FB0_disasm.txt`
 
 ## Two Distinct Paths
 

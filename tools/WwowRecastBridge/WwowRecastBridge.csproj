@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>WwowRecastBridge</RootNamespace>
+    <AssemblyName>WwowRecastBridge</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseAppHost>true</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
+    <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Runtime.LegacyCorruptedStateExceptionsPolicy" Value="true" />
+  </ItemGroup>
+</Project>

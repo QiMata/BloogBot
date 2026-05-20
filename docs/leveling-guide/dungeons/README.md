@@ -1,12 +1,14 @@
 # Dungeons
 
 > **Pass 1 placeholder.** One file per 5-man dungeon. Pass 4.
+>
+> **iter-32 update**: [`00_INDEX.md`](00_INDEX.md) is the canonical family catalog with PCE_STANDARD §15 binding section contract. [`ragefire-chasm.md`](ragefire-chasm.md) is the family **template authority** — mirror its structure when authoring subsequent dungeon files. The table below is preserved as the legacy pass-4 plan; see 00_INDEX.md for current shipped/future status.
 
 ## Planned files (pass 4)
 
 | File | Level range | Faction natural | Key required |
 |---|---|---|---|
-| `ragefire-chasm.md` | 13-18 | Horde (Orgrimmar interior) | none |
+| [`ragefire-chasm.md`](ragefire-chasm.md) **shipped** | 13-18 | Horde (Orgrimmar interior) | none |
 | `wailing-caverns.md` | 15-25 | both | none |
 | `deadmines.md` | 17-26 | Alliance | none |
 | `shadowfang-keep.md` | 22-30 | Horde | none |

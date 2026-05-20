@@ -115,6 +115,7 @@ public static class NavigationPathFactory
         var policy = NavigationRoutePolicySettings.Resolve(routePolicy);
         var cadence = ResolveWaypointDiagnosticCadence();
 
+        var includeReadyStaticProps = routePolicy == NavigationRoutePolicy.LongTravel;
         return new NavigationPath(
             pathfindingClient,
             enableProbeHeuristics: policy.EnableProbeHeuristics,
@@ -127,7 +128,11 @@ public static class NavigationPathFactory
             capsuleRadius: capabilities.CapsuleRadius,
             capsuleHeight: capabilities.CapsuleHeight,
             nearbyObjectProvider: IsDynamicOverlayEnabled()
-                ? (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(objectManager, start, end)
+                ? (start, end) => PathfindingOverlayBuilder.BuildNearbyObjects(
+                    objectManager,
+                    start,
+                    end,
+                    includeReadyStaticProps: includeReadyStaticProps)
                 : null,
             stuckRecoveryGenerationProvider: stuckRecoveryGenerationProvider ?? (() => objectManager.MovementStuckRecoveryGeneration),
             beforePathCalculation: routePolicy == NavigationRoutePolicy.LongTravel ? objectManager.StopAllMovement : null,

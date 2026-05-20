@@ -1,9 +1,9 @@
 # Movement Counter Tracking
 
 ## Primary Evidence
-- `docs/physics/0x616800_disasm.txt`
-- `docs/physics/0x617570_disasm.txt`
-- `docs/physics/0x619DE0_disasm.txt`
+- `docs/disasm/0x616800_disasm.txt`
+- `docs/disasm/0x617570_disasm.txt`
+- `docs/disasm/0x619DE0_disasm.txt`
 - `0x630A40 -> 0x4685E0`
 - targeted callsites at `0x616A05`, `0x61714C`, `0x619D45`, `0x619D6B`, `0x619EAA`, `0x61AA94`, `0x61AAC1`, and `0x61AAF0`
 

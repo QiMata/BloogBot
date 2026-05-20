@@ -341,7 +341,7 @@
     - `Exports/WoWSharpClient/Handlers/ClientControlHandler.cs`
     - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
     - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
-    - `docs/physics/0x603EA0_disasm.txt`
+    - `docs/disasm/0x603EA0_disasm.txt`
     - `docs/physics/state_client_control.md`
     - `docs/physics/README.md`
     - `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`

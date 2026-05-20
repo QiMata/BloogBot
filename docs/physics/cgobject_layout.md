@@ -2,7 +2,7 @@
 
 ## Primary evidence
 - `0x466C70` typed zero/init helper reached from the `SMSG_UPDATE_OBJECT` create path
-- `docs/physics/0x466C70_disasm.txt` raw typed zero/init capture
+- `docs/disasm/0x466C70_disasm.txt` raw typed zero/init capture
 - `0x466E00` typed object construction / recovery helper
 - `0x46878A` base `CGObject_C` vfptr write (`0x803640`)
 - `0x613B49` base `CGObject_C` vfptr reset during cleanup

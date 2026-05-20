@@ -46,7 +46,8 @@ public static class PathfindingOverlayBuilder
         Position start,
         Position end,
         float maxDistance = DefaultNearbyObjectRadius,
-        int maxObjectCount = MaxNearbyObjectCount)
+        int maxObjectCount = MaxNearbyObjectCount,
+        bool includeReadyStaticProps = false)
     {
         ArgumentNullException.ThrowIfNull(objectManager);
         ArgumentNullException.ThrowIfNull(start);
@@ -57,7 +58,7 @@ public static class PathfindingOverlayBuilder
 
         foreach (var gameObject in gameObjects)
         {
-            if (!TryBuildNearbyObject(gameObject, start, end, maxDistance, out var proto, out var distance))
+            if (!TryBuildNearbyObject(gameObject, start, end, maxDistance, includeReadyStaticProps, out var proto, out var distance))
                 continue;
 
             nearbyObjects.Add((distance, proto));
@@ -76,6 +77,7 @@ public static class PathfindingOverlayBuilder
         Position start,
         Position end,
         float maxDistance,
+        bool includeReadyStaticProps,
         out DynamicObjectProto proto,
         out float distance)
     {
@@ -91,7 +93,7 @@ public static class PathfindingOverlayBuilder
             if (!IsFinitePosition(position))
                 return false;
 
-            if (gameObject.DisplayId == 0 || !IsDynamicOverlayCandidate(gameObject.TypeId, gameObject.GoState))
+            if (gameObject.DisplayId == 0 || !IsDynamicOverlayCandidate(gameObject.TypeId, gameObject.GoState, includeReadyStaticProps))
                 return false;
 
             distance = MathF.Min(position!.DistanceTo(start), position.DistanceTo(end));
@@ -120,11 +122,11 @@ public static class PathfindingOverlayBuilder
         }
     }
 
-    private static bool IsDynamicOverlayCandidate(uint typeId, GOState goState)
+    private static bool IsDynamicOverlayCandidate(uint typeId, GOState goState, bool includeReadyStaticProps)
         => Enum.IsDefined(typeof(GameObjectType), (int)typeId)
             && (Array.IndexOf(AlwaysOverlayTypes, (GameObjectType)typeId) >= 0
                 || Array.IndexOf(GameplayRelevantTypes, (GameObjectType)typeId) >= 0
-                || (goState != GOState.Ready
+                || ((includeReadyStaticProps || goState != GOState.Ready)
                     && Array.IndexOf(StaticPropTypes, (GameObjectType)typeId) >= 0));
 
     private static bool IsFinitePosition(Position? position)

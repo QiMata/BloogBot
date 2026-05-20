@@ -415,6 +415,31 @@ public class NavigationPathFactoryTests
     }
 
     [Fact]
+    public void Create_LongTravelOverlayIncludesReadyStaticProps()
+    {
+        using var overlayEnv = new EnvironmentVariableScope(NavigationPathFactory.DynamicOverlayEnvironmentVariable, "1");
+        var objectManager = new Mock<IObjectManager>();
+        objectManager.SetupGet(x => x.Player).Returns((IWoWLocalPlayer?)null!);
+        objectManager.SetupGet(x => x.GameObjects).Returns(
+        [
+            CreateGameObject(0x2001, (uint)GameObjectType.Generic, 17, new Position(5f, 0f, 0f)).Object
+        ]);
+
+        var pathfinding = new CapturingPathfindingClient(_ => [new Position(5f, 0f, 0f), new Position(10f, 0f, 0f)]);
+        var navPath = NavigationPathFactory.Create(pathfinding, objectManager.Object, NavigationRoutePolicy.LongTravel);
+
+        var waypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            new Position(12f, 0f, 0f),
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        var overlayObject = Assert.Single(pathfinding.LastNearbyObjects!);
+        Assert.Equal(0x2001UL, overlayObject.Guid);
+    }
+
+    [Fact]
     public void Create_WithNullPlayer_UsesDefaultMovementCapabilities()
     {
         using var env = new CharacterEnvironmentScope();

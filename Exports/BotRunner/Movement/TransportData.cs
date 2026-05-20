@@ -180,16 +180,15 @@ public static class TransportData
                 // DBC path 302 stops the model at (1318.107,-4658.047,71.860);
                 // zepplin-riding.jpg captures a stable post-attachment center-deck transport-local offset.
                 TransportBoardingOffset: new Position(-12.580913f, -7.983256f, -16.398277f),
-                // Phase 5.3.5 (PFS-OVERHAUL-005): anchored to Zeppelin Master NPC
-                // 9564 "Frezza" spawn (mangos.creature guid=3464, map=1) at the
-                // top of the OG zeppelin tower's wooden ramp — same Z tier as
-                // BoardingPosition (z=53.89), unlike the prior staging point at
-                // z=51.6 (city ground tier) which forced Detour through the
-                // tier-edge lip and stalled the boarding leg. Frezza stands on
-                // the upper-platform deck where the docked zeppelin's gangplank
-                // attaches, so the walk leg now terminates on the same elevation
-                // as the boarding zone.
-                ApproachPosition: new Position(1331.11f, -4649.45f, 53.6269f)),
+                // Route the long walk leg directly to the gangplank-side
+                // boarding zone. The prior Frezza deck anchor encouraged the
+                // raw Detour corridor to hug the back/side of Orgrimmar before
+                // climbing, which is both farther from the actual zeppelin
+                // tower entrance and more sensitive to live seasonal props.
+                // Keeping NavigationPosition aligned with BoardingPosition lets
+                // route packs and dynamic-overlay requests target the same
+                // front-side corridor the bot should physically board from.
+                ApproachPosition: new Position(1320.142944f, -4653.158691f, 53.891945f)),
             new(
                 "Undercity Zeppelin Tower",
                 0,

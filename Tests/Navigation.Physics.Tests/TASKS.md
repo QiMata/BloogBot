@@ -392,7 +392,7 @@ Known remaining work in this owner: `0` items.
     - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore --no-dependencies -m:1 -p:UseSharedCompilation=false` -> `succeeded`
     - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~WowGroundedDriverSelectedPlaneTailElapsedMillisecondsTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailProbeStateSnapshotTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailProbeRerouteCandidateTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailProbeVerticalFallbackTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailChooserProbeTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailChooserContractTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailReturnDispatchTests" --logger "console;verbosity=minimal"` -> `passed (25/25)`
     - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~WowGroundedDriver" --logger "console;verbosity=minimal"` -> `passed (109/109)`
-  - Practical implication: this owner’s grounded backlog is now orchestration-only. The remaining open shell is explicitly mapped from `docs/physics/0x635600_disasm.txt` as pre-call setup, the `0x6351A0` / `0x635450` dispatch shell, the reroute-loop controller, the return-`2` late branch, the side-channel notifier branch, and the late notifier/state-commit tail.
+  - Practical implication: this owner’s grounded backlog is now orchestration-only. The remaining open shell is explicitly mapped from `docs/disasm/0x635600_disasm.txt` as pre-call setup, the `0x6351A0` / `0x635450` dispatch shell, the reroute-loop controller, the return-`2` late branch, the side-channel notifier branch, and the late notifier/state-commit tail.
   - Exact next command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/Navigation.Physics.Tests/test.runsettings --filter "FullyQualifiedName~WowGroundedDriverSelectedPlaneTailElapsedMillisecondsTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailProbeStateSnapshotTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailProbeRerouteCandidateTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailProbeVerticalFallbackTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailChooserProbeTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailChooserContractTests|FullyQualifiedName~WowGroundedDriverSelectedPlaneTailReturnDispatchTests" --logger "console;verbosity=minimal"`
   - Session 279 added `WowGroundedDriverSelectedPlaneTailProbeRerouteCandidateTests.cs` and `WowGroundedDriverSelectedPlaneTailProbeVerticalFallbackTests.cs`, and extended the split grounded-driver interop in `NavigationInterop.GroundedDriver.cs`.
   - The new deterministic grounded coverage pins two more visible inner seams from the old `PhysicsEngine` chooser probe through the production DLL: the reroute candidate build/drift-gate/writeback block in `0x6357DA..0x6359A9` and the vertical-only fallback block in `0x6358A0..0x6358EF`.
@@ -624,12 +624,12 @@ Known remaining work in this owner: `0` items.
     - `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorBvhRecursionStepTests|FullyQualifiedName~WowSelectorLeafQueueMutationTests|FullyQualifiedName~WowSelectorLeafQueueMutationWrapperTests|FullyQualifiedName~WowSelectorObjectRouterTests" --logger "console;verbosity=minimal"` -> `passed (13/13)`
   - Practical implication: this owner no longer has to infer the `0x6B9430` consumer tail. The next missing deterministic object seams are now the full `0x6BC7E0` recursive walk and the larger consumers `0x6B8E50` / `0x6BB6B0`.
   - Exact next command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorObjectConsumerDispatchTests|FullyQualifiedName~WowSelectorBvhRecursionStepTests|FullyQualifiedName~WowSelectorLeafQueueMutationTests|FullyQualifiedName~WowSelectorLeafQueueMutationWrapperTests|FullyQualifiedName~WowSelectorObjectRouterTests" --logger "console;verbosity=minimal"`
-  - Session 252 was a docs-only deterministic-seam quantification pass over the fully extended object-side captures in `docs/physics/0x6BC7E0_disasm.txt`, `docs/physics/0x6B9430_disasm.txt`, `docs/physics/0x6B8E50_disasm.txt`, and `docs/physics/0x6BB6B0_disasm.txt`.
+  - Session 252 was a docs-only deterministic-seam quantification pass over the fully extended object-side captures in `docs/disasm/0x6BC7E0_disasm.txt`, `docs/disasm/0x6B9430_disasm.txt`, `docs/disasm/0x6B8E50_disasm.txt`, and `docs/disasm/0x6BB6B0_disasm.txt`.
   - Practical implication: the remaining deterministic native seams that will need new production-DLL coverage are now exact. The object side is no longer an unknown blob: `0x6BC7E0` is one medium recursive body, `0x6B9430` is one small dispatch/cleanup tail, `0x6B8E50` is one medium accepted-list consumer, and `0x6BB6B0` is one large raster/consumer body. Together with the already-known producer wiring and `0x635C00` / `0x636100` correction work, that leaves five native delivery lanes plus the final focused managed audit.
   - Revised ETA for full native parity plus the final focused managed audit is now: best case `2026-03-31`, realistic `2026-04-01` to `2026-04-02`, conservative `2026-04-03`.
   - Validation: not run (`docs-only quantification pass`)
   - Exact next command: `py -c "from capstone import *; from pathlib import Path; code=Path(r'D:/World of Warcraft/WoW.exe').read_bytes(); md=Cs(CS_ARCH_X86, CS_MODE_32); start=0x632A30; end=0x632E40; data=code[start-0x400000:end-0x400000]; print('\\n'.join([f'0x{i.address:08X}: {i.mnemonic:8s} {i.op_str}' for i in md.disasm(data, start) if i.address < end]))"`
-  - Session 251 was a docs-only deterministic-seam quantification pass over the fresh object-consumer captures in `docs/physics/0x6B8E50_disasm.txt` and `docs/physics/0x6BB6B0_disasm.txt`. The open object side is no longer treated as one vague “post-traversal consumer” bucket: `0x6B8E50` is now bounded as a medium consumer body with two counted preprocessing loops, four distinct helper call targets, and a visible reservation/overflow prefix, while `0x6BB6B0` is now bounded as the largest remaining consumer body with copy/translate, support-point reduction, four-step quantization, scratch allocation, and an explicit jump into a deeper loop at `0x6BB982`.
+  - Session 251 was a docs-only deterministic-seam quantification pass over the fresh object-consumer captures in `docs/disasm/0x6B8E50_disasm.txt` and `docs/disasm/0x6BB6B0_disasm.txt`. The open object side is no longer treated as one vague “post-traversal consumer” bucket: `0x6B8E50` is now bounded as a medium consumer body with two counted preprocessing loops, four distinct helper call targets, and a visible reservation/overflow prefix, while `0x6BB6B0` is now bounded as the largest remaining consumer body with copy/translate, support-point reduction, four-step quantization, scratch allocation, and an explicit jump into a deeper loop at `0x6BB982`.
   - Practical implication: the remaining deterministic seam inventory on this path is now nine known native units, grouped as producer wiring (`0x632A30`, `0x631E70`, selected-index / paired-payload handoff), selected-plane correction (`0x635C00`, `0x636100`), and object work (`0x6BC7E0`, the uncaptured post-`0x6BC7E0` tail in `0x6B9430`, `0x6B8E50`, and `0x6BB6B0`). Revised ETA from that tighter accounting is best case `2026-03-31`, realistic `2026-04-01` to `2026-04-02`, conservative `2026-04-03` to `2026-04-04`.
   - Validation: not run (`docs-only quantification pass`)
   - Exact next command: `dotnet test Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WowSelectorBvhRecursionStepTests|FullyQualifiedName~WowSelectorBvhChildTraversalTests|FullyQualifiedName~WowSelectorPairPostForwardingDispatchTests|FullyQualifiedName~WowSelectorPairForwardingTests|FullyQualifiedName~WowSelectorAlternateUnitZStateHandlerTests|FullyQualifiedName~WowSelectorDirectStateHandlerTests|FullyQualifiedName~WowGroundedDriverFirstDispatchTests|FullyQualifiedName~WowGroundedDriverSelectedContactDispatchTests|FullyQualifiedName~WowGroundedDriverResweepBookkeepingTests|FullyQualifiedName~WowGroundedDriverVerticalCapTests|FullyQualifiedName~WowGroundedDriverSelectedPairCommitTailTests|FullyQualifiedName~WowGroundedDriverSelectedPairCommitGuardTests|FullyQualifiedName~WowGroundedDriverSelectedPairCommitBodyTests|FullyQualifiedName~WowGroundedDriverHoverRerankDispatchTests|FullyQualifiedName~WowSelectorAlternatePairTests|FullyQualifiedName~WowSelectorTwoCandidateWorkingVectorTests|FullyQualifiedName~WowSelectorTriangleEdgeDirectionTests|FullyQualifiedName~WowSelectorPlaneIntersectionPointTests|FullyQualifiedName~WowSelectorPlaneFootprintMismatchTests|FullyQualifiedName~WowSelectorAlternateWorkingVectorModeTests|FullyQualifiedName~WowSelectorPairWindowAdjustmentTests|FullyQualifiedName~WowSelectorPairFollowupGateTests|FullyQualifiedName~WowSelectorPairConsumerTests|FullyQualifiedName~UndercityUpperDoorContactTests" --logger "console;verbosity=minimal"`
@@ -938,7 +938,7 @@ Known remaining work in this owner: `0` items.
   - Session 190 added deterministic coverage for the binary `0x6334A0` walkability helper. The new `WowCheckWalkableTests.cs` fixture drives the exported pure helper through steep positive, shallow positive, steep negative-touch, and steep negative-no-touch cases, which now pins the real signed-normal thresholds plus the `0x04000000` consume/preserve behavior without depending on a full live movement scene.
   - `NavigationInterop.cs` now exposes the helper through `EvaluateWoWCheckWalkable(...)`, and `SceneQuery.cpp` / `PhysicsTestExports.cpp` preserve enough raw contact geometry for the tests to reason about the same triangle/plane data the client helper uses.
   - A first direct runtime hookup of the helper regressed both live Durotar parity routes and was reverted before handoff. This owner therefore keeps the deterministic helper coverage but does not yet claim runtime parity for `0x6334A0`; the next native delta has to fix `TestTerrain` contact orientation / `Vec3Negate` parity first.
-  - Session 189 added a deterministic guard for the top-level `0x633840` branch order before touching the still-partial grounded helper. Fresh binary disassembly now lives in `docs/physics/0x633840_disasm.txt` and shows airborne is checked before swim (`0x633A29`/`0x633A4C` before `0x633B5E`).
+  - Session 189 added a deterministic guard for the top-level `0x633840` branch order before touching the still-partial grounded helper. Fresh binary disassembly now lives in `docs/disasm/0x633840_disasm.txt` and shows airborne is checked before swim (`0x633A29`/`0x633A4C` before `0x633B5E`).
   - `FrameAheadIntegrationTests.AirborneBranch_TakesPrecedenceOverSwimmingFlag_OnDryGround` proves the native engine now treats `FALLINGFAR | SWIMMING` on dry ground as airborne motion: the frame descends like pure freefall and the final output clears `MOVEFLAG_SWIMMING`.
   - The focused native slice stayed green after the rebuild: the new precedence test, an existing jump-arc sanity check, the packet-backed swim replay, and the live Durotar redirect parity route all passed unchanged.
   - Session 185 converted the native parity backlog into an exact counted checklist. This owner now records `4` known remaining native-proof items, aligned to the master `11`-item parity checklist in `docs/TASKS.md`.
@@ -1053,8 +1053,8 @@ Known remaining work in this owner: `0` items.
   - `Exports/Navigation/PhysicsTestExports.cpp`
   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
   - `Tests/Navigation.Physics.Tests/WowTerrainQueryBoundsTests.cs`
-  - `docs/physics/0x631E70_disasm.txt`
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/0x631E70_disasm.txt`
+  - `docs/disasm/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
@@ -1064,8 +1064,8 @@ Known remaining work in this owner: `0` items.
   - `Exports/Navigation/PhysicsTestExports.cpp`
   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
   - `Tests/Navigation.Physics.Tests/WowTerrainQueryMaskTests.cs`
-  - `docs/physics/0x6315F0_disasm.txt`
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/0x6315F0_disasm.txt`
+  - `docs/disasm/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
@@ -1075,7 +1075,7 @@ Known remaining work in this owner: `0` items.
   - `Exports/Navigation/PhysicsTestExports.cpp`
   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
   - `Tests/Navigation.Physics.Tests/WowSelectorSourceRankingTests.cs`
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
@@ -1085,8 +1085,8 @@ Known remaining work in this owner: `0` items.
   - `Exports/Navigation/PhysicsTestExports.cpp`
   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
   - `Tests/Navigation.Physics.Tests/WowSelectorCandidateQuadPlaneRecordTests.cs`
-  - `docs/physics/0x632F80_disasm.txt`
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/0x632F80_disasm.txt`
+  - `docs/disasm/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
@@ -1096,9 +1096,9 @@ Known remaining work in this owner: `0` items.
   - `Exports/Navigation/PhysicsTestExports.cpp`
   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
   - `Tests/Navigation.Physics.Tests/WowSelectorCandidateRecordSetTests.cs`
-  - `docs/physics/0x631870_disasm.txt`
-  - `docs/physics/0x632700_disasm.txt`
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/0x631870_disasm.txt`
+  - `docs/disasm/0x632700_disasm.txt`
+  - `docs/disasm/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
@@ -1108,15 +1108,15 @@ Known remaining work in this owner: `0` items.
   - `Exports/Navigation/PhysicsTestExports.cpp`
   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
   - `Tests/Navigation.Physics.Tests/WowSelectorCandidatePlaneRecordTests.cs`
-  - `docs/physics/0x632460_disasm.txt`
-  - `docs/physics/0x637480_disasm.txt`
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/0x632460_disasm.txt`
+  - `docs/disasm/0x637480_disasm.txt`
+  - `docs/disasm/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `docs/TASKS.md`
   - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
@@ -1128,7 +1128,7 @@ Known remaining work in this owner: `0` items.
   - `Tests/Navigation.Physics.Tests/Helpers/ReplayEngine.cs`
   - `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
   - `Tests/Navigation.Physics.Tests/UndercityUpperDoorContactTests.cs`
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`
   - `Exports/Navigation/TASKS.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
@@ -1142,7 +1142,7 @@ Known remaining work in this owner: `0` items.
   - `docs/TASKS.md`
   - `Exports/Navigation/PhysicsEngine.cpp`
   - `Tests/Navigation.Physics.Tests/FrameAheadIntegrationTests.cs`
-  - `docs/physics/0x633840_disasm.txt`
+  - `docs/disasm/0x633840_disasm.txt`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `Exports/Navigation/TASKS.md`
   - `docs/physicsengine-calibration.md`
@@ -1170,7 +1170,7 @@ Known remaining work in this owner: `0` items.
 - Last delta:
   - Removed the remaining custom grounded wall-contact sort from `CollisionStepWoW`, so the contact-plane slide path no longer re-ranks blocking planes by distance / depth / horizontal-normal magnitude.
   - Added `PhysicsReplayTests.DurotarWallSlideWindow_ReplayPreservesRecordedDeflection`, which pins a real recorded Durotar wall-slide window and verifies the replay keeps the same sustained deflection signature.
-  - Corrected `docs/physics/wow_exe_decompilation.md`: local `WoW.exe` disassembly shows `0x637330` is the vec3-negation helper used after `TestTerrain`, not the unresolved grounded slide helper.
+  - Corrected `docs/disasm/wow_exe_decompilation.md`: local `WoW.exe` disassembly shows `0x637330` is the vec3-negation helper used after `TestTerrain`, not the unresolved grounded slide helper.
 - Validation:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal` -> `succeeded`
   - `dotnet build Tests/Navigation.Physics.Tests/Navigation.Physics.Tests.csproj --configuration Release --no-restore` -> `succeeded` (existing warnings only)
@@ -1179,7 +1179,7 @@ Known remaining work in this owner: `0` items.
 - Files changed:
   - `Exports/Navigation/PhysicsEngine.cpp`
   - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/wow_exe_decompilation.md`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
   - `Exports/Navigation/TASKS.md`
   - `docs/physicsengine-calibration.md`
@@ -1245,7 +1245,7 @@ Known remaining work in this owner: `0` items.
   - `Exports/Navigation/SceneQuery.cpp`
   - `Tests/Navigation.Physics.Tests/ElevatorScenarioTests.cs`
   - `Tests/Navigation.Physics.Tests/TASKS.md`
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/wow_exe_decompilation.md`
   - `docs/physicsengine-calibration.md`
   - `docs/TASKS.md`
 - Blockers:

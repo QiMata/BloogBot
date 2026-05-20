@@ -11,6 +11,28 @@
 R26 in Resolved below. Five Phase-2-deferred verification flags below
 remain non-blocking with `⚠ Unverified` markers in shard files.)*
 
+### Q-D5-1 — D5 OG harbor `no_route` test-runner DataDir default (added 2026-05-19, by impl-loop iter 3)
+
+> Implementation-loop-blocked 2026-05-19
+
+D5 surface at `(1601.2,-4455.3,7.7)` diagnosed as bake-state drift between
+`D:\MaNGOS\data\mmaps\` (md5 `cc0d89c4...`) and
+`D:\wwow-bot\prod-data\mmaps\` (md5 `68b4f4cb...`, loop-24 canonical) per
+[Plan/Handoffs/2026-05-19-loop25-d5-og-sea-level-no-route-surface.md §5](Handoffs/2026-05-19-loop25-d5-og-sea-level-no-route-surface.md).
+
+`tools/MmapGen/promote-mmaps.ps1:18-21` PFS-OVERHAUL-006 comment says
+"no more mixing with the MaNGOS server's data dir" — but
+`tools/scripts/run-pathfinding-tests.ps1:59` still defaults `-DataDir` to
+`D:\MaNGOS\data`. Stale default never aligned with the overhaul.
+
+User decision needed: pick Option A (repoint `run-pathfinding-tests.ps1:59`
++ 3 sibling-script defaults to `D:\wwow-bot\prod-data`, ~4 LOC), Option B
+(one-off env var, no source change), or Option C (sync MaNGOS\data ←
+prod-data, counter to PFS-OVERHAUL-006 — NOT recommended).
+
+Blocks D-series closure → blocks S1.4–S1.14 behavior-refinement track per
+the impl loop priority order.
+
 ### Q-S0.9.5-1 — Cenarion Circle faction id (added 2026-05-11, by monorepo-worker, in slot S0.9.5)
 
 **Context:** S0.9.5 catalog row `rep.cenarion-circle` requires a

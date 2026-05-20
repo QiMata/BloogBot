@@ -138,8 +138,11 @@ public sealed class PathfindingTestFixture : IAsyncDisposable
         psi.Environment["WWOW_NAVIGATION_PRELOAD_MAPS"] = "all";
         psi.Environment["Navigation__PreloadMaps"] = "all";
         psi.Environment["Navigation__RunStartupDiagnostics"] = "false";
-        psi.Environment["Navigation__EnableDynamicObjectOverlay"] = "false";
-        psi.Environment["WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY"] = "0";
+        var dynamicOverlaySetting =
+            Environment.GetEnvironmentVariable("WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY") ?? "0";
+        psi.Environment["Navigation__EnableDynamicObjectOverlay"] =
+            IsTruthy(dynamicOverlaySetting) ? "true" : "false";
+        psi.Environment["WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY"] = dynamicOverlaySetting;
 
         // Mirror Phase 5.3.6 overhaul defaults: route pack and repair pipeline
         // OFF unless the test explicitly opts in.
@@ -221,6 +224,13 @@ public sealed class PathfindingTestFixture : IAsyncDisposable
         throw new TimeoutException(
             $"PathfindingService.exe did not become ready (phase={phase}) on port {Port} within {MaxStartupSeconds}s.");
     }
+
+    private static bool IsTruthy(string? value)
+        => !string.IsNullOrWhiteSpace(value)
+            && (string.Equals(value.Trim(), "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value.Trim(), "true", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value.Trim(), "yes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value.Trim(), "on", StringComparison.OrdinalIgnoreCase));
 
     private static string? ResolvePathfindingExe()
     {

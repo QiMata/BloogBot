@@ -696,7 +696,7 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
     - grounded `resolveWallSlide(...)` no longer re-ranks non-walkable contacts by custom distance / depth / horizontal-normal heuristics before sequential plane projection
   - `Tests/Navigation.Physics.Tests/PhysicsReplayTests.cs`
     - added `DurotarWallSlideWindow_ReplayPreservesRecordedDeflection`, which pins a real recorded Durotar wall-slide window and asserts the replay keeps sustained 60°+ deflection with tight spatial error
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/wow_exe_decompilation.md`
     - corrected the `0x637330` note to `Vec3Negate`
 - Validation:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
@@ -723,7 +723,7 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
     - grounded `CollisionStepWoW` no longer accumulates full-step and half-step `SweepAABB` contacts into the wall/support query path
     - it now unions the start box, full-step box, and contracted half-step box, then runs `TestTerrainAABB(...)` on that merged volume before custom slide projection
     - post-slide support now comes only from the final resolved AABB query instead of re-appending earlier half-step contacts
-  - `docs/physics/wow_exe_decompilation.md`
+  - `docs/disasm/wow_exe_decompilation.md`
     - corrected the grounded/falling/swimming notes so `0x6373B0` is tracked as `AABB::Merge`
 - Validation:
   - `& "C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/Bin/MSBuild.exe" Exports/Navigation/Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -p:NodeReuse=false -v:minimal`
@@ -1057,7 +1057,7 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
 
 - Scope note:
   - This pass did not touch the still-unresolved grounded helper. It only aligned the top-level `CollisionStep` branch order after a fresh binary capture showed BG still treated overlapping airborne/swim frames in the wrong order.
-  - Captured evidence lives in `docs/physics/0x633840_disasm.txt`.
+  - Captured evidence lives in `docs/disasm/0x633840_disasm.txt`.
 - Behavioral change shipped:
   - `Exports/Navigation/PhysicsEngine.cpp`
     - `StepV2` now prefers the airborne path whenever airborne flags are present, even if `MOVEFLAG_SWIMMING` overlaps on the same frame
@@ -1096,7 +1096,7 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - `Tests/Navigation.Physics.Tests/WowCheckWalkableTests.cs`
     - added deterministic coverage for steep positive, shallow positive, steep negative-touch, and steep negative-no-touch cases
 - Binary evidence captured:
-  - `docs/physics/0x6334A0_disasm.txt`
+  - `docs/disasm/0x6334A0_disasm.txt`
     - `0x6334A0` uses `0.6427876f` when the `this+0x15C` path says the normal threshold is steep-only, and `0.17364818f` otherwise
     - positive normals above threshold call `0x6335D0` and may clear `0x04000000`
     - negative normals call `0x6333D0`, may consume `0x04000000`, and only succeed when `-normal.z > 0.6427876f`
@@ -1123,7 +1123,7 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
 
 - Scope note:
   - This pass targeted the exact blocker left by the first `0x6334A0` helper capture: the static `TestTerrainAABB` path was still upward-flattening contacts instead of preserving the signed, post-negation contact normal the client uses after `TestTerrain`.
-  - Fresh binary evidence was captured in `docs/physics/0x6721B0_disasm.txt`.
+  - Fresh binary evidence was captured in `docs/disasm/0x6721B0_disasm.txt`.
 - Behavioral change shipped:
   - `Exports/Navigation/SceneQuery.h/.cpp`
     - added `BuildTerrainAABBContact(...)`
@@ -1268,7 +1268,7 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass targeted the reopened packet-backed Undercity upper-door blocker on the current baseline instead of packet cadence or live integration.
   - The goal was to move one level closer to the binary-selected contact path feeding `0x6334A0` without broadcasting stateful walkability across the whole merged query.
 - Binary/evidence note:
-  - The fresh note in `docs/physics/wow_exe_decompilation.md` records the selected-contact container rooted at `0xC4E52C` with `0xC4E534` (`0x34` contacts) and `0xC4E544` (`0x08` paired selector payload).
+  - The fresh note in `docs/disasm/wow_exe_decompilation.md` records the selected-contact container rooted at `0xC4E52C` with `0xC4E534` (`0x34` contacts) and `0xC4E544` (`0x08` paired selector payload).
   - That evidence keeps the constraint explicit: `0x6367B0` consumes one selected entry plus one paired payload, so runtime `CheckWalkable` must stay on a chosen contact path rather than becoming a merged-query broadcast.
 - Behavioral change shipped:
   - `Exports/Navigation/PhysicsBridge.h`, `Exports/Navigation/PhysicsEngine.h`, `Services/PathfindingService/Repository/Physics.cs`, `Tests/Navigation.Physics.Tests/Helpers/ReplayEngine.cs`, and `Tests/Navigation.Physics.Tests/NavigationInterop.cs`
@@ -1469,8 +1469,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - It extended the production-DLL trace around the already-selected contact so the deterministic harness can mirror the binary `0x633760 -> 0x6335D0` gate before changing the runtime branch again.
 - Binary/evidence delta shipped:
-  - added raw captures in `docs/physics/0x6351A0_disasm.txt` and `docs/physics/0x632BA0_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` with the newly confirmed `0x632BA0` five-slot candidate loop and the `0x633760` projected-prism interpretation
+  - added raw captures in `docs/disasm/0x6351A0_disasm.txt` and `docs/disasm/0x632BA0_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` with the newly confirmed `0x632BA0` five-slot candidate loop and the `0x633760` projected-prism interpretation
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - `GroundedWallResolutionTrace` now records the selected-contact threshold point, selected `normal.z`, current/projected `0x6335D0` prism inclusion, and whether the chosen contact would stay on the direct paired path under the relaxed or standard `0x633760` thresholds
@@ -1505,8 +1505,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to disprove one remaining shortcut hypothesis before touching the selector-builder runtime path again: whether the packet-backed frame-16 merged query already contained a direct-pair-ready contact that the current selection code was simply missing later in `0x633760`.
 - Binary/evidence delta shipped:
-  - added a raw capture in `docs/physics/0x632280_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` with the newly confirmed `0x632280` four-entry source loop plus the `0x632830` / `0x6329E0` helper shape
+  - added a raw capture in `docs/disasm/0x632280_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` with the newly confirmed `0x632280` four-entry source loop plus the `0x632830` / `0x6329E0` helper shape
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - promoted the selected-contact threshold/prism math into a pure `EvaluateSelectedContactThresholdGate(...)` helper so tests can run the exact same `0x633760 -> 0x6335D0` gate logic over arbitrary merged-query contacts
@@ -1537,8 +1537,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to expose the next pure binary building block behind the selector chain: the fixed 9-plane support strip that `0x631BE0` prepares before `0x632830` starts validating candidate directions.
 - Binary/evidence delta shipped:
-  - added a raw capture in `docs/physics/0x631440_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` with the `0x631440` support-plane strip and its diagonal constants `0x80DFE4` / `0x80DFE0`
+  - added a raw capture in `docs/disasm/0x631440_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` with the `0x631440` support-plane strip and its diagonal constants `0x80DFE4` / `0x80DFE0`
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `BuildSelectorSupportPlanes(...)`, mirroring the binary `0x631440` plane-strip builder
@@ -1570,8 +1570,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to expose the binary `0x631BE0` neighborhood/selector-table builder so the next `0x632830` work can start from exact data rather than inferred corner layouts.
 - Binary/evidence delta shipped:
-  - added a raw capture in `docs/physics/0x631BE0_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` with the exact 9-point neighborhood and 32-byte selector table emitted by `0x631BE0`
+  - added a raw capture in `docs/disasm/0x631BE0_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` with the exact 9-point neighborhood and 32-byte selector table emitted by `0x631BE0`
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `BuildSelectorNeighborhood(...)`, mirroring the binary `0x631BE0` point/table builder
@@ -1603,8 +1603,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to pin the next selector-chain body itself: the ratio helper (`0x6329E0`) plus the in-place strip validation / rebuild path (`0x632830` / `0x632980` / `0x6318C0`).
 - Binary/evidence delta shipped:
-  - added raw captures in `docs/physics/0x6329E0_disasm.txt`, `docs/physics/0x632830_disasm.txt`, and `docs/physics/0x6318C0_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` with the exact strip-buffer shape, ratio thresholds, and clip/rebuild rules
+  - added raw captures in `docs/disasm/0x6329E0_disasm.txt`, `docs/disasm/0x632830_disasm.txt`, and `docs/disasm/0x6318C0_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` with the exact strip-buffer shape, ratio thresholds, and clip/rebuild rules
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `EvaluateSelectorPlaneRatio(...)`
@@ -1641,8 +1641,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to pin the next pure caller-side helper feeding the already-mirrored strip validator: the four-plane candidate record builder at `0x632460`.
 - Binary/evidence delta shipped:
-  - added raw captures in `docs/physics/0x632460_disasm.txt` and `docs/physics/0x637480_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` with the now-confirmed `0x632460` record layout and the `0x637480` normalized plane builder it uses
+  - added raw captures in `docs/disasm/0x632460_disasm.txt` and `docs/disasm/0x637480_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` with the now-confirmed `0x632460` record layout and the `0x637480` normalized plane builder it uses
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `BuildSelectorCandidatePlaneRecord(...)`
@@ -1674,8 +1674,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to pin the next caller-side selector body itself: the `0x631870` plane-prefix clip helper plus the `0x632700` record-set evaluator that sits between the record builders and the already-mirrored `0x632830` validator.
 - Binary/evidence delta shipped:
-  - added raw captures in `docs/physics/0x631870_disasm.txt` and `docs/physics/0x632700_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` with the exact `0x34` record layout, the local strip seeding path, the prefix clip loop, and the final best-ratio/index update rule
+  - added raw captures in `docs/disasm/0x631870_disasm.txt` and `docs/disasm/0x632700_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` with the exact `0x34` record layout, the local strip seeding path, the prefix clip loop, and the final best-ratio/index update rule
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `ClipSelectorPointStripAgainstPlanePrefix(...)`
@@ -1710,8 +1710,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to pin the next pure builder feeding the now-mirrored `0x632700` evaluator: the 4-selector / 5-plane candidate record builder at `0x632F80`.
 - Binary/evidence delta shipped:
-  - added raw capture in `docs/physics/0x632F80_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` with the now-confirmed 4-selector ring walk, previous-point flip rule, and slot-4 source-plane anchor
+  - added raw capture in `docs/disasm/0x632F80_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` with the now-confirmed 4-selector ring walk, previous-point flip rule, and slot-4 source-plane anchor
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `BuildSelectorCandidateQuadPlaneRecord(...)`
@@ -1743,7 +1743,7 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to pin the next caller-side selector body itself: the `0x632280` four-source overwrite/append/swap ranking loop that sits between the `0x632460` translated-triplet builder and the already-mirrored `0x632700` evaluator.
 - Binary/evidence delta shipped:
-  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x632280` section now explicitly records the production-DLL mirror: source-plane dot reject, `0x632460` clip-plane build, `0x632700` evaluator handoff, and the `0x80DFEC` overwrite/append/swap window on the 5-slot best-candidate buffer
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the `0x632280` section now explicitly records the production-DLL mirror: source-plane dot reject, `0x632460` clip-plane build, `0x632700` evaluator handoff, and the `0x80DFEC` overwrite/append/swap window on the 5-slot best-candidate buffer
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `EvaluateSelectorTriangleSourceRanking(...)`
@@ -1777,7 +1777,7 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to pin the next caller-side selector body itself: the second-half `0x632BA0` five-direction chooser core that sits between the already-mirrored `0x632F80` quad-record builder and the later `0x6351A0` selected-contact gate.
 - Binary/evidence delta shipped:
-  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x632BA0` section now explicitly records the production-DLL mirror for the second-half chooser core and also keeps the unresolved `0x632A30` / `0x631E70` setup gates explicit
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the `0x632BA0` section now explicitly records the production-DLL mirror for the second-half chooser core and also keeps the unresolved `0x632A30` / `0x631E70` setup gates explicit
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `EvaluateSelectorDirectionRanking(...)`
@@ -1811,8 +1811,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to pin the tiny post-selector gates that `0x6351A0` uses after `0x633720`: `0x635410` on the direct-return path and `0x6353D0` on the alternate path.
 - Binary/evidence delta shipped:
-  - added raw captures in `docs/physics/0x635410_disasm.txt` and `docs/physics/0x6353D0_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the selected-contact note now records that both helpers scan the same local `0x10`-stride candidate buffer at `buffer + 8`, which means they compare `normal.z`, not world height
+  - added raw captures in `docs/disasm/0x635410_disasm.txt` and `docs/disasm/0x6353D0_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the selected-contact note now records that both helpers scan the same local `0x10`-stride candidate buffer at `buffer + 8`, which means they compare `normal.z`, not world height
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `HasSelectorCandidateWithNegativeDiagonalZ(...)`
@@ -1847,8 +1847,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to pin the first explicit cache-hit gate inside the newly reviewed `0x631E70` path: the inclusive point-vs-AABB test at `0x637350`.
 - Binary/evidence delta shipped:
-  - added raw capture in `docs/physics/0x637350_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records that it uses `0x637350` against the cached bounds at `0xC4E5A0` before rebuilding the merged query
+  - added raw capture in `docs/disasm/0x637350_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records that it uses `0x637350` against the cached bounds at `0xC4E5A0` before rebuilding the merged query
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `IsPointInsideAabbInclusive(...)`
@@ -1881,8 +1881,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to pin the exact query-mask builder that `0x631E70` feeds into `0x6721B0`, so the next merged-query work stops relying on inferred mask constants.
 - Binary/evidence delta shipped:
-  - added raw capture in `docs/physics/0x6315F0_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records the exact `0x6315F0` base-mask split and both augmentation gates
+  - added raw capture in `docs/disasm/0x6315F0_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records the exact `0x6315F0` base-mask split and both augmentation gates
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `BuildTerrainQueryMask(...)`
@@ -1914,8 +1914,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to pin the exact projected AABB shape that `0x631E70` builds before the double `0x637350` cache-fit test.
 - Binary/evidence delta shipped:
-  - added raw capture in `docs/physics/0x631E70_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records the exact projected bounds layout and the two-corner cache-fit gate
+  - added raw capture in `docs/disasm/0x631E70_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records the exact projected bounds layout and the two-corner cache-fit gate
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `BuildTerrainQueryBounds(...)`
@@ -1947,8 +1947,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the already-suspected `0x6373B0` helper from fresh raw binary evidence and pin it through the production DLL so the merged-query volume stops relying on anonymous local logic.
 - Binary/evidence delta shipped:
-  - added raw capture in `docs/physics/0x6373B0_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records that `0x6373B0` is a pure componentwise AABB union helper, not a query/collision routine
+  - added raw capture in `docs/disasm/0x6373B0_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the unresolved `0x631E70` note now records that `0x6373B0` is a pure componentwise AABB union helper, not a query/collision routine
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `MergeAabbBounds(...)`
@@ -1979,8 +1979,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the wrapper-visible gates on `0x632A30` and the shared selector-plane initializer `0x6376A0`, so the remaining unknown is the data transaction feeding `0x632280`, not the wrapper edges around it.
 - Binary/evidence delta shipped:
-  - added raw captures in `docs/physics/0x632A30_disasm.txt` and `docs/physics/0x6376A0_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the unresolved `0x632A30` / `0x631E70` note now records the explicit no-override `0x631E70` call, the early-fail `*outScalar = 0` path, the final `0x80DFEC` zero clamp, and the `(0,0,1,0)` selector-plane init from `0x6376A0`
+  - added raw captures in `docs/disasm/0x632A30_disasm.txt` and `docs/disasm/0x6376A0_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the unresolved `0x632A30` / `0x631E70` note now records the explicit no-override `0x631E70` call, the early-fail `*outScalar = 0` path, the final `0x80DFEC` zero clamp, and the `(0,0,1,0)` selector-plane init from `0x6376A0`
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `InitializeSelectorSupportPlane(...)`
@@ -2017,8 +2017,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the fixed seed payload that `0x632A30` hands to `0x632280`, so the remaining unknowns are the variable fields rather than the wrapper defaults.
 - Binary/evidence delta shipped:
-  - reused the fresh raw capture in `docs/physics/0x632A30_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x632A30` note now records both fixed `(0,0,-1)` vectors and the initial `1.0f` best ratio before the `0x632280` call
+  - reused the fresh raw capture in `docs/disasm/0x632A30_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the `0x632A30` note now records both fixed `(0,0,-1)` vectors and the initial `1.0f` best ratio before the `0x632280` call
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `InitializeSelectorTriangleSourceWrapperSeeds(...)`
@@ -2048,8 +2048,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the tiny scalar-offset helpers on the `0x631E70` cache-miss path so the remaining unknown is the higher-level merged transaction rather than the per-vector arithmetic.
 - Binary/evidence delta shipped:
-  - added raw captures in `docs/physics/0x6372D0_disasm.txt`, `docs/physics/0x637300_disasm.txt`, and `docs/physics/0x61E9C0_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the old `ExpandAndSweep` label is replaced with the true helper semantics: subtract scalar from the min vector, add scalar to the max vector, and then merge; `0x61E9C0` is a no-op in this build
+  - added raw captures in `docs/disasm/0x6372D0_disasm.txt`, `docs/disasm/0x637300_disasm.txt`, and `docs/disasm/0x61E9C0_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the old `ExpandAndSweep` label is replaced with the true helper semantics: subtract scalar from the min vector, add scalar to the max vector, and then merge; `0x61E9C0` is a no-op in this build
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `AddScalarToVector3(...)`
@@ -2081,7 +2081,7 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the higher-level merged-bounds handoff on the `0x631E70` cache-miss path so the remaining unknown is the optional swim-side query / contact-flip work rather than the AABB transaction itself.
 - Binary/evidence delta shipped:
-  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x631E70` note now records the exact cache-miss sequence: projected query bounds, binary `1/6` expansion, then merge against cached `0xC4E5A0` through `0x6373B0`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the `0x631E70` note now records the exact cache-miss sequence: projected query bounds, binary `1/6` expansion, then merge against cached `0xC4E5A0` through `0x6373B0`
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `BuildTerrainQueryCacheMissBounds(...)`
@@ -2111,8 +2111,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the per-contact plane rewrite on the `0x631E70` swim-side query path so the remaining unknown is the surrounding transform loop rather than the flip itself.
 - Binary/evidence delta shipped:
-  - added raw capture in `docs/physics/0x597AD0_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the swim-path note now records both halves of the rewrite: `0x637330` negates the normal and `0x597AD0` writes the negated `{normal, planeD}` record back
+  - added raw capture in `docs/disasm/0x597AD0_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the swim-path note now records both halves of the rewrite: `0x637330` negates the normal and `0x597AD0` writes the negated `{normal, planeD}` record back
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `NegatePlane(...)`
@@ -2142,8 +2142,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the raw point/vector/plane math behind the `0x63214C..0x632270` transport-local contact rewrite, so the remaining unknown is the per-contact loop shape rather than the transform formulas.
 - Binary/evidence delta shipped:
-  - added raw captures in `docs/physics/0x7BD700_disasm.txt` and `docs/physics/0x7BCC60_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the transport note now records the inverse RT-frame build (`0x7BD700`) and the frame-applied point transform (`0x7BCC60`) that the `0x631E70` rewrite loop uses
+  - added raw captures in `docs/disasm/0x7BD700_disasm.txt` and `docs/disasm/0x7BCC60_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the transport note now records the inverse RT-frame build (`0x7BD700`) and the frame-applied point transform (`0x7BCC60`) that the `0x631E70` rewrite loop uses
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `TransformWorldPointToTransportLocal(...)`
@@ -2176,8 +2176,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the actual cached-contact record body that `0x631E70` rewrites after the inverse transport transform is built, so the remaining unknown is the outer loop/gating rather than the `0x34`-byte record contents.
 - Binary/evidence delta shipped:
-  - added raw capture in `docs/physics/0x63214C_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the transport note now records the exact per-record layout: plane at `+0x00..+0x0C`, points at `+0x10/+0x1C/+0x28`
+  - added raw capture in `docs/disasm/0x63214C_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the transport note now records the exact per-record layout: plane at `+0x00..+0x0C`, points at `+0x10/+0x1C/+0x28`
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `TransformSelectorCandidateRecordToTransportLocal(...)`
@@ -2207,8 +2207,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the visible fast exits and in-place array walk around the already-pinned `0x34`-byte record transform.
 - Binary/evidence delta shipped:
-  - reused the fresh raw capture in `docs/physics/0x63214C_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the same note now records the `transportGuid == 0` and `count == 0` fast exits explicitly
+  - reused the fresh raw capture in `docs/disasm/0x63214C_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the same note now records the `transportGuid == 0` and `count == 0` fast exits explicitly
 - Diagnostic/test delta shipped:
   - `Exports/Navigation/PhysicsEngine.h/.cpp`
     - added pure `TransformSelectorCandidateRecordBufferToTransportLocal(...)`
@@ -2238,9 +2238,9 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the visible `0x6351A0` consumer tail so the next runtime change can use the real direct-pair / zero-pair / alternate-pair branch contract instead of the current inferred wall fallback logic.
 - Binary/evidence delta shipped:
-  - added raw capture in `docs/physics/0x635734_callsite_disasm.txt`
-  - added raw capture in `docs/physics/0x7C5DA0_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x6351A0` note now records the full visible outcome contract:
+  - added raw capture in `docs/disasm/0x635734_callsite_disasm.txt`
+  - added raw capture in `docs/disasm/0x7C5DA0_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the `0x6351A0` note now records the full visible outcome contract:
     - zero-distance early return with pair-only zero
     - `0x632BA0` failure returning `2` and zeroing the move vector
     - selected-index sentinel return
@@ -2279,8 +2279,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the visible pure gate that `0x635450` calls immediately after `0x6351A0`, so the next runtime change can mirror the caller-side selector transaction instead of inferring the post-selection airborne/window checks.
 - Binary/evidence delta shipped:
-  - added raw capture in `docs/physics/0x635550_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the `0x6351A0` note now also records the visible `0x635550` contract:
+  - added raw capture in `docs/disasm/0x635550_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the `0x6351A0` note now also records the visible `0x635550` contract:
     - immediate success when the second `0x6351A0` out-state dword is nonzero
     - otherwise require `this->+0xA0 < 0`
     - compute the binary `0x7C5DA0` jump-time scalar
@@ -2317,8 +2317,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close the remaining visible post-selection math after `0x6351A0`: the `0x7C5F50` gravity/terminal-velocity time solver and the `0x635450` caller-side window clamp/scaler that sits on top of `0x635550`.
 - Binary/evidence delta shipped:
-  - added raw captures in `docs/physics/0x635450_disasm.txt` and `docs/physics/0x7C5F50_disasm.txt`
-  - tightened `docs/physics/wow_exe_decompilation.md` so the selector note now also records:
+  - added raw captures in `docs/disasm/0x635450_disasm.txt` and `docs/disasm/0x7C5F50_disasm.txt`
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the selector note now also records:
     - `0x7C5F50` choosing terminal velocity `7.0f` vs `60.14800262f` from `MOVEFLAG_SAFE_FALL`
     - its positive-speed clamp, stationary sqrt branch, terminal-velocity fallback, and earlier-positive-root toggle
     - `0x635450` calling `0x635550`, then `0x7C5F50`, then zeroing/clamping/scaling the move vector based on the remaining vertical window
@@ -2356,8 +2356,8 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass still did not change runtime grounded behavior.
   - The goal was to close one more producer-side `TestTerrain` seam safely before touching `CollisionStepWoW`: the visible filtered copy from the temp `0x34` contact buffer plus its aligned `0x08` sidecar payload.
 - Binary/evidence delta shipped:
-  - added raw capture in `docs/physics/0x673C80_disasm.txt`
-  - tightened `docs/physics/0x6721B0_disasm.txt` and `docs/physics/wow_exe_decompilation.md` so the `TestTerrain` output contract now explicitly records:
+  - added raw capture in `docs/disasm/0x673C80_disasm.txt`
+  - tightened `docs/disasm/0x6721B0_disasm.txt` and `docs/disasm/wow_exe_decompilation.md` so the `TestTerrain` output contract now explicitly records:
     - filter on stored `normal.z >= 0x80DFFC`
     - verbatim copy of the surviving `0x34` record
     - aligned append of the matching `0x08` sidecar payload through `0x673C80`
@@ -2392,7 +2392,7 @@ dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --fil
   - This pass did not change runtime grounded behavior.
   - The goal was to close one more deterministic caller-side `0x635C00` / `0x636100` seam before touching `CollisionStepWoW` again: the visible vertical retry transaction around the already-pinned distance-pointer scalar helper.
 - Binary/evidence delta shipped:
-  - tightened `docs/physics/wow_exe_decompilation.md` so the grounded notes now explicitly record the visible caller-side vertical retry transaction
+  - tightened `docs/disasm/wow_exe_decompilation.md` so the grounded notes now explicitly record the visible caller-side vertical retry transaction
   - the production DLL now mirrors that bounded bookkeeping through `EvaluateGroundedDriverSelectedPlaneRetryTransaction(...)`
   - the mirrored facts are:
     - walkable selected contacts bypass `0x636100` and go straight to the vertical retry path

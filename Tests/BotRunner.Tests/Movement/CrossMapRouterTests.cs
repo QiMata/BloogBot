@@ -9,9 +9,9 @@ namespace BotRunner.Tests.Movement;
 public class CrossMapRouterTests
 {
     private readonly CrossMapRouter _router = new();
-    // Phase 5.3.5: anchored to Zeppelin Master Frezza (NPC 9564) on the OG
-    // upper-platform deck — same Z tier as BoardingPosition (z≈53.6).
-    private static readonly Position OrgrimmarUndercityZeppelinApproachPoint = new(1331.11f, -4649.45f, 53.6269f);
+    // The Orgrimmar walk leg should hand off at the front gangplank-side
+    // boarding zone rather than the back-side Frezza deck anchor.
+    private static readonly Position OrgrimmarUndercityZeppelinApproachPoint = new(1320.142944f, -4653.158691f, 53.891945f);
     private static readonly Position OrgrimmarUndercityZeppelinBoardingPoint = new(1320.142944f, -4653.158691f, 53.891945f);
 
     [Fact]

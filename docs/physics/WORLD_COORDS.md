@@ -89,7 +89,7 @@ Continent topology summary (derived from the above):
 ### Runtime client (cross-check)
 
 The decompiled 1.12.1 client carries the same constants
-(`docs/physics/wow_exe_decompilation.md:499-502`):
+(`docs/disasm/wow_exe_decompilation.md:499-502`):
 
 | Constant | Address | Value |
 |---|---|---|
@@ -424,7 +424,7 @@ the continent navmesh and the GO mmtile is the surface where the OG zeppelin
 work in `MEMORY.md` lives.
 
 > The decompiled client's terrain query also uses `17066.666` as the world
-> origin (`docs/physics/wow_exe_decompilation.md:499`). Transports do not
+> origin (`docs/disasm/wow_exe_decompilation.md:499`). Transports do not
 > shift this constant; they apply their own model-space transform to the
 > player while leaving the world-coord query unchanged.
 

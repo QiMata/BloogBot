@@ -1,10 +1,10 @@
 # MSG_MOVE_WORLDPORT_ACK
 
 ## Primary Evidence
-- `docs/physics/0x401B00_disasm.txt`
-- `docs/physics/0x401BC0_disasm.txt`
-- `docs/physics/0x401DE0_disasm.txt`
-- `docs/physics/0x616800_disasm.txt`
+- `docs/disasm/0x401B00_disasm.txt`
+- `docs/disasm/0x401BC0_disasm.txt`
+- `docs/disasm/0x401DE0_disasm.txt`
+- `docs/disasm/0x616800_disasm.txt`
 
 ## SMSG_NEW_WORLD (`0x401B00`)
 `0x401B00` is the first-stage new-world handler:

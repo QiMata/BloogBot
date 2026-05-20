@@ -1,10 +1,10 @@
 # SMSG_FORCE_MOVE_ROOT / SMSG_FORCE_MOVE_UNROOT
 
 ## Primary Evidence
-- `docs/physics/0x603F90_disasm.txt`
-- `docs/physics/0x602780_disasm.txt`
-- `docs/physics/0x61A700_disasm.txt`
-- `docs/physics/0x617570_disasm.txt`
+- `docs/disasm/0x603F90_disasm.txt`
+- `docs/disasm/0x602780_disasm.txt`
+- `docs/disasm/0x61A700_disasm.txt`
+- `docs/disasm/0x617570_disasm.txt`
 
 ## Dispatch
 - `SMSG_FORCE_MOVE_ROOT` (`0x0E8`) reaches `0x61A700(..., 1)` from `0x60285E`.

@@ -75,8 +75,8 @@ services:
       WWOW_NAVIGATION_PRELOAD_MAPS: all
       Navigation__PreloadMaps: all
       Navigation__RunStartupDiagnostics: "false"
-      Navigation__EnableDynamicObjectOverlay: "false"
-      WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY: "0"
+      Navigation__EnableDynamicObjectOverlay: "true"
+      WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY: "1"
       WWOW_ROUTE_PACK_STARTUP_WARMUP: "0"
       # Enable the CalculateValidatedPath repair pipeline so the per-call
       # segment-validation memoization (commit 3b296ea4) actually fires

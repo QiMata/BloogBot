@@ -11,13 +11,13 @@ This note covers the inbound flag-toggle family handled by `0x603F90 -> 0x602780
 - `SMSG_MOVE_UNSET_HOVER` (`0x0F5`)
 
 ## Primary Evidence
-- `docs/physics/0x602780_disasm.txt`
-- `docs/physics/0x61A380_disasm.txt`
-- `docs/physics/0x61A490_disasm.txt`
-- `docs/physics/0x61A5D0_disasm.txt`
-- `docs/physics/0x61A430_disasm.txt`
-- `docs/physics/0x61A550_disasm.txt`
-- `docs/physics/0x617570_disasm.txt`
+- `docs/disasm/0x602780_disasm.txt`
+- `docs/disasm/0x61A380_disasm.txt`
+- `docs/disasm/0x61A490_disasm.txt`
+- `docs/disasm/0x61A5D0_disasm.txt`
+- `docs/disasm/0x61A430_disasm.txt`
+- `docs/disasm/0x61A550_disasm.txt`
+- `docs/disasm/0x617570_disasm.txt`
 
 ## Dispatch
 - `0x0DE -> 0x61A380(..., 1)` and `0x0DF -> 0x61A380(..., 0)`

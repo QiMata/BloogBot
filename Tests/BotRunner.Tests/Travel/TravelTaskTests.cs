@@ -112,10 +112,10 @@ public class TravelTaskTests
 
         var crossroads = new Position(-437.0f, -2596.0f, 96.0f);
         var orgrimmarFlightMaster = new Position(1677.0f, -4315.0f, 62.0f);
-        // Phase 5.3.5: ApproachPosition is now anchored to Zeppelin Master Frezza
-        // (NPC 9564) at the upper-platform deck (z=53.63), not the prior
-        // wrong-tier city-ground point (z=51.6).
-        var liveApproachPosition = new Position(1331.11f, -4649.45f, 53.6269f);
+        // The live Orgrimmar zeppelin handoff should complete at the front
+        // boarding zone so the walk leg and boarding logic share the same
+        // gangplank-side target.
+        var liveApproachPosition = TransportData.ZeppelinUndercityOrgrimmar.Stops[0].NavigationPosition;
         var undercityTarget = new Position(1584.0f, 242.0f, -52.0f);
         var playerPosition = crossroads;
         var mapId = 1u;
@@ -552,11 +552,11 @@ public class TravelTaskTests
         transportGuid = 0UL;
         task.Update();
 
-        Assert.Contains(diagnostics, message => message.Contains("start index=1 type=Zeppelin", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("start index=0 type=Zeppelin", StringComparison.Ordinal));
         Assert.Contains(diagnostics, message => message.Contains("phase=Riding", StringComparison.Ordinal));
         Assert.DoesNotContain(diagnostics, message => message.Contains("transport_map_changed", StringComparison.Ordinal));
-        Assert.DoesNotContain(diagnostics, message => message.Contains("complete index=1", StringComparison.Ordinal));
-        Assert.DoesNotContain(diagnostics, message => message.Contains("start index=2 type=Walk", StringComparison.Ordinal));
+        Assert.DoesNotContain(diagnostics, message => message.Contains("complete index=0", StringComparison.Ordinal));
+        Assert.DoesNotContain(diagnostics, message => message.Contains("start index=1 type=Walk", StringComparison.Ordinal));
         Assert.Same(task, taskStack.Peek());
     }
 

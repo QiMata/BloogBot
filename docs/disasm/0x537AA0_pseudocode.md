@@ -8,7 +8,7 @@ int NetClient::ProcessMessage(NetClient* self, void* packetContext, PacketStream
 `packetContext` is passed through unchanged to the registered handler. `stream` is the reader object used to extract the opcode and payload.
 
 ## Primary Evidence
-- `docs/physics/0x537AA0_disasm.txt`
+- `docs/disasm/0x537AA0_disasm.txt`
 - `docs/physics/opcode_dispatch_table.md`
 
 ## Pseudocode

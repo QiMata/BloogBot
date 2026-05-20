@@ -32,12 +32,11 @@ public class LongPathingTests
     private const int OrgrimmarMapId = 1;
     private const float OrgrimmarTaxiX = 1677.0f;
     private const float OrgrimmarTaxiY = -4315.0f;
-    // Phase 5.3.5: anchored to Zeppelin Master Frezza (NPC 9564) on the OG
-    // upper-platform deck — same Z tier as BoardingPosition (z≈53.6), not the
-    // prior wrong-tier city-ground point (z=51.6).
-    private const float OrgrimmarZeppelinRouteTargetX = 1331.11f;
-    private const float OrgrimmarZeppelinRouteTargetY = -4649.45f;
-    private const float OrgrimmarZeppelinRouteTargetZ = 53.6269f;
+    // The long Orgrimmar walk leg should hand off at the front boarding zone,
+    // not the back-side deck anchor.
+    private const float OrgrimmarZeppelinRouteTargetX = 1320.142944f;
+    private const float OrgrimmarZeppelinRouteTargetY = -4653.158691f;
+    private const float OrgrimmarZeppelinRouteTargetZ = 53.891945f;
     private const float OrgrimmarZeppelinX = 1320.142944f;
     private const float OrgrimmarZeppelinY = -4653.158691f;
     private const float OrgrimmarZeppelinBoardingX = 1320.142944f;
@@ -632,15 +631,14 @@ public class LongPathingTests
         // pipeline. Teleports the bot to the OG flight master tower top
         // (where a real test would arrive after the flight leg) and dispatches
         // a TravelTo to the Undercity destination. Asserts the bot's walk leg
-        // climbs the wooden ramp UP to within 12y of Zeppelin Master Frezza
-        // (1331.11,-4649.45,53.6269) within a 180-second budget (Phase 5.3.6:
+        // reaches the OG front boarding zone / gangplank corridor within a
+        // 180-second budget (Phase 5.3.6:
         // budget bumped from 90s after the FindPathCornersForAgent diagnostic
-        // proved Detour serves a 96+ corner path that descends through OG
-        // city sea level before climbing the OG zeppelin tower's external
-        // spiral ramp; 90s was insufficient simply for traversal time, before
-        // any corner-completion problems). Fails fast with a screenshot if
-        // the bot stalls anywhere along the climb — this is the failing
-        // slice from the full live test, isolated for fast diagnostic cycles.
+        // proved the OG walk leg can be substantially longer than a straight
+        // tower climb. Fails fast with a screenshot if the bot stalls anywhere
+        // along the climb — this is the failing slice from the full live test,
+        // isolated for fast diagnostic cycles. The test name is legacy; the
+        // production walk-leg target is the boarding corridor, not Frezza.
         global::Tests.Infrastructure.Skip.IfNot(
             string.Equals(
                 Environment.GetEnvironmentVariable(OgRampClimbEnvVar),
@@ -668,12 +666,6 @@ public class LongPathingTests
 
         await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
 
-        // Frezza spawn (Zeppelin Master, NPC 9564) on the OG upper-platform deck.
-        const float FrezzaX = 1331.11f;
-        const float FrezzaY = -4649.45f;
-        const float FrezzaZ = 53.6269f;
-        const float FrezzaArrivalRadius = 12f;
-
         // Teleport the bot to the OG flight master tower top — the natural
         // post-flight starting position for the OG→UC zeppelin walk leg.
         await _bot.BotTeleportAsync(target.AccountName, OrgrimmarMapId, OrgrimmarTaxiX, OrgrimmarTaxiY, 62.0f);
@@ -685,7 +677,8 @@ public class LongPathingTests
         var diagnosticBaseline = startSnapshot?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
 
         // Dispatch TravelTo Undercity destination — same as the full test, so
-        // the route planner emits the same Walk-leg-to-Frezza we're isolating.
+        // the route planner emits the same boarding-corridor walk leg we're
+        // isolating.
         var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
         {
             ActionType = ActionType.TravelTo,
@@ -701,7 +694,7 @@ public class LongPathingTests
 
         // Tight stuck guard: 20s of sub-1.5y movement → fail fast with screenshot.
         var stuckGuard = new SnapshotStallGuard(
-            "OG zeppelin tower ramp climb (stalled before reaching Frezza)",
+            "OG zeppelin tower ramp climb (stalled before reaching boarding zone)",
             TimeSpan.FromSeconds(20),
             LongTravelStallMovementYards);
 
@@ -750,7 +743,8 @@ public class LongPathingTests
 
                 if (snapshot?.RecentChatMessages == null)
                     return false;
-                // Walk leg leg=0 (the OG-tower-to-Frezza walk) reports completion
+                // Walk leg leg=0 (the OG flight-master -> boarding-zone walk)
+                // reports completion
                 // via this exact diagnostic when TravelTask's TryGetWalkLegArrival
                 // accepts the bot's position. reason=walk_arrived is the success
                 // path; reason=walk_map_changed/walk_stall_*/etc would indicate
@@ -767,7 +761,7 @@ public class LongPathingTests
             },
             TimeSpan.FromSeconds(180),
             pollIntervalMs: 500,
-            progressLabel: $"{target.RoleLabel} OG zeppelin tower ramp climb to Frezza");
+            progressLabel: $"{target.RoleLabel} OG zeppelin tower ramp climb to boarding zone");
 
         await _bot.RefreshSnapshotsAsync();
         var finalSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
@@ -777,7 +771,7 @@ public class LongPathingTests
             walkLegCompleted,
             target.AccountName,
             $"Expected TravelTask to emit [TRAVEL_LEG] complete index=0 reason=walk_arrived for "
-            + $"the OG-flight-master-to-Frezza walk leg within 180s. The walk-leg arrival rules "
+            + $"the OG-flight-master-to-boarding-zone walk leg within 180s. The walk-leg arrival rules "
             + $"are owned by TravelTask (WalkLegNativeOffMeshTransportVerticalArrivalTolerance=1.5y, "
             + $"BoardingRadius=12y XY). If walk_arrived never fires, the bot did not physically "
             + $"reach the boarding zone — investigate the corridor + native collision path. "

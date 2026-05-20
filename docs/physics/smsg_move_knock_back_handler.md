@@ -1,10 +1,10 @@
 # SMSG_MOVE_KNOCK_BACK
 
 ## Primary Evidence
-- `docs/physics/0x603F90_disasm.txt`
-- `docs/physics/0x602780_disasm.txt`
-- `docs/physics/0x602670_disasm.txt`
-- `docs/physics/0x617570_disasm.txt`
+- `docs/disasm/0x603F90_disasm.txt`
+- `docs/disasm/0x602780_disasm.txt`
+- `docs/disasm/0x602670_disasm.txt`
+- `docs/disasm/0x617570_disasm.txt`
 
 ## Dispatch
 - `SMSG_MOVE_KNOCK_BACK` (`0x0EF`) is wired to `0x603F90`.

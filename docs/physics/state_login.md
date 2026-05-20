@@ -2,7 +2,7 @@
 
 ## Primary Evidence
 - `docs/physics/msg_move_worldport_ack.md`
-- `docs/physics/0x401DE0_disasm.txt`
+- `docs/disasm/0x401DE0_disasm.txt`
 - Managed implementation: `Exports/WoWSharpClient/WoWSharpObjectManager.cs`, `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`, `Exports/WoWSharpClient/Handlers/LoginHandler.cs`
 
 ## WoW.exe State Machine

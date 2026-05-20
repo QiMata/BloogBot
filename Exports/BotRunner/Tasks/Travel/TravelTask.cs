@@ -25,11 +25,11 @@ public class TravelTask : BotTask, IBotTask
     private const float WalkLegTransportArrivalRadius = 4.0f;
     private const float WalkLegTransportVerticalArrivalTolerance = 6.0f;
     // Phase 5.3.6 (PFS-OVERHAUL-006): under WWOW_OFFMESH_NATIVE_BOARDING, the
-    // walk leg ends at ApproachPosition (Frezza, z=53.6 for OG zeppelin) which
-    // sits on the upper deck. The legacy 6y tolerance accepted arrival on the
-    // LOWER spiral coil (z≈50) where the bot is XY-close but vertically wrong
-    // — boarding cascade then can't bridge the 3y Z gap because Detour's path
-    // from there leads through the OG tower's central pillar (Phase 5.3.4
+    // walk leg must end on the same deck tier as the configured boarding zone.
+    // The legacy 6y tolerance accepted arrival on the LOWER spiral coil
+    // (z≈50) where the bot is XY-close but vertically wrong — boarding
+    // cascade then can't bridge the 3y Z gap because Detour's path from there
+    // leads through the OG tower's central pillar (Phase 5.3.4
     // "Detour-walkable but physically-blocked" geometry). 1.5y matches
     // NavigationPath's WAYPOINT_VERTICAL_REACH_TOLERANCE=1.25f plus a quantum,
     // forcing same-deck arrival before walk_arrived fires.
@@ -455,13 +455,13 @@ public class TravelTask : BotTask, IBotTask
         if (!WalkLegHandsOffToTransport(leg))
             return WalkLegArrivalRadius;
 
-        // Phase 5.3.5: when native off-mesh boarding is active, the walk-leg
-        // target is anchored to the transport's NPC spawn (e.g. OG Zeppelin
-        // Master Frezza). The bot's natural ramp-top arrival point sits within
-        // the configured BoardingRadius but typically outside the legacy 4y
-        // WalkLegTransportArrivalRadius. Use BoardingRadius as the arrival
-        // tolerance so the walk-leg completes when the bot is within the
-        // transport's normal boarding zone.
+        // Phase 5.3.5+: when native off-mesh boarding is active, the walk leg
+        // is judged against the configured boarding zone rather than a narrow
+        // generic transport radius. The bot's natural ramp-top arrival point
+        // sits within BoardingRadius but can fall outside the legacy 4y
+        // WalkLegTransportArrivalRadius. Use BoardingRadius so the handoff
+        // happens when the bot is actually inside the transport's usable front
+        // boarding corridor.
         if (TransportWaitingLogic.IsNativeOffMeshBoardingEnabled())
         {
             var nextLeg = (_route != null && _currentLegIndex + 1 < _route.Count)
@@ -1133,7 +1133,7 @@ public class TravelTask : BotTask, IBotTask
         // corner-cutting in NavigationPath.AdvanceReachableWaypoints — and
         // that lets the bot skip ahead off the OG zeppelin tower's wooden
         // ramp before fully cresting onto the upper-platform deck (live test
-        // showed snag at z=51.6, 2y short of Frezza). Re-enabling this
+        // showed snag at z=51.6, 2y short of the upper boarding deck).
         // predicate routes the boarding nav through LongTravel policy
         // (EnableDynamicProbeSkipping=false, RequireVerticalWaypointArrival=
         // true, TightenDenseWaypointAcceptance=true) so the bot follows

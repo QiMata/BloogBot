@@ -3,7 +3,7 @@
 ## Primary Evidence
 - `docs/physics/msg_move_teleport_handler.md`
 - `docs/physics/packet_ack_timing.md`
-- `docs/physics/0x602FB0_disasm.txt`
+- `docs/disasm/0x602FB0_disasm.txt`
 - Managed implementation: `Exports/WoWSharpClient/WoWSharpObjectManager.Movement.cs`
 
 ## WoW.exe State Machine

@@ -652,7 +652,7 @@ CollisionStep (0x633840)
     - the production DLL now also mirrors the visible `0x635A37..0x635AED` notifier/state-commit tail through pure `EvaluateGroundedDriverSelectedPlaneTailLateNotifier(...)`
 - Practical implication for native parity work:
   - the remaining stateless mismatch is no longer the merged blocker selector, the horizontal epsilon nudge, or the bounded `0x635D80` helper itself
-  - fresh raw captures now also live in `docs/physics/0x617170_disasm.txt`, `docs/physics/0x636FA1_disasm.txt`, `docs/physics/0x6BC7E0_disasm.txt`, `docs/physics/0x6B9430_disasm.txt`, `docs/physics/0x6B8E50_disasm.txt`, and `docs/physics/0x6BB6B0_disasm.txt`
+  - fresh raw captures now also live in `docs/disasm/0x617170_disasm.txt`, `docs/disasm/0x636FA1_disasm.txt`, `docs/disasm/0x6BC7E0_disasm.txt`, `docs/disasm/0x6B9430_disasm.txt`, `docs/disasm/0x6B8E50_disasm.txt`, and `docs/disasm/0x6BB6B0_disasm.txt`
   - the remaining object-side workload is now fully bounded locally rather than estimated from prefix windows:
     - `0x6BC7E0` is one medium recursive BVH body (`0x006BC7E0..0x006BC98E`) with only four call targets total: `0x6B8C50`, `0x6BC9A0`, self-recursive `0x6BC7E0`, and already-closed `0x6B8C00` through the leaf wrapper
     - its leaf arm is exact: after `0x6B8C50` survives it iterates the node-owned leaf-id span and calls `0x6BC9A0` once per leaf id
@@ -676,7 +676,7 @@ CollisionStep (0x633840)
     - the production DLL now also mirrors the visible `0x635600..0x6356D2` entry/setup shell through pure `EvaluateGroundedDriverSelectedPlaneTailEntrySetup(...)`: millisecond-to-seconds scaling, zeroed local state, snapshot capture, 3D/2D magnitude build, and the normalized-input handoff into the chooser path
     - the production DLL now also mirrors the bounded `0x6357DA..0x6359A9` retry controller through pure `EvaluateGroundedDriverSelectedPlaneTailRerouteLoopController(...)`: optional attempt-budget advance, attempt-limit vertical fallback, and reset-vs-loopback dispatch above the already-pinned reroute-candidate / vertical-fallback leaves
     - `EvaluateGroundedDriverSelectedPlaneTailChooserContract(...)` now also surfaces the positive projected-move mutation path instead of only the unchanged-buffer case
-    - `docs/physics/0x635600_disasm.txt` still carries the full shell capture, but no caller-side `0x635600` seam remains open backlog on the split grounded path
+    - `docs/disasm/0x635600_disasm.txt` still carries the full shell capture, but no caller-side `0x635600` seam remains open backlog on the split grounded path
   - current 2026-03-28 practical implication update: the old grounded caller shell is no longer an open deterministic native gap on the collision/movement-controller path
   - current 2026-03-28 practical implication update: the remaining work has moved back to live replay calibration / transport parity in `PhysicsEngine.cpp` and the external live-fixture proof lane, not another missing `GroundedDriverParity` seam
   - on the current collision/movement-controller scope, the remaining grounded gap is no longer “internal `0x635F80` semantics” as one opaque helper
@@ -696,7 +696,7 @@ CollisionStep (0x633840)
   - the following `0x6334A0` / `0x636100` work therefore runs on a selected entry, not on every contact in the merged query
 - `0x6351A0` is the only direct caller currently identified that returns the paired `0xC4E544[index]` payload:
   - it first calls `0x632BA0`
-  - fresh raw captures now live in `docs/physics/0x6351A0_disasm.txt` and `docs/physics/0x632BA0_disasm.txt`
+  - fresh raw captures now live in `docs/disasm/0x6351A0_disasm.txt` and `docs/disasm/0x632BA0_disasm.txt`
   - `0x632BA0`
     - initializes a five-slot local `0x10`-stride candidate buffer before the `0x632700` loop
     - iterates five candidate directions, calls `0x632700` on each surviving candidate, and keeps updating the selected scalar/index written back through the local `ebp-4` slot that `0x6351A0` later treats as the chosen `0xC4E534` / `0xC4E544` index
@@ -706,14 +706,14 @@ CollisionStep (0x633840)
     - fresh 2026-03-26 review now adds one concrete `0x631E70` sub-helper on that unresolved path: `0x637350` is a pure inclusive point-vs-AABB test over six floats laid out as `minX,minY,minZ,maxX,maxY,maxZ`, and `0x631E70` uses it to decide whether the cached query bounds at `0xC4E5A0` already contain both the current and projected points before rebuilding the merged query volume
     - the production DLL now mirrors that exact `0x637350` helper through pure `IsPointInsideAabbInclusive(...)` plus a deterministic export/test seam
     - fresh 2026-03-26 review now also pins the query-mask builder `0x6315F0`, which `0x631E70` calls immediately before `0x6721B0`
-    - fresh raw capture now lives in `docs/physics/0x6315F0_disasm.txt`
+    - fresh raw capture now lives in `docs/disasm/0x6315F0_disasm.txt`
     - `0x6315F0`
       - calls `0x5FA550(this+0x15C)` and seeds the base mask as `0x100111` on success or `0x102111` on failure
       - then ORs `0x30000` only when `(this->flags & 0x10000000) != 0`, `(this->flags & 0x200000) == 0`, and the raw float at `this+0x20` is strictly greater than `0x80DFE8 = -0.6457718015f`
       - then ORs `0x8000` only when both tree-bit tests succeed on `([this+0x15C]+8)->+8` and `([this+0x15C]+0xE68)->+8`
       - the production DLL now mirrors that exact mask builder through pure `BuildTerrainQueryMask(...)` plus a deterministic export/test seam
     - fresh 2026-03-26 review now also pins the exact projected query AABB that `0x631E70` checks against the cached bounds
-    - fresh raw capture now lives in `docs/physics/0x631E70_disasm.txt`
+    - fresh raw capture now lives in `docs/disasm/0x631E70_disasm.txt`
     - after the optional transform path, `0x631E70` treats `[ebp+8..+0x10]` as the projected feet position and builds:
       - `boundsMin = (projected.x - this+0xB0, projected.y - this+0xB0, projected.z)`
       - `boundsMax = (projected.x + this+0xB0, projected.y + this+0xB0, projected.z + this+0xB4)`
@@ -725,10 +725,10 @@ CollisionStep (0x633840)
       - `0x6721B0` does not just copy a surviving `0x34` contact record
       - it filters those temp records by stored `normal.z >= 0x80DFFC`
       - for every surviving record it also appends the aligned `0x08` sidecar payload through `0x673C80`
-      - fresh raw capture now also lives in `docs/physics/0x673C80_disasm.txt`
+      - fresh raw capture now also lives in `docs/disasm/0x673C80_disasm.txt`
     - the production DLL now mirrors that filtered contact-plus-pair copy contract through pure `CopyTerrainQueryWalkableContactsAndPairs(...)` plus deterministic export/test coverage
     - fresh 2026-03-26 review now also pins one primitive writer on the still-unresolved `0x6AB530` temp-record path
-      - fresh raw capture now lives in `docs/physics/0x6ACDE0_disasm.txt`
+      - fresh raw capture now lives in `docs/disasm/0x6ACDE0_disasm.txt`
       - `0x6ACDE0` writes one plane record as `{ normal.x, normal.y, normal.z, -(normal dot point) }`
       - it copies the incoming normal verbatim and performs no normalization or epsilon guard
     - the production DLL now mirrors that exact primitive through pure `BuildPlaneFromNormalAndPoint(...)` plus deterministic export/test coverage
@@ -786,7 +786,7 @@ CollisionStep (0x633840)
       - `0x6B9430` is the deterministic wrapper above `0x6BC7E0`: it builds query bounds from the eight support points at `arg2+0x60`, forces `callbackMask | 0x80` into a 16-bit field, zeroes the local accepted-count, packages node-owned pointers `{+0x44, +0x90, +0xC4, +0xC8, +0xD0}`, then calls `0x6BC7E0(rootIndex = 0)` before the unresolved post-traversal consumers
       - the production DLL now also mirrors one low/high recursion step from a prebuilt split record through pure `EvaluateSelectorBvhRecursionStep(...)`: low child is always consumed before high child, and each entered child ORs its result while adding pending/accepted deltas and overflow flags into the running traversal state
     - the production DLL now mirrors those additional caller/object-path seams through pure `DoAabbsOverlapInclusive(...)`, `IsTerrainQueryPayloadEnabled(...)`, `BuildOptionalSelectorChildDispatchMask(...)`, `ZeroTerrainQueryPairPayloadRange(...)`, `EvaluateTerrainQueryEntryDispatch(...)`, `ShouldDispatchDynamicTerrainQueryEntry(...)`, `BeginTerrainQueryProducerPass(...)`, `BuildTerrainQueryChunkSpan(...)`, `EnumerateTerrainQueryChunkCoordinates(...)`, `EvaluateSelectorSourceAabbCull(...)`, `TransformSelectorSupportPointBuffer(...)`, `BuildSelectorHullSourceGeometry(...)`, and `EvaluateSelectorHullTransformedBoundsCull(...)` plus deterministic export/test coverage
-    - fresh raw captures now also live in `docs/physics/0x632A30_disasm.txt` and `docs/physics/0x6376A0_disasm.txt`
+    - fresh raw captures now also live in `docs/disasm/0x632A30_disasm.txt` and `docs/disasm/0x6376A0_disasm.txt`
     - `0x632A30` initializes a 7-slot and a 9-slot `0x10`-stride selector-plane buffer through `0x6376A0`, zeroes the 9-point scratch, picks the override position or `this+0x10`, and calls `0x631BE0`
     - before `0x632280`, `0x632A30` also seeds both local vectors to `(0, 0, -1)` and seeds the initial best ratio as `1.0f`
     - only when no override position was provided does `0x632A30` call `0x631E70`; if that call fails it writes `0` to the caller's reported scalar and returns `0`
@@ -797,12 +797,12 @@ CollisionStep (0x633840)
     - it now also mirrors the next bounded producer composition above the earlier injected bridge seam through pure `EvaluateSelectorChosenIndexPairDirectionSetupProducerTransaction(...)`: run the existing variable helper, derive the chosen index plus candidate-plane buffer through `EvaluateSelectorChosenIndexPairDirectionSetupTransaction(...)`, then feed those real direction-setup outputs into the selected-contact container + bridge path instead of injecting `0x632BA0` outputs by hand
     - it now also mirrors the lower variable-plus-selected-contact-container handoff inside that lane through pure `EvaluateSelectorChosenIndexPairVariableContainerTransaction(...)`: the existing variable helper feeds the selected-contact-container helper directly while preserving reported best ratio, ambient cached-container reuse on override, cached-query reuse, and walkable query-result copies
     - practical implication: the producer lane is no longer blocked on the later direction-setup -> bridge composition or the lower `0x631E70` variable/container handoff; the remaining grounded front on this path is the still-uncaptured `0x636100` tail-local projected-rerank/state-writeback block above the now-pinned helper leaves, with `0x635F80` still bounded only by its chooser-bool outcome
-    - fresh raw captures now also live in `docs/physics/0x6372D0_disasm.txt`, `docs/physics/0x637300_disasm.txt`, and `docs/physics/0x61E9C0_disasm.txt`
+    - fresh raw captures now also live in `docs/disasm/0x6372D0_disasm.txt`, `docs/disasm/0x637300_disasm.txt`, and `docs/disasm/0x61E9C0_disasm.txt`
     - on the `0x631E70` cache-miss path, `0x637300` subtracts the same scalar from all three min-corner components and `0x6372D0` adds it to all three max-corner components before `0x6373B0`
     - `0x61E9C0` is a bare no-op `ret` in this client build
     - the cache-miss transaction then merges that expanded query box against the cached `0xC4E5A0` bounds through `0x6373B0`, using the exact binary `1/6` scalar `0x3E2AAAAB`
     - the production DLL now mirrors the `0x6372D0` / `0x637300` scalar-offset helpers through pure `AddScalarToVector3(...)` and `SubtractScalarFromVector3(...)` seams, and mirrors that higher-level cache-miss bounds handoff through pure `BuildTerrainQueryCacheMissBounds(...)`, all with deterministic export/test coverage
-  - fresh raw capture now also lives in `docs/physics/0x632280_disasm.txt`
+  - fresh raw capture now also lives in `docs/disasm/0x632280_disasm.txt`
   - `0x632280`
     - initializes a five-slot local `0x10`-stride candidate buffer to `(0, 0, 1, 0)`
     - iterates four source entries from `[arg+0x18]+0x50` and advances a parallel 3-byte selector table from `[arg+0x20]+0x14`
@@ -811,7 +811,7 @@ CollisionStep (0x633840)
     - the production DLL now mirrors that exact overwrite/append/swap body through pure `EvaluateSelectorTriangleSourceRanking(...)` plus a deterministic export/test seam
   - then gates the selected index through `0x633720`
   - then checks the local candidate buffer with `0x635410` / `0x6353D0`
-    - fresh raw captures now also live in `docs/physics/0x635410_disasm.txt` and `docs/physics/0x6353D0_disasm.txt`
+    - fresh raw captures now also live in `docs/disasm/0x635410_disasm.txt` and `docs/disasm/0x6353D0_disasm.txt`
     - both are tiny `0x10`-stride scans over the same local candidate buffer starting at `buffer + 8`, which means they compare the candidate plane's `normal.z`, not any world-height field
     - `0x635410` returns success when any candidate `normal.z` matches `0x80E014 = -0.4756366014f` within `0x8026BC`
     - `0x6353D0` returns success when any candidate `normal.z` matches `0x7FF9D8 = 1.0f` within `0x8026BC`
@@ -825,7 +825,7 @@ CollisionStep (0x633840)
     - if `0x633720` succeeds and `0x635410` finds a matching local candidate, `0x6351A0` returns `0xC4E544[index]` directly, writes `1` to the first out-state dword, and leaves the second out-state dword at `0`
     - if `0x633720` succeeds but `0x635410` fails, it returns a zeroed pair with success and still writes `1` to that first out-state dword
     - if `0x633720` fails, it zeroes the pair first, then only writes `1` to the second out-state dword when `scaledMove.z < 0`, `(0x7C5DA0(this) - arg1) >= 0`, `((0x7C5DA0(this) - arg1) * this->+0x84) >= requestedDistance`, and `0x6353D0` finds a unit-Z local candidate; otherwise it falls through `0x635090` and returns that alternate pair
-  - fresh raw captures now live in `docs/physics/0x633720_disasm.txt`, `docs/physics/0x635090_disasm.txt`, `docs/physics/0x635734_callsite_disasm.txt`, and `docs/physics/0x7C5DA0_disasm.txt`
+  - fresh raw captures now live in `docs/disasm/0x633720_disasm.txt`, `docs/disasm/0x635090_disasm.txt`, `docs/disasm/0x635734_callsite_disasm.txt`, and `docs/disasm/0x7C5DA0_disasm.txt`
   - the new `0x7C5DA0` capture closes one detail on that alternate path: it is a tiny airborne time-scalar helper (`this->+0xA0 * -1/gravity` when airborne, else `0`), not a radius helper
   - the production DLL now mirrors that visible `0x6351A0` consumer tail through pure `EvaluateSelectorAlternateUnitZFallbackGate(...)` and `EvaluateSelectorPairConsumer(...)` helpers plus deterministic export/test seams
   - it now also mirrors the visible selected-index direct-load classifier just above that tail through pure `EvaluateSelectorChosenIndexPairSelectedRecordLoadTransaction(...)`
@@ -834,7 +834,7 @@ CollisionStep (0x633840)
     - in-range indices load `0xC4E534[index]` plus `0xC4E544[index]`
     - indices past `selectedContactCount` stay a distinct mismatch state instead of being collapsed into the sentinel/unset cases
   - it now also mirrors the next one-step chosen-contact bridge above that tail through pure `EvaluateSelectorChosenPairForwarding(...)`: start from an already chosen contact/index, scale the move by `requestedDistance`, run the `0x633720` direct gate via the selected-contact threshold/prism helper, then expose whether the branch returned the direct pair, a zero pair, the alternate unit-Z zero-pair state, or the alternate-pair fallback
-  - fresh raw captures now also live in `docs/physics/0x635550_disasm.txt`, `docs/physics/0x635450_disasm.txt`, and `docs/physics/0x7C5F50_disasm.txt`
+  - fresh raw captures now also live in `docs/disasm/0x635550_disasm.txt`, `docs/disasm/0x635450_disasm.txt`, and `docs/disasm/0x7C5F50_disasm.txt`
   - `0x635550`
     - is the pure follow-up gate that `0x635450` calls immediately after `0x6351A0`
     - returns success immediately when the second `0x6351A0` out-state dword is nonzero
@@ -878,28 +878,28 @@ CollisionStep (0x633840)
     - production-DLL packet-backed tracing now adds one more frame-16 constraint on top of that logic: once the runtime has already selected the WMO wall contact (`instance 0x00003B34`, `groupId 3228`), the projected `position + requestedMove` point is outside the `0x6335D0` expanded triangle prism, so the selected wall would stay on the alternate `0x635090` path under both the relaxed and standard thresholds
   - `0x635090`
     - first calls `0x6336A0`
-    - fresh raw capture now lives in `docs/physics/0x6336A0_disasm.txt`
+    - fresh raw capture now lives in `docs/disasm/0x6336A0_disasm.txt`
     - `0x6336A0` reads `normal.z` from `0xC4E534[index]` and only returns success when that selected contact stays inside the non-walkable slope band `[-0.6427876, +0.6427876]`
     - the production DLL now mirrors that exact gate through pure `IsSelectorContactWithinAlternateWorkingVectorBand(...)` plus deterministic export/test coverage
     - on success it delegates to `0x634AE0` to produce the working 3-vector
-    - fresh raw capture now lives in `docs/physics/0x634AE0_disasm.txt`
+    - fresh raw capture now lives in `docs/disasm/0x634AE0_disasm.txt`
     - the visible `0x634AE0` branch fanout is now closed:
       - `count <= 1` or `count > 4` => return `-candidateBuffer[0].normal`
       - `count == 2` => enter the only nontrivial two-plane builder body
       - `count == 3` or `count == 4` => return `0xC4E534[selectedIndex].normal`
     - the production DLL now mirrors that exact outer mode selection through pure `EvaluateSelectorAlternateWorkingVectorMode(...)` plus deterministic export/test coverage
-    - fresh raw capture now also lives in `docs/physics/0x634960_disasm.txt`
+    - fresh raw capture now also lives in `docs/disasm/0x634960_disasm.txt`
     - one private branch gate inside that unresolved `count == 2` body is now closed:
       - `0x602630` is just a 3-float dot-product helper
       - `0x634960` samples five footprint points around `this->position` with horizontal offsets `±this->+0xB0` and vertical offset `this->+0xB0 * 1.8493989706` (`0x80C740`)
       - it returns failure as soon as one sample satisfies `abs(dot(samplePoint, selectedPlane.normal) + selectedPlane.planeDistance) > 1/720`
       - the production DLL now mirrors that exact plane/footprint gate through pure `EvaluateSelectorPlaneFootprintMismatch(...)` plus deterministic export/test coverage
-    - fresh raw capture now also lives in `docs/physics/0x634FC0_disasm.txt`
+    - fresh raw capture now also lives in `docs/disasm/0x634FC0_disasm.txt`
     - another private helper inside that same `count == 2` body is now closed:
       - `0x634FC0` copies the selected plane plus the two candidate planes as `{normal.xyz, -planeDistance}` and solves the three-plane intersection point
       - `0x7BE0E0` / `0x7BE2A0` on this path are the determinant/inverse helpers behind that solve
       - the production DLL now mirrors that exact helper through pure `BuildSelectorPlaneIntersectionPoint(...)` plus deterministic export/test coverage
-    - fresh raw capture now also lives in `docs/physics/0x634DA0_disasm.txt`
+    - fresh raw capture now also lives in `docs/disasm/0x634DA0_disasm.txt`
     - the private chooser inside that same `count == 2` body is now closed:
       - `0x634DA0` iterates the three selected-triangle edges in order `(p0 -> p1)`, `(p1 -> p2)`, `(p2 -> p0)`
       - it skips an edge when its magnitude is `<= 0x8029D4`
@@ -927,39 +927,39 @@ CollisionStep (0x633840)
       - it writes the final pair as `horizontalPair * scale`
       - the production DLL now has deterministic coverage for the band-fail negated-input path, the 3-candidate selected-normal path, and the 2-candidate builder path
     - practical implication: the visible alternate-pair helper chain is now closed. The next unresolved selector step is no longer more math inside `0x635090`; it is the production grounded transaction that chooses the selected index plus paired `0xC4E544[index]` payload before `0x6351A0` consumes it.
-  - `0x5FA550` now has a raw capture in `docs/physics/0x5FA550_disasm.txt`
+  - `0x5FA550` now has a raw capture in `docs/disasm/0x5FA550_disasm.txt`
     - it walks model/tree flags rooted at `this+0x110` and can recurse through `0x468460(..., 0x1DF)` before returning `0` or `1`
     - practical implication: the relaxed-vs-standard threshold split inside `0x633760` is model-property driven, not a geometric point-in-triangle test
 - `0x632700` adds one concrete filter detail for that selector chain:
   - candidate contacts are rejected only when the candidate-direction dot product is effectively non-opposing (`>= -1e-5f`)
-  - fresh raw captures now also live in `docs/physics/0x632700_disasm.txt` and `docs/physics/0x631870_disasm.txt`
+  - fresh raw captures now also live in `docs/disasm/0x632700_disasm.txt` and `docs/disasm/0x631870_disasm.txt`
   - `0x632700` walks the `0x34`-stride record array at `recordsBase + index * 0x34`, where each record is `SelectorSupportPlane filterPlane + 3 strip points`
   - for every dot-accepted record it seeds a local strip from `record + 0x10`, sets the first three source ids to `-1`, clips that strip through `0x631870`, and only then calls `0x632830`
   - `0x631870` is the simple plane-prefix clip helper around `0x6318C0`: it clips against planes `0..count-1` and returns false as soon as the strip count reaches zero
   - once `0x632830` returns a local best ratio, `0x632700` only updates the caller best ratio/index when that local ratio is not greater than the caller's current best
   - the production DLL now mirrors that prefix-clip and record-evaluation chain through pure `ClipSelectorPointStripAgainstPlanePrefix(...)` and `EvaluateSelectorCandidateRecordSet(...)` helpers plus deterministic export/test seams
   - its helper tail is also now better mapped:
-    - fresh raw capture now also lives in `docs/physics/0x631440_disasm.txt`
+    - fresh raw capture now also lives in `docs/disasm/0x631440_disasm.txt`
     - `0x631440` is a pure support-plane builder used by `0x631BE0` before the selector-builder chain reaches `0x632830`
     - it emits a fixed 9-plane strip: `±X`, `±Y`, `+Z`, plus four diagonal planes using the binary constants `0x80DFE4 = 0.8796418905f` and `0x80DFE0 = 0.4756366014f`
     - the production DLL now mirrors that builder through a pure `BuildSelectorSupportPlanes(...)` helper and deterministic export/test seam
-    - fresh raw capture now also lives in `docs/physics/0x631BE0_disasm.txt`
+    - fresh raw capture now also lives in `docs/disasm/0x631BE0_disasm.txt`
     - `0x631BE0` calls `0x631440`, then emits the exact 9-point selector neighborhood plus the 32-byte selector table consumed by `0x632460` / `0x632F80`
     - the production DLL now mirrors that builder through a pure `BuildSelectorNeighborhood(...)` helper and deterministic export/test seam
-    - fresh raw captures now also live in `docs/physics/0x632830_disasm.txt`, `docs/physics/0x6329E0_disasm.txt`, and `docs/physics/0x6318C0_disasm.txt`
+    - fresh raw captures now also live in `docs/disasm/0x632830_disasm.txt`, `docs/disasm/0x6329E0_disasm.txt`, and `docs/disasm/0x6318C0_disasm.txt`
     - `0x6329E0` itself is a tiny plane-ratio helper: it returns `(dot(candidatePoint, planeNormal) + planeD) / dot(testPoint, planeNormal)` only when the denominator magnitude exceeds the tiny constant at `0x8029D4`; otherwise it returns `0`
     - `0x632830` walks the selected `0x10`-stride plane across the current `15-point + 15-id + count` strip, keeps the smallest positive ratio (clamping to `0` when the smaller ratio is non-positive), and clears its first-pass success bit if any ratio exceeds `0x80DFF4`
     - only when that first pass fully survives does `0x632830` call `0x632980` to rebuild the strip while excluding the selected plane index; it then rechecks that rebuilt strip with `0x6329E0` against the stricter scalar at `0x7FF9C8`
     - `0x632980` is the exclude-one wrapper around repeated `0x6318C0` calls and returns false as soon as one rebuild yields zero surviving outputs
     - `0x6318C0` is the in-place strip clipper behind that rebuild: it computes `-(dot(point, planeNormal) + planeD)` for every point, leaves the strip unchanged when the minimum signed distance stays above `-1/720`, zeroes the strip when the maximum signed distance stays below `+1/720`, otherwise clips the polygon and tags new intersection points with the current plane index
     - the production DLL now mirrors that ratio/clip/validation chain through pure `EvaluateSelectorPlaneRatio(...)`, `ClipSelectorPointStripAgainstPlane(...)`, `ClipSelectorPointStripExcludingPlane(...)`, and `ValidateSelectorPointStripCandidate(...)` helpers plus deterministic export/test seams
-    - fresh raw captures now also live in `docs/physics/0x632460_disasm.txt` and `docs/physics/0x637480_disasm.txt`
+    - fresh raw captures now also live in `docs/disasm/0x632460_disasm.txt` and `docs/disasm/0x637480_disasm.txt`
     - `0x637480` is the normalized plane-from-three-points helper used by `0x632460`: it builds `normal = normalize((point3 - point1) x (point2 - point1))`, then stores `planeD = -dot(normal, point1)`
     - the production DLL now also mirrors that primitive directly through pure `BuildPlaneFromTrianglePoints(...)` plus deterministic export/test coverage
     - `0x632460` consumes one 3-byte selector entry plus the translated 9-point neighborhood, builds three side planes through `0x637480`, flips each plane with `0x637330` when the opposite selector point lands on the positive side, then writes the source plane back at plane slot `3` with a re-anchored `planeD` through the translated first selector point
     - `0x632460` returns `0` as soon as any side-plane normal collapses below `0x8026BC`
     - the production DLL now mirrors that four-plane record builder through pure `BuildSelectorCandidatePlaneRecord(...)` plus deterministic export/test seams
-    - fresh raw capture now also lives in `docs/physics/0x632F80_disasm.txt`
+    - fresh raw capture now also lives in `docs/disasm/0x632F80_disasm.txt`
     - `0x632F80` is the 4-selector companion builder used by the second `0x632BA0` path: it walks one 4-byte selector ring, builds four side planes through `0x637480`, flips each plane against the previous selector point, then writes the source plane back at plane slot `4` with a re-anchored `planeD` through the translated first selector point
     - `0x632F80` returns `0` as soon as any side-plane normal collapses below `0x8026BC`
     - the production DLL now mirrors that five-plane record builder through pure `BuildSelectorCandidateQuadPlaneRecord(...)` plus deterministic export/test seams

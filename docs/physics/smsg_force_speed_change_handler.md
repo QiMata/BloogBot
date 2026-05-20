@@ -11,9 +11,9 @@ This note covers the speed-change family wired through `0x603F90 -> 0x602780`:
 - `SMSG_FORCE_TURN_RATE_CHANGE` (`0x2DE`)
 
 ## Primary Evidence
-- `docs/physics/0x603F90_disasm.txt`
-- `docs/physics/0x602780_disasm.txt`
-- `docs/physics/0x619500_disasm.txt`
+- `docs/disasm/0x603F90_disasm.txt`
+- `docs/disasm/0x602780_disasm.txt`
+- `docs/disasm/0x619500_disasm.txt`
 
 ## Dispatch Map
 - `0x0E2 -> 0x6027D7 -> 0x619500` (queue helper, slot `0x14`)

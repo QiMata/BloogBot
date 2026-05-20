@@ -2,7 +2,7 @@
 
 ## Primary Evidence
 - `docs/physics/opcode_dispatch_table.md`
-- `docs/physics/0x603EA0_disasm.txt`
+- `docs/disasm/0x603EA0_disasm.txt`
 - WoW.exe runtime disassembly of `0x5FA600`
 
 ## Dispatcher Anchor

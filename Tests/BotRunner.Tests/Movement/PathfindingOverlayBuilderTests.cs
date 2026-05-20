@@ -109,6 +109,29 @@ public class PathfindingOverlayBuilderTests
         Assert.Contains(nearby, item => item.Guid == 0x3007UL);
     }
 
+    [Fact]
+    public void BuildNearbyObjects_LongTravelOptInIncludesReadyStaticProps()
+    {
+        var objectManager = new Mock<IObjectManager>();
+        objectManager.SetupGet(x => x.GameObjects).Returns(
+        [
+            CreateGameObject(0x4001, (uint)GameObjectType.Generic, 201, new Position(4f, 0f, 0f)).Object,
+            CreateGameObject(0x4002, (uint)GameObjectType.MapObject, 202, new Position(5f, 0f, 0f)).Object,
+            CreateGameObject(0x4003, (uint)GameObjectType.Goober, 203, new Position(6f, 0f, 0f)).Object
+        ]);
+
+        var nearby = PathfindingOverlayBuilder.BuildNearbyObjects(
+            objectManager.Object,
+            new Position(0f, 0f, 0f),
+            new Position(12f, 0f, 0f),
+            includeReadyStaticProps: true);
+
+        Assert.Equal(3, nearby.Length);
+        Assert.Contains(nearby, item => item.Guid == 0x4001UL);
+        Assert.Contains(nearby, item => item.Guid == 0x4002UL);
+        Assert.Contains(nearby, item => item.Guid == 0x4003UL);
+    }
+
     private static Mock<IWoWGameObject> CreateGameObject(
         ulong guid,
         uint typeId,

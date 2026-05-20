@@ -212,8 +212,8 @@ Known remaining work in this owner: `0` items.
   - Next command:
     - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WsgObjectiveTests" --logger "console;verbosity=minimal"`
   - Synced the previously-landed P2.4 work into the evidence/docs surface:
-    - added `docs/physics/0x466590_disasm.txt`
-    - added `docs/physics/0x466C70_disasm.txt`
+    - added `docs/disasm/0x466590_disasm.txt`
+    - added `docs/disasm/0x466C70_disasm.txt`
     - updated `cgobject_layout.md`, `csharp_object_field_audit.md`, and `smsg_update_object_handler.md`
   - New hard findings from those captures:
     - `0x466590` walks descriptor fields in ascending descriptor-index order and forwards each present field through `0x466A00 -> 0x6142E0`
@@ -238,7 +238,7 @@ Known remaining work in this owner: `0` items.
     - `docs/physics/state_login.md`
     - `docs/physics/state_knockback.md`
     - `docs/physics/state_root.md`
-  - `docs/physics/0x603EA0_disasm.txt` and `docs/physics/state_client_control.md` now pin the WoW.exe behavior: `0x603EA0` reads packed GUID + control byte and calls `0x5FA600`, which toggles bit `0x400` in `[object + 0xC58]` and only propagates the follow-up global update for the active mover.
+  - `docs/disasm/0x603EA0_disasm.txt` and `docs/physics/state_client_control.md` now pin the WoW.exe behavior: `0x603EA0` reads packed GUID + control byte and calls `0x5FA600`, which toggles bit `0x400` in `[object + 0xC58]` and only propagates the follow-up global update for the active mover.
   - `WoWSharpObjectManager.EventEmitter_OnClientControlUpdate(...)` now ignores non-local GUIDs, stores an explicit lockout on `canControl=false`, clears that lockout only on `canControl=true`, and blocks `ReconcilePlayerControlState()` from immediately undoing the server's lockout packet.
   - Added deterministic coverage:
     - `StateMachineParityTests.ClientControlUpdate_LocalPlayer_FollowsCanControlAndBlocksReconcile`
@@ -272,7 +272,7 @@ Known remaining work in this owner: `0` items.
     - `Exports/WoWSharpClient/Handlers/ClientControlHandler.cs`
     - `Exports/WoWSharpClient/WoWSharpEventEmitter.cs`
     - `Exports/WoWSharpClient/WoWSharpObjectManager.Network.cs`
-    - `docs/physics/0x603EA0_disasm.txt`
+    - `docs/disasm/0x603EA0_disasm.txt`
     - `docs/physics/state_client_control.md`
     - `docs/physics/README.md`
     - `docs/TASKS.md`

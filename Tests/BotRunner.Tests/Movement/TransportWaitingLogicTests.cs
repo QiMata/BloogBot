@@ -139,17 +139,10 @@ public class TransportWaitingLogicTests
     [Fact]
     public void Approaching_ZeppelinAtConfiguredBoardingPosition_TransitionsToWaitingOnTheDeck()
     {
-        // Phase 5.3.5: with OG.ApproachPosition anchored to Zeppelin Master Frezza
-        // (z=53.6, same deck tier as BoardingPosition z=53.89), the bot teleported
-        // to BoardingPosition is within BoardingRadius=12f of NavigationPosition
-        // (~11.6y XY apart, identical Z tier). The early `dist <= BoardingRadius`
-        // branch fires and returns NavigationPosition. Pre-Phase-5.3.5 (when
-        // ApproachPosition was at the wrong-tier z=51.6 city ground), the bot at
-        // BoardingPosition was OUTSIDE BoardingRadius of NavigationPosition and the
-        // `IsAtConfiguredBoardingPosition` fallback returned BoardingPosition.
-        // Both branches transition to WaitingForArrival; only the returned waypoint
-        // differs. The new geometry consolidates these cases since both points are
-        // on the same deck within attachment distance of the docked zeppelin.
+        // The live OG walk leg now hands off at the front boarding zone. A bot
+        // already staged on BoardingPosition should immediately transition into
+        // WaitingForArrival without being redirected toward a farther back-side
+        // deck anchor.
         var boardingStop = ZeppelinUndercityOrgrimmar.Stops[0];
         var destinationStop = ZeppelinUndercityOrgrimmar.Stops[1];
         var boardingPosition = boardingStop.BoardingPosition!;
@@ -162,13 +155,11 @@ public class TransportWaitingLogicTests
         Assert.Equal(TransportPhase.WaitingForArrival, logic.CurrentPhase);
         Assert.NotNull(firstTarget);
         Assert.NotNull(secondTarget);
-        // Returned waypoint must be on the deck — either the NPC-anchored
-        // NavigationPosition (Frezza) or BoardingPosition (gangplank attach point).
-        // Both are valid wait points on the same elevation.
+        // Returned waypoint must stay on the boarding deck.
         Assert.True(
             (Math.Abs(firstTarget!.X - navigationPosition.X) < 0.5f && Math.Abs(firstTarget.Y - navigationPosition.Y) < 0.5f)
             || (Math.Abs(firstTarget.X - boardingPosition.X) < 0.5f && Math.Abs(firstTarget.Y - boardingPosition.Y) < 0.5f),
-            $"Expected firstTarget on deck near Frezza({navigationPosition.X:F2},{navigationPosition.Y:F2}) "
+            $"Expected firstTarget on deck near NavigationPosition({navigationPosition.X:F2},{navigationPosition.Y:F2}) "
             + $"or BoardingPosition({boardingPosition.X:F2},{boardingPosition.Y:F2}); "
             + $"got ({firstTarget.X:F2},{firstTarget.Y:F2},{firstTarget.Z:F2}).");
         Assert.Equal(navigationPosition.Z, firstTarget.Z, 1);

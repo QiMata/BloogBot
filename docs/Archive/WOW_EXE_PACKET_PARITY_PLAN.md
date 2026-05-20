@@ -99,8 +99,8 @@ Each phase has **explicit entry criteria** (what must be proven first), a **work
 
 The decompilation targets below are the packet-handling twins of the physics functions we already have. Each one needs:
 
-- A raw disassembly capture → `docs/physics/0x*_disasm.txt`
-- A pseudocode translation → `docs/physics/0x*_pseudocode.md`
+- A raw disassembly capture → `docs/disasm/0x*_disasm.txt`
+- A pseudocode translation → `docs/disasm/0x*_pseudocode.md`
 - Binary-backed evidence for the behavior claim
 
 | Priority | Symbol / target                                | Why we need it                                        | Deliverable filename                       |
@@ -126,7 +126,7 @@ We already have a working PacketLogger hook that successfully injects into `NetC
 
 1. Attach IDA / Ghidra to a running WoW.exe (1.12.1) via `Services/ForegroundBotRunner/Native/DllInjector.cs`.
 2. Dump disassembly for each target VA via Ghidra Decompile API or IDA batch mode.
-3. Save to `docs/physics/0x*_disasm.txt` (raw) and write a `_pseudocode.md` companion translating to C-like form.
+3. Save to `docs/disasm/0x*_disasm.txt` (raw) and write a `_pseudocode.md` companion translating to C-like form.
 4. Cross-reference against physics disasm where handlers touch CMovement at +0x10/+0x1C/+0x40/etc.
 
 ### 2.5 Sub-tasks

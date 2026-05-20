@@ -5,7 +5,7 @@
 # Usage:
 #   .\tools\scripts\run-pathfinding-tests.ps1 -TestSet unit
 #   .\tools\scripts\run-pathfinding-tests.ps1 -TestSet climb -OutDir tmp\bake-sweeps\<variant>
-#   .\tools\scripts\run-pathfinding-tests.ps1 -TestSet pathfinding -DataDir D:\MaNGOS\data
+#   .\tools\scripts\run-pathfinding-tests.ps1 -TestSet pathfinding -DataDir D:\wwow-bot\test-data
 #   .\tools\scripts\run-pathfinding-tests.ps1 -TestSet all
 #
 # Test sets:
@@ -21,8 +21,8 @@
 # Args:
 #   -TestSet   (string, required) See above.
 #   -DataDir   (string, optional) WWOW_DATA_DIR override. Default
-#              $env:WWOW_DATA_DIR or D:\MaNGOS\data (the climb-iteration
-#              fallback per docs\physics\MMAP_DATA_FLOW.md).
+#              $env:WWOW_DATA_DIR or D:\wwow-bot\test-data (the local-test
+#              bake root per docs\physics\MMAP_DATA_FLOW.md).
 #   -OutDir    (string, optional) Where to drop trx + console.log.
 #              Default tmp\test-runs\<UTC>\.
 #   -ExtraEnv  (hashtable, optional) Additional env vars to set, e.g.
@@ -56,7 +56,7 @@ $wwowRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 
 if (-not $DataDir) {
     $DataDir = $env:WWOW_DATA_DIR
-    if (-not $DataDir) { $DataDir = 'D:\MaNGOS\data' }
+    if (-not $DataDir) { $DataDir = 'D:\wwow-bot\test-data' }
 }
 foreach ($sub in 'mmaps','maps','vmaps') {
     if (-not (Test-Path (Join-Path $DataDir $sub))) {
@@ -126,6 +126,9 @@ if ($TestSet -eq 'climb') {
     $envSnapshot['VMAP_PHYS_LOG_LEVEL'] = '0'
     $envSnapshot['WWOW_USE_LOCAL_PATHFINDING_SERVICE'] = '1'
     $envSnapshot['WWOW_TEST_PATHFINDING_PORT'] = '5101'
+    $envSnapshot['WWOW_ENABLE_PATH_REPAIR'] = '1'
+    $envSnapshot['WWOW_ENABLE_STATIC_ROUTE_PACK'] = '1'
+    $envSnapshot['WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY'] = '1'
 }
 if ($ExtraEnv) {
     foreach ($k in $ExtraEnv.Keys) { $envSnapshot[$k] = [string]$ExtraEnv[$k] }
