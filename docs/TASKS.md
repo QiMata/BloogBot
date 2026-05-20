@@ -76,6 +76,38 @@ Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
 | BRM bake-fidelity | S9.1 — Triage post-cull stall coord | `monorepo-worker` or `codex:codex-rescue` | open | [`Plan/10_PARALLEL_BRM_BAKE.md`](Plan/10_PARALLEL_BRM_BAKE.md) |
 | Skill refinement | S10.1 — `activity-catalog-bootstrap` skill | `monorepo-worker` | open | [`Plan/11_PARALLEL_SKILL_REFINEMENT.md`](Plan/11_PARALLEL_SKILL_REFINEMENT.md) |
 | Test isolation refactor | (slots) | `monorepo-worker` | open (post Phase-2 S2.0) | [`Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md`](Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md) |
+| **IGameDatabase migration** | `S-IGDB-1` — define `Exports/GameDatabase.Core/` interfaces | `monorepo-worker` or `codex:codex-rescue` | **new (2026-05-20)** — closes monorepo G4 | spec: [../../docs/specs/shared/services/game_database_interface.md](../../docs/specs/shared/services/game_database_interface.md) |
+| **Validation harness tools (Ch 9 §8)** | `S-VHT-1` — `MemScanner` standalone tool | `monorepo-worker` | **new (2026-05-20)** — methodology Ch 9 §8 alignment | spec: [../../docs/methodology/09_validation_harness.md](../../docs/methodology/09_validation_harness.md) |
+
+## IGameDatabase migration — Slots (2026-05-20)
+
+> Substrate refactor that replaces the 6,952-line static `MangosRepository` ([Services/DecisionEngineService/](../Services/DecisionEngineService/)) with the portable `IGameDatabase` family ([spec](../../docs/specs/shared/services/game_database_interface.md)). Each slot is one PR; do not bundle. The DecisionEngine never breaks — the static class stays alongside the interfaces until S-IGDB-9.
+
+| Slot | Title | Owner | Status |
+|---|---|---|---|
+| `S-IGDB-1` | Create `Exports/GameDatabase.Core/` assembly with 6 interfaces (`IGameSpellDatabase`, `IGameCreatureDatabase`, `IGameItemDatabase`, `IGameQuestDatabase`, `IGameWorldDatabase`, `IGameRecipeDatabase`) + `IGameDatabaseCapabilities` + DTO records per [spec §4](../../docs/specs/shared/services/game_database_interface.md#4-interface-sketches) | `monorepo-worker` | open |
+| `S-IGDB-2` | Implement `MangosGameDatabase` as a thin façade over the existing static `MangosRepository`. Façade only — no logic moves yet. Capabilities report what MaNGOS schema actually provides. Coverage test under `Tests/DecisionEngine.Tests/`. | `monorepo-worker` | open (depends on S-IGDB-1) |
+| `S-IGDB-3` | Migrate `IGameSpellDatabase` consumers off `MangosRepository.*` to interface. One DecisionEngine consumer per commit if multiple; do not refactor logic, only rename call sites. | `monorepo-worker` | open (depends on S-IGDB-2) |
+| `S-IGDB-4` | Migrate `IGameCreatureDatabase` consumers. Same shape as S-IGDB-3. | `monorepo-worker` | open (depends on S-IGDB-2) |
+| `S-IGDB-5` | Migrate `IGameItemDatabase` consumers. | `monorepo-worker` | open (depends on S-IGDB-2) |
+| `S-IGDB-6` | Migrate `IGameQuestDatabase` consumers. | `monorepo-worker` | open (depends on S-IGDB-2) |
+| `S-IGDB-7` | Migrate `IGameWorldDatabase` consumers (zones, NPCs, factions, spawns). | `monorepo-worker` | open (depends on S-IGDB-2) |
+| `S-IGDB-8` | Migrate `IGameRecipeDatabase` consumers (crafting/profession scoring). Audit whether any consumers exist; if zero, mark `n/a` and skip. | `monorepo-worker` | open (depends on S-IGDB-2) |
+| `S-IGDB-9` | Fold logic from static `MangosRepository` into `MangosGameDatabase`; delete the static class; assert no remaining references via Roslyn analyser. | `monorepo-worker` | open (depends on S-IGDB-3..8) |
+
+**Exit criteria:** DecisionEngine consumes only `IGameDatabase*` interfaces. `MangosRepository` is deleted. Any new game repo can plug its own emulator-backed adapter without touching DecisionEngine code.
+
+## Validation harness tools — Slots (2026-05-20)
+
+> Methodology Ch 9 §8 names five tools every game should have. WWoW already ships `PathPhysicsProbe` (✓), `PacketLogger` (in-process hook, ✓), `MmapGen` / `SceneCacheBuilder`. Three named tools are missing as standalone artefacts.
+
+| Slot | Title | Owner | Status |
+|---|---|---|---|
+| `S-VHT-1` | `tools/MemScanner/` — heap pattern scan + structure dereference; CLI takes a string pattern, scans heap allocations, dereferences hits, emits JSON. Models on FFXIBot's `tools/MemScanner` and methodology Ch 02 §4D heap-string-scan pattern. | `monorepo-worker` or `codex:codex-rescue` | open |
+| `S-VHT-2` | `tools/ObjectManagerDump/` — enumerate `IObjectManager` (FG variant) and dump to JSON. Useful for `ActivitySnapshot` parity tests and ad-hoc world-state inspection. Cite Ch 09 §3.2 (Enumerate verb). | `monorepo-worker` | open |
+| `S-VHT-3` | `tools/FgBgParityDiff/` — diff a recorded FG session against a BG replay; report state-divergence segments with tolerated-vs-failed classification. Re-uses the `GroundedDriverParity` patterns from `Exports/Navigation/`. Cite Ch 05 §5 + Ch 09 §3.3 (Diff verb). | `monorepo-worker` or `codex:codex-rescue` | open |
+
+**Exit criteria:** all three tools build, run, and have at least one regression test that asserts the verdict on a known-good fixture (per Ch 9 §4 "bake the verdict into a regression test").
 
 ## Doodad Collision Gap (loop 25+, started 2026-05-18) — **CLOSED 2026-05-19**
 
