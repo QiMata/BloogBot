@@ -46,9 +46,9 @@ public class ChannelTests
 
         // BG bot sends a chat message via SEND_CHAT
         _output.WriteLine($"[TEST] BG sending chat message: {testMessage}");
-        var sendResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
+        var sendResult = await _bot.SendActionAsync(bgAccount, new ObjectiveMessage
         {
-            ActionType = ActionType.SendChat,
+            ObjectiveType = ObjectiveType.SendChat,
             Parameters = { new RequestParameter { StringParam = testMessage } }
         });
         _output.WriteLine($"[TEST] SEND_CHAT result: {sendResult}");

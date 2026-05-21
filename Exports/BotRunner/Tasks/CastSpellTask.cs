@@ -7,7 +7,7 @@ namespace BotRunner.Tasks;
 /// <summary>
 /// Atomic task: cast a spell by ID on a target GUID.
 /// Sets the target, casts the spell, then pops.
-/// Maps to ActionType.CAST_SPELL from StateManager.
+/// Maps to ObjectiveType.CAST_SPELL from StateManager.
 /// </summary>
 public class CastSpellTask(IBotContext botContext, int spellId, ulong targetGuid = 0, bool castOnSelf = false) : BotTask(botContext), IBotTask
 {

@@ -48,14 +48,14 @@ namespace WoWSharpClient.Handlers
                 byte enabledFlag = reader.ReadByte();
 
                 // Read 10 action bar entries (packed uint32: lower 24 bits = ID, upper 8 bits = type)
-                var actionBar = new List<(uint SpellId, byte ActionType)>(MAX_ACTION_BAR_INDEX);
+                var actionBar = new List<(uint SpellId, byte ObjectiveType)>(MAX_ACTION_BAR_INDEX);
                 for (int i = 0; i < MAX_ACTION_BAR_INDEX; i++)
                 {
                     uint packed = reader.ReadUInt32();
                     uint spellId = packed & 0x00FFFFFF;
-                    byte actionType = (byte)(packed >> 24);
+                    byte objectiveType = (byte)(packed >> 24);
                     if (spellId != 0)
-                        actionBar.Add((spellId, actionType));
+                        actionBar.Add((spellId, objectiveType));
                 }
 
                 // Read additional spell list

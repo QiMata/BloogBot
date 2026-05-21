@@ -33,9 +33,9 @@ public class CoordinatorStrictCountTests
         Assert.Null(coordinator.GetAction("BGLEADER", readySnapshots));
         Assert.Equal(BattlegroundCoordinator.CoordState.QueueForBattleground, coordinator.State);
 
-        Assert.Equal(ActionType.JoinBattleground, coordinator.GetAction("BGLEADER", readySnapshots)?.ActionType);
-        Assert.Equal(ActionType.JoinBattleground, coordinator.GetAction("BGMEMBER1", readySnapshots)?.ActionType);
-        Assert.Equal(ActionType.JoinBattleground, coordinator.GetAction("BGMEMBER2", readySnapshots)?.ActionType);
+        Assert.Equal(ObjectiveType.JoinBattleground, coordinator.GetAction("BGLEADER", readySnapshots)?.ObjectiveType);
+        Assert.Equal(ObjectiveType.JoinBattleground, coordinator.GetAction("BGMEMBER1", readySnapshots)?.ObjectiveType);
+        Assert.Equal(ObjectiveType.JoinBattleground, coordinator.GetAction("BGMEMBER2", readySnapshots)?.ObjectiveType);
         Assert.Null(coordinator.GetAction("BGLEADER", readySnapshots));
         Assert.Equal(BattlegroundCoordinator.CoordState.WaitForInvite, coordinator.State);
 
@@ -74,9 +74,9 @@ public class CoordinatorStrictCountTests
 
         Assert.Null(coordinator.GetAction("BGLEADER", readySnapshots));
         Assert.Equal(BattlegroundCoordinator.CoordState.QueueForBattleground, coordinator.State);
-        Assert.Equal(ActionType.JoinBattleground, coordinator.GetAction("BGLEADER", readySnapshots)?.ActionType);
-        Assert.Equal(ActionType.JoinBattleground, coordinator.GetAction("BGMEMBER1", readySnapshots)?.ActionType);
-        Assert.Equal(ActionType.JoinBattleground, coordinator.GetAction("BGMEMBER2", readySnapshots)?.ActionType);
+        Assert.Equal(ObjectiveType.JoinBattleground, coordinator.GetAction("BGLEADER", readySnapshots)?.ObjectiveType);
+        Assert.Equal(ObjectiveType.JoinBattleground, coordinator.GetAction("BGMEMBER1", readySnapshots)?.ObjectiveType);
+        Assert.Equal(ObjectiveType.JoinBattleground, coordinator.GetAction("BGMEMBER2", readySnapshots)?.ObjectiveType);
         Assert.Null(coordinator.GetAction("BGLEADER", readySnapshots));
         Assert.Equal(BattlegroundCoordinator.CoordState.WaitForInvite, coordinator.State);
 
@@ -87,13 +87,13 @@ public class CoordinatorStrictCountTests
             CreateSnapshot("BGMEMBER2", level: 10, mapId: 1));
 
         var joinRetryAction = coordinator.GetAction("BGMEMBER1", partialEntrySnapshots);
-        Assert.Equal(ActionType.JoinBattleground, joinRetryAction?.ActionType);
+        Assert.Equal(ObjectiveType.JoinBattleground, joinRetryAction?.ObjectiveType);
         Assert.Equal(2, joinRetryAction?.Parameters.Count ?? 0);
         Assert.Equal(2, joinRetryAction!.Parameters[0].IntParam);
         Assert.Equal(489, joinRetryAction.Parameters[1].IntParam);
 
         var acceptRetryAction = coordinator.GetAction("BGMEMBER1", partialEntrySnapshots);
-        Assert.Equal(ActionType.AcceptBattleground, acceptRetryAction?.ActionType);
+        Assert.Equal(ObjectiveType.AcceptBattleground, acceptRetryAction?.ObjectiveType);
 
         // Retry is throttled per-account and should not fire again immediately.
         Assert.Null(coordinator.GetAction("BGMEMBER1", partialEntrySnapshots));
@@ -105,7 +105,7 @@ public class CoordinatorStrictCountTests
         acceptRetrySentAt["BGMEMBER1"] = now - TimeSpan.FromSeconds(6);
 
         var secondJoinRetryAction = coordinator.GetAction("BGMEMBER1", partialEntrySnapshots);
-        Assert.Equal(ActionType.JoinBattleground, secondJoinRetryAction?.ActionType);
+        Assert.Equal(ObjectiveType.JoinBattleground, secondJoinRetryAction?.ObjectiveType);
     }
 
     [Fact]
@@ -208,11 +208,11 @@ public class CoordinatorStrictCountTests
         SetPrivateField(coordinator, "_state", BattlegroundCoordinator.CoordState.QueueForBattleground);
         SetPrivateField(coordinator, "_stateEnteredAt", DateTime.UtcNow - TimeSpan.FromSeconds(5));
 
-        Assert.Equal(ActionType.JoinBattleground, coordinator.GetAction("BGLEADER", unstagedSnapshots)?.ActionType);
-        Assert.Equal(ActionType.JoinBattleground, coordinator.GetAction("BGMEMBER1", unstagedSnapshots)?.ActionType);
+        Assert.Equal(ObjectiveType.JoinBattleground, coordinator.GetAction("BGLEADER", unstagedSnapshots)?.ObjectiveType);
+        Assert.Equal(ObjectiveType.JoinBattleground, coordinator.GetAction("BGMEMBER1", unstagedSnapshots)?.ObjectiveType);
 
         var restageAction = coordinator.GetAction("BGMEMBER2", unstagedSnapshots);
-        Assert.Equal(ActionType.Goto, restageAction?.ActionType);
+        Assert.Equal(ObjectiveType.Goto, restageAction?.ObjectiveType);
         Assert.Equal(4, restageAction?.Parameters.Count ?? 0);
         Assert.Equal(100f, restageAction!.Parameters[0].FloatParam);
         Assert.Equal(100f, restageAction.Parameters[1].FloatParam);
@@ -224,7 +224,7 @@ public class CoordinatorStrictCountTests
             CreateSnapshot("BGMEMBER2", level: 10, mapId: 1, x: 100, y: 100));
 
         var joinAction = coordinator.GetAction("BGMEMBER2", stagedSnapshots);
-        Assert.Equal(ActionType.JoinBattleground, joinAction?.ActionType);
+        Assert.Equal(ObjectiveType.JoinBattleground, joinAction?.ObjectiveType);
     }
 
     [Fact]
@@ -304,12 +304,12 @@ public class CoordinatorStrictCountTests
         Assert.Equal(DungeoneeringCoordinator.CoordState.FormGroup_Inviting, coordinator.State);
 
         var firstInvite = coordinator.GetAction("RFCLEADER", readySnapshots);
-        Assert.Equal(ActionType.SendGroupInvite, firstInvite?.ActionType);
+        Assert.Equal(ObjectiveType.SendGroupInvite, firstInvite?.ObjectiveType);
         AssertActionDoesNotUsePrepChat(firstInvite);
 
         Thread.Sleep(TimeSpan.FromMilliseconds(900));
         var firstAccept = coordinator.GetAction("RFCMEMBER1", readySnapshots);
-        Assert.Equal(ActionType.AcceptGroupInvite, firstAccept?.ActionType);
+        Assert.Equal(ObjectiveType.AcceptGroupInvite, firstAccept?.ObjectiveType);
         AssertActionDoesNotUsePrepChat(firstAccept);
 
         var firstGroupedSnapshots = CreateSnapshots(
@@ -319,12 +319,12 @@ public class CoordinatorStrictCountTests
 
         Assert.Null(coordinator.GetAction("RFCLEADER", firstGroupedSnapshots));
         var secondInvite = coordinator.GetAction("RFCLEADER", firstGroupedSnapshots);
-        Assert.Equal(ActionType.SendGroupInvite, secondInvite?.ActionType);
+        Assert.Equal(ObjectiveType.SendGroupInvite, secondInvite?.ObjectiveType);
         AssertActionDoesNotUsePrepChat(secondInvite);
 
         Thread.Sleep(TimeSpan.FromMilliseconds(900));
         var secondAccept = coordinator.GetAction("RFCMEMBER2", readySnapshots);
-        Assert.Equal(ActionType.AcceptGroupInvite, secondAccept?.ActionType);
+        Assert.Equal(ObjectiveType.AcceptGroupInvite, secondAccept?.ObjectiveType);
         AssertActionDoesNotUsePrepChat(secondAccept);
 
         var fullyGroupedSnapshots = CreateSnapshots(
@@ -342,7 +342,7 @@ public class CoordinatorStrictCountTests
         Assert.Equal(DungeoneeringCoordinator.CoordState.TeleportToRFC, coordinator.State);
 
         var teleportAction = coordinator.GetAction("RFCLEADER", fullyGroupedSnapshots);
-        Assert.Equal(ActionType.SendChat, teleportAction?.ActionType);
+        Assert.Equal(ObjectiveType.SendChat, teleportAction?.ObjectiveType);
         AssertActionDoesNotUsePrepChat(teleportAction);
         Assert.Equal(".go xyz 0.798 -8.234 -15.529 389", teleportAction!.Parameters[0].StringParam);
     }
@@ -367,7 +367,7 @@ public class CoordinatorStrictCountTests
         SetPrivateField(coordinator, "_state", DungeoneeringCoordinator.CoordState.TeleportToRFC);
 
         var teleportAction = coordinator.GetAction("SCHLEADER", groupedSnapshots);
-        Assert.Equal(ActionType.SendChat, teleportAction?.ActionType);
+        Assert.Equal(ObjectiveType.SendChat, teleportAction?.ObjectiveType);
         Assert.Equal(".go xyz 190.819 126.329 137.227 289", teleportAction!.Parameters[0].StringParam);
 
         var inDungeonSnapshots = CreateSnapshots(
@@ -378,7 +378,7 @@ public class CoordinatorStrictCountTests
         SetPrivateField(coordinator, "_state", DungeoneeringCoordinator.CoordState.DispatchDungeoneering);
 
         var leaderDispatch = coordinator.GetAction("SCHLEADER", inDungeonSnapshots);
-        Assert.Equal(ActionType.StartDungeoneering, leaderDispatch?.ActionType);
+        Assert.Equal(ObjectiveType.StartDungeoneering, leaderDispatch?.ObjectiveType);
         Assert.Equal(1, leaderDispatch!.Parameters[0].IntParam);
         Assert.Equal(289, leaderDispatch.Parameters[1].IntParam);
     }
@@ -637,9 +637,9 @@ public class CoordinatorStrictCountTests
         };
     }
 
-    private static void AssertActionDoesNotUsePrepChat(ActionMessage? action)
+    private static void AssertActionDoesNotUsePrepChat(ObjectiveMessage? action)
     {
-        if (action?.ActionType != ActionType.SendChat)
+        if (action?.ObjectiveType != ObjectiveType.SendChat)
             return;
 
         var chat = action.Parameters.FirstOrDefault()?.StringParam ?? string.Empty;

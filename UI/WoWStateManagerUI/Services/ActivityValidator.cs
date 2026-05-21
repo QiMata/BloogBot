@@ -77,19 +77,19 @@ namespace WoWStateManagerUI.Services
                         if (task.Actions == null || task.Actions.Count == 0)
                         {
                             issues.Add(new ValidationIssue(Severity.Error, taskPath,
-                                "Task has no Actions — every Task must emit at least one ActionMessage."));
+                                "Task has no Actions — every Task must emit at least one ObjectiveMessage."));
                             continue;
                         }
 
                         foreach (var action in task.Actions)
                         {
                             actionCount++;
-                            var actionPath = $"{taskPath}/{action.ActionType}";
-                            trace.Add(new TraceLine(3, "Action", action.ActionType));
+                            var actionPath = $"{taskPath}/{action.ObjectiveType}";
+                            trace.Add(new TraceLine(3, "Action", action.ObjectiveType));
 
-                            if (string.IsNullOrWhiteSpace(action.ActionType))
+                            if (string.IsNullOrWhiteSpace(action.ObjectiveType))
                                 issues.Add(new ValidationIssue(Severity.Error, actionPath,
-                                    "Action has no ActionType."));
+                                    "Action has no ObjectiveType."));
                         }
                     }
                 }

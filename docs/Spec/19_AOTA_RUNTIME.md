@@ -17,7 +17,7 @@
 | Activity | `AssignedActivity` string parsed into a head `IBotTask` by `ActivityResolver` | `IActivity` interface; instantiated *from* `ActivityDefinition` + `IActivityParameters` |
 | Objective | snapshot strings `travel_objective` + `progression_status.current_objective` | `IObjective` interface; sequence inside the active `IActivity` |
 | Task | shipped: `IBotTask` (S1.0 async contract) | (no change) |
-| Action | shipped: `ActionType` enum + `ActionMessage` proto | (no change) |
+| Action | shipped: `ObjectiveType` enum + `ObjectiveMessage` proto | (no change) |
 
 ## 2. `IActivity` contract
 
@@ -45,7 +45,7 @@ public interface IActivity
 
 public sealed record ActivityTickResult(
     ActivityTickStatus Status,                 // InProgress | Complete | Failed | Suspended
-    ActionMessage? NextAction,                  // null when no action this tick
+    ObjectiveMessage? NextAction,                  // null when no action this tick
     string? RationaleTag);                      // for snapshot projection + tracing
 
 public sealed record ActivityCompletion(
@@ -412,7 +412,7 @@ The Phase-12 test-isolation refactor (Plan/12) rewrites the 117
 Category-A LiveValidation tests cataloged in
 [`Audits/test-isolation-audit.md`](../Audits/test-isolation-audit.md)
 to drive `Activity × Objective` instead of constructing raw
-`ActionMessage` objects in the test body.
+`ObjectiveMessage` objects in the test body.
 
 ## 14. Why this is its own spec
 

@@ -92,7 +92,7 @@ lease return.
 - **Test anchor:**
   `BotRunner.Tests.LiveValidation.DeathCorpseRunTests.Death_ReleaseAndRetrieve_ResurrectsBackgroundPlayer`
   at `Tests/BotRunner.Tests/LiveValidation/DeathCorpseRunTests.cs:52`
-  exercises the `ActionType.ReleaseCorpse → ReleaseCorpseTask` path end
+  exercises the `ObjectiveType.ReleaseCorpse → ReleaseCorpseTask` path end
   to end; also exercised by
   `BotRunner.Tests.LiveValidation.SpiritHealerTests.SpiritHealer_Resurrect_PlayerAliveWithSickness`
   at `Tests/BotRunner.Tests/LiveValidation/SpiritHealerTests.cs:36`.
@@ -100,7 +100,7 @@ lease return.
 - **Catalog `TaskFamily` claim:** `Recovery`. Pushed on death by every
   family that exposes the bot to mob damage (Combat, Dungeoneering,
   Raid, BG, Questing, Gathering, World-event); the
-  `ActionType.ReleaseCorpse` enum is mapped at
+  `ObjectiveType.ReleaseCorpse` enum is mapped at
   `Exports/BotRunner/BotRunnerService.ActionMapping.cs:79`.
 
 ### RetrieveCorpseTask
@@ -189,7 +189,7 @@ lease return.
   `SpiritHealerTests` when the bot opts into spirit-healer rescue.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --filter "FullyQualifiedName~DeathCorpseRunTests"`
 - **Catalog `TaskFamily` claim:** `Recovery`. Mapped from
-  `Communication.ActionType.RetrieveCorpse → CharacterAction.RetrieveCorpse`
+  `Communication.ObjectiveType.RetrieveCorpse → CharacterAction.RetrieveCorpse`
   at `Exports/BotRunner/BotRunnerService.ActionMapping.cs:80`. Pushed
   by every family that can leave the bot in ghost form (same
   catalog set as `ReleaseCorpseTask`).
@@ -329,7 +329,7 @@ lease return.
     `login_failed` after 3 consecutive failures (per the
     Failure-recovery section below).
   - Composition rule: pushed by `BotRunnerService` (or by
-    StateManager via an `ActionType.Reconnect` dispatch) when the
+    StateManager via an `ObjectiveType.Reconnect` dispatch) when the
     WoWSharpClient world socket reports a disconnect; the task ends
     by restoring `AssignedActivity` from the last persisted snapshot
     (Spec 12 — `WorldEntryHydration` is the existing nearest
@@ -473,7 +473,7 @@ lease return.
   `BotRunner.Tests.LiveValidation.SpiritHealerTests.SpiritHealer_Resurrect_PlayerAliveWithSickness`
   at `Tests/BotRunner.Tests/LiveValidation/SpiritHealerTests.cs:36`.
   Currently asserts the inlined-fallback flow via
-  `ActionType.ReleaseCorpse` then waits for the spirit healer to
+  `ObjectiveType.ReleaseCorpse` then waits for the spirit healer to
   resurrect — the test will switch to dispatching a dedicated
   `SpiritHealerTask` once it ships. Mark per-task coverage
   `partial` (the live path is exercised; the task push surface is

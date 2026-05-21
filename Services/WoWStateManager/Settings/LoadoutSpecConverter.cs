@@ -6,7 +6,7 @@ namespace WoWStateManager.Settings
     /// P3: Maps the JSON-friendly <see cref="LoadoutSpecSettings"/> POCO loaded
     /// from <c>CharacterSettings.Loadout</c> into the
     /// <see cref="Communication.LoadoutSpec"/> protobuf message that rides on
-    /// <c>ActionMessage</c> for the single <c>ApplyLoadout</c> hand-off.
+    /// <c>ObjectiveMessage</c> for the single <c>ApplyLoadout</c> hand-off.
     ///
     /// Lives here instead of in the proto layer so the config-shape POCO can
     /// evolve independently from the wire format and the coordinator has one
@@ -81,15 +81,15 @@ namespace WoWStateManager.Settings
         }
 
         /// <summary>
-        /// Convenience wrapper: build a fully-populated <see cref="ActionMessage"/>
+        /// Convenience wrapper: build a fully-populated <see cref="ObjectiveMessage"/>
         /// of type <c>ApplyLoadout</c> directly from settings. Coordinators enqueue
         /// the returned message once per bot.
         /// </summary>
-        public static ActionMessage BuildApplyLoadoutAction(LoadoutSpecSettings settings)
+        public static ObjectiveMessage BuildApplyLoadoutAction(LoadoutSpecSettings settings)
         {
-            return new ActionMessage
+            return new ObjectiveMessage
             {
-                ActionType = ActionType.ApplyLoadout,
+                ObjectiveType = ObjectiveType.ApplyLoadout,
                 LoadoutSpec = ToProto(settings),
             };
         }

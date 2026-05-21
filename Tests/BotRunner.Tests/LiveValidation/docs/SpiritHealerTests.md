@@ -15,8 +15,8 @@ Warrior topology participant, and SHODAN as the Background Gnome Mage director.
 
 - `SpiritHealer_Resurrect_PlayerAliveWithSickness`: fixture-stages `ECONBG1`
   into corpse state near the Valley spirit healer, dispatches
-  `ActionType.ReleaseCorpse`, moves the ghost into interaction range with
-  `ActionType.Goto`, and dispatches `ActionType.InteractWith` against the
+  `ObjectiveType.ReleaseCorpse`, moves the ghost into interaction range with
+  `ObjectiveType.Goto`, and dispatches `ObjectiveType.InteractWith` against the
   spirit-healer GUID. The final assertion waits for strict-alive snapshot state.
 
 ## Shodan Staging
@@ -33,9 +33,9 @@ The test body calls fixture helpers and BotRunner actions only. The fixture owns
 
 ## Runtime Linkage
 
-- `ActionType.ReleaseCorpse` -> `CharacterAction.ReleaseCorpse`.
-- `ActionType.Goto` -> persistent `GoToTask` with 4-yard tolerance.
-- `ActionType.InteractWith` -> ghost-aware spirit-healer branch in
+- `ObjectiveType.ReleaseCorpse` -> `CharacterAction.ReleaseCorpse`.
+- `ObjectiveType.Goto` -> persistent `GoToTask` with 4-yard tolerance.
+- `ObjectiveType.InteractWith` -> ghost-aware spirit-healer branch in
   `ActionDispatcher`, which greets the NPC and calls
   `DeadActorAgent.ResurrectWithSpiritHealerAsync(...)`.
 

@@ -66,7 +66,7 @@ All proto definitions live under `Exports/BotCommLayer/communication.proto`
 |---|---|---|
 | `BotHeartbeat` | Bot → SM | Per-tick liveness, lifecycle state |
 | `WoWActivitySnapshot` | Bot → SM | Per-tick state delta |
-| `ActionMessage` | SM → Bot | Action dispatch (75 action types) |
+| `ObjectiveMessage` | SM → Bot | Action dispatch (75 action types) |
 | `ActionAck` | Bot → SM | Accept/reject of action |
 | `LoadoutSpecMessage` | SM → Bot | Loadout plan |
 | `ActivityAssignment` | SM → Bot | Start/stop activity by descriptor |

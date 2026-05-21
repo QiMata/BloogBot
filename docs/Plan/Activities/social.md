@@ -115,7 +115,7 @@ plumbing exists; this file enumerates the per-activity slots.
 > fields (lines 235-236).
 >
 > **Shodan policy.** Per `Spec/13_TESTING.md#shodan-rules`, social
-> tests must never dispatch `ActionType.*` against the Shodan account
+> tests must never dispatch `ObjectiveType.*` against the Shodan account
 > and never assert on Shodan's snapshot for behavior validation.
 > `LiveBotFixture.ResolveBotRunnerActionTargets()` resolves the
 > non-Shodan test bots; `TradeTestSupport.ResolvePair` does the
@@ -643,7 +643,7 @@ plumbing exists; this file enumerates the per-activity slots.
   at
   `Tests/BotRunner.Tests/LiveValidation/ChannelTests.cs:32` —
   current test exercises chat propagation via
-  `ActionType.SendChat` and asserts on
+  `ObjectiveType.SendChat` and asserts on
   `WoWActivitySnapshot.RecentChatMessages`. A dedicated
   channel-join assertion is not yet present. **Planned anchor:**
   `Tests/BotRunner.Tests/LiveValidation/ChannelTests.cs::Channel_AutoJoin_DefaultChannelsJoined`
@@ -697,7 +697,7 @@ plumbing exists; this file enumerates the per-activity slots.
   - `ActionDispatcher` integration: **none today** — no
     `CharacterAction.SendGuildInvite` /
     `CharacterAction.AcceptGuildInvite`. Phase 1 work must add
-    these enum values, the proto `Communication.ActionType.*`
+    these enum values, the proto `Communication.ObjectiveType.*`
     values, the `BotRunnerService.ActionMapping.cs` mapping rows,
     and the dispatch branches per
     `Spec/03_BOTRUNNER.md#actionmessage-dispatch` (5-step
@@ -755,8 +755,8 @@ plumbing exists; this file enumerates the per-activity slots.
   on `IsObjectManagerValid` plus chat-log substring matches;
   once SS.5 + Phase 1 land the BotRunner-dispatched path, the
   same test method should switch to
-  `ActionType.SendGuildInvite` /
-  `ActionType.AcceptGuildInvite` and assert on
+  `ObjectiveType.SendGuildInvite` /
+  `ObjectiveType.AcceptGuildInvite` and assert on
   `WoWActivitySnapshot.guildName`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --filter "FullyQualifiedName~GuildOperationTests" --configuration Release`
 - **Catalog `TaskFamily` claim:** `Social`. Underlies every

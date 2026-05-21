@@ -7,7 +7,7 @@ namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
 /// Shodan-directed trade validation. SHODAN stages the real BotRunner
-/// participants; executable cases dispatch only trade ActionTypes.
+/// participants; executable cases dispatch only trade ObjectiveTypes.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class TradingTests

@@ -27,7 +27,7 @@ Tests that passive talent spells learned via GM appear in the snapshot SpellList
 
 **StateManager/BotRunner Role:**
 
-**No ActionType dispatches.** All operations use GM chat commands. BotRunnerService processes `SendChat` actions. The test validates the snapshot spell tracking pipeline for passive talent spells.
+**No ObjectiveType dispatches.** All operations use GM chat commands. BotRunnerService processes `SendChat` actions. The test validates the snapshot spell tracking pipeline for passive talent spells.
 
 **Passive Talent Spell Detection (Critical):**
 Passive talent spells (like Deflection 16462) are **NOT in the static spell array** — they're detected via:

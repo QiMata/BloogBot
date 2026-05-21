@@ -30,12 +30,12 @@ This suite currently exercises:
 2. Remove stale quest `4641` through the fixture-contained quest-state helper.
 3. Clean-slate BG and stage it near Kaltunk through
    `StageBotRunnerAtValleyOfTrialsQuestGiverAsync`.
-4. Resolve Kaltunk from the live snapshot and dispatch `ActionType.AcceptQuest`
+4. Resolve Kaltunk from the live snapshot and dispatch `ObjectiveType.AcceptQuest`
    with quest `4641`.
 5. Poll `QuestLogEntries` until quest `4641` appears.
 6. Stage BG near Gornek through
    `StageBotRunnerAtValleyOfTrialsQuestTurnInAsync`.
-7. Resolve Gornek and dispatch `ActionType.CompleteQuest` with quest `4641`.
+7. Resolve Gornek and dispatch `ObjectiveType.CompleteQuest` with quest `4641`.
 8. Poll `QuestLogEntries` until quest `4641` is gone, then remove it again in
    cleanup and return BG to the Orgrimmar trade staging point.
 

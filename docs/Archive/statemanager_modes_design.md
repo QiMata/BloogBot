@@ -72,7 +72,7 @@ CharacterSettings = JsonConvert.DeserializeObject<List<CharacterSettings>>(
 
 | Value | Meaning |
 |---|---|
-| `"Test"` | Today's behavior. StateManager waits for an `ActionMessage` (from a test fixture) and dispatches it. **Default if `Mode` omitted.** |
+| `"Test"` | Today's behavior. StateManager waits for an `ObjectiveMessage` (from a test fixture) and dispatches it. **Default if `Mode` omitted.** |
 | `"Automated"` | At world-entry, StateManager auto-dispatches the per-character `Loadout` (`APPLY_LOADOUT`) followed by `AssignedActivity` parsing. The bot self-progresses through all configured stages. Tests assert against snapshot milestones. |
 | `"OnDemandActivities"` | StateManager listens for human-player requests (via Shodan in-game, or via the WPF UI) on top of `AssignedActivity` parsing. Same dispatch path as Automated, but triggered by external request rather than at world-entry. |
 

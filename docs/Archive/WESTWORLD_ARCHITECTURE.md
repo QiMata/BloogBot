@@ -31,7 +31,7 @@ progression, pathfinding/scene-data scale, metrics, and logging live in
 │  - Coordinates multi-bot activities (groups, raids)   │
 │  - Manages bot lifecycle (login, teleport, level)     │
 │  - Detects human player requests from chat/LFG        │
-│  - Dispatches ActionMessages to bots via IPC          │
+│  - Dispatches ObjectiveMessages to bots via IPC          │
 │                                                       │
 │  Coordinators:                                        │
 │    - DungeoneeringCoordinator (group → dungeon)       │
@@ -40,10 +40,10 @@ progression, pathfinding/scene-data scale, metrics, and logging live in
 │    - QuestCoordinator (shared quest objectives)       │
 │    - ProgressionPlanner (goal evaluation)             │
 └──────────────────────┬──────────────────────────────┘
-                       │ ActionMessages (Goto, CastSpell, JoinBG, etc.)
+                       │ ObjectiveMessages (Goto, CastSpell, JoinBG, etc.)
 ┌──────────────────────▼──────────────────────────────┐
 │                   BotRunner                          │
-│  - Receives ActionMessages from StateManager          │
+│  - Receives ObjectiveMessages from StateManager          │
 │  - Constructs behavior trees from actions             │
 │  - Pushes BotTasks onto the task stack                │
 │  - Tasks execute autonomously until complete           │
@@ -80,7 +80,7 @@ progression, pathfinding/scene-data scale, metrics, and logging live in
 2. **StateManager stores snapshot** in ConcurrentDictionary, makes available to all coordinators
 3. **DecisionEngine reads all snapshots** periodically, evaluates each bot's progress toward its CharacterBuildConfig goals
 4. **DecisionEngine outputs objectives**: "Bot ORWA0001 should queue for WSG" or "Bot TADR0015 should farm Stratholme for Cape of the Black Baron"
-5. **StateManager translates objective** into ActionMessages: TeleportTo(Orgrimmar) → JoinBattleground(WSG) → idle
+5. **StateManager translates objective** into ObjectiveMessages: TeleportTo(Orgrimmar) → JoinBattleground(WSG) → idle
 6. **Bot executes actions** via behavior tree tasks, sends updated snapshot next tick
 
 ### Human Player → DecisionEngine → StateManager → Bots

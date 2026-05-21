@@ -29,6 +29,6 @@
     "logIntervalSeconds": 15
   },
   "assertions": {
-    "actionTypeSeen": "StartMeleeAttack"
+    "objectiveTypeSeen": "StartMeleeAttack"
   }
 }

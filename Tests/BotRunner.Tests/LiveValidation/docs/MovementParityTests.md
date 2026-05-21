@@ -13,10 +13,10 @@ characters have account-level GM access and can self-stage with `.go xyz`.
 ## Test Methods
 
 - `Pathfinding_PointAToPointB_FgBgParity`: stages both participants in
-  Durotar, dispatches matching `ActionType.Goto`, and asserts point A to point
+  Durotar, dispatches matching `ObjectiveType.Goto`, and asserts point A to point
   B pathfinding, travel, arrival, and FG/BG distance parity.
 - `RunningJump_FgBgParity`: starts both participants on the same Durotar path,
-  dispatches `ActionType.Jump` while they are moving, and asserts matching jump
+  dispatches `ObjectiveType.Jump` while they are moving, and asserts matching jump
   evidence.
 - `Knockback_FgBgParity`: targets each participant with its own GM
   `.targetself` command, applies `.knockback 5 5`, and asserts movement or jump

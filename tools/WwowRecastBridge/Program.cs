@@ -43,7 +43,7 @@ internal static class Program
                     options.AgentRadius,
                     options.AgentHeight);
 
-            WriteSuccess(options.Mode, result);
+            WriteSuccess(options, result);
             return 0;
         }
         catch (Exception ex)
@@ -227,10 +227,10 @@ internal static class Program
     [DllImport("Navigation.dll", EntryPoint = "SetDataDirectory", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     private static extern void SetDataDirectoryNative(string dataDir);
 
-    private static void WriteSuccess(QueryMode mode, NavigationPathResult result)
+    private static void WriteSuccess(Options options, NavigationPathResult result)
     {
         Console.WriteLine("STATUS ok");
-        Console.WriteLine($"MODE {mode.ToString().ToLowerInvariant()}");
+        Console.WriteLine($"MODE {options.Mode.ToString().ToLowerInvariant()}");
         Console.WriteLine($"RESULT {Sanitize(result.Result)}");
         Console.WriteLine($"PATH_COUNT {result.Path.Length}");
         Console.WriteLine($"RAW_PATH_COUNT {result.RawPath.Length}");
@@ -247,6 +247,10 @@ internal static class Program
             WritePoint("RAW", i, result.RawPath[i]);
         }
 
+        WriteSegmentAffordance("DIRECT", ClassifySegmentAffordanceSafe(options.Start, options.End));
+        WritePathSegmentAffordances("PATHSEG", result.Path);
+        WritePathSegmentAffordances("RAWSEG", result.RawPath);
+
         var summary = $"result={result.Result} validatedCorners={result.Path.Length} rawCorners={result.RawPath.Length}";
         if (result.BlockedSegmentIndex is int blockedSegmentIndex)
         {
@@ -258,7 +262,66 @@ internal static class Program
         }
 
         Console.WriteLine($"SUMMARY {Sanitize(summary)}");
+
+        void WritePathSegmentAffordances(string prefix, XYZ[] path)
+        {
+            for (int i = 0; i + 1 < path.Length; i++)
+            {
+                WriteSegmentAffordance(prefix, ClassifySegmentAffordanceSafe(path[i], path[i + 1]), i);
+            }
+        }
+
+        NativeSegmentAffordanceResult ClassifySegmentAffordanceSafe(XYZ start, XYZ end)
+        {
+            try
+            {
+                return Navigation.ClassifySegmentAffordance(options.MapId, start, end, options.AgentRadius, options.AgentHeight);
+            }
+            catch
+            {
+                return new NativeSegmentAffordanceResult(
+                    NativeSegmentAffordance.Blocked,
+                    ValidationCode: 1,
+                    ClimbHeight: MathF.Max(0f, end.Z - start.Z),
+                    GapDistance: 0f,
+                    DropHeight: MathF.Max(0f, start.Z - end.Z),
+                    SlopeAngleDeg: 0f,
+                    ResolvedEndZ: end.Z);
+            }
+        }
     }
+
+    private static void WriteSegmentAffordance(string prefix, NativeSegmentAffordanceResult result, int? index = null)
+    {
+        if (index.HasValue)
+        {
+            Console.WriteLine(
+                string.Create(
+                    Invariant,
+                    $"{prefix} {index.Value} {FormatAffordance(result.Affordance)} {result.ValidationCode} {result.ClimbHeight:F4} {result.GapDistance:F4} {result.DropHeight:F4} {result.SlopeAngleDeg:F4} {result.ResolvedEndZ:F4}"));
+            return;
+        }
+
+        Console.WriteLine(
+            string.Create(
+                Invariant,
+                $"{prefix} {FormatAffordance(result.Affordance)} {result.ValidationCode} {result.ClimbHeight:F4} {result.GapDistance:F4} {result.DropHeight:F4} {result.SlopeAngleDeg:F4} {result.ResolvedEndZ:F4}"));
+    }
+
+    private static string FormatAffordance(NativeSegmentAffordance affordance)
+        => affordance switch
+        {
+            NativeSegmentAffordance.StepUp => "step_up",
+            NativeSegmentAffordance.SteepClimb => "steep_climb",
+            NativeSegmentAffordance.Drop => "drop",
+            NativeSegmentAffordance.Cliff => "cliff",
+            NativeSegmentAffordance.Vertical => "vertical",
+            NativeSegmentAffordance.JumpGap => "jump_gap",
+            NativeSegmentAffordance.SafeDrop => "safe_drop",
+            NativeSegmentAffordance.UnsafeDrop => "unsafe_drop",
+            NativeSegmentAffordance.Blocked => "blocked",
+            _ => "walk",
+        };
 
     private static void WritePoint(string prefix, int index, XYZ point)
     {

@@ -21,7 +21,7 @@ public interface IBotRunner
     Task StartAsync(CancellationToken ct);
     Task StopAsync(CancellationToken ct);
 
-    Task DispatchAsync(ActionMessage action, CancellationToken ct);
+    Task DispatchAsync(ObjectiveMessage action, CancellationToken ct);
     Task<bool> WaitForLoadoutCompleteAsync(TimeSpan timeout, CancellationToken ct);
     Task<WoWActivitySnapshot> CaptureSnapshotAsync(CancellationToken ct);
 
@@ -145,11 +145,11 @@ Current FG-only gaps (must be closed before living-server scale):
 All listed gaps have slots in [`Plan/04_PHASE3_BOT_LEASE_SCHEDULER.md`](../Plan/04_PHASE3_BOT_LEASE_SCHEDULER.md)
 as pre-requisites for full activity coverage.
 
-## ActionMessage dispatch
+## ObjectiveMessage dispatch
 
-`StateManager` ships an `ActionMessage` (proto) to a bot. BotRunner:
+`StateManager` ships an `ObjectiveMessage` (proto) to a bot. BotRunner:
 
-1. Maps `ActionMessage.ActionType` → `CharacterAction` enum
+1. Maps `ObjectiveMessage.ObjectiveType` → `CharacterAction` enum
    (`BotRunnerService.ActionMapping.cs`).
 2. Builds a `Xas.FluentBehaviourTree` sequence for the action
    (`BotRunnerService.ActionDispatch.cs`).

@@ -50,7 +50,7 @@ internal static class QuestTestSupport
         LiveBotFixture bot,
         ITestOutputHelper output,
         LiveBotFixture.BotRunnerActionTarget target,
-        ActionMessage action,
+        ObjectiveMessage action,
         string stepName,
         int timeoutSeconds = 10)
     {
@@ -85,21 +85,21 @@ internal static class QuestTestSupport
         return result;
     }
 
-    internal static ActionMessage MakeInteractWith(ulong npcGuid) => new()
+    internal static ObjectiveMessage MakeInteractWith(ulong npcGuid) => new()
     {
-        ActionType = ActionType.InteractWith,
+        ObjectiveType = ObjectiveType.InteractWith,
         Parameters = { new RequestParameter { LongParam = unchecked((long)npcGuid) } },
     };
 
-    internal static ActionMessage MakeStartMeleeAttack(ulong targetGuid) => new()
+    internal static ObjectiveMessage MakeStartMeleeAttack(ulong targetGuid) => new()
     {
-        ActionType = ActionType.StartMeleeAttack,
+        ObjectiveType = ObjectiveType.StartMeleeAttack,
         Parameters = { new RequestParameter { LongParam = unchecked((long)targetGuid) } },
     };
 
-    internal static ActionMessage MakeAcceptQuest(ulong npcGuid, uint questId) => new()
+    internal static ObjectiveMessage MakeAcceptQuest(ulong npcGuid, uint questId) => new()
     {
-        ActionType = ActionType.AcceptQuest,
+        ObjectiveType = ObjectiveType.AcceptQuest,
         Parameters =
         {
             new RequestParameter { LongParam = unchecked((long)npcGuid) },
@@ -107,9 +107,9 @@ internal static class QuestTestSupport
         },
     };
 
-    internal static ActionMessage MakeCompleteQuest(ulong npcGuid, uint questId) => new()
+    internal static ObjectiveMessage MakeCompleteQuest(ulong npcGuid, uint questId) => new()
     {
-        ActionType = ActionType.CompleteQuest,
+        ObjectiveType = ObjectiveType.CompleteQuest,
         Parameters =
         {
             new RequestParameter { LongParam = unchecked((long)npcGuid) },

@@ -17,7 +17,7 @@ using Xunit;
 namespace BotRunner.Tests;
 
 /// <summary>
-/// P3.3: verifies that BotRunnerService dispatches <see cref="ActionType.ApplyLoadout"/>
+/// P3.3: verifies that BotRunnerService dispatches <see cref="ObjectiveType.ApplyLoadout"/>
 /// by pushing a <see cref="LoadoutTask"/> and keeps the outbound snapshot's
 /// <c>LoadoutStatus</c>/<c>LoadoutFailureReason</c> in sync with the task's state.
 /// </summary>
@@ -59,7 +59,7 @@ public sealed class BotRunnerServiceLoadoutDispatchTests
     public void HandleApplyLoadoutAction_NullLoadoutSpec_TreatedAsEmptySpec()
     {
         var service = CreateService();
-        var action = new ActionMessage { ActionType = ActionType.ApplyLoadout }; // LoadoutSpec == null
+        var action = new ObjectiveMessage { ObjectiveType = ObjectiveType.ApplyLoadout }; // LoadoutSpec == null
 
         service.HandleApplyLoadoutAction(action);
 
@@ -149,27 +149,27 @@ public sealed class BotRunnerServiceLoadoutDispatchTests
             ack =>
             {
                 Assert.Equal("corr-loadout-1", ack.CorrelationId);
-                Assert.Equal(ActionType.ApplyLoadout, ack.ActionType);
+                Assert.Equal(ObjectiveType.ApplyLoadout, ack.ObjectiveType);
                 Assert.Equal(CommandAckEvent.Types.AckStatus.Pending, ack.Status);
             },
             ack =>
             {
                 Assert.Equal("corr-loadout-1/step-1", ack.CorrelationId);
-                Assert.Equal(ActionType.SendChat, ack.ActionType);
+                Assert.Equal(ObjectiveType.SendChat, ack.ObjectiveType);
                 Assert.Equal(CommandAckEvent.Types.AckStatus.Pending, ack.Status);
                 Assert.Equal(12345u, ack.RelatedId);
             },
             ack =>
             {
                 Assert.Equal("corr-loadout-1/step-1", ack.CorrelationId);
-                Assert.Equal(ActionType.SendChat, ack.ActionType);
+                Assert.Equal(ObjectiveType.SendChat, ack.ObjectiveType);
                 Assert.Equal(CommandAckEvent.Types.AckStatus.Success, ack.Status);
                 Assert.Equal(12345u, ack.RelatedId);
             },
             ack =>
             {
                 Assert.Equal("corr-loadout-1", ack.CorrelationId);
-                Assert.Equal(ActionType.ApplyLoadout, ack.ActionType);
+                Assert.Equal(ObjectiveType.ApplyLoadout, ack.ObjectiveType);
                 Assert.Equal(CommandAckEvent.Types.AckStatus.Success, ack.Status);
             });
     }
@@ -213,47 +213,47 @@ public sealed class BotRunnerServiceLoadoutDispatchTests
             ack =>
             {
                 Assert.Equal("corr-loadout-1", ack.CorrelationId);
-                Assert.Equal(ActionType.ApplyLoadout, ack.ActionType);
+                Assert.Equal(ObjectiveType.ApplyLoadout, ack.ObjectiveType);
                 Assert.Equal(CommandAckEvent.Types.AckStatus.Pending, ack.Status);
             },
             ack =>
             {
                 Assert.Equal("corr-loadout-1/step-1", ack.CorrelationId);
-                Assert.Equal(ActionType.SendChat, ack.ActionType);
+                Assert.Equal(ObjectiveType.SendChat, ack.ObjectiveType);
                 Assert.Equal(CommandAckEvent.Types.AckStatus.Pending, ack.Status);
                 Assert.Equal(12345u, ack.RelatedId);
             },
             ack =>
             {
                 Assert.Equal("corr-loadout-2", ack.CorrelationId);
-                Assert.Equal(ActionType.ApplyLoadout, ack.ActionType);
+                Assert.Equal(ObjectiveType.ApplyLoadout, ack.ObjectiveType);
                 Assert.Equal(CommandAckEvent.Types.AckStatus.Pending, ack.Status);
             },
             ack =>
             {
                 Assert.Equal("corr-loadout-2", ack.CorrelationId);
-                Assert.Equal(ActionType.ApplyLoadout, ack.ActionType);
+                Assert.Equal(ObjectiveType.ApplyLoadout, ack.ObjectiveType);
                 Assert.Equal(CommandAckEvent.Types.AckStatus.Failed, ack.Status);
                 Assert.Equal("loadout_task_already_active", ack.FailureReason);
             },
             ack =>
             {
                 Assert.Equal("corr-loadout-1/step-1", ack.CorrelationId);
-                Assert.Equal(ActionType.SendChat, ack.ActionType);
+                Assert.Equal(ObjectiveType.SendChat, ack.ObjectiveType);
                 Assert.Equal(CommandAckEvent.Types.AckStatus.Success, ack.Status);
                 Assert.Equal(12345u, ack.RelatedId);
             },
             ack =>
             {
                 Assert.Equal("corr-loadout-1", ack.CorrelationId);
-                Assert.Equal(ActionType.ApplyLoadout, ack.ActionType);
+                Assert.Equal(ObjectiveType.ApplyLoadout, ack.ObjectiveType);
                 Assert.Equal(CommandAckEvent.Types.AckStatus.Success, ack.Status);
             });
     }
 
-    private static ActionMessage BuildApplyLoadoutAction(LoadoutSpec spec, string? correlationId = null) => new()
+    private static ObjectiveMessage BuildApplyLoadoutAction(LoadoutSpec spec, string? correlationId = null) => new()
     {
-        ActionType = ActionType.ApplyLoadout,
+        ObjectiveType = ObjectiveType.ApplyLoadout,
         CorrelationId = correlationId ?? string.Empty,
         LoadoutSpec = spec,
     };

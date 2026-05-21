@@ -326,7 +326,7 @@ The project includes a comprehensive GitHub Actions workflow that provides:
 
 ### Extending Bot Behavior
 1. Add new `CharacterAction` enum value in `GameData.Core/Enums/CharacterAction.cs`
-2. Add matching `ActionType` value in `communication.proto` and regenerate
+2. Add matching `ObjectiveType` value in `communication.proto` and regenerate
 3. Map proto→enum in `BotRunnerService.ActionMapping.cs`
 4. Build sequence in `BotRunnerService.ActionDispatch.cs` (support both FG frame + BG packet paths)
 5. If complex, implement as `IBotTask` in `BotRunner/Tasks/`

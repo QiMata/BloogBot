@@ -54,9 +54,9 @@ public class CornerNavigationTests
 
         // Send TRAVEL_TO action targeting Org AH
         // Params: [0]=mapId (int), [1]=x, [2]=y, [3]=z
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.TravelTo,
+            ObjectiveType = ObjectiveType.TravelTo,
             Parameters =
             {
                 new RequestParameter { IntParam = 1 },        // mapId (Kalimdor)
@@ -108,9 +108,9 @@ public class CornerNavigationTests
 
         // Navigate deeper into RFC
         // Params: [0]=mapId (int), [1]=x, [2]=y, [3]=z
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.TravelTo,
+            ObjectiveType = ObjectiveType.TravelTo,
             Parameters =
             {
                 new RequestParameter { IntParam = 389 },      // mapId (RFC)

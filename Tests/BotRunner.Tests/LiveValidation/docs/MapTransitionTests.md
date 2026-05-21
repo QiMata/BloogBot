@@ -16,7 +16,7 @@ Warrior topology participant, and SHODAN as the Background Gnome Mage director.
 - `MapTransition_DeeprunTramBounce_ClientSurvives`: fixture-stages `ECONBG1`
   near the Ironforge tram entrance, fixture-triggers the rejected Deeprun Tram
   transition, asserts the target settles back to `InWorld` with
-  `IsMapTransition=false`, and dispatches a correlated `ActionType.Goto` at the
+  `IsMapTransition=false`, and dispatches a correlated `ObjectiveType.Goto` at the
   current snapshot position to prove BotRunner remains action-responsive.
 
 ## Shodan Staging
@@ -37,13 +37,13 @@ The test body does not issue GM commands. The fixture owns:
 
 - Fixture staging uses the existing bot-chat `.go xyz` helper because MaNGOS
   exposes this rejected transition only as a GM world-position command.
-- The BotRunner action under test is `ActionType.Goto`, dispatched after the
+- The BotRunner action under test is `ObjectiveType.Goto`, dispatched after the
   bounce against the current snapshot position with an 8-yard tolerance.
 
 ## Notes
 
 The rejected Deeprun Tram transition is intentionally BG-action-only. There is
-no production `ActionType` for forcing a server-rejected instance teleport, so
+no production `ObjectiveType` for forcing a server-rejected instance teleport, so
 the transition itself stays fixture-owned and the BotRunner action proves
 post-transition responsiveness.
 

@@ -153,7 +153,7 @@ A live integration test exercising party invite must satisfy R8 (clean cross-tes
 1. **Server-up assertion** — `ServerHealthcheck` returns 200; fail-fast if not (root R4).
 2. **Pre-test snapshot predicate** — `leader.GroupId == 0 AND leader.GroupInviteGuid == 0 AND target.GroupId == 0 AND target.GroupInviteGuid == 0 AND leader.Faction == target.Faction AND leader.IsOnline == true AND target.IsOnline == true`. Setup: `.tele` both bots to the same zone for proximity; ensure neither has prior group state via `.dis` (disband) if needed; verify ignore-list is empty via `.unignore` (admin command).
 3. **Two-bot fixture** — `MultiBotStateManager` provisions both `leaderBot` and `targetBot`; fixture owns lifecycle of both (per CLAUDE.md fixture-ownership rule).
-4. **Push `PartyInviteSendTask(targetName)`** on leader's bot via fixture. **Do NOT construct `new ActionMessage { ActionType = ActionType.PARTY_INVITE }`** in test body — per [Test Isolation Rules](../../../CLAUDE.md).
+4. **Push `PartyInviteSendTask(targetName)`** on leader's bot via fixture. **Do NOT construct `new ObjectiveMessage { ObjectiveType = ObjectiveType.PARTY_INVITE }`** in test body — per [Test Isolation Rules](../../../CLAUDE.md).
 5. **CMSG_GROUP_INVITE dispatch predicate** — poll `leaderBot.RecentCommandAcks[CMSG_GROUP_INVITE]` within 500ms of push.
 6. **SMSG_GROUP_INVITE receipt on target** — poll `targetBot.RecentNetworkEvents.Any(e => e.OpcodeId == 111)` within 1s; assert decoded inviter name matches `leaderBot.Name`.
 7. **SMSG_PARTY_COMMAND_RESULT receipt on leader** — poll `leaderBot.RecentNetworkEvents.Any(e => e.OpcodeId == 127 && e.PartyOp == 0 && e.Result == 0)` within 1s of dispatch.

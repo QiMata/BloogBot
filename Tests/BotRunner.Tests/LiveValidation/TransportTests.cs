@@ -192,9 +192,9 @@ public class TransportTests
             target.RoleLabel);
         Assert.True(staged, $"{target.RoleLabel}: expected Undercity elevator upper staging to succeed.");
 
-        var gotoResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var gotoResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.Goto,
+            ObjectiveType = ObjectiveType.Goto,
             Parameters =
             {
                 new RequestParameter { FloatParam = UndercityElevatorX },

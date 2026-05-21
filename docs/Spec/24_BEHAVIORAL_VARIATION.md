@@ -276,9 +276,9 @@ Behavior variation MUST satisfy both properties:
 
 1. **Dynamic.** Two bots with different `AccountName` (and therefore
    different deterministic-PRNG personalities) running the same
-   Activity MUST emit different per-tick `ActionMessage` timing
+   Activity MUST emit different per-tick `ObjectiveMessage` timing
    signatures over a representative window. Specifically: the
-   sequence of `(ActionType, dispatchedAtMs)` tuples diverges in
+   sequence of `(ObjectiveType, dispatchedAtMs)` tuples diverges in
    `dispatchedAtMs` cadence by at least the `ReactionTimeJitterMs`
    range. Asserted via the trace surface — not by reading internal
    timer state.
@@ -347,7 +347,7 @@ Isolation Rules — never via `PersonalityProfile` private fields.
 - **`BehavioralVariation_DynamicProgressive_TimingDivergesButOutcomeIsStableTest`** —
   the dynamic-progressive invariant from §12. Two bots with different
   AccountName-derived personalities running the same Activity emit
-  diverging `(ActionType, dispatchedAtMs)` cadence in traces AND both
+  diverging `(ObjectiveType, dispatchedAtMs)` cadence in traces AND both
   produce `roster_distance_delta ≤ 0` outcomes within 1.5× the
   deterministic-baseline wall clock. Slot S12.11.
 

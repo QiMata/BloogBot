@@ -1,7 +1,7 @@
 # GatheringProfessionTests
 
 `GatheringProfessionTests` validates mining and herbalism through
-`ActionType.StartGatheringRoute`. The suite now follows the Shodan
+`ObjectiveType.StartGatheringRoute`. The suite now follows the Shodan
 test-director pattern: FG and BG are BotRunner action targets, and SHODAN is
 the director for loadout, pool refresh, and location staging.
 
@@ -20,7 +20,7 @@ the director for loadout, pool refresh, and location staging.
 5. `StageBotRunnerAtValleyCopperRouteStartAsync(...)` and
    `StageBotRunnerAtDurotarHerbRouteStartAsync(...)` keep movement staging in
    the fixture.
-6. Test bodies dispatch only `ActionType.StartGatheringRoute` to the selected
+6. Test bodies dispatch only `ObjectiveType.StartGatheringRoute` to the selected
    BotRunner target.
 
 ## Active Coverage

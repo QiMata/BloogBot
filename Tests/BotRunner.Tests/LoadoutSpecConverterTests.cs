@@ -133,12 +133,12 @@ public sealed class LoadoutSpecConverterTests
     }
 
     [Fact]
-    public void BuildApplyLoadoutAction_SetsActionTypeAndEmbedsSpec()
+    public void BuildApplyLoadoutAction_SetsObjectiveTypeAndEmbedsSpec()
     {
         var settings = new LoadoutSpecSettings { TargetLevel = 60, HonorRank = 14 };
         var action = LoadoutSpecConverter.BuildApplyLoadoutAction(settings);
 
-        Assert.Equal(ActionType.ApplyLoadout, action.ActionType);
+        Assert.Equal(ObjectiveType.ApplyLoadout, action.ObjectiveType);
         Assert.NotNull(action.LoadoutSpec);
         Assert.Equal(60u, action.LoadoutSpec.TargetLevel);
         Assert.Equal(14u, action.LoadoutSpec.HonorRank);

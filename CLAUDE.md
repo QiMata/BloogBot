@@ -17,8 +17,29 @@ WWoW uses a four-layer behavior hierarchy adopted from D2Bot:
 [`docs/Spec/18_TERMINOLOGY.md`](docs/Spec/18_TERMINOLOGY.md) before
 adding new "behavior tree", "task family", or "action mapping" terms —
 those map onto these four layers and using them as synonyms drifts the
-spec. Worked example: `dungeon.ubrs` Activity → `reach-flame-crest`
-Objective → `TravelToTask(coord)` Task → `ActionMessage{ActionType=TravelTo,...}` Action.
+spec.
+
+- **Activity** = major, usually-dynamic event supporting any number of
+  characters (raid, battleground, dungeon run, multi-hour farm).
+- **Objective** = high-level state change composed of Tasks. **What
+  actually travels on the wire** as `ObjectiveMessage` (formerly named
+  `ActionMessage` — misnomer cleaned up in the 2026-05-21 rename).
+  BotRunner decomposes the incoming `ObjectiveMessage` into Tasks via
+  behavior tree + game-database knowledge lookups.
+- **Task** = behavior-tree node (`IBotTask`) on the LIFO task stack that
+  orchestrates Actions to drive ONE minute state change, with
+  verification + failure handling. Pushes child Tasks (`GoToTask` is
+  the universal child).
+- **Action** = reusable code primitive (methods + variables) inside the
+  BotRunner that mirrors a single thing a human player can do (read
+  loot window, press hotkey, click a world coord, cast a spell).
+  **Pure local code — Actions do not cross any wire.**
+
+Worked example: `dungeon.ubrs` Activity → `reach-flame-crest` Objective
+(on the wire as `ObjectiveMessage{ObjectiveType=TravelTo,...}`) →
+`TravelToTask(coord)` Task → `IObjectManager.MoveToAsync(coord)` +
+`IObjectManager.InteractAsync(zeppelin)` + `ReadVehicleSeatState()`
+Actions.
 
 For the deeper architecture treatment (recursive composition rules,
 how DecisionEngine builds Objectives dynamically from the MaNGOS
@@ -252,7 +273,7 @@ character with account-level GM access in normal operation.
 The LiveValidation suite reuses Shodan as a **test director** for setup
 operations that need GM targeting (`.gobject respawn`, `.tele`, `.additem`,
 `.learn`, `.setskill`). It is *never* the subject of a behavior test.
-Behavior tests dispatch `ActionType.*` against dedicated test accounts
+Behavior tests dispatch `ObjectiveType.*` against dedicated test accounts
 (TESTBOT1/TESTBOT2 for the default roster, plus category-specific siblings
 like GATHFG1/BG1, EQUIPFG1/BG1, TRMAF5/B5, ECONFG1/BG1, LOOTFG1/BG1, etc.)
 and assert against those accounts' snapshots — never Shodan's.
@@ -290,10 +311,10 @@ exercises bot behavior by:
    family naturally.
 4. Asserting on the BOT'S BEHAVIOR — `WoWActivitySnapshot` fields,
    Task-stack progression, `current_activity_id` (Phase 2+),
-   `current_objective_id` (Phase 2+), or the resulting `ActionMessage`
+   `current_objective_id` (Phase 2+), or the resulting `ObjectiveMessage`
    stream as captured by `AckCaptureTests`-style harnesses.
 
-A test that constructs `new ActionMessage { ActionType = ... }` and
+A test that constructs `new ObjectiveMessage { ObjectiveType = ... }` and
 dispatches it via `_bot.SendActionAsync(...)` (or `SendActionAndWaitAsync`)
 in the test body is **REMOTE-CONTROLLING THE BOT**, not testing its
 behavior. That pattern bypasses DecisionEngine, ActivityResolver, and
@@ -332,7 +353,7 @@ applies to **NEW tests only**.
 
 - New LiveValidation tests must declare an Activity (today: via the
   `AssignedActivity` string + `StageBotRunner*Async` fixture helpers)
-  and assert on snapshot state, NOT construct raw `ActionMessage`
+  and assert on snapshot state, NOT construct raw `ObjectiveMessage`
   objects in the test body.
 - New tests that legitimately need to verify a single Action shape in
   isolation should go in `Tests/BotRunner.Tests/ActionDispatch/`

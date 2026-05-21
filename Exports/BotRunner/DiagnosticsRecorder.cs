@@ -78,15 +78,15 @@ namespace BotRunner
         /// Handle diagnostic action types that don't map to CharacterAction.
         /// Returns true if the action was handled (caller should return early).
         /// </summary>
-        internal bool HandleDiagnosticAction(ActionMessage action)
+        internal bool HandleDiagnosticAction(ObjectiveMessage action)
         {
-            switch (action.ActionType)
+            switch (action.ObjectiveType)
             {
-                case ActionType.StartPhysicsRecording:
+                case ObjectiveType.StartPhysicsRecording:
                     if (!RecordingArtifactsFeature.IsEnabled())
                     {
-                        Log.Information("[DIAG] Ignoring {ActionType}; set {EnvVar}=1 to enable recording artifacts",
-                            action.ActionType,
+                        Log.Information("[DIAG] Ignoring {ObjectiveType}; set {EnvVar}=1 to enable recording artifacts",
+                            action.ObjectiveType,
                             RecordingArtifactsFeature.EnvironmentVariableName);
                         return true;
                     }
@@ -95,11 +95,11 @@ namespace BotRunner
                     StartTransformRecording();
                     return true;
 
-                case ActionType.StopPhysicsRecording:
+                case ObjectiveType.StopPhysicsRecording:
                     if (!RecordingArtifactsFeature.IsEnabled())
                     {
-                        Log.Information("[DIAG] Ignoring {ActionType}; set {EnvVar}=1 to enable recording artifacts",
-                            action.ActionType,
+                        Log.Information("[DIAG] Ignoring {ObjectiveType}; set {EnvVar}=1 to enable recording artifacts",
+                            action.ObjectiveType,
                             RecordingArtifactsFeature.EnvironmentVariableName);
                         return true;
                     }
@@ -291,7 +291,7 @@ namespace BotRunner
 
             _latestRecordedTraceTaskStack = stackNames;
             _latestRecordedTraceTick = (int)Interlocked.Read(ref tickCount);
-            _latestRecordedTraceAction = activitySnapshot?.CurrentAction?.ActionType.ToString();
+            _latestRecordedTraceAction = activitySnapshot?.CurrentAction?.ObjectiveType.ToString();
         }
 
         private void WriteNavigationTraceRecording()

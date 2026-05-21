@@ -35,7 +35,7 @@ public sealed class LiveBotFixtureQuiesceTests
             AccountName = "ACC1",
             ScreenState = "InWorld",
             ConnectionState = BotConnectionState.BotInWorld,
-            CurrentAction = new ActionMessage { ActionType = ActionType.Wait },
+            CurrentAction = new ObjectiveMessage { ObjectiveType = ObjectiveType.Wait },
         };
 
         var result = LiveBotFixture.DescribeBlockingActionState("ACC1", snapshot);
@@ -50,7 +50,7 @@ public sealed class LiveBotFixtureQuiesceTests
             AccountName = "ACC1",
             ScreenState = "InWorld",
             ConnectionState = BotConnectionState.BotInWorld,
-            CurrentAction = new ActionMessage { ActionType = ActionType.Goto },
+            CurrentAction = new ObjectiveMessage { ObjectiveType = ObjectiveType.Goto },
         };
 
         var result = LiveBotFixture.DescribeBlockingActionState("ACC1", snapshot);

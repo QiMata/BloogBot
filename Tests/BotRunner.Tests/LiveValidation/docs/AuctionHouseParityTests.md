@@ -29,14 +29,14 @@ BotRunner exposes those auction action surfaces.
 - BotRunner action targets: `ECONFG1` as seller, `ECONBG1` as buyer.
 - Director: `SHODAN`.
 - Result: skipped with reason:
-  `Auction post/buy ActionType surface is not implemented yet; Shodan loadout/location staging is migrated.`
+  `Auction post/buy ObjectiveType surface is not implemented yet; Shodan loadout/location staging is migrated.`
 
 ### AH_Cancel_FgBgParity
 
 - BotRunner action targets: `ECONBG1` and `ECONFG1`.
 - Director: `SHODAN`.
 - Result: skipped with reason:
-  `Auction cancel ActionType surface is not implemented yet; Shodan location staging is migrated.`
+  `Auction cancel ObjectiveType surface is not implemented yet; Shodan location staging is migrated.`
 
 ## Current Status
 

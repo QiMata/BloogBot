@@ -166,7 +166,7 @@ public sealed class Phase12BehavioralVariationContractTests
         //        ReactionTimeJitterMs by at least 100ms), both staged
         //        for the same Activity (e.g. quest.westfall-defias-cycle).
         // WHEN:  both run end to end with traces produced.
-        // THEN:  (dynamic) the trace-recorded (ActionType, dispatchedAtMs)
+        // THEN:  (dynamic) the trace-recorded (ObjectiveType, dispatchedAtMs)
         //        cadence diverges between the two bots by at least 50ms
         //        median across the run.
         // AND:   (progressive) both bots' outcome lines show

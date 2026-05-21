@@ -1,11 +1,13 @@
 param(
-    [ValidateSet('og-zeppelin', 'brd', 'rfc', 'all')]
+    [ValidateSet('og-zeppelin', 'og-city', 'brd', 'rfc', 'all')]
     [string]$Route = 'all',
     [string]$DataDir = $(if ($env:WWOW_DATA_DIR) { $env:WWOW_DATA_DIR } else { 'D:\MaNGOS\data' }),
     [string]$OutRoot = 'tmp\test-runtime\visualization\pathfinding',
     [string]$TrxPath = 'tmp\test-runtime\results-pathfinding\underpass_sim_anchor_diagnostics.trx',
     [string]$MmapGenExe = $(if (Test-Path 'tools\MmapGen\build\MmapGen.exe') { 'tools\MmapGen\build\MmapGen.exe' } else { 'D:\MaNGOS\source\bin\MoveMapGenerator.exe' }),
+    [string[]]$GameObjectVariants,
     [switch]$RefreshRaw,
+    [switch]$RefreshGameObjectVariants,
     [switch]$Resume,
     [switch]$CleanLegacyOgFolder
 )
@@ -13,6 +15,66 @@ param(
 $ErrorActionPreference = 'Stop'
 $script:Invariant = [Globalization.CultureInfo]::InvariantCulture
 $script:RepoRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
+$script:SupportedGameObjectVariants = @(
+    'base',
+    'midsummer-fire-festival',
+    'feast-of-winter-veil',
+    'darkmoon-elwynn',
+    'darkmoon-mulgore',
+    'fireworks',
+    'lunar-festival',
+    'love-is-in-the-air',
+    'harvest-festival',
+    'hallows-end',
+    'noblegarden',
+    'new-years-eve',
+    'org-city-trophies',
+    'sw-city-trophies',
+    'major-city-trophies'
+)
+
+function Get-CanonicalGameObjectVariant([string]$Variant) {
+    if ([string]::IsNullOrWhiteSpace($Variant)) {
+        throw 'GameObject variant names must be non-empty.'
+    }
+
+    $normalized = $Variant.Trim().ToLowerInvariant()
+    if ($script:SupportedGameObjectVariants -notcontains $normalized) {
+        throw "Unsupported -GameObjectVariants entry '$Variant'. Supported values: $($script:SupportedGameObjectVariants -join ', ')"
+    }
+
+    return $normalized
+}
+
+function Get-ResolvedGameObjectVariants([string[]]$Variants) {
+    if ($null -eq $Variants -or $Variants.Count -eq 0) {
+        return @()
+    }
+
+    $resolved = New-Object System.Collections.Generic.List[string]
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    $requestedBase = $false
+    foreach ($variant in $Variants) {
+        $entries = @($variant -split '[,;]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        foreach ($entry in $entries) {
+            $canonical = Get-CanonicalGameObjectVariant $entry
+            if ($canonical -eq 'base') {
+                $requestedBase = $true
+            }
+            if ($seen.Add($canonical)) {
+                $resolved.Add($canonical)
+            }
+        }
+    }
+
+    if ($resolved.Count -gt 0 -and -not $requestedBase) {
+        $resolved.Insert(0, 'base')
+    }
+
+    return @($resolved.ToArray())
+}
+
+$script:ResolvedGameObjectVariants = Get-ResolvedGameObjectVariants $GameObjectVariants
 
 function Get-MonorepoRoot {
     $candidate = Split-Path -Parent $script:RepoRoot
@@ -66,6 +128,104 @@ function Initialize-LatestDir([string]$RelativePath) {
     $latest = Reset-Directory $RelativePath
     Ensure-CategoryDirs $latest
     return $latest
+}
+
+function Format-GameObjectVariantLabel {
+    if ($script:ResolvedGameObjectVariants.Count -eq 0) {
+        return 'legacy-full-export'
+    }
+
+    return ($script:ResolvedGameObjectVariants -join '+')
+}
+
+function Format-GameObjectVariantSummary {
+    if ($script:ResolvedGameObjectVariants.Count -eq 0) {
+        return 'legacy full export from gameobject_spawns.json'
+    }
+
+    return ($script:ResolvedGameObjectVariants -join ', ')
+}
+
+function Ensure-GameObjectVariantExport([string]$VariantId) {
+    $variantRoot = Join-Path $DataDir 'gameobject_spawns'
+    $variantPath = Join-Path $variantRoot ($VariantId + '.json')
+    if (-not $RefreshGameObjectVariants -and (Test-Path $variantPath)) {
+        return $variantPath
+    }
+
+    New-Item -ItemType Directory -Force -Path $variantRoot | Out-Null
+    $projectPath = Resolve-RepoPath 'tools\GameObjectExporter\GameObjectExporter.csproj'
+    $args = @(
+        'run',
+        '--project', $projectPath,
+        '--configuration', 'Release',
+        '--',
+        '--variant', $VariantId,
+        '--out', $variantPath
+    )
+
+    Write-Host "[go-variants] exporting $VariantId -> $variantPath" -ForegroundColor DarkGray
+    & dotnet @args | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "GameObjectExporter failed for variant '$VariantId' with exit code $LASTEXITCODE"
+    }
+
+    if (-not (Test-Path $variantPath)) {
+        throw "Expected variant export was not created: $variantPath"
+    }
+
+    return $variantPath
+}
+
+function Get-GameObjectSpawnIdentity($Spawn) {
+    if ($null -ne $Spawn.PSObject.Properties['guid'] -and $null -ne $Spawn.guid) {
+        return "guid:$($Spawn.guid)"
+    }
+
+    return "display:$($Spawn.displayId)|x:$($Spawn.x)|y:$($Spawn.y)|z:$($Spawn.z)|o:$($Spawn.o)|s:$($Spawn.s)"
+}
+
+function Write-ComposedGameObjectSpawnsJson([string[]]$VariantIds, [string]$OutPath) {
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    $byMap = [ordered]@{}
+
+    foreach ($variantId in $VariantIds) {
+        $variantPath = Ensure-GameObjectVariantExport $variantId
+        $root = [IO.File]::ReadAllText($variantPath) | ConvertFrom-Json
+        foreach ($mapProperty in $root.PSObject.Properties) {
+            if (-not $byMap.Contains($mapProperty.Name)) {
+                $byMap[$mapProperty.Name] = New-Object System.Collections.ArrayList
+            }
+
+            foreach ($spawn in @($mapProperty.Value)) {
+                $identity = '{0}|{1}' -f $mapProperty.Name, (Get-GameObjectSpawnIdentity $spawn)
+                if ($seen.Add($identity)) {
+                    [void]$byMap[$mapProperty.Name].Add($spawn)
+                }
+            }
+        }
+    }
+
+    $orderedMaps = [ordered]@{}
+    foreach ($mapKey in ($byMap.Keys | Sort-Object { [int]$_ })) {
+        $orderedMaps[$mapKey] = @($byMap[$mapKey])
+    }
+
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutPath) | Out-Null
+    $orderedMaps | ConvertTo-Json -Depth 6 -Compress | Set-Content -Path $OutPath -Encoding UTF8
+}
+
+function Initialize-GameObjectSpawnsForWorkDir([string]$WorkDir) {
+    $destination = Join-Path $WorkDir 'gameobject_spawns.json'
+    if ($script:ResolvedGameObjectVariants.Count -eq 0) {
+        $legacyPath = Join-Path $DataDir 'gameobject_spawns.json'
+        if (Test-Path $legacyPath) {
+            Copy-Item -Force $legacyPath $destination
+        }
+        return
+    }
+
+    Write-ComposedGameObjectSpawnsJson $script:ResolvedGameObjectVariants $destination
 }
 
 function New-Point([double]$X, [double]$Y, [double]$Z, [string]$Label = '') {
@@ -375,9 +535,13 @@ function Invoke-MmapGenDebugTile(
         }
     }
 
-    $gameObjectSpawns = Join-Path $DataDir 'gameobject_spawns.json'
-    if (Test-Path $gameObjectSpawns) {
-        Copy-Item -Force $gameObjectSpawns (Join-Path $work 'gameobject_spawns.json')
+    Initialize-GameObjectSpawnsForWorkDir $work
+    if ($script:ResolvedGameObjectVariants.Count -gt 0) {
+        Write-Host ("[go-variants] using {0} for map={1} tile={2},{3}" -f `
+            (Format-GameObjectVariantSummary),
+            $MapId,
+            $TileX,
+            $TileY) -ForegroundColor DarkGray
     }
 
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath) | Out-Null
@@ -429,7 +593,7 @@ function Read-PathFromTrx([string]$Path) {
         return $points
     }
 
-    $raw = Get-Content -Path $Path -Raw
+    $raw = [IO.File]::ReadAllText((Resolve-Path $Path))
     $matches = [regex]::Matches($raw, '\[(\d{1,3})\]\s+\((-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)\)')
     $byIndex = @{}
     foreach ($m in $matches) {
@@ -702,7 +866,7 @@ function Export-OgZeppelin {
         "- analysis/mmap_top_ramp_deck_polys.csv is the main deck/ramp polygon report.",
         "- analysis/mmap_top_ramp_deck_reachable_polys.csv and analysis/mmap_top_ramp_deck_unreachable_polys.csv split the same crop by single-tile graph reachability from the route start.",
         "- overlays/route_waypoints.obj is the latest route polyline extracted from the TRX when available.",
-        "- If the log has [GO] map=1 tile=40,29, the raw bake input includes static GameObject placements from gameobject_spawns.json."
+        "- Active GameObject set: $(Format-GameObjectVariantSummary). If the log has [GO] map=1 tile=40,29, the raw bake input includes those static GameObject placements."
     )
 
     Stage-RecastDemoRoute 'Orgrimmar' 1 $markers @(
@@ -723,6 +887,89 @@ function Export-OgZeppelin {
         @{ Name = 'og_zeppelin_mmapgen_generated_top_deck.gset'; Title = 'Orgrimmar MmapGen Generated Top Deck'; Files = @('og_mmapgen_generated_top_deck_crop.obj') },
         @{ Name = 'og_zeppelin_mmapgen_polymesh.gset'; Title = 'Orgrimmar MmapGen Polymesh'; Files = @('og_mmapgen_polymesh.obj') },
         @{ Name = 'og_zeppelin_mmapgen_detailmesh.gset'; Title = 'Orgrimmar MmapGen Detail Mesh'; Files = @('og_mmapgen_detailmesh.obj') }
+    )
+
+    if (Test-Path (Join-Path $latest '_work')) {
+        Remove-Item -LiteralPath (Join-Path $latest '_work') -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Export-OgCity {
+    $latest = Initialize-LatestDir (Join-Path $OutRoot 'og-city\latest')
+
+    $markers = @(
+        (New-Point 1320.140 -4653.160 53.890 'zeppelin_tower_top'),
+        (New-Point 1350.540 -4663.390 53.455 'zeppelin_campfire'),
+        (New-Point 1536.940 -4409.440 8.059 'org_ony_head'),
+        (New-Point 1537.890 -4421.620 7.553 'org_nef_head'),
+        (New-Point 1668.130 -4419.980 17.398 'org_midsummer_probe'),
+        (New-Point 1766.420 -4222.410 43.352 'org_main_gate')
+    )
+
+    $tiles = @(
+        [pscustomobject]@{ Name = 'og_city_tile_3928'; Map = 1; TileX = 39; TileY = 28; Mmtile = Join-Path $DataDir 'mmaps\0012839.mmtile' },
+        [pscustomobject]@{ Name = 'og_city_tile_3929'; Map = 1; TileX = 39; TileY = 29; Mmtile = Join-Path $DataDir 'mmaps\0012939.mmtile' },
+        [pscustomobject]@{ Name = 'og_city_tile_4028'; Map = 1; TileX = 40; TileY = 28; Mmtile = Join-Path $DataDir 'mmaps\0012840.mmtile' },
+        [pscustomobject]@{ Name = 'og_city_tile_4029'; Map = 1; TileX = 40; TileY = 29; Mmtile = Join-Path $DataDir 'mmaps\0012940.mmtile' }
+    )
+
+    foreach ($tile in $tiles) {
+        $tileKey = '{0:D3}{1:D2}{2:D2}' -f $tile.Map, $tile.TileY, $tile.TileX
+        $workDir = Join-Path $OutRoot "og-city\latest\_work\mmapgen_$tileKey"
+        $logPath = Join-Path $latest "logs\mmapgen_tile_$tileKey.log"
+        $rawResult = Get-MmapGenDebugTileResult $tile.Map $tile.TileX $tile.TileY $workDir $logPath
+        if ($RefreshRaw -or -not ($Resume -and (Test-Path $rawResult.RawObj))) {
+            $rawResult = Invoke-MmapGenDebugTile $tile.Map $tile.TileX $tile.TileY $workDir $logPath
+        }
+
+        Convert-RawMmapGenObj $rawResult.RawObj (Join-Path $latest "source\$($tile.Name)_compiled_adt_vmap_go_full.obj")
+
+        Copy-IfExists $rawResult.Mmtile (Join-Path $latest "mmap\$($tile.Name)_mmapgen_generated_tile.mmtile")
+        Copy-IfExists $rawResult.PolyMeshObj (Join-Path $latest "mmap\$($tile.Name)_mmapgen_polymesh.obj")
+        Copy-IfExists $rawResult.DetailMeshObj (Join-Path $latest "mmap\$($tile.Name)_mmapgen_detailmesh.obj")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "$tileKey.pmesh") (Join-Path $latest "mmap\$($tile.Name)_mmapgen_polymesh.pmesh")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "$tileKey.dmesh") (Join-Path $latest "mmap\$($tile.Name)_mmapgen_detailmesh.dmesh")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "map$tileKey.nav") (Join-Path $latest "mmap\$($tile.Name)_mmapgen_final_detour_tile.nav")
+        Copy-IfExists (Join-Path (Split-Path -Parent $rawResult.RawObj) "map${tileKey}.source_triangles.csv") (Join-Path $latest "analysis\$($tile.Name)_compiled_adt_vmap_go_source_triangles.csv")
+
+        $generatedTile = Join-Path $latest "mmap\$($tile.Name)_mmapgen_generated_tile.mmtile"
+        if (Test-Path $generatedTile) {
+            Invoke-MmapVisualize $generatedTile (Join-Path $latest "mmap\$($tile.Name)_mmapgen_generated_full.obj") $markers
+        }
+        Invoke-MmapVisualize $tile.Mmtile (Join-Path $latest "mmap\$($tile.Name)_mmap_runtime_full.obj") $markers -IncludeVmaps
+    }
+
+    Write-Readme (Join-Path $latest 'README.md') 'Orgrimmar City Pathfinding Reference' @(
+        "- Scope: connected 2x2 Orgrimmar city tile bundle covering the zeppelin tower, auction-house/city-gate trophy tile, and the main gate approach.",
+        "- Tiles: (39,28), (39,29), (40,28), and (40,29) on map 1.",
+        "- source/ contains converted compiled ADT/VMAP/GO bake-input geometry per tile.",
+        "- mmap/ contains runtime MMAP renderings plus MmapGen-generated tile snapshots for the same city tiles.",
+        "- Active GameObject set: $(Format-GameObjectVariantSummary).",
+        "- The staged RecastDemo layouts are intended for comparing city-head, bonfire, and seasonal-prop collision coverage across connected Orgrimmar tiles."
+    )
+
+    Stage-RecastDemoRoute 'Orgrimmar' 1 $markers @(
+        @{ Source = (Join-Path $latest 'source\og_city_tile_3928_compiled_adt_vmap_go_full.obj'); Target = 'og_city_tile_3928_source_full.obj' },
+        @{ Source = (Join-Path $latest 'source\og_city_tile_3929_compiled_adt_vmap_go_full.obj'); Target = 'og_city_tile_3929_source_full.obj' },
+        @{ Source = (Join-Path $latest 'source\og_city_tile_4028_compiled_adt_vmap_go_full.obj'); Target = 'og_city_tile_4028_source_full.obj' },
+        @{ Source = (Join-Path $latest 'source\og_city_tile_4029_compiled_adt_vmap_go_full.obj'); Target = 'og_city_tile_4029_source_full.obj' },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_3928_mmap_runtime_full.obj'); Target = 'og_city_tile_3928_runtime_full.obj' },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_3929_mmap_runtime_full.obj'); Target = 'og_city_tile_3929_runtime_full.obj' },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_4028_mmap_runtime_full.obj'); Target = 'og_city_tile_4028_runtime_full.obj' },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_4029_mmap_runtime_full.obj'); Target = 'og_city_tile_4029_runtime_full.obj' },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_3928_mmapgen_generated_full.obj'); Target = 'og_city_tile_3928_mmapgen_generated_full.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_3929_mmapgen_generated_full.obj'); Target = 'og_city_tile_3929_mmapgen_generated_full.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_4028_mmapgen_generated_full.obj'); Target = 'og_city_tile_4028_mmapgen_generated_full.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_4029_mmapgen_generated_full.obj'); Target = 'og_city_tile_4029_mmapgen_generated_full.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_3928_mmapgen_polymesh.obj'); Target = 'og_city_tile_3928_mmapgen_polymesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_3929_mmapgen_polymesh.obj'); Target = 'og_city_tile_3929_mmapgen_polymesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_4028_mmapgen_polymesh.obj'); Target = 'og_city_tile_4028_mmapgen_polymesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_4029_mmapgen_polymesh.obj'); Target = 'og_city_tile_4029_mmapgen_polymesh.obj'; Required = $false }
+    ) @(
+        @{ Name = 'og_city_source_tiles.gset'; Title = 'Orgrimmar City Source Tiles'; Files = @('og_city_tile_3928_source_full.obj', 'og_city_tile_3929_source_full.obj', 'og_city_tile_4028_source_full.obj', 'og_city_tile_4029_source_full.obj') },
+        @{ Name = 'og_city_runtime_tiles.gset'; Title = 'Orgrimmar City Runtime Tiles'; Files = @('og_city_tile_3928_runtime_full.obj', 'og_city_tile_3929_runtime_full.obj', 'og_city_tile_4028_runtime_full.obj', 'og_city_tile_4029_runtime_full.obj') },
+        @{ Name = 'og_city_mmapgen_generated_tiles.gset'; Title = 'Orgrimmar City MmapGen Generated Tiles'; Files = @('og_city_tile_3928_mmapgen_generated_full.obj', 'og_city_tile_3929_mmapgen_generated_full.obj', 'og_city_tile_4028_mmapgen_generated_full.obj', 'og_city_tile_4029_mmapgen_generated_full.obj') },
+        @{ Name = 'og_city_mmapgen_polymesh_tiles.gset'; Title = 'Orgrimmar City MmapGen Polymesh Tiles'; Files = @('og_city_tile_3928_mmapgen_polymesh.obj', 'og_city_tile_3929_mmapgen_polymesh.obj', 'og_city_tile_4028_mmapgen_polymesh.obj', 'og_city_tile_4029_mmapgen_polymesh.obj') }
     )
 
     if (Test-Path (Join-Path $latest '_work')) {
@@ -817,7 +1064,7 @@ function Export-Brd {
         "- source/ contains converted compiled ADT/VMAP/GO bake-input geometry from MmapGen debug output; *_all_sources.obj keeps terrain/vmap/gameobject/liquid materials visible for direct source-vs-mmap inspection.",
         "- mmap/ contains Detour/MMAP renderings for the same tiles, including *_mmapgen_generated_* files before runtime promotion.",
         "- analysis/flamecrest_stall_mmap_crop_polys.csv, analysis/brd_approach_mmap_crop_polys.csv, and analysis/brm_south_trap_mmap_crop_polys.csv are the focused polygon reports.",
-        "- MmapGen logs in logs/ show whether static GameObject spawns were baked for each tile."
+        "- Active GameObject set: $(Format-GameObjectVariantSummary). MmapGen logs in logs/ show whether static GameObject spawns were baked for each tile."
     )
 
     Stage-RecastDemoRoute 'BlackrockMountain' 0 $markers @(
@@ -904,7 +1151,8 @@ function Export-Rfc {
         "- Intended use: fast UI iteration and indoor hallway/doorway navmesh comparisons in RecastDemo.",
         "- source/ contains converted compiled ADT/VMAP/GO bake-input geometry per RFC tile.",
         "- mmap/ contains runtime MMAP renderings and MmapGen-generated tile snapshots for the same RFC tiles.",
-        "- analysis/*_mmap_crop_polys.csv provides focused polygon reports around the RFC corridor probe."
+        "- analysis/*_mmap_crop_polys.csv provides focused polygon reports around the RFC corridor probe.",
+        "- Active GameObject set: $(Format-GameObjectVariantSummary)."
     )
 
     Stage-RecastDemoRoute 'RagefireChasm' 389 $markers @(
@@ -954,6 +1202,9 @@ function Clear-LegacyOg {
 
 if ($Route -eq 'og-zeppelin' -or $Route -eq 'all') {
     Export-OgZeppelin
+}
+if ($Route -eq 'og-city' -or $Route -eq 'all') {
+    Export-OgCity
 }
 if ($Route -eq 'brd' -or $Route -eq 'all') {
     Export-Brd

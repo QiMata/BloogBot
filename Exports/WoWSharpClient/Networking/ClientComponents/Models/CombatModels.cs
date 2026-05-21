@@ -185,7 +185,7 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
     /// <summary>
     /// MaNGOS 1.12.1 ActiveStates — action type byte for UNIT_ACTION_BUTTON packing.
     /// </summary>
-    public static class PetActionType
+    public static class PetObjectiveType
     {
         public const byte ACT_PASSIVE = 0x01;
         public const byte ACT_DISABLED = 0x81;
@@ -197,8 +197,8 @@ namespace WoWSharpClient.Networking.ClientComponents.Models
         /// Packs action/spell ID and type into uint32 for CMSG_PET_ACTION data field.
         /// Lower 24 bits = action ID, upper 8 bits = action type.
         /// </summary>
-        public static uint Pack(uint actionId, byte actionType) =>
-            (actionId & 0x00FFFFFF) | ((uint)actionType << 24);
+        public static uint Pack(uint actionId, byte objectiveType) =>
+            (actionId & 0x00FFFFFF) | ((uint)objectiveType << 24);
     }
 
     /// <summary>

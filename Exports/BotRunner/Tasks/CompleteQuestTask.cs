@@ -6,7 +6,7 @@ namespace BotRunner.Tasks;
 /// <summary>
 /// Atomic task: complete (turn in) a quest from an open quest dialog.
 /// Optionally selects a reward by index before completing.
-/// Maps to ActionType.COMPLETE_QUEST from StateManager.
+/// Maps to ObjectiveType.COMPLETE_QUEST from StateManager.
 /// </summary>
 public class CompleteQuestTask(IBotContext botContext, int rewardIndex = 0) : BotTask(botContext), IBotTask
 {

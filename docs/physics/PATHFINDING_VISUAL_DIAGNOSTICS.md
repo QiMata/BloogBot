@@ -75,6 +75,15 @@ reachability filters. Inspect:
   shortcut Recast should not have simplified into one surface.
 - `horizontalArea2D`: large area on a small walkway/deck may hide multiple real
   surfaces under one Detour polygon.
+- `avgDetailSlope` / `maxDetailSlope`: distinguish a genuinely steep surface
+  from a mostly-flat polygon that only picked up a steep wall apron in its
+  detail triangles.
+- `steepDetailAreaRatio`: how much of the polygon's detail-triangle surface is
+  steeper than the WoW-player probe threshold (currently 50 degrees in the
+  focused tower diagnostics).
+- `suspiciousMixedWall`: focused flag for the "flat floor plus wall creep"
+  class; this trips when a polygon has some clearly steep detail triangles plus
+  too much vertical spread and footprint for the current climb assumptions.
 - reachable/unreachable split: use as a local-tile clue, not as full-route proof,
   because this simple visualizer does not resolve neighbor tiles.
 

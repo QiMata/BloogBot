@@ -692,7 +692,7 @@ namespace WoWSharpClient
         public IWoWLocalPet Pet => _activePet;
 
         // Pet action bar and spell IDs populated from SMSG_PET_SPELLS
-        private readonly List<(uint SpellId, byte ActionType)> _petActionBar = [];
+        private readonly List<(uint SpellId, byte ObjectiveType)> _petActionBar = [];
         private readonly List<uint> _petSpellIds = [];
         private readonly object _petSpellLock = new();
 
@@ -707,7 +707,7 @@ namespace WoWSharpClient
         /// <summary>
         /// Called by PetHandler when SMSG_PET_SPELLS is received.
         /// </summary>
-        internal void SetPetSpells(ulong petGuid, List<(uint SpellId, byte ActionType)> actionBar, List<uint> spells)
+        internal void SetPetSpells(ulong petGuid, List<(uint SpellId, byte ObjectiveType)> actionBar, List<uint> spells)
         {
             lock (_petSpellLock)
             {

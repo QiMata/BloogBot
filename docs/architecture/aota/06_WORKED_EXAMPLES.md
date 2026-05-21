@@ -91,24 +91,24 @@ new ActivityDefinition {
 push KillObjectiveTask(quest=132, creatureEntry=458, requiredCount=8, hotspots=[...])
   Tick 1:
     push GoToTask(hotspot[0] = (-10987, 1442, 38))
-      → emits ActionType.TravelTo
+      → emits ObjectiveType.TravelTo
       → pushes PathfindingClient.RequestRoute (multi-leg)
-      → emits ActionType.StartMovement
+      → emits ObjectiveType.StartMovement
       → ... (15-20 ticks of movement)
-      → emits ActionType.StopMovement on arrival
+      → emits ObjectiveType.StopMovement on arrival
   Tick after GoToTask completes:
     push PullStrategyTask(unit=nearest hostile DefiasTrapper)
-      → emits ActionType.SetSelection
+      → emits ObjectiveType.SetSelection
       → emits MSG_RAID_TARGET_UPDATE (skull marker)
-      → emits ActionType.CastSpell("Throw")
+      → emits ObjectiveType.CastSpell("Throw")
       → pop on unit aggression
     push PvERotationTask(WarriorArmsPveRotation)
-      → emits ActionType.CastSpell("Mortal Strike")
-      → emits ActionType.CastSpell("Rend")
-      → emits ActionType.StartMeleeAttack
+      → emits ObjectiveType.CastSpell("Mortal Strike")
+      → emits ObjectiveType.CastSpell("Rend")
+      → emits ObjectiveType.StartMeleeAttack
       → pop on target Health == 0
     push LootCorpseTask(corpseGuid)
-      → emits ActionType.Loot (via IObjectManager.LootTargetAsync internally)
+      → emits ObjectiveType.Loot (via IObjectManager.LootTargetAsync internally)
       → IObjectManager fires CMSG_LOOT, CMSG_AUTOSTORE_LOOT_ITEM(s), CMSG_LOOT_RELEASE
       → pop
   KillObjectiveTask increments local counter; reads
@@ -346,7 +346,7 @@ new ActivityDefinition {
 [0]  travel-to-battlemaster           Travel    target=Orgrimmar battlemaster
 [1]  queue-for-wsg                    Queue     bgType=WarsongGulch
 [2]  wait-for-invite                  Wait      timeout=5min then re-queue
-[3]  accept-bg-invite                 Action    ActionType.AcceptBattlegroundInvite
+[3]  accept-bg-invite                 Action    ObjectiveType.AcceptBattlegroundInvite
 [4]  post-teleport-stabilize          Recovery  wait for valid Position + IsOnNavmesh
 [5]  role-assignment                  Decision  ("flag carrier" | "defender" | "midfield")
 [6]  flag-loop                        Loop      until 3 caps or BG ends
@@ -366,9 +366,9 @@ push BattlegroundQueueTask(bgType=WarsongGulch, expectedMapId=489)
   State machine:
     FindBattlemaster      → scan ObjectManager.Units by Entry+UNIT_NPC_FLAG_BATTLEMASTER
     MoveToBattlemaster    → push GoToTask(npc.Position)
-    InteractAndQueue      → InteractWithNpcTask, emit ActionType.JoinBattlegroundQueue
+    InteractAndQueue      → InteractWithNpcTask, emit ObjectiveType.JoinBattlegroundQueue
     WaitForInvite         → poll BattlegroundNetworkClientComponent.CurrentState
-    AcceptInvite          → emit ActionType.AcceptBattlegroundInvite (CMSG_BATTLEFIELD_PORT)
+    AcceptInvite          → emit ObjectiveType.AcceptBattlegroundInvite (CMSG_BATTLEFIELD_PORT)
     WaitForEntry          → poll Player.MapId == 489
     Done                  → pop
 ```

@@ -45,6 +45,13 @@ internal static class Program
     private const int DtLinkSize = 16;                    // dtPolyRef64=8 + uint+4 + 4*byte = 16
     private const int DtBVNodeSize = 16;                  // 6 ushorts + 1 int = 16
     private const int DtOffMeshConnectionSize = 36;       // 6 floats + 1 float + ushort + byte + byte + uint = 36
+    private const float SteepSurfaceEpsilonDegrees = 1.0f;
+    private const float SteepSurfaceMinTriangleNormal = 1e-5f;
+    private const float MixedWallPolyMinSteepAreaRatio = 0.08f;
+    private const float MixedWallPolyMinZRange = 1.0f;
+    private const float MixedWallPolyMinEdgeLength2D = 6.0f;
+    private const float MixedWallPolyMinArea2D = 8.0f;
+    private const float MixedWallPolyClimbOvershoot = 0.15f;
 
     private static int Main(string[] args)
     {
@@ -234,6 +241,8 @@ internal static class Program
 
     private static int Align4(int x) => (x + 3) & ~3;
 
+    private static bool IsRenderableNavPoly(Poly poly) => !IsOffMesh(poly) && poly.VertCount > 0 && poly.Flags != 0;
+
     private static void WriteObj(StreamWriter w, Tile tile, Args opts)
     {
         // vmangos stores MaNGOS/Recast verts as (WoW_Y, WoW_Z_up, WoW_X).
@@ -287,11 +296,9 @@ internal static class Program
         {
             var poly = tile.Polys[pIdx];
             // Skip off-mesh-connection polygons (rendered separately).
-            if ((poly.AreaAndType >> 6) == 1) // DT_POLYTYPE_OFFMESH_CONNECTION = 1
+            if (!IsRenderableNavPoly(poly))
                 continue;
             if (reachabilityFilter != null && !reachabilityFilter.Contains(pIdx))
-                continue;
-            if (poly.VertCount == 0)
                 continue;
             if (opts.PolyFilter.Count > 0 && !opts.PolyFilter.Contains(pIdx))
                 continue;
@@ -577,7 +584,7 @@ internal static class Program
         }
 
         var groundPolys = Enumerable.Range(0, tile.Polys.Length)
-            .Where(i => !IsOffMesh(tile.Polys[i]) && tile.Polys[i].VertCount > 0)
+            .Where(i => IsRenderableNavPoly(tile.Polys[i]))
             .ToHashSet();
 
         var output = opts.ReachableMode == ReachableMode.Only
@@ -597,7 +604,7 @@ internal static class Program
         for (var i = 0; i < tile.Polys.Length; i++)
         {
             var poly = tile.Polys[i];
-            if (IsOffMesh(poly) || poly.VertCount == 0)
+            if (!IsRenderableNavPoly(poly))
                 continue;
 
             var centroid = GetPolyCentroid(tile, i);
@@ -713,6 +720,76 @@ internal static class Program
         return MathF.Abs(twiceArea) * 0.5f;
     }
 
+    private static Vec3 GetDetailTriVertex(Tile tile, Poly poly, PolyDetail detail, byte triVertIndex)
+    {
+        if (triVertIndex < poly.VertCount)
+            return tile.Verts[poly.Verts[triVertIndex]];
+
+        return tile.DetailVerts[(int)detail.VertBase + triVertIndex - poly.VertCount];
+    }
+
+    private static DetailPolyMetrics GetDetailPolyMetrics(Tile tile, int polyIndex, float walkableSlopeDegrees)
+    {
+        var poly = tile.Polys[polyIndex];
+        var detail = polyIndex < tile.DetailMeshes.Length ? tile.DetailMeshes[polyIndex] : new PolyDetail(0, 0, 0, 0);
+        var totalSurfaceArea = 0f;
+        var steepSurfaceArea = 0f;
+        var weightedUpComponent = 0f;
+        var maxSlopeDegrees = 0f;
+
+        for (var triIndex = 0; triIndex < detail.TriCount; triIndex++)
+        {
+            var tri = tile.DetailTris[(int)detail.TriBase + triIndex];
+            var a = GetDetailTriVertex(tile, poly, detail, tri.v0);
+            var b = GetDetailTriVertex(tile, poly, detail, tri.v1);
+            var c = GetDetailTriVertex(tile, poly, detail, tri.v2);
+
+            var edgeAb = new Vec3(b.X - a.X, b.Y - a.Y, b.Z - a.Z);
+            var edgeAc = new Vec3(c.X - a.X, c.Y - a.Y, c.Z - a.Z);
+            var normal = new Vec3(
+                edgeAb.Y * edgeAc.Z - edgeAb.Z * edgeAc.Y,
+                edgeAb.Z * edgeAc.X - edgeAb.X * edgeAc.Z,
+                edgeAb.X * edgeAc.Y - edgeAb.Y * edgeAc.X);
+
+            var normalLength = MathF.Sqrt(normal.X * normal.X + normal.Y * normal.Y + normal.Z * normal.Z);
+            if (normalLength <= SteepSurfaceMinTriangleNormal)
+                continue;
+
+            var area = normalLength * 0.5f;
+            var upComponent = Math.Clamp(MathF.Abs(normal.Y) / normalLength, 0f, 1f);
+            var slopeDegrees = MathF.Acos(upComponent) * (180f / MathF.PI);
+
+            totalSurfaceArea += area;
+            weightedUpComponent += upComponent * area;
+            maxSlopeDegrees = MathF.Max(maxSlopeDegrees, slopeDegrees);
+            if (slopeDegrees > walkableSlopeDegrees + SteepSurfaceEpsilonDegrees)
+                steepSurfaceArea += area;
+        }
+
+        if (totalSurfaceArea <= 0f)
+            return new DetailPolyMetrics(0f, 0f, 0f, 0f);
+
+        var avgUpComponent = Math.Clamp(weightedUpComponent / totalSurfaceArea, 0f, 1f);
+        var avgSlopeDegrees = MathF.Acos(avgUpComponent) * (180f / MathF.PI);
+        return new DetailPolyMetrics(totalSurfaceArea, steepSurfaceArea, avgSlopeDegrees, maxSlopeDegrees);
+    }
+
+    private static bool IsSuspiciousMixedWallPoly(Tile tile, int polyIndex, WowBounds bounds, float maxEdge2D, float horizontalArea2D)
+    {
+        var metrics = GetDetailPolyMetrics(tile, polyIndex, tile.Header.WalkableClimb > 0f ? 50f : 50f);
+        if (metrics.TotalSurfaceArea <= 0f)
+            return false;
+
+        var steepAreaRatio = metrics.SteepSurfaceArea / metrics.TotalSurfaceArea;
+        var zRange = bounds.MaxZ - bounds.MinZ;
+        var minRequiredZRange = MathF.Max(MixedWallPolyMinZRange, tile.Header.WalkableClimb + MixedWallPolyClimbOvershoot);
+
+        return steepAreaRatio >= MixedWallPolyMinSteepAreaRatio &&
+               metrics.MaxSlopeDegrees > 50f + SteepSurfaceEpsilonDegrees &&
+               zRange >= minRequiredZRange &&
+               (maxEdge2D >= MixedWallPolyMinEdgeLength2D || horizontalArea2D >= MixedWallPolyMinArea2D);
+    }
+
     private static int CountInternalNeighbors(Poly poly)
     {
         var count = 0;
@@ -733,7 +810,7 @@ internal static class Program
 
         using var writer = new StreamWriter(path, append: false, Encoding.UTF8);
         writer.NewLine = "\n";
-        writer.WriteLine("polyIndex,polyType,area,flags,vertCount,detailTriCount,centroidX,centroidY,centroidZ,minX,maxX,minY,maxY,minZ,maxZ,zRange,maxEdge2D,horizontalArea2D,internalNeighbors");
+        writer.WriteLine("polyIndex,polyType,area,flags,vertCount,detailTriCount,centroidX,centroidY,centroidZ,minX,maxX,minY,maxY,minZ,maxZ,zRange,maxEdge2D,horizontalArea2D,internalNeighbors,avgDetailSlope,maxDetailSlope,steepDetailAreaRatio,suspiciousMixedWall");
 
         foreach (var polyIndex in polyIndices)
         {
@@ -747,6 +824,9 @@ internal static class Program
             var maxEdge2D = GetMaxPolyEdge2D(tile, poly);
             var horizontalArea = GetHorizontalArea2D(tile, poly);
             var neighbors = CountInternalNeighbors(poly);
+            var detailMetrics = GetDetailPolyMetrics(tile, polyIndex, 50f);
+            var steepDetailAreaRatio = detailMetrics.TotalSurfaceArea <= 0f ? 0f : detailMetrics.SteepSurfaceArea / detailMetrics.TotalSurfaceArea;
+            var suspiciousMixedWall = IsSuspiciousMixedWallPoly(tile, polyIndex, bounds, maxEdge2D, horizontalArea);
 
             writer.WriteLine(string.Join(',',
                 polyIndex.ToString(CultureInfo.InvariantCulture),
@@ -767,7 +847,11 @@ internal static class Program
                 zRange.ToString("F4", CultureInfo.InvariantCulture),
                 maxEdge2D.ToString("F4", CultureInfo.InvariantCulture),
                 horizontalArea.ToString("F4", CultureInfo.InvariantCulture),
-                neighbors.ToString(CultureInfo.InvariantCulture)));
+                neighbors.ToString(CultureInfo.InvariantCulture),
+                detailMetrics.AvgSlopeDegrees.ToString("F4", CultureInfo.InvariantCulture),
+                detailMetrics.MaxSlopeDegrees.ToString("F4", CultureInfo.InvariantCulture),
+                steepDetailAreaRatio.ToString("F4", CultureInfo.InvariantCulture),
+                suspiciousMixedWall ? "1" : "0"));
         }
     }
 
@@ -919,6 +1003,12 @@ internal sealed record OffMeshConnection(
     uint UserId);
 
 internal readonly record struct Vec3(float X, float Y, float Z);
+
+internal readonly record struct DetailPolyMetrics(
+    float TotalSurfaceArea,
+    float SteepSurfaceArea,
+    float AvgSlopeDegrees,
+    float MaxSlopeDegrees);
 
 internal sealed record Marker(float X, float Y, float Z, string Label);
 

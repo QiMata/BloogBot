@@ -2,7 +2,7 @@
 
 Shodan-directed ADT tile-boundary movement coverage. SHODAN stages the BG
 action target near each boundary; the BotRunner target receives only
-`ActionType.TravelTo` for movement probes.
+`ObjectiveType.TravelTo` for movement probes.
 
 ## Bot Execution Mode
 
@@ -33,7 +33,7 @@ The test body does not issue GM commands. The fixture owns:
 
 ## Runtime Linkage
 
-- `ActionType.TravelTo` carries map id `1` and destination coordinates to
+- `ObjectiveType.TravelTo` carries map id `1` and destination coordinates to
   `ECONBG1`.
 - The Orgrimmar route proves a concrete boundary crossing and arrival.
 - The open-terrain route keeps the historic lower bar: tile snapshots must be

@@ -13,7 +13,7 @@ SHODAN as the director. SHODAN performs setup through fixture helpers; only
 
 ### AuctionHouse_InteractWithAuctioneer
 
-**Purpose:** Prove auctioneer detection and BG `ActionType.InteractWith`
+**Purpose:** Prove auctioneer detection and BG `ObjectiveType.InteractWith`
 dispatch after Shodan-owned Orgrimmar auction-house staging.
 
 **Setup path:**
@@ -21,7 +21,7 @@ dispatch after Shodan-owned Orgrimmar auction-house staging.
   target near the Orgrimmar auctioneers.
 
 **Action path:**
-- `ActionType.InteractWith` using the detected auctioneer GUID.
+- `ObjectiveType.InteractWith` using the detected auctioneer GUID.
 
 **Current live result:**
 - Passed in `bg_interaction_shodan.trx`.
@@ -37,7 +37,7 @@ mailbox and SOAP mail-money staging.
   helper rather than the test body.
 
 **Action path:**
-- `ActionType.CheckMail` using the detected mailbox GUID.
+- `ObjectiveType.CheckMail` using the detected mailbox GUID.
 
 **Current live result:**
 - Passed in `bg_interaction_shodan.trx`; coinage increased after collection.
@@ -53,7 +53,7 @@ and Orgrimmar flight-master staging.
   location.
 
 **Action path:**
-- `ActionType.VisitFlightMaster` with a correlation id and command ACK check.
+- `ObjectiveType.VisitFlightMaster` with a correlation id and command ACK check.
 
 **Current live result:**
 - Passed in `bg_interaction_shodan.trx`.
@@ -68,11 +68,11 @@ the missing production action surface.
 - `StageBotRunnerAtOrgrimmarBankAsync(...)` stages the bank location.
 
 **Action path:**
-- `ActionType.InteractWith` using the detected banker GUID.
+- `ObjectiveType.InteractWith` using the detected banker GUID.
 
 **Current live result:**
 - Tracked skip in `bg_interaction_shodan.trx` after banker interaction because
-  bank deposit has no BotRunner `ActionType` surface yet.
+  bank deposit has no BotRunner `ObjectiveType` surface yet.
 
 ### DeeprunTram_RideTransport_ArrivesAtDestination
 

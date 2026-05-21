@@ -3,26 +3,45 @@
 > Reading prerequisite: [`Spec/18_TERMINOLOGY.md`](../../Spec/18_TERMINOLOGY.md).
 > This file goes deeper on each layer and on the **recursive composition rules** that the canonical glossary leaves implicit.
 
-## 1. Action — the wire primitive
+## 1. Action — the reusable player-capability primitive
 
 ### What it is
 
-An `Action` is **a single `ActionMessage` over protobuf-on-TCP**. It is
-the only thing that crosses the `StateManager` ↔ `BotRunner` boundary.
-Everything else (Activities, Objectives, Tasks) is runtime state on
-one side or the other.
+An **Action** is a reusable code primitive (a method or variable accessor)
+inside the BotRunner that mirrors a single thing a human player can do:
+read the loot window, check a bag slot, press a hotkey, click a world
+coordinate, read a unit field, cast a spell by id, accept a loot item,
+turn in a quest reward.
 
-### Where it lives
+**Actions are pure local code.** No Action is ever a wire message. The
+protobuf `ObjectiveMessage` type (formerly named `ActionMessage` — a
+misnomer cleaned up in the 2026-05-21 rename) carries **Objective-level**
+state-change requests, not Actions. The BotRunner receives an
+`ObjectiveMessage`, decomposes it into Tasks via a behavior tree + game
+database knowledge lookups, and the Tasks then invoke Action methods to
+read and alter game state.
 
-- **Wire shape:** `ActionMessage` in [`Exports/BotCommLayer/Models/ProtoDef/communication.proto`](../../../Exports/BotCommLayer/Models/ProtoDef/communication.proto).
-- **Type enum:** `ActionType` — ~85 closed-set values (`TravelTo`, `Interact`, `CastSpell`, `Loot`, `AcceptQuest`, `TurnInQuest`, `StartMovement`, `StopMovement`, `StartDungeoneering`, etc.).
-- **Mapping to C#:** `CharacterAction` enum in `Exports/GameData.Core/Enums/CharacterAction.cs`.
-- **Dispatch:** `Exports/BotRunner/BotRunnerService.ActionDispatch.cs`.
+### Where Actions live
 
-### What it costs to add one
+- **Read primitives:** `IObjectManager` accessors (`GetActiveLootGuid`,
+  `GetBagContents`, `GetPlayerPosition`, `GetUnitFieldValue`, etc.) and
+  type-safe state objects (`IWoWUnit`, `IWoWPlayer`, `IInventory`,
+  `ILootWindow`).
+- **Write primitives:** `IObjectManager.CastSpellAsync(spellId, target)`,
+  `InteractAsync(guid)`, `LootSlotAsync(slot)`, `MoveToAsync(coord)`,
+  `PressHotkeyAsync(key)`, `ClickWorldAsync(x,y,z)`, etc.
+- **FG vs BG split:** FG implementations write to memory + call engine
+  thunks via FastCall; BG implementations emit equivalent packets through
+  WoWSharpClient. Same Action signature, swappable execution mode (the
+  FG/BG parity contract).
 
-Per [`Spec/03_BOTRUNNER.md`](../../Spec/03_BOTRUNNER.md#actionmessage-dispatch):
-adding a new `ActionType` is a protobuf change that:
+### The closed wire-level Action-kind roster
+
+The proto's `ObjectiveType` enum (~85 values: `WAIT`, `GOTO`,
+`INTERACT_WITH`, `CAST_SPELL`, `LOOT_CORPSE`, `ACCEPT_QUEST`, etc.) is
+the **roster of Action kinds the StateManager can request via an
+`ObjectiveMessage`** — not the Action itself. The enum is closed-set
+because adding one is protobuf-cost:
 
 1. Adds the enum value in `communication.proto`.
 2. Adds the mirrored value in `CharacterAction.cs`.
@@ -30,54 +49,48 @@ adding a new `ActionType` is a protobuf change that:
 4. Adds sequence builder in `BotRunnerService.ActionDispatch.cs` (FG + BG paths).
 5. Regenerates protobuf for every client (rule R10).
 
-So adding actions is **deliberately expensive.** The closed-set
-discipline forces composition at higher layers instead.
+So adding wire-dispatchable Action kinds is **deliberately expensive.**
+The closed-set discipline forces composition at higher layers instead —
+prefer to add a new Task that composes existing Actions over adding a
+new `ObjectiveType`.
 
 ### Recursive composition — Actions calling Actions
 
 > "Actions can use other Actions (ObjectManager functions that handle
 > multiple state changes, etc.)" — user's framing.
 
-There are two kinds of Action composition:
-
-**(a) Wire-level sequence built by `ActionDispatcher`.** A single
-`ActionMessage` arriving at the bot can fan out into a *sequence* of
-internal `ActionType` dispatches via the `Xas.FluentBehaviourTree`
-builder. Example: `ActionType.TurnInQuest` arriving at the bot triggers
-inside the BotRunner a sequence of three internal steps:
+Actions can invoke other Actions via `IObjectManager` helpers that
+internally handle multi-step state changes. Example:
+`TurnInQuestAsync(npc, questId, rewardIndex)` is a single Action method
+that internally fires three opcodes (open quest frame, select reward,
+confirm) and observes their effects before returning:
 
 ```
-ActionType.TurnInQuest(npcGuid, questId, rewardIndex)
+IObjectManager.TurnInQuestAsync(npcGuid, questId, rewardIndex)
         │
-        ▼ ActionDispatcher.BuildTree
+        ▼ ActionDispatcher.BuildTree (local)
         ├─ step 1: open quest frame (FG) OR  CMSG_QUESTGIVER_COMPLETE_QUEST (BG)
         ├─ step 2: select reward index    (FG QuestRewardItem{n}:Click OR CMSG_QUESTGIVER_CHOOSE_REWARD)
         └─ step 3: dispatch confirm      (FG QuestFrameCompleteQuestButton:Click OR same CMSG)
 ```
 
-The **outside** wire surface stays a single `ActionType.TurnInQuest`
-ack; the inside is multiple opcodes / Lua calls. This is the
-"ObjectManager handles multiple state changes" pattern: `IObjectManager`
-methods like `TurnInQuestAsync`, `LootTargetAsync`, `BuyItemAsync` are
-the convergence point for multi-opcode sequences.
+This is the **"ObjectManager handles multiple state changes"** pattern:
+`IObjectManager` methods like `TurnInQuestAsync`, `LootTargetAsync`,
+`BuyItemAsync` are the convergence point for multi-opcode sequences.
 
-**(b) Cross-mode helper invocation.** The same `IObjectManager` method
-that an Action dispatch calls can also be called from inside a `Task`
-implementation directly — without going through the proto wire. A
-`PullStrategyTask` calls `IObjectManager.SetRaidTarget(unit, Skull)`
-(which internally emits `MSG_RAID_TARGET_UPDATE`) followed by
-`IObjectManager.CastSpellAsync("Shoot")`. From the bot's perspective
-these are just method calls; from the network's perspective they are
-wire actions. This means **the same Action primitive can be reached
-two ways**: by an external `ActionMessage` dispatch (StateManager
-talking to BotRunner) or by an internal Task call (BotRunner code
-talking to itself through `IObjectManager`).
+There are two ways the same Action method gets called:
 
-**Rule.** When in doubt, prefer to add a *Task* that calls existing
-`IObjectManager` helpers (which already emit existing Actions). Only
-add a new `ActionType` when StateManager needs to dispatch a brand-new
-intent that no current Action covers and that does not decompose
-cleanly into existing Tasks.
+1. **External `ObjectiveMessage` dispatch.** StateManager sends
+   `ObjectiveMessage{objective_type=TurnInQuest, …}`; BotRunner's dispatcher
+   resolves it to `IObjectManager.TurnInQuestAsync(...)`. Used when
+   StateManager wants a single observable wire-level intent.
+2. **Internal Task call.** A `CompleteQuestTask` directly calls
+   `IObjectManager.TurnInQuestAsync(...)` — no wire round-trip. Used
+   when a Task is orchestrating a multi-step state change locally.
+
+**Rule.** Tasks should reach for `IObjectManager` Actions directly. Add
+new `ObjectiveType` enum values only when StateManager needs to dispatch a
+brand-new intent that no current Task already covers.
 
 ## 2. Task — the behavior-tree node
 
@@ -127,11 +140,11 @@ on the stack and fully replayable from snapshots.
 |---|---|---|
 | `TravelToTask(coord)` | `GoToTask(walk-leg)` → `BoardTransportTask(zeppelin)` → `WaitForLandingTask` → `GoToTask(deck-anchor)` | Travel within a map decomposes into walk-and-board legs. |
 | `LongTravelTask(continent-target)` | `UseHearthstoneTask` *or* `TakeFlightPathTask(closest-fp → dest-fp)` *or* `MageTeleportTask(city)` *or* `BoardTransportTask(zeppelin)`; then `TravelToTask(local-coord)` | Cross-map routing is "pick the cheapest gateway, then short-range travel from gateway to target." `CrossMapRouter.cs` chooses; this Task pushes the chosen leg(s). |
-| `AcceptQuestTask(questId)` | `GoToTask(quest-giver-coord)` → `InteractWithNpcTask(questGiverGuid)` → emits `ActionType.AcceptQuest` | Every quest pickup is "get within interact range, open quest frame, click accept." |
+| `AcceptQuestTask(questId)` | `GoToTask(quest-giver-coord)` → `InteractWithNpcTask(questGiverGuid)` → emits `ObjectiveType.AcceptQuest` | Every quest pickup is "get within interact range, open quest frame, click accept." |
 | `KillObjectiveTask(questId, creatureEntry, requiredCount)` | for each hotspot: `GoToTask(hotspot)` → `PullStrategyTask(matching-unit)` → `PvERotationTask` → `LootCorpseTask`; loops until counter reaches required | Every kill objective is "walk hotspot, pull, kill, loot, repeat." |
 | `CollectObjectiveTask(questId, itemId, requiredCount, sourceCreatureId?, sourceGameObjectId?)` | for each hotspot: `GoToTask(hotspot)` → either `PullStrategyTask` + `LootCorpseTask` (creature source) or `UseGameObjectTask` (container source) | Mirror of KillObjective but the gate is item count in inventory, not unit death count. |
 | `DungeoneeringTask` | `TravelToTask(instance-portal)` → `InteractWithGameObjectTask(portal)` → per-room: `PullStrategyTask` → `LootCorpseTask`; per-named-boss: `BossEncounterTask(plan)`; on completion: `TravelToTask(exit)` | A dungeon clear is a chained sequence of pulls, encounters, and loots. |
-| `BattlegroundQueueTask(bgType)` | `GoToTask(battlemaster)` → `InteractWithNpcTask` → emit `ActionType.JoinBattlegroundQueue` → wait → on invite emit `ActionType.AcceptBattlegroundInvite` → wait → on entry pop | Queueing for any BG is the same 5-step dance; only the battlemaster NPC differs. |
+| `BattlegroundQueueTask(bgType)` | `GoToTask(battlemaster)` → `InteractWithNpcTask` → emit `ObjectiveType.JoinBattlegroundQueue` → wait → on invite emit `ObjectiveType.AcceptBattlegroundInvite` → wait → on entry pop | Queueing for any BG is the same 5-step dance; only the battlemaster NPC differs. |
 | `GatheringRouteTask(nodeType, waypoints)` | for each waypoint: `GoToTask(waypoint)` → on node detection: `GatherNodeTask(nodeGuid)`; loops the route while skill < cap | Mining/Herb/Skinning routes are identical at this layer; the differentiator is which entry-set the scanner watches for. |
 | `CraftRecipeTask(recipeId, targetCount)` | `MaterialSourcingTask(missing-reagents)` (if needed) → `LearnRecipeTask(recipeId)` (if not yet known) → `TrainerVisitTask(profession)` (if skill capped) → `CastCraftSpellTask(spellId)` × N | Crafting is "ensure mats, ensure recipe, ensure skill headroom, then cast N times." |
 
@@ -142,8 +155,8 @@ Every interaction in MMO play is gated on physical proximity: quest
 NPCs, vendors, mailboxes, mailbox-adjacent banks, gathering nodes,
 mob hotspots, boss positions, BG capture points. `GoToTask` itself
 decomposes — internally it pushes `PathfindingClient.RequestRoute`
-followed by a stream of `ActionType.StartMovement` /
-`ActionType.StopMovement` actions, driven by `MovementController`
+followed by a stream of `ObjectiveType.StartMovement` /
+`ObjectiveType.StopMovement` actions, driven by `MovementController`
 parity guarantees.
 
 ### Failure escalation
@@ -335,8 +348,8 @@ quorums.
 
 | Rule | Statement |
 |---|---|
-| **R-A1** | An Action may internally invoke other Actions via `IObjectManager` helpers; the externally visible `ActionMessage` is still one wire dispatch. |
-| **R-A2** | New `ActionType` values are protobuf-cost; prefer to express new behavior as a new *Task* that composes existing Actions. |
+| **R-A1** | An Action is local code; it may internally invoke other Actions via `IObjectManager` helpers. Actions never cross the wire — what crosses is an `ObjectiveMessage` that the BotRunner decomposes into Tasks → Actions. |
+| **R-A2** | New `ObjectiveType` enum values (the wire-level roster of Action *kinds* StateManager can request) are protobuf-cost; prefer to express new behavior as a new *Task* that composes existing Actions. |
 | **R-T1** | A Task composes other Tasks via the **push** primitive; there is no implicit sequence or parallel. |
 | **R-T2** | A Task may not push a Task whose family is not in the family catalog (see `Spec/03_BOTRUNNER.md#catalog-of-task-families`). |
 | **R-T3** | Every Task ends as `Complete` or `Failed`; `OnChildFailedAsync` returns `true` to absorb or `false` to escalate. |
@@ -345,7 +358,7 @@ quorums.
 | **R-O3** | An Objective may only push Tasks from families the activity catalog already declares for the Activity. Adding a new family requires a spec PR. |
 | **R-AC1** | An Activity is one assigned-at-a-time goal. Catalog row drives legality + selection + reward policy. Runtime `IActivity` lands in Phase 2 (slot S2.0). |
 | **R-AC2** | Activities reference other Activities through `EntryRequirements` + the unlock graph. The DecisionEngine resolves these into a planned sequence. |
-| **R-W1** | Only **Actions** cross the StateManager↔BotRunner wire. Activity/Objective/Task identity is *projected* onto the snapshot for observability (`current_activity_id`, `current_objective_id`, top-of-stack task name). |
+| **R-W1** | Only **`ObjectiveMessage`** (an Objective-level state-change request) crosses the StateManager↔BotRunner wire. BotRunner decomposes that locally into Tasks → Actions. Activity / Task identity is *projected* onto the snapshot for observability (`current_activity_id`, top-of-stack task name); Action invocation is never wire-visible. |
 
 ## 6. Snapshot projection (Phase 2)
 

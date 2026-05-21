@@ -33,12 +33,12 @@ namespace WoWStateManagerUI.Models
 
     /// <summary>
     /// Catalog-side definition of an atomic Action: a single
-    /// <c>ActionMessage</c> sent over the protobuf wire. <see cref="ActionType"/>
-    /// matches the <c>ActionType</c> enum value from
+    /// <c>ObjectiveMessage</c> sent over the protobuf wire. <see cref="ObjectiveType"/>
+    /// matches the <c>ObjectiveType</c> enum value from
     /// <c>Exports/BotCommLayer/Models/ProtoDef/*.proto</c>
     /// (e.g. <c>TravelTo</c>, <c>CastSpell</c>, <c>Interact</c>, <c>AcceptQuest</c>).
     /// </summary>
     public sealed record ActionDefinition(
-        string ActionType,
+        string ObjectiveType,
         string? Description);
 }

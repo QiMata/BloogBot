@@ -32,10 +32,10 @@ only BotRunner action dispatches.
 
 - BotRunner action targets: `ECONBG1`, then `ECONFG1` when actionable.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.InteractWith` with the detected
+- Under-test action dispatch: `ObjectiveType.InteractWith` with the detected
   banker GUID.
 - Result: skipped after successful Shodan item/location staging and banker
-  interaction because bank deposit/withdraw has no BotRunner `ActionType`
+  interaction because bank deposit/withdraw has no BotRunner `ObjectiveType`
   surface yet.
 
 ## Current Status

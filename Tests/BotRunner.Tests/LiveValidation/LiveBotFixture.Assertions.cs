@@ -264,16 +264,16 @@ public partial class LiveBotFixture
 
         if (appearsLeader)
         {
-            await SendActionAsync(account, new Communication.ActionMessage
+            await SendActionAsync(account, new Communication.ObjectiveMessage
             {
-                ActionType = Communication.ActionType.DisbandGroup
+                ObjectiveType = Communication.ObjectiveType.DisbandGroup
             });
             await Task.Delay(250);
         }
 
-        await SendActionAsync(account, new Communication.ActionMessage
+        await SendActionAsync(account, new Communication.ObjectiveMessage
         {
-            ActionType = Communication.ActionType.LeaveGroup
+            ObjectiveType = Communication.ObjectiveType.LeaveGroup
         });
         await Task.Delay(750);
         await WaitForSnapshotConditionAsync(
@@ -438,11 +438,11 @@ public partial class LiveBotFixture
         if (snapshot.ConnectionState == Communication.BotConnectionState.BotDisconnected)
             return null;
 
-        var currentAction = snapshot.CurrentAction?.ActionType;
-        if (currentAction != null && currentAction != Communication.ActionType.Wait)
+        var currentAction = snapshot.CurrentAction?.ObjectiveType;
+        if (currentAction != null && currentAction != Communication.ObjectiveType.Wait)
         {
             var previousAction = snapshot.PreviousAction != null
-                ? snapshot.PreviousAction.ActionType.ToString()
+                ? snapshot.PreviousAction.ObjectiveType.ToString()
                 : "none";
             return
                 $"{account}:current={currentAction}, previous={previousAction}, screen={snapshot.ScreenState}, conn={snapshot.ConnectionState}, transition={snapshot.IsMapTransition}";
@@ -553,9 +553,9 @@ public partial class LiveBotFixture
 
             for (var attempt = 0; attempt < 3; attempt++)
             {
-                lastDispatch = await SendActionAsync(accountName, new ActionMessage
+                lastDispatch = await SendActionAsync(accountName, new ObjectiveMessage
                 {
-                    ActionType = ActionType.StartMeleeAttack,
+                    ObjectiveType = ObjectiveType.StartMeleeAttack,
                     Parameters = { new RequestParameter { LongParam = (long)selfGuid } }
                 });
 
@@ -566,7 +566,7 @@ public partial class LiveBotFixture
                 }
 
                 // Stop any accidental swing attempts; only target selection side effect is needed.
-                _ = await SendActionAsync(accountName, new ActionMessage { ActionType = ActionType.StopAttack });
+                _ = await SendActionAsync(accountName, new ObjectiveMessage { ObjectiveType = ObjectiveType.StopAttack });
 
                 var pollSw = Stopwatch.StartNew();
                 while (pollSw.ElapsedMilliseconds < 2500)

@@ -52,7 +52,7 @@ Completed items moved from TASKS.md.
 
 ## Archived Snapshot (2026-04-21) - P3 Unified Loadout Hand-off closeout
 
-- [x] `P3.1` Plumbing — proto types (`LoadoutSpec`, `LoadoutStatus`, `ActionType.ApplyLoadout`, `WoWActivitySnapshot.loadoutStatus` + `loadoutFailureReason`, status field included in `SnapshotChangeSignature`). Shipped in commit `9c0e6339`.
+- [x] `P3.1` Plumbing — proto types (`LoadoutSpec`, `LoadoutStatus`, `ObjectiveType.ApplyLoadout`, `WoWActivitySnapshot.loadoutStatus` + `loadoutFailureReason`, status field included in `SnapshotChangeSignature`). Shipped in commit `9c0e6339`.
 - [x] `P3.2` Config — `CharacterSettings.Loadout` POCO (`LoadoutSpecSettings` + sub-POCOs) and `Services/WoWStateManager/Settings/LoadoutSpecConverter.cs` (`ToProto` / `BuildApplyLoadoutAction`). Shipped in commit `61b9fffb`.
 - [x] `P3.3` BotRunner — `Exports/BotRunner/Tasks/LoadoutTask.cs` with plan-builder + seven step executors (`LearnSpellStep`, `SetSkillStep`, `AddItemStep`, `AddItemSetStep`, `EquipItemStep`, `UseItemStep`, `LevelUpStep`), 100ms pacing throttle, idempotent `IsSatisfied` + `TryExecute` contract. Scaffold in commit `d38fff31`, executors in `813da3ef`. `BotRunnerService.HandleApplyLoadoutAction` / `SyncLoadoutStatusIntoSnapshot` wiring in `a1a312c3`.
 - [x] `P3.4` StateManager dispatch — `BattlegroundCoordinator.CoordState.ApplyingLoadouts` between `WaitingForBots` and `QueueForBattleground`, per-bot single-shot `ApplyLoadout` dispatch, `ExcludedAccounts` exclusion list for `LoadoutFailed` bots, chain-loop through purely-internal orchestration states. Shipped in commit `f1799080`.
@@ -4450,7 +4450,7 @@ memory; do not act on these unless re-promoted into Plan/.
 ## Handoff (2026-04-25, Shodan mail foreground stabilization)
 
 - Completed: closed the foreground mail runtime follow-up; `MailSystemTests`
-  and `MailParityTests` now dispatch `ActionType.CheckMail` to both FG and BG
+  and `MailParityTests` now dispatch `ObjectiveType.CheckMail` to both FG and BG
   under the Shodan director topology.
 - Last delta:
   - Foreground mailbox collection now waits through delayed mailbox metadata
@@ -4511,7 +4511,7 @@ That works but has three real gaps:
    specific `.learn 12345` succeed?"* have to baseline + diff + pattern-match
    on text (`LiveBotFixture.BotChat.cs.GetDeltaMessages` +
    `LiveBotFixture.Assertions.cs.ContainsCommandRejection`). Works today
-   but brittle — there is no correlation id on `ActionMessage`, and MaNGOS
+   but brittle — there is no correlation id on `ObjectiveMessage`, and MaNGOS
    1.12 emits no chat text for most GM command successes, so the "wait for
    system message" pattern can't gate on `.learn` / `.setskill` / `.additem`
    at all.
@@ -4606,11 +4606,11 @@ commands that have no authoritative SMSG (`.modify money`, `.setskill`,
     advancement leaves the active step still subscribed.
 
 - [x] **P4.4** Correlation IDs + structured `CommandAckEvent`
-  - [x] P4.4.1 Add `string correlation_id = <n>;` to `ActionMessage` in
+  - [x] P4.4.1 Add `string correlation_id = <n>;` to `ObjectiveMessage` in
     `Exports/BotCommLayer/Models/ProtoDef/communication.proto`.
     StateManager assigns one per dispatch; BotRunner echoes it back.
   - [x] P4.4.2 Add a new message
-    `CommandAckEvent { string correlation_id; ActionType action_type;
+    `CommandAckEvent { string correlation_id; ObjectiveType objective_type;
     enum AckStatus {Pending, Success, Failed, TimedOut} status;
     string failure_reason; uint32 related_id; }` and
     `repeated CommandAckEvent recent_command_acks` on
@@ -4638,7 +4638,7 @@ commands that have no authoritative SMSG (`.modify money`, `.setskill`,
     is the per-command receipt.
   - [x] P4.5.2 `LiveBotFixture.BotChat.SendGmChatCommandTrackedAsync`
     stamps a `test:<account>:<seq>` correlation id on the outbound
-    `ActionMessage` (StateManager only stamps empty ids, so the test id
+    `ObjectiveMessage` (StateManager only stamps empty ids, so the test id
     survives end-to-end) and returns `GmChatCommandTrace` with
     `CorrelationId`, `AckStatus`, and `AckFailureReason` populated from
     the matching `CommandAckEvent` in `RecentCommandAcks`.
@@ -4661,7 +4661,7 @@ commands that have no authoritative SMSG (`.modify money`, `.setskill`,
 - **Polling stays as the authoritative success signal.** Events are
   a latency optimization; they never decide "did this succeed?" alone.
 - **Snapshot budget:** ring buffers only, explicit caps, documented.
-- **Correlation IDs flow through `ActionMessage` end-to-end.** No
+- **Correlation IDs flow through `ObjectiveMessage` end-to-end.** No
   StateManager → bot → StateManager round trip loses the id.
 - **FG/BG parity.** Every event added to `IWoWEventHandler` must have
   a firing path from both the FG Lua-hook bridge and the BG SMSG
@@ -4794,7 +4794,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `SpellCastOnTargetTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG Battle Shout action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
   - Added `StageBotRunnerRageAsync(...)` so the rage setup for Battle Shout lives behind the fixture boundary alongside `StageBotRunnerLoadoutAsync(...)` and `StageBotRunnerAurasAbsentAsync(...)`.
-  - The BG target dispatches only correlated `ActionType.CastSpell` with spell id `6673`; the test body has no inline setup GM commands.
+  - The BG target dispatches only correlated `ObjectiveType.CastSpell` with spell id `6673`; the test body has no inline setup GM commands.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/SpellCastOnTargetTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `SpellCastOnTargetTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now `7`.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -4818,7 +4818,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `BattlegroundQueueTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG WSG queue action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
   - Added `StageBotRunnerAtOrgrimmarWarsongBattlemasterAsync(...)` so WSG battlemaster coordinate staging lives in the fixture. Level setup uses `StageBotRunnerLoadoutAsync(...)`.
-  - The BG target dispatches only `ActionType.JoinBattleground` with WSG type/map parameters and cleanup `ActionType.LeaveBattleground`.
+  - The BG target dispatches only `ObjectiveType.JoinBattleground` with WSG type/map parameters and cleanup `ObjectiveType.LeaveBattleground`.
   - Docs added at `Tests/BotRunner.Tests/LiveValidation/docs/BattlegroundQueueTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `BattlegroundQueueTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now `8`.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -4842,7 +4842,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `BgInteractionTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG economy/NPC smoke action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
   - Moved item, bank, auction-house, mailbox, mail-money, coinage, and flight-master setup behind fixture helpers. The migrated test body no longer issues direct GM setup calls.
-  - The BG target dispatches only `ActionType.InteractWith`, `ActionType.CheckMail`, and `ActionType.VisitFlightMaster`.
+  - The BG target dispatches only `ObjectiveType.InteractWith`, `ObjectiveType.CheckMail`, and `ObjectiveType.VisitFlightMaster`.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/BgInteractionTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `BgInteractionTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now `9`.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -4866,7 +4866,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - Migrated `LootCorpseTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Loot.config.json`. `LOOTBG1` is the BG loot action target, `LOOTFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
   - Replaced the old dedicated `CombatBgArenaFixture` execution mode with `LiveBotFixture` plus Shodan settings validation and action-target resolution.
   - Moved clean-slate and bag cleanup into `StageBotRunnerLoadoutAsync(...)`; moved Durotar mob-area setup into `StageBotRunnerAtDurotarMobAreaAsync(...)`. The migrated test body no longer issues direct GM setup calls.
-  - The BG target dispatches only `ActionType.StartMeleeAttack`, `StopAttack`, and `LootCorpse`, then verifies the loot dispatch and inventory observation path.
+  - The BG target dispatches only `ObjectiveType.StartMeleeAttack`, `StopAttack`, and `LootCorpse`, then verifies the loot dispatch and inventory observation path.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/LootCorpseTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `LootCorpseTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~16.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -4895,7 +4895,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - Migrated `NavigationTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG navigation action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
   - Migrated `AllianceNavigationTests.cs` to `Services/WoWStateManager/Settings/Configs/Navigation.config.json` with stable idle foreground `ECONFG1`, Human BG target `NAVBG1`, and SHODAN as director. The initial all-Human foreground config was not kept because the foreground runner crashed in the first live attempt.
   - Moved navigation coordinate setup behind `StageBotRunnerAtNavigationPointAsync(...)`; migrated test bodies no longer issue direct `BotTeleportAsync(...)` setup calls.
-  - `NavigationTests` dispatches only BG `ActionType.Goto` for executable route probes. `AllianceNavigationTests` remains snapshot-only after fixture-owned Alliance coordinate staging.
+  - `NavigationTests` dispatches only BG `ObjectiveType.Goto` for executable route probes. `AllianceNavigationTests` remains snapshot-only after fixture-owned Alliance coordinate staging.
   - `Navigation_LongPath_ArrivesAtDestination` is a tracked skip for the Valley of Trials long diagonal `GoToTask` `no_path_timeout`; the committed Durotar short route stages at z=`42` to avoid the repeated identical command no-op observed in earlier live attempts.
   - Docs added at `Tests/BotRunner.Tests/LiveValidation/docs/NavigationTests.md` and `Tests/BotRunner.Tests/LiveValidation/docs/AllianceNavigationTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: both files moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~17.
 - Validation:
@@ -4925,7 +4925,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 - Completed:
   - Migrated `MovementSpeedTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG movement-speed action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
-  - Replaced the old foreground-shadow teleport setup with fixture-contained Durotar road staging through `StageBotRunnerAtNavigationPointAsync(...)`; the test body now dispatches only BG `ActionType.Goto`.
+  - Replaced the old foreground-shadow teleport setup with fixture-contained Durotar road staging through `StageBotRunnerAtNavigationPointAsync(...)`; the test body now dispatches only BG `ObjectiveType.Goto`.
   - The live probe still asserts the 141-yard Durotar route, minimum/maximum travel speed envelope, Z stability, and arrival tolerance from snapshots.
   - Docs added at `Tests/BotRunner.Tests/LiveValidation/docs/MovementSpeedTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `MovementSpeedTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~19.
 - Validation:
@@ -4953,7 +4953,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `CornerNavigationTests.cs` and `TileBoundaryCrossingTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG navigation action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
   - Added fixture-contained arbitrary navigation coordinate staging via `StageBotRunnerAtNavigationPointAsync(...)`; the migrated test bodies no longer issue direct `BotTeleportAsync(...)` setup calls.
-  - Route checks dispatch only BG `ActionType.TravelTo`, while snapshot-only probes rely on Shodan-owned staging and snapshot assertions.
+  - Route checks dispatch only BG `ObjectiveType.TravelTo`, while snapshot-only probes rely on Shodan-owned staging and snapshot assertions.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/CornerNavigationTests.md` and `Tests/BotRunner.Tests/LiveValidation/docs/TileBoundaryCrossingTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: both files moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~20.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -4981,7 +4981,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `TravelPlannerTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG travel action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
   - Added fixture-contained street-level Orgrimmar staging through `StageBotRunnerAtTravelPlannerStartAsync(...)` plus targeted BG quiesce after staging. The test body no longer issues `.tele` setup commands.
-  - The executable short-walk case dispatches only `ActionType.TravelTo` toward the Orgrimmar auction-house service location and asserts snapshot movement.
+  - The executable short-walk case dispatches only `ObjectiveType.TravelTo` toward the Orgrimmar auction-house service location and asserts snapshot movement.
   - The long Orgrimmar-to-Crossroads probes launch through the Shodan topology but are tracked skips because delivered `TravelTo` starts `GoToTask` with no position delta after 20s and leaves BG `CurrentAction=TravelTo`.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/TravelPlannerTests.md`, execution-mode index updated, and inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `TravelPlannerTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~22.
 - Validation:
@@ -5010,7 +5010,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `MountEnvironmentTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG mount-environment action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
   - Added fixture-contained mount loadout, unmount cleanup, and indoor/outdoor coordinate staging helpers. The test body no longer issues `.learn`, `.setskill`, `.dismount`, `.unaura`, or `.go xyz` setup commands.
-  - The BG target dispatches only `ActionType.CastSpell` for mount behavior checks; snapshot/chat assertions prove outdoor mount success and indoor mount rejection.
+  - The BG target dispatches only `ObjectiveType.CastSpell` for mount behavior checks; snapshot/chat assertions prove outdoor mount success and indoor mount rejection.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/MountEnvironmentTests.md`, execution-mode index updated, and inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `MountEnvironmentTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~23.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -5038,7 +5038,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `MapTransitionTests.cs` to the Shodan test-director pattern using `Services/WoWStateManager/Settings/Configs/Economy.config.json`. `ECONBG1` is the BG map-transition action target, `ECONFG1` is idle for topology parity, and SHODAN is the Background Gnome Mage director.
   - Added fixture-contained Ironforge tram staging and rejected Deeprun Tram transition helpers. The test body no longer issues `.go xyz` setup commands.
-  - The BG target dispatches only a correlated post-bounce `ActionType.Goto` at its current snapshot position, proving BotRunner remains action-responsive after the map transition settles.
+  - The BG target dispatches only a correlated post-bounce `ObjectiveType.Goto` at its current snapshot position, proving BotRunner remains action-responsive after the map transition settles.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/MapTransitionTests.md`, execution-mode index updated, and inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `MapTransitionTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~24.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -5063,7 +5063,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `NpcInteractionTests.cs` to the Shodan test-director pattern with `Services/WoWStateManager/Settings/Configs/NpcInteraction.config.json`. `NPCBG1` is the Background Orc Hunter action target, `NPCFG1` is the Foreground Orc Rogue action target, and SHODAN is the Background Gnome Mage director.
   - Added fixture-contained Razor Hill hunter trainer and Orgrimmar flight-master staging helpers, plus spell-unlearn staging for the trainer path. The test body resolves action recipients with `ResolveBotRunnerActionTargets(...)`; SHODAN remains director-only.
-  - Vendor, flight-master, and object-manager checks now dispatch only `ActionType.VisitVendor` / `VisitFlightMaster` or assert snapshots after Shodan staging. `Trainer_LearnAvailableSpells` is Shodan-shaped but skipped with a tracked live funding/mailbox staging gap.
+  - Vendor, flight-master, and object-manager checks now dispatch only `ObjectiveType.VisitVendor` / `VisitFlightMaster` or assert snapshots after Shodan staging. `Trainer_LearnAvailableSpells` is Shodan-shaped but skipped with a tracked live funding/mailbox staging gap.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/NpcInteractionTests.md`, execution-mode index updated, and inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `NpcInteractionTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~26.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -5090,7 +5090,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `GossipQuestTests.cs`, `QuestObjectiveTests.cs`, `QuestInteractionTests.cs`, and `StarterQuestTests.cs` to the Shodan test-director pattern. The slice reuses `Services/WoWStateManager/Settings/Configs/Economy.config.json` with `ECONBG1` as the quest/gossip action target, `ECONFG1` launched idle for topology parity, and SHODAN as Background Gnome Mage director.
   - Added `QuestTestSupport` plus fixture-contained quest location and quest-state staging helpers in `LiveBotFixture.TestDirector.cs` for Razor Hill, Valley of Trials, Durotar objective staging, and quest add/complete/remove setup.
-  - Test bodies no longer issue GM setup commands. Executable behavior paths dispatch only `ActionType.InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or `CompleteQuest` to BG; snapshot-plumbing paths assert fixture-staged quest-log state.
+  - Test bodies no longer issue GM setup commands. Executable behavior paths dispatch only `ObjectiveType.InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or `CompleteQuest` to BG; snapshot-plumbing paths assert fixture-staged quest-log state.
   - Docs added/refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/GossipQuestTests.md`, `QuestObjectiveTests.md`, `QuestInteractionTests.md`, and `StarterQuestTests.md`; execution-mode index updated; inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: all four files moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~27.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -5150,7 +5150,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 - Completed:
   - Migrated `MailSystemTests.cs` and `MailParityTests.cs` to the Shodan test-director pattern. The slice reuses `Services/WoWStateManager/Settings/Configs/Economy.config.json` with `ECONFG1` and `ECONBG1` as mail action targets and SHODAN as Background Gnome Mage director.
-  - Added `StageBotRunnerMailboxItemAsync` so SOAP item-mail setup joins the existing Shodan mailbox and mail-money helpers. Test bodies now dispatch only `ActionType.CheckMail`.
+  - Added `StageBotRunnerMailboxItemAsync` so SOAP item-mail setup joins the existing Shodan mailbox and mail-money helpers. Test bodies now dispatch only `ObjectiveType.CheckMail`.
   - Later foreground stabilization closed the `CheckMail` timing gap: foreground mailbox collection now waits through delayed inbox metadata and emits `[MAIL-COLLECT]` markers for money/item collection evidence.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/MailSystemTests.md` and `Tests/BotRunner.Tests/LiveValidation/docs/MailParityTests.md`, execution-mode index updated, and inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: both files moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~33.
 - Validation:
@@ -5179,7 +5179,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `EconomyInteractionTests.cs` to the Shodan test-director pattern. The slice reuses `Services/WoWStateManager/Settings/Configs/Economy.config.json` with `ECONFG1` and `ECONBG1` as action targets plus SHODAN as Background Gnome Mage director.
   - Added `StageBotRunnerAtOrgrimmarMailboxAsync` and `StageBotRunnerMailboxMoneyAsync` so mailbox location and SOAP mail-money setup are fixture-contained. Existing Shodan bank/AH staging helpers now cover the other two methods.
-  - `EconomyInteractionTests` dispatches only `ActionType.InteractWith` for banker/auctioneer and `ActionType.CheckMail` for mailbox collection. FG and BG both passed the live slice.
+  - `EconomyInteractionTests` dispatches only `ObjectiveType.InteractWith` for banker/auctioneer and `ObjectiveType.CheckMail` for mailbox collection. FG and BG both passed the live slice.
   - Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/EconomyInteractionTests.md`, execution-mode index updated, and inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `EconomyInteractionTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~35.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
@@ -5207,7 +5207,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `VendorBuySellTests.cs` to the Shodan test-director pattern. The slice reuses `Services/WoWStateManager/Settings/Configs/Economy.config.json` with `ECONBG1` as the BG vendor packet action target, `ECONFG1` launched idle for topology parity, and SHODAN as Background Gnome Mage director.
   - Added `StageBotRunnerAtRazorHillVendorAsync` and `StageBotRunnerCoinageAsync` so Razor Hill vendor staging and money setup are fixture-contained. Test bodies no longer issue `.go` / `.additem` / `.modify money` setup.
-  - `VendorBuySellTests` dispatches only `ActionType.BuyItem`, `ActionType.SellItem`, and post-buy `ActionType.DestroyItem` cleanup from the test body. This remains a BG packet baseline by design; foreground vendor parity is left to a future behavior slice.
+  - `VendorBuySellTests` dispatches only `ObjectiveType.BuyItem`, `ObjectiveType.SellItem`, and post-buy `ObjectiveType.DestroyItem` cleanup from the test body. This remains a BG packet baseline by design; foreground vendor parity is left to a future behavior slice.
   - Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/VendorBuySellTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `VendorBuySellTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~36.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
@@ -5235,7 +5235,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `BankInteractionTests.cs` and `BankParityTests.cs` to the Shodan test-director pattern. The slice reuses `Services/WoWStateManager/Settings/Configs/Economy.config.json` with `ECONFG1` Foreground Orc Warrior, `ECONBG1` Background Orc Warrior, and SHODAN as Background Gnome Mage director.
   - Added `StageBotRunnerAtOrgrimmarBankAsync` so bank coordinate staging is fixture-contained. Test bodies no longer issue `.tele` / `.go` / `.additem` setup.
-  - `BankInteractionTests` validates FG/BG banker detection and dispatches only `ActionType.InteractWith` to detected banker GUIDs. `BankParityTests` validates FG/BG bank staging and Linen Cloth staging; deposit/withdraw and bank-slot purchase are explicit skips because no bank action surfaces exist yet.
+  - `BankInteractionTests` validates FG/BG banker detection and dispatches only `ObjectiveType.InteractWith` to detected banker GUIDs. `BankParityTests` validates FG/BG bank staging and Linen Cloth staging; deposit/withdraw and bank-slot purchase are explicit skips because no bank action surfaces exist yet.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/BankInteractionTests.md` and `Tests/BotRunner.Tests/LiveValidation/docs/BankParityTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: both files moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~37.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
@@ -5245,7 +5245,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BankInteractionTests|FullyQualifiedName~BankParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=bank_shodan.trx"` -> `1 passed, 3 skipped`.
   - Reference Ratchet anchor was already run once this session during the Gathering slice: `fishing_shodan_anchor_gathering_slice.trx` -> `passed (1/1)`.
 - Evidence:
-  - `tmp/test-runtime/results-live/bank_shodan.trx` shows `ECONFG1`/`ECONBG1` staging through `StageBotRunnerAtOrgrimmarBankAsync`, banker detection passing, `ActionType.InteractWith` succeeding where exercised, and deposit/withdraw/slot-purchase placeholders skipping with explicit missing-action reasons.
+  - `tmp/test-runtime/results-live/bank_shodan.trx` shows `ECONFG1`/`ECONBG1` staging through `StageBotRunnerAtOrgrimmarBankAsync`, banker detection passing, `ObjectiveType.InteractWith` succeeding where exercised, and deposit/withdraw/slot-purchase placeholders skipping with explicit missing-action reasons.
 - Files changed:
   - `Tests/BotRunner.Tests/LiveValidation/BankInteractionTests.cs`
   - `Tests/BotRunner.Tests/LiveValidation/BankParityTests.cs`
@@ -5264,7 +5264,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `AuctionHouseTests.cs` and `AuctionHouseParityTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/Economy.config.json` launches `ECONFG1` Foreground Orc Warrior, `ECONBG1` Background Orc Warrior, and SHODAN as Background Gnome Mage director.
   - Added `StageBotRunnerAtOrgrimmarAuctionHouseAsync` so AH coordinate staging is fixture-contained. Test bodies no longer issue `.tele` / `.go` / `.additem` setup.
-  - `AuctionHouseTests` dispatches only `ActionType.InteractWith` to FG/BG auctioneer GUIDs. `AuctionHouseParityTests` validates FG/BG AH staging/search detection; post/buy and cancel are explicit skips because no auction post/buy/cancel action surface exists yet.
+  - `AuctionHouseTests` dispatches only `ObjectiveType.InteractWith` to FG/BG auctioneer GUIDs. `AuctionHouseParityTests` validates FG/BG AH staging/search detection; post/buy and cancel are explicit skips because no auction post/buy/cancel action surface exists yet.
   - Docs refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/AuctionHouseTests.md` and `Tests/BotRunner.Tests/LiveValidation/docs/AuctionHouseParityTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: both files moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~39.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
@@ -5274,7 +5274,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~AuctionHouseTests|FullyQualifiedName~AuctionHouseParityTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=auction_house_shodan.trx"` -> `3 passed, 2 skipped`.
   - Reference Ratchet anchor was already run once this session during the Gathering slice: `fishing_shodan_anchor_gathering_slice.trx` -> `passed (1/1)`.
 - Evidence:
-  - `tmp/test-runtime/results-live/auction_house_shodan.trx` shows `ECONFG1`/`ECONBG1` staging through `StageBotRunnerAtOrgrimmarAuctionHouseAsync`, AH search/detection passing on both roles, `ActionType.InteractWith` succeeding on both roles, and the post/buy/cancel placeholders skipping with explicit missing-action reasons.
+  - `tmp/test-runtime/results-live/auction_house_shodan.trx` shows `ECONFG1`/`ECONBG1` staging through `StageBotRunnerAtOrgrimmarAuctionHouseAsync`, AH search/detection passing on both roles, `ObjectiveType.InteractWith` succeeding on both roles, and the post/buy/cancel placeholders skipping with explicit missing-action reasons.
 - Files changed:
   - `Services/WoWStateManager/Settings/Configs/Economy.config.json` (new)
   - `Tests/BotRunner.Tests/LiveValidation/AuctionHouseTests.cs`
@@ -5294,7 +5294,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `PetManagementTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/PetManagement.config.json` launches `PETBG1` Background Orc Hunter as the action target, idle `PETFG1` Foreground Orc Rogue for topology parity, and SHODAN as Background Gnome Mage director.
   - Moved hunter pet setup into `StageBotRunnerLoadoutAsync`: level `10`, Call Pet `883`, Dismiss Pet `2641`, and Tame Animal `1515`.
-  - Kept the behavior surface BG-only: `PETBG1` receives the `ActionType.CastSpell` dispatches for Call Pet and Dismiss Pet. FG remains launched but idle because foreground spell-id casting is not the validated pet-management path.
+  - Kept the behavior surface BG-only: `PETBG1` receives the `ObjectiveType.CastSpell` dispatches for Call Pet and Dismiss Pet. FG remains launched but idle because foreground spell-id casting is not the validated pet-management path.
   - Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/PetManagementTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `PetManagementTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~41.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
@@ -5304,7 +5304,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PetManagementTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=pet_management_shodan.trx"` -> `passed (1/1)`.
   - Reference Ratchet anchor was already run once this session during the Gathering slice: `fishing_shodan_anchor_gathering_slice.trx` -> `passed (1/1)`.
 - Evidence:
-  - `tmp/test-runtime/results-live/pet_management_shodan.trx` shows `PETBG1` staging via `StageBotRunnerLoadoutAsync`, `.learn 883`, `.learn 2641`, `.learn 1515`, and the two under-test dispatches as BG `ActionType.CastSpell`.
+  - `tmp/test-runtime/results-live/pet_management_shodan.trx` shows `PETBG1` staging via `StageBotRunnerLoadoutAsync`, `.learn 883`, `.learn 2641`, `.learn 1515`, and the two under-test dispatches as BG `ObjectiveType.CastSpell`.
 - Files changed:
   - `Services/WoWStateManager/Settings/Configs/PetManagement.config.json` (new)
   - `Tests/BotRunner.Tests/LiveValidation/PetManagementTests.cs`
@@ -5321,7 +5321,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `CraftingProfessionTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/Crafting.config.json` launches `CRAFTFG1` Foreground Orc Warrior, `CRAFTBG1` Background Orc Warrior, and SHODAN as Background Gnome Mage director.
   - Moved First Aid recipe/skill/reagent setup into `StageBotRunnerLoadoutAsync`: First Aid Apprentice `3273`, Linen Bandage recipe `3275`, First Aid skill `129=1/75`, and one Linen Cloth `2589`.
-  - Kept the behavior surface BG-only: `CRAFTBG1` receives the single `ActionType.CastSpell` dispatch, while FG remains launched for Shodan-topology parity because foreground spell-id casting is not the validated crafting path.
+  - Kept the behavior surface BG-only: `CRAFTBG1` receives the single `ObjectiveType.CastSpell` dispatch, while FG remains launched for Shodan-topology parity because foreground spell-id casting is not the validated crafting path.
   - Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/CraftingProfessionTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `CraftingProfessionTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~42.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
@@ -5331,7 +5331,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~CraftingProfessionTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=crafting_shodan.trx"` -> `passed (1/1)`.
   - Reference Ratchet anchor was already run once this session during the Gathering slice: `fishing_shodan_anchor_gathering_slice.trx` -> `passed (1/1)`.
 - Evidence:
-  - `tmp/test-runtime/results-live/crafting_shodan.trx` shows `CRAFTBG1` staging via `StageBotRunnerLoadoutAsync`, `.learn 3273`, `.learn 3275`, `.setskill 129 1 75`, `.additem 2589 1`, and the only under-test dispatch as `ActionType.CastSpell`.
+  - `tmp/test-runtime/results-live/crafting_shodan.trx` shows `CRAFTBG1` staging via `StageBotRunnerLoadoutAsync`, `.learn 3273`, `.learn 3275`, `.setskill 129 1 75`, `.additem 2589 1`, and the only under-test dispatch as `ObjectiveType.CastSpell`.
 - Files changed:
   - `Services/WoWStateManager/Settings/Configs/Crafting.config.json` (new)
   - `Tests/BotRunner.Tests/LiveValidation/CraftingProfessionTests.cs`
@@ -5348,7 +5348,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Migrated `GatheringProfessionTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/Gathering.config.json` launches `GATHFG1` Foreground Orc Warrior, `GATHBG1` Background Orc Warrior, and SHODAN as Background Gnome Mage director.
   - Added fixture-contained gathering staging helpers: Shodan refreshes/prioritizes pool candidates, target bots receive profession loadout through `StageBotRunnerLoadoutAsync`, and route teleport staging lives in `StageBotRunnerAtValleyCopperRouteStartAsync` / `StageBotRunnerAtDurotarHerbRouteStartAsync`.
-  - Corrected the Valley copper route center to `(-1000,-4500,28.5)` after native `GetGroundZ` showed the old `(-800,-4500,31)` center sits on a high terrain layer. The test body now dispatches only `ActionType.StartGatheringRoute`.
+  - Corrected the Valley copper route center to `(-1000,-4500,28.5)` after native `GetGroundZ` showed the old `(-800,-4500,31)` center sits on a high terrain layer. The test body now dispatches only `ObjectiveType.StartGatheringRoute`.
   - Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/GatheringProfessionTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `GatheringProfessionTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~43.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings plus benign vcpkg applocal dumpbin warning)`.
@@ -5377,7 +5377,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-24, Shodan test-director overhaul slice 3 - MageTeleportTests)
 - Completed:
-  - Migrated `MageTeleportTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/MageTeleport.config.json` launches `TRMAF5` Foreground Troll Mage, `TRMAB5` Background Troll Mage, and SHODAN as Background Gnome Mage director. `TRMAB5` is the only BotRunner action target for spell-casting tests because `ActionType.CastSpell` resolves to `_objectManager.CastSpell(int)`, which is a documented no-op on the Foreground runner; FG is launched for Shodan-topology parity but stays idle.
+  - Migrated `MageTeleportTests.cs` to the Shodan test-director pattern. New `Services/WoWStateManager/Settings/Configs/MageTeleport.config.json` launches `TRMAF5` Foreground Troll Mage, `TRMAB5` Background Troll Mage, and SHODAN as Background Gnome Mage director. `TRMAB5` is the only BotRunner action target for spell-casting tests because `ObjectiveType.CastSpell` resolves to `_objectManager.CastSpell(int)`, which is a documented no-op on the Foreground runner; FG is launched for Shodan-topology parity but stays idle.
   - Added a fixture-contained `StageBotRunnerAtRazorHillAsync` helper for the Razor Hill staging teleport (Durotar) so the Org arrival delta is unambiguous, and an optional `levelTo` parameter on `StageBotRunnerLoadoutAsync` so spell-casting tests can seed sufficient level via SOAP `.character level`.
   - Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/MageTeleportTests.md`. Inventory updated at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`: `MageTeleportTests.cs` moved to ALREADY-SHODAN; SHODAN-CANDIDATE total now ~44.
 - Validation:
@@ -5387,7 +5387,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `$env:WWOW_DATA_DIR='D:/MaNGOS/data'; dotnet test ... --filter "FullyQualifiedName~MageTeleportTests" --logger "console;verbosity=normal" --results-directory "tmp/test-runtime/results-live" --logger "trx;LogFileName=mage_teleport_shodan_levelup.trx"` -> `2 passed, 1 skipped (Alliance), 1 failed`. Pass: `MagePortal_PartyTeleported`, `MageAllCityTeleports`. Skip: `MageTeleport_Alliance_StormwindArrival` (Horde-only roster). Fail: `MageTeleport_Horde_OrgrimmarArrival` — pre-existing `SMSG_SPELL_FAILURE` for spell 3567 (initially `NO_POWER`, then a short-payload generic failure even after the bot was leveled to 20 and Rune of Teleportation was staged). Tracked as a follow-up; the Shodan/FG/BG migration shape is correct.
   - Reference anchor: `dotnet test ... --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool" --logger "trx;LogFileName=fishing_shodan_anchor.trx"` -> `failed (1/1)` after FG hit `fishing_loot_success` then BG hit `loot_window_timeout` + `max_casts_reached` (BG-side anchor flake; the prior session saw the same failure on FG). Not a regression from this slice.
 - Evidence:
-  - `tmp/test-runtime/results-live/mage_teleport_shodan_levelup.console.txt` shows `[ACTION-PLAN] BG TRMAB5/Jinmarbobhs: ... dispatch CastSpell.` and `[ACTION-PLAN] FG TRMAF5/Taldakurnqe: ... idle (FG ActionType.CastSpell-by-id is a no-op).`, then `Spell error for 3567: Cast failed for spell 3567` after the level-up to 20, ending in `Failed: 1, Passed: 2, Skipped: 1`.
+  - `tmp/test-runtime/results-live/mage_teleport_shodan_levelup.console.txt` shows `[ACTION-PLAN] BG TRMAB5/Jinmarbobhs: ... dispatch CastSpell.` and `[ACTION-PLAN] FG TRMAF5/Taldakurnqe: ... idle (FG ObjectiveType.CastSpell-by-id is a no-op).`, then `Spell error for 3567: Cast failed for spell 3567` after the level-up to 20, ending in `Failed: 1, Passed: 2, Skipped: 1`.
   - `tmp/test-runtime/results-live/fishing_shodan_anchor.console.txt` captures `[FG:CHAT] [TASK] FishingTask fishing_loot_success` followed by `[BG] FishingTask never reached fishing_loot_success within 3m`.
 - Files changed:
   - `Services/WoWStateManager/Settings/Configs/MageTeleport.config.json` (new)
@@ -5403,7 +5403,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-24, Shodan test-director overhaul slice 2 - EquipmentEquipTests + WandAttackTests)
 - Completed:
-  - Migrated `EquipmentEquipTests.cs` to the Shodan test-director pattern. `Equipment.config.json` now launches `EQUIPFG1`/`EQUIPBG1` Orc Warriors plus SHODAN; Shodan stages loadout, and only the FG/BG action targets receive `ActionType.EquipItem`.
+  - Migrated `EquipmentEquipTests.cs` to the Shodan test-director pattern. `Equipment.config.json` now launches `EQUIPFG1`/`EQUIPBG1` Orc Warriors plus SHODAN; Shodan stages loadout, and only the FG/BG action targets receive `ObjectiveType.EquipItem`.
   - Migrated `WandAttackTests.cs` to a separate `Wand.config.json` with `TRMAF5`/`TRMAB5` Troll Mages plus SHODAN. This keeps wand loadout/actions on mage characters; Shodan remains director-only.
   - Added action-target guardrails in `LiveBotFixture.TestDirector`: `ResolveBotRunnerActionTargets(...)` logs the director/target split and refuses to treat SHODAN as an action target; `AssertConfiguredCharactersMatchAsync(...)` verifies the live account character class/race/gender against the selected config before actions run.
   - Fixed foreground character creation class selection so configured mage accounts are created as mages, not warriors, by resolving the race-local `SetSelectedClass` slot from `GetClassesForRace(...)`.
@@ -5440,7 +5440,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 - Completed:
   - Audited the 70 top-level `Tests/BotRunner.Tests/LiveValidation/*.cs` files for direct FG/BG GM-command usage and grouped them by migration category. ~45 are SHODAN-CANDIDATE (test-body GM setup that should move to Shodan), the others are ACTIVITY-OWNED, NO-GM-USAGE, ALREADY-SHODAN, or FIXTURE-INFRASTRUCTURE. Inventory landed at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`.
   - Added the first Shodan test-director helper: `LiveBotFixture.StageBotRunnerLoadoutAsync(targetAccount, label, spellsToLearn?, skillsToSet?, itemsToAdd?, cleanSlate, clearInventoryFirst)` with declarative `SkillDirective` / `ItemDirective` records (`Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`). The helper refuses to be called against Shodan herself and rejects empty target accounts.
-  - Migrated `UnequipItemTests.cs` as the pilot. It now launches `Equipment.config.json` (`EQUIPFG1` + `EQUIPBG1` + SHODAN, no `AssignedActivity`), stages each role via `StageBotRunnerLoadoutAsync`, then dispatches only `ActionType.EquipItem` and `ActionType.UnequipItem`. The test body issues no GM commands. Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/UnequipItemTests.md`.
+  - Migrated `UnequipItemTests.cs` as the pilot. It now launches `Equipment.config.json` (`EQUIPFG1` + `EQUIPBG1` + SHODAN, no `AssignedActivity`), stages each role via `StageBotRunnerLoadoutAsync`, then dispatches only `ObjectiveType.EquipItem` and `ObjectiveType.UnequipItem`. The test body issues no GM commands. Doc refreshed at `Tests/BotRunner.Tests/LiveValidation/docs/UnequipItemTests.md`.
   - Created `Services/WoWStateManager/Settings/Configs/Equipment.config.json` to back the new pilot launch and subsequent equipment/generic-loadout migrations. Wand-specific action tests now use `Wand.config.json`.
 - Validation:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj -c Release -v minimal -m:1 -p:UseSharedCompilation=false` -> `0 errors` (1066 warnings, unchanged).
@@ -5488,7 +5488,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-24, live-validation Tier 1 slice 12 - single-launch Ratchet fishing; BG pathfinding cast restored)
 - Completed:
-  - Simplified `Fishing_CatchFish_BgAndFg_RatchetStagedPool` down to one `EnsureSettingsAsync(Fishing.config.json)` launch. The test now keeps FG + BG + Shodan online together, stages with Shodan, dispatches `ActionType.StartFishing` to FG, re-stages, then dispatches the same action to BG. `Fishing.config.json` no longer assigns `Fishing[Ratchet]` to TESTBOT1/TESTBOT2, and the obsolete `Fishing.ShodanOnly.config.json` roster file was deleted.
+  - Simplified `Fishing_CatchFish_BgAndFg_RatchetStagedPool` down to one `EnsureSettingsAsync(Fishing.config.json)` launch. The test now keeps FG + BG + Shodan online together, stages with Shodan, dispatches `ObjectiveType.StartFishing` to FG, re-stages, then dispatches the same action to BG. `Fishing.config.json` no longer assigns `Fishing[Ratchet]` to TESTBOT1/TESTBOT2, and the obsolete `Fishing.ShodanOnly.config.json` roster file was deleted.
   - Extended `ActionDispatcher.StartFishing` so action-dispatched fishing matches the env-var path. The dispatcher now accepts `[location, useGmCommands, masterPoolId, waypoint floats...]`, forwards those into `FishingTask`, and preserves the legacy float-only waypoint shape. Added `BotRunnerServiceFishingDispatchTests` coverage for both shapes.
   - Fixed the recurring BG Ratchet LOS regression reported in the latest screenshot. `FishingTask.TryResolveCastPosition(...)` had drifted back to native-first selection, which made BG reuse `castSource=native` dock-interior standoffs (`distance≈18.2`) that threw into the pier. The resolver is pathfinding-first again, with the native ring sweep kept only as fallback.
 - Validation:
@@ -5554,7 +5554,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 - Completed:
   - Fixed the Shodan activity leak in `Services/WoWStateManager/StateManagerWorker.BotManagement.cs`. `TESTBOT1` launches were leaving `WWOW_ASSIGNED_ACTIVITY=Fishing[Ratchet]` in process-global env state, and the next background launch inherited it. `StartBackgroundBotWorker(...)` now explicitly removes optional env vars when absent, and `StartForegroundBotRunner(...)` now clears the same optional globals when null, so `UseGmCommands=true` with no `AssignedActivity` leaves Shodan idle instead of auto-running `FishingTask`.
-  - Added a dedicated admin loadout path in `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ShodanLoadout.cs` and switched `FishingProfessionTests` to use it. The helper levels Shodan to 60, resets items, learns wand proficiency (`5019`), `.additem`s a slot-correct mage BIS list, then dispatches `ActionType.EquipItem` per item and waits until each item leaves the bag snapshot. This proves the items are equipped, not merely added to inventory.
+  - Added a dedicated admin loadout path in `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ShodanLoadout.cs` and switched `FishingProfessionTests` to use it. The helper levels Shodan to 60, resets items, learns wand proficiency (`5019`), `.additem`s a slot-correct mage BIS list, then dispatches `ObjectiveType.EquipItem` per item and waits until each item leaves the bag snapshot. This proves the items are equipped, not merely added to inventory.
   - Corrected the slot map after live validation exposed bad IDs in the earlier list. The final validated loadout is Frostfire-based with `22498/22499/22496/22503/22501/22502/22497/22500`, neck `23058`, cloak `22731`, rings `23062/23031`, trinkets `23046/19379`, main-hand `22589`, and ranged wand `22820`. No fishing pole is present.
 - Remaining blocker: the focused Ratchet fishing slice is still red, but for a different reason. Shodan now logs in, stands still, and only acts when the fixture sends explicit GM chat. The next failure is the pool-staging verifier: `EnsureCloseFishingPoolActiveNearAsync(...)` keeps logging `closest active pool = 340282346638528859811704183484516925440.0y` (`float.MaxValue`), which means the current `.pool spawns 2628` response parsing is not surfacing child coordinates in the captured chat path.
 - Validation:
@@ -5715,7 +5715,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
 
 ## Handoff (2026-04-22, live-validation Tier 1 slice 4 - dual-bot Ratchet staged-pool fishing)
 
-- Completed: replaced the pier open-water direct-cast shortcut in `FishingProfessionTests` with `Fishing_CatchFish_BgAndFg_RatchetStagedPool`, the authoritative FG+BG Ratchet staged-pool proof. Both TESTBOT1 (FG) and TESTBOT2 (BG) are now required in-world (asserted pre- and post-prep against `LiveBotFixture.AllBots`), stage at the Ratchet packet-capture dock, locate a real off-shore fishing pool via `PrepareRatchetFishingStageAsync` (DB spawn query + natural respawn wait + visible-pool confirmation), and dispatch the task-owned `ActionType.StartFishing` flow. `AssertFishingResult` enforces `pool_acquired`, cast-range arrival, channel/bobber observation, and a newly looted item for each bot. Shoreline/open-water direct-cast shortcuts are no longer part of the pass contract.
+- Completed: replaced the pier open-water direct-cast shortcut in `FishingProfessionTests` with `Fishing_CatchFish_BgAndFg_RatchetStagedPool`, the authoritative FG+BG Ratchet staged-pool proof. Both TESTBOT1 (FG) and TESTBOT2 (BG) are now required in-world (asserted pre- and post-prep against `LiveBotFixture.AllBots`), stage at the Ratchet packet-capture dock, locate a real off-shore fishing pool via `PrepareRatchetFishingStageAsync` (DB spawn query + natural respawn wait + visible-pool confirmation), and dispatch the task-owned `ObjectiveType.StartFishing` flow. `AssertFishingResult` enforces `pool_acquired`, cast-range arrival, channel/bobber observation, and a newly looted item for each bot. Shoreline/open-water direct-cast shortcuts are no longer part of the pass contract.
 - Deletions: removed the pier open-water direct-cast path entirely. Dropped `RunPierOpenWaterFishing*`, `AssertDirectFishing*`, `FormatDirectFishingFailureContext`, `BuildRatchetPierCastCandidates`, `TryDirectFishingCastAsync`, `TryEnsureRatchetPierCastProbeReady`, `EnsureTestNavigationDllResolverRegistered`, `ResolveNavigationDllForTests`, `WaitForPositionSettledAsync`, `MoveToFishingWaypointAsync*`, `WaitForGoToArrivalMessageAsync`, `WaitForFacingSettledAsync`, `WaitForCastReadySnapshotAsync`, `WaitForFishingPoleEquippedAsync`, the facing utilities (`CalculateFacingToPoint/Delta`, `NormalizeAngleRadians`, `FacingDeltaRadians`, `GetMainhandGuid`, `MakeSetFacing`, `MakeGoto`), the pier-specific record types (`DirectFishingRunResult`, `DirectFishingCastCandidate`, `FerryCastTargetSpec`, `DirectFishingCastAttemptResult`, `PositionWaitResult`, `GoToArrivalWaitResult`, `WaypointMoveResult`), the pier/known-pool constants, the Navigation P/Invokes, and the now-unused `System.Reflection` / `System.Runtime.InteropServices` / `BotRunner.Native` usings. File shrank from `3023` -> `1832` lines.
 - Validation:
   - `tasklist /FI "IMAGENAME eq WoW.exe" /FO LIST` -> `No tasks are running which match the specified criteria.`
@@ -5903,7 +5903,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
     `CommandAckEvent` (so coordinators can log failure reasons). Existing
     `BattlegroundCoordinatorAckTests` stay green because the status-only wrapper
     preserves the `P4.5.1` contract.
-  - `HandleApplyingLoadouts` pre-stamps `ActionMessage.CorrelationId` with
+  - `HandleApplyingLoadouts` pre-stamps `ObjectiveMessage.CorrelationId` with
     `bg-coord:loadout:<account>:<guid>`. `CharacterStateSocketListener.StampDispatchCorrelationId`
     already skips stamping when `CorrelationId` is non-empty, so the coordinator id
     survives end-to-end to the `CommandAckEvent` without listener changes.
@@ -5928,8 +5928,8 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -nodeReuse:false -v:minimal` -> `succeeded (0 errors)`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BattlegroundCoordinator|FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests|FullyQualifiedName~LoadoutTaskExecutorTests|FullyQualifiedName~ActionForwardingContractTests" --logger "console;verbosity=minimal"` -> `passed (109/109)`
 - Notes:
-  - `BattlegroundCoordinator.LastAckStatus` is static and reusable — coordinator state handlers can key on a dispatched `ActionMessage`'s correlation id to react to ACK arrivals without repeating the scan logic. Integration into further coordinator transitions is deferred until a concrete driver shows up that needs it.
-  - `SendGmChatCommandTrackedAsync` now stamps a test-owned `test:<account>:<seq>` correlation id on every dispatched `ActionMessage`. `CharacterStateSocketListener.StampDispatchCorrelationId` only stamps when the id is empty, so the test id survives to the snapshot.
+  - `BattlegroundCoordinator.LastAckStatus` is static and reusable — coordinator state handlers can key on a dispatched `ObjectiveMessage`'s correlation id to react to ACK arrivals without repeating the scan logic. Integration into further coordinator transitions is deferred until a concrete driver shows up that needs it.
+  - `SendGmChatCommandTrackedAsync` now stamps a test-owned `test:<account>:<seq>` correlation id on every dispatched `ObjectiveMessage`. `CharacterStateSocketListener.StampDispatchCorrelationId` only stamps when the id is empty, so the test id survives to the snapshot.
   - Migration policy: only `AssertCommandSucceeded` helpers in `IntegrationValidationTests` and `TalentAllocationTests` were moved over. The rest continue to use `ContainsCommandRejection` until the backing command wires a `CommandAckEvent`. The legacy helper is intentionally still exposed from `LiveBotFixture.Assertions.cs`.
 - Files changed:
   - `Services/WoWStateManager/Coordination/BattlegroundCoordinator.cs`
@@ -6031,7 +6031,7 @@ Physics parity against WoW.exe is green. Packet dispatch, ObjectManager state mu
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BotRunnerServiceSnapshotTests|FullyQualifiedName~BotRunnerServiceLoadoutDispatchTests" --logger "console;verbosity=minimal"` -> `passed (22/22)`
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ActionForwardingContractTests|FullyQualifiedName~LoadoutSpecConverterTests" --logger "console;verbosity=minimal"` -> `passed (48/48)`
 - Notes:
-  - `ActionMessage.correlation_id` now survives the StateManager -> bot -> snapshot round trip. `CharacterStateSocketListener` stamps `account:sequence` ids when a dispatch reaches a bot without an explicit correlation id.
+  - `ObjectiveMessage.correlation_id` now survives the StateManager -> bot -> snapshot round trip. `CharacterStateSocketListener` stamps `account:sequence` ids when a dispatch reaches a bot without an explicit correlation id.
   - `WoWActivitySnapshot.recent_command_acks` is now the canonical cap-10 structured ACK ring. BotRunner emits `Pending` on dispatch plus `Success`/`Failed`/`TimedOut` on completion, including per-step `LoadoutTask` actions.
   - `SnapshotChangeSignature` now includes `RecentCommandAckCount`; unlike the chat/error rings dropped in `P4.2`, ACK count only changes per command dispatch/completion, so coordinator-visible ACK arrivals force immediate full snapshots without reintroducing diagnostic churn.
   - Duplicate `ApplyLoadout` requests now fail the duplicate correlation id without clobbering the original in-flight loadout ACK.

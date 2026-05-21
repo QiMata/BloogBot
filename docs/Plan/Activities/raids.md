@@ -197,7 +197,7 @@ Catalog references resolve through
 - **Test anchor** —
   `Tests/BotRunner.Tests/LiveValidation/Raids/RaidCoordinationTests.cs::Raid_LootRules_CorrectDistribution`.
   Filter: `dotnet test --filter "FullyQualifiedName~RaidCoordinationTests"
-  --configuration Release`. Today this test exercises `ActionType.AssignLoot`
+  --configuration Release`. Today this test exercises `ObjectiveType.AssignLoot`
   with the group-loot setting only — it asserts loot-method assignment,
   not full master-loot distribution. **Planned anchor test:**
   `Tests/BotRunner.Tests/LiveValidation/Raids/MasterLootTests.cs::MasterLoot_DistributeBossLoot_PriorityHonored`

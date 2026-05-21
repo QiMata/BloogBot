@@ -114,9 +114,9 @@ public async Task Feature_Scenario_ExpectedBehavior()
     await Task.Delay(3000);
 
     // 4. ACTION — send bot task via IPC
-    var result = await _bot.SendActionAsync(bgAccount, new ActionMessage
+    var result = await _bot.SendActionAsync(bgAccount, new ObjectiveMessage
     {
-        ActionType = ActionType.InteractWith,
+        ObjectiveType = ObjectiveType.InteractWith,
     });
 
     // 5. ASSERT — verify via snapshot

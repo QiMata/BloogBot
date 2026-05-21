@@ -67,9 +67,9 @@ public class MovementSpeedTests
         _output.WriteLine($"Actual start: ({startPos!.X:F1}, {startPos.Y:F1}, {startPos.Z:F1})\n");
 
         // Send GOTO to target
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.Goto,
+            ObjectiveType = ObjectiveType.Goto,
             Parameters =
             {
                 new RequestParameter { FloatParam = TargetX },

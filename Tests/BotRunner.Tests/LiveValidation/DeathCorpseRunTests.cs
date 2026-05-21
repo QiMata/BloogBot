@@ -163,7 +163,7 @@ public class DeathCorpseRunTests
         _output.WriteLine($"  [{label}] Corpse at: ({corpsePos.X:F1}, {corpsePos.Y:F1}, {corpsePos.Z:F1})");
 
         _output.WriteLine($"  [{label}] Step 2: Release corpse");
-        var releaseResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.ReleaseCorpse });
+        var releaseResult = await _bot.SendActionAsync(account, new ObjectiveMessage { ObjectiveType = ObjectiveType.ReleaseCorpse });
         if (releaseResult != ResponseResult.Success)
             return await FailAsync($"ReleaseCorpse failed: {releaseResult}", corpsePos);
 
@@ -187,14 +187,14 @@ public class DeathCorpseRunTests
         RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, account, "physics", "transform", "navtrace");
 
         _output.WriteLine($"  [{label}] Step 4: Start diagnostic recording and queue RetrieveCorpse from {graveyardDistanceToCorpse:F0}y away");
-        var startRecordingResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.StartPhysicsRecording });
+        var startRecordingResult = await _bot.SendActionAsync(account, new ObjectiveMessage { ObjectiveType = ObjectiveType.StartPhysicsRecording });
         if (startRecordingResult != ResponseResult.Success)
             return await FailAsync($"StartPhysicsRecording failed: {startRecordingResult}", corpsePos);
 
         (bool alive, float bestDistanceToCorpse, uint bestReclaimDelay, bool reachedCorpseRange) recoveryResult;
         try
         {
-            var retrieveResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.RetrieveCorpse });
+            var retrieveResult = await _bot.SendActionAsync(account, new ObjectiveMessage { ObjectiveType = ObjectiveType.RetrieveCorpse });
             if (retrieveResult != ResponseResult.Success)
                 return await FailAsync($"RetrieveCorpse failed: {retrieveResult}", corpsePos);
 
@@ -203,7 +203,7 @@ public class DeathCorpseRunTests
         }
         finally
         {
-            var stopRecordingResult = await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.StopPhysicsRecording });
+            var stopRecordingResult = await _bot.SendActionAsync(account, new ObjectiveMessage { ObjectiveType = ObjectiveType.StopPhysicsRecording });
             _output.WriteLine($"  [{label}] Recording stop result: {stopRecordingResult}");
             await Task.Delay(500);
         }

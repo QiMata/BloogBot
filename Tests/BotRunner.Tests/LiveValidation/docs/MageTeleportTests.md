@@ -1,6 +1,6 @@
 # MageTeleportTests
 
-Tests dispatching `ActionType.CastSpell` for the mage city-teleport spells
+Tests dispatching `ObjectiveType.CastSpell` for the mage city-teleport spells
 (`Teleport: Orgrimmar`, etc.) and asserting on snapshot position arrival.
 
 ## Bot Execution Mode
@@ -21,7 +21,7 @@ encapsulated in `StageBotRunnerAtRazorHillAsync`.
 
 **Bots:** BG (`TRMAB5`) + SHODAN (test director). FG (`TRMAF5`) is launched
 for topology parity but **does not receive the action dispatch**.
-`ActionType.CastSpell` resolves to `_objectManager.CastSpell(int spellId)`,
+`ObjectiveType.CastSpell` resolves to `_objectManager.CastSpell(int spellId)`,
 which is a documented no-op on Foreground (only the `CastSpellByName(string)`
 Lua overload casts there). BG sends `CMSG_CAST_SPELL` directly and is
 observable via the snapshot.
@@ -44,7 +44,7 @@ that needs separate inspection.
 | 1 | Wait for spell | Poll 8s for spell `3567` in `SpellList`. |
 | 2 | Wait for reagent | Poll 8s for item `17031` in bags. |
 | 3 | Stage at Razor Hill | `StageBotRunnerAtRazorHillAsync(bgAccount, "BG")` teleports BG to Razor Hill (Durotar) so the Org arrival delta is unambiguous. |
-| 4 | Cast teleport | Dispatch `ActionType.CastSpell` with `IntParam = 3567`. Assert Success. |
+| 4 | Cast teleport | Dispatch `ObjectiveType.CastSpell` with `IntParam = 3567`. Assert Success. |
 | 5 | Verify arrival | Poll 20s (10s cast + 10s buffer) for player position within 50yd of `(1676, -4315)` on map 1 (Orgrimmar landing in `MageTeleportData[3567]`). |
 
 ### MageTeleport_Alliance_StormwindArrival
@@ -54,7 +54,7 @@ that needs separate inspection.
 Skips when the configured roster is Horde-only (the default for this fixture).
 When run against an Alliance roster, the BG target receives Teleport:
 Stormwind (3561) plus the Rune of Teleportation reagent through
-`StageBotRunnerLoadoutAsync`, then dispatches `ActionType.CastSpell` and
+`StageBotRunnerLoadoutAsync`, then dispatches `ObjectiveType.CastSpell` and
 asserts a position change within 15s.
 
 ### MagePortal_PartyTeleported
@@ -89,7 +89,7 @@ appears in the BG snapshot's `SpellList`.
 
 ## StateManager/BotRunner Action Flow
 
-`ActionType.CastSpell` dispatches the spell id to the BotRunner. FG path:
+`ObjectiveType.CastSpell` dispatches the spell id to the BotRunner. FG path:
 Lua `CastSpellByName(spellName)`. BG path: `CMSG_CAST_SPELL` with the spell
 id. Self-teleport spells consume one Rune of Teleportation per cast and
 move the player to the landing coordinates baked into

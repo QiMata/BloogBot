@@ -183,7 +183,7 @@ Shared contract:
    `StopAttack`, `StopAllMovement`, `MoveToward`, `SetFacing`,
    `UseItem` (potions via `CombatRotationTask.TryUseHealthPotion` /
    `TryUseManaPotion`). Resulting snapshot deltas: `currentAction`
-   (ActionType.CastSpell etc.), `player.unit.targetGuid`,
+   (ObjectiveType.CastSpell etc.), `player.unit.targetGuid`,
    `movementData`, `player.unit.auras`.
 4. **BG protocol footprint** — `CMSG_CAST_SPELL`
    (`SpellcastingManager.cs:229,256,279`), `CMSG_SET_SELECTION`
@@ -523,7 +523,7 @@ Shared contract:
    `IObjectManager.IsSpellReady(Summon*)`. Writes by side-effect:
    `CastSpell(<summon spell>)` →
    `WoWActivitySnapshot.player.unit.auras` (channeling bit while
-   summon casts), `currentAction.actionType = CastSpell`,
+   summon casts), `currentAction.objectiveType = CastSpell`,
    followup snapshot's `nearbyUnits` gains the pet
    (Warlock pet GUID owned by player; Hunter pet from stable),
    `player.pet_guid` (where modelled).
@@ -549,7 +549,7 @@ Shared contract:
 6. **Test anchor** — `BotRunner.Tests.LiveValidation.PetManagementTests`
    at `Tests/BotRunner.Tests/LiveValidation/PetManagementTests.cs`
    (`Pet_SummonAndManage_StanceFeedAbility`), which dispatches
-   `ActionType.CastSpell` with `CallPetSpellId = 883` then
+   `ObjectiveType.CastSpell` with `CallPetSpellId = 883` then
    `DismissPetSpellId = 2641`.
    Command:
    `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --filter "FullyQualifiedName~PetManagementTests"`.

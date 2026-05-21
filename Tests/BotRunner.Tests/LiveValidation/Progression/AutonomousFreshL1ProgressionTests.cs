@@ -26,7 +26,7 @@ namespace BotRunner.Tests.LiveValidation.Progression;
 ///     current_activity_id (field 33), current_objective_id (34),
 ///     current_objective_type (35), advice_log (36),
 ///     roster_distance (46), Player.Level, Player.QuestLog
-///   - tests must NOT construct ActionMessage directly; the
+///   - tests must NOT construct ObjectiveMessage directly; the
 ///     composer-driven IBotTask chain produces the Actions
 ///   - tests must NOT issue .character level / .additem /
 ///     .modify reputation as part of the assertion phase

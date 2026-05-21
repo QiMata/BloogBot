@@ -17,8 +17,8 @@ receives the vendor actions itself.
 4. `StageBotRunnerAtRazorHillVendorAsync(...)` stages BG beside Grimtak.
 5. `StageBotRunnerCoinageAsync(...)` ensures BG has enough copper for the buy
    path.
-6. The test body dispatches only `ActionType.BuyItem`, `ActionType.SellItem`,
-   and post-buy `ActionType.DestroyItem` cleanup.
+6. The test body dispatches only `ObjectiveType.BuyItem`, `ObjectiveType.SellItem`,
+   and post-buy `ObjectiveType.DestroyItem` cleanup.
 
 ## Test Methods
 
@@ -26,7 +26,7 @@ receives the vendor actions itself.
 
 - BotRunner action target: `ECONBG1`.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.BuyItem` with the detected vendor
+- Under-test action dispatch: `ObjectiveType.BuyItem` with the detected vendor
   GUID, item `159`, and quantity `1`.
 - Result: passed.
 
@@ -34,7 +34,7 @@ receives the vendor actions itself.
 
 - BotRunner action target: `ECONBG1`.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.SellItem` with the detected vendor
+- Under-test action dispatch: `ObjectiveType.SellItem` with the detected vendor
   GUID, bag/slot from snapshot inventory, and quantity `1`.
 - Result: passed.
 

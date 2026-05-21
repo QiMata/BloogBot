@@ -65,7 +65,7 @@ Phase 1 complete (task families implementable).
   `IActivity.NextAction(snapshot)` pump and assert on `IObjective` state
   transitions. Three sub-deliverables:
   1. `IActivity`: `string Id`, `IActivityParameters Parameters`,
-     `ActionMessage? NextAction(WoWActivitySnapshot snapshot)`,
+     `ObjectiveMessage? NextAction(WoWActivitySnapshot snapshot)`,
      `ActivityCompletion CheckCompletion(WoWActivitySnapshot snapshot)`.
      Mirror D2's contract.
   2. `IObjective`: `string Id`, `ObjectiveType Type`,

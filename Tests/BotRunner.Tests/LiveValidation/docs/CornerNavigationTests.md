@@ -2,7 +2,7 @@
 
 Shodan-directed corner and obstacle navigation coverage. SHODAN stages the BG
 action target at each probe coordinate; the BotRunner target receives only
-`ActionType.TravelTo` for route checks.
+`ObjectiveType.TravelTo` for route checks.
 
 ## Bot Execution Mode
 
@@ -36,7 +36,7 @@ The test body does not issue GM commands. The fixture owns:
 
 ## Runtime Linkage
 
-- Route probes dispatch `ActionType.TravelTo` to `ECONBG1`.
+- Route probes dispatch `ObjectiveType.TravelTo` to `ECONBG1`.
 - Snapshot-only probes still use Shodan-owned staging and never call
   `BotTeleportAsync(...)` from the test body.
 - FG stays idle for topology parity. SHODAN is director-only and never receives

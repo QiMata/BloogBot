@@ -3,7 +3,7 @@
 `EconomyInteractionTests` now uses the Shodan test-director topology for
 banker, auctioneer, and mailbox interaction baselines. The test body issues no
 GM setup commands; SHODAN owns world and mail staging through fixture helpers,
-while FG/BG receive only `ActionType` dispatches.
+while FG/BG receive only `ObjectiveType` dispatches.
 
 ## Shodan Shape
 
@@ -26,7 +26,7 @@ while FG/BG receive only `ActionType` dispatches.
 
 - BotRunner action targets: `ECONBG1`, then `ECONFG1` when actionable.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.InteractWith` with the detected
+- Under-test action dispatch: `ObjectiveType.InteractWith` with the detected
   banker GUID.
 - Result: passed.
 
@@ -34,7 +34,7 @@ while FG/BG receive only `ActionType` dispatches.
 
 - BotRunner action targets: `ECONBG1`, then `ECONFG1` when actionable.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.InteractWith` with the detected
+- Under-test action dispatch: `ObjectiveType.InteractWith` with the detected
   auctioneer GUID.
 - Result: passed.
 
@@ -42,7 +42,7 @@ while FG/BG receive only `ActionType` dispatches.
 
 - BotRunner action targets: `ECONBG1`, then `ECONFG1` when actionable.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.CheckMail` with the detected mailbox
+- Under-test action dispatch: `ObjectiveType.CheckMail` with the detected mailbox
   GUID.
 - Result: passed. The test asserts coinage increases after the fixture stages a
   money mail for each target.

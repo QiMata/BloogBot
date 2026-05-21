@@ -23,12 +23,18 @@ before another Objective becomes the next bottleneck ("reach the
 instance portal", "kill the next named", "open the door"). An Objective
 unfolds into **Tasks** — behavior-tree nodes that other Tasks reuse
 (`GoToTask`, `InteractWithTask`, `LootCorpseTask`, `CastSpellTask`).
-A Task ultimately emits **Actions** — single protobuf wire messages
-(`ActionMessage{ActionType=TravelTo, …}`).
+A Task ultimately invokes **Actions** — reusable code primitives that
+mirror what a human player can do (`ReadLootWindow()`, `PressHotkeyAsync("1")`,
+`IObjectManager.CastSpellAsync(id, target)`). Actions are pure local code;
+the wire transports **Objectives** as `ObjectiveMessage` (formerly named
+`ActionMessage`, renamed 2026-05-21 — a misnomer cleaned up because what's
+on the wire is an Objective-level state-change request, not an Action).
 
 Each layer composes the layer below it **and itself**. Actions call
-Actions (object-manager helpers that internally fire multiple wire
-messages and observe their effects). Tasks push Tasks (a `LongTravelTask`
+Actions (object-manager helpers that internally combine multiple
+primitive reads and writes — `IObjectManager.TurnInQuestAsync()` invokes
+`InteractWithNpc()` + `SelectGossipOption()` + `ReadQuestRewardSlots()` +
+`ConfirmReward()` and verifies the quest log changes). Tasks push Tasks (a `LongTravelTask`
 is a sequence of `GoToTask` + `BoardTransportTask` + `TakeFlightPathTask`).
 Objectives chain Objectives via prerequisite edges. Activities reference
 other Activities as preconditions ("BWL Attune requires UBRS cleared
@@ -39,23 +45,26 @@ of leaf primitives.
 ## The four layers at a glance
 
 ```
-                       (one assigned at a time per bot)
-Activity     ──►  "Run UBRS"                      ←─ catalog row
-  └─ Objective  ──►  "reach Flame Crest"          ←─ next-blocker slice
-       └─ Task     ──►  TravelToTask(coord)       ←─ behavior-tree node
-            └─ Action  ──►  ActionMessage{TravelTo,x,y,z}  ←─ wire message
+                       (one assigned at a time per bot; supports any number of characters)
+Activity     ──►  "Run UBRS"                                ←─ catalog row + DecisionEngine compose
+  └─ Objective  ──►  ObjectiveMessage{reach-flame-crest}    ←─ WIRE-LEVEL state-change request
+       └─ Task     ──►  TravelToTask(coord)                 ←─ behavior-tree node; orchestrates Actions
+            └─ Action  ──►  IObjectManager.MoveToAsync(...) ←─ LOCAL code primitive (player capability)
 ```
 
 | Layer | Granularity | Lifetime on stack | Wire-visible? |
 |---|---|---|---|
 | **Activity** | minutes to hours | duration of the run | indirect (catalog id projected onto snapshot in Phase 2) |
-| **Objective** | seconds to single minute | duration of one state-change slice | indirect (objective id projected onto snapshot in Phase 2) |
-| **Task** | tick to tens of seconds | duration on LIFO stack | indirect (top-of-stack name on snapshot) |
-| **Action** | single tick / packet | fire-and-forget | **yes** — the only thing that crosses StateManager ↔ BotRunner |
+| **Objective** | seconds to single minute | duration of one state-change slice | **yes — `ObjectiveMessage` on the wire** (formerly `ActionMessage` — misnomer cleaned up 2026-05-21) |
+| **Task** | tick to tens of seconds | duration on LIFO stack | indirect (top-of-stack `current_task_name` on snapshot) |
+| **Action** | function call | local, fire-and-await | **no** — pure local code primitive; never on the wire |
 
 The **only** thing that crosses the StateManager↔BotRunner TCP boundary
-is an `ActionMessage`. Activities, Objectives, and Tasks are runtime
-state derived from Activity assignment + task-stack inspection.
+is an `ObjectiveMessage` (an Objective-level state-change request). The
+BotRunner decomposes it into Tasks via behavior tree + DB lookups, and
+Tasks invoke Actions (reusable code primitives) locally. Activity
+assignment and Task identity are projected onto the snapshot for
+observability.
 
 ## Why this matters for a "dynamic" DecisionEngine
 
@@ -107,7 +116,7 @@ only the activity row's minimum prerequisites resolve. Detail in
 
 - [`docs/Spec/18_TERMINOLOGY.md`](../../Spec/18_TERMINOLOGY.md) — canonical glossary; one-paragraph definition of each layer + the worked UBRS example.
 - [`docs/Spec/04_ACTIVITIES.md`](../../Spec/04_ACTIVITIES.md) — `ActivityDefinition` record, OnDemand vs Autonomous flows, legality validation, the 7-step gating.
-- [`docs/Spec/03_BOTRUNNER.md`](../../Spec/03_BOTRUNNER.md) — `IBotTask` contract (target Phase-1 async surface), task-family catalog, `ActionMessage` dispatch.
+- [`docs/Spec/03_BOTRUNNER.md`](../../Spec/03_BOTRUNNER.md) — `IBotTask` contract (target Phase-1 async surface), task-family catalog, `ObjectiveMessage` dispatch.
 - [`docs/Spec/05_PROGRESSION.md`](../../Spec/05_PROGRESSION.md) — `RosterPlanner` / `ProgressionPlanner` / `ActivityScheduler`; the planner *that* uses AOTA.
 - [`docs/leveling-guide/`](../../leveling-guide/) — reference data on WoW game mechanics; the input the DecisionEngine reads alongside the MaNGOS DB.
 - [`docs/Plan/Activities/`](../../Plan/Activities/) — per-activity-family implementation slot tables; `00_INDEX.md` is the 86-row catalog board.

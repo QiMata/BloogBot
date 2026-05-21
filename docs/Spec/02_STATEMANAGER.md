@@ -50,7 +50,7 @@ config defaulting to `Test`.
 
 | Mode | Behavior |
 |---|---|
-| `Test` | StateManager waits for explicit `ActionMessage` dispatch from a test fixture. No automatic loadout, no automatic activity start. Used by every `BotRunner.Tests` LiveValidation test. |
+| `Test` | StateManager waits for explicit `ObjectiveMessage` dispatch from a test fixture. No automatic loadout, no automatic activity start. Used by every `BotRunner.Tests` LiveValidation test. |
 | `Automated` | At world-entry, StateManager auto-dispatches `APPLY_LOADOUT` then parses `AssignedActivity` and starts the corresponding activity. Bots self-progress through `Loadout` → `AssignedActivity` → `NextActivities[]`. |
 | `OnDemandActivities` | Adds external request handling on top of `Automated`. Shodan listens for in-game whispers (`!fish ratchet`, `!group rfc 15-20`); the WPF UI submits requests over IPC. The mode handler treats human requests as high-priority leases. |
 

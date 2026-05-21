@@ -214,10 +214,10 @@ Frame Movement: (moveDir, distance)
 |----------|-------|-------------|
 | `GRAVITY` | 19.29 | WoW gravity (yards/s^2) |
 | `JUMP_VELOCITY` | 7.96 | Initial jump velocity (yards/s) |
-| `STEP_HEIGHT` | 2.125 | Maximum auto-step height (yards) |
+| `STEP_HEIGHT` | 2.027778 | Maximum auto-step height (yards) |
 | `STEP_DOWN_HEIGHT` | 4.0 | Maximum ground snap distance (yards) |
 | `GROUND_HEIGHT_TOLERANCE` | 0.04 | Ground detection tolerance |
-| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.5 | Walkable slope threshold (cos 60 deg) |
+| `DEFAULT_WALKABLE_MIN_NORMAL_Z` | 0.6428 | Walkable slope threshold (cos 50 deg) |
 | `WATER_LEVEL_DELTA` | 2.0 | Swimming transition depth |
 
 ## Usage

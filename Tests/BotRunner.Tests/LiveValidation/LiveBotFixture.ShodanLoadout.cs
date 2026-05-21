@@ -99,9 +99,9 @@ public partial class LiveBotFixture
 
             var equipResult = await SendActionAsync(
                 shodanAccountName,
-                new ActionMessage
+                new ObjectiveMessage
                 {
-                    ActionType = ActionType.EquipItem,
+                    ObjectiveType = ObjectiveType.EquipItem,
                     Parameters = { new RequestParameter { IntParam = itemId } }
                 },
                 emitOutput: false);

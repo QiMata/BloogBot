@@ -1,12 +1,12 @@
 # Bot Capability Audit — 2026-03-07
 
-## ActionType Implementation Status
+## ObjectiveType Implementation Status
 
-Every ActionType defined in `communication.proto` is mapped in `BotRunnerService.ActionMapping.cs` and dispatched in `BotRunnerService.ActionDispatch.cs`. However, many BG bot (WoWSharpClient) implementations are stubs.
+Every ObjectiveType defined in `communication.proto` is mapped in `BotRunnerService.ActionMapping.cs` and dispatched in `BotRunnerService.ActionDispatch.cs`. However, many BG bot (WoWSharpClient) implementations are stubs.
 
 ### Fully Implemented + Tested
 
-| ActionType | BG Bot Status | FG Bot Status | Test File |
+| ObjectiveType | BG Bot Status | FG Bot Status | Test File |
 |------------|---------------|---------------|-----------|
 | GOTO | Working (pathfinding + physics) | Working (CTM disabled, pathfinding) | GatheringProfessionTests |
 | INTERACT_WITH | Working (CMSG_GAMEOBJ_USE / NPC_TEXT) | Working (native) | EconomyInteractionTests, NpcInteractionTests |
@@ -31,7 +31,7 @@ Every ActionType defined in `communication.proto` is mapped in `BotRunnerService
 
 ### Implemented but NOT Tested
 
-| ActionType | BG Bot Status | FG Bot Status | Priority | Notes |
+| ObjectiveType | BG Bot Status | FG Bot Status | Priority | Notes |
 |------------|---------------|---------------|----------|-------|
 | WAIT | Working (timer) | Working | LOW | Trivial |
 | SELECT_GOSSIP | Working (gossip frame) | Working | MEDIUM | Needs gossip NPC interaction |
@@ -43,7 +43,7 @@ Every ActionType defined in `communication.proto` is mapped in `BotRunnerService
 
 ### Stubbed / Not Working on BG Bot
 
-| ActionType | BG Bot Issue | FG Bot Status | Priority | Fix Required |
+| ObjectiveType | BG Bot Issue | FG Bot Status | Priority | Fix Required |
 |------------|-------------|---------------|----------|--------------|
 | UNEQUIP_ITEM | **FIXED + TESTED** — delegates to `EquipmentAgent.UnequipItemAsync()` | Working (native) | ~~MEDIUM~~ | CMSG_AUTOSTORE_BAG_ITEM |
 | BUY_ITEM | **FIXED** — `BuyItemFromVendorAsync` via VendorAgent (with vendorGuid param) | Working (native) | ~~HIGH~~ | Legacy MerchantFrame path still null |
@@ -78,8 +78,8 @@ Every ActionType defined in `communication.proto` is mapped in `BotRunnerService
 **Fix:** `WoWSharpObjectManager.UnequipItem()` delegates to `EquipmentAgent.UnequipItemAsync()` (CMSG_AUTOSTORE_BAG_ITEM). Maps `EquipSlot` → `EquipmentSlot` (offset -1).
 
 ### GAP-3: TrainerFrame — Low Priority
-**Impact:** BG bot cannot train spells via ActionType.TrainSkill.
-**Status:** `LearnAllAvailableSpellsAsync` already bypasses TrainerFrame via TrainerAgent. ActionType.TrainSkill legacy path still depends on null TrainerFrame. Tests use GM `.learn` commands.
+**Impact:** BG bot cannot train spells via ObjectiveType.TrainSkill.
+**Status:** `LearnAllAvailableSpellsAsync` already bypasses TrainerFrame via TrainerAgent. ObjectiveType.TrainSkill legacy path still depends on null TrainerFrame. Tests use GM `.learn` commands.
 
 ## Test Coverage Summary
 
@@ -114,4 +114,4 @@ Every ActionType defined in `communication.proto` is mapped in `BotRunnerService
 1. ~~**VendorBuySellTests**~~ — **DONE** (session 19): Buy + Sell via CMSG_LIST_INVENTORY + CMSG_BUY_ITEM + CMSG_SELL_ITEM
 2. ~~**SpellCastOnTargetTests**~~ — **DONE** (session 20): Heroic Strike on mob, verify damage
 3. ~~**UnequipItemTests**~~ — **DONE** (session 20): Equip → unequip → verify slot empty
-4. ~~**BuffDismissTests**~~ — **DONE** (session 20): Apply buff → dismiss (ActionType + .unaura fallback) → verify removal
+4. ~~**BuffDismissTests**~~ — **DONE** (session 20): Apply buff → dismiss (ObjectiveType + .unaura fallback) → verify removal

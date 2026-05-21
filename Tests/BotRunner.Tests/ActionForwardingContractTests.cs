@@ -35,9 +35,9 @@ public class ActionForwardingContractTests
             ActionForward = new ActionForwardRequest
             {
                 AccountName = "TESTBOT1",
-                Action = new ActionMessage
+                Action = new ObjectiveMessage
                 {
-                    ActionType = ActionType.SendChat,
+                    ObjectiveType = ObjectiveType.SendChat,
                     Parameters = { new RequestParameter { StringParam = "/say Hello" } }
                 }
             }
@@ -47,7 +47,7 @@ public class ActionForwardingContractTests
         var deserialized = AsyncRequest.Parser.ParseFrom(bytes);
 
         Assert.Equal("TESTBOT1", deserialized.ActionForward.AccountName);
-        Assert.Equal(ActionType.SendChat, deserialized.ActionForward.Action.ActionType);
+        Assert.Equal(ObjectiveType.SendChat, deserialized.ActionForward.Action.ObjectiveType);
         Assert.Single(deserialized.ActionForward.Action.Parameters);
         Assert.Equal("/say Hello", deserialized.ActionForward.Action.Parameters[0].StringParam);
     }
@@ -55,9 +55,9 @@ public class ActionForwardingContractTests
     [Fact]
     public void ActionForwardRequest_MultipleParameters_PreserveOrder()
     {
-        var action = new ActionMessage
+        var action = new ObjectiveMessage
         {
-            ActionType = ActionType.Goto,
+            ObjectiveType = ObjectiveType.Goto,
             Parameters =
             {
                 new RequestParameter { FloatParam = 1629.5f },
@@ -93,9 +93,9 @@ public class ActionForwardingContractTests
             ActionForward = new ActionForwardRequest
             {
                 AccountName = "TESTBOT3",
-                Action = new ActionMessage
+                Action = new ObjectiveMessage
                 {
-                    ActionType = ActionType.ApplyLoadout,
+                    ObjectiveType = ObjectiveType.ApplyLoadout,
                     CorrelationId = "acct-123:42",
                     LoadoutSpec = new LoadoutSpec { TargetLevel = 60u }
                 }
@@ -106,7 +106,7 @@ public class ActionForwardingContractTests
         var deserialized = AsyncRequest.Parser.ParseFrom(bytes);
 
         Assert.Equal("acct-123:42", deserialized.ActionForward.Action.CorrelationId);
-        Assert.Equal(ActionType.ApplyLoadout, deserialized.ActionForward.Action.ActionType);
+        Assert.Equal(ObjectiveType.ApplyLoadout, deserialized.ActionForward.Action.ObjectiveType);
         Assert.Equal(60u, deserialized.ActionForward.Action.LoadoutSpec.TargetLevel);
     }
 
@@ -151,7 +151,7 @@ public class ActionForwardingContractTests
             ActionForward = new ActionForwardRequest
             {
                 AccountName = "",
-                Action = new ActionMessage { ActionType = ActionType.Wait }
+                Action = new ObjectiveMessage { ObjectiveType = ObjectiveType.Wait }
             }
         };
 
@@ -170,9 +170,9 @@ public class ActionForwardingContractTests
             ActionForward = new ActionForwardRequest
             {
                 AccountName = "TESTBOT1",
-                Action = new ActionMessage
+                Action = new ObjectiveMessage
                 {
-                    ActionType = ActionType.SendChat,
+                    ObjectiveType = ObjectiveType.SendChat,
                     Parameters = { new RequestParameter { StringParam = "/say compressed" } }
                 }
             }
@@ -186,7 +186,7 @@ public class ActionForwardingContractTests
 
         Assert.Equal(42ul, deserialized.Id);
         Assert.Equal("TESTBOT1", deserialized.ActionForward.AccountName);
-        Assert.Equal(ActionType.SendChat, deserialized.ActionForward.Action.ActionType);
+        Assert.Equal(ObjectiveType.SendChat, deserialized.ActionForward.Action.ObjectiveType);
         Assert.Equal("/say compressed", deserialized.ActionForward.Action.Parameters[0].StringParam);
     }
 
@@ -249,7 +249,7 @@ public class ActionForwardingContractTests
         snapshot.RecentCommandAcks.Add(new CommandAckEvent
         {
             CorrelationId = "WSGBOT1:17",
-            ActionType = ActionType.ApplyLoadout,
+            ObjectiveType = ObjectiveType.ApplyLoadout,
             Status = CommandAckEvent.Types.AckStatus.Success,
             FailureReason = string.Empty,
             RelatedId = 23509u,
@@ -260,7 +260,7 @@ public class ActionForwardingContractTests
 
         var ack = Assert.Single(deserialized.RecentCommandAcks);
         Assert.Equal("WSGBOT1:17", ack.CorrelationId);
-        Assert.Equal(ActionType.ApplyLoadout, ack.ActionType);
+        Assert.Equal(ObjectiveType.ApplyLoadout, ack.ObjectiveType);
         Assert.Equal(CommandAckEvent.Types.AckStatus.Success, ack.Status);
         Assert.Equal(23509u, ack.RelatedId);
     }
@@ -487,7 +487,7 @@ public class ActionForwardingContractTests
         listener.CurrentActivityMemberList["DEAD_ACCT"] = deadSnap;
 
         // Enqueue a non-chat action — should be accepted
-        var gotoAction = new ActionMessage { ActionType = ActionType.Goto };
+        var gotoAction = new ObjectiveMessage { ObjectiveType = ObjectiveType.Goto };
         var ex = Record.Exception(() => listener.EnqueueAction("DEAD_ACCT", gotoAction));
         Assert.Null(ex);
     }
@@ -508,7 +508,7 @@ public class ActionForwardingContractTests
         listener.CurrentActivityMemberList["DEAD_ACCT"] = deadSnap;
 
         // SendChat should be dropped
-        var chatAction = new ActionMessage { ActionType = ActionType.SendChat };
+        var chatAction = new ObjectiveMessage { ObjectiveType = ObjectiveType.SendChat };
         listener.EnqueueAction("DEAD_ACCT", chatAction);
 
         // Verify via pending actions field
@@ -536,7 +536,7 @@ public class ActionForwardingContractTests
         listener.CurrentActivityMemberList["ALIVE_ACCT"] = aliveSnap;
 
         // SendChat should be accepted when alive
-        var chatAction = new ActionMessage { ActionType = ActionType.SendChat };
+        var chatAction = new ObjectiveMessage { ObjectiveType = ObjectiveType.SendChat };
         var ex = Record.Exception(() => listener.EnqueueAction("ALIVE_ACCT", chatAction));
         Assert.Null(ex);
     }
@@ -546,9 +546,9 @@ public class ActionForwardingContractTests
     {
         var listener = CreateListener("BOT_A", "BOT_B");
 
-        Assert.True(listener.EnqueueAction("BOT_A", new ActionMessage { ActionType = ActionType.Wait }));
-        Assert.True(listener.EnqueueAction("BOT_A", new ActionMessage { ActionType = ActionType.Goto }));
-        Assert.True(listener.EnqueueAction("BOT_B", new ActionMessage { ActionType = ActionType.SendChat }));
+        Assert.True(listener.EnqueueAction("BOT_A", new ObjectiveMessage { ObjectiveType = ObjectiveType.Wait }));
+        Assert.True(listener.EnqueueAction("BOT_A", new ObjectiveMessage { ObjectiveType = ObjectiveType.Goto }));
+        Assert.True(listener.EnqueueAction("BOT_B", new ObjectiveMessage { ObjectiveType = ObjectiveType.SendChat }));
 
         var drained = listener.DrainPendingActions("BOT_A");
 
@@ -562,9 +562,9 @@ public class ActionForwardingContractTests
     {
         var listener = CreateListener("BOT_A", "BOT_B");
 
-        Assert.True(listener.EnqueueAction("BOT_A", new ActionMessage { ActionType = ActionType.Wait }));
-        Assert.True(listener.EnqueueAction("BOT_B", new ActionMessage { ActionType = ActionType.Goto }));
-        Assert.True(listener.EnqueueAction("BOT_B", new ActionMessage { ActionType = ActionType.SendChat }));
+        Assert.True(listener.EnqueueAction("BOT_A", new ObjectiveMessage { ObjectiveType = ObjectiveType.Wait }));
+        Assert.True(listener.EnqueueAction("BOT_B", new ObjectiveMessage { ObjectiveType = ObjectiveType.Goto }));
+        Assert.True(listener.EnqueueAction("BOT_B", new ObjectiveMessage { ObjectiveType = ObjectiveType.SendChat }));
 
         var drained = listener.DrainPendingActions();
 
@@ -604,13 +604,13 @@ public class ActionForwardingContractTests
             SetPrivateField(coordinator, "_state", BattlegroundCoordinator.CoordState.QueueForBattleground);
             SetPrivateField(listener, "_battlegroundCoordinator", coordinator);
 
-            Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.SendChat }));
+            Assert.True(listener.EnqueueAction("TESTBOT1", new ObjectiveMessage { ObjectiveType = ObjectiveType.SendChat }));
 
             var request = BuildReadySnapshot("TESTBOT1");
             var response = InvokeHandleRequest(listener, request);
 
             Assert.NotNull(response.CurrentAction);
-            Assert.Equal(ActionType.JoinBattleground, response.CurrentAction.ActionType);
+            Assert.Equal(ObjectiveType.JoinBattleground, response.CurrentAction.ObjectiveType);
         }
         finally
         {
@@ -638,13 +638,13 @@ public class ActionForwardingContractTests
             SetPrivateField(coordinator, "_state", BattlegroundCoordinator.CoordState.InBattleground);
             SetPrivateField(listener, "_battlegroundCoordinator", coordinator);
 
-            Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.SendChat }));
+            Assert.True(listener.EnqueueAction("TESTBOT1", new ObjectiveMessage { ObjectiveType = ObjectiveType.SendChat }));
 
             var request = BuildReadySnapshot("TESTBOT1");
             var response = InvokeHandleRequest(listener, request);
 
             Assert.NotNull(response.CurrentAction);
-            Assert.Equal(ActionType.SendChat, response.CurrentAction.ActionType);
+            Assert.Equal(ObjectiveType.SendChat, response.CurrentAction.ObjectiveType);
         }
         finally
         {
@@ -656,12 +656,12 @@ public class ActionForwardingContractTests
     public void HandleRequest_DeliveredPendingAction_StampsMissingCorrelationId()
     {
         var listener = CreateListener("TESTBOT1");
-        Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.SendChat }));
+        Assert.True(listener.EnqueueAction("TESTBOT1", new ObjectiveMessage { ObjectiveType = ObjectiveType.SendChat }));
 
         var response = InvokeHandleRequest(listener, BuildReadySnapshot("TESTBOT1"));
 
         Assert.NotNull(response.CurrentAction);
-        Assert.Equal(ActionType.SendChat, response.CurrentAction.ActionType);
+        Assert.Equal(ObjectiveType.SendChat, response.CurrentAction.ObjectiveType);
         Assert.False(string.IsNullOrWhiteSpace(response.CurrentAction.CorrelationId));
         Assert.StartsWith("TESTBOT1:", response.CurrentAction.CorrelationId, StringComparison.Ordinal);
     }
@@ -672,7 +672,7 @@ public class ActionForwardingContractTests
         var listener = CreateListener("TESTBOT1");
         _ = InvokeHandleRequest(listener, BuildReadySnapshot("TESTBOT1"));
 
-        Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.StartFishing }));
+        Assert.True(listener.EnqueueAction("TESTBOT1", new ObjectiveMessage { ObjectiveType = ObjectiveType.StartFishing }));
 
         var response = InvokeHandleRequest(listener, new WoWActivitySnapshot
         {
@@ -686,7 +686,7 @@ public class ActionForwardingContractTests
         });
 
         Assert.NotNull(response.CurrentAction);
-        Assert.Equal(ActionType.StartFishing, response.CurrentAction.ActionType);
+        Assert.Equal(ObjectiveType.StartFishing, response.CurrentAction.ObjectiveType);
     }
 
     [Fact]
@@ -695,7 +695,7 @@ public class ActionForwardingContractTests
         var listener = CreateListener("TESTBOT1");
         _ = InvokeHandleRequest(listener, BuildReadySnapshot("TESTBOT1"));
 
-        Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.StartFishing }));
+        Assert.True(listener.EnqueueAction("TESTBOT1", new ObjectiveMessage { ObjectiveType = ObjectiveType.StartFishing }));
 
         var transitionResponse = InvokeHandleRequest(listener, new WoWActivitySnapshot
         {
@@ -713,14 +713,14 @@ public class ActionForwardingContractTests
         var readyResponse = InvokeHandleRequest(listener, BuildReadySnapshot("TESTBOT1"));
 
         Assert.NotNull(readyResponse.CurrentAction);
-        Assert.Equal(ActionType.StartFishing, readyResponse.CurrentAction.ActionType);
+        Assert.Equal(ObjectiveType.StartFishing, readyResponse.CurrentAction.ObjectiveType);
     }
 
     [Fact]
     public void HandleRequest_DefersPendingAction_WhenFullSnapshotNotActionable()
     {
         var listener = CreateListener("TESTBOT1");
-        Assert.True(listener.EnqueueAction("TESTBOT1", new ActionMessage { ActionType = ActionType.StartFishing }));
+        Assert.True(listener.EnqueueAction("TESTBOT1", new ObjectiveMessage { ObjectiveType = ObjectiveType.StartFishing }));
 
         var transitioning = BuildReadySnapshot("TESTBOT1");
         transitioning.ConnectionState = BotConnectionState.BotTransferring;
@@ -734,7 +734,7 @@ public class ActionForwardingContractTests
         var readyResponse = InvokeHandleRequest(listener, BuildReadySnapshot("TESTBOT1"));
 
         Assert.NotNull(readyResponse.CurrentAction);
-        Assert.Equal(ActionType.StartFishing, readyResponse.CurrentAction.ActionType);
+        Assert.Equal(ObjectiveType.StartFishing, readyResponse.CurrentAction.ObjectiveType);
     }
 
     [Fact]
@@ -895,29 +895,29 @@ public class ActionForwardingContractTests
         return WoWNameGenerator.GenerateName(race, gender, uniquenessSeed);
     }
 
-    // ===== ActionType coverage =====
+    // ===== ObjectiveType coverage =====
 
     [Theory]
-    [InlineData(ActionType.Wait)]
-    [InlineData(ActionType.Goto)]
-    [InlineData(ActionType.InteractWith)]
-    [InlineData(ActionType.CastSpell)]
-    [InlineData(ActionType.SendChat)]
-    [InlineData(ActionType.SetFacing)]
-    [InlineData(ActionType.StartMovement)]
-    [InlineData(ActionType.StopMovement)]
-    [InlineData(ActionType.VisitVendor)]
-    [InlineData(ActionType.VisitTrainer)]
-    [InlineData(ActionType.VisitFlightMaster)]
-    [InlineData(ActionType.StartFishing)]
-    [InlineData(ActionType.StartGatheringRoute)]
-    public void ActionMessage_AllTypes_RoundTrip(ActionType actionType)
+    [InlineData(ObjectiveType.Wait)]
+    [InlineData(ObjectiveType.Goto)]
+    [InlineData(ObjectiveType.InteractWith)]
+    [InlineData(ObjectiveType.CastSpell)]
+    [InlineData(ObjectiveType.SendChat)]
+    [InlineData(ObjectiveType.SetFacing)]
+    [InlineData(ObjectiveType.StartMovement)]
+    [InlineData(ObjectiveType.StopMovement)]
+    [InlineData(ObjectiveType.VisitVendor)]
+    [InlineData(ObjectiveType.VisitTrainer)]
+    [InlineData(ObjectiveType.VisitFlightMaster)]
+    [InlineData(ObjectiveType.StartFishing)]
+    [InlineData(ObjectiveType.StartGatheringRoute)]
+    public void ObjectiveMessage_AllTypes_RoundTrip(ObjectiveType objectiveType)
     {
-        var msg = new ActionMessage { ActionType = actionType };
+        var msg = new ObjectiveMessage { ObjectiveType = objectiveType };
         var bytes = msg.ToByteArray();
-        var deserialized = ActionMessage.Parser.ParseFrom(bytes);
+        var deserialized = ObjectiveMessage.Parser.ParseFrom(bytes);
 
-        Assert.Equal(actionType, deserialized.ActionType);
+        Assert.Equal(objectiveType, deserialized.ObjectiveType);
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

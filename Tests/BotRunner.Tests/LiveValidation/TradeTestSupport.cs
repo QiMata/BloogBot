@@ -76,7 +76,7 @@ internal static class TradeTestSupport
             bot,
             output,
             pair.Initiator,
-            new ActionMessage { ActionType = ActionType.DeclineTrade },
+            new ObjectiveMessage { ObjectiveType = ObjectiveType.DeclineTrade },
             "DeclineTrade");
         output.WriteLine($"[TRADE] {pair.Initiator.RoleLabel} DeclineTrade: {decline}");
 
@@ -126,7 +126,7 @@ internal static class TradeTestSupport
             bot,
             output,
             pair.Receiver,
-            new ActionMessage { ActionType = ActionType.AcceptTrade },
+            new ObjectiveMessage { ObjectiveType = ObjectiveType.AcceptTrade },
             "AcceptTradeRequest");
         output.WriteLine($"[TRADE] {pair.Receiver.RoleLabel} AcceptTradeRequest: {receiverOpen}");
 
@@ -143,7 +143,7 @@ internal static class TradeTestSupport
             bot,
             output,
             pair.Receiver,
-            new ActionMessage { ActionType = ActionType.AcceptTrade },
+            new ObjectiveMessage { ObjectiveType = ObjectiveType.AcceptTrade },
             "AcceptTrade");
         output.WriteLine($"[TRADE] {pair.Receiver.RoleLabel} AcceptTrade: {receiverAccept}");
 
@@ -152,7 +152,7 @@ internal static class TradeTestSupport
             bot,
             output,
             pair.Initiator,
-            new ActionMessage { ActionType = ActionType.AcceptTrade },
+            new ObjectiveMessage { ObjectiveType = ObjectiveType.AcceptTrade },
             "AcceptTrade");
         output.WriteLine($"[TRADE] {pair.Initiator.RoleLabel} AcceptTrade: {initiatorAccept}");
 
@@ -315,21 +315,21 @@ internal static class TradeTestSupport
         return receiverGuid;
     }
 
-    private static ActionMessage MakeOfferTrade(ulong partnerGuid) => new()
+    private static ObjectiveMessage MakeOfferTrade(ulong partnerGuid) => new()
     {
-        ActionType = ActionType.OfferTrade,
+        ObjectiveType = ObjectiveType.OfferTrade,
         Parameters = { new RequestParameter { LongParam = unchecked((long)partnerGuid) } },
     };
 
-    private static ActionMessage MakeOfferGold(int copper) => new()
+    private static ObjectiveMessage MakeOfferGold(int copper) => new()
     {
-        ActionType = ActionType.OfferGold,
+        ObjectiveType = ObjectiveType.OfferGold,
         Parameters = { new RequestParameter { IntParam = copper } },
     };
 
-    private static ActionMessage MakeOfferItem(int bagId, int slotId) => new()
+    private static ObjectiveMessage MakeOfferItem(int bagId, int slotId) => new()
     {
-        ActionType = ActionType.OfferItem,
+        ObjectiveType = ObjectiveType.OfferItem,
         Parameters =
         {
             new RequestParameter { IntParam = bagId },
@@ -343,7 +343,7 @@ internal static class TradeTestSupport
         LiveBotFixture bot,
         ITestOutputHelper output,
         LiveBotFixture.BotRunnerActionTarget target,
-        ActionMessage action,
+        ObjectiveMessage action,
         string stepName)
     {
         var correlationId =

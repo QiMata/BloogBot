@@ -28,12 +28,12 @@ commands. Per-role loadout setup is encapsulated in
 | 0 | Stage loadout | `StageBotRunnerLoadoutAsync(account, label, spells=[198], skills=[(54,1,300)], items=[(36,1)])` - clean slate, clear bag 0, learn mace proficiency, set Maces skill, add Worn Mace. |
 | 1 | Wait for bag | Poll for Worn Mace (`36`) in bag snapshot contents. |
 | 2 | Record baseline | Snapshot mainhand slot (`15`) and Worn Mace count in bags. |
-| 3 | Equip weapon | Dispatch `ActionType.EquipItem` with `IntParam = 36`. |
+| 3 | Equip weapon | Dispatch `ObjectiveType.EquipItem` with `IntParam = 36`. |
 | 4 | Verify equip | Poll until mainhand is filled and either the mainhand GUID changed or the Worn Mace bag count dropped. |
 
 **StateManager/BotRunner Action Flow:**
 
-`ActionType.EquipItem` -> `BuildEquipItemByIdSequence(36)` -> find item 36 in
+`ObjectiveType.EquipItem` -> `BuildEquipItemByIdSequence(36)` -> find item 36 in
 bags -> `_objectManager.EquipItem(bag, slot)`.
 
 FG path: Lua `PickupContainerItem(bag, slot)` + `AutoEquipCursorItem()`.

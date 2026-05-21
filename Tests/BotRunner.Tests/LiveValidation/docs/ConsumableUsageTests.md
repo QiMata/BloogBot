@@ -12,7 +12,7 @@ target, `LOOTFG1` idle for topology parity, and SHODAN as the director.
 ### UseConsumable_ElixirOfLionsStrength_BuffApplied
 
 **Purpose:** Prove the legacy BG consumable path can stage an elixir through
-Shodan and dispatch `ActionType.UseItem` without test-body GM setup.
+Shodan and dispatch `ObjectiveType.UseItem` without test-body GM setup.
 
 **Setup path:**
 - `StageBotRunnerConsumableStateAsync(...)` clears the target inventory, adds
@@ -20,7 +20,7 @@ Shodan and dispatch `ActionType.UseItem` without test-body GM setup.
   `2367` / `2457`.
 
 **Action path:**
-- `ActionType.UseItem` with item id `2454` to `LOOTBG1`.
+- `ObjectiveType.UseItem` with item id `2454` to `LOOTBG1`.
 
 **Current live result:**
 - `buff_consumable_shodan.trx` passed this test once while the companion

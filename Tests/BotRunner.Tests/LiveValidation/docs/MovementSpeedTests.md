@@ -2,7 +2,7 @@
 
 Shodan-directed movement-speed coverage. SHODAN stages the BG action target on
 a proven Durotar winding-road route; the BotRunner target receives only
-`ActionType.Goto`.
+`ObjectiveType.Goto`.
 
 ## Bot Execution Mode
 
@@ -31,7 +31,7 @@ The test body does not issue GM commands. The fixture owns:
 
 ## Runtime Linkage
 
-- `ActionType.Goto` carries the Durotar target coordinates and 5-yard arrival
+- `ObjectiveType.Goto` carries the Durotar target coordinates and 5-yard arrival
   tolerance to `ECONBG1`.
 - The old observational FG shadow teleports were removed; FG stays idle for
   topology parity.

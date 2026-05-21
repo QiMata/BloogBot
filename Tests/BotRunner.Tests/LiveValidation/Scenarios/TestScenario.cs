@@ -43,7 +43,7 @@ namespace BotRunner.Tests.LiveValidation.Scenarios;
 ///   },
 ///   "assertions": {
 ///     "snapshotConditions": [
-///       { "account": "$BG", "field": "CurrentAction.ActionType", "equals": "StartGatheringRoute" }
+///       { "account": "$BG", "field": "CurrentAction.ObjectiveType", "equals": "StartGatheringRoute" }
 ///     ]
 ///   }
 /// }
@@ -206,7 +206,7 @@ public class ScenarioAction
     public string Account { get; set; } = "$BG";
 
     /// <summary>
-    /// ActionType name (must match Communication.ActionType enum).
+    /// ObjectiveType name (must match Communication.ObjectiveType enum).
     /// </summary>
     [JsonPropertyName("type")]
     public string Type { get; set; } = "";
@@ -254,7 +254,7 @@ public class ScenarioAssertions
     public bool? GroupFormed { get; set; }
 
     /// <summary>
-    /// If true, at least 1 bot must have CurrentAction.ActionType == StartDungeoneering.
+    /// If true, at least 1 bot must have CurrentAction.ObjectiveType == StartDungeoneering.
     /// </summary>
     [JsonPropertyName("dungeoneeringDispatched")]
     public bool? DungeoneeringDispatched { get; set; }
@@ -274,8 +274,8 @@ public class ScenarioAssertions
     /// <summary>
     /// Assert a specific bot's action type during observation.
     /// </summary>
-    [JsonPropertyName("actionTypeSeen")]
-    public string? ActionTypeSeen { get; set; }
+    [JsonPropertyName("objectiveTypeSeen")]
+    public string? ObjectiveTypeSeen { get; set; }
 
     /// <summary>
     /// Account-specific snapshot field assertions.

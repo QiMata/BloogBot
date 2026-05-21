@@ -52,9 +52,9 @@ public class RaidFormationTests
         global::Tests.Infrastructure.Skip.If(string.IsNullOrWhiteSpace(bgName), "BG character name not available");
 
         _output.WriteLine($"[RAID] FG inviting BG ({bgName}) to group");
-        var inviteResult = await _bot.SendActionAsync(fgAccount!, new ActionMessage
+        var inviteResult = await _bot.SendActionAsync(fgAccount!, new ObjectiveMessage
         {
-            ActionType = ActionType.SendGroupInvite,
+            ObjectiveType = ObjectiveType.SendGroupInvite,
             Parameters = { new RequestParameter { StringParam = bgName } }
         });
         Assert.Equal(ResponseResult.Success, inviteResult);
@@ -73,9 +73,9 @@ public class RaidFormationTests
         // Step 2: BG accepts invite. Predicate-poll for both bots seeing FG
         // as the party leader, instead of blind-sleeping 2000ms.
         _output.WriteLine("[RAID] BG accepting group invite");
-        var acceptResult = await _bot.SendActionAsync(bgAccount, new ActionMessage
+        var acceptResult = await _bot.SendActionAsync(bgAccount, new ObjectiveMessage
         {
-            ActionType = ActionType.AcceptGroupInvite
+            ObjectiveType = ObjectiveType.AcceptGroupInvite
         });
         Assert.Equal(ResponseResult.Success, acceptResult);
 
@@ -96,9 +96,9 @@ public class RaidFormationTests
         // so re-poll the same predicate as a smoke test that the raid
         // wrapper landed without breaking the leader relationship.
         _output.WriteLine("[RAID] FG converting group to raid");
-        var raidResult = await _bot.SendActionAsync(fgAccount!, new ActionMessage
+        var raidResult = await _bot.SendActionAsync(fgAccount!, new ObjectiveMessage
         {
-            ActionType = ActionType.ConvertToRaid
+            ObjectiveType = ObjectiveType.ConvertToRaid
         });
         _output.WriteLine($"[RAID] CONVERT_TO_RAID result: {raidResult}");
         Assert.Equal(ResponseResult.Success, raidResult);
@@ -107,9 +107,9 @@ public class RaidFormationTests
 
         // Step 4: Change raid subgroup for BG
         _output.WriteLine("[RAID] Moving BG to subgroup 2");
-        var subgroupResult = await _bot.SendActionAsync(fgAccount!, new ActionMessage
+        var subgroupResult = await _bot.SendActionAsync(fgAccount!, new ObjectiveMessage
         {
-            ActionType = ActionType.ChangeRaidSubgroup,
+            ObjectiveType = ObjectiveType.ChangeRaidSubgroup,
             Parameters =
             {
                 new RequestParameter { StringParam = bgName },
@@ -130,7 +130,7 @@ public class RaidFormationTests
         _output.WriteLine("[RAID] Raid formation verified");
 
         // Cleanup: disband
-        await _bot.SendActionAsync(fgAccount!, new ActionMessage { ActionType = ActionType.DisbandGroup });
+        await _bot.SendActionAsync(fgAccount!, new ObjectiveMessage { ObjectiveType = ObjectiveType.DisbandGroup });
         await Task.Delay(1000);
     }
 
@@ -143,11 +143,11 @@ public class RaidFormationTests
 
         var selfGuid = snap.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
         var action = selfGuid != 0 && snap.PartyLeaderGuid == selfGuid
-            ? ActionType.DisbandGroup
-            : ActionType.LeaveGroup;
+            ? ObjectiveType.DisbandGroup
+            : ObjectiveType.LeaveGroup;
 
         _output.WriteLine($"[{label}] Ungrouping (leader=0x{snap.PartyLeaderGuid:X}), sending {action}");
-        await _bot.SendActionAndWaitAsync(account, new ActionMessage { ActionType = action }, delayMs: 1000);
+        await _bot.SendActionAndWaitAsync(account, new ObjectiveMessage { ObjectiveType = action }, delayMs: 1000);
     }
 
     private async Task<bool> WaitForPartyMembershipAsync(string leaderAccount, string memberAccount, ulong leaderGuid, TimeSpan timeout)

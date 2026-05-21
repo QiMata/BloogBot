@@ -70,9 +70,9 @@ public class TravelPlannerTests
         await _bot.RefreshSnapshotsAsync();
         var startPos = (await _bot.GetSnapshotAsync(target.AccountName))!.Player?.Unit?.GameObject?.Base?.Position!;
 
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.TravelTo,
+            ObjectiveType = ObjectiveType.TravelTo,
             Parameters =
             {
                 new RequestParameter { IntParam = MapId },

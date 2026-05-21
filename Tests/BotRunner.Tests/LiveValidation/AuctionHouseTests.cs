@@ -56,9 +56,9 @@ public class AuctionHouseTests
             await StageAtAuctionHouseAsync(target);
             var auctioneerGuid = await AssertAuctioneerNearbyAsync(target, $"{target.RoleLabel} auctioneer-interact");
 
-            var interactResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+            var interactResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
             {
-                ActionType = ActionType.InteractWith,
+                ObjectiveType = ObjectiveType.InteractWith,
                 Parameters = { new RequestParameter { LongParam = (long)auctioneerGuid } }
             });
             _output.WriteLine($"[AH] {target.RoleLabel} InteractWith result: {interactResult}");

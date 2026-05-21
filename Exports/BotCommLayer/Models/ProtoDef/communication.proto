@@ -21,18 +21,18 @@ message SnapshotQueryRequest {
     string account_name = 1;
 }
 
-// Forward an ActionMessage to a specific bot via StateManager.
+// Forward an ObjectiveMessage to a specific bot via StateManager.
 // StateManager routes the action to the bot identified by account_name.
 message ActionForwardRequest {
     string account_name = 1;
-    ActionMessage action = 2;
+    ObjectiveMessage action = 2;
 }
 
-message ActionMessage {
-    ActionType action_type = 1;
+message ObjectiveMessage {
+    ObjectiveType objective_type = 1;
     repeated RequestParameter parameters = 2;
     ResponseResult actionResult = 3;
-    LoadoutSpec loadout_spec = 4;   // Populated only when action_type=APPLY_LOADOUT; full per-bot prep spec handed off once so BotRunner owns execution pacing.
+    LoadoutSpec loadout_spec = 4;   // Populated only when objective_type=APPLY_LOADOUT; full per-bot prep spec handed off once so BotRunner owns execution pacing.
     string correlation_id = 5;      // P4.4: StateManager stamps one per dispatch; BotRunner echoes it back in CurrentAction / CommandAckEvent.
 }
 
@@ -45,13 +45,13 @@ message CommandAckEvent {
     }
 
     string correlation_id = 1;
-    ActionType action_type = 2;
+    ObjectiveType objective_type = 2;
     AckStatus status = 3;
     string failure_reason = 4;
     uint32 related_id = 5;
 }
 
-enum ActionType {
+enum ObjectiveType {
     WAIT = 0;
     GOTO = 1;
     INTERACT_WITH = 2;
@@ -139,7 +139,7 @@ enum ActionType {
 }
 
 message ActionMap {
-    repeated ActionMessage actions = 1;
+    repeated ObjectiveMessage actions = 1;
 }
 
 message StateChangeRequest {
@@ -211,8 +211,8 @@ message WoWActivitySnapshot {
     uint32 timestamp = 1;
     string accountName = 2;
     game.WoWPlayer player = 3;
-    ActionMessage previousAction = 4;
-    ActionMessage currentAction = 5;
+    ObjectiveMessage previousAction = 4;
+    ObjectiveMessage currentAction = 5;
     repeated game.WoWGameObject nearbyObjects = 6;
     repeated game.WoWUnit nearbyUnits = 7;
     string characterName = 8;  // Name of the logged-in character (set after world entry)
@@ -271,7 +271,7 @@ message LoadoutFactionRep {
 
 // P3: single-message description of everything a character needs to become
 // raid-ready for its configured activity. StateManager hands this off once
-// per bot via ActionType.APPLY_LOADOUT; BotRunner executes it at its own
+// per bot via ObjectiveType.APPLY_LOADOUT; BotRunner executes it at its own
 // pace and reports completion via WoWActivitySnapshot.loadout_status. Empty
 // / zero-valued fields mean "don't change" so the spec is additive.
 message LoadoutSpec {

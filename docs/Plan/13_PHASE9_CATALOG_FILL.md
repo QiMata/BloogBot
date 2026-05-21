@@ -211,7 +211,7 @@
   - `OnDemand_HallowsEnd_CandyBucketTour` — bot completes 5 buckets; asserts via inventory-change events for candy items.
   - `Phase9CatalogFill_DynamicProgressive_ExpandedCatalogClosesGoalDistanceTest` — the dynamic-progressive invariant. See §15.
 - **Procedure:**
-  1. Use the established `LiveBotFixture` and `StageBotRunner*Async` helpers per the Test Isolation Rules; do NOT construct `ActionMessage` directly.
+  1. Use the established `LiveBotFixture` and `StageBotRunner*Async` helpers per the Test Isolation Rules; do NOT construct `ObjectiveMessage` directly.
   2. Each test stages with a deterministic personality (Spec/24 §7).
   3. Trace each run to `tmp/test-runtime/traces/<test-name>/` for the off-line tools (S9.3 ML sub-bullet, holiday-prioritization S9.5).
 - **Success criteria:** all five tests green on `Westworld-Test`; trace files produced.

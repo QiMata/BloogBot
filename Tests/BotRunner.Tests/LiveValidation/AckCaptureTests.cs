@@ -929,9 +929,9 @@ public sealed class AckCaptureTests
 
         var attack = await _bot.SendActionAsync(
             target.AccountName,
-            new ActionMessage
+            new ObjectiveMessage
             {
-                ActionType = ActionType.StartMeleeAttack,
+                ObjectiveType = ObjectiveType.StartMeleeAttack,
                 Parameters = { new RequestParameter { LongParam = (long)creatureGuid } }
             });
         Assert.Equal(ResponseResult.Success, attack);
@@ -944,7 +944,7 @@ public sealed class AckCaptureTests
 
         await _bot.SendActionAsync(
             target.AccountName,
-            new ActionMessage { ActionType = ActionType.StopAttack });
+            new ObjectiveMessage { ObjectiveType = ObjectiveType.StopAttack });
     }
 
     private static ulong FindKnockbackCreatureGuid(WoWActivitySnapshot? snapshot)

@@ -173,7 +173,7 @@ public class AlteracValleyFixture : BattlegroundCoordinatorFixtureBase
     // EnsureObjectivePreparedAsync / PrepareObjectiveLoadoutOnceAsync /
     // PrepareObjectiveReadyLoadoutAsync were removed in P3.7. AV loadout prep now
     // runs through the BattlegroundCoordinator's ApplyingLoadouts state: each
-    // bot receives an ActionType.ApplyLoadout with the full LoadoutSpec
+    // bot receives an ObjectiveType.ApplyLoadout with the full LoadoutSpec
     // (explicit per-(class, race) spell IDs, proficiencies, armor set, gear,
     // elixirs) that BotRunner's LoadoutTask executes at its own pace.
 

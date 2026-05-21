@@ -6,7 +6,7 @@ namespace BotRunner.Tasks;
 /// <summary>
 /// Atomic task: equip an item from a bag slot.
 /// Calls UseContainerItem which auto-equips equippable items.
-/// Maps to ActionType.EQUIP_ITEM from StateManager.
+/// Maps to ObjectiveType.EQUIP_ITEM from StateManager.
 /// </summary>
 public class EquipItemTask(IBotContext botContext, int bagId, int slotId) : BotTask(botContext), IBotTask
 {

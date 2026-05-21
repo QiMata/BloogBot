@@ -16,7 +16,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// The test launches TRMAF5 + TRMAB5 + SHODAN with Wand.config.json, stages
 /// each mage BotRunner target with a wand loadout through StageBotRunnerLoadoutAsync,
 /// stages that same target near natural Durotar mobs through a fixture helper,
-/// and dispatches only ActionType.EquipItem / ActionType.StartWandAttack from
+/// and dispatches only ObjectiveType.EquipItem / ObjectiveType.StartWandAttack from
 /// the test body. SHODAN remains director-only.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
@@ -95,9 +95,9 @@ public class WandAttackTests
             return false;
         }
 
-        var equipResult = await _bot.SendActionAsync(account, new ActionMessage
+        var equipResult = await _bot.SendActionAsync(account, new ObjectiveMessage
         {
-            ActionType = ActionType.EquipItem,
+            ObjectiveType = ObjectiveType.EquipItem,
             Parameters = { new RequestParameter { IntParam = (int)TorchlightWand } }
         });
         _output.WriteLine($"  [{label}] Equip wand result: {equipResult}");
@@ -147,9 +147,9 @@ public class WandAttackTests
 
         try
         {
-            var wandResult = await _bot.SendActionAsync(account, new ActionMessage
+            var wandResult = await _bot.SendActionAsync(account, new ObjectiveMessage
             {
-                ActionType = ActionType.StartWandAttack,
+                ObjectiveType = ObjectiveType.StartWandAttack,
                 Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
             });
             _output.WriteLine($"  [{label}] StartWandAttack result: {wandResult}");
@@ -173,7 +173,7 @@ public class WandAttackTests
         }
         finally
         {
-            await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.StopAttack });
+            await _bot.SendActionAsync(account, new ObjectiveMessage { ObjectiveType = ObjectiveType.StopAttack });
             await Task.Delay(300);
         }
     }

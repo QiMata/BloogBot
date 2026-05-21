@@ -66,9 +66,9 @@ public class IntegrationValidationTests
         Assert.NotNull(snapBefore);
         _output.WriteLine($"[{target.RoleLabel}] Pre-dungeoneering snapshot: screen={snapBefore.ScreenState}");
 
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.StartDungeoneering
+            ObjectiveType = ObjectiveType.StartDungeoneering
         });
         _output.WriteLine($"[{target.RoleLabel}] StartDungeoneering dispatched (result={result})");
         Assert.Equal(ResponseResult.Success, result);
@@ -213,9 +213,9 @@ public class IntegrationValidationTests
         var vendorGuid = vendor!.GameObject?.Base?.Guid ?? 0;
         _output.WriteLine($"[{target.RoleLabel}] Found vendor: {vendor.GameObject?.Name} GUID=0x{vendorGuid:X}");
 
-        var sellResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var sellResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.SellItem,
+            ObjectiveType = ObjectiveType.SellItem,
             Parameters =
             {
                 new RequestParameter { LongParam = (long)vendorGuid },
@@ -331,9 +331,9 @@ public class IntegrationValidationTests
         _output.WriteLine($"[{target.RoleLabel}] Self GUID=0x{selfGuid:X}");
         Assert.True(selfGuid != 0, $"[{target.RoleLabel}] Self GUID should be available before AssignLoot dispatch.");
 
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.AssignLoot,
+            ObjectiveType = ObjectiveType.AssignLoot,
             Parameters = { new RequestParameter { LongParam = (long)selfGuid } }
         });
         _output.WriteLine($"[{target.RoleLabel}] AssignLoot dispatched (result={result})");

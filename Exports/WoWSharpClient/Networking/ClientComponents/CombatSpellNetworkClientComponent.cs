@@ -466,7 +466,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             var payload = new byte[20];
             BitConverter.GetBytes(petGuid).CopyTo(payload, 0);
-            uint packedData = PetActionType.Pack((uint)reactState, PetActionType.ACT_REACTION);
+            uint packedData = PetObjectiveType.Pack((uint)reactState, PetObjectiveType.ACT_REACTION);
             BitConverter.GetBytes(packedData).CopyTo(payload, 8);
             // targetGuid = 0 (not applicable for stance changes)
             return payload;
@@ -628,7 +628,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             var payload = new byte[20];
             BitConverter.GetBytes(petGuid).CopyTo(payload, 0);
-            uint packedData = PetActionType.Pack((uint)command, PetActionType.ACT_COMMAND);
+            uint packedData = PetObjectiveType.Pack((uint)command, PetObjectiveType.ACT_COMMAND);
             BitConverter.GetBytes(packedData).CopyTo(payload, 8);
             BitConverter.GetBytes(targetGuid).CopyTo(payload, 12);
             return payload;
@@ -643,7 +643,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         {
             var payload = new byte[20];
             BitConverter.GetBytes(petGuid).CopyTo(payload, 0);
-            uint packedData = PetActionType.Pack(abilityId, PetActionType.ACT_ENABLED);
+            uint packedData = PetObjectiveType.Pack(abilityId, PetObjectiveType.ACT_ENABLED);
             BitConverter.GetBytes(packedData).CopyTo(payload, 8);
             BitConverter.GetBytes(targetGuid).CopyTo(payload, 12);
             return payload;

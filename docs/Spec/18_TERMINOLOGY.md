@@ -9,45 +9,53 @@
 ## The four layers
 
 ```
-Activity     ← top-level goal:        "Run Wailing Caverns", "Fish at Ratchet"
-  └─ Objective  ← sub-goal:           "Reach the instance portal", "Kill the next boss"
-       └─ Task     ← behavior tree node: "Travel to (x,y,z)", "Cast Holy Light on tank"
-            └─ Action  ← single wire message: ActionMessage{ActionType=TravelTo, ...}
+Activity     ← major dynamic event:        "Run UBRS", "Molten Core raid", "Warsong Gulch", "Fish at Ratchet"
+  └─ Objective  ← high-level state change (WIRE-LEVEL):  "Reach the instance portal", "Kill the next boss"
+       └─ Task     ← orchestrates Actions for ONE minute state change + verification:  "Travel to (x,y,z)", "Loot corpse + verify bag"
+            └─ Action  ← reusable code primitive matching a player capability (LOCAL code):  ReadLootWindow(), PressHotkeyAsync("1"), IObjectManager.CastSpellAsync(id, target)
 ```
 
-| Layer | Plural noun | Granularity | Lives where today |
+| Layer | Plural noun | Granularity | Lives where |
 |---|---|---|---|
-| **Activity** | "the bot's current Activity" | Multi-minute. One assigned at a time per bot. Catalog-row driven. | [`Exports/GameData.Core/Models/Activities/ActivityDefinition.cs`](../../Exports/GameData.Core/Models/Activities/ActivityDefinition.cs) catalog. **No runtime `IActivity` interface yet** — slated for Phase 2 (see [`Plan/03_PHASE2_ONDEMAND_ENGINE.md`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md)). |
-| **Objective** | "the bot's current Objective" | Tens of seconds to single-minute. Multiple per Activity, sequenced. | **Not yet abstracted.** Today's `WoWActivitySnapshot.travel_objective` and `progression_status.current_objective` are the only Objective-shaped fields on the wire; a general `IObjective` is slated for Phase 2. |
-| **Task** | "the task stack" (LIFO) | Single-second to tens-of-seconds. Behavior-tree node. | [`Exports/BotRunner/Interfaces/IBotTask.cs`](../../Exports/BotRunner/Interfaces/IBotTask.cs) — Phase-1 target contract. Concrete tasks live under `Exports/BotRunner/Tasks/` and `BotProfiles/<ClassSpec>/Tasks/`. |
-| **Action** | "an action sent over the wire" | Single tick / packet. | `ActionType` enum in [`Exports/BotCommLayer/Models/ProtoDef/communication.proto`](../../Exports/BotCommLayer/Models/ProtoDef/communication.proto) (~85 values). Carried by `ActionMessage`. |
+| **Activity** | "the bot's current Activity" | Major, usually-dynamic event supporting any number of characters at once. Catalog-row driven. | [`Exports/GameData.Core/Models/Activities/ActivityDefinition.cs`](../../Exports/GameData.Core/Models/Activities/ActivityDefinition.cs) catalog. **No runtime `IActivity` interface yet** — slated for Phase 2 (see [`Plan/03_PHASE2_ONDEMAND_ENGINE.md`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md)). |
+| **Objective** | "the bot's current Objective" | High-level state change composed of multiple Tasks. **What actually travels on the wire as `ObjectiveMessage`** (formerly `ActionMessage` — misnomer cleaned up in the 2026-05-21 rename). | Wire type: `ObjectiveMessage` in [`Exports/BotCommLayer/Models/ProtoDef/communication.proto`](../../Exports/BotCommLayer/Models/ProtoDef/communication.proto). BotRunner decomposes via behavior tree + game DB knowledge lookups into Tasks. Snapshot fields `WoWActivitySnapshot.travel_objective` + `progression_status.current_objective` mirror the in-flight Objective; a general `IObjective` interface is slated for Phase 2. |
+| **Task** | "the task stack" (LIFO) | Orchestrates Actions for ONE minute state change with verification + failure handling. Pushes child Tasks (`GoToTask` is the universal child). | [`Exports/BotRunner/Interfaces/IBotTask.cs`](../../Exports/BotRunner/Interfaces/IBotTask.cs) — Phase-1 target contract. Concrete tasks under `Exports/BotRunner/Tasks/` and `BotProfiles/<ClassSpec>/Tasks/`. |
+| **Action** | "an Action" | **Reusable code primitive** (methods + variables) mirroring a single thing a human player can do: read the loot window, check a bag slot, press a hotkey, click a world coord, read a unit field, cast a spell. **Pure local code — Actions do NOT cross any wire.** | `IObjectManager` accessors + state objects + write methods. The `ObjectiveType` enum (~85 values) in `communication.proto` is the **roster of Action kinds the StateManager can request via an `ObjectiveMessage`** — not the Action itself. |
 
 ## Worked example — "Run UBRS"
 
 | Layer | Concrete value |
 |---|---|
 | Activity | `dungeon.ubrs` (ActivityDefinition row in the hard-coded catalog) |
-| Objective | `reach-flame-crest` → `enter-instance-portal` → `clear-trash-to-rend` → `kill-rend-blackhand` → `loot-rend` → `exit-instance` |
-| Task (one Objective unfolds into many tasks; sample for `reach-flame-crest`) | `TravelToTask(coord)` → pushes `BoardTransportTask(zeppelin_og)` → pushes `WalkToCoordTask(deck_anchor)` → pushes `WaitForLandingTask` |
-| Action (one Task unfolds into a stream of actions) | `ActionMessage{ActionType=TravelTo, x,y,z}` then `ActionMessage{ActionType=Interact, target=zeppelin}` then a stream of `ActionMessage{ActionType=StartMovement}` / `StopMovement` over many ticks |
+| Objective DAG (each Objective is one `ObjectiveMessage` on the wire) | `reach-flame-crest` → `enter-instance-portal` → `clear-trash-to-rend` → `kill-rend-blackhand` → `loot-rend` → `exit-instance` |
+| Task stack for `reach-flame-crest` (BotRunner decomposes the incoming `ObjectiveMessage` into Tasks via behavior tree + DB lookups) | `TravelToTask(coord)` → pushes `BoardTransportTask(zeppelin_og)` → pushes `WalkToCoordTask(deck_anchor)` → pushes `WaitForLandingTask` |
+| Actions invoked by Tasks (reusable code primitives — never cross the wire) | `ReadPlayerPosition()` (read), `IObjectManager.MoveToAsync(coord)` (write), `ReadCurrentZone()` (read), `IsWithinInteractRange(target)` (predicate), `IObjectManager.InteractAsync(zeppelin)` (write + verify) |
 
 ## Layer ownership rules
 
-- An **Activity** can only decompose into Objectives that this codebase
-  already knows how to drive. New Objective types require a corresponding
-  IBotTask family — adding a new Objective without backing Tasks is a
-  spec violation.
-- An **Objective** can only push existing **Tasks**. Adding a new
-  Objective shape that requires a wholly new behavior-tree node is a
-  spec change.
-- A **Task** can only emit existing **Actions** (`ActionType` enum
-  values). Adding a new ActionType is a protobuf change requiring all
-  clients to be regenerated (rule R10).
-- **Actions are the only thing that crosses the StateManager↔BotRunner
-  TCP boundary.** Activities and Objectives are runtime state derived
-  from Activity assignment + Task stack inspection; they are not direct
-  wire commands today (Phase 2 adds a `current_activity_id` /
-  `current_objective_id` projection to `WoWActivitySnapshot`).
+- An **Activity** decomposes into Objectives gated by snapshot state
+  changes. The DecisionEngine composes the Objective list dynamically
+  from the MaNGOS DB — see
+  [`docs/architecture/aota/03_DYNAMIC_COMPOSITION.md`](../architecture/aota/03_DYNAMIC_COMPOSITION.md).
+- An **Objective** is the wire-level unit of dispatch. StateManager
+  sends an `ObjectiveMessage` (formerly `ActionMessage`) to a BotRunner;
+  the BotRunner uses a behavior tree + game database knowledge lookups
+  to decompose it into Tasks. Adding a new Objective kind is an
+  `ObjectiveType` enum extension (proto change, rule R10).
+- A **Task** orchestrates Actions to drive one minute state change.
+  Tasks compose other Tasks via push (the LIFO task stack); `GoToTask`
+  is the universal child. **Every Task must include verification** —
+  read state via Actions after every dispatch, fail properly if the
+  expected state change didn't happen.
+- An **Action** is reusable code that mirrors what a human player can
+  do. Multiple Tasks call the same Action methods. Actions invoke
+  `IObjectManager` helpers (which may emit packets or read memory).
+  **Actions are local code; no Action is ever a wire message.**
+- **Only `ObjectiveMessage` crosses the StateManager↔BotRunner TCP
+  boundary.** Activity assignment, Objective dispatch, snapshot
+  reporting, and command acks are all wire-visible. Task identity is
+  projected onto the snapshot (top-of-stack `current_task_name`).
+  Action invocation is purely local — never visible to StateManager.
 
 ## What today's WWoW uses for each layer
 
@@ -56,7 +64,7 @@ Activity     ← top-level goal:        "Run Wailing Caverns", "Fish at Ratchet"
 | Activity | `ActivityDefinition` catalog row + `AssignedActivity` string (`"Fishing[Ratchet]"`) parsed by [`ActivityResolver`](../../Exports/BotRunner/Activities/ActivityResolver.cs). Returns an `IBotTask` directly — no `IActivity` object. | (no change) | New `IActivity` runtime contract modeled on D2's [`IActivity.cs`](../../../../D2Bot/D2Orchestrator/Orchestration/Activities/IActivity.cs). Instantiated *from* an `ActivityDefinition`. |
 | Objective | Snapshot-only: `WoWActivitySnapshot.travel_objective` (travel-specific) + `progression_status.current_objective` (free-form string). No `IObjective` interface. | (no change) | New `IObjective` runtime contract modeled on D2's [`BotObjectiveContract`](../../../../D2Bot/D2Orchestrator/Orchestration/ObjectiveRuntimeContracts.cs). New `ObjectiveType` enum on the proto. |
 | Task | [`IBotTask`](../../Exports/BotRunner/Interfaces/IBotTask.cs) + `BotTaskStatus` enum. Stack-based. | Phase-1 closes the IBotTask substrate per [`Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md`](../Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md). | (no change) |
-| Action | `ActionType` enum (~85 values) + `ActionMessage` over protobuf. | (no change) | (no change — closed set) |
+| Action | `ObjectiveType` enum (~85 values) + `ObjectiveMessage` over protobuf. | (no change) | (no change — closed set) |
 
 ## Test-naming convention
 
@@ -72,7 +80,7 @@ Tests/BotRunner.Tests/LiveValidation/
 ```
 
 Tests **assert against the bot's Activity + Objective + Task state** as
-observed in `WoWActivitySnapshot`. Tests must not drive `ActionMessage`
+observed in `WoWActivitySnapshot`. Tests must not drive `ObjectiveMessage`
 dispatch directly — see [WWoW CLAUDE.md → Test Isolation
 Rules](../../CLAUDE.md#test-isolation-rules) for the enforcement contract.
 

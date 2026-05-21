@@ -94,7 +94,7 @@ KillObjectiveTask(quest=N, creature=K, count=10)
 
 ### Wire actions
 
-`ActionType` values touched per quest cycle:
+`ObjectiveType` values touched per quest cycle:
 `TravelTo`, `Interact`, `AcceptQuest`, `StartMeleeAttack` /
 `CastSpell`, `Loot`, `TurnInQuest`, `StartMovement` / `StopMovement`.
 
@@ -239,8 +239,8 @@ Sequence is `Cap` (Interact w/ flag, hold for 60s) iterated per node.
 BattlegroundQueueTask(bgType)
   ├─ GoToTask(battlemaster)
   ├─ InteractWithNpcTask
-  ├─ ActionType.JoinBattlegroundQueue  ← single Action
-  └─ wait for invite → ActionType.AcceptBattlegroundInvite
+  ├─ ObjectiveType.JoinBattlegroundQueue  ← single Action
+  └─ wait for invite → ObjectiveType.AcceptBattlegroundInvite
 
 (post-teleport)
 BgObjectiveTask  (per BG type)

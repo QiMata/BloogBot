@@ -427,18 +427,18 @@ static int triangulate(int n, const int* verts, int* indices, int* tris)
 		for (int k = i1; k < n; k++)
 			indices[k] = indices[k+1];
 		
-		if (i1 >= n) i1 = 0;
-		i = prev(i1,n);
-		// Update diagonal flags.
-		if (diagonal(prev(i, n), i1, n, verts, indices))
-			indices[i] |= 0x80000000;
-		else
-			indices[i] &= 0x0fffffff;
-		
-		if (diagonal(i, next(i1, n), n, verts, indices))
-			indices[i1] |= 0x80000000;
-		else
-			indices[i1] &= 0x0fffffff;
+		// Re-evaluate every removable ear after the clip. Updating only the two
+		// local flags can leave stale convexity state behind and produce bad
+		// concave polys during rcBuildPolyMesh.
+		for (int updateIndex = 0; updateIndex < n; ++updateIndex)
+		{
+			const int updateNext = next(updateIndex, n);
+			const int updateNext2 = next(updateNext, n);
+			if (diagonal(updateIndex, updateNext2, n, verts, indices))
+				indices[updateNext] |= 0x80000000;
+			else
+				indices[updateNext] &= 0x0fffffff;
+		}
 	}
 	
 	// Append the remaining triangle.

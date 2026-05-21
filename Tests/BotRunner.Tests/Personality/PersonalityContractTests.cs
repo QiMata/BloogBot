@@ -126,7 +126,7 @@ public sealed class PersonalityContractTests
         //        AccountName-derived personalities, both assigned the
         //        same Activity (e.g. "quest.westfall-defias-cycle").
         // WHEN:  both run the Activity end to end.
-        // THEN:  (dynamic) the trace-recorded (ActionType, dispatchedAtMs)
+        // THEN:  (dynamic) the trace-recorded (ObjectiveType, dispatchedAtMs)
         //        sequence diverges between TESTBOT4 and TESTBOT5 by at
         //        least the ReactionTimeJitterMs range in dispatch cadence.
         // AND:   (progressive) both bots' Activity outcomes have

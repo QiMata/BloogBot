@@ -17,7 +17,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// Shodan migration shape:
 ///   1. Launch FG + BG + SHODAN with Gathering.config.json.
 ///   2. Stage profession loadout and route location through fixture helpers.
-///   3. Dispatch only ActionType.StartGatheringRoute to the BotRunner target.
+///   3. Dispatch only ObjectiveType.StartGatheringRoute to the BotRunner target.
 ///   4. Assert gather success via snapshots and task diagnostics.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
@@ -349,15 +349,15 @@ public class GatheringProfessionTests
         Assert.True(ready, $"{label}: herbalism skill and level should be staged before StartGatheringRoute.");
     }
 
-    private ActionMessage BuildGatheringRouteAction(
+    private ObjectiveMessage BuildGatheringRouteAction(
         uint gatherSpellId,
         IReadOnlyCollection<uint> nodeEntries,
         IReadOnlyList<(int map, float x, float y, float z, float distance2D, uint? poolEntry, string? poolDescription)> routeCandidates,
         int maxRouteLoops = 2)
     {
-        var action = new ActionMessage
+        var action = new ObjectiveMessage
         {
-            ActionType = ActionType.StartGatheringRoute,
+            ObjectiveType = ObjectiveType.StartGatheringRoute,
             Parameters =
             {
                 new RequestParameter { IntParam = (int)gatherSpellId },

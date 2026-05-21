@@ -74,7 +74,7 @@ purchases. Steady-state reached without seeding.
 > `econ.ah-restock` and `econ.vendor-loop`. Most equipment-family
 > blocks additionally underwrite the `LoadoutTask` step list and so
 > appear under every catalog row that triggers
-> `ActionType.ApplyLoadout`.
+> `ObjectiveType.ApplyLoadout`.
 
 ### AuctionHousePostTask
 
@@ -648,7 +648,7 @@ purchases. Steady-state reached without seeding.
   and implements `IBotTask`. **Status:** done — atomic
   primary-construct-and-fire task (`Update` calls
   `ObjectManager.UseContainerItem(bagId, slotId)` and pops).
-  Maps to `ActionType.EquipItem` from StateManager.
+  Maps to `ObjectiveType.EquipItem` from StateManager.
 - **Public surface:**
   - *Current shipped surface:*
     `public EquipItemTask(IBotContext botContext, int bagId, int slotId)`;
@@ -700,7 +700,7 @@ purchases. Steady-state reached without seeding.
 ### UnequipItemTask
 
 - **Class declaration:** No standalone `UnequipItemTask` class.
-  The unequip path is dispatched from `ActionType.UnequipItem`
+  The unequip path is dispatched from `ObjectiveType.UnequipItem`
   through `EquipmentAgent.UnequipItemAsync(...)` and lands at
   `Exports/WoWSharpClient/Networking/ClientComponents/EquipmentNetworkClientComponent.cs:149`.
   **Status:** partial — the action is end-to-end (test green) but
@@ -712,7 +712,7 @@ purchases. Steady-state reached without seeding.
   table buckets unequip under Equipment which co-lives with
   the gear chase loops in this file).
 - **Public surface:**
-  - *Current shipped surface:* `ActionType.UnequipItem` handler
+  - *Current shipped surface:* `ObjectiveType.UnequipItem` handler
     inside `BotRunnerService.ActionDispatch.cs` calling
     `IObjectManager.EquipmentAgent.UnequipItemAsync(int equipSlot,
     CancellationToken ct)`. No `IBotTask` wrapper.
@@ -759,7 +759,7 @@ purchases. Steady-state reached without seeding.
   `Exports/BotRunner/Tasks/LoadoutTask.cs`. Inherits `BotTask`
   and implements `IBotTask`. **Status:** done (orchestrator).
   Executes a `Communication.LoadoutSpec` step list received via
-  `ActionType.ApplyLoadout`; reports through
+  `ObjectiveType.ApplyLoadout`; reports through
   `WoWActivitySnapshot.LoadoutStatus`.
 - **Public surface:**
   - *Current shipped surface:*

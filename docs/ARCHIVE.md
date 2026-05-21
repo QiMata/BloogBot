@@ -1404,11 +1404,11 @@ All 6 implementation steps completed.
 ### Section 9.2: Level-Up Handling — Code Complete
 - Trainer trigger, talent allocation, equipment upgrade, rotation update via IsSpellReady
 
-### Teleport Position Tracking Fix + SET_FACING ActionType (2026-02-20)
+### Teleport Position Tracking Fix + SET_FACING ObjectiveType (2026-02-20)
 - Fixed `NotifyTeleportIncoming()` race condition in `WoWSharpObjectManager` — position write guard must be set BEFORE queuing the update
 - Uncommented `MSG_MOVE_TELEPORT_ACK` position update handler in `MovementHandler.cs`
 - Discovered SOAP `.teleport name` with coordinates is NOT a valid MaNGOS command (silently fails) — switched to `.go xyz` via chat
-- Added `SET_FACING` ActionType (proto 63) end-to-end: communication.proto → Communication.cs → CharacterAction → BotRunnerService behavior tree
+- Added `SET_FACING` ObjectiveType (proto 63) end-to-end: communication.proto → Communication.cs → CharacterAction → BotRunnerService behavior tree
 - `FishingProfessionTests` now passes dual-client: both BG+FG bots teleport to Ratchet dock, face water, cast fishing, detect bobber
 
 ### Bobber Activation + Full Fishing Catch Pipeline (2026-02-20)
@@ -1486,7 +1486,7 @@ Split 2586-line monolith into 12 focused partial class files:
 | File | Lines | Content |
 |------|-------|---------|
 | `BotRunnerService.cs` | 360 | Core: fields, constructor, lifecycle, main tick loop, UpdateBehaviorTree, death recovery |
-| `BotRunnerService.ActionMapping.cs` | 144 | Proto→CharacterAction mapping, ConvertActionMessageToCharacterActions, BotRunnerContext |
+| `BotRunnerService.ActionMapping.cs` | 144 | Proto→CharacterAction mapping, ConvertObjectiveMessageToCharacterActions, BotRunnerContext |
 | `BotRunnerService.ActionDispatch.cs` | 297 | BuildBehaviorTreeFromActions — 50+ case switch |
 | `BotRunnerService.Sequences.Movement.cs` | 177 | GoTo, InteractWith, GatherNode, CheckForTarget |
 | `BotRunnerService.Sequences.NPC.cs` | 184 | Gossip, taxi, quest, trainer, merchant |

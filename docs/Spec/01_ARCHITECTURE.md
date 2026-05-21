@@ -20,7 +20,7 @@
 | PathfindingService |  <---------------------------- |  - metrics/log out   |
 |   (port 5001)      |                                +-----+----------------+
 +--------------------+                                      |
-+--------------------+                                      | ActionMessages
++--------------------+                                      | ObjectiveMessages
 |  SceneDataService  |                                      v
 |   (port 5003)      |   <--- bot local queries --- +----------------------+
 +--------------------+                              |  BotRunner (FG/BG)    |
@@ -77,7 +77,7 @@ Human (UI or in-game whisper) --> StateManager.RequestActivity
   → OnDemandActivityLauncher.LaunchAsync(activityId, humanGuid, params)
     → Spawning → Outfitting → Partying → Travelling → Engaged → TearDown
   → Coordinator (Dungeon/BG/Raid/...).LaunchAsync(def, pool, parameters)
-  → Coordinator dispatches ActionMessages → bots execute
+  → Coordinator dispatches ObjectiveMessages → bots execute
   → On completion / disengage → TearDown → pool slots freed; characters recycled or deleted
 ```
 

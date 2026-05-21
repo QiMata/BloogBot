@@ -6,7 +6,7 @@ namespace BotRunner.Tasks;
 /// <summary>
 /// Atomic task: accept a quest from an open quest dialog.
 /// Requires that a quest accept dialog is already showing.
-/// Maps to ActionType.ACCEPT_QUEST from StateManager.
+/// Maps to ObjectiveType.ACCEPT_QUEST from StateManager.
 /// </summary>
 public class AcceptQuestTask(IBotContext botContext) : BotTask(botContext), IBotTask
 {

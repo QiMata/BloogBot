@@ -202,10 +202,10 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             ulong gameObjectGuid = 0x66666666;
-            var interactionType = GameObjectInteractionType.OpenChest;
+            var interobjectiveType = GameObjectInterobjectiveType.OpenChest;
 
             // Act
-            var canInteract = _gameObjectAgent.CanInteractWith(gameObjectGuid, interactionType);
+            var canInteract = _gameObjectAgent.CanInteractWith(gameObjectGuid, interobjectiveType);
 
             // Assert
             Assert.True(canInteract);
@@ -385,19 +385,19 @@ namespace WoWSharpClient.Tests.Agent
         }
 
         [Theory]
-        [InlineData(GameObjectInteractionType.Generic)]
-        [InlineData(GameObjectInteractionType.OpenChest)]
-        [InlineData(GameObjectInteractionType.Gather)]
-        [InlineData(GameObjectInteractionType.UseDoor)]
-        [InlineData(GameObjectInteractionType.ActivateButton)]
-        [InlineData(GameObjectInteractionType.Read)]
-        public void CanInteractWith_VariousInteractionTypes_ReturnsTrue(GameObjectInteractionType interactionType)
+        [InlineData(GameObjectInterobjectiveType.Generic)]
+        [InlineData(GameObjectInterobjectiveType.OpenChest)]
+        [InlineData(GameObjectInterobjectiveType.Gather)]
+        [InlineData(GameObjectInterobjectiveType.UseDoor)]
+        [InlineData(GameObjectInterobjectiveType.ActivateButton)]
+        [InlineData(GameObjectInterobjectiveType.Read)]
+        public void CanInteractWith_VariousInterobjectiveTypes_ReturnsTrue(GameObjectInterobjectiveType interobjectiveType)
         {
             // Arrange
             ulong gameObjectGuid = 0x12345678;
 
             // Act
-            var canInteract = _gameObjectAgent.CanInteractWith(gameObjectGuid, interactionType);
+            var canInteract = _gameObjectAgent.CanInteractWith(gameObjectGuid, interobjectiveType);
 
             // Assert
             Assert.True(canInteract);

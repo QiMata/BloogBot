@@ -174,7 +174,7 @@
 - Last delta:
   - `ObjectManager.Interaction` now keeps the foreground mailbox collection loop alive while visible inbox rows hydrate delayed money/item metadata.
   - `LocalPlayer.Copper` prefers Lua `GetMoney()` before descriptor fallback, and `CollectAllMailWithResultAsync(...)` returns structured evidence for foreground mail assertions.
-  - `MailSystemTests` / `MailParityTests` dispatch `ActionType.CheckMail` to both `ECONFG1` and `ECONBG1` under the Shodan director topology.
+  - `MailSystemTests` / `MailParityTests` dispatch `ObjectiveType.CheckMail` to both `ECONFG1` and `ECONBG1` under the Shodan director topology.
 - Validation/tests run:
   - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.CollectInboxAttachmentsLua|FullyQualifiedName~ForegroundInteractionFrameTests.DeleteEmptyInboxItemsLua|FullyQualifiedName~ForegroundInteractionFrameTests.WaitForInboxPendingAttachmentsAsync" --logger "console;verbosity=minimal"` -> `passed (3/3)`.
   - `mail_fg_shodan_director_extendedpoll.trx` -> Shodan FG/BG mail validation passed `4/4`.

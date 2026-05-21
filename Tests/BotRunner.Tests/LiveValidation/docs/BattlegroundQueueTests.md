@@ -13,7 +13,7 @@ BotRunner battleground actions.
 
 ### BG_QueueForWSG_ReceivesQueuedStatus
 
-**Purpose:** Prove the BG `ActionType.JoinBattleground` dispatch path can
+**Purpose:** Prove the BG `ObjectiveType.JoinBattleground` dispatch path can
 queue from the Orgrimmar Warsong Gulch battlemaster after Shodan-owned staging.
 
 **Setup path:**
@@ -24,9 +24,9 @@ queue from the Orgrimmar Warsong Gulch battlemaster after Shodan-owned staging.
 - `QuiesceAccountsAsync(...)` drains setup actions before queue dispatch.
 
 **Action path:**
-- `ActionType.JoinBattleground` with Warsong Gulch type id `2` and expected map
+- `ObjectiveType.JoinBattleground` with Warsong Gulch type id `2` and expected map
   id `489`.
-- `ActionType.LeaveBattleground` is sent as cleanup after the queue evidence is
+- `ObjectiveType.LeaveBattleground` is sent as cleanup after the queue evidence is
   captured.
 
 **Assertion surface:**

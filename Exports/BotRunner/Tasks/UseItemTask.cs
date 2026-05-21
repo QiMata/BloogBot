@@ -7,7 +7,7 @@ namespace BotRunner.Tasks;
 /// <summary>
 /// Atomic task: use an item from inventory by bag and slot.
 /// Calls ObjectManager.UseItem(bag, slot), then pops.
-/// Maps to ActionType.USE_ITEM from StateManager.
+/// Maps to ObjectiveType.USE_ITEM from StateManager.
 /// </summary>
 public class UseItemTask(IBotContext botContext, int bagId, int slotId, ulong targetGuid = 0) : BotTask(botContext), IBotTask
 {

@@ -8,6 +8,7 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <limits>
 #include <string>
 #include <unordered_set>
 #include <unordered_map>
@@ -243,9 +244,12 @@ static bool IntersectsTileAabb(
     float minY,
     float maxY)
 {
-    const float tileMaxX = (32 - int(tileX)) * MMAP::GRID_SIZE;
+    // Mmap tiles are indexed as (tileX <- WoW.Y, tileY <- WoW.X). Keep the
+    // filter in world-space, but swap the tile axes before comparing against
+    // the spawn/model AABB in WoW coordinates.
+    const float tileMaxX = (32 - int(tileY)) * MMAP::GRID_SIZE;
     const float tileMinX = tileMaxX - MMAP::GRID_SIZE;
-    const float tileMaxY = (32 - int(tileY)) * MMAP::GRID_SIZE;
+    const float tileMaxY = (32 - int(tileX)) * MMAP::GRID_SIZE;
     const float tileMinY = tileMaxY - MMAP::GRID_SIZE;
 
     return maxX >= tileMinX
@@ -854,6 +858,572 @@ static void filterLedgeSpans(const int walkableHeight, const int walkableClimbTr
     }
 }
 
+namespace
+{
+constexpr float STEEP_SURFACE_PRUNE_EPSILON_DEGREES = 1.0f;
+constexpr float STEEP_SURFACE_PRUNE_MIN_TRIANGLE_NORMAL = 1e-5f;
+constexpr float STEEP_SURFACE_PRUNE_MIN_STEEP_AREA_RATIO = 0.6f;
+constexpr float MIXED_WALL_POLY_MIN_STEEP_AREA_RATIO = 0.08f;
+constexpr float MIXED_WALL_POLY_MIN_Z_RANGE = 1.0f;
+constexpr float MIXED_WALL_POLY_MIN_EDGE_LENGTH_2D = 6.0f;
+constexpr float MIXED_WALL_POLY_MIN_AREA_2D = 8.0f;
+constexpr float MIXED_WALL_POLY_CLIMB_OVERSHOOT = 0.15f;
+constexpr float DETOUR_FINAL_CULL_MAX_SLOPE_DEGREES = 50.0f;
+constexpr float SHADOWED_LEDGE_MAX_AREA_2D = 20.0f;
+constexpr float SHADOWED_LEDGE_MAX_EDGE_2D = 7.0f;
+constexpr float SHADOWED_LEDGE_MAX_Z_RANGE = 1.5f;
+constexpr float SHADOWED_LEDGE_MIN_VERTICAL_GAP = 1.0f;
+constexpr float SHADOWED_LEDGE_MAX_VERTICAL_GAP = 4.0f;
+constexpr float SHADOWED_LEDGE_MIN_OVERLAP_AREA_2D = 0.5f;
+constexpr float SHADOWED_LEDGE_MIN_OVERLAP_RATIO = 0.35f;
+constexpr float SHADOWED_LEDGE_COMPONENT_MAX_AREA_2D = 80.0f;
+constexpr float SHADOWED_LEDGE_COMPONENT_MAX_Z_RANGE = 2.5f;
+
+struct DetailPolyDiagnostics
+{
+    float totalSurfaceArea = 0.0f;
+    float steepSurfaceArea = 0.0f;
+    float weightedUpComponent = 0.0f;
+    float maxSlopeDegrees = 0.0f;
+    float minY = std::numeric_limits<float>::max();
+    float maxY = -std::numeric_limits<float>::max();
+    float maxEdge2D = 0.0f;
+    float horizontalArea2D = 0.0f;
+};
+
+static int GetPolyVertCount(const rcPolyMesh& mesh, const int polyIndex)
+{
+    const unsigned short* poly = &mesh.polys[polyIndex * mesh.nvp * 2];
+    int vertCount = 0;
+    while (vertCount < mesh.nvp && poly[vertCount] != RC_MESH_NULL_IDX)
+        ++vertCount;
+    return vertCount;
+}
+
+static void GetPolyWorldVert(const rcPolyMesh& mesh, const int polyIndex, const int polyVertIndex, float out[3])
+{
+    const unsigned short* poly = &mesh.polys[polyIndex * mesh.nvp * 2];
+    const unsigned short vertIndex = poly[polyVertIndex];
+    const unsigned short* vert = &mesh.verts[vertIndex * 3];
+    out[0] = mesh.bmin[0] + vert[0] * mesh.cs;
+    out[1] = mesh.bmin[1] + vert[1] * mesh.ch;
+    out[2] = mesh.bmin[2] + vert[2] * mesh.cs;
+}
+
+static const float* GetDetailTriVertex(const rcPolyMesh& mesh, const rcPolyMeshDetail& detailMesh, const int polyIndex,
+    const unsigned int* detail, const int polyVertCount, const unsigned char triVertIndex, float tempStorage[3])
+{
+    if (triVertIndex < polyVertCount)
+    {
+        GetPolyWorldVert(mesh, polyIndex, triVertIndex, tempStorage);
+        return tempStorage;
+    }
+
+    return &detailMesh.verts[(detail[0] + (triVertIndex - polyVertCount)) * 3];
+}
+
+static float GetPolyMaxEdge2D(const rcPolyMesh& mesh, const int polyIndex, const int polyVertCount)
+{
+    float maxEdge2D = 0.0f;
+    float vertexA[3];
+    float vertexB[3];
+    for (int vertexIndex = 0; vertexIndex < polyVertCount; ++vertexIndex)
+    {
+        GetPolyWorldVert(mesh, polyIndex, vertexIndex, vertexA);
+        GetPolyWorldVert(mesh, polyIndex, (vertexIndex + 1) % polyVertCount, vertexB);
+        const float deltaX = vertexB[0] - vertexA[0];
+        const float deltaZ = vertexB[2] - vertexA[2];
+        maxEdge2D = rcMax(maxEdge2D, sqrtf(deltaX * deltaX + deltaZ * deltaZ));
+    }
+
+    return maxEdge2D;
+}
+
+static float GetPolyHorizontalArea2D(const rcPolyMesh& mesh, const int polyIndex, const int polyVertCount)
+{
+    float twiceArea = 0.0f;
+    float vertexA[3];
+    float vertexB[3];
+    for (int vertexIndex = 0; vertexIndex < polyVertCount; ++vertexIndex)
+    {
+        GetPolyWorldVert(mesh, polyIndex, vertexIndex, vertexA);
+        GetPolyWorldVert(mesh, polyIndex, (vertexIndex + 1) % polyVertCount, vertexB);
+        twiceArea += (vertexA[0] * vertexB[2]) - (vertexB[0] * vertexA[2]);
+    }
+
+    return fabsf(twiceArea) * 0.5f;
+}
+
+static DetailPolyDiagnostics AnalyzeDetailPoly(const rcPolyMesh& mesh, const rcPolyMeshDetail& detailMesh,
+    const int polyIndex, const float maxSlopeDegrees)
+{
+    DetailPolyDiagnostics diagnostics;
+    const int polyVertCount = GetPolyVertCount(mesh, polyIndex);
+    if (polyVertCount < 3)
+        return diagnostics;
+
+    diagnostics.maxEdge2D = GetPolyMaxEdge2D(mesh, polyIndex, polyVertCount);
+    diagnostics.horizontalArea2D = GetPolyHorizontalArea2D(mesh, polyIndex, polyVertCount);
+
+    float polyVertex[3];
+    for (int vertexIndex = 0; vertexIndex < polyVertCount; ++vertexIndex)
+    {
+        GetPolyWorldVert(mesh, polyIndex, vertexIndex, polyVertex);
+        diagnostics.minY = rcMin(diagnostics.minY, polyVertex[1]);
+        diagnostics.maxY = rcMax(diagnostics.maxY, polyVertex[1]);
+    }
+
+    if (polyIndex >= detailMesh.nmeshes)
+        return diagnostics;
+
+    const unsigned int* detail = &detailMesh.meshes[polyIndex * 4];
+    const unsigned int triBase = detail[2];
+    const unsigned int triCount = detail[3];
+
+    for (unsigned int triIndex = 0; triIndex < triCount; ++triIndex)
+    {
+        const unsigned char* tri = &detailMesh.tris[(triBase + triIndex) * 4];
+        float tempStorage[3][3];
+        const float* triVerts[3];
+        for (int vertIndex = 0; vertIndex < 3; ++vertIndex)
+            triVerts[vertIndex] = GetDetailTriVertex(mesh, detailMesh, polyIndex, detail, polyVertCount, tri[vertIndex], tempStorage[vertIndex]);
+
+        float edgeAB[3];
+        float edgeAC[3];
+        float normal[3];
+        rcVsub(edgeAB, triVerts[1], triVerts[0]);
+        rcVsub(edgeAC, triVerts[2], triVerts[0]);
+        rcVcross(normal, edgeAB, edgeAC);
+
+        const float normalLength = sqrtf(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+        if (normalLength <= STEEP_SURFACE_PRUNE_MIN_TRIANGLE_NORMAL)
+            continue;
+
+        const float area = normalLength * 0.5f;
+        const float upComponent = rcClamp(fabsf(normal[1]) / normalLength, 0.0f, 1.0f);
+        const float slopeDegrees = acosf(upComponent) * (180.0f / RC_PI);
+        diagnostics.totalSurfaceArea += area;
+        diagnostics.weightedUpComponent += upComponent * area;
+        diagnostics.maxSlopeDegrees = rcMax(diagnostics.maxSlopeDegrees, slopeDegrees);
+        if (slopeDegrees > maxSlopeDegrees + STEEP_SURFACE_PRUNE_EPSILON_DEGREES)
+            diagnostics.steepSurfaceArea += area;
+
+        for (int vertIndex = 0; vertIndex < 3; ++vertIndex)
+        {
+            diagnostics.minY = rcMin(diagnostics.minY, triVerts[vertIndex][1]);
+            diagnostics.maxY = rcMax(diagnostics.maxY, triVerts[vertIndex][1]);
+        }
+    }
+
+    if (diagnostics.minY == std::numeric_limits<float>::max())
+    {
+        diagnostics.minY = 0.0f;
+        diagnostics.maxY = 0.0f;
+    }
+
+    return diagnostics;
+}
+
+static bool ShouldCullSuspiciousPoly(const rcPolyMesh& mesh, const rcPolyMeshDetail& detailMesh, const int polyIndex,
+    const float maxSlopeDegrees, const float maxClimbWorld)
+{
+    const DetailPolyDiagnostics diagnostics = AnalyzeDetailPoly(mesh, detailMesh, polyIndex, maxSlopeDegrees);
+    if (diagnostics.totalSurfaceArea <= 0.0f)
+        return false;
+
+    const float averageUpComponent = rcClamp(diagnostics.weightedUpComponent / diagnostics.totalSurfaceArea, 0.0f, 1.0f);
+    const float averageSlopeDegrees = acosf(averageUpComponent) * (180.0f / RC_PI);
+    const float steepAreaRatio = diagnostics.steepSurfaceArea / diagnostics.totalSurfaceArea;
+    const float verticalRange = diagnostics.maxY - diagnostics.minY;
+
+    const bool overwhelminglySteep =
+        averageSlopeDegrees > maxSlopeDegrees + STEEP_SURFACE_PRUNE_EPSILON_DEGREES ||
+        steepAreaRatio >= STEEP_SURFACE_PRUNE_MIN_STEEP_AREA_RATIO;
+
+    const bool mixedTallWallApron =
+        steepAreaRatio >= MIXED_WALL_POLY_MIN_STEEP_AREA_RATIO &&
+        diagnostics.maxSlopeDegrees > maxSlopeDegrees + STEEP_SURFACE_PRUNE_EPSILON_DEGREES &&
+        verticalRange >= rcMax(MIXED_WALL_POLY_MIN_Z_RANGE, maxClimbWorld + MIXED_WALL_POLY_CLIMB_OVERSHOOT) &&
+        (diagnostics.maxEdge2D >= MIXED_WALL_POLY_MIN_EDGE_LENGTH_2D ||
+            diagnostics.horizontalArea2D >= MIXED_WALL_POLY_MIN_AREA_2D);
+
+    return overwhelminglySteep || mixedTallWallApron;
+}
+
+static int CullSuspiciousMixedWallPolys(rcPolyMesh& mesh, const rcPolyMeshDetail& detailMesh,
+    const float maxSlopeDegrees, const float maxClimbWorld)
+{
+    int culled = 0;
+    for (int polyIndex = 0; polyIndex < mesh.npolys; ++polyIndex)
+    {
+        if (mesh.areas[polyIndex] != AREA_GROUND)
+            continue;
+
+        if (!ShouldCullSuspiciousPoly(mesh, detailMesh, polyIndex, maxSlopeDegrees, maxClimbWorld))
+            continue;
+
+        mesh.areas[polyIndex] = AREA_NONE;
+        mesh.flags[polyIndex] = 0;
+        ++culled;
+    }
+
+    return culled;
+}
+
+struct DetourPolyDiagnostics
+{
+    float totalSurfaceArea = 0.0f;
+    float steepSurfaceArea = 0.0f;
+    float weightedUpComponent = 0.0f;
+    float maxSlopeDegrees = 0.0f;
+    float minX = std::numeric_limits<float>::max();
+    float minY = std::numeric_limits<float>::max();
+    float minZ = std::numeric_limits<float>::max();
+    float maxX = -std::numeric_limits<float>::max();
+    float maxY = -std::numeric_limits<float>::max();
+    float maxZ = -std::numeric_limits<float>::max();
+    float maxEdge2D = 0.0f;
+    float horizontalArea2D = 0.0f;
+};
+
+static float GetDetourPolyMaxEdge2D(const dtMeshTile& tile, const dtPoly& poly)
+{
+    float maxEdge2D = 0.0f;
+    for (int vertexIndex = 0; vertexIndex < poly.vertCount; ++vertexIndex)
+    {
+        const float* vertexA = &tile.verts[poly.verts[vertexIndex] * 3];
+        const float* vertexB = &tile.verts[poly.verts[(vertexIndex + 1) % poly.vertCount] * 3];
+        const float deltaX = vertexB[0] - vertexA[0];
+        const float deltaZ = vertexB[2] - vertexA[2];
+        maxEdge2D = rcMax(maxEdge2D, sqrtf(deltaX * deltaX + deltaZ * deltaZ));
+    }
+
+    return maxEdge2D;
+}
+
+static float GetDetourPolyHorizontalArea2D(const dtMeshTile& tile, const dtPoly& poly)
+{
+    float twiceArea = 0.0f;
+    for (int vertexIndex = 0; vertexIndex < poly.vertCount; ++vertexIndex)
+    {
+        const float* vertexA = &tile.verts[poly.verts[vertexIndex] * 3];
+        const float* vertexB = &tile.verts[poly.verts[(vertexIndex + 1) % poly.vertCount] * 3];
+        twiceArea += (vertexA[0] * vertexB[2]) - (vertexB[0] * vertexA[2]);
+    }
+
+    return fabsf(twiceArea) * 0.5f;
+}
+
+static const float* GetDetourDetailTriVertex(const dtMeshTile& tile, const dtPoly& poly, const dtPolyDetail& detail,
+    const unsigned char triVertIndex, float tempStorage[3])
+{
+    if (triVertIndex < poly.vertCount)
+        return &tile.verts[poly.verts[triVertIndex] * 3];
+
+    const unsigned int detailVertIndex = detail.vertBase + (triVertIndex - poly.vertCount);
+    if (detailVertIndex < (unsigned int)tile.header->detailVertCount)
+        return &tile.detailVerts[detailVertIndex * 3];
+
+    tempStorage[0] = 0.0f;
+    tempStorage[1] = 0.0f;
+    tempStorage[2] = 0.0f;
+    return tempStorage;
+}
+
+static DetourPolyDiagnostics AnalyzeDetourPoly(const dtMeshTile& tile, const int polyIndex, const float maxSlopeDegrees)
+{
+    DetourPolyDiagnostics diagnostics;
+    if (!tile.header || polyIndex < 0 || polyIndex >= tile.header->polyCount)
+        return diagnostics;
+
+    const dtPoly& poly = tile.polys[polyIndex];
+    if (poly.vertCount < 3)
+        return diagnostics;
+
+    diagnostics.maxEdge2D = GetDetourPolyMaxEdge2D(tile, poly);
+    diagnostics.horizontalArea2D = GetDetourPolyHorizontalArea2D(tile, poly);
+
+    for (int vertexIndex = 0; vertexIndex < poly.vertCount; ++vertexIndex)
+    {
+        const float* polyVertex = &tile.verts[poly.verts[vertexIndex] * 3];
+        diagnostics.minX = rcMin(diagnostics.minX, polyVertex[0]);
+        diagnostics.minY = rcMin(diagnostics.minY, polyVertex[1]);
+        diagnostics.minZ = rcMin(diagnostics.minZ, polyVertex[2]);
+        diagnostics.maxX = rcMax(diagnostics.maxX, polyVertex[0]);
+        diagnostics.maxY = rcMax(diagnostics.maxY, polyVertex[1]);
+        diagnostics.maxZ = rcMax(diagnostics.maxZ, polyVertex[2]);
+    }
+
+    if (polyIndex >= tile.header->detailMeshCount)
+        return diagnostics;
+
+    const dtPolyDetail& detail = tile.detailMeshes[polyIndex];
+    for (unsigned int triIndex = 0; triIndex < detail.triCount; ++triIndex)
+    {
+        const unsigned char* tri = &tile.detailTris[(detail.triBase + triIndex) * 4];
+        float tempStorage[3][3];
+        const float* triVerts[3];
+        for (int vertIndex = 0; vertIndex < 3; ++vertIndex)
+            triVerts[vertIndex] = GetDetourDetailTriVertex(tile, poly, detail, tri[vertIndex], tempStorage[vertIndex]);
+
+        float edgeAB[3];
+        float edgeAC[3];
+        float normal[3];
+        rcVsub(edgeAB, triVerts[1], triVerts[0]);
+        rcVsub(edgeAC, triVerts[2], triVerts[0]);
+        rcVcross(normal, edgeAB, edgeAC);
+
+        const float normalLength = sqrtf(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+        if (normalLength <= STEEP_SURFACE_PRUNE_MIN_TRIANGLE_NORMAL)
+            continue;
+
+        const float area = normalLength * 0.5f;
+        const float upComponent = rcClamp(fabsf(normal[1]) / normalLength, 0.0f, 1.0f);
+        const float slopeDegrees = acosf(upComponent) * (180.0f / RC_PI);
+        diagnostics.totalSurfaceArea += area;
+        diagnostics.weightedUpComponent += upComponent * area;
+        diagnostics.maxSlopeDegrees = rcMax(diagnostics.maxSlopeDegrees, slopeDegrees);
+        if (slopeDegrees > maxSlopeDegrees + STEEP_SURFACE_PRUNE_EPSILON_DEGREES)
+            diagnostics.steepSurfaceArea += area;
+
+        for (int vertIndex = 0; vertIndex < 3; ++vertIndex)
+        {
+            diagnostics.minX = rcMin(diagnostics.minX, triVerts[vertIndex][0]);
+            diagnostics.minY = rcMin(diagnostics.minY, triVerts[vertIndex][1]);
+            diagnostics.minZ = rcMin(diagnostics.minZ, triVerts[vertIndex][2]);
+            diagnostics.maxX = rcMax(diagnostics.maxX, triVerts[vertIndex][0]);
+            diagnostics.maxY = rcMax(diagnostics.maxY, triVerts[vertIndex][1]);
+            diagnostics.maxZ = rcMax(diagnostics.maxZ, triVerts[vertIndex][2]);
+        }
+    }
+
+    if (diagnostics.minY == std::numeric_limits<float>::max())
+    {
+        diagnostics.minX = 0.0f;
+        diagnostics.minY = 0.0f;
+        diagnostics.minZ = 0.0f;
+        diagnostics.maxX = 0.0f;
+        diagnostics.maxY = 0.0f;
+        diagnostics.maxZ = 0.0f;
+    }
+
+    return diagnostics;
+}
+
+static bool ShouldCullDetourPoly(const DetourPolyDiagnostics& diagnostics, const float maxClimbWorld)
+{
+    if (diagnostics.totalSurfaceArea <= 0.0f)
+        return false;
+
+    const float averageUpComponent = rcClamp(diagnostics.weightedUpComponent / diagnostics.totalSurfaceArea, 0.0f, 1.0f);
+    const float averageSlopeDegrees = acosf(averageUpComponent) * (180.0f / RC_PI);
+    const float steepAreaRatio = diagnostics.steepSurfaceArea / diagnostics.totalSurfaceArea;
+    const float verticalRange = diagnostics.maxY - diagnostics.minY;
+
+    const bool overwhelminglySteep =
+        averageSlopeDegrees > DETOUR_FINAL_CULL_MAX_SLOPE_DEGREES + STEEP_SURFACE_PRUNE_EPSILON_DEGREES ||
+        steepAreaRatio >= STEEP_SURFACE_PRUNE_MIN_STEEP_AREA_RATIO;
+
+    const bool mixedTallWallApron =
+        steepAreaRatio >= MIXED_WALL_POLY_MIN_STEEP_AREA_RATIO &&
+        diagnostics.maxSlopeDegrees > DETOUR_FINAL_CULL_MAX_SLOPE_DEGREES + STEEP_SURFACE_PRUNE_EPSILON_DEGREES &&
+        verticalRange >= rcMax(MIXED_WALL_POLY_MIN_Z_RANGE, maxClimbWorld + MIXED_WALL_POLY_CLIMB_OVERSHOOT) &&
+        (diagnostics.maxEdge2D >= MIXED_WALL_POLY_MIN_EDGE_LENGTH_2D ||
+            diagnostics.horizontalArea2D >= MIXED_WALL_POLY_MIN_AREA_2D);
+
+    return overwhelminglySteep || mixedTallWallApron;
+}
+
+static float GetDetourBoundsOverlapArea2D(const DetourPolyDiagnostics& candidate, const DetourPolyDiagnostics& other)
+{
+    const float overlapX = rcMin(candidate.maxX, other.maxX) - rcMax(candidate.minX, other.minX);
+    if (overlapX <= 0.0f)
+        return 0.0f;
+
+    const float overlapZ = rcMin(candidate.maxZ, other.maxZ) - rcMax(candidate.minZ, other.minZ);
+    if (overlapZ <= 0.0f)
+        return 0.0f;
+
+    return overlapX * overlapZ;
+}
+
+static bool IsShadowedLedgeCandidate(const DetourPolyDiagnostics& diagnostics)
+{
+    return diagnostics.totalSurfaceArea > 0.0f &&
+        diagnostics.horizontalArea2D <= SHADOWED_LEDGE_MAX_AREA_2D &&
+        diagnostics.maxEdge2D <= SHADOWED_LEDGE_MAX_EDGE_2D &&
+        (diagnostics.maxY - diagnostics.minY) <= SHADOWED_LEDGE_MAX_Z_RANGE;
+}
+
+static bool IsWalkableLandPoly(const dtPoly& poly)
+{
+    return poly.getType() == DT_POLYTYPE_GROUND &&
+        poly.flags != 0 &&
+        (poly.flags & NAV_GROUND) != 0 &&
+        poly.getArea() != AREA_NONE;
+}
+
+static bool HasShadowingUpperGroundPoly(const dtMeshTile& tile, const int polyIndex,
+    const std::vector<DetourPolyDiagnostics>& diagnostics, const std::vector<unsigned char>& liveGroundMask)
+{
+    const DetourPolyDiagnostics& candidate = diagnostics[polyIndex];
+    const float minOverlapArea = rcMax(
+        SHADOWED_LEDGE_MIN_OVERLAP_AREA_2D,
+        rcMin(candidate.horizontalArea2D * SHADOWED_LEDGE_MIN_OVERLAP_RATIO, 3.0f));
+
+    for (int otherIndex = 0; otherIndex < tile.header->polyCount; ++otherIndex)
+    {
+        if (otherIndex == polyIndex || !liveGroundMask[otherIndex])
+            continue;
+
+        const DetourPolyDiagnostics& other = diagnostics[otherIndex];
+        const float verticalGap = other.minY - candidate.maxY;
+        if (verticalGap < SHADOWED_LEDGE_MIN_VERTICAL_GAP || verticalGap > SHADOWED_LEDGE_MAX_VERTICAL_GAP)
+            continue;
+
+        if (GetDetourBoundsOverlapArea2D(candidate, other) < minOverlapArea)
+            continue;
+
+        return true;
+    }
+
+    return false;
+}
+
+struct ShadowedLedgeComponent
+{
+    std::vector<int> members;
+    float totalHorizontalArea2D = 0.0f;
+    float minHeight = std::numeric_limits<float>::max();
+    float maxHeight = -std::numeric_limits<float>::max();
+    bool hasShadowingUpperGround = false;
+};
+
+static ShadowedLedgeComponent CollectShadowedLedgeComponent(const dtMeshTile& tile, const int startPolyIndex,
+    const std::vector<DetourPolyDiagnostics>& diagnostics, const std::vector<unsigned char>& liveGroundMask,
+    std::vector<unsigned char>& visitedMask)
+{
+    ShadowedLedgeComponent component;
+    std::vector<int> pending;
+    pending.push_back(startPolyIndex);
+    visitedMask[startPolyIndex] = 1;
+
+    while (!pending.empty())
+    {
+        const int polyIndex = pending.back();
+        pending.pop_back();
+        const dtPoly& poly = tile.polys[polyIndex];
+        const DetourPolyDiagnostics& polyDiagnostics = diagnostics[polyIndex];
+
+        component.members.push_back(polyIndex);
+        component.totalHorizontalArea2D += polyDiagnostics.horizontalArea2D;
+        component.minHeight = rcMin(component.minHeight, polyDiagnostics.minY);
+        component.maxHeight = rcMax(component.maxHeight, polyDiagnostics.maxY);
+        component.hasShadowingUpperGround = component.hasShadowingUpperGround ||
+            HasShadowingUpperGroundPoly(tile, polyIndex, diagnostics, liveGroundMask);
+
+        for (int edgeIndex = 0; edgeIndex < poly.vertCount; ++edgeIndex)
+        {
+            const unsigned short neighbor = poly.neis[edgeIndex];
+            if (neighbor == 0 || (neighbor & DT_EXT_LINK) != 0)
+                continue;
+
+            const int neighborIndex = static_cast<int>(neighbor) - 1;
+            if (neighborIndex < 0 || neighborIndex >= tile.header->polyCount)
+                continue;
+
+            if (visitedMask[neighborIndex] || !liveGroundMask[neighborIndex])
+                continue;
+
+            if (!IsShadowedLedgeCandidate(diagnostics[neighborIndex]))
+                continue;
+
+            visitedMask[neighborIndex] = 1;
+            pending.push_back(neighborIndex);
+        }
+    }
+
+    if (component.minHeight == std::numeric_limits<float>::max())
+        component.minHeight = 0.0f;
+    if (component.maxHeight == -std::numeric_limits<float>::max())
+        component.maxHeight = 0.0f;
+
+    return component;
+}
+
+static int CullSuspiciousDetourPolys(dtMeshTile& tile, const float maxClimbWorld, const bool trimShadowedLedges)
+{
+    if (!tile.header)
+        return 0;
+
+    std::vector<DetourPolyDiagnostics> diagnostics(tile.header->polyCount);
+    std::vector<unsigned char> liveGroundMask(tile.header->polyCount, 0);
+    for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+    {
+        const dtPoly& poly = tile.polys[polyIndex];
+        if (poly.getType() != DT_POLYTYPE_GROUND || poly.vertCount < 3)
+            continue;
+
+        diagnostics[polyIndex] = AnalyzeDetourPoly(tile, polyIndex, DETOUR_FINAL_CULL_MAX_SLOPE_DEGREES);
+        if (IsWalkableLandPoly(poly))
+            liveGroundMask[polyIndex] = 1;
+    }
+
+    int culled = 0;
+    for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+    {
+        dtPoly& poly = tile.polys[polyIndex];
+        if (!liveGroundMask[polyIndex] || !IsWalkableLandPoly(poly))
+            continue;
+
+        if (!ShouldCullDetourPoly(diagnostics[polyIndex], maxClimbWorld))
+            continue;
+
+        poly.flags = 0;
+        poly.setArea(AREA_NONE);
+        liveGroundMask[polyIndex] = 0;
+        ++culled;
+    }
+
+    if (trimShadowedLedges)
+    {
+        std::vector<unsigned char> visitedMask(tile.header->polyCount, 0);
+        for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+        {
+            dtPoly& poly = tile.polys[polyIndex];
+            if (visitedMask[polyIndex] || !liveGroundMask[polyIndex] || !IsWalkableLandPoly(poly))
+                continue;
+
+            if (!IsShadowedLedgeCandidate(diagnostics[polyIndex]))
+                continue;
+
+            const ShadowedLedgeComponent component = CollectShadowedLedgeComponent(
+                tile, polyIndex, diagnostics, liveGroundMask, visitedMask);
+
+            const float componentHeightRange = component.maxHeight - component.minHeight;
+            if (!component.hasShadowingUpperGround ||
+                component.totalHorizontalArea2D > SHADOWED_LEDGE_COMPONENT_MAX_AREA_2D ||
+                componentHeightRange > SHADOWED_LEDGE_COMPONENT_MAX_Z_RANGE)
+                continue;
+
+            for (const int memberIndex : component.members)
+            {
+                dtPoly& memberPoly = tile.polys[memberIndex];
+                if (!liveGroundMask[memberIndex] || !IsWalkableLandPoly(memberPoly))
+                    continue;
+
+                memberPoly.flags = 0;
+                memberPoly.setArea(AREA_NONE);
+                liveGroundMask[memberIndex] = 0;
+                ++culled;
+            }
+        }
+    }
+
+    return culled;
+}
+}
+
 static void from_json(const json& j, rcConfig& config)
 {
     config.tileSize               = MMAP::VERTEX_PER_TILE;
@@ -1280,14 +1850,15 @@ namespace MMAP
 
                 // [WWoW-DIVERGENCE] 2026-05-07: --debug-heightfield diagnostic.
                 // Convert WoW (X, Y) to a recast cell index for THIS sub-tile.
-                // MapBuilder::getTileBounds stores WoW X in bmin[0]/bmax[0] and
-                // WoW Y in bmin[2]/bmax[2]. Only sub-tiles whose heightfield
-                // contains the requested column emit per-stage dumps below.
+                // Generator/Recast horizontal coordinates are stored as
+                // (recast X <- WoW Y, recast Z <- WoW X). Only the sub-tile
+                // whose heightfield contains the requested column emits the
+                // detailed per-stage span dumps below.
                 int dbgCellX = -1, dbgCellY = -1;
                 if (m_debugWoWSet)
                 {
-                    const float recastX = m_debugWoWX;
-                    const float recastZ = m_debugWoWY;
+                    const float recastX = m_debugWoWY;
+                    const float recastZ = m_debugWoWX;
                     dbgCellX = (int)std::floor((recastX - tile.solid->bmin[0]) / tileCfg.cs);
                     dbgCellY = (int)std::floor((recastZ - tile.solid->bmin[2]) / tileCfg.cs);
                     const bool inRange = (dbgCellX >= 0 && dbgCellX < tile.solid->width &&
@@ -1555,6 +2126,17 @@ namespace MMAP
         }
         rcMergePolyMeshDetails(m_rcContext, dmmerge, nmerge, *iv.polyMeshDetail);
 
+        const int culledSuspiciousPolys = CullSuspiciousMixedWallPolys(
+            *iv.polyMesh,
+            *iv.polyMeshDetail,
+            config.walkableSlopeAngle,
+            agentMaxClimbTerrain);
+        if (culledSuspiciousPolys > 0)
+        {
+            printf("[POLY-CULL] map=%u tile=%u,%u: disabled %d suspicious mixed-wall polygon(s)\n",
+                mapID, tileX, tileY, culledSuspiciousPolys);
+        }
+
         // free things up
         delete[] pmmerge;
         delete[] dmmerge;
@@ -1689,6 +2271,19 @@ namespace MMAP
                 continue;
             }
 
+            const dtMeshTile* addedTileConst = navMesh->getTileByRef(tileRef);
+            if (addedTileConst)
+            {
+                dtMeshTile* addedTile = const_cast<dtMeshTile*>(addedTileConst);
+                const bool trimShadowedLedges = jsonTileConfig["postDetourCullShadowedLedges"].get<bool>();
+                const int culledDetourPolys = CullSuspiciousDetourPolys(*addedTile, agentMaxClimbTerrain, trimShadowedLedges);
+                if (culledDetourPolys > 0)
+                {
+                    printf("[DT-POLY-CULL] map=%u tile=%u,%u: disabled %d final suspicious Detour polygon(s)\n",
+                        mapID, tileX, tileY, culledDetourPolys);
+                }
+            }
+
             // file output
             char fileName[255];
             sprintf(fileName, "mmaps/%03u%02i%02i.mmtile", mapID, tileY, tileX);
@@ -1766,6 +2361,7 @@ namespace MMAP
             // See filterLedgeSpans for what each flag controls.
             { "treatOobNeighborAsCliff",  true  },
             { "mixedAreaUsesTerrainClimb", false },
+            { "postDetourCullShadowedLedges", false },
         };
     }
 

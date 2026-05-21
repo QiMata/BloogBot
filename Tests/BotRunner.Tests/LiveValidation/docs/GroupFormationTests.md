@@ -22,8 +22,8 @@ Tests party invite/accept flow and group state tracking between FG and BG bots.
 | 2 | Probe FG | `CheckFgActionableAsync()` confirms FG is still processing actions after any prior suite instability; otherwise the test skips instead of timing out. |
 | 3 | Ensure ungrouped | `EnsureNotGroupedAsync()` for both bots - up to 5 attempts. If `PartyLeaderGuid != 0`: dispatch `DisbandGroup` (leader) or `LeaveGroup` (member). 1s between attempts. |
 | 4 | Verify initial state | Snapshot both: assert `PartyLeaderGuid == 0` |
-| 5 | FG invites BG | **Dispatch `ActionType.SendGroupInvite`** with `StringParam = bgCharacterName`. Assert Success. Wait 1.2s. |
-| 6 | BG accepts | **Dispatch `ActionType.AcceptGroupInvite`** (no params). Assert Success. Wait 1.5s. |
+| 5 | FG invites BG | **Dispatch `ObjectiveType.SendGroupInvite`** with `StringParam = bgCharacterName`. Assert Success. Wait 1.2s. |
+| 6 | BG accepts | **Dispatch `ObjectiveType.AcceptGroupInvite`** (no params). Assert Success. Wait 1.5s. |
 | 7 | Verify group formed | `WaitForGroupFormationAsync(20s)`: poll every 1s for `fgLeader != 0 && fgLeader == bgLeader && fgLeader == fgGuid` (FG is leader) |
 | 8 | Cleanup | `EnsureNotGroupedAsync()` for both. Verify `PartyLeaderGuid == 0`. |
 

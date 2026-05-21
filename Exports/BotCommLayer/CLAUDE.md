@@ -9,7 +9,7 @@ Cross-service TCP socket communication using Protocol Buffers. Length-prefixed b
 | `ProtobufSocketServer.cs` | 127 | Synchronous TCP server with ThreadPool client handling |
 | `ProtobufSocketClient.cs` | 173 | TCP client with exponential backoff retry (10 attempts, 500ms base) |
 | `ProtobufAsyncSocketServer.cs` | 143 | Event-driven async server using System.Reactive Subject |
-| `Models/Communication.cs` | auto | ActionMessage, ActivitySnapshot, 56+ ActionTypes |
+| `Models/Communication.cs` | auto | ObjectiveMessage, ActivitySnapshot, 56+ ObjectiveTypes |
 | `Models/Game.cs` | auto | WoWObject, WoWUnit, WoWPlayer, Position |
 | `Models/Pathfinding.cs` | auto | PathfindingRequest, PhysicsInput/Output, LineOfSight |
 | `Models/Database.cs` | auto | Game database entities |

@@ -16,7 +16,7 @@ encapsulated in `StageBotRunnerLoadoutAsync`.
    - Call Pet `883`.
    - Dismiss Pet `2641`.
    - Tame Animal `1515`.
-4. The test dispatches `ActionType.CastSpell` only to BG for Call Pet and
+4. The test dispatches `ObjectiveType.CastSpell` only to BG for Call Pet and
    Dismiss Pet.
 5. Assertions come from action responses plus a refreshed snapshot after Call
    Pet.
@@ -42,7 +42,7 @@ Final slice validation artifact:
 - `Pet_SummonAndManage_StanceFeedAbility`: passed in `2m07s`.
 - The TRX shows `PETBG1` loadout staging through
   `StageBotRunnerLoadoutAsync` and the only under-test action dispatches as
-  BG `ActionType.CastSpell` for spell ids `883` and `2641`.
+  BG `ObjectiveType.CastSpell` for spell ids `883` and `2641`.
 
 ## Validation
 

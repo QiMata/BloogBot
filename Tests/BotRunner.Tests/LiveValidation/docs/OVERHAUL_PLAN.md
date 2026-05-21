@@ -18,7 +18,7 @@ Completed overhaul slices now on disk:
 - `FishingProfessionTests.cs` now requires the task-visible `loot_window_open` diagnostic plus a real post-loot bag delta, so the pass condition is anchored to the bobber-interact -> loot-window -> bag update path.
 - BG spell-state sync now handles `SMSG_SUPERCEDED_SPELL` and `SMSG_REMOVED_SPELL`, which unblocked server-side fishing rank replacement.
 - New unit coverage links the live fishing baseline back to the owning runtime logic in `SpellHandler` and `FishingData`.
-- `ActionType.StartFishing` / `CharacterAction.StartFishing` / `FishingTask` now own the fishing cast entry instead of raw live-test `CastSpell` dispatch.
+- `ObjectiveType.StartFishing` / `CharacterAction.StartFishing` / `FishingTask` now own the fishing cast entry instead of raw live-test `CastSpell` dispatch.
 - `FishingProfessionTests.cs` now asserts both BG and FG on the same task-owned Ratchet flow instead of parking FG as a reference bot.
 - FG fishing bite handling now mirrors BG packet behavior through `PacketLogger.OnPacketCaptured -> ForegroundBotWorker.HandleCapturedPacket(...) -> ObjectManager.TryAutoInteractFishingBobberFromPacket()`.
 - Fishing success now requires a real post-loot bag delta after the bobber interaction path, not just a loot-window/open-frame signal.
@@ -27,10 +27,10 @@ Completed overhaul slices now on disk:
 - BG `MovementController` forced-stop handling now clears directional intent while preserving falling/swimming physics flags, so stop requests do not cancel `MOVEFLAG_FALLINGFAR` mid-overrun.
 - The NPC action contract now includes `VisitVendor`, `VisitTrainer`, and `VisitFlightMaster`, and `Trainer_LearnAvailableSpells` now drives BG through `TrainerVisitTask`-owned logic instead of a raw `InteractWith` dispatch.
 - `LiveBotFixture.CheckFgActionableAsync()` now requires both successful action forwarding and a teleport/snapshot round-trip before later FG-sensitive suites keep running.
-- Mining live coverage now dispatches `ActionType.StartGatheringRoute` into `GatheringRouteTask` from an explicit `ValleyOfTrials` test setup, so the task owns route optimization, candidate movement, node discovery, and gather interaction instead of the test piloting per-node `Goto` steps.
+- Mining live coverage now dispatches `ObjectiveType.StartGatheringRoute` into `GatheringRouteTask` from an explicit `ValleyOfTrials` test setup, so the task owns route optimization, candidate movement, node discovery, and gather interaction instead of the test piloting per-node `Goto` steps.
 - The Valley mining probe now loads pooled candidate metadata from `pool_gameobject` / `pool_template` and no longer truncates the nearby Valley copper set to 6 rows. The latest live rerun confirmed `7` Valley candidates loaded from pool `1024`.
 - Fixture/login scan confirmed there is no fixture-level or post-login `ValleyOfTrials` teleport path; the only active Valley teleport is the mining test's own staging helper.
-- Herbalism live coverage now dispatches `ActionType.StartGatheringRoute` into `GatheringRouteTask` from an explicit Durotar herb route start (`-500, -4800, 38`), querying Peacebloom (1617), Silverleaf (1618), and Earthroot (1619) candidates with pool metadata. The old inline `TryGatherAtSpawns` herbalism path was replaced. Latest live rerun found `24` Durotar herb-route candidates across pools `1020`, `1021`, `1022`.
+- Herbalism live coverage now dispatches `ObjectiveType.StartGatheringRoute` into `GatheringRouteTask` from an explicit Durotar herb route start (`-500, -4800, 38`), querying Peacebloom (1617), Silverleaf (1618), and Earthroot (1619) candidates with pool metadata. The old inline `TryGatherAtSpawns` herbalism path was replaced. Latest live rerun found `24` Durotar herb-route candidates across pools `1020`, `1021`, `1022`.
 - Test markdown was refreshed to link each touched test back to the production code paths it exercises.
 
 Verification runs on the current pass:
@@ -63,8 +63,8 @@ Verification runs on the current pass:
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~GatheringProfessionTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~NpcInteractionTests|FullyQualifiedName~QuestInteractionTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~UnequipItemTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 10 passed, 2 skipped.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~SpellCastOnTargetTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LiveValidation" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 32 passed, 0 failed, 3 skipped.
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> 13 passed.
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> 44 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~ObjectiveMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> 13 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests|FullyQualifiedName~ObjectiveMessage_AllTypes_RoundTrip" --logger "console;verbosity=minimal"` -> 44 passed.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingProfessionTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 1 passed.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~FishingTaskTests|FullyQualifiedName~FishingDataTests" --logger "console;verbosity=minimal"` -> 40 passed.
 - `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~MovementControllerTests" --logger "console;verbosity=minimal"` -> 38 passed.
@@ -75,7 +75,7 @@ Verification runs on the current pass:
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~BasicLoopTests|FullyQualifiedName~CharacterLifecycleTests|FullyQualifiedName~BuffAndConsumableTests|FullyQualifiedName~CraftingProfessionTests|FullyQualifiedName~EconomyInteractionTests|FullyQualifiedName~EquipmentEquipTests|FullyQualifiedName~GroupFormationTests|FullyQualifiedName~OrgrimmarGroundZAnalysisTests|FullyQualifiedName~SpellCastOnTargetTests|FullyQualifiedName~TalentAllocationTests" --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=minimal"` -> 14 passed, 1 skipped.
 - `dotnet build Exports/BotRunner/BotRunner.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded.
 - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -p:UseSharedCompilation=false` -> succeeded.
-- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ActionMessage_AllTypes_RoundTrip|FullyQualifiedName~GatheringRouteSelectionTests" --logger "console;verbosity=minimal"` -> 16 passed.
+- `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~GatheringRouteTaskTests|FullyQualifiedName~ObjectiveMessage_AllTypes_RoundTrip|FullyQualifiedName~GatheringRouteSelectionTests" --logger "console;verbosity=minimal"` -> 16 passed.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 --filter "FullyQualifiedName~Mining_GatherCopperVein_SkillIncreases" --blame-hang --blame-hang-timeout 15m --logger "console;verbosity=detailed"` -> 1 skipped because none of the 6 natural Valley copper-route candidates were currently spawned.
 
 Current live-suite boundary:
@@ -87,7 +87,7 @@ Current live-suite boundary:
 - `CheckFgActionableAsync()` now proves both command forwarding and snapshot movement responsiveness, so later FG-dependent suites no longer inherit stale world-state from earlier instability.
 - The root FG remote-teleport instability remains tracked under `FG-CRASH-TELE`; it is no longer misattributed to test-spawned game objects or allowed to cascade into unrelated live suites.
 - `Trainer_LearnAvailableSpells` now takes the task-owned `VisitTrainer -> TrainerVisitTask -> LearnAllAvailableSpellsAsync(...)` path, but BG still closes gossip without surfacing `SMSG_TRAINER_LIST`; that gap is tracked under `BRT-OVR-006`.
-- BG and FG fishing now start from the Ratchet named teleport with the fishing cast entry flowing through `ActionType.StartFishing -> FishingTask`.
+- BG and FG fishing now start from the Ratchet named teleport with the fishing cast entry flowing through `ObjectiveType.StartFishing -> FishingTask`.
 - Mining now stages at `ValleyOfTrials` only inside `GatheringProfessionTests`; the fixture still uses safe-zone Orgrimmar teleports for cleanup/probes and does not inject Valley staging into login or clean-slate paths.
 - The mining live test is now task-owned through `StartGatheringRoute -> GatheringRouteTask`, but its current live signal is gated by natural node availability rather than any forced spawn path.
 - The latest full-suite rerun passed (`31 passed, 0 failed, 4 skipped`), but routine regression coverage now uses a narrower documented-stable slice so unfinished major-rework suites do not dominate the signal.
@@ -99,7 +99,7 @@ Current live-suite boundary:
 ## Core Principles
 
 1. **NO `.gm on` — EVER.** All bots use account-level GM (gmlevel=6) for setup commands (`.learn`, `.additem`, `.go xyz`). The PLAYER_FLAGS_GM flag must never be set. This eliminates factionTemplate corruption and ensures mobs/NPCs behave naturally.
-2. **Test BotTasks, not raw dispatches.** Tests must exercise the actual task stack — push a BotTask onto the stack and observe the outcome. The test should NOT replicate task logic via sequential ActionType dispatches.
+2. **Test BotTasks, not raw dispatches.** Tests must exercise the actual task stack — push a BotTask onto the stack and observe the outcome. The test should NOT replicate task logic via sequential ObjectiveType dispatches.
 3. **GM commands are setup/teardown ONLY.** `.learn`, `.additem`, `.setskill`, `.go xyz`, `.revive` are acceptable for staging. The tested mechanic itself must flow through BotTasks.
 4. **NO `.respawn` commands.** Valley of Trials has sufficient mob density. If a test can't find a target, it waits or skips — never forces spawns.
 5. **Orgrimmar Bank Top** as default staging location for all Orgrimmar-area tests (use `.tele` named location).
@@ -417,7 +417,7 @@ Each test: set level 60, apply talent points via `.learn`, verify all expected p
 
 ### 3.15 CraftingTaskTests (replaces CraftingProfessionTests)
 
-**New ActionType needed:** `CreateItem` (replaces `CastSpell` for crafting)
+**New ObjectiveType needed:** `CreateItem` (replaces `CastSpell` for crafting)
 
 **Why:** `CreateItem` allows BotRunner to add pre-checks:
 - Inventory space available?
@@ -512,7 +512,7 @@ Session 3:  Phase 3.1a (Warrior CombatClassTest) + Phase 3.2 (CombatRange unit t
             - Commit + push
 
 Session 4:  Phase 3.7 (EquipmentSuite) + Phase 3.15 (CraftItemTask) + Phase 4 (CraftItemTask impl)
-            - New CraftItemTask + CreateItem ActionType
+            - New CraftItemTask + CreateItem ObjectiveType
             - Equipment slot expansion
             - Commit + push
 
@@ -589,7 +589,7 @@ Session 9:  Phase 3.10 (RaidManagement) + Phase 3.11 (MapTransition)
 - `GatheringRouteTask.cs`
 - `CraftItemTask.cs`
 
-### New ActionType
+### New ObjectiveType
 - `CreateItem` — added to proto enum, maps to `CraftItemTask` in ActionDispatch
 
 ### Fixture Changes

@@ -69,9 +69,9 @@ public class TileBoundaryCrossingTests
         _output.WriteLine($"[TILE-CROSS] Start: ({startPos!.X:F1},{startPos.Y:F1},{startPos.Z:F1}) tile={WorldToTileX(startPos.X)}");
 
         // Send TravelTo across the boundary
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.TravelTo,
+            ObjectiveType = ObjectiveType.TravelTo,
             Parameters =
             {
                 new RequestParameter { IntParam = 1 },         // mapId (Kalimdor)
@@ -165,9 +165,9 @@ public class TileBoundaryCrossingTests
         global::Tests.Infrastructure.Skip.If(startPos == null, "Could not get start position");
         _output.WriteLine($"[OPEN-TILE] Start: ({startPos!.X:F1},{startPos.Y:F1},{startPos.Z:F1})");
 
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.TravelTo,
+            ObjectiveType = ObjectiveType.TravelTo,
             Parameters =
             {
                 new RequestParameter { IntParam = 1 },

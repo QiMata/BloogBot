@@ -14,7 +14,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// <summary>
 /// Shodan-directed BG vendor packet baselines for explicit buy/sell behavior.
 /// SHODAN stages the BG action target at Grimtak, with FG launched but idle for
-/// topology parity. The test body dispatches only vendor ActionTypes.
+/// topology parity. The test body dispatches only vendor ObjectiveTypes.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class VendorBuySellTests
@@ -84,9 +84,9 @@ public class VendorBuySellTests
         var coinageBefore = before?.Player?.Coinage ?? 0;
 
         _output.WriteLine($"[{target.RoleLabel}] Buying item {BuyTestItemId} from vendor 0x{vendor.Guid:X}.");
-        var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.BuyItem,
+            ObjectiveType = ObjectiveType.BuyItem,
             Parameters =
             {
                 new RequestParameter { LongParam = (long)vendor.Guid },
@@ -163,9 +163,9 @@ public class VendorBuySellTests
         Assert.True(bagId >= 0, $"[{target.RoleLabel}] sell item {SellTestItemId} should resolve to a bag slot.");
 
         _output.WriteLine($"[{target.RoleLabel}] Selling item {SellTestItemId} from bag={bagId} slot={slotId} to vendor 0x{vendor.Guid:X}.");
-        var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.SellItem,
+            ObjectiveType = ObjectiveType.SellItem,
             Parameters =
             {
                 new RequestParameter { LongParam = (long)vendor.Guid },
@@ -306,9 +306,9 @@ public class VendorBuySellTests
             return;
 
         _output.WriteLine($"[{target.RoleLabel}] Cleanup: destroying item {itemId} at bag={bagId} slot={slotId}.");
-        await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.DestroyItem,
+            ObjectiveType = ObjectiveType.DestroyItem,
             Parameters =
             {
                 new RequestParameter { IntParam = bagId },

@@ -179,11 +179,11 @@ Messaging infrastructure for bot coordination:
 | Model | Description |
 |-------|-------------|
 | **AsyncRequest** | Asynchronous message wrapper with request IDs |
-| **ActionMessage** | Bot action definitions with parameters and results |
+| **ObjectiveMessage** | Bot action definitions with parameters and results |
 | **ActivitySnapshot** | Complete game state snapshot with player and environment data |
 | **StateChangeRequest/Response** | Character personality and behavior modifications |
 | **CharacterDefinition** | AI personality traits using Big Five model (Openness, Conscientiousness, etc.) |
-| **ActionType** | Enum with 56 predefined action types |
+| **ObjectiveType** | Enum with 56 predefined action types |
 
 Action types include movement (GOTO, START_MELEE_ATTACK), interaction (INTERACT_WITH, ACCEPT_QUEST), combat (CAST_SPELL, USE_ITEM), social (SEND_GROUP_INVITE, ACCEPT_TRADE), and system (LOGIN, LOGOUT, CREATE_CHARACTER).
 
@@ -198,17 +198,17 @@ var snapshot = new ActivitySnapshot
     Timestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
     AccountName = "TestAccount",
     Player = player,
-    CurrentAction = new ActionMessage
+    CurrentAction = new ObjectiveMessage
     {
-        ActionType = ActionType.CastSpell,
+        ObjectiveType = ObjectiveType.CastSpell,
         ActionResult = ResponseResult.Success
     }
 };
 
 // Define a bot action
-var moveAction = new ActionMessage
+var moveAction = new ObjectiveMessage
 {
-    ActionType = ActionType.Goto,
+    ObjectiveType = ObjectiveType.Goto,
     Parameters = {
         new RequestParameter { FloatParam = 150.0f }, // X coordinate
         new RequestParameter { FloatParam = 250.0f }, // Y coordinate
@@ -457,16 +457,16 @@ using Communication;
 [Test]
 public void TestMessageSerialization()
 {
-    var original = new ActionMessage
+    var original = new ObjectiveMessage
     {
-        ActionType = ActionType.CastSpell,
+        ObjectiveType = ObjectiveType.CastSpell,
         ActionResult = ResponseResult.Success
     };
 
     var bytes = original.ToByteArray();
-    var deserialized = ActionMessage.Parser.ParseFrom(bytes);
+    var deserialized = ObjectiveMessage.Parser.ParseFrom(bytes);
 
-    Assert.AreEqual(original.ActionType, deserialized.ActionType);
+    Assert.AreEqual(original.ObjectiveType, deserialized.ObjectiveType);
     Assert.AreEqual(original.ActionResult, deserialized.ActionResult);
 }
 ```

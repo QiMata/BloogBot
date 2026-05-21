@@ -29,7 +29,7 @@
     },
     "Loadout": {
       "type": "object",
-      "description": "JSON projection of `LoadoutSpecSettings` (docs/Spec/17_LOADOUT.md, `Services/WoWStateManager/Settings/CharacterSettings.cs:192`). Applied during the Outfitting stage via `ActionType.APPLY_LOADOUT` (online) or coordinator GM commands (offline). All fields are optional; zero/empty values mean 'don't change' so the spec is additive (Spec/17 overview).",
+      "description": "JSON projection of `LoadoutSpecSettings` (docs/Spec/17_LOADOUT.md, `Services/WoWStateManager/Settings/CharacterSettings.cs:192`). Applied during the Outfitting stage via `ObjectiveType.APPLY_LOADOUT` (online) or coordinator GM commands (offline). All fields are optional; zero/empty values mean 'don't change' so the spec is additive (Spec/17 overview).",
       "additionalProperties": false,
       "required": ["TargetLevel"],
       "properties": {

@@ -100,7 +100,7 @@ anchors; per-dungeon `BossEncounterTask` subclasses live under
 
 6. **Test anchor** —
    `Tests/BotRunner.Tests/LiveValidation/IntegrationValidationTests.cs::V3_1_EncounterMechanics_StartDungeoneering_SnapshotsUpdate`
-   (dispatches `ActionType.StartDungeoneering` at the RFC entrance and
+   (dispatches `ObjectiveType.StartDungeoneering` at the RFC entrance and
    asserts the post-dispatch snapshot is readable). Filter:
    `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --filter "FullyQualifiedName~IntegrationValidationTests.V3_1_EncounterMechanics_StartDungeoneering_SnapshotsUpdate"`.
    Per-dungeon entry tests live in

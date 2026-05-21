@@ -47,9 +47,9 @@ public class StateManagerLoadTests
 
             // Simulate realistic StateManager work: clone + inject action
             var response = request.Clone();
-            response.CurrentAction = new ActionMessage
+            response.CurrentAction = new ObjectiveMessage
             {
-                ActionType = ActionType.Wait,
+                ObjectiveType = ObjectiveType.Wait,
             };
             return response;
         }
@@ -315,7 +315,7 @@ public class StateManagerLoadTests
         protected override WoWActivitySnapshot HandleRequest(WoWActivitySnapshot request)
         {
             var response = request.Clone();
-            response.CurrentAction = new ActionMessage { ActionType = ActionType.Wait };
+            response.CurrentAction = new ObjectiveMessage { ObjectiveType = ObjectiveType.Wait };
             return response;
         }
     }

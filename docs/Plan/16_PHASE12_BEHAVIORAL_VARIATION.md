@@ -272,7 +272,7 @@ Phase 12's variation MUST satisfy:
 
 1. **Dynamic.** Two bots with different `AccountName` (and therefore
    different deterministic-PRNG personalities) running the same
-   Activity MUST emit different per-tick `(ActionType, dispatchedAtMs)`
+   Activity MUST emit different per-tick `(ObjectiveType, dispatchedAtMs)`
    timing signatures. Asserted via the trace surface — not by reading
    internal timer state.
 2. **Progressive.** Variation MUST NOT degrade Activity outcomes: a

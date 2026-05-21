@@ -42,15 +42,15 @@ public class BattlegroundCoordinatorLoadoutTests
         // First poll: WaitingForBots → ApplyingLoadouts; returns ApplyLoadout for leader.
         var leaderAction = coordinator.GetAction("BGLEADER", snapshots);
         Assert.Equal(BattlegroundCoordinator.CoordState.ApplyingLoadouts, coordinator.State);
-        Assert.Equal(ActionType.ApplyLoadout, leaderAction?.ActionType);
+        Assert.Equal(ObjectiveType.ApplyLoadout, leaderAction?.ObjectiveType);
         Assert.NotNull(leaderAction!.LoadoutSpec);
 
         // Second poll for leader: already sent, stays in state (waits for Ready).
         Assert.Null(coordinator.GetAction("BGLEADER", snapshots));
 
         // Members each get their own ApplyLoadout.
-        Assert.Equal(ActionType.ApplyLoadout, coordinator.GetAction("BGMEMBER1", snapshots)?.ActionType);
-        Assert.Equal(ActionType.ApplyLoadout, coordinator.GetAction("BGMEMBER2", snapshots)?.ActionType);
+        Assert.Equal(ObjectiveType.ApplyLoadout, coordinator.GetAction("BGMEMBER1", snapshots)?.ObjectiveType);
+        Assert.Equal(ObjectiveType.ApplyLoadout, coordinator.GetAction("BGMEMBER2", snapshots)?.ObjectiveType);
     }
 
     [Fact]
@@ -79,8 +79,8 @@ public class BattlegroundCoordinatorLoadoutTests
         var snapshots = ReadySnapshots("BGLEADER", "BGMEMBER1", mapId: StagingMapId);
 
         // Drain the ApplyLoadout dispatch for each bot.
-        Assert.Equal(ActionType.ApplyLoadout, coordinator.GetAction("BGLEADER", snapshots)?.ActionType);
-        Assert.Equal(ActionType.ApplyLoadout, coordinator.GetAction("BGMEMBER1", snapshots)?.ActionType);
+        Assert.Equal(ObjectiveType.ApplyLoadout, coordinator.GetAction("BGLEADER", snapshots)?.ObjectiveType);
+        Assert.Equal(ObjectiveType.ApplyLoadout, coordinator.GetAction("BGMEMBER1", snapshots)?.ObjectiveType);
 
         // Not yet ready → stays in ApplyingLoadouts.
         SetLoadoutStatus(snapshots, "BGLEADER", LoadoutStatus.LoadoutInProgress);
@@ -135,7 +135,7 @@ public class BattlegroundCoordinatorLoadoutTests
         var action = coordinator.GetAction("BGLEADER", snapshots);
 
         Assert.NotNull(action);
-        Assert.Equal(ActionType.ApplyLoadout, action!.ActionType);
+        Assert.Equal(ObjectiveType.ApplyLoadout, action!.ObjectiveType);
         Assert.False(string.IsNullOrWhiteSpace(action.CorrelationId), "ApplyLoadout action must carry a coordinator-stamped CorrelationId");
         Assert.StartsWith("bg-coord:loadout:BGLEADER:", action.CorrelationId);
     }
@@ -395,7 +395,7 @@ public class BattlegroundCoordinatorLoadoutTests
         snapshots[account].RecentCommandAcks.Add(new CommandAckEvent
         {
             CorrelationId = correlationId,
-            ActionType = ActionType.ApplyLoadout,
+            ObjectiveType = ObjectiveType.ApplyLoadout,
             Status = status,
             FailureReason = failureReason,
         });

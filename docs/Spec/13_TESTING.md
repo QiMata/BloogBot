@@ -13,7 +13,7 @@
    `IStateManagerClient` interface the UI uses and subscribes to the
    same protobuf summary stream. Tests observe live stats exactly the
    way the operator does.
-3. Drives state by sending `ActionMessage`s through StateManager or by
+3. Drives state by sending `ObjectiveMessage`s through StateManager or by
    waiting for the mode handler to dispatch them.
 4. Asserts on the resulting `WoWActivitySnapshot` polled from
    StateManager.
@@ -116,7 +116,7 @@ FG recordings as authority and assert BG matches within tolerance.
 
 Shodan is the production GM liaison + test director. Tests must:
 
-- **Never dispatch `ActionType.*` against the Shodan account.**
+- **Never dispatch `ObjectiveType.*` against the Shodan account.**
 - **Never assert on Shodan's snapshot for behavior validation.**
 - Use `LiveBotFixture.ResolveBotRunnerActionTargets()` to resolve the
   non-Shodan test bots.

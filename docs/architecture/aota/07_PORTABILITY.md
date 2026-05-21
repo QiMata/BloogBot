@@ -24,7 +24,7 @@
 - The `ActivityFamily` enum values (WoW has Quest/Dungeon/Raid/BG; FFXI has Mission/CampaignBattle/Mog-house/etc.; D2 has Areas/Bosses/Quests/Cube-Recipes).
 - The catalog row fields beyond the common core (`LevelRange`, `Location`) — e.g. WoW's `RoleTemplate` doesn't apply identically to D2.
 - The list of `Task` families in `Spec/03_BOTRUNNER.md#catalog-of-task-families`.
-- The `ActionType` enum (each game has its own wire surface).
+- The `ObjectiveType` enum (each game has its own wire surface).
 - The DB schema the composer reads (MaNGOS in WoW, LandSandBoat in FFXI, etc.).
 - The unlock-graph node namespaces and the priority bands' specifics.
 
@@ -40,7 +40,7 @@ tree following this checklist:
    - per-game inventory: list the catalog families this game uses.
 
 □ 01_LAYERS.md  (lighter than WoW's; just per-game specifics)
-   - which ActionType enum values exist in this game's communication.proto
+   - which ObjectiveType enum values exist in this game's communication.proto
    - which IBotTask families have implementations
    - what the snapshot proto carries for each layer's identity field
 
@@ -187,7 +187,7 @@ implementations, and tests per loop.
 |---|---|
 | **Hard-coding the Objective list per Activity in C#.** | Defeats the whole "dynamic" claim. The composer reads the DB; the C# is the algorithm, not the data. |
 | **Treating Tasks as a flat list (no push-child stack).** | Loses the recursive composition; you'll re-invent it as nested switch-statements. |
-| **Adding new `ActionType` values per behavior.** | Wire-cost without payoff. Compose at the Task layer instead. |
+| **Adding new `ObjectiveType` values per behavior.** | Wire-cost without payoff. Compose at the Task layer instead. |
 | **Skipping the Objective layer entirely (Activity directly pushes Tasks).** | You lose the test-assertion granularity and the failure-isolation surface. |
 | **Per-character behavior trees that persist across ticks.** | Hides state from the snapshot. Use the LIFO Task stack; let the snapshot project the top. |
 | **Asserting on Task internals in tests.** | Brittle. Assert on `WoWActivitySnapshot` (or game-equivalent) state. |

@@ -93,7 +93,7 @@ Fixes applied to 6 HIGH and 3 MEDIUM severity items. All 40 tests now pass. Chan
 
 ### TIM-7: Fishing test doesn't test FG bot
 - **File:** `FishingProfessionTests.cs:107`
-- **Fix:** `FishingProfessionTests` now stages both bots at Ratchet, dispatches `ActionType.StartFishing` for both, and hard-asserts the FG task-owned equip -> approach -> cast -> bobber -> loot-window -> bag-delta path once FG is actionable.
+- **Fix:** `FishingProfessionTests` now stages both bots at Ratchet, dispatches `ObjectiveType.StartFishing` for both, and hard-asserts the FG task-owned equip -> approach -> cast -> bobber -> loot-window -> bag-delta path once FG is actionable.
 
 ### TIM-10: Undocumented 180s ReclaimTimeout — FIXED
 - **File:** `DeathCorpseRunTests.cs:50`

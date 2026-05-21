@@ -4753,13 +4753,13 @@ void ObjectMgr::LoadPlayerInfo()
 
                 uint8 action_button  = fields[2].GetUInt8();
                 uint32 action = fields[3].GetUInt32();
-                uint8 action_type = fields[4].GetUInt8();
+                uint8 objective_type = fields[4].GetUInt8();
 
-                if (!Player::IsActionButtonDataValid(action_button, action, action_type, nullptr))
+                if (!Player::IsActionButtonDataValid(action_button, action, objective_type, nullptr))
                     continue;
 
                 PlayerInfo* pInfo = &m_PlayerInfo[current_race][current_class];
-                pInfo->action.push_back(PlayerCreateInfoAction(action_button, action, action_type));
+                pInfo->action.push_back(PlayerCreateInfoAction(action_button, action, objective_type));
 
                 ++count;
             }

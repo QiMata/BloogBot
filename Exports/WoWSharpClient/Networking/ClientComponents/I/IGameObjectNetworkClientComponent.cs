@@ -70,7 +70,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// <summary>
         /// Checks if a game object can be interacted with.
         /// </summary>
-        bool CanInteractWith(ulong gameObjectGuid, GameObjectInteractionType interactionType);
+        bool CanInteractWith(ulong gameObjectGuid, GameObjectInterobjectiveType interobjectiveType);
 
         /// <summary>
         /// Gets the distance required for interacting with a game object.
@@ -81,7 +81,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
     /// <summary>
     /// Enumeration for different types of game object interactions.
     /// </summary>
-    public enum GameObjectInteractionType
+    public enum GameObjectInterobjectiveType
     {
         Generic,
         OpenChest,

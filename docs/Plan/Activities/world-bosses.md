@@ -123,7 +123,7 @@ specific boss entry id consumed by `EncounterDefinition`.
   `PartyLeaderGuid` (field 11) to drive raid-leader-only branches
   (ready-check initiation, pull, master-loot); `previousAction` /
   `currentAction` (fields 4-5) to confirm the staging
-  `ActionType.Travel` action acked before pushing the raid pipeline;
+  `ObjectiveType.Travel` action acked before pushing the raid pipeline;
   `recentChatMessages` (field 12) for `.spawn` / `.respawn` GM-command
   echoes during testing.
   **Writes:** none directly into the proto. Per Spec/03's "tasks
@@ -170,7 +170,7 @@ specific boss entry id consumed by `EncounterDefinition`.
   `RaidCollections.cs` — none reference world bosses. Per slot
   **SWB.5**, the LiveValidation harness must `.spawn` (or
   `.npc add`) the target boss creature at the staging location
-  before dispatching `ActionType.AssignActivity` with the
+  before dispatching `ObjectiveType.AssignActivity` with the
   `boss.<id>` activity id; the full encounter is gated on Phase 2
   OnDemand spawn/gear infrastructure per
   [`Spec/04_ACTIVITIES.md`](../../Spec/04_ACTIVITIES.md) for the same
