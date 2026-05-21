@@ -23,18 +23,27 @@ before another Objective becomes the next bottleneck ("reach the
 instance portal", "kill the next named", "open the door"). An Objective
 unfolds into **Tasks** — behavior-tree nodes that other Tasks reuse
 (`GoToTask`, `InteractWithTask`, `LootCorpseTask`, `CastSpellTask`).
-A Task ultimately invokes **Actions** — reusable code primitives that
-mirror what a human player can do (`ReadLootWindow()`, `PressHotkeyAsync("1")`,
-`IObjectManager.CastSpellAsync(id, target)`). Actions are pure local code;
-the wire transports **Objectives** as `ObjectiveMessage` (formerly named
-`ActionMessage`, renamed 2026-05-21 — a misnomer cleaned up because what's
-on the wire is an Objective-level state-change request, not an Action).
+A Task ultimately invokes **Actions** — ATOMIC code primitives, the
+smallest things a human player can do: one memory read, one bit flip,
+one packet opcode send, one key press (`ReadMemoryDword(addr)`,
+`ReadUnitField(guid, off)`, `WriteMovementBit(forward, true)`,
+`SendOpcode(CMSG_CAST_SPELL, payload)`, `PressKey('1')`). Compound things
+like `MoveToCoord`, `InviteToParty`, `CastSpell`, `LootCorpse` are
+**Tasks** — each composes many Actions over many ticks with
+verification. `IObjectManager` wrappers such as `MoveToAsync`,
+`CastSpellAsync`, `LootTargetAsync` are Task-level convenience methods,
+not Actions. The wire transports **Objectives** as `ObjectiveMessage`
+(formerly named `ActionMessage`, renamed 2026-05-21 — a misnomer cleaned
+up because what's on the wire is an Objective-level state-change
+request, not an Action).
 
-Each layer composes the layer below it **and itself**. Actions call
-Actions (object-manager helpers that internally combine multiple
-primitive reads and writes — `IObjectManager.TurnInQuestAsync()` invokes
-`InteractWithNpc()` + `SelectGossipOption()` + `ReadQuestRewardSlots()` +
-`ConfirmReward()` and verifies the quest log changes). Tasks push Tasks (a `LongTravelTask`
+Each layer composes the layer below it **and itself**. Tasks push Tasks
+(a `LongTravelTask` is a sequence of `GoToTask` + `BoardTransportTask`
++ `TakeFlightPathTask`). `IObjectManager` Task-wrappers internally
+sequence multiple atomic Actions and verify their effects — e.g.,
+`TurnInQuestAsync()` sends the CMSG_QUESTGIVER_COMPLETE_QUEST opcode,
+reads the reward slot fields, sends CMSG_QUESTGIVER_CHOOSE_REWARD, then
+polls the quest-log field to verify completion. Tasks push Tasks (a `LongTravelTask`
 is a sequence of `GoToTask` + `BoardTransportTask` + `TakeFlightPathTask`).
 Objectives chain Objectives via prerequisite edges. Activities reference
 other Activities as preconditions ("BWL Attune requires UBRS cleared
@@ -46,10 +55,12 @@ of leaf primitives.
 
 ```
                        (one assigned at a time per bot; supports any number of characters)
-Activity     ──►  "Run UBRS"                                ←─ catalog row + DecisionEngine compose
-  └─ Objective  ──►  ObjectiveMessage{reach-flame-crest}    ←─ WIRE-LEVEL state-change request
-       └─ Task     ──►  TravelToTask(coord)                 ←─ behavior-tree node; orchestrates Actions
-            └─ Action  ──►  IObjectManager.MoveToAsync(...) ←─ LOCAL code primitive (player capability)
+Activity     ──►  "Run UBRS"                                  ←─ catalog row + DecisionEngine compose
+  └─ Objective  ──►  ObjectiveMessage{reach-flame-crest}      ←─ WIRE-LEVEL state-change request
+       └─ Task     ──►  TravelToTask(coord)                   ←─ orchestrates Actions, verifies state
+            └─ Action  ──►  WriteMovementBit(forward, true)   ←─ ATOMIC primitive — ONE thing a player can do
+                            SendOpcode(MSG_MOVE_HEARTBEAT)
+                            ReadUnitField(guid, FIELD_POS_X)
 ```
 
 | Layer | Granularity | Lifetime on stack | Wire-visible? |

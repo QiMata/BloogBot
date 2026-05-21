@@ -87,29 +87,43 @@ new ActivityDefinition {
 
 **Task push sequence for Objective `[7]` `kill-defias-trapper-q132-o0`:**
 
+> **Reading note.** Each `→` line below is an **atomic Action** invoked
+> locally by the parent Task (a single memory read, single opcode send,
+> single bit write, single key press). Tasks do NOT emit
+> `ObjectiveType.X` values — that enum lives on the wire as the kind
+> field of `ObjectiveMessage`. Tasks decompose Objectives into Actions;
+> they do not re-emit Objectives back to StateManager.
+
 ```
 push KillObjectiveTask(quest=132, creatureEntry=458, requiredCount=8, hotspots=[...])
   Tick 1:
     push GoToTask(hotspot[0] = (-10987, 1442, 38))
-      → emits ObjectiveType.TravelTo
-      → pushes PathfindingClient.RequestRoute (multi-leg)
-      → emits ObjectiveType.StartMovement
-      → ... (15-20 ticks of movement)
-      → emits ObjectiveType.StopMovement on arrival
+      → SendOpcode(CMSG_PATHFINDING_REQUEST)        (one packet)
+      → ReadUnitField(player, FIELD_POS_X/Y/Z)      (per-tick transform read)
+      → WriteMovementBit(forward, true)             (single bit flip)
+      → SendOpcode(MSG_MOVE_START_FORWARD, payload) (one packet)
+      → ... 15-20 ticks of (ReadUnitField + WriteMovementBit + SendOpcode(MSG_MOVE_HEARTBEAT)) ...
+      → WriteMovementBit(forward, false) + SendOpcode(MSG_MOVE_STOP) on arrival
   Tick after GoToTask completes:
     push PullStrategyTask(unit=nearest hostile DefiasTrapper)
-      → emits ObjectiveType.SetSelection
-      → emits MSG_RAID_TARGET_UPDATE (skull marker)
-      → emits ObjectiveType.CastSpell("Throw")
-      → pop on unit aggression
+      → WriteUnitField(player, FIELD_SELECTION, trapperGuid)
+      → SendOpcode(MSG_RAID_TARGET_UPDATE, skull_payload)
+      → SendOpcode(CMSG_CAST_SPELL, spellId="Throw")  (single opcode)
+      → ReadUnitField(trapper, FIELD_TARGET) verify aggression
+      → pop
     push PvERotationTask(WarriorArmsPveRotation)
-      → emits ObjectiveType.CastSpell("Mortal Strike")
-      → emits ObjectiveType.CastSpell("Rend")
-      → emits ObjectiveType.StartMeleeAttack
-      → pop on target Health == 0
+      → ReadGameTime() (GCD check)
+      → SendOpcode(CMSG_CAST_SPELL, "Mortal Strike")
+      → SendOpcode(CMSG_CAST_SPELL, "Rend")
+      → SendOpcode(CMSG_ATTACKSWING, target=trapperGuid)
+      → ReadUnitField(trapper, FIELD_HEALTH) → loop until 0
+      → pop
     push LootCorpseTask(corpseGuid)
-      → emits ObjectiveType.Loot (via IObjectManager.LootTargetAsync internally)
-      → IObjectManager fires CMSG_LOOT, CMSG_AUTOSTORE_LOOT_ITEM(s), CMSG_LOOT_RELEASE
+      → SendOpcode(CMSG_LOOT, corpseGuid)           (open loot)
+      → ReadLootWindowSlot(0..n)                    (per-slot reads)
+      → SendOpcode(CMSG_AUTOSTORE_LOOT_ITEM, slot) × n
+      → ReadInventorySlot(bag, slot) verify each transfer
+      → SendOpcode(CMSG_LOOT_RELEASE)               (close loot)
       → pop
   KillObjectiveTask increments local counter; reads
   snapshot.Player.QuestLogEntries[slotForQ132].QuestCounters[0]

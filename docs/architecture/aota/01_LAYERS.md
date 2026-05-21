@@ -21,19 +21,45 @@ state-change requests, not Actions. The BotRunner receives an
 database knowledge lookups, and the Tasks then invoke Action methods to
 read and alter game state.
 
-### Where Actions live
+### Granularity — Action vs Task
 
-- **Read primitives:** `IObjectManager` accessors (`GetActiveLootGuid`,
-  `GetBagContents`, `GetPlayerPosition`, `GetUnitFieldValue`, etc.) and
-  type-safe state objects (`IWoWUnit`, `IWoWPlayer`, `IInventory`,
-  `ILootWindow`).
-- **Write primitives:** `IObjectManager.CastSpellAsync(spellId, target)`,
-  `InteractAsync(guid)`, `LootSlotAsync(slot)`, `MoveToAsync(coord)`,
-  `PressHotkeyAsync(key)`, `ClickWorldAsync(x,y,z)`, etc.
-- **FG vs BG split:** FG implementations write to memory + call engine
-  thunks via FastCall; BG implementations emit equivalent packets through
-  WoWSharpClient. Same Action signature, swappable execution mode (the
-  FG/BG parity contract).
+> **Critical distinction.** Compound things like `MoveToCoord`,
+> `InviteToParty`, `WalkToWorld`, `CastSpell`, `LootCorpse` are **Tasks**
+> — each composes many Actions over many ticks with verification. An
+> **Action** is the SMALLEST possible primitive: one memory read, one
+> bit flip, one packet opcode send, one key press. The `IObjectManager`
+> methods that wrap multi-opcode sequences (`MoveToAsync`,
+> `CastSpellAsync`, `LootTargetAsync`) are **Task-level convenience
+> wrappers**, not Actions; the truly-atomic Actions are the primitives
+> they invoke internally.
+
+### Where atomic Actions live
+
+- **Read primitives (single memory or packet read):**
+  `ReadMemoryDword(addr)`, `ReadUnitField(guid, fieldOffset)`,
+  `ReadOwnPosition()`, `ReadGameTime()`, `ReadTargetGuid()`,
+  `ReadInventorySlot(bag, slot)`, `ReadHotbarSpellId(slot)`,
+  `ReadQuestLogSlotState(idx)`.
+- **Write primitives (single memory bit or single opcode):**
+  `WriteMovementBit(forward, true)`, `WriteUnitField(guid, off, val)`,
+  `SendOpcode(CMSG_CAST_SPELL, payload)`,
+  `SendOpcode(MSG_MOVE_HEARTBEAT, payload)`,
+  `SendOpcode(CMSG_LOOT, target_guid)`,
+  `PressKey('1')` / `ReleaseKey('1')`,
+  `WriteMouseClick(screenX, screenY)`.
+- **FG vs BG split:** FG Actions write to WoW.exe process memory + send
+  packets via inline hooks; BG Actions emit equivalent opcodes through
+  WoWSharpClient and write to an in-process ObjectManager mirror. The
+  Action signatures are identical, the implementations differ — that's
+  the FG/BG parity contract.
+- **What is NOT an Action.** `MoveToCoord(coord)` is a Task: it loops
+  `ReadOwnPosition` + `WriteMovementBit` + `SendOpcode(MSG_MOVE_*)` +
+  stuck-detection over many ticks until the bot arrives. `CastSpell(id,
+  target)` is a Task: it checks the GCD via `ReadGameTime`, sets the
+  target via `WriteUnitField`, sends `CMSG_CAST_SPELL`, then verifies
+  via `ReadSpellCastResultPacket`. `InviteToParty(player)` is a Task:
+  it sends `CMSG_GROUP_INVITE`, then polls `ReadGroupMembership` until
+  the invite is accepted or times out.
 
 ### The closed wire-level Action-kind roster
 

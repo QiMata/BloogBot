@@ -11,16 +11,18 @@
 ```
 Activity     ← major dynamic event:        "Run UBRS", "Molten Core raid", "Warsong Gulch", "Fish at Ratchet"
   └─ Objective  ← high-level state change (WIRE-LEVEL):  "Reach the instance portal", "Kill the next boss"
-       └─ Task     ← orchestrates Actions for ONE minute state change + verification:  "Travel to (x,y,z)", "Loot corpse + verify bag"
-            └─ Action  ← reusable code primitive matching a player capability (LOCAL code):  ReadLootWindow(), PressHotkeyAsync("1"), IObjectManager.CastSpellAsync(id, target)
+       └─ Task     ← orchestrates Actions for ONE minute state change + verification:  TravelToTask, LootCorpseTask, InviteToPartyTask, CastSpellTask
+            └─ Action  ← ATOMIC code primitive — ONE thing a player can do (LOCAL code):  ReadMemoryDword(addr), WriteMovementBit(forward), SendOpcode(0x117, payload), PressKey('1'), ReadUnitField(guid, off)
 ```
+
+> **Granularity note.** Things like `MoveToCoord`, `InviteToParty`, `WalkToWorld`, `LootCorpse`, `CastSpell` are **Tasks**, not Actions — each composes many Actions (read transform, flip a movement bit, send opcode, read response, verify state, repeat). An Action is the SINGLE smallest player-capable primitive: one memory read, one bit write, one opcode send, one key press. `IObjectManager` methods that wrap multi-opcode sequences (`MoveToAsync`, `CastSpellAsync`, `LootTargetAsync`) are **Task-level** convenience wrappers; the Actions they invoke internally are the truly-atomic primitives below them.
 
 | Layer | Plural noun | Granularity | Lives where |
 |---|---|---|---|
 | **Activity** | "the bot's current Activity" | Major, usually-dynamic event supporting any number of characters at once. Catalog-row driven. | [`Exports/GameData.Core/Models/Activities/ActivityDefinition.cs`](../../Exports/GameData.Core/Models/Activities/ActivityDefinition.cs) catalog. **No runtime `IActivity` interface yet** — slated for Phase 2 (see [`Plan/03_PHASE2_ONDEMAND_ENGINE.md`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md)). |
 | **Objective** | "the bot's current Objective" | High-level state change composed of multiple Tasks. **What actually travels on the wire as `ObjectiveMessage`** (formerly `ActionMessage` — misnomer cleaned up in the 2026-05-21 rename). | Wire type: `ObjectiveMessage` in [`Exports/BotCommLayer/Models/ProtoDef/communication.proto`](../../Exports/BotCommLayer/Models/ProtoDef/communication.proto). BotRunner decomposes via behavior tree + game DB knowledge lookups into Tasks. Snapshot fields `WoWActivitySnapshot.travel_objective` + `progression_status.current_objective` mirror the in-flight Objective; a general `IObjective` interface is slated for Phase 2. |
 | **Task** | "the task stack" (LIFO) | Orchestrates Actions for ONE minute state change with verification + failure handling. Pushes child Tasks (`GoToTask` is the universal child). | [`Exports/BotRunner/Interfaces/IBotTask.cs`](../../Exports/BotRunner/Interfaces/IBotTask.cs) — Phase-1 target contract. Concrete tasks under `Exports/BotRunner/Tasks/` and `BotProfiles/<ClassSpec>/Tasks/`. |
-| **Action** | "an Action" | **Reusable code primitive** (methods + variables) mirroring a single thing a human player can do: read the loot window, check a bag slot, press a hotkey, click a world coord, read a unit field, cast a spell. **Pure local code — Actions do NOT cross any wire.** | `IObjectManager` accessors + state objects + write methods. The `ObjectiveType` enum (~85 values) in `communication.proto` is the **roster of Action kinds the StateManager can request via an `ObjectiveMessage`** — not the Action itself. |
+| **Action** | "an Action" | **ATOMIC code primitive — ONE thing the player can do**: one memory read, one bit write, one opcode send, one key press. Examples: `ReadMemoryDword(addr)`, `ReadUnitField(guid, fieldOffset)`, `WriteMovementBit(forward, true)`, `SendOpcode(CMSG_CAST_SPELL, payload)`, `PressKey('1')`. **Pure local code — Actions do NOT cross any wire.** Compound things like `MoveToCoord` / `InviteToParty` / `CastSpell` are Tasks (they compose many Actions over many ticks). | Atomic memory + packet + input primitives. `IObjectManager` *helper methods* like `CastSpellAsync` are Task-level wrappers; the truly-atomic Actions they invoke (memory writes, opcode sends) are what live here. The `ObjectiveType` enum in `communication.proto` is the **roster of Objective kinds StateManager can request via an `ObjectiveMessage`** — not the Action set. |
 
 ## Worked example — "Run UBRS"
 
@@ -29,7 +31,7 @@ Activity     ← major dynamic event:        "Run UBRS", "Molten Core raid", "Wa
 | Activity | `dungeon.ubrs` (ActivityDefinition row in the hard-coded catalog) |
 | Objective DAG (each Objective is one `ObjectiveMessage` on the wire) | `reach-flame-crest` → `enter-instance-portal` → `clear-trash-to-rend` → `kill-rend-blackhand` → `loot-rend` → `exit-instance` |
 | Task stack for `reach-flame-crest` (BotRunner decomposes the incoming `ObjectiveMessage` into Tasks via behavior tree + DB lookups) | `TravelToTask(coord)` → pushes `BoardTransportTask(zeppelin_og)` → pushes `WalkToCoordTask(deck_anchor)` → pushes `WaitForLandingTask` |
-| Actions invoked by Tasks (reusable code primitives — never cross the wire) | `ReadPlayerPosition()` (read), `IObjectManager.MoveToAsync(coord)` (write), `ReadCurrentZone()` (read), `IsWithinInteractRange(target)` (predicate), `IObjectManager.InteractAsync(zeppelin)` (write + verify) |
+| Atomic Actions invoked by Tasks (never cross the wire) — examples from `WalkToCoordTask` | `ReadUnitField(player_guid, UNIT_FIELD_POSITION_X/Y/Z)` (read player transform per tick) • `WriteMovementBit(forward, true)` (set forward flag) • `SendOpcode(MSG_MOVE_HEARTBEAT, packet)` (heartbeat to server) • `ReadGameTime()` (compute movement delta) • `PressKey('W')` (FG-side) / `SendOpcode(MSG_MOVE_START_FORWARD)` (BG-side) |
 
 ## Layer ownership rules
 
