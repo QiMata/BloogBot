@@ -30,16 +30,24 @@ spec.
   orchestrates Actions to drive ONE minute state change, with
   verification + failure handling. Pushes child Tasks (`GoToTask` is
   the universal child).
-- **Action** = reusable code primitive (methods + variables) inside the
-  BotRunner that mirrors a single thing a human player can do (read
-  loot window, press hotkey, click a world coord, cast a spell).
-  **Pure local code — Actions do not cross any wire.**
+- **Action** = ATOMIC code primitive — ONE thing a player can do: one
+  memory read, one bit write, one packet opcode send, one key press.
+  Examples: `ReadUnitField(guid, off)`, `WriteMovementBit(forward, true)`,
+  `SendOpcode(CMSG_CAST_SPELL, payload)`, `PressKey('1')`. Compound things
+  like `MoveToCoord`, `InviteToParty`, `CastSpell`, `LootCorpse` are
+  **Tasks** that compose many Actions over many ticks with verification.
+  `IObjectManager` methods like `MoveToAsync` / `CastSpellAsync` are
+  Task-level wrappers, NOT Actions. **Pure local code — Actions do not
+  cross any wire.**
 
 Worked example: `dungeon.ubrs` Activity → `reach-flame-crest` Objective
 (on the wire as `ObjectiveMessage{ObjectiveType=TravelTo,...}`) →
-`TravelToTask(coord)` Task → `IObjectManager.MoveToAsync(coord)` +
-`IObjectManager.InteractAsync(zeppelin)` + `ReadVehicleSeatState()`
-Actions.
+`TravelToTask(coord)` Task → atomic Actions per tick:
+`ReadUnitField(player, FIELD_POS_X/Y/Z)` (read transform) +
+`WriteMovementBit(forward, true)` (set forward flag) +
+`SendOpcode(MSG_MOVE_HEARTBEAT, payload)` (movement) +
+`SendOpcode(CMSG_GAMEOBJECT_USE, zeppelin_guid)` (board) +
+`ReadUnitField(player, FIELD_VEHICLE_SEAT)` (verify).
 
 For the deeper architecture treatment (recursive composition rules,
 how DecisionEngine builds Objectives dynamically from the MaNGOS

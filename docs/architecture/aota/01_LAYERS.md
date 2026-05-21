@@ -80,43 +80,52 @@ The closed-set discipline forces composition at higher layers instead —
 prefer to add a new Task that composes existing Actions over adding a
 new `ObjectiveType`.
 
-### Recursive composition — Actions calling Actions
+### Action composition vs Task wrappers
 
-> "Actions can use other Actions (ObjectManager functions that handle
-> multiple state changes, etc.)" — user's framing.
+> The original framing of "Actions can use other Actions via
+> ObjectManager helpers" was imprecise. After the atomicity clarification
+> (2026-05-21+), `IObjectManager` multi-opcode helpers are recognized as
+> **Task-level wrappers**, not Actions.
 
-Actions can invoke other Actions via `IObjectManager` helpers that
-internally handle multi-step state changes. Example:
-`TurnInQuestAsync(npc, questId, rewardIndex)` is a single Action method
-that internally fires three opcodes (open quest frame, select reward,
-confirm) and observes their effects before returning:
+`IObjectManager.TurnInQuestAsync(npc, questId, rewardIndex)` is a
+**Task-level convenience method** that internally invokes a sequence
+of atomic Actions and verifies their effects before returning:
 
 ```
-IObjectManager.TurnInQuestAsync(npcGuid, questId, rewardIndex)
+TurnInQuestTask (or IObjectManager.TurnInQuestAsync wrapper)
         │
-        ▼ ActionDispatcher.BuildTree (local)
-        ├─ step 1: open quest frame (FG) OR  CMSG_QUESTGIVER_COMPLETE_QUEST (BG)
-        ├─ step 2: select reward index    (FG QuestRewardItem{n}:Click OR CMSG_QUESTGIVER_CHOOSE_REWARD)
-        └─ step 3: dispatch confirm      (FG QuestFrameCompleteQuestButton:Click OR same CMSG)
+        ▼ executes atomic Actions:
+        ├─ SendOpcode(CMSG_QUESTGIVER_COMPLETE_QUEST, npcGuid|questId)
+        ├─ ReadQuestRewardSlots()                  (memory read)
+        ├─ SendOpcode(CMSG_QUESTGIVER_CHOOSE_REWARD, rewardIndex)
+        ├─ ReadQuestLogSlot(questId, state)        (verify)
+        └─ if state == COMPLETE: return success
 ```
 
-This is the **"ObjectManager handles multiple state changes"** pattern:
+This is the **"ObjectManager wrapper composes atomic Actions"** pattern:
 `IObjectManager` methods like `TurnInQuestAsync`, `LootTargetAsync`,
-`BuyItemAsync` are the convergence point for multi-opcode sequences.
+`BuyItemAsync`, `MoveToAsync`, `CastSpellAsync` are convergence points
+for multi-Action sequences — they live in the Task layer (or just below
+it as Task-helper utilities), NOT in the Action layer.
 
-There are two ways the same Action method gets called:
+There are two ways the wrapper gets invoked:
 
 1. **External `ObjectiveMessage` dispatch.** StateManager sends
-   `ObjectiveMessage{objective_type=TurnInQuest, …}`; BotRunner's dispatcher
-   resolves it to `IObjectManager.TurnInQuestAsync(...)`. Used when
-   StateManager wants a single observable wire-level intent.
-2. **Internal Task call.** A `CompleteQuestTask` directly calls
-   `IObjectManager.TurnInQuestAsync(...)` — no wire round-trip. Used
-   when a Task is orchestrating a multi-step state change locally.
+   `ObjectiveMessage{objective_type=TurnInQuest, …}`; BotRunner's
+   dispatcher resolves it to a `TurnInQuestTask` (which may internally
+   call `IObjectManager.TurnInQuestAsync` as its execution body). Used
+   when StateManager wants a single observable wire-level Objective.
+2. **Internal Task call from a parent Task.** A higher-level Task like
+   `KillObjectiveTask` directly calls `IObjectManager.TurnInQuestAsync`
+   when it needs to turn in a kill quest — no wire round-trip. Used when
+   a Task is orchestrating a multi-step state change locally.
 
-**Rule.** Tasks should reach for `IObjectManager` Actions directly. Add
-new `ObjectiveType` enum values only when StateManager needs to dispatch a
-brand-new intent that no current Task already covers.
+**Rule.** Tasks should reach for `IObjectManager` helpers (or smaller
+Tasks) directly. Add new `ObjectiveType` enum values only when
+StateManager needs to dispatch a brand-new wire-level intent that no
+current Task already covers — and the new Action-level primitives those
+Tasks invoke should be additions to the BotRunner's atomic-Action set
+(memory reads, opcode sends, bit writes), not new wire enum values.
 
 ## 2. Task — the behavior-tree node
 
