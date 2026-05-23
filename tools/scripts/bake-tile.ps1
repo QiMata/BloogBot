@@ -211,6 +211,46 @@ $report = [pscustomobject]@{
 }
 $report | ConvertTo-Json -Depth 6 | Set-Content -Path (Join-Path $outDir 'bake-report.json') -Encoding utf8
 
+if ($exitCode -eq 0) {
+    $analysisDir = Join-Path $outDir 'analysis'
+    New-Item -ItemType Directory -Force -Path $analysisDir | Out-Null
+    $navDataAuditProj = Join-Path $wwowRoot 'tools\NavDataAudit\NavDataAudit.csproj'
+
+    foreach ($entry in $tileEntries) {
+        $manifestStem = "map{0:D3}{1:D2}{2:D2}" -f $Map, $entry.tileY, $entry.tileX
+        $manifestSource = Join-Path $DataDir ("meshes\{0}_anchor_stage_manifest.json" -f $manifestStem)
+        if (-not (Test-Path $manifestSource)) {
+            continue
+        }
+
+        $manifestDest = Join-Path $analysisDir ("{0}_anchor_stage_manifest.json" -f $manifestStem)
+        Copy-Item $manifestSource $manifestDest -Force
+
+        foreach ($suffix in @('stage_heightfield_spans.csv', 'stage_compact_spans.csv', 'stage_contours.csv')) {
+            $stageSource = Join-Path $DataDir ("meshes\{0}_{1}" -f $manifestStem, $suffix)
+            if (Test-Path $stageSource) {
+                Copy-Item $stageSource (Join-Path $analysisDir ("{0}_{1}" -f $manifestStem, $suffix)) -Force
+            }
+        }
+
+        $summaryJson = Join-Path $analysisDir ("{0}_anchor_stage_summary.json" -f $manifestStem)
+        $summaryCsv = Join-Path $analysisDir ("{0}_anchor_stage_summary.csv" -f $manifestStem)
+        if (-not $Quiet) {
+            Write-Host "[bake-tile] summarizing anchor stage manifest $manifestDest" -ForegroundColor Cyan
+        }
+
+        & dotnet run --project $navDataAuditProj --configuration Release --no-restore -- `
+            --stage-summary-only `
+            --stage-manifest $manifestDest `
+            --write-stage-summary $summaryJson `
+            --write-stage-summary-csv $summaryCsv
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Anchor stage manifest summary failed for $manifestDest"
+        }
+    }
+}
+
 # --- Console summary ---
 if (-not $Quiet) {
     Write-Host ""

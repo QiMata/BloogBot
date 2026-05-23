@@ -13,11 +13,11 @@ public sealed class RouteResultCacheTests
     [Fact]
     public void RouteAlgorithmSignature_TracksStaticRoutePackAndReachabilityContract()
     {
-        Assert.Contains("RouteResultCache.v9", RouteResultCache.RouteAlgorithmSignature, StringComparison.Ordinal);
-        Assert.Contains("StaticRoutePack.v9", RouteResultCache.RouteAlgorithmSignature, StringComparison.Ordinal);
-        Assert.Contains("LocalPhysicsReachability.v4", RouteResultCache.RouteAlgorithmSignature, StringComparison.Ordinal);
+        Assert.Contains("RouteResultCache.v10", RouteResultCache.RouteAlgorithmSignature, StringComparison.Ordinal);
+        Assert.Contains("StaticRoutePack.v10", RouteResultCache.RouteAlgorithmSignature, StringComparison.Ordinal);
+        Assert.Contains("RawNativeRuntime.v1", RouteResultCache.RouteAlgorithmSignature, StringComparison.Ordinal);
         Assert.Contains("TransportStaging.v1", RouteResultCache.RouteAlgorithmSignature, StringComparison.Ordinal);
-        Assert.Contains("BakedMMapOnlyOverlayDefault.v2", RouteResultCache.RouteAlgorithmSignature, StringComparison.Ordinal);
+        Assert.Contains("BakedMMapOnlyOverlayDefault.v3", RouteResultCache.RouteAlgorithmSignature, StringComparison.Ordinal);
     }
 
     [Fact]

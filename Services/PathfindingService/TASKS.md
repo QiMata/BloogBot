@@ -34,6 +34,7 @@
 4. Archive completed items to `Services/PathfindingService/TASKS_ARCHIVE.md` when they no longer need follow-up.
 5. Every pass must record one-line `Pass result` and exactly one executable `Next command`.
 6. **(2026-05-06 freeze)** Honor the freeze contract above. New work outside the freeze surface goes in `tools/MmapGen/` and references the overhaul doc.
+7. Live pathfinding reverse-engineering must collect screenshot evidence, not just logs: use timeline captures, waypoint/stall screenshots, and teleport-to-waypoint proofs before tuning bake parameters.
 
 ## Pathfinding Overhaul (active)
 
@@ -167,6 +168,101 @@
   service startup or deterministic tests for a full session timeout.
 
 ## Session Handoff
+- Last updated: 2026-05-22 (Detour PR #725 adapted port test)
+
+### 2026-05-22 - Detour PR #725 adapted port test
+- Active task: test whether upstream Detour `findNearestPoly` BV-tree metadata
+  fix can reduce the remaining OG dead-end stack failures without reviving any
+  post-path repair.
+- Pass result: `delta partially shipped; the PR #725 logic is now ported safely
+  for WWoW's serialized tile layout, focused OG gates remain green, but the
+  remaining OG dead-end failures stay at 17/23 and therefore still point back
+  to bake/topology rather than Detour nearest-poly metadata`.
+- Last delta:
+  - First proved a bad port shape: the direct one-line `header->bvNodeCount =
+    createBVTree(...)` adaptation corrupted off-mesh section offsets in WWoW's
+    fork because the loader uses `bvNodeCount` to derive section boundaries.
+    That broken branch regressed the OG sweep to `5/23` and produced garbage
+    off-mesh endpoint probe coordinates.
+  - Reworked both WWoW Detour builders to build the BV tree into a temporary
+    buffer, size the serialized BV-tree block from the actual returned node
+    count, and then copy only those nodes into the final tile payload.
+  - Rebuilt `MmapGen` and `Navigation.dll`, rebaked OG tile `40,29`, and
+    verified that the boarding-support off-mesh endpoint links were sane again
+    in the `PathPhysicsProbe` output.
+- Validation/tests run:
+  - `.\tools\MmapGen\build-mmapgen.ps1 -Configuration Release` -> passed.
+  - `"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" Exports\Navigation\Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; .\tools\scripts\bake-tile.ps1 -Map 1 -Tiles "40,28;40,29" -Variant "og-bvnodecount-pr725-fixed-layout" -DataDir "D:\wwow-bot\test-data"` -> passed; `0012940.mmtile` shrank by `16` bytes and changed hash to `43EACD6F5E53818F0478550EC8D4CB407F95C82528C79F7B07D060FCDCACC744`.
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -- D:\wwow-bot\test-data --map 1 --tile 40,29 --config-path "E:\repos\Westworld of Warcraft\tools\MmapGen\config.json" --spawns-path "D:\MaNGOS\data\gameobject_spawns.json" --build-log tmp/bake-sweeps/og-bvnodecount-pr725-fixed-layout-20260522T233732Z/bake.log --write-manifest tmp/test-runtime/results-navigation/og_bvnodecount_pr725_fixed_layout_tile4029_manifest.json` -> passed.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_bvnodecount_pr725_fixed_layout.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> still `17/23`; same remaining six reds.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinShortcut_UsesCleanCurrentRuntimePath|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_bvnodecount_pr725_fixed_layout_focused.trx" --results-directory tmp/test-runtime/results-pathfinding` -> passed `6/6`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\tools\scripts\build-recastnavigation.ps1 -Configuration Debug -RunUpstreamTests` -> upstream standalone tests passed `32`, with `1` expected skip.
+- Next command: probe the pre-contour / region-partition side around the four remaining dead-end anchors instead of spending more time on runtime query metadata. The PR-725 path is now exhausted as a likely cure for this bug class.
+
+### 2026-05-22 — OG anchor-stack bake experiments + anti-pattern doc pass
+- Active task: keep static-world fixes on the bake side only and continue reducing the remaining OG dead-end stack failures without reviving post-path generation repair.
+- Pass result: `delta partially shipped; anchor-stack final-tile pass is wired and instrumented, the conservative overlap-gated version is kept as the non-regressing source state, and the docs/skills now explicitly ban post-path generation repair for static-world bugs`.
+- Last delta:
+  - Added a tile-local `postDetourCullAnchorPolyStacks` final-tile pass in `tools/MmapGen/contrib/mmap/src/TileWorker.cpp` plus per-tile config for OG `4029`.
+  - Proved a critical implementation detail: `dtNavMeshQuery::init(...)` for the post-addTile anchor pass must use a modest fixed node budget (`4096`). The earlier `polyCount`-scaled init failed on tile `40,29`, which made the pass a silent no-op until instrumented.
+  - Proved another operational detail: post-addTile Detour culls can change the serialized tile hash without changing the `.mmtile` byte length. Hash + probe are the required proof surface, not file size.
+  - Recorded a negative-result branch: removing the anchor/support overlap gate over-culled the local stack family, failed to close the hallway/vertical dead-end routes, and regressed `orgrimmar_exterior_steep_incline_live_stall_recovery`. That broader variant was not kept in source, and `D:\wwow-bot\test-data\mmaps\0012940.mmtile` was restored to the prior non-regressing snapshot (`SHA256 6046E861EA352D8F00DE735591E15DCFF6785D6464FC9B0758EF97FE9D6E251D`).
+  - Updated shared docs/skills so `post-path generation repair` is now explicitly called out as an anti-pattern. Static-world route defects must be fixed in source extraction, MmapGen/Recast, off-mesh authoring, or a serialized bake-side final-tile pass.
+- Validation/tests run:
+  - `.\tools\MmapGen\build-mmapgen.ps1 -Configuration Release` -> passed repeatedly during the anchor-stack loop.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; .\tools\scripts\bake-tile.ps1 -Map 1 -Tiles "40,29" -Variant "og-anchor-stack-cull-working" -DataDir "D:\wwow-bot\test-data"` -> passed; conservative overlap-gated anchor pass logged `culled=1/4/0/1` across the four anchors and changed the tile hash without changing byte length.
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -- D:\wwow-bot\test-data --map 1 --tile 40,29 --config-path "E:\repos\Westworld of Warcraft\tools\MmapGen\config.json" --spawns-path "D:\MaNGOS\data\gameobject_spawns.json" --build-log tmp/bake-sweeps/og-anchor-stack-cull-working-20260522T155720Z/bake.log --write-manifest tmp/test-runtime/results-navigation/og_anchor_stack_cull_working_tile4029_manifest.json` -> passed.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinShortcut_UsesCleanCurrentRuntimePath|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments" --logger "console;verbosity=minimal"` -> passed `6/6`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_anchor_stack_cull_working.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> still `17/23`; same remaining reds as the prior raw-Detour baseline.
+  - Negative-result bake branch: `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; .\tools\scripts\bake-tile.ps1 -Map 1 -Tiles "40,29" -Variant "og-anchor-stack-cull-no-overlap" -DataDir "D:\wwow-bot\test-data"` -> passed but over-culled (`13/5/14/5`) and regressed the full critical route sweep to `16/23`; see `critical_walk_legs_og_anchor_stack_cull_no_overlap.trx`.
+- Next command: `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; & 'E:\repos\Westworld of Warcraft\Bot\Release\net8.0\PathPhysicsProbe.exe' --map 1 --start 1518.2,-4419.8,17.1 --end 1320.142944,-4653.158691,53.891945 --detour-resolve --smooth --dump-poly-stack *> tmp/test-runtime/results-pathfinding/og_anchor_stack_probe_hallway_route_stack_after_working_20260522.txt`
+
+- Last updated: 2026-05-22 (raw Detour cutover + OG anchor-trim bake follow-up)
+
+### 2026-05-22 — raw Detour cutover + OG anchor-trim bake follow-up
+- Active task: keep the default runtime on raw/native Detour output while pushing the remaining OG zeppelin failures back into MmapGen bake/off-mesh authoring instead of reviving repair logic.
+- Pass result: `delta shipped; raw-runtime default path is preserved, focused 40,28/40,29 bake follow-up improved the OG tower slice, and the exact tower-ramp route is no longer one of the red CriticalWalkLegs cases`.
+- Last delta:
+  - Retired managed/native repair from the default request path so `PathfindingSocketServer` now serves raw/native results by default, with the compatibility entrypoints in `Navigation.cs` reduced to raw-path shims.
+  - Removed the active query-time post-processing from `Exports/Navigation/PathFinder.cpp` and raised `MAX_POINT_PATH_LENGTH` to `4096` so long raw routes are no longer truncated at the old `1024` corner cap.
+  - Added an opt-in MmapGen final-tile cull for steep micro-components that are actually selected as off-mesh start landing polys (`postDetourCullOffMeshAnchorSteepTrim`), enabled only for tile `4029`.
+  - Patched the Detour navmesh builder in both MmapGen and `Navigation.dll` so stored off-mesh connections reserve the extra start-tile link they need when the destination lies outside the source tile.
+  - Rebuilt MmapGen + `Navigation.dll`, regenerated `D:\wwow-bot\prod-data\mmaps\0012840.mmtile` and `0012940.mmtile`, and re-ran the focused OG route/mesh gates against prod-data.
+- Validation/tests run:
+  - `.\tools\MmapGen\build-mmapgen.ps1 -Configuration Release` -> passed.
+  - `"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" Exports\Navigation\Navigation.vcxproj -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v145 -v:minimal` -> passed.
+  - `Push-Location D:\wwow-bot\prod-data; & 'E:\repos\Westworld of Warcraft\tools\MmapGen\build\MmapGen.exe' 1 --tile 40,28 --silent --threads 1 --offMeshInput 'E:\repos\Westworld of Warcraft\tools\MmapGen\offmesh.txt' --configInputPath 'E:\repos\Westworld of Warcraft\tools\MmapGen\config.json'; & 'E:\repos\Westworld of Warcraft\tools\MmapGen\build\MmapGen.exe' 1 --tile 40,29 --silent --threads 1 --offMeshInput 'E:\repos\Westworld of Warcraft\tools\MmapGen\offmesh.txt' --configInputPath 'E:\repos\Westworld of Warcraft\tools\MmapGen\config.json'; Pop-Location` -> passed; logs under `tmp/bake-sweeps/raw-detour-anchor-trim-20260522T032257Z/`.
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -- D:\wwow-bot\prod-data --map 1 --tile 40,29 --config-path "E:\repos\Westworld of Warcraft\tools\MmapGen\config.json" --spawns-path "D:\MaNGOS\data\gameobject_spawns.json" --build-log "tmp/bake-sweeps/raw-detour-anchor-trim-20260522T032257Z/tile_4029.log" --write-manifest tmp/test-runtime/results-navigation/raw_detour_anchor_trim_tile4029_manifest.json` -> Detour/header/capsule checks pass; only the known GO build-log marker gap stays red.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\prod-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToBoardingPosition_IntraTilePolygonListIncludesOffMeshConnection|FullyQualifiedName~LongPathingRouteTests.OrgrimmarApproachToBoardingPosition_PathExistsAndDescribesOffMeshUsage" --logger "console;verbosity=minimal"` -> passed `6/6`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\prod-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinShortcut_UsesCleanCurrentRuntimePath|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck" --logger "console;verbosity=minimal"` -> passed `6/6`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\prod-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_raw_detour_anchor_trim.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `17/23` passed, `6` failed. Remaining red labels: `orgrimmar_city_live_vertical_replan_recovery`, `orgrimmar_city_hallway_live_wall_stall_recovery`, `orgrimmar_city_hallway_exit_live_stall_recovery`, `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`, `orgrimmar_exterior_incline_live_stall_exact_recovery`, `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`.
+- Next command: `$env:WWOW_DATA_DIR='D:\wwow-bot\prod-data'; & 'E:\repos\Westworld of Warcraft\Bot\Release\net8.0\PathPhysicsProbe.exe' --map 1 --start 1545,-4434.5,11.1 --end 1320.142944,-4653.158691,53.891945 --detour-resolve --smooth --dump-polyrefs --load-adt *> tmp/test-runtime/results-pathfinding/og_city_vertical_after_anchor_trim_20260522.txt`
+
+- Last updated: 2026-05-22 (Recast full vendor sync + split-root audit parity)
+
+### 2026-05-22 — Recast full vendor sync + split-root audit parity
+- Active task: bake-side Recast migration for the Orgrimmar zeppelin tower proof slice, keeping runtime `.mmtile` / Detour compatibility intact.
+- Pass result: `delta shipped; vendored Recast core now matches upstream main for MmapGen, canonical test-data/prod-data bake pipeline is green, Docker runtime reloaded the promoted tile`.
+- Last delta:
+  - Replaced WWoW's vendored `tools/MmapGen/dep/recastnavigation/Recast/{Include,Source}` bake core with upstream `main` commit `9f4ce64` content, preserving WWoW-local bake behavior in `TileWorker.cpp`.
+  - Updated `TileWorker.cpp` to use upstream `rcRasterizeTriangles(...)` after the vendor sync retired `SortAndRasterizeTriangles(...)`.
+  - Added split-root GO-spawn fallback in `TileWorker.cpp`: when baking into `D:/wwow-bot/test-data`, `WWOW_VMANGOS_DATA_DIR/gameobject_spawns.json` is now the supported source if the mutable data root has no local copy.
+  - Updated `tools/NavDataAudit` to accept `--config-path` / `--spawns-path` and to treat `walkableRadius=0` / `walkableHeight=0` in `tools/MmapGen/config.json` as the intended auto-derived contract rather than a false audit failure.
+  - Rebuilt MmapGen, re-baked tile `map 1 / tile 40,29` into `D:/wwow-bot/test-data`, promoted `0012940.mmtile` into `D:/wwow-bot/prod-data`, rebuilt Docker `wwow-pathfinding`, redeployed `wwow-pathfinding` + `wwow-scene-data`, and refreshed `og-zeppelin/latest`.
+- Validation/tests run:
+  - `.\tools\MmapGen\build-mmapgen.ps1 -Configuration Release` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; .\tools\scripts\bake-tile.ps1 -Map 1 -Tiles "40,29" -Variant "recast-full-sync-og-4029-go-fallback" -DataDir "D:\wwow-bot\test-data"` -> passed; log `tmp/bake-sweeps/recast-full-sync-og-4029-go-fallback-20260522T000716Z/bake.log`.
+  - `dotnet run --project tools/NavDataAudit/NavDataAudit.csproj --configuration Release --no-restore -- D:\wwow-bot\test-data --map 1 --tile 40,29 --config-path "E:\repos\Westworld of Warcraft\tools\MmapGen\config.json" --spawns-path "D:\MaNGOS\data\gameobject_spawns.json" --build-log tmp/bake-sweeps/recast-full-sync-og-4029-go-fallback-20260522T000716Z/bake.log --write-manifest tmp/test-runtime/results-navigation/mmap_regen_map1_tile4029_20260522_full_recast_sync_testdata_manifest.json` -> passed.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck" --logger "console;verbosity=minimal" --logger "trx;LogFileName=mmap_mesh_quality_org_zeppelin_full_recast_sync_testdata.trx" --results-directory tmp/test-runtime/results-pathfinding` -> passed `4/4`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_org_fm_static_blockers_full_recast_sync_testdata.trx" --results-directory tmp/test-runtime/results-pathfinding` -> passed `1/1`.
+  - `.\tools\MmapGen\promote-mmaps.ps1 -Map 1 -Tiles "40,29"` -> promoted `0012940.mmtile`; prod-data SHA256 matches test-data exactly: `40DAF1915B9A9CE4BD3CA9832C4105C38F713A77012C378847C37B1F5EC9C38D`.
+  - `docker compose -f docker-compose.vmangos-linux.yml build wwow-pathfinding` -> passed; image manifest `sha256:f8225328380120e77625dacec1f4e0e9ed764a5627a31c613fc2ee66fa153ecf`.
+  - `docker compose -f docker-compose.vmangos-linux.yml up -d wwow-pathfinding wwow-scene-data` -> passed; `docker exec wwow-pathfinding cat /app/pathfinding_status.json` reached `IsReady=true`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\prod-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_org_fm_static_blockers_full_recast_sync_proddata.trx" --results-directory tmp/test-runtime/results-pathfinding` -> passed `1/1`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; .\tools\scripts\export-pathfinding-reference.ps1 -Route og-zeppelin -Resume -MmapGenExe .\tools\MmapGen\build\MmapGen.exe; .\tools\scripts\summarize-pathfinding-reference.ps1 -Route og-zeppelin` -> passed; latest summary now reports `268` top-ramp/deck crop polys, `187` reachable, `81` unreachable, worst `zRange=1.000y`.
+- Next command: `$env:WWOW_DATA_DIR='D:\wwow-bot\prod-data'; $env:WWOW_TEST_PRESERVE_EXISTING_PATHFINDING='1'; dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.CrossroadsToUndercity_UsesFlightAndZeppelin" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_crossroads_undercity_after_recast_full_sync.trx" --results-directory tmp/test-runtime/results-live -- RunConfiguration.TestSessionTimeout=1500000`
+
 - Last updated: 2026-05-13 (nav-summary accelerator scaffold)
 
 ### 2026-05-13 — Nav-summary accelerator scaffold
@@ -1308,6 +1404,26 @@
   - `tmp/test-runtime/screenshots/long-pathing/The-Orgrimmar---Undercity-zeppelin-was-detected-at-the-dock-but-the-bot-missed-b-LPATHFG1-client-6048-win0-20260506_010905.png`
 - Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
 
+## 2026-05-21 OG Demo Route Refresh
+
+- Refreshed the RecastDemo-facing OG zeppelin bundle so the generated `.gset`
+  files carry per-layout marker subsets plus explicit
+  `defaultStartMarker` / `defaultEndMarker` metadata. The top-deck runtime
+  view now defaults to `frezza_spawn -> boarding_pos`, and full/tower views
+  default to `route_start -> boarding_pos`.
+- `tools/scripts/export-pathfinding-reference.ps1` now stages the optional
+  `route_waypoints.obj` overlay into the RecastDemo bundle, so the current
+  route polyline is visible immediately when the layout loads.
+- The old upper-platform-only proof is now explicitly skipped as historical
+  diagnostic context. The current focused shortcut proof is
+  `LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut`,
+  which keys off the live Detour corner export plus off-mesh corridor presence
+  instead of the obsolete `z>=80` requirement.
+- Validation/results:
+  - `powershell -ExecutionPolicy Bypass -File E:/repos/tools/scripts/build-recastnavigation.ps1 -Configuration Debug -RunUpstreamTests` -> `32 passed, 1 skipped` (`rcRasterizeTriangle` expected degenerate skip).
+  - `$env:WWOW_DATA_DIR='D:/wwow-bot/prod-data'; $env:WWOW_VMANGOS_DATA_DIR='D:/MaNGOS/data'; powershell -ExecutionPolicy Bypass -File E:/repos/Westworld of Warcraft/tools/scripts/export-pathfinding-reference.ps1 -Route og-zeppelin -DataDir D:/wwow-bot/prod-data -TrxPath "tmp/test-runtime/results-pathfinding/pathfinding_org_fm_static_blockers_full_recast_sync_proddata.trx" -Resume` -> `DONE`, refreshed `tmp/test-runtime/visualization/pathfinding/og-zeppelin/latest` and `tools/recastnavigation/build-msvc/RecastDemo/Meshes/WorldOfWarcraft/Generated/Orgrimmar/*.gset`.
+  - `$env:WWOW_DATA_DIR='D:/wwow-bot/prod-data'; dotnet test E:/repos/Westworld of Warcraft/Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --filter "FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_PathExists|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFrezzaSpawnToBoardingPosition_PathExists|FullyQualifiedName~LongPathingRouteTests.OrgrimmarApproachToBoardingPosition_PathExistsAndDescribesOffMeshUsage|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_demo_route_refresh_20260521_rerun2.trx" --results-directory E:/repos/Westworld of Warcraft/tmp/test-runtime/results-pathfinding` -> `passed (9/9)`.
+
 ---
 
 - Last updated: 2026-05-05
@@ -1562,3 +1678,320 @@
   - `Tests/PathfindingService.Tests/TASKS.md`
   - `docs/TASKS.md`
 - Next command: `.\run-tests.ps1 -ListRepoScopedProcesses`
+
+## 2026-05-23 Recast/MmapGen follow-up handoff
+
+- Status:
+  - the bake/runtime work is still stuck at `18/23` on the OG raw-Detour
+    `CriticalWalkLegs` sweep
+  - focused OG mesh/route checks remain green (`6/6`)
+  - no route-time repair was reintroduced
+- Remaining reds are still:
+  - `orgrimmar_city_live_vertical_replan_recovery`
+  - `orgrimmar_city_hallway_live_wall_stall_recovery`
+  - `orgrimmar_city_hallway_exit_live_stall_recovery`
+  - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+  - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+- Important new learning:
+  - the city/hallway/hall-exit failures are still snapping to slightly-below-
+    anchor nearest-poly winners, not failing because of smooth-path clipping
+  - current probe winners:
+    - vertical start `(1545.0,-4434.5,11.1)` -> `0x100001520BEEE`, `surfaceZ=11.009`
+    - hallway start `(1518.2,-4419.8,17.1)` -> `0x100001520ADA2`, `surfaceZ=16.885`
+    - hall-exit start `(1491.4,-4417.3,23.3)` -> `0x1000015209D5A`, `surfaceZ=23.209`
+- Branches tested this loop:
+  - `closestPointOnPoly` support fallback for anchor culls
+  - stricter anchor support floor (`surface >= anchorZ`)
+  - extra collapse-point anchor probes in `config.json`
+  - anchor-local lower-fringe cull when a higher overlapping layer exists
+- Result of those branches:
+  - all stayed `6/6` focused green
+  - none beat `18/23`
+  - the lower-fringe branch materially changed the tile hash to
+    `01629C2251081B8C00E1F546F1690053B70BD8C9491641696603F926D373F9F3`
+    but shortened the hallway dead-end, so treat it as non-promote
+- Current test-data tile:
+  - `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+  - hash: `01629C2251081B8C00E1F546F1690053B70BD8C9491641696603F926D373F9F3`
+  - this is experimental, not a promoted improvement
+- Best artifact bundle to inspect for the last loop:
+  - `tmp/bake-sweeps/og_anchor_lower_fringe-20260523T034944Z/`
+  - `tmp/test-runtime/results-pathfinding/critical_walk_legs_og_anchor_lower_fringe.trx`
+  - `tmp/test-runtime/results-pathfinding/og_vertical_anchor_polyrefs_closest_20260523.tsv`
+  - `tmp/test-runtime/results-pathfinding/og_hallway_anchor_polyrefs_closest_20260523.tsv`
+  - `tmp/test-runtime/results-pathfinding/og_hallexit_anchor_polyrefs_closest_20260523.tsv`
+- Recommended next step:
+  - stop tuning generic anchor support thresholds
+  - implement a bake-side cull that explicitly targets the *current nearest-
+    poly winner component* at verified bad anchors when a better overlapping
+    upper layer exists, or move earlier in the pipeline and split/prevent those
+    local start-cell basin layers before final Detour serialization
+
+## 2026-05-23 Recast/MmapGen follow-up handoff (late loop)
+
+- Status:
+  - current source-backed `test-data` tile is restored to
+    `E299BDC34EEFD82F2B0466B66BE09E7BDCDC3A683C59106778D96A55C01824B4`
+  - focused OG checks are green `6/6`
+  - full raw-Detour `CriticalWalkLegs` is still `17/23`
+- New negative-result branches completed and documented:
+  - preferred-support final-tile cull inside `CullAnchorPolyStacks(...)`
+  - tile-local `minRegionArea=60` config experiment via
+    `tmp/config-experiments/og_4029_minRegionArea60.json`
+- What the preferred-support branch proved:
+  - it changed the tile hash to
+    `345FA5BBFF7BDFDCFE58B3B061C9E25D162B17723A536C8FDE85E2383FBBA671`
+  - focused OG checks stayed green `6/6`
+  - the full sweep stayed `17/23`
+  - exact dead-end winner probes did **not** move:
+    - `(1535.267,-4437.9,13.909)` -> `0x100001520BE35`
+    - `(1521.267,-4425.6,17.609)` -> `0x100001520AD5D`
+    - `(1479.867,-4425.8,25.309)` -> `0x1000015208D00`
+    - `(1364.867,-4374.0,26.109)` -> `0x1000015204ECD`
+    - `(1357.2,-4516.2,32.2)` -> `0x10000152047F5`
+  - exact `--dump-poly-stack` still showed same-height competitors around those
+    winners, but the winner itself remained the `posOverPoly=1` containing
+    support, so the branch was reverted from source
+- What the `minRegionArea=60` branch proved:
+  - focused OG checks stayed green `6/6`
+  - full sweep stayed `17/23`
+  - bake logs showed real pre-region span churn in the in-range anchor windows,
+    but the route failures and dead-end winners were effectively unchanged
+- Current validated artifacts:
+  - focused restored-source TRX:
+    `tmp/test-runtime/results-pathfinding/og_4029_source_restore_after_negative_experiments_focused.trx`
+  - full restored-source TRX:
+    `tmp/test-runtime/results-pathfinding/critical_walk_legs_og_4029_source_restore_after_negative_experiments.trx`
+  - preferred-support exact winners:
+    `tmp/test-runtime/results-pathfinding/og_anchor_deadend_exact_preferred_support_polyrefs_20260523.tsv`
+  - preferred-support exact stacks:
+    `tmp/test-runtime/results-pathfinding/og_anchor_deadend_exact_preferred_support_stack_20260523.txt`
+  - preferred-support bake:
+    `tmp/bake-sweeps/og_4029_anchor_preferred_support-20260523T065325Z/`
+  - `minRegionArea=60` bake:
+    `tmp/bake-sweeps/og_4029_minRegionArea60-20260523T070514Z/`
+- Next move:
+  - stop spending cycles on support scoring and generic isolated-region knobs
+  - move to a basin/component-level bake fix, or earlier region/contour
+    separation, because the exact containing winner polys are surviving across
+    both classes of experiment
+
+## 2026-05-23 original-worker comparison handoff
+
+- I ran the "can we still bake this tile with the original worker?" proof using
+  the earliest in-repo `TileWorker.cpp` baseline (`4e3716ae`, 2026-05-07),
+  built in scratch at:
+  - `tmp/mmapgen-baseline-20260507/`
+- Scratch compatibility note:
+  - the copied baseline needed one mechanical build-only edit:
+    `SortAndRasterizeTriangles(...) -> rcRasterizeTriangles(...)`
+  - that change was made only in the scratch copy, not in live source
+- Focused baseline bake:
+  - log:
+    `tmp/bake-sweeps/tileworker_20260507_baseline_20260523T123759Z/bake.log`
+  - produced tile hash:
+    `5EC417472F918E93A1255098FFFDD86B1F56CDE91E4BA0ED8235CCD004C49675`
+- Validation of the baseline tile:
+  - focused mesh-quality slice stayed green `4/4`:
+    `tmp/test-runtime/results-pathfinding/tileworker_20260507_baseline_focused_mesh_quality.trx`
+  - focused route gate failed:
+    `tmp/test-runtime/results-pathfinding/tileworker_20260507_baseline_route_gate.trx`
+  - `NavDataAudit` manifest:
+    `tmp/test-runtime/results-navigation/tileworker_20260507_baseline_tile4029_manifest.json`
+  - audit still passed Tauren/Detour header checks, but failed the GO-feed
+    evidence:
+    - `bake.log does not show gameobject spawn loading`
+    - `bake.log has no GO geometry bake line for tile 40,29`
+- Practical conclusion:
+  - current WWoW GO-aware input is a real improvement surface, not incidental
+  - the old/original worker can still bake a plausible-looking tile, but
+    without GO-spawn-aware geometry it regresses the actual Orgrimmar
+    static-blocker route again
+- Current state after comparison:
+  - restored `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+  - restored hash:
+    `E299BDC34EEFD82F2B0466B66BE09E7BDCDC3A683C59106778D96A55C01824B4`
+- Research outcome from sibling generators:
+  - stock vmangos / TrinityCore / AzerothCore generator flow is still
+    `loadMap -> loadVMap -> loadOffMeshConnections`
+  - those generators do not ingest WWoW-style server `gameobject_spawns.json`
+    bake data
+  - so "swap to stock mmaps_generator" is not a real fix path for GO-sensitive
+    city tiles; the correct direction remains richer WoW geometry feed plus
+    bake-side topology cleanup
+
+## 2026-05-23 source-support pre-region probe handoff
+
+- I added source-support stage instrumentation in
+  `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`:
+  - `HF-SRC-ANCHOR`
+  - `CHF-SRC-ANCHOR`
+- Purpose:
+  - prove, during a normal bake, whether the intended upper support from the
+    classified source triangles survives raster/filter/compact/erode stages
+- Probe bake artifact:
+  - `tmp/bake-sweeps/og_4029_stage_support_probe_v2-20260523T133825Z/`
+- Important outcome:
+  - this branch is still diagnostics, not a fix
+  - the current log stream is still per-subtile/noisy enough that it should not
+    be promoted as proof of a successful pre-region cull
+  - because the experiment stayed unproven, I disabled
+    `preRegionCullAnchorSourceSupportCompetingSpans` again in
+    `tools/MmapGen/config.json`
+- Current `test-data` restore state after this loop:
+  - `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+  - hash:
+    `FE0C8973C5D6344B9121F896F2255670C27781A14A5D47254BE3D33D458E0F25`
+- Best next move:
+  - keep the new stage probes, but tighten them to a single known subtile or
+    explicit source-to-heightfield coverage proof before using them to justify
+    another bake-side cull
+
+## 2026-05-23 isolation update
+
+- I isolated the `40,29` config regressions instead of continuing to tune the
+  combined `layers + 1.3` source state.
+- Proven negative knobs:
+  - `watershed + maxSimplificationError=1.3`
+    - hash:
+      `932A176CD19C96B38E319ACDFD085A3BD9BC68E00FB6A792AB541F69F7AC713C`
+    - focused slice dropped to `4/7`
+    - Frezza shortcut lost its off-mesh corridor (`offMeshPolyCount=0`)
+    - giant bridge polys returned
+  - `layers + 1.8`
+    - hash:
+      `814BA912D2089383FEB6AA5836AC4FAC62F16FE21B22E9B2FEE8DD2E2B2DBBE3`
+    - focused slice dropped to `5/7`
+    - still left one shadowed lower trim ledge and under-preserved deck
+      connector coverage
+- Source was restored by removing both `partitionType` and
+  `maxSimplificationError` from tile `4029` config.
+- Current best-known source-backed state:
+  - tile hash:
+    `FB2FBAF1848FC2ACFB1F9E093A8EC99284C9C19843CD64E4F15CA4FBBF3315D6`
+  - focused OG slice:
+    `tmp/test-runtime/results-pathfinding/og_4029_source_restore_watershed18_focused.trx`
+    (`7/7` pass)
+  - full raw-Detour sweep:
+    `tmp/test-runtime/results-pathfinding/critical_walk_legs_og_4029_source_restore_watershed18.trx`
+    (`17/23` pass, same six red legs as before)
+- Meaning:
+  - the ledge-fallback restoration was not the regression
+  - `maxSimplificationError=1.3` is currently a forbidden knob on this tile
+  - next work should move earlier in the bake/topology proof surface again,
+    not back to contour simplification or `layers` churn
+
+## 2026-05-23 anchor stage manifest handoff
+
+- Status:
+  - stage-by-stage structured coverage now exists for tile `1:40,29`
+  - current `test-data` tile is still the approved source-backed snapshot:
+    `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+  - hash:
+    `FB2FBAF1848FC2ACFB1F9E093A8EC99284C9C19843CD64E4F15CA4FBBF3315D6`
+  - focused OG slice stayed green `7/7`
+  - full raw-Detour `CriticalWalkLegs` was not rerun because the tile hash did
+    not change
+- Final artifact bundle:
+  - `tmp/bake-sweeps/og_4029_anchor_stage_manifest_clean-20260523T212130Z/`
+  - `tmp/bake-sweeps/og_4029_anchor_stage_manifest_clean-20260523T212130Z/analysis/map0012940_anchor_stage_manifest.json`
+  - `tmp/bake-sweeps/og_4029_anchor_stage_manifest_clean-20260523T212130Z/analysis/map0012940_anchor_stage_summary.json`
+  - `tmp/bake-sweeps/og_4029_anchor_stage_manifest_clean-20260523T212130Z/analysis/map0012940_anchor_stage_summary.csv`
+  - `tmp/test-runtime/results-pathfinding/og_4029_anchor_stage_manifest_clean_focused.trx`
+- New workflow:
+  - `writeAnchorStageManifest=true` is now the preferred proof surface for the
+    remaining Orgrimmar stacked-support reds
+  - `bake-tile.ps1` auto-copies the manifest into the variant `analysis/`
+    folder and runs `NavDataAudit --stage-summary-only`
+  - `logAnchorStageDiagnostics=false` keeps the replaced
+    `SRC-ANCHOR-SUPPORT` / `HF-SRC-ANCHOR` / `CHF-SRC-ANCHOR` /
+    `CHF-SRC-COMP` spam out of the default bake log
+- Proven first-bad-stage answers:
+  - `1546.600,-4435.900,11.500` -> `finalDetour`
+    - support survives through `polymesh`, but the final Detour winner drops to
+      lower basin `0x1000000000BE35`
+  - `1522.500,-4424.100,17.000` -> `finalDetour`
+    - support and lower competitor both survive into `polymesh`; final winner
+      still lands on lower basin `0x1000000000AD5D`
+  - `1523.800,-4425.900,17.100` -> `median`
+    - lower competitor becomes dominant before regions/contours
+  - `1521.267,-4425.600,17.609` -> `contours`
+    - support survives `regions`, but contour generation is where the lower
+      basin becomes dominant
+  - `1521.300,-4422.500,17.100` -> `sourceSupport`
+    - the exact upper support is not yet proven by the source-backed oracle
+- Remaining uncertainty:
+  - `sourceSupport` failure on `1521.300,-4422.500,17.100` means we still need
+    a better source-backed proof for that exact coord before calling any later
+    stage wrong
+  - some compact-stage records carry `anchor_outside_compact_window`; treat
+    those as window/projection nuances, not as automatic support loss
+- Next move:
+  - use the summary as the very first regression/improvement gate for future
+    `40,29` branches
+  - only rerun the full `CriticalWalkLegs` sweep when the saved tile hash moves
+  - do not spend another session churning `partitionType` or
+    `maxSimplificationError` unless the stage summary shows a specific stage
+    shift that justifies it
+
+### 2026-05-23 follow-up: combined source-support restore + window cull
+
+- Current experimental tile/config state on `4029`:
+  - `preRegionRestoreAnchorSourceSupportAfterErode=true`
+  - `preRegionCullAnchorSourceSupportCompetingSpans=true`
+  - `preRegionCullAnchorSourceSupportFallbackToWindow=true`
+  - `preRegionCullAnchorUpperCompactSpans=true`
+  - `postDetourCullAnchorPolyStacks=true`
+- Bake + validation bundle:
+  - bake dir:
+    `tmp/bake-sweeps/og_4029_restore_source_cull_window-20260523T215708Z/`
+  - summary:
+    `tmp/bake-sweeps/og_4029_restore_source_cull_window-20260523T215708Z/analysis/map0012940_anchor_stage_summary.json`
+  - focused validation:
+    `tmp/test-runtime/results-pathfinding/og_4029_restore_source_cull_window_focused.trx`
+    (`7/7` pass)
+  - full raw-Detour sweep:
+    `tmp/test-runtime/results-pathfinding/critical_walk_legs_og_4029_restore_source_cull_window.trx`
+    (`17/23` pass)
+  - saved tile hash:
+    `29449D252853BF2E3B9739DC108BA0E4CE1E0F4C1152D7BADAE45032984945C5`
+- Proven improvement from the stage summary:
+  - `1522.500,-4424.100,17.000` no longer reports a bad stage
+  - `1521.267,-4425.600,17.609` no longer reports a bad stage
+  - `1523.800,-4425.900,17.100` still first fails at `median`, but the lower
+    competitor is gone by `regions`
+  - `1546.600,-4435.900,11.500` still first fails at `finalDetour`, but the
+    final winner is no longer classified as a lower competitor
+  - `1521.300,-4422.500,17.100` is still blocked at `sourceSupport`
+- Route-level reality:
+  - the score stayed `17/23`, but several dead-end paths shifted later:
+    - city vertical route now dies near `(1537.3,-4437.9,13.0)`
+    - hallway route now dies near `(1520.6,-4426.5,17.9)`
+    - hallway-exit route still dies near `(1479.8,-4426.0,25.3)`
+    - exterior incline still dies near `(1364.9,-4374.0,26.1)`
+- Next recommended move:
+  - add the shifted dead-end coords to the anchor manifest list and rerun the
+    same stage-summary workflow on this branch
+  - do not drop back to `partitionType` or `maxSimplificationError` tuning;
+    the manifest already proved this branch is changing the right local basin
+    ownership surface
+
+### 2026-05-23 manifest-only shifted-dead-end follow-up
+
+- New safe probe surface:
+  - `anchorStageManifestCoordsWow` in `tools/MmapGen/config.json`
+  - purpose: add extra stage-manifest anchors without changing the actual cull
+    coord list
+- Validation run:
+  - `tmp/bake-sweeps/og_4029_manifest_shifted_deadends_v2-20260523T221238Z/`
+  - hash stayed on the combined source-cull branch:
+    `29449D252853BF2E3B9739DC108BA0E4CE1E0F4C1152D7BADAE45032984945C5`
+- New green manifest-only anchors:
+  - `1537.300,-4437.900,13.000`
+  - `1520.600,-4426.500,17.900`
+  - `1355.600,-4522.300,33.100`
+- Meaning:
+  - the current route stalls are not explained by bad local support at those
+    exact endpoints anymore
+  - next route-fix loop should search for the next corridor break beyond those
+    coords, not keep reworking the same endpoint support basin

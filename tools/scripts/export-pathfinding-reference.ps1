@@ -684,7 +684,9 @@ function Write-RecastDemoLayout(
     [int]$MapId,
     [string]$Title,
     [object[]]$Markers,
-    [string[]]$Files)
+    [string[]]$Files,
+    [string]$DefaultStartMarker = '',
+    [string]$DefaultEndMarker = '')
 {
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     $writer = [IO.StreamWriter]::new($Path, $false, $utf8NoBom)
@@ -694,6 +696,12 @@ function Write-RecastDemoLayout(
         $writer.WriteLine("m mapId $MapId")
         if ($Title) {
             $writer.WriteLine("m title $Title")
+        }
+        if ($DefaultStartMarker) {
+            $writer.WriteLine("m defaultStartMarker $DefaultStartMarker")
+        }
+        if ($DefaultEndMarker) {
+            $writer.WriteLine("m defaultEndMarker $DefaultEndMarker")
         }
         foreach ($marker in $Markers) {
             $writer.WriteLine(("p {0} {1} {2} {3}" -f `
@@ -742,10 +750,21 @@ function Stage-RecastDemoRoute(
         }
 
         foreach ($layout in $Layouts) {
+            $layoutMarkers = if ($null -ne $layout.Markers) { $layout.Markers } else { $Markers }
+            $layoutFiles = New-Object System.Collections.Generic.List[string]
             $missingFiles = @()
             foreach ($file in $layout.Files) {
                 if (-not $stagedTargets.Contains([string]$file)) {
                     $missingFiles += [string]$file
+                } else {
+                    $layoutFiles.Add([string]$file)
+                }
+            }
+            if ($null -ne $layout.OptionalFiles) {
+                foreach ($file in $layout.OptionalFiles) {
+                    if ($stagedTargets.Contains([string]$file)) {
+                        $layoutFiles.Add([string]$file)
+                    }
                 }
             }
 
@@ -760,8 +779,10 @@ function Stage-RecastDemoRoute(
                 (Join-Path $routeDir $layout.Name) `
                 $MapId `
                 $layout.Title `
-                $Markers `
-                $layout.Files
+                $layoutMarkers `
+                $layoutFiles.ToArray() `
+                $layout.DefaultStartMarker `
+                $layout.DefaultEndMarker
         }
     }
 }
@@ -804,7 +825,11 @@ function Export-OgZeppelin {
         (New-Point 1340.800 -4652.000 40.509 'bad_segment_95_to'),
         (New-Point 1335.200 -4644.400 53.500 'top_ramp_lip'),
         (New-Point 1338.130 -4645.960 51.600 'deck_lip_stall'),
+        (New-Point 1331.110 -4649.450 53.627 'frezza_spawn'),
         (New-Point 1320.140 -4653.160 53.890 'boarding_pos')
+    )
+    $topDeckMarkers = @(
+        $markers | Where-Object { $_.Label -in @('top_ramp_lip', 'deck_lip_stall', 'frezza_spawn', 'boarding_pos') }
     )
     $towerCrop = New-Bounds 1308 -4668 18 1372 -4500 110
     $topDeckCrop = New-Bounds 1316 -4664 47 1348 -4636 67
@@ -878,15 +903,84 @@ function Export-OgZeppelin {
         @{ Source = (Join-Path $latest 'mmap\mmap_top_ramp_deck_crop.obj'); Target = 'og_runtime_mmap_top_deck_crop.obj' },
         @{ Source = (Join-Path $latest 'mmap\mmapgen_generated_top_ramp_deck_crop.obj'); Target = 'og_mmapgen_generated_top_deck_crop.obj'; Required = $false },
         @{ Source = (Join-Path $latest 'mmap\mmapgen_polymesh.obj'); Target = 'og_mmapgen_polymesh.obj'; Required = $false },
-        @{ Source = (Join-Path $latest 'mmap\mmapgen_detailmesh.obj'); Target = 'og_mmapgen_detailmesh.obj'; Required = $false }
+        @{ Source = (Join-Path $latest 'mmap\mmapgen_detailmesh.obj'); Target = 'og_mmapgen_detailmesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'overlays\route_waypoints.obj'); Target = 'route_waypoints.obj'; Required = $false }
     ) @(
-        @{ Name = 'og_zeppelin_source_full.gset'; Title = 'Orgrimmar Zeppelin Source Full'; Files = @('og_source_full.obj') },
-        @{ Name = 'og_zeppelin_source_top_deck.gset'; Title = 'Orgrimmar Zeppelin Source Top Deck'; Files = @('og_source_top_deck_all_sources.obj') },
-        @{ Name = 'og_zeppelin_runtime_mmap_full.gset'; Title = 'Orgrimmar Runtime MMAP Full'; Files = @('og_runtime_mmap_full.obj') },
-        @{ Name = 'og_zeppelin_runtime_mmap_top_deck.gset'; Title = 'Orgrimmar Runtime MMAP Top Deck'; Files = @('og_runtime_mmap_top_deck_crop.obj') },
-        @{ Name = 'og_zeppelin_mmapgen_generated_top_deck.gset'; Title = 'Orgrimmar MmapGen Generated Top Deck'; Files = @('og_mmapgen_generated_top_deck_crop.obj') },
-        @{ Name = 'og_zeppelin_mmapgen_polymesh.gset'; Title = 'Orgrimmar MmapGen Polymesh'; Files = @('og_mmapgen_polymesh.obj') },
-        @{ Name = 'og_zeppelin_mmapgen_detailmesh.gset'; Title = 'Orgrimmar MmapGen Detail Mesh'; Files = @('og_mmapgen_detailmesh.obj') }
+        @{
+            Name = 'og_zeppelin_source_full.gset'
+            Title = 'Orgrimmar Zeppelin Source Full'
+            Files = @('og_source_full.obj')
+            OptionalFiles = @('route_waypoints.obj')
+            DefaultStartMarker = 'route_start'
+            DefaultEndMarker = 'boarding_pos'
+        },
+        @{
+            Name = 'og_zeppelin_source_tower_crop.gset'
+            Title = 'Orgrimmar Zeppelin Source Tower Crop'
+            Files = @('og_source_tower_crop.obj')
+            OptionalFiles = @('route_waypoints.obj')
+            DefaultStartMarker = 'route_start'
+            DefaultEndMarker = 'boarding_pos'
+        },
+        @{
+            Name = 'og_zeppelin_source_top_deck.gset'
+            Title = 'Orgrimmar Zeppelin Source Top Deck'
+            Markers = $topDeckMarkers
+            Files = @('og_source_top_deck_all_sources.obj')
+            OptionalFiles = @('route_waypoints.obj')
+            DefaultStartMarker = 'frezza_spawn'
+            DefaultEndMarker = 'boarding_pos'
+        },
+        @{
+            Name = 'og_zeppelin_runtime_mmap_full.gset'
+            Title = 'Orgrimmar Runtime MMAP Full'
+            Files = @('og_runtime_mmap_full.obj')
+            OptionalFiles = @('route_waypoints.obj')
+            DefaultStartMarker = 'route_start'
+            DefaultEndMarker = 'boarding_pos'
+        },
+        @{
+            Name = 'og_zeppelin_runtime_mmap_tower_crop.gset'
+            Title = 'Orgrimmar Runtime MMAP Tower Crop'
+            Files = @('og_runtime_mmap_tower_crop.obj')
+            OptionalFiles = @('route_waypoints.obj')
+            DefaultStartMarker = 'route_start'
+            DefaultEndMarker = 'boarding_pos'
+        },
+        @{
+            Name = 'og_zeppelin_runtime_mmap_top_deck.gset'
+            Title = 'Orgrimmar Runtime MMAP Top Deck'
+            Markers = $topDeckMarkers
+            Files = @('og_runtime_mmap_top_deck_crop.obj')
+            OptionalFiles = @('route_waypoints.obj')
+            DefaultStartMarker = 'frezza_spawn'
+            DefaultEndMarker = 'boarding_pos'
+        },
+        @{
+            Name = 'og_zeppelin_mmapgen_generated_top_deck.gset'
+            Title = 'Orgrimmar MmapGen Generated Top Deck'
+            Markers = $topDeckMarkers
+            Files = @('og_mmapgen_generated_top_deck_crop.obj')
+            OptionalFiles = @('route_waypoints.obj')
+            DefaultStartMarker = 'frezza_spawn'
+            DefaultEndMarker = 'boarding_pos'
+        },
+        @{
+            Name = 'og_zeppelin_mmapgen_polymesh.gset'
+            Title = 'Orgrimmar MmapGen Polymesh'
+            Markers = $topDeckMarkers
+            Files = @('og_mmapgen_polymesh.obj')
+            DefaultStartMarker = 'frezza_spawn'
+            DefaultEndMarker = 'boarding_pos'
+        },
+        @{
+            Name = 'og_zeppelin_mmapgen_detailmesh.gset'
+            Title = 'Orgrimmar MmapGen Detail Mesh'
+            Markers = $topDeckMarkers
+            Files = @('og_mmapgen_detailmesh.obj')
+            DefaultStartMarker = 'frezza_spawn'
+            DefaultEndMarker = 'boarding_pos'
+        }
     )
 
     if (Test-Path (Join-Path $latest '_work')) {
@@ -1082,12 +1176,16 @@ function Export-Brd {
         @{ Source = (Join-Path $latest 'mmap\brm_south_trap_mmapgen_generated_crop.obj'); Target = 'brm_south_trap_mmapgen_generated_crop.obj'; Required = $false },
         @{ Source = (Join-Path $latest 'mmap\flamecrest_stall_mmapgen_polymesh.obj'); Target = 'flamecrest_mmapgen_polymesh.obj'; Required = $false },
         @{ Source = (Join-Path $latest 'mmap\brd_approach_mmapgen_polymesh.obj'); Target = 'brd_approach_mmapgen_polymesh.obj'; Required = $false },
-        @{ Source = (Join-Path $latest 'mmap\brm_south_trap_mmapgen_polymesh.obj'); Target = 'brm_south_trap_mmapgen_polymesh.obj'; Required = $false }
+        @{ Source = (Join-Path $latest 'mmap\brm_south_trap_mmapgen_polymesh.obj'); Target = 'brm_south_trap_mmapgen_polymesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\flamecrest_stall_mmapgen_detailmesh.obj'); Target = 'flamecrest_mmapgen_detailmesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\brd_approach_mmapgen_detailmesh.obj'); Target = 'brd_approach_mmapgen_detailmesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\brm_south_trap_mmapgen_detailmesh.obj'); Target = 'brm_south_trap_mmapgen_detailmesh.obj'; Required = $false }
     ) @(
         @{ Name = 'brm_focus_source_tiles.gset'; Title = 'Blackrock Mountain Source Focus Tiles'; Files = @('flamecrest_source_crop.obj', 'brd_approach_source_crop.obj', 'brm_south_trap_source_crop.obj') },
         @{ Name = 'brm_focus_runtime_tiles.gset'; Title = 'Blackrock Mountain Runtime Focus Tiles'; Files = @('flamecrest_runtime_crop.obj', 'brd_approach_runtime_crop.obj', 'brm_south_trap_runtime_crop.obj') },
         @{ Name = 'brm_focus_mmapgen_generated_tiles.gset'; Title = 'Blackrock Mountain MmapGen Generated Focus Tiles'; Files = @('flamecrest_mmapgen_generated_crop.obj', 'brd_approach_mmapgen_generated_crop.obj', 'brm_south_trap_mmapgen_generated_crop.obj') },
         @{ Name = 'brm_focus_mmapgen_polymesh_tiles.gset'; Title = 'Blackrock Mountain MmapGen Polymesh Tiles'; Files = @('flamecrest_mmapgen_polymesh.obj', 'brd_approach_mmapgen_polymesh.obj', 'brm_south_trap_mmapgen_polymesh.obj') },
+        @{ Name = 'brm_focus_mmapgen_detailmesh_tiles.gset'; Title = 'Blackrock Mountain MmapGen Detail Mesh Tiles'; Files = @('flamecrest_mmapgen_detailmesh.obj', 'brd_approach_mmapgen_detailmesh.obj', 'brm_south_trap_mmapgen_detailmesh.obj') },
         @{ Name = 'brm_source_full_tiles.gset'; Title = 'Blackrock Mountain Source Full Tiles'; Files = @('flamecrest_source_full.obj', 'brd_approach_source_full.obj', 'brm_south_trap_source_full.obj') }
     )
 
@@ -1175,12 +1273,17 @@ function Export-Rfc {
         @{ Source = (Join-Path $latest 'mmap\rfc_tile_3131_mmapgen_polymesh.obj'); Target = 'rfc_tile_3131_mmapgen_polymesh.obj'; Required = $false },
         @{ Source = (Join-Path $latest 'mmap\rfc_tile_3132_mmapgen_polymesh.obj'); Target = 'rfc_tile_3132_mmapgen_polymesh.obj'; Required = $false },
         @{ Source = (Join-Path $latest 'mmap\rfc_tile_3231_mmapgen_polymesh.obj'); Target = 'rfc_tile_3231_mmapgen_polymesh.obj'; Required = $false },
-        @{ Source = (Join-Path $latest 'mmap\rfc_tile_3232_mmapgen_polymesh.obj'); Target = 'rfc_tile_3232_mmapgen_polymesh.obj'; Required = $false }
+        @{ Source = (Join-Path $latest 'mmap\rfc_tile_3232_mmapgen_polymesh.obj'); Target = 'rfc_tile_3232_mmapgen_polymesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\rfc_tile_3131_mmapgen_detailmesh.obj'); Target = 'rfc_tile_3131_mmapgen_detailmesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\rfc_tile_3132_mmapgen_detailmesh.obj'); Target = 'rfc_tile_3132_mmapgen_detailmesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\rfc_tile_3231_mmapgen_detailmesh.obj'); Target = 'rfc_tile_3231_mmapgen_detailmesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\rfc_tile_3232_mmapgen_detailmesh.obj'); Target = 'rfc_tile_3232_mmapgen_detailmesh.obj'; Required = $false }
     ) @(
         @{ Name = 'rfc_corridor_source_tiles.gset'; Title = 'Ragefire Chasm Corridor Source Tiles'; Files = @('rfc_tile_3131_source_crop.obj', 'rfc_tile_3132_source_crop.obj', 'rfc_tile_3231_source_crop.obj', 'rfc_tile_3232_source_crop.obj') },
         @{ Name = 'rfc_corridor_runtime_tiles.gset'; Title = 'Ragefire Chasm Corridor Runtime Tiles'; Files = @('rfc_tile_3131_runtime_crop.obj', 'rfc_tile_3132_runtime_crop.obj', 'rfc_tile_3231_runtime_crop.obj', 'rfc_tile_3232_runtime_crop.obj') },
         @{ Name = 'rfc_corridor_mmapgen_generated_tiles.gset'; Title = 'Ragefire Chasm MmapGen Generated Tiles'; Files = @('rfc_tile_3131_mmapgen_generated_crop.obj', 'rfc_tile_3132_mmapgen_generated_crop.obj', 'rfc_tile_3231_mmapgen_generated_crop.obj', 'rfc_tile_3232_mmapgen_generated_crop.obj') },
         @{ Name = 'rfc_corridor_mmapgen_polymesh_tiles.gset'; Title = 'Ragefire Chasm MmapGen Polymesh Tiles'; Files = @('rfc_tile_3131_mmapgen_polymesh.obj', 'rfc_tile_3132_mmapgen_polymesh.obj', 'rfc_tile_3231_mmapgen_polymesh.obj', 'rfc_tile_3232_mmapgen_polymesh.obj') },
+        @{ Name = 'rfc_corridor_mmapgen_detailmesh_tiles.gset'; Title = 'Ragefire Chasm MmapGen Detail Mesh Tiles'; Files = @('rfc_tile_3131_mmapgen_detailmesh.obj', 'rfc_tile_3132_mmapgen_detailmesh.obj', 'rfc_tile_3231_mmapgen_detailmesh.obj', 'rfc_tile_3232_mmapgen_detailmesh.obj') },
         @{ Name = 'rfc_full_source_tiles.gset'; Title = 'Ragefire Chasm Full Source Tiles'; Files = @('rfc_tile_3131_source_full.obj', 'rfc_tile_3132_source_full.obj', 'rfc_tile_3231_source_full.obj', 'rfc_tile_3232_source_full.obj') }
     )
 

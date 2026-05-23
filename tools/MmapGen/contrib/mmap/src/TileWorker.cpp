@@ -1,14 +1,18 @@
 #include "TileWorker.h"
 #include "MapBuilder.h"
 #include "Maps/GridMapDefines.h"
+#include "DetourNavMeshQuery.h"
 #include <algorithm>
+#include <array>
 #include <cfloat>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <fstream>
 #include <memory>
 #include <mutex>
 #include <limits>
+#include <set>
 #include <string>
 #include <unordered_set>
 #include <unordered_map>
@@ -111,6 +115,17 @@ static void LoadGameObjectModelBounds()
 static void LoadGameObjectSpawns()
 {
     std::ifstream file("gameobject_spawns.json");
+    std::string resolvedPath = "gameobject_spawns.json";
+    if (!file)
+    {
+        const char* vmangosDataDir = std::getenv("WWOW_VMANGOS_DATA_DIR");
+        if (vmangosDataDir && *vmangosDataDir)
+        {
+            resolvedPath = std::string(vmangosDataDir) + "/gameobject_spawns.json";
+            file.open(resolvedPath.c_str());
+        }
+    }
+
     if (!file)
         return;
 
@@ -140,7 +155,7 @@ static void LoadGameObjectSpawns()
         }
     }
 
-    printf("  Loaded %u gameobject spawns across %zu maps from gameobject_spawns.json\n", total, s_gameObjectSpawnsByMap.size());
+    printf("  Loaded %u gameobject spawns across %zu maps from %s\n", total, s_gameObjectSpawnsByMap.size(), resolvedPath.c_str());
 }
 
 static void EnsureGameObjectDataLoaded()
@@ -449,19 +464,18 @@ struct DebugStageCrop
     float maxHeight = 0.0f;
 };
 
-static DebugStageCrop ReadDebugStageCrop(const json& jsonTileConfig)
+static DebugStageCrop ParseDebugStageCropWow(const json& wowCrop)
 {
     DebugStageCrop crop;
-    auto it = jsonTileConfig.find("debugStageCropWow");
-    if (it == jsonTileConfig.end() || !it->is_array() || it->size() != 6)
+    if (!wowCrop.is_array() || wowCrop.size() != 6)
         return crop;
 
-    const float minWowX = std::min((*it)[0].get<float>(), (*it)[3].get<float>());
-    const float maxWowX = std::max((*it)[0].get<float>(), (*it)[3].get<float>());
-    const float minWowY = std::min((*it)[1].get<float>(), (*it)[4].get<float>());
-    const float maxWowY = std::max((*it)[1].get<float>(), (*it)[4].get<float>());
-    const float minWowZ = std::min((*it)[2].get<float>(), (*it)[5].get<float>());
-    const float maxWowZ = std::max((*it)[2].get<float>(), (*it)[5].get<float>());
+    const float minWowX = std::min(wowCrop[0].get<float>(), wowCrop[3].get<float>());
+    const float maxWowX = std::max(wowCrop[0].get<float>(), wowCrop[3].get<float>());
+    const float minWowY = std::min(wowCrop[1].get<float>(), wowCrop[4].get<float>());
+    const float maxWowY = std::max(wowCrop[1].get<float>(), wowCrop[4].get<float>());
+    const float minWowZ = std::min(wowCrop[2].get<float>(), wowCrop[5].get<float>());
+    const float maxWowZ = std::max(wowCrop[2].get<float>(), wowCrop[5].get<float>());
 
     // Generator/Recast horizontal coordinates are stored as (WoW Y, WoW X).
     crop.minRecastX = minWowY;
@@ -472,6 +486,32 @@ static DebugStageCrop ReadDebugStageCrop(const json& jsonTileConfig)
     crop.maxHeight = maxWowZ;
     crop.enabled = true;
     return crop;
+}
+
+static std::vector<DebugStageCrop> ReadDebugStageCrops(const json& jsonTileConfig)
+{
+    std::vector<DebugStageCrop> crops;
+
+    auto singleCrop = jsonTileConfig.find("debugStageCropWow");
+    if (singleCrop != jsonTileConfig.end())
+    {
+        DebugStageCrop crop = ParseDebugStageCropWow(*singleCrop);
+        if (crop.enabled)
+            crops.push_back(crop);
+    }
+
+    auto multiCrop = jsonTileConfig.find("debugStageCropsWow");
+    if (multiCrop != jsonTileConfig.end() && multiCrop->is_array())
+    {
+        for (const json& wowCrop : *multiCrop)
+        {
+            DebugStageCrop crop = ParseDebugStageCropWow(wowCrop);
+            if (crop.enabled)
+                crops.push_back(crop);
+        }
+    }
+
+    return crops;
 }
 
 static bool IntersectsDebugCrop2D(float minX, float maxX, float minZ, float maxZ, const DebugStageCrop& crop)
@@ -516,40 +556,44 @@ static void ResetDebugStageFiles(uint32 mapID, uint32 tileX, uint32 tileY)
 }
 
 static void WriteHeightfieldStageCsv(const char* stage, uint32 mapID, uint32 tileX, uint32 tileY,
-                                     int subX, int subY, const DebugStageCrop& crop, const rcHeightfield& hf)
+                                     int subX, int subY, const std::vector<DebugStageCrop>& crops, const rcHeightfield& hf)
 {
-    if (!crop.enabled)
+    if (crops.empty())
         return;
 
     char fileName[256];
     sprintf(fileName, "meshes/map%03u%02u%02u_stage_heightfield_spans.csv", mapID, tileY, tileX);
-    FILE* file = OpenDebugCsv(fileName, "stage,map,tileX,tileY,subX,subY,cellX,cellY,spanIndex,recastX,recastZ,minHeight,maxHeight,area");
+    FILE* file = OpenDebugCsv(fileName, "stage,map,tileX,tileY,subX,subY,cropIndex,cellX,cellY,spanIndex,recastX,recastZ,minHeight,maxHeight,area");
     if (!file)
         return;
 
-    for (int y = 0; y < hf.height; ++y)
+    for (size_t cropIndex = 0; cropIndex < crops.size(); ++cropIndex)
     {
-        const float cellMinZ = hf.bmin[2] + y * hf.cs;
-        const float cellMaxZ = cellMinZ + hf.cs;
-        for (int x = 0; x < hf.width; ++x)
+        const DebugStageCrop& crop = crops[cropIndex];
+        for (int y = 0; y < hf.height; ++y)
         {
-            const float cellMinX = hf.bmin[0] + x * hf.cs;
-            const float cellMaxX = cellMinX + hf.cs;
-            if (!IntersectsDebugCrop2D(cellMinX, cellMaxX, cellMinZ, cellMaxZ, crop))
-                continue;
-
-            int spanIndex = 0;
-            for (rcSpan* span = hf.spans[x + y * hf.width]; span; span = span->next, ++spanIndex)
+            const float cellMinZ = hf.bmin[2] + y * hf.cs;
+            const float cellMaxZ = cellMinZ + hf.cs;
+            for (int x = 0; x < hf.width; ++x)
             {
-                const float minHeight = hf.bmin[1] + (float)span->smin * hf.ch;
-                const float maxHeight = hf.bmin[1] + (float)span->smax * hf.ch;
-                if (!IntersectsDebugCropHeight(minHeight, maxHeight, crop))
+                const float cellMinX = hf.bmin[0] + x * hf.cs;
+                const float cellMaxX = cellMinX + hf.cs;
+                if (!IntersectsDebugCrop2D(cellMinX, cellMaxX, cellMinZ, cellMaxZ, crop))
                     continue;
 
-                fprintf(file, "%s,%u,%u,%u,%d,%d,%d,%d,%d,%f,%f,%f,%f,%u\n",
-                        stage, mapID, tileX, tileY, subX, subY, x, y, spanIndex,
-                        cellMinX + hf.cs * 0.5f, cellMinZ + hf.cs * 0.5f,
-                        minHeight, maxHeight, (unsigned)span->area);
+                int spanIndex = 0;
+                for (rcSpan* span = hf.spans[x + y * hf.width]; span; span = span->next, ++spanIndex)
+                {
+                    const float minHeight = hf.bmin[1] + (float)span->smin * hf.ch;
+                    const float maxHeight = hf.bmin[1] + (float)span->smax * hf.ch;
+                    if (!IntersectsDebugCropHeight(minHeight, maxHeight, crop))
+                        continue;
+
+                    fprintf(file, "%s,%u,%u,%u,%d,%d,%zu,%d,%d,%d,%f,%f,%f,%f,%u\n",
+                            stage, mapID, tileX, tileY, subX, subY, cropIndex, x, y, spanIndex,
+                            cellMinX + hf.cs * 0.5f, cellMinZ + hf.cs * 0.5f,
+                            minHeight, maxHeight, (unsigned)span->area);
+                }
             }
         }
     }
@@ -558,41 +602,46 @@ static void WriteHeightfieldStageCsv(const char* stage, uint32 mapID, uint32 til
 }
 
 static void WriteCompactHeightfieldStageCsv(const char* stage, uint32 mapID, uint32 tileX, uint32 tileY,
-                                            int subX, int subY, const DebugStageCrop& crop, const rcCompactHeightfield& chf)
+                                            int subX, int subY, const std::vector<DebugStageCrop>& crops, const rcCompactHeightfield& chf)
 {
-    if (!crop.enabled)
+    if (crops.empty())
         return;
 
     char fileName[256];
     sprintf(fileName, "meshes/map%03u%02u%02u_stage_compact_spans.csv", mapID, tileY, tileX);
-    FILE* file = OpenDebugCsv(fileName, "stage,map,tileX,tileY,subX,subY,cellX,cellY,spanIndex,recastX,recastZ,minHeight,maxHeight,area,connections");
+    FILE* file = OpenDebugCsv(fileName, "stage,map,tileX,tileY,subX,subY,cropIndex,cellX,cellY,spanIndex,recastX,recastZ,minHeight,maxHeight,area,region,distance,connections");
     if (!file)
         return;
 
-    for (int y = 0; y < chf.height; ++y)
+    for (size_t cropIndex = 0; cropIndex < crops.size(); ++cropIndex)
     {
-        const float cellMinZ = chf.bmin[2] + y * chf.cs;
-        const float cellMaxZ = cellMinZ + chf.cs;
-        for (int x = 0; x < chf.width; ++x)
+        const DebugStageCrop& crop = crops[cropIndex];
+        for (int y = 0; y < chf.height; ++y)
         {
-            const float cellMinX = chf.bmin[0] + x * chf.cs;
-            const float cellMaxX = cellMinX + chf.cs;
-            if (!IntersectsDebugCrop2D(cellMinX, cellMaxX, cellMinZ, cellMaxZ, crop))
-                continue;
-
-            const rcCompactCell& cell = chf.cells[x + y * chf.width];
-            for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+            const float cellMinZ = chf.bmin[2] + y * chf.cs;
+            const float cellMaxZ = cellMinZ + chf.cs;
+            for (int x = 0; x < chf.width; ++x)
             {
-                const rcCompactSpan& span = chf.spans[i];
-                const float minHeight = chf.bmin[1] + (float)span.y * chf.ch;
-                const float maxHeight = chf.bmin[1] + (float)(span.y + span.h) * chf.ch;
-                if (!IntersectsDebugCropHeight(minHeight, maxHeight, crop))
+                const float cellMinX = chf.bmin[0] + x * chf.cs;
+                const float cellMaxX = cellMinX + chf.cs;
+                if (!IntersectsDebugCrop2D(cellMinX, cellMaxX, cellMinZ, cellMaxZ, crop))
                     continue;
 
-                fprintf(file, "%s,%u,%u,%u,%d,%d,%d,%d,%u,%f,%f,%f,%f,%u,%u\n",
-                        stage, mapID, tileX, tileY, subX, subY, x, y, (unsigned)(i - cell.index),
-                        cellMinX + chf.cs * 0.5f, cellMinZ + chf.cs * 0.5f,
-                        minHeight, maxHeight, (unsigned)chf.areas[i], (unsigned)span.con);
+                const rcCompactCell& cell = chf.cells[x + y * chf.width];
+                for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                {
+                    const rcCompactSpan& span = chf.spans[i];
+                    const float minHeight = chf.bmin[1] + (float)span.y * chf.ch;
+                    const float maxHeight = chf.bmin[1] + (float)(span.y + span.h) * chf.ch;
+                    if (!IntersectsDebugCropHeight(minHeight, maxHeight, crop))
+                        continue;
+
+                    const unsigned short distance = chf.dist ? chf.dist[i] : 0;
+                    fprintf(file, "%s,%u,%u,%u,%d,%d,%zu,%d,%d,%u,%f,%f,%f,%f,%u,%u,%u,%u\n",
+                            stage, mapID, tileX, tileY, subX, subY, cropIndex, x, y, (unsigned)(i - cell.index),
+                            cellMinX + chf.cs * 0.5f, cellMinZ + chf.cs * 0.5f,
+                            minHeight, maxHeight, (unsigned)chf.areas[i], (unsigned)span.reg, (unsigned)distance, (unsigned)span.con);
+                }
             }
         }
     }
@@ -601,33 +650,37 @@ static void WriteCompactHeightfieldStageCsv(const char* stage, uint32 mapID, uin
 }
 
 static void WriteContourStageCsv(uint32 mapID, uint32 tileX, uint32 tileY, int subX, int subY,
-                                 const DebugStageCrop& crop, const rcContourSet& contours)
+                                 const std::vector<DebugStageCrop>& crops, const rcContourSet& contours)
 {
-    if (!crop.enabled)
+    if (crops.empty())
         return;
 
     char fileName[256];
     sprintf(fileName, "meshes/map%03u%02u%02u_stage_contours.csv", mapID, tileY, tileX);
-    FILE* file = OpenDebugCsv(fileName, "map,tileX,tileY,subX,subY,contourIndex,vertexIndex,recastX,recastY,recastZ,area,region");
+    FILE* file = OpenDebugCsv(fileName, "map,tileX,tileY,subX,subY,cropIndex,contourIndex,vertexIndex,recastX,recastY,recastZ,area,region");
     if (!file)
         return;
 
-    for (int i = 0; i < contours.nconts; ++i)
+    for (size_t cropIndex = 0; cropIndex < crops.size(); ++cropIndex)
     {
-        const rcContour& contour = contours.conts[i];
-        for (int v = 0; v < contour.nverts; ++v)
+        const DebugStageCrop& crop = crops[cropIndex];
+        for (int i = 0; i < contours.nconts; ++i)
         {
-            const int* cv = &contour.verts[v * 4];
-            const float recastX = contours.bmin[0] + cv[0] * contours.cs;
-            const float recastY = contours.bmin[1] + cv[1] * contours.ch;
-            const float recastZ = contours.bmin[2] + cv[2] * contours.cs;
-            if (!IntersectsDebugCrop2D(recastX, recastX, recastZ, recastZ, crop)
-                || !IntersectsDebugCropHeight(recastY, recastY, crop))
-                continue;
+            const rcContour& contour = contours.conts[i];
+            for (int v = 0; v < contour.nverts; ++v)
+            {
+                const int* cv = &contour.verts[v * 4];
+                const float recastX = contours.bmin[0] + cv[0] * contours.cs;
+                const float recastY = contours.bmin[1] + cv[1] * contours.ch;
+                const float recastZ = contours.bmin[2] + cv[2] * contours.cs;
+                if (!IntersectsDebugCrop2D(recastX, recastX, recastZ, recastZ, crop)
+                    || !IntersectsDebugCropHeight(recastY, recastY, crop))
+                    continue;
 
-            fprintf(file, "%u,%u,%u,%d,%d,%d,%d,%f,%f,%f,%u,%u\n",
-                    mapID, tileX, tileY, subX, subY, i, v,
-                    recastX, recastY, recastZ, (unsigned)contour.area, (unsigned)contour.reg);
+                fprintf(file, "%u,%u,%u,%d,%d,%zu,%d,%d,%f,%f,%f,%u,%u\n",
+                        mapID, tileX, tileY, subX, subY, cropIndex, i, v,
+                        recastX, recastY, recastZ, (unsigned)contour.area, (unsigned)contour.reg);
+            }
         }
     }
 
@@ -878,6 +931,47 @@ constexpr float SHADOWED_LEDGE_MIN_OVERLAP_AREA_2D = 0.5f;
 constexpr float SHADOWED_LEDGE_MIN_OVERLAP_RATIO = 0.35f;
 constexpr float SHADOWED_LEDGE_COMPONENT_MAX_AREA_2D = 80.0f;
 constexpr float SHADOWED_LEDGE_COMPONENT_MAX_Z_RANGE = 2.5f;
+constexpr float SHADOWED_LEDGE_FALLBACK_MEMBER_MAX_AREA_2D = 10.0f;
+constexpr float SHADOWED_LEDGE_FALLBACK_MEMBER_MAX_EDGE_2D = 6.5f;
+constexpr float SHADOWED_LEDGE_FALLBACK_MEMBER_MAX_Z_RANGE = 0.75f;
+constexpr int SHADOWED_LEDGE_FALLBACK_MAX_CULLS_PER_COMPONENT = 4;
+constexpr float SHADOWED_POCKET_MAX_AREA_2D = 40.0f;
+constexpr float SHADOWED_POCKET_MAX_EDGE_2D = 10.0f;
+constexpr float SHADOWED_POCKET_MAX_Z_RANGE = 5.5f;
+constexpr float SHADOWED_POCKET_MIN_VERTICAL_GAP = 0.15f;
+constexpr float SHADOWED_POCKET_MAX_VERTICAL_GAP = 5.0f;
+constexpr float SHADOWED_POCKET_MIN_OVERLAP_AREA_2D = 0.75f;
+constexpr float SHADOWED_POCKET_MIN_OVERLAP_RATIO = 0.40f;
+constexpr float SHADOWED_POCKET_COMPONENT_MAX_AREA_2D = 150.0f;
+constexpr float SHADOWED_POCKET_COMPONENT_MAX_Z_RANGE = 6.0f;
+constexpr float STACKED_SLIVER_MAX_Z_RANGE = 1.0f;
+constexpr float STACKED_SLIVER_MAX_AREA_2D = 18.0f;
+constexpr float STACKED_SLIVER_MAX_EDGE_2D = 7.0f;
+constexpr float STACKED_SLIVER_MIN_OVERLAP_AREA_2D = 0.5f;
+constexpr float STACKED_SLIVER_MIN_OVERLAP_RATIO = 0.35f;
+constexpr float STACKED_SLIVER_MIN_SUPPORT_DELTA = -0.25f;
+constexpr float STACKED_SLIVER_MAX_CLOSEST_SUPPORT_DISTANCE_2D = 1.0f;
+constexpr float ANCHOR_POLY_STACK_MIN_SUPPORT_DELTA = 0.0f;
+constexpr float ANCHOR_POLY_STACK_SUPPORT_EPSILON = 0.05f;
+constexpr float ANCHOR_LOWER_FRINGE_MAX_TOP_DELTA = 0.05f;
+constexpr float ANCHOR_UPPER_FRINGE_MIN_TOP_DELTA = 0.15f;
+constexpr float STACKED_SLIVER_MAX_SUPPORT_DELTA = 0.5f;
+constexpr float OFFMESH_ANCHOR_STEEP_TRIM_MIN_AVERAGE_SLOPE_DEGREES = 35.0f;
+constexpr float OFFMESH_ANCHOR_STEEP_TRIM_MAX_EDGE_2D = 4.5f;
+constexpr float OFFMESH_ANCHOR_STEEP_TRIM_MAX_AREA_2D = 6.0f;
+constexpr float OFFMESH_ANCHOR_STEEP_TRIM_MAX_Z_RANGE = 3.25f;
+constexpr float OFFMESH_ANCHOR_STEEP_TRIM_COMPONENT_MAX_AREA_2D = 18.0f;
+constexpr float OFFMESH_ANCHOR_STEEP_TRIM_COMPONENT_MAX_Z_RANGE = 3.5f;
+
+struct OffMeshAnchorSteepTrimSettings
+{
+    float minAverageSlopeDegrees = OFFMESH_ANCHOR_STEEP_TRIM_MIN_AVERAGE_SLOPE_DEGREES;
+    float maxEdge2D = OFFMESH_ANCHOR_STEEP_TRIM_MAX_EDGE_2D;
+    float maxArea2D = OFFMESH_ANCHOR_STEEP_TRIM_MAX_AREA_2D;
+    float maxZRange = OFFMESH_ANCHOR_STEEP_TRIM_MAX_Z_RANGE;
+    float componentMaxArea2D = OFFMESH_ANCHOR_STEEP_TRIM_COMPONENT_MAX_AREA_2D;
+    float componentMaxZRange = OFFMESH_ANCHOR_STEEP_TRIM_COMPONENT_MAX_Z_RANGE;
+};
 
 struct DetailPolyDiagnostics
 {
@@ -1210,13 +1304,21 @@ static DetourPolyDiagnostics AnalyzeDetourPoly(const dtMeshTile& tile, const int
     return diagnostics;
 }
 
+static float GetAverageSlopeDegrees(const DetourPolyDiagnostics& diagnostics)
+{
+    if (diagnostics.totalSurfaceArea <= 0.0f)
+        return 0.0f;
+
+    const float averageUpComponent = rcClamp(diagnostics.weightedUpComponent / diagnostics.totalSurfaceArea, 0.0f, 1.0f);
+    return acosf(averageUpComponent) * (180.0f / RC_PI);
+}
+
 static bool ShouldCullDetourPoly(const DetourPolyDiagnostics& diagnostics, const float maxClimbWorld)
 {
     if (diagnostics.totalSurfaceArea <= 0.0f)
         return false;
 
-    const float averageUpComponent = rcClamp(diagnostics.weightedUpComponent / diagnostics.totalSurfaceArea, 0.0f, 1.0f);
-    const float averageSlopeDegrees = acosf(averageUpComponent) * (180.0f / RC_PI);
+    const float averageSlopeDegrees = GetAverageSlopeDegrees(diagnostics);
     const float steepAreaRatio = diagnostics.steepSurfaceArea / diagnostics.totalSurfaceArea;
     const float verticalRange = diagnostics.maxY - diagnostics.minY;
 
@@ -1255,12 +1357,2235 @@ static bool IsShadowedLedgeCandidate(const DetourPolyDiagnostics& diagnostics)
         (diagnostics.maxY - diagnostics.minY) <= SHADOWED_LEDGE_MAX_Z_RANGE;
 }
 
+static bool IsShadowedPocketCandidate(const DetourPolyDiagnostics& diagnostics)
+{
+    return diagnostics.totalSurfaceArea > 0.0f &&
+        diagnostics.horizontalArea2D <= SHADOWED_POCKET_MAX_AREA_2D &&
+        diagnostics.maxEdge2D <= SHADOWED_POCKET_MAX_EDGE_2D &&
+        (diagnostics.maxY - diagnostics.minY) <= SHADOWED_POCKET_MAX_Z_RANGE;
+}
+
+static bool IsOffMeshAnchorSteepTrimCandidate(const DetourPolyDiagnostics& diagnostics,
+    const OffMeshAnchorSteepTrimSettings& settings)
+{
+    return diagnostics.totalSurfaceArea > 0.0f &&
+        GetAverageSlopeDegrees(diagnostics) >= settings.minAverageSlopeDegrees &&
+        diagnostics.maxEdge2D <= settings.maxEdge2D &&
+        diagnostics.horizontalArea2D <= settings.maxArea2D &&
+        (diagnostics.maxY - diagnostics.minY) <= settings.maxZRange;
+}
+
 static bool IsWalkableLandPoly(const dtPoly& poly)
 {
     return poly.getType() == DT_POLYTYPE_GROUND &&
         poly.flags != 0 &&
         (poly.flags & NAV_GROUND) != 0 &&
         poly.getArea() != AREA_NONE;
+}
+
+struct AnchorPolyStackCoord
+{
+    float wowX = 0.0f;
+    float wowY = 0.0f;
+    float wowZ = 0.0f;
+};
+
+struct AnchorPolyStackProbeResult
+{
+    bool posOverPoly = false;
+    bool hasClosestPoint = false;
+    bool hasSurfaceZ = false;
+    float closestPoint[3] = { 0.0f, 0.0f, 0.0f };
+    float closestDistance2D = std::numeric_limits<float>::max();
+    float surfaceZ = std::numeric_limits<float>::quiet_NaN();
+};
+
+struct AnchorSourceSupportProbe
+{
+    AnchorPolyStackCoord anchor;
+    bool found = false;
+    float supportY = 0.0f;
+    float distance2D = std::numeric_limits<float>::max();
+    int triIndex = -1;
+    MMAP::MeshTriangleSource source = MMAP::MeshTriangleSource::Terrain;
+    bool projectedInside = false;
+};
+
+struct Point2DXZ
+{
+    float x = 0.0f;
+    float z = 0.0f;
+};
+
+static std::string FormatAnchorStageId(const AnchorPolyStackCoord& anchor)
+{
+    char buffer[96];
+    sprintf(buffer, "%.3f,%.3f,%.3f", anchor.wowX, anchor.wowY, anchor.wowZ);
+    return std::string(buffer);
+}
+
+static std::string FormatPolyRefHex(const dtPolyRef polyRef)
+{
+    char buffer[32];
+    sprintf(buffer, "0x%llX", static_cast<unsigned long long>(polyRef));
+    return std::string(buffer);
+}
+
+static bool PointInPolygonXZ(const std::vector<Point2DXZ>& polygon, const float x, const float z)
+{
+    if (polygon.size() < 3)
+        return false;
+
+    bool inside = false;
+    for (size_t i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++)
+    {
+        const Point2DXZ& vi = polygon[i];
+        const Point2DXZ& vj = polygon[j];
+        const bool intersects =
+            ((vi.z > z) != (vj.z > z)) &&
+            (x < (vj.x - vi.x) * (z - vi.z) / ((vj.z - vi.z) + 1.0e-6f) + vi.x);
+        if (intersects)
+            inside = !inside;
+    }
+
+    return inside;
+}
+
+static bool TryProjectPointToTriangleXZ(const float a[3], const float b[3], const float c[3],
+    const float px, const float pz, float& projectedY)
+{
+    const float v0x = b[0] - a[0];
+    const float v0z = b[2] - a[2];
+    const float v1x = c[0] - a[0];
+    const float v1z = c[2] - a[2];
+    const float v2x = px - a[0];
+    const float v2z = pz - a[2];
+
+    const float denom = v0x * v1z - v1x * v0z;
+    if (fabsf(denom) < 1.0e-6f)
+        return false;
+
+    const float invDenom = 1.0f / denom;
+    const float v = (v2x * v1z - v1x * v2z) * invDenom;
+    const float w = (v0x * v2z - v2x * v0z) * invDenom;
+    const float u = 1.0f - v - w;
+    if (u < -1.0e-4f || v < -1.0e-4f || w < -1.0e-4f)
+        return false;
+
+    projectedY = u * a[1] + v * b[1] + w * c[1];
+    return true;
+}
+
+static void ClosestPointOnSegmentXZ(const float ax, const float az, const float ay,
+    const float bx, const float bz, const float by,
+    const float px, const float pz,
+    float& outX, float& outZ, float& outY)
+{
+    const float abX = bx - ax;
+    const float abZ = bz - az;
+    const float len2 = abX * abX + abZ * abZ;
+    float t = 0.0f;
+    if (len2 > 1.0e-6f)
+    {
+        t = ((px - ax) * abX + (pz - az) * abZ) / len2;
+        if (t < 0.0f)
+            t = 0.0f;
+        else if (t > 1.0f)
+            t = 1.0f;
+    }
+
+    outX = ax + abX * t;
+    outZ = az + abZ * t;
+    outY = ay + (by - ay) * t;
+}
+
+static bool TryResolveTriangleSupportY(const float a[3], const float b[3], const float c[3],
+    const float anchorX, const float anchorZ, const float xyExtent,
+    float& supportY, float& distance2D, bool& projectedInside)
+{
+    projectedInside = false;
+    supportY = 0.0f;
+    distance2D = std::numeric_limits<float>::max();
+
+    float projectedY = 0.0f;
+    if (TryProjectPointToTriangleXZ(a, b, c, anchorX, anchorZ, projectedY))
+    {
+        projectedInside = true;
+        supportY = projectedY;
+        distance2D = 0.0f;
+        return true;
+    }
+
+    float bestX = 0.0f;
+    float bestZ = 0.0f;
+    float bestY = 0.0f;
+    float bestDistance2D = std::numeric_limits<float>::max();
+
+    auto testEdge = [&](const float* p0, const float* p1)
+    {
+        float edgeX = 0.0f;
+        float edgeZ = 0.0f;
+        float edgeY = 0.0f;
+        ClosestPointOnSegmentXZ(p0[0], p0[2], p0[1], p1[0], p1[2], p1[1], anchorX, anchorZ, edgeX, edgeZ, edgeY);
+        const float dx = edgeX - anchorX;
+        const float dz = edgeZ - anchorZ;
+        const float dist = sqrtf(dx * dx + dz * dz);
+        if (dist < bestDistance2D)
+        {
+            bestDistance2D = dist;
+            bestX = edgeX;
+            bestZ = edgeZ;
+            bestY = edgeY;
+        }
+    };
+
+    testEdge(a, b);
+    testEdge(b, c);
+    testEdge(c, a);
+
+    if (bestDistance2D > xyExtent)
+        return false;
+
+    supportY = bestY;
+    distance2D = bestDistance2D;
+    return true;
+}
+
+static const char* MeshTriangleSourceName(const MMAP::MeshTriangleSource source)
+{
+    switch (source)
+    {
+    case MMAP::MeshTriangleSource::VMap:
+        return "vmap";
+    case MMAP::MeshTriangleSource::GameObject:
+        return "gameobject";
+    case MMAP::MeshTriangleSource::Terrain:
+    default:
+        return "terrain";
+    }
+}
+
+static std::vector<AnchorSourceSupportProbe> ResolveAnchorSourceSupportProbes(
+    const MMAP::MeshData& meshData,
+    const float* tVerts,
+    const int* tTris,
+    const unsigned char* areas,
+    const int tTriCount,
+    const float xyExtent,
+    const float supportZTolerance,
+    const std::vector<AnchorPolyStackCoord>& anchorCoords,
+    const bool logDiagnostics)
+{
+    std::vector<AnchorSourceSupportProbe> probes;
+    probes.reserve(anchorCoords.size());
+    if (!tVerts || !tTris || !areas || anchorCoords.empty())
+        return probes;
+
+    constexpr float kSupportFloorBelowSlack = 0.35f;
+    constexpr float kSupportFloorAboveSlack = 0.75f;
+
+    for (const AnchorPolyStackCoord& anchor : anchorCoords)
+    {
+        AnchorSourceSupportProbe best;
+        best.anchor = anchor;
+        const float anchorRecastX = anchor.wowY;
+        const float anchorRecastZ = anchor.wowX;
+        float bestScore = FLT_MAX;
+
+        for (int triIndex = 0; triIndex < tTriCount; ++triIndex)
+        {
+            const unsigned char area = areas[triIndex];
+            if (area != AREA_GROUND && area != AREA_GROUND_MODEL)
+                continue;
+
+            const int* tri = &tTris[triIndex * 3];
+            const float* a = &tVerts[tri[0] * 3];
+            const float* b = &tVerts[tri[1] * 3];
+            const float* c = &tVerts[tri[2] * 3];
+
+            const float minX = std::min(a[0], std::min(b[0], c[0]));
+            const float maxX = std::max(a[0], std::max(b[0], c[0]));
+            const float minZ = std::min(a[2], std::min(b[2], c[2]));
+            const float maxZ = std::max(a[2], std::max(b[2], c[2]));
+            if (maxX < anchorRecastX - xyExtent || minX > anchorRecastX + xyExtent ||
+                maxZ < anchorRecastZ - xyExtent || minZ > anchorRecastZ + xyExtent)
+            {
+                continue;
+            }
+
+            float supportY = 0.0f;
+            float distance2D = std::numeric_limits<float>::max();
+            bool projectedInside = false;
+            if (!TryResolveTriangleSupportY(a, b, c, anchorRecastX, anchorRecastZ, xyExtent, supportY, distance2D, projectedInside))
+                continue;
+
+            const float delta = supportY - anchor.wowZ;
+            if (delta < -kSupportFloorBelowSlack || delta > supportZTolerance + kSupportFloorAboveSlack)
+                continue;
+
+            const float deltaPenalty = delta >= 0.0f ? delta : 4.0f + fabsf(delta);
+            const float insidePenalty = projectedInside ? 0.0f : 1.5f;
+            const float score = deltaPenalty * 4.0f + distance2D + insidePenalty;
+            if (!best.found || score < bestScore)
+            {
+                best.found = true;
+                best.supportY = supportY;
+                best.distance2D = distance2D;
+                best.triIndex = triIndex;
+                best.source = meshData.SourceForTriangle(triIndex);
+                best.projectedInside = projectedInside;
+                bestScore = score;
+            }
+        }
+
+        if (logDiagnostics && best.found)
+        {
+            printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) supportY=%.3f delta=%.3f tri=%d source=%s dist2D=%.3f inside=%d\n",
+                anchor.wowX, anchor.wowY, anchor.wowZ,
+                best.supportY, best.supportY - anchor.wowZ, best.triIndex,
+                meshData.SourceNameForTriangle(best.triIndex),
+                best.distance2D, best.projectedInside ? 1 : 0);
+        }
+        else if (logDiagnostics)
+        {
+            printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) supportY=none\n",
+                anchor.wowX, anchor.wowY, anchor.wowZ);
+        }
+
+        probes.push_back(best);
+    }
+
+    return probes;
+}
+
+static bool IntersectsAnchorWindow(const DetourPolyDiagnostics& diagnostics,
+    const float detourAnchorX, const float detourAnchorY, const float detourAnchorZ,
+    const float xyExtent, const float zExtent)
+{
+    if (diagnostics.maxX < detourAnchorX - xyExtent || diagnostics.minX > detourAnchorX + xyExtent)
+        return false;
+    if (diagnostics.maxZ < detourAnchorZ - xyExtent || diagnostics.minZ > detourAnchorZ + xyExtent)
+        return false;
+    if (diagnostics.maxY < detourAnchorY - zExtent || diagnostics.minY > detourAnchorY + zExtent)
+        return false;
+
+    return true;
+}
+
+static bool IntersectsAnchorSupportBand(const DetourPolyDiagnostics& diagnostics,
+    const float supportBandMinY, const float supportBandMaxY)
+{
+    return diagnostics.maxY >= supportBandMinY && diagnostics.minY <= supportBandMaxY;
+}
+
+static AnchorPolyStackProbeResult ProbeAnchorPolyAtCoord(dtNavMeshQuery& query, const dtPolyRef polyRef, const float detourPos[3])
+{
+    AnchorPolyStackProbeResult result;
+
+    float closest[3] = { 0.0f, 0.0f, 0.0f };
+    bool posOverPoly = false;
+    const dtStatus closestStatus = query.closestPointOnPoly(polyRef, detourPos, closest, &posOverPoly);
+    if (dtStatusSucceed(closestStatus))
+    {
+        result.hasClosestPoint = true;
+        rcVcopy(result.closestPoint, closest);
+        const float deltaX = closest[0] - detourPos[0];
+        const float deltaZ = closest[2] - detourPos[2];
+        result.closestDistance2D = sqrtf(deltaX * deltaX + deltaZ * deltaZ);
+        if (posOverPoly)
+            result.posOverPoly = true;
+    }
+
+    float height = 0.0f;
+    dtStatus heightStatus = query.getPolyHeight(polyRef, detourPos, &height);
+    if (dtStatusFailed(heightStatus) && dtStatusSucceed(closestStatus))
+        heightStatus = query.getPolyHeight(polyRef, closest, &height);
+
+    if (dtStatusSucceed(heightStatus))
+    {
+        result.hasSurfaceZ = true;
+        result.surfaceZ = height;
+    }
+
+    return result;
+}
+
+static bool TryGetAnchorProbeSupportSurfaceZ(const AnchorPolyStackProbeResult& probe, float& surfaceZ, bool& usedClosestFallback)
+{
+    if (probe.hasSurfaceZ)
+    {
+        surfaceZ = probe.surfaceZ;
+        usedClosestFallback = false;
+        return true;
+    }
+
+    if (probe.hasClosestPoint && probe.closestDistance2D <= STACKED_SLIVER_MAX_CLOSEST_SUPPORT_DISTANCE_2D)
+    {
+        surfaceZ = probe.closestPoint[1];
+        usedClosestFallback = true;
+        return true;
+    }
+
+    usedClosestFallback = false;
+    return false;
+}
+
+static bool IsAnchorSupportSurfaceDeltaValid(const float surfaceDelta, const float supportZTolerance)
+{
+    return surfaceDelta >= -ANCHOR_POLY_STACK_SUPPORT_EPSILON &&
+        surfaceDelta <= supportZTolerance;
+}
+
+static std::vector<AnchorPolyStackCoord> ParseAnchorCoords(const json& config, const char* key)
+{
+    std::vector<AnchorPolyStackCoord> coords;
+
+    auto it = config.find(key);
+    if (it == config.end() || !it->is_array())
+        return coords;
+
+    for (const json& entry : *it)
+    {
+        if (!entry.is_array() || entry.size() != 3 ||
+            !entry[0].is_number() || !entry[1].is_number() || !entry[2].is_number())
+        {
+            continue;
+        }
+
+        AnchorPolyStackCoord coord;
+        coord.wowX = entry[0].get<float>();
+        coord.wowY = entry[1].get<float>();
+        coord.wowZ = entry[2].get<float>();
+        coords.push_back(coord);
+    }
+
+    return coords;
+}
+
+static std::vector<AnchorPolyStackCoord> ParseAnchorPolyStackCoords(const json& config)
+{
+    return ParseAnchorCoords(config, "postDetourCullAnchorPolyStacksCoordsWow");
+}
+
+static std::vector<AnchorPolyStackCoord> ParseAnchorStageManifestCoords(const json& config)
+{
+    return ParseAnchorCoords(config, "anchorStageManifestCoordsWow");
+}
+
+static std::vector<AnchorPolyStackCoord> MergeUniqueAnchorCoords(
+    const std::vector<AnchorPolyStackCoord>& primary,
+    const std::vector<AnchorPolyStackCoord>& extras)
+{
+    std::vector<AnchorPolyStackCoord> merged = primary;
+    std::unordered_set<std::string> seenIds;
+    seenIds.reserve(primary.size() + extras.size());
+    for (const AnchorPolyStackCoord& coord : primary)
+        seenIds.insert(FormatAnchorStageId(coord));
+
+    for (const AnchorPolyStackCoord& coord : extras)
+    {
+        const std::string id = FormatAnchorStageId(coord);
+        if (!seenIds.insert(id).second)
+            continue;
+
+        merged.push_back(coord);
+    }
+
+    return merged;
+}
+
+// [WWoW-DIVERGENCE] 2026-05-22/23: pre-region compact-heightfield cleanup for
+// anchor-proven stacked slabs. The dead-end OG hallway/vertical/exterior probes
+// showed that the bad competing layer already exists at buildCHF/median time as
+// an immediate multi-floor stack in the same cell. The compact-heightfield span
+// floor (span.y) is the walkable support surface; span.y + span.h is the
+// clearance ceiling to the next obstacle, not the standable floor. Prefer the
+// local support floor closest to the anchor and cull lower competing floors in
+// the same cell so they never become regions/contours/polys.
+static int CullAnchorUpperCompactSpans(rcCompactHeightfield& chf,
+    const float xyExtent, const float supportZTolerance,
+    const std::vector<AnchorPolyStackCoord>& anchorCoords,
+    const bool logDiagnostics)
+{
+    if (!chf.cells || !chf.spans || !chf.areas || anchorCoords.empty())
+        return 0;
+
+    constexpr float kSupportFloorBelowSlack = 0.15f;
+    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
+    int culled = 0;
+
+    for (const AnchorPolyStackCoord& anchor : anchorCoords)
+    {
+        const float anchorRecastX = anchor.wowY;
+        const float anchorRecastZ = anchor.wowX;
+        const float supportFloorMinY = anchor.wowZ - kSupportFloorBelowSlack;
+        const float supportFloorMaxY = anchor.wowZ + supportZTolerance;
+
+        int supportCells = 0;
+        int anchorCulled = 0;
+
+        for (int y = 0; y < chf.height; ++y)
+        {
+            const float cellCenterZ = chf.bmin[2] + (y + 0.5f) * chf.cs;
+            if (fabsf(cellCenterZ - anchorRecastZ) > xyExtent)
+                continue;
+
+            for (int x = 0; x < chf.width; ++x)
+            {
+                const float cellCenterX = chf.bmin[0] + (x + 0.5f) * chf.cs;
+                if (fabsf(cellCenterX - anchorRecastX) > xyExtent)
+                    continue;
+
+                const rcCompactCell& cell = chf.cells[x + y * chf.width];
+                if (cell.count < 2)
+                    continue;
+
+                int bestSupportSpanIndex = -1;
+                float bestSupportFloor = 0.0f;
+                float bestSupportScore = FLT_MAX;
+                for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                {
+                    if (chf.areas[i] == RC_NULL_AREA)
+                        continue;
+
+                    const rcCompactSpan& span = chf.spans[i];
+                    const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
+                    if (spanFloor < supportFloorMinY || spanFloor > supportFloorMaxY)
+                        continue;
+
+                    const float delta = spanFloor - anchor.wowZ;
+                    // Prefer surfaces at/above the anchor first. If none exist,
+                    // fall back to the closest slightly-below floor.
+                    const float score =
+                        (delta >= 0.0f ? 0.0f : 1000.0f) +
+                        fabsf(delta);
+                    if (score < bestSupportScore)
+                    {
+                        bestSupportScore = score;
+                        bestSupportFloor = spanFloor;
+                        bestSupportSpanIndex = static_cast<int>(i);
+                    }
+                }
+
+                if (bestSupportSpanIndex < 0)
+                    continue;
+
+                ++supportCells;
+                for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                {
+                    if (static_cast<int>(i) == bestSupportSpanIndex)
+                        continue;
+                    if (chf.areas[i] == RC_NULL_AREA)
+                        continue;
+
+                    const rcCompactSpan& span = chf.spans[i];
+                    const float spanBottom = chf.bmin[1] + (float)span.y * chf.ch;
+                    if (spanBottom >= bestSupportFloor - kCompetingLowerFloorMinDrop)
+                        continue;
+
+                    chf.areas[i] = RC_NULL_AREA;
+                    ++culled;
+                    ++anchorCulled;
+                }
+            }
+        }
+
+        if (logDiagnostics)
+        {
+            printf("[CHF-ANCHOR-CULL] anchor=(%.3f,%.3f,%.3f) supportCells=%d culled=%d\n",
+                anchor.wowX, anchor.wowY, anchor.wowZ, supportCells, anchorCulled);
+        }
+    }
+
+    return culled;
+}
+
+// [WWoW-DIVERGENCE] 2026-05-23: source-geometry-backed compact-span cleanup.
+// The older anchor compact cull chooses the preferred support floor from the
+// already-quantized compact spans, which can preserve the wrong basin when the
+// contaminated lower layer wins locally. This pass instead samples the original
+// classified source triangles near the verified anchor coords and uses that
+// support floor to null lower competing compact spans before region building.
+static int CullAnchorSourceSupportCompactSpans(rcCompactHeightfield& chf,
+    const float xyExtent, const float supportZTolerance, const bool fallbackToWindowSupport,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const bool logDiagnostics)
+{
+    if (!chf.cells || !chf.spans || !chf.areas || sourceSupports.empty())
+        return 0;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
+    constexpr float kFallbackCullRadius = 0.85f;
+
+    struct AnchorWindowCell
+    {
+        int x = 0;
+        int y = 0;
+        bool hasSupportSpan = false;
+        float bestSupportFloor = 0.0f;
+        float cellDistance2D = 0.0f;
+    };
+
+    int culled = 0;
+    for (const AnchorSourceSupportProbe& support : sourceSupports)
+    {
+        if (!support.found)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        if (anchorRecastX < chf.bmin[0] - xyExtent || anchorRecastX > chf.bmax[0] + xyExtent ||
+            anchorRecastZ < chf.bmin[2] - xyExtent || anchorRecastZ > chf.bmax[2] + xyExtent)
+        {
+            continue;
+        }
+        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+        const bool allowFallbackBasinCull = support.projectedInside || support.distance2D <= 0.5f;
+
+        std::vector<AnchorWindowCell> windowCells;
+        int supportCells = 0;
+        int anchorCulled = 0;
+        int fallbackCells = 0;
+        for (int y = 0; y < chf.height; ++y)
+        {
+            const float cellCenterZ = chf.bmin[2] + (y + 0.5f) * chf.cs;
+            if (fabsf(cellCenterZ - anchorRecastZ) > xyExtent)
+                continue;
+
+            for (int x = 0; x < chf.width; ++x)
+            {
+                const float cellCenterX = chf.bmin[0] + (x + 0.5f) * chf.cs;
+                if (fabsf(cellCenterX - anchorRecastX) > xyExtent)
+                    continue;
+
+                const rcCompactCell& cell = chf.cells[x + y * chf.width];
+                if (cell.count < 1)
+                    continue;
+
+                const float dxCell = cellCenterX - anchorRecastX;
+                const float dzCell = cellCenterZ - anchorRecastZ;
+                const float cellDistance2D = sqrtf(dxCell * dxCell + dzCell * dzCell);
+
+                AnchorWindowCell windowCell;
+                windowCell.x = x;
+                windowCell.y = y;
+                windowCell.cellDistance2D = cellDistance2D;
+                for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                {
+                    if (chf.areas[i] == RC_NULL_AREA)
+                        continue;
+
+                    const rcCompactSpan& span = chf.spans[i];
+                    const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
+                    if (spanFloor >= supportFloorMinY && spanFloor <= supportFloorMaxY)
+                    {
+                        windowCell.hasSupportSpan = true;
+                        windowCell.bestSupportFloor = std::max(windowCell.bestSupportFloor, spanFloor);
+                    }
+                }
+
+                windowCells.push_back(windowCell);
+
+                if (!windowCell.hasSupportSpan)
+                {
+                    if (!allowFallbackBasinCull || cellDistance2D > kFallbackCullRadius)
+                        continue;
+
+                    int cellCulled = 0;
+                    for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                    {
+                        if (chf.areas[i] == RC_NULL_AREA)
+                            continue;
+
+                        const rcCompactSpan& span = chf.spans[i];
+                        const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
+                        if (spanFloor >= support.supportY - kCompetingLowerFloorMinDrop)
+                            continue;
+
+                        chf.areas[i] = RC_NULL_AREA;
+                        ++culled;
+                        ++anchorCulled;
+                        ++cellCulled;
+                    }
+
+                    if (cellCulled > 0)
+                        ++fallbackCells;
+                    continue;
+                }
+
+                ++supportCells;
+                for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                {
+                    if (chf.areas[i] == RC_NULL_AREA)
+                        continue;
+
+                    const rcCompactSpan& span = chf.spans[i];
+                    const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
+                    if (spanFloor >= windowCell.bestSupportFloor - kCompetingLowerFloorMinDrop)
+                        continue;
+
+                    chf.areas[i] = RC_NULL_AREA;
+                    ++culled;
+                    ++anchorCulled;
+                }
+            }
+        }
+
+        if (fallbackToWindowSupport && supportCells > 0)
+        {
+            for (const AnchorWindowCell& windowCell : windowCells)
+            {
+                if (windowCell.hasSupportSpan)
+                    continue;
+
+                const rcCompactCell& cell = chf.cells[windowCell.x + windowCell.y * chf.width];
+                int cellCulled = 0;
+                for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                {
+                    if (chf.areas[i] == RC_NULL_AREA)
+                        continue;
+
+                    const rcCompactSpan& span = chf.spans[i];
+                    const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
+                    if (spanFloor >= support.supportY - kCompetingLowerFloorMinDrop)
+                        continue;
+
+                    chf.areas[i] = RC_NULL_AREA;
+                    ++culled;
+                    ++anchorCulled;
+                    ++cellCulled;
+                }
+
+                if (cellCulled > 0)
+                    ++fallbackCells;
+            }
+        }
+
+        if (logDiagnostics)
+        {
+            printf("[CHF-SRC-ANCHOR-CULL] anchor=(%.3f,%.3f,%.3f) supportY=%.3f source=%d supportCells=%d fallbackCells=%d culled=%d\n",
+                support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                support.supportY, (int)support.source, supportCells, fallbackCells, anchorCulled);
+        }
+    }
+
+    return culled;
+}
+
+// [WWoW-DIVERGENCE] 2026-05-23: source-backed support preservation after
+// rcErodeWalkableArea. Stage manifests on tile 1:40,29 showed one red hallway
+// anchor keeping ~80 source-matching support cells through buildCHF but only 8
+// after erode, then flipping to a lower-only dominant component at median.
+// Restore only the compact spans that (a) were walkable before erode, (b) were
+// removed by erode, and (c) still match the verified source-support floor band
+// near the anchor. This keeps the proof/fix surface bake-side and local.
+static int RestoreAnchorSourceSupportCompactSpansAfterErode(rcCompactHeightfield& chf,
+    const std::vector<unsigned char>& preErodeAreas,
+    const float xyExtent,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const bool logDiagnostics)
+{
+    if (!chf.cells || !chf.spans || !chf.areas || sourceSupports.empty() || preErodeAreas.size() != chf.spanCount)
+        return 0;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+    constexpr float kMaxSourceDistance2D = 0.50f;
+
+    int restored = 0;
+    for (const AnchorSourceSupportProbe& support : sourceSupports)
+    {
+        if (!support.found)
+            continue;
+        if (!support.projectedInside && support.distance2D > kMaxSourceDistance2D)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        if (anchorRecastX < chf.bmin[0] - xyExtent || anchorRecastX > chf.bmax[0] + xyExtent ||
+            anchorRecastZ < chf.bmin[2] - xyExtent || anchorRecastZ > chf.bmax[2] + xyExtent)
+        {
+            continue;
+        }
+
+        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+        const float supportFloorMaxY = support.supportY + kSupportFloorSlackAbove;
+        int restoredCells = 0;
+        int restoredSpans = 0;
+
+        for (int y = 0; y < chf.height; ++y)
+        {
+            const float cellCenterZ = chf.bmin[2] + (y + 0.5f) * chf.cs;
+            if (fabsf(cellCenterZ - anchorRecastZ) > xyExtent)
+                continue;
+
+            for (int x = 0; x < chf.width; ++x)
+            {
+                const float cellCenterX = chf.bmin[0] + (x + 0.5f) * chf.cs;
+                if (fabsf(cellCenterX - anchorRecastX) > xyExtent)
+                    continue;
+
+                const rcCompactCell& cell = chf.cells[x + y * chf.width];
+                bool cellRestored = false;
+                for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                {
+                    if (chf.areas[i] != RC_NULL_AREA || preErodeAreas[i] == RC_NULL_AREA)
+                        continue;
+
+                    const rcCompactSpan& span = chf.spans[i];
+                    const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
+                    if (spanFloor < supportFloorMinY || spanFloor > supportFloorMaxY)
+                        continue;
+
+                    chf.areas[i] = preErodeAreas[i];
+                    ++restored;
+                    ++restoredSpans;
+                    cellRestored = true;
+                }
+
+                if (cellRestored)
+                    ++restoredCells;
+            }
+        }
+
+        if (logDiagnostics)
+        {
+            printf("[CHF-SRC-RESTORE] anchor=(%.3f,%.3f,%.3f) supportY=%.3f source=%d restoredCells=%d restoredSpans=%d\n",
+                support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                support.supportY, (int)support.source, restoredCells, restoredSpans);
+        }
+    }
+
+    return restored;
+}
+
+static void LogAnchorSourceSupportHeightfieldStage(const char* stage, const rcHeightfield& hf,
+    const float xyExtent, const float supportZTolerance,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports)
+{
+    if (!hf.spans || sourceSupports.empty())
+        return;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
+
+    for (const AnchorSourceSupportProbe& support : sourceSupports)
+    {
+        if (!support.found)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        if (anchorRecastX < hf.bmin[0] - xyExtent || anchorRecastX > hf.bmax[0] + xyExtent ||
+            anchorRecastZ < hf.bmin[2] - xyExtent || anchorRecastZ > hf.bmax[2] + xyExtent)
+        {
+            continue;
+        }
+        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+
+        int supportCells = 0;
+        int supportSpans = 0;
+        int lowerCells = 0;
+        int lowerSpans = 0;
+        float bestSupportDelta = std::numeric_limits<float>::max();
+
+        for (int y = 0; y < hf.height; ++y)
+        {
+            const float cellCenterZ = hf.bmin[2] + (y + 0.5f) * hf.cs;
+            if (fabsf(cellCenterZ - anchorRecastZ) > xyExtent)
+                continue;
+
+            for (int x = 0; x < hf.width; ++x)
+            {
+                const float cellCenterX = hf.bmin[0] + (x + 0.5f) * hf.cs;
+                if (fabsf(cellCenterX - anchorRecastX) > xyExtent)
+                    continue;
+
+                bool cellHasSupport = false;
+                bool cellHasLower = false;
+                for (const rcSpan* span = hf.spans[x + y * hf.width]; span; span = span->next)
+                {
+                    if (span->area == RC_NULL_AREA)
+                        continue;
+
+                    const float spanFloor = hf.bmin[1] + (float)span->smax * hf.ch;
+                    if (spanFloor >= supportFloorMinY && spanFloor <= supportFloorMaxY)
+                    {
+                        cellHasSupport = true;
+                        ++supportSpans;
+                        bestSupportDelta = std::min(bestSupportDelta, fabsf(spanFloor - support.supportY));
+                    }
+                    else if (spanFloor < support.supportY - kCompetingLowerFloorMinDrop)
+                    {
+                        cellHasLower = true;
+                        ++lowerSpans;
+                    }
+                }
+
+                if (cellHasSupport)
+                    ++supportCells;
+                if (cellHasLower)
+                    ++lowerCells;
+            }
+        }
+
+        printf("[HF-SRC-ANCHOR] stage=%s anchor=(%.3f,%.3f,%.3f) supportY=%.3f source=%s supportCells=%d supportSpans=%d lowerCells=%d lowerSpans=%d bestDelta=%.3f\n",
+            stage,
+            support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+            support.supportY, MeshTriangleSourceName(support.source),
+            supportCells, supportSpans, lowerCells, lowerSpans,
+            bestSupportDelta == std::numeric_limits<float>::max() ? -1.0f : bestSupportDelta);
+    }
+}
+
+static void LogAnchorSourceSupportCompactStage(const char* stage, const rcCompactHeightfield& chf,
+    const float xyExtent, const float supportZTolerance,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports)
+{
+    if (!chf.cells || !chf.spans || !chf.areas || sourceSupports.empty())
+        return;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
+
+    for (const AnchorSourceSupportProbe& support : sourceSupports)
+    {
+        if (!support.found)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+
+        int supportCells = 0;
+        int supportSpans = 0;
+        int lowerCells = 0;
+        int lowerSpans = 0;
+        float bestSupportDelta = std::numeric_limits<float>::max();
+
+        for (int y = 0; y < chf.height; ++y)
+        {
+            const float cellCenterZ = chf.bmin[2] + (y + 0.5f) * chf.cs;
+            if (fabsf(cellCenterZ - anchorRecastZ) > xyExtent)
+                continue;
+
+            for (int x = 0; x < chf.width; ++x)
+            {
+                const float cellCenterX = chf.bmin[0] + (x + 0.5f) * chf.cs;
+                if (fabsf(cellCenterX - anchorRecastX) > xyExtent)
+                    continue;
+
+                const rcCompactCell& cell = chf.cells[x + y * chf.width];
+                bool cellHasSupport = false;
+                bool cellHasLower = false;
+                for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                {
+                    if (chf.areas[i] == RC_NULL_AREA)
+                        continue;
+
+                    const rcCompactSpan& span = chf.spans[i];
+                    const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
+                    if (spanFloor >= supportFloorMinY && spanFloor <= supportFloorMaxY)
+                    {
+                        cellHasSupport = true;
+                        ++supportSpans;
+                        bestSupportDelta = std::min(bestSupportDelta, fabsf(spanFloor - support.supportY));
+                    }
+                    else if (spanFloor < support.supportY - kCompetingLowerFloorMinDrop)
+                    {
+                        cellHasLower = true;
+                        ++lowerSpans;
+                    }
+                }
+
+                if (cellHasSupport)
+                    ++supportCells;
+                if (cellHasLower)
+                    ++lowerCells;
+            }
+        }
+
+        printf("[CHF-SRC-ANCHOR] stage=%s anchor=(%.3f,%.3f,%.3f) supportY=%.3f source=%s supportCells=%d supportSpans=%d lowerCells=%d lowerSpans=%d bestDelta=%.3f\n",
+            stage,
+            support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+            support.supportY, MeshTriangleSourceName(support.source),
+            supportCells, supportSpans, lowerCells, lowerSpans,
+            bestSupportDelta == std::numeric_limits<float>::max() ? -1.0f : bestSupportDelta);
+    }
+}
+
+static void LogAnchorSourceSupportCompactComponents(const char* stage, const rcCompactHeightfield& chf,
+    const float xyExtent, const float supportZTolerance,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports)
+{
+    if (!chf.cells || !chf.spans || !chf.areas || sourceSupports.empty())
+        return;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
+
+    struct WindowSpan
+    {
+        unsigned int globalIndex = 0;
+        int x = 0;
+        int y = 0;
+        float floor = 0.0f;
+        float distance2D = 0.0f;
+        bool supportRange = false;
+        bool competingLower = false;
+    };
+
+    struct ComponentSummary
+    {
+        int spanCount = 0;
+        int cellCount = 0;
+        int supportSpanCount = 0;
+        int lowerSpanCount = 0;
+        float minFloor = std::numeric_limits<float>::max();
+        float maxFloor = -std::numeric_limits<float>::max();
+        float minDistance2D = std::numeric_limits<float>::max();
+        bool touchesBoundary = false;
+        bool containsAnchorCell = false;
+    };
+
+    for (const AnchorSourceSupportProbe& support : sourceSupports)
+    {
+        if (!support.found)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        if (anchorRecastX < chf.bmin[0] - xyExtent || anchorRecastX > chf.bmax[0] + xyExtent ||
+            anchorRecastZ < chf.bmin[2] - xyExtent || anchorRecastZ > chf.bmax[2] + xyExtent)
+        {
+            continue;
+        }
+
+        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+
+        std::vector<WindowSpan> windowSpans;
+        std::vector<int> localByGlobalSpan(chf.spanCount, -1);
+        int minWindowX = chf.width;
+        int maxWindowX = -1;
+        int minWindowY = chf.height;
+        int maxWindowY = -1;
+
+        for (int y = 0; y < chf.height; ++y)
+        {
+            const float cellCenterZ = chf.bmin[2] + (y + 0.5f) * chf.cs;
+            if (fabsf(cellCenterZ - anchorRecastZ) > xyExtent)
+                continue;
+
+            for (int x = 0; x < chf.width; ++x)
+            {
+                const float cellCenterX = chf.bmin[0] + (x + 0.5f) * chf.cs;
+                if (fabsf(cellCenterX - anchorRecastX) > xyExtent)
+                    continue;
+
+                const rcCompactCell& cell = chf.cells[x + y * chf.width];
+                if (cell.count < 1)
+                    continue;
+
+                minWindowX = std::min(minWindowX, x);
+                maxWindowX = std::max(maxWindowX, x);
+                minWindowY = std::min(minWindowY, y);
+                maxWindowY = std::max(maxWindowY, y);
+
+                const float dxCell = cellCenterX - anchorRecastX;
+                const float dzCell = cellCenterZ - anchorRecastZ;
+                const float cellDistance2D = sqrtf(dxCell * dxCell + dzCell * dzCell);
+                for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                {
+                    if (chf.areas[i] == RC_NULL_AREA)
+                        continue;
+
+                    const rcCompactSpan& span = chf.spans[i];
+                    const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
+
+                    WindowSpan windowSpan;
+                    windowSpan.globalIndex = i;
+                    windowSpan.x = x;
+                    windowSpan.y = y;
+                    windowSpan.floor = spanFloor;
+                    windowSpan.distance2D = cellDistance2D;
+                    windowSpan.supportRange = spanFloor >= supportFloorMinY && spanFloor <= supportFloorMaxY;
+                    windowSpan.competingLower = spanFloor < support.supportY - kCompetingLowerFloorMinDrop;
+                    localByGlobalSpan[i] = static_cast<int>(windowSpans.size());
+                    windowSpans.push_back(windowSpan);
+                }
+            }
+        }
+
+        if (windowSpans.empty())
+            continue;
+
+        std::vector<unsigned char> visited(windowSpans.size(), 0);
+        std::vector<ComponentSummary> components;
+        std::vector<int> stack;
+        std::unordered_set<int> componentCells;
+        stack.reserve(windowSpans.size());
+        componentCells.reserve(windowSpans.size());
+
+        for (size_t localIndex = 0; localIndex < windowSpans.size(); ++localIndex)
+        {
+            if (visited[localIndex])
+                continue;
+
+            ComponentSummary component;
+            componentCells.clear();
+            stack.clear();
+            stack.push_back(static_cast<int>(localIndex));
+            visited[localIndex] = 1;
+
+            while (!stack.empty())
+            {
+                const int currentLocalIndex = stack.back();
+                stack.pop_back();
+
+                const WindowSpan& current = windowSpans[currentLocalIndex];
+                const rcCompactSpan& currentSpan = chf.spans[current.globalIndex];
+                component.spanCount++;
+                component.minFloor = std::min(component.minFloor, current.floor);
+                component.maxFloor = std::max(component.maxFloor, current.floor);
+                component.minDistance2D = std::min(component.minDistance2D, current.distance2D);
+                if (current.supportRange)
+                    component.supportSpanCount++;
+                if (current.competingLower)
+                    component.lowerSpanCount++;
+                if (current.distance2D <= chf.cs)
+                    component.containsAnchorCell = true;
+                if (current.x == minWindowX || current.x == maxWindowX || current.y == minWindowY || current.y == maxWindowY)
+                    component.touchesBoundary = true;
+                componentCells.insert(current.x + current.y * chf.width);
+
+                for (int dir = 0; dir < 4; ++dir)
+                {
+                    const int connection = rcGetCon(currentSpan, dir);
+                    if (connection == RC_NOT_CONNECTED)
+                        continue;
+
+                    const int nx = current.x + rcGetDirOffsetX(dir);
+                    const int ny = current.y + rcGetDirOffsetY(dir);
+                    if (nx < minWindowX || nx > maxWindowX || ny < minWindowY || ny > maxWindowY)
+                        continue;
+
+                    const rcCompactCell& neighborCell = chf.cells[nx + ny * chf.width];
+                    const unsigned int neighborGlobalIndex = neighborCell.index + static_cast<unsigned int>(connection);
+                    if (neighborGlobalIndex >= chf.spanCount)
+                        continue;
+
+                    const int neighborLocalIndex = localByGlobalSpan[neighborGlobalIndex];
+                    if (neighborLocalIndex < 0 || visited[neighborLocalIndex])
+                        continue;
+
+                    visited[neighborLocalIndex] = 1;
+                    stack.push_back(neighborLocalIndex);
+                }
+            }
+
+            component.cellCount = static_cast<int>(componentCells.size());
+            components.push_back(component);
+        }
+
+        std::sort(components.begin(), components.end(),
+            [](const ComponentSummary& left, const ComponentSummary& right)
+            {
+                if ((left.containsAnchorCell ? 1 : 0) != (right.containsAnchorCell ? 1 : 0))
+                    return left.containsAnchorCell > right.containsAnchorCell;
+                if ((left.supportSpanCount > 0 ? 1 : 0) != (right.supportSpanCount > 0 ? 1 : 0))
+                    return left.supportSpanCount > right.supportSpanCount;
+                if (fabsf(left.minDistance2D - right.minDistance2D) > 0.001f)
+                    return left.minDistance2D < right.minDistance2D;
+                return left.spanCount > right.spanCount;
+            });
+
+        printf("[CHF-SRC-COMP] stage=%s anchor=(%.3f,%.3f,%.3f) supportY=%.3f source=%s components=%u\n",
+            stage,
+            support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+            support.supportY, MeshTriangleSourceName(support.source),
+            (unsigned int)components.size());
+
+        const size_t maxComponentsToLog = std::min<size_t>(components.size(), 6);
+        for (size_t index = 0; index < maxComponentsToLog; ++index)
+        {
+            const ComponentSummary& component = components[index];
+            printf("[CHF-SRC-COMP] stage=%s anchor=(%.3f,%.3f,%.3f) comp=%u spans=%d cells=%d supportSpans=%d lowerSpans=%d minFloor=%.3f maxFloor=%.3f minDist=%.3f touchesBoundary=%d containsAnchor=%d\n",
+                stage,
+                support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                (unsigned int)index,
+                component.spanCount,
+                component.cellCount,
+                component.supportSpanCount,
+                component.lowerSpanCount,
+                component.minFloor,
+                component.maxFloor,
+                component.minDistance2D,
+                component.touchesBoundary ? 1 : 0,
+                component.containsAnchorCell ? 1 : 0);
+        }
+    }
+}
+
+static json BuildAnchorSourceSupportJson(const AnchorSourceSupportProbe& support)
+{
+    return
+    {
+        { "found", support.found },
+        { "supportY", support.found ? support.supportY : 0.0f },
+        { "distance2D", support.found ? support.distance2D : -1.0f },
+        { "triIndex", support.found ? support.triIndex : -1 },
+        { "source", support.found ? MeshTriangleSourceName(support.source) : "none" },
+        { "projectedInside", support.found && support.projectedInside },
+        { "deltaFromAnchorZ", support.found ? support.supportY - support.anchor.wowZ : 0.0f },
+    };
+}
+
+static json BuildBaseAnchorStageJson(const char* stageName, const char* kind, const AnchorSourceSupportProbe& support)
+{
+    json stage =
+    {
+        { "name", stageName },
+        { "kind", kind },
+        { "upperSupportExists", false },
+        { "lowerCompetitorExists", false },
+        { "dominantLowerCandidate", false },
+        { "supportCandidateCount", 0 },
+        { "lowerCandidateCount", 0 },
+    };
+
+    if (!support.found)
+        stage["unprovenReason"] = "no_source_support_probe";
+
+    return stage;
+}
+
+static json BuildHeightfieldAnchorStageSummary(const char* stageName, const rcHeightfield& hf,
+    const float xyExtent, const float supportZTolerance,
+    const AnchorSourceSupportProbe& support)
+{
+    json stage = BuildBaseAnchorStageJson(stageName, "heightfield", support);
+    stage["supportCells"] = 0;
+    stage["supportSpans"] = 0;
+    stage["lowerCells"] = 0;
+    stage["lowerSpans"] = 0;
+    stage["bestSupportDelta"] = -1.0f;
+
+    if (!hf.spans || !support.found)
+        return stage;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
+
+    const float anchorRecastX = support.anchor.wowY;
+    const float anchorRecastZ = support.anchor.wowX;
+    const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+    const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+
+    int supportCells = 0;
+    int supportSpans = 0;
+    int lowerCells = 0;
+    int lowerSpans = 0;
+    float bestSupportDelta = std::numeric_limits<float>::max();
+
+    for (int y = 0; y < hf.height; ++y)
+    {
+        const float cellCenterZ = hf.bmin[2] + (y + 0.5f) * hf.cs;
+        if (fabsf(cellCenterZ - anchorRecastZ) > xyExtent)
+            continue;
+
+        for (int x = 0; x < hf.width; ++x)
+        {
+            const float cellCenterX = hf.bmin[0] + (x + 0.5f) * hf.cs;
+            if (fabsf(cellCenterX - anchorRecastX) > xyExtent)
+                continue;
+
+            bool cellHasSupport = false;
+            bool cellHasLower = false;
+            for (const rcSpan* span = hf.spans[x + y * hf.width]; span; span = span->next)
+            {
+                if (span->area == RC_NULL_AREA)
+                    continue;
+
+                const float spanFloor = hf.bmin[1] + (float)span->smax * hf.ch;
+                if (spanFloor >= supportFloorMinY && spanFloor <= supportFloorMaxY)
+                {
+                    cellHasSupport = true;
+                    ++supportSpans;
+                    bestSupportDelta = std::min(bestSupportDelta, fabsf(spanFloor - support.supportY));
+                }
+                else if (spanFloor < support.supportY - kCompetingLowerFloorMinDrop)
+                {
+                    cellHasLower = true;
+                    ++lowerSpans;
+                }
+            }
+
+            if (cellHasSupport)
+                ++supportCells;
+            if (cellHasLower)
+                ++lowerCells;
+        }
+    }
+
+    stage["upperSupportExists"] = supportCells > 0;
+    stage["lowerCompetitorExists"] = lowerCells > 0;
+    stage["supportCandidateCount"] = supportSpans;
+    stage["lowerCandidateCount"] = lowerSpans;
+    stage["supportCells"] = supportCells;
+    stage["supportSpans"] = supportSpans;
+    stage["lowerCells"] = lowerCells;
+    stage["lowerSpans"] = lowerSpans;
+    stage["bestSupportDelta"] = bestSupportDelta == std::numeric_limits<float>::max() ? -1.0f : bestSupportDelta;
+    return stage;
+}
+
+static json BuildCompactAnchorStageSummary(const char* stageName, const rcCompactHeightfield& chf,
+    const float xyExtent, const float supportZTolerance,
+    const AnchorSourceSupportProbe& support, const bool includeComponents)
+{
+    json stage = BuildBaseAnchorStageJson(stageName, "compact", support);
+    stage["supportCells"] = 0;
+    stage["supportSpans"] = 0;
+    stage["lowerCells"] = 0;
+    stage["lowerSpans"] = 0;
+    stage["bestSupportDelta"] = -1.0f;
+
+    if (!chf.cells || !chf.spans || !chf.areas || !support.found)
+        return stage;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
+
+    const float anchorRecastX = support.anchor.wowY;
+    const float anchorRecastZ = support.anchor.wowX;
+    if (anchorRecastX < chf.bmin[0] - xyExtent || anchorRecastX > chf.bmax[0] + xyExtent ||
+        anchorRecastZ < chf.bmin[2] - xyExtent || anchorRecastZ > chf.bmax[2] + xyExtent)
+    {
+        stage["unprovenReason"] = "anchor_outside_compact_window";
+        return stage;
+    }
+
+    const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+    const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+
+    int supportCells = 0;
+    int supportSpans = 0;
+    int lowerCells = 0;
+    int lowerSpans = 0;
+    float bestSupportDelta = std::numeric_limits<float>::max();
+
+    struct WindowSpan
+    {
+        unsigned int globalIndex = 0;
+        int x = 0;
+        int y = 0;
+        float floor = 0.0f;
+        float distance2D = 0.0f;
+        bool supportRange = false;
+        bool competingLower = false;
+    };
+
+    struct ComponentSummary
+    {
+        int spanCount = 0;
+        int cellCount = 0;
+        int supportSpanCount = 0;
+        int lowerSpanCount = 0;
+        float minFloor = std::numeric_limits<float>::max();
+        float maxFloor = -std::numeric_limits<float>::max();
+        float minDistance2D = std::numeric_limits<float>::max();
+        bool touchesBoundary = false;
+        bool containsAnchorCell = false;
+        std::set<unsigned short> regionIds;
+    };
+
+    std::vector<WindowSpan> windowSpans;
+    std::vector<int> localByGlobalSpan(includeComponents ? chf.spanCount : 0, -1);
+    int minWindowX = chf.width;
+    int maxWindowX = -1;
+    int minWindowY = chf.height;
+    int maxWindowY = -1;
+
+    for (int y = 0; y < chf.height; ++y)
+    {
+        const float cellCenterZ = chf.bmin[2] + (y + 0.5f) * chf.cs;
+        if (fabsf(cellCenterZ - anchorRecastZ) > xyExtent)
+            continue;
+
+        for (int x = 0; x < chf.width; ++x)
+        {
+            const float cellCenterX = chf.bmin[0] + (x + 0.5f) * chf.cs;
+            if (fabsf(cellCenterX - anchorRecastX) > xyExtent)
+                continue;
+
+            const rcCompactCell& cell = chf.cells[x + y * chf.width];
+            bool cellHasSupport = false;
+            bool cellHasLower = false;
+            if (cell.count < 1)
+                continue;
+
+            minWindowX = std::min(minWindowX, x);
+            maxWindowX = std::max(maxWindowX, x);
+            minWindowY = std::min(minWindowY, y);
+            maxWindowY = std::max(maxWindowY, y);
+
+            const float dxCell = cellCenterX - anchorRecastX;
+            const float dzCell = cellCenterZ - anchorRecastZ;
+            const float cellDistance2D = sqrtf(dxCell * dxCell + dzCell * dzCell);
+            for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+            {
+                if (chf.areas[i] == RC_NULL_AREA)
+                    continue;
+
+                const rcCompactSpan& span = chf.spans[i];
+                const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
+                const bool supportRange = spanFloor >= supportFloorMinY && spanFloor <= supportFloorMaxY;
+                const bool competingLower = spanFloor < support.supportY - kCompetingLowerFloorMinDrop;
+
+                if (supportRange)
+                {
+                    cellHasSupport = true;
+                    ++supportSpans;
+                    bestSupportDelta = std::min(bestSupportDelta, fabsf(spanFloor - support.supportY));
+                }
+                else if (competingLower)
+                {
+                    cellHasLower = true;
+                    ++lowerSpans;
+                }
+
+                if (includeComponents)
+                {
+                    WindowSpan windowSpan;
+                    windowSpan.globalIndex = i;
+                    windowSpan.x = x;
+                    windowSpan.y = y;
+                    windowSpan.floor = spanFloor;
+                    windowSpan.distance2D = cellDistance2D;
+                    windowSpan.supportRange = supportRange;
+                    windowSpan.competingLower = competingLower;
+                    localByGlobalSpan[i] = static_cast<int>(windowSpans.size());
+                    windowSpans.push_back(windowSpan);
+                }
+            }
+
+            if (cellHasSupport)
+                ++supportCells;
+            if (cellHasLower)
+                ++lowerCells;
+        }
+    }
+
+    stage["upperSupportExists"] = supportCells > 0;
+    stage["lowerCompetitorExists"] = lowerCells > 0;
+    stage["supportCandidateCount"] = supportSpans;
+    stage["lowerCandidateCount"] = lowerSpans;
+    stage["supportCells"] = supportCells;
+    stage["supportSpans"] = supportSpans;
+    stage["lowerCells"] = lowerCells;
+    stage["lowerSpans"] = lowerSpans;
+    stage["bestSupportDelta"] = bestSupportDelta == std::numeric_limits<float>::max() ? -1.0f : bestSupportDelta;
+
+    if (!includeComponents || windowSpans.empty())
+        return stage;
+
+    std::vector<unsigned char> visited(windowSpans.size(), 0);
+    std::vector<ComponentSummary> components;
+    std::vector<int> stack;
+    std::unordered_set<int> componentCells;
+    stack.reserve(windowSpans.size());
+    componentCells.reserve(windowSpans.size());
+
+    for (size_t localIndex = 0; localIndex < windowSpans.size(); ++localIndex)
+    {
+        if (visited[localIndex])
+            continue;
+
+        ComponentSummary component;
+        componentCells.clear();
+        stack.clear();
+        stack.push_back(static_cast<int>(localIndex));
+        visited[localIndex] = 1;
+
+        while (!stack.empty())
+        {
+            const int currentLocalIndex = stack.back();
+            stack.pop_back();
+
+            const WindowSpan& current = windowSpans[currentLocalIndex];
+            const rcCompactSpan& currentSpan = chf.spans[current.globalIndex];
+            component.spanCount++;
+            component.minFloor = std::min(component.minFloor, current.floor);
+            component.maxFloor = std::max(component.maxFloor, current.floor);
+            component.minDistance2D = std::min(component.minDistance2D, current.distance2D);
+            if (current.supportRange)
+                component.supportSpanCount++;
+            if (current.competingLower)
+                component.lowerSpanCount++;
+            if (current.distance2D <= chf.cs)
+                component.containsAnchorCell = true;
+            if (current.x == minWindowX || current.x == maxWindowX || current.y == minWindowY || current.y == maxWindowY)
+                component.touchesBoundary = true;
+            componentCells.insert(current.x + current.y * chf.width);
+            if (currentSpan.reg != 0)
+                component.regionIds.insert(currentSpan.reg);
+
+            for (int dir = 0; dir < 4; ++dir)
+            {
+                const int connection = rcGetCon(currentSpan, dir);
+                if (connection == RC_NOT_CONNECTED)
+                    continue;
+
+                const int nx = current.x + rcGetDirOffsetX(dir);
+                const int ny = current.y + rcGetDirOffsetY(dir);
+                if (nx < minWindowX || nx > maxWindowX || ny < minWindowY || ny > maxWindowY)
+                    continue;
+
+                const rcCompactCell& neighborCell = chf.cells[nx + ny * chf.width];
+                const unsigned int neighborGlobalIndex = neighborCell.index + static_cast<unsigned int>(connection);
+                if (neighborGlobalIndex >= chf.spanCount)
+                    continue;
+
+                const int neighborLocalIndex = localByGlobalSpan[neighborGlobalIndex];
+                if (neighborLocalIndex < 0 || visited[neighborLocalIndex])
+                    continue;
+
+                visited[neighborLocalIndex] = 1;
+                stack.push_back(neighborLocalIndex);
+            }
+        }
+
+        component.cellCount = static_cast<int>(componentCells.size());
+        components.push_back(component);
+    }
+
+    std::sort(components.begin(), components.end(),
+        [](const ComponentSummary& left, const ComponentSummary& right)
+        {
+            if ((left.containsAnchorCell ? 1 : 0) != (right.containsAnchorCell ? 1 : 0))
+                return left.containsAnchorCell > right.containsAnchorCell;
+            if ((left.supportSpanCount > 0 ? 1 : 0) != (right.supportSpanCount > 0 ? 1 : 0))
+                return left.supportSpanCount > right.supportSpanCount;
+            if (fabsf(left.minDistance2D - right.minDistance2D) > 0.001f)
+                return left.minDistance2D < right.minDistance2D;
+            return left.spanCount > right.spanCount;
+        });
+
+    bool supportContainsAnchor = false;
+    bool lowerContainsAnchor = false;
+    bool anySupportComponent = false;
+    json componentArray = json::array();
+    for (size_t index = 0; index < components.size(); ++index)
+    {
+        const ComponentSummary& component = components[index];
+        if (component.supportSpanCount > 0)
+            anySupportComponent = true;
+        if (component.containsAnchorCell && component.supportSpanCount > 0)
+            supportContainsAnchor = true;
+        if (component.containsAnchorCell && component.supportSpanCount == 0 && component.lowerSpanCount > 0)
+            lowerContainsAnchor = true;
+
+        json regionIds = json::array();
+        for (const unsigned short regionId : component.regionIds)
+            regionIds.push_back(regionId);
+
+        componentArray.push_back(
+            {
+                { "componentIndex", static_cast<int>(index) },
+                { "spanCount", component.spanCount },
+                { "cellCount", component.cellCount },
+                { "supportSpanCount", component.supportSpanCount },
+                { "lowerSpanCount", component.lowerSpanCount },
+                { "minFloor", component.minFloor == std::numeric_limits<float>::max() ? 0.0f : component.minFloor },
+                { "maxFloor", component.maxFloor == -std::numeric_limits<float>::max() ? 0.0f : component.maxFloor },
+                { "minDistance2D", component.minDistance2D == std::numeric_limits<float>::max() ? -1.0f : component.minDistance2D },
+                { "touchesBoundary", component.touchesBoundary },
+                { "containsAnchorCell", component.containsAnchorCell },
+                { "regionIds", regionIds },
+            });
+    }
+
+    stage["supportContainsAnchorCell"] = supportContainsAnchor;
+    stage["lowerContainsAnchorCell"] = lowerContainsAnchor;
+    stage["dominantLowerCandidate"] = lowerContainsAnchor && anySupportComponent && !supportContainsAnchor;
+    stage["components"] = componentArray;
+    return stage;
+}
+
+static json BuildContourAnchorStageSummary(const rcContourSet& contours,
+    const float xyExtent, const float supportZTolerance,
+    const AnchorSourceSupportProbe& support)
+{
+    json stage = BuildBaseAnchorStageJson("contours", "contours", support);
+    stage["contours"] = json::array();
+
+    if (!contours.conts || !support.found)
+        return stage;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
+
+    const float anchorRecastX = support.anchor.wowY;
+    const float anchorRecastZ = support.anchor.wowX;
+    const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+    const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+
+    bool supportContainsAnchor = false;
+    bool lowerContainsAnchor = false;
+    int supportCount = 0;
+    int lowerCount = 0;
+
+    for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
+    {
+        const rcContour& contour = contours.conts[contourIndex];
+        if (contour.nverts < 3)
+            continue;
+
+        std::vector<Point2DXZ> polygon;
+        polygon.reserve(contour.nverts);
+        float minX = std::numeric_limits<float>::max();
+        float maxX = -std::numeric_limits<float>::max();
+        float minY = std::numeric_limits<float>::max();
+        float maxY = -std::numeric_limits<float>::max();
+        float minZ = std::numeric_limits<float>::max();
+        float maxZ = -std::numeric_limits<float>::max();
+        for (int vertIndex = 0; vertIndex < contour.nverts; ++vertIndex)
+        {
+            const int* cv = &contour.verts[vertIndex * 4];
+            const float recastX = contours.bmin[0] + cv[0] * contours.cs;
+            const float recastY = contours.bmin[1] + cv[1] * contours.ch;
+            const float recastZ = contours.bmin[2] + cv[2] * contours.cs;
+            polygon.push_back({ recastX, recastZ });
+            minX = std::min(minX, recastX);
+            maxX = std::max(maxX, recastX);
+            minY = std::min(minY, recastY);
+            maxY = std::max(maxY, recastY);
+            minZ = std::min(minZ, recastZ);
+            maxZ = std::max(maxZ, recastZ);
+        }
+
+        if (maxX < anchorRecastX - xyExtent || minX > anchorRecastX + xyExtent ||
+            maxZ < anchorRecastZ - xyExtent || minZ > anchorRecastZ + xyExtent)
+        {
+            continue;
+        }
+
+        const bool containsAnchorProjection = PointInPolygonXZ(polygon, anchorRecastX, anchorRecastZ);
+        const bool supportBand = maxY >= supportFloorMinY && minY <= supportFloorMaxY;
+        const bool competingLower = maxY < support.supportY - kCompetingLowerFloorMinDrop;
+        if (!containsAnchorProjection && !supportBand && !competingLower)
+            continue;
+
+        if (supportBand)
+            ++supportCount;
+        if (competingLower)
+            ++lowerCount;
+        if (containsAnchorProjection && supportBand)
+            supportContainsAnchor = true;
+        if (containsAnchorProjection && competingLower)
+            lowerContainsAnchor = true;
+
+        stage["contours"].push_back(
+            {
+                { "contourIndex", contourIndex },
+                { "regionId", static_cast<unsigned int>(contour.reg) },
+                { "area", static_cast<unsigned int>(contour.area) },
+                { "vertexCount", contour.nverts },
+                { "containsAnchorProjection", containsAnchorProjection },
+                { "supportBand", supportBand },
+                { "competingLower", competingLower },
+                { "minX", minX },
+                { "maxX", maxX },
+                { "minY", minY },
+                { "maxY", maxY },
+                { "minZ", minZ },
+                { "maxZ", maxZ },
+            });
+    }
+
+    stage["upperSupportExists"] = supportCount > 0;
+    stage["lowerCompetitorExists"] = lowerCount > 0;
+    stage["supportCandidateCount"] = supportCount;
+    stage["lowerCandidateCount"] = lowerCount;
+    stage["supportContainsAnchorProjection"] = supportContainsAnchor;
+    stage["lowerContainsAnchorProjection"] = lowerContainsAnchor;
+    stage["dominantLowerCandidate"] = lowerContainsAnchor && supportCount > 0 && !supportContainsAnchor;
+    return stage;
+}
+
+static json BuildPolyMeshAnchorStageSummary(const rcPolyMesh& mesh,
+    const float xyExtent, const float supportZTolerance,
+    const AnchorSourceSupportProbe& support)
+{
+    json stage = BuildBaseAnchorStageJson("polymesh", "polymesh", support);
+    stage["polys"] = json::array();
+
+    if (!mesh.polys || !mesh.verts || !support.found)
+        return stage;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
+
+    const float anchorRecastX = support.anchor.wowY;
+    const float anchorRecastZ = support.anchor.wowX;
+    const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+    const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+
+    bool supportContainsAnchor = false;
+    bool lowerContainsAnchor = false;
+    int supportCount = 0;
+    int lowerCount = 0;
+
+    for (int polyIndex = 0; polyIndex < mesh.npolys; ++polyIndex)
+    {
+        if (mesh.areas[polyIndex] == RC_NULL_AREA)
+            continue;
+
+        const unsigned short* poly = &mesh.polys[polyIndex * mesh.nvp * 2];
+        std::vector<Point2DXZ> polygon;
+        polygon.reserve(mesh.nvp);
+        float minX = std::numeric_limits<float>::max();
+        float maxX = -std::numeric_limits<float>::max();
+        float minY = std::numeric_limits<float>::max();
+        float maxY = -std::numeric_limits<float>::max();
+        float minZ = std::numeric_limits<float>::max();
+        float maxZ = -std::numeric_limits<float>::max();
+
+        for (int vertIndex = 0; vertIndex < mesh.nvp; ++vertIndex)
+        {
+            const unsigned short vertex = poly[vertIndex];
+            if (vertex == RC_MESH_NULL_IDX)
+                break;
+
+            const unsigned short* v = &mesh.verts[vertex * 3];
+            const float recastX = mesh.bmin[0] + v[0] * mesh.cs;
+            const float recastY = mesh.bmin[1] + v[1] * mesh.ch;
+            const float recastZ = mesh.bmin[2] + v[2] * mesh.cs;
+            polygon.push_back({ recastX, recastZ });
+            minX = std::min(minX, recastX);
+            maxX = std::max(maxX, recastX);
+            minY = std::min(minY, recastY);
+            maxY = std::max(maxY, recastY);
+            minZ = std::min(minZ, recastZ);
+            maxZ = std::max(maxZ, recastZ);
+        }
+
+        if (polygon.size() < 3)
+            continue;
+
+        if (maxX < anchorRecastX - xyExtent || minX > anchorRecastX + xyExtent ||
+            maxZ < anchorRecastZ - xyExtent || minZ > anchorRecastZ + xyExtent)
+        {
+            continue;
+        }
+
+        const bool containsAnchorProjection = PointInPolygonXZ(polygon, anchorRecastX, anchorRecastZ);
+        const bool supportBand = maxY >= supportFloorMinY && minY <= supportFloorMaxY;
+        const bool competingLower = maxY < support.supportY - kCompetingLowerFloorMinDrop;
+        if (!containsAnchorProjection && !supportBand && !competingLower)
+            continue;
+
+        if (supportBand)
+            ++supportCount;
+        if (competingLower)
+            ++lowerCount;
+        if (containsAnchorProjection && supportBand)
+            supportContainsAnchor = true;
+        if (containsAnchorProjection && competingLower)
+            lowerContainsAnchor = true;
+
+        stage["polys"].push_back(
+            {
+                { "polyIndex", polyIndex },
+                { "regionId", static_cast<unsigned int>(mesh.regs[polyIndex]) },
+                { "area", static_cast<unsigned int>(mesh.areas[polyIndex]) },
+                { "vertexCount", static_cast<int>(polygon.size()) },
+                { "containsAnchorProjection", containsAnchorProjection },
+                { "supportBand", supportBand },
+                { "competingLower", competingLower },
+                { "minX", minX },
+                { "maxX", maxX },
+                { "minY", minY },
+                { "maxY", maxY },
+                { "minZ", minZ },
+                { "maxZ", maxZ },
+            });
+    }
+
+    stage["upperSupportExists"] = supportCount > 0;
+    stage["lowerCompetitorExists"] = lowerCount > 0;
+    stage["supportCandidateCount"] = supportCount;
+    stage["lowerCandidateCount"] = lowerCount;
+    stage["supportContainsAnchorProjection"] = supportContainsAnchor;
+    stage["lowerContainsAnchorProjection"] = lowerContainsAnchor;
+    stage["dominantLowerCandidate"] = lowerContainsAnchor && supportCount > 0 && !supportContainsAnchor;
+    return stage;
+}
+
+static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshTile& tile,
+    const std::vector<DetourPolyDiagnostics>& diagnostics, const std::vector<unsigned char>& liveGroundMask,
+    const float xyExtent, const float zExtent, const float supportZTolerance,
+    const AnchorSourceSupportProbe& support)
+{
+    json stage = BuildBaseAnchorStageJson("finalDetour", "final-detour", support);
+    stage["candidates"] = json::array();
+
+    if (!tile.header || !support.found)
+        return stage;
+
+    std::unique_ptr<dtNavMeshQuery, decltype(&dtFreeNavMeshQuery)> query(dtAllocNavMeshQuery(), &dtFreeNavMeshQuery);
+    if (!query || dtStatusFailed(query->init(&navMesh, 4096)))
+    {
+        stage["unprovenReason"] = "query_init_failed";
+        return stage;
+    }
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
+
+    const float detourPos[3] = { support.anchor.wowY, support.anchor.wowZ, support.anchor.wowX };
+    const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+    const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+    const dtPolyRef tileRefBase = navMesh.getPolyRefBase(&tile);
+
+    bool supportContainsAnchor = false;
+    bool lowerContainsAnchor = false;
+    int supportCount = 0;
+    int lowerCount = 0;
+    std::unordered_map<dtPolyRef, json> candidateByRef;
+
+    for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+    {
+        if (!liveGroundMask[polyIndex])
+            continue;
+
+        const dtPoly& poly = tile.polys[polyIndex];
+        if (!IsWalkableLandPoly(poly))
+            continue;
+
+        if (!IntersectsAnchorWindow(diagnostics[polyIndex], support.anchor.wowY, support.anchor.wowZ, support.anchor.wowX, xyExtent, zExtent))
+            continue;
+
+        const dtPolyRef polyRef = tileRefBase | static_cast<dtPolyRef>(polyIndex);
+        const AnchorPolyStackProbeResult probe = ProbeAnchorPolyAtCoord(*query, polyRef, detourPos);
+        float supportSurfaceZ = 0.0f;
+        bool usedClosestFallback = false;
+        const bool hasSurface = TryGetAnchorProbeSupportSurfaceZ(probe, supportSurfaceZ, usedClosestFallback);
+        const bool supportCandidate = hasSurface && supportSurfaceZ >= supportFloorMinY && supportSurfaceZ <= supportFloorMaxY;
+        const bool lowerCandidate = hasSurface && supportSurfaceZ < support.supportY - kCompetingLowerFloorMinDrop;
+
+        if (supportCandidate)
+            ++supportCount;
+        if (lowerCandidate)
+            ++lowerCount;
+        if (probe.posOverPoly && supportCandidate)
+            supportContainsAnchor = true;
+        if (probe.posOverPoly && lowerCandidate)
+            lowerContainsAnchor = true;
+
+        json candidate =
+        {
+            { "polyIndex", polyIndex },
+            { "polyRef", FormatPolyRefHex(polyRef) },
+            { "posOverPoly", probe.posOverPoly },
+            { "hasSurfaceZ", probe.hasSurfaceZ },
+            { "hasClosestPoint", probe.hasClosestPoint },
+            { "closestDistance2D", probe.hasClosestPoint ? probe.closestDistance2D : -1.0f },
+            { "surfaceZ", hasSurface ? supportSurfaceZ : 0.0f },
+            { "surfaceFromClosestFallback", hasSurface && usedClosestFallback },
+            { "supportCandidate", supportCandidate },
+            { "competingLower", lowerCandidate },
+            { "minY", diagnostics[polyIndex].minY },
+            { "maxY", diagnostics[polyIndex].maxY },
+            { "horizontalArea2D", diagnostics[polyIndex].horizontalArea2D },
+            { "maxEdge2D", diagnostics[polyIndex].maxEdge2D },
+            { "containsAnchorProjection", probe.posOverPoly },
+        };
+        candidateByRef[polyRef] = candidate;
+        stage["candidates"].push_back(candidate);
+    }
+
+    stage["upperSupportExists"] = supportCount > 0;
+    stage["lowerCompetitorExists"] = lowerCount > 0;
+    stage["supportCandidateCount"] = supportCount;
+    stage["lowerCandidateCount"] = lowerCount;
+    stage["supportContainsAnchorProjection"] = supportContainsAnchor;
+    stage["lowerContainsAnchorProjection"] = lowerContainsAnchor;
+
+    const float nearestExtents[3] = { xyExtent, zExtent, xyExtent };
+    dtQueryFilter filter;
+    dtPolyRef nearestRef = 0;
+    float nearestPoint[3] = { 0.0f, 0.0f, 0.0f };
+    if (dtStatusSucceed(query->findNearestPoly(detourPos, nearestExtents, &filter, &nearestRef, nearestPoint)) && nearestRef != 0)
+    {
+        const AnchorPolyStackProbeResult winnerProbe = ProbeAnchorPolyAtCoord(*query, nearestRef, detourPos);
+        float winnerSurfaceZ = 0.0f;
+        bool winnerFallback = false;
+        const bool winnerHasSurface = TryGetAnchorProbeSupportSurfaceZ(winnerProbe, winnerSurfaceZ, winnerFallback);
+        const bool winnerSupport = winnerHasSurface && winnerSurfaceZ >= supportFloorMinY && winnerSurfaceZ <= supportFloorMaxY;
+        const bool winnerLower = winnerHasSurface && winnerSurfaceZ < support.supportY - kCompetingLowerFloorMinDrop;
+        stage["finalWinner"] =
+        {
+            { "polyRef", FormatPolyRefHex(nearestRef) },
+            { "posOverPoly", winnerProbe.posOverPoly },
+            { "closestDistance2D", winnerProbe.hasClosestPoint ? winnerProbe.closestDistance2D : -1.0f },
+            { "surfaceZ", winnerHasSurface ? winnerSurfaceZ : 0.0f },
+            { "surfaceFromClosestFallback", winnerHasSurface && winnerFallback },
+            { "supportCandidate", winnerSupport },
+            { "competingLower", winnerLower },
+        };
+        stage["dominantLowerCandidate"] = winnerLower && supportCount > 0;
+    }
+
+    return stage;
+}
+
+static void MergeAnchorStageSummary(json& existing, const json& incoming)
+{
+    const auto mergeBool = [&](const char* name)
+    {
+        const bool current = existing.value(name, false);
+        const bool next = incoming.value(name, false);
+        existing[name] = current || next;
+    };
+
+    const auto mergeCount = [&](const char* name)
+    {
+        const int current = existing.value(name, 0);
+        const int next = incoming.value(name, 0);
+        existing[name] = current + next;
+    };
+
+    const auto mergeFloatMin = [&](const char* name)
+    {
+        const float current = existing.value(name, -1.0f);
+        const float next = incoming.value(name, -1.0f);
+        if (current < 0.0f)
+            existing[name] = next;
+        else if (next < 0.0f)
+            existing[name] = current;
+        else
+            existing[name] = std::min(current, next);
+    };
+
+    mergeBool("upperSupportExists");
+    mergeBool("lowerCompetitorExists");
+    mergeBool("dominantLowerCandidate");
+    mergeBool("supportContainsAnchorCell");
+    mergeBool("lowerContainsAnchorCell");
+    mergeBool("supportContainsAnchorProjection");
+    mergeBool("lowerContainsAnchorProjection");
+    mergeCount("supportCandidateCount");
+    mergeCount("lowerCandidateCount");
+    mergeCount("supportCells");
+    mergeCount("supportSpans");
+    mergeCount("lowerCells");
+    mergeCount("lowerSpans");
+    mergeFloatMin("bestSupportDelta");
+
+    for (const char* arrayName : { "components", "contours", "polys", "candidates" })
+    {
+        if (!incoming.contains(arrayName) || !incoming[arrayName].is_array())
+            continue;
+
+        if (!existing.contains(arrayName) || !existing[arrayName].is_array())
+            existing[arrayName] = json::array();
+
+        for (const json& entry : incoming[arrayName])
+            existing[arrayName].push_back(entry);
+    }
+
+    if (incoming.contains("finalWinner") && !existing.contains("finalWinner"))
+        existing["finalWinner"] = incoming["finalWinner"];
+
+    if (incoming.contains("unprovenReason") && !existing.contains("unprovenReason"))
+        existing["unprovenReason"] = incoming["unprovenReason"];
+}
+
+static void MergeAnchorStageIntoManifest(json& anchorStages, const json& incomingStage)
+{
+    const std::string stageName = incomingStage.value("name", "");
+    if (stageName.empty())
+        return;
+
+    for (json& existingStage : anchorStages)
+    {
+        if (existingStage.value("name", "") == stageName)
+        {
+            MergeAnchorStageSummary(existingStage, incomingStage);
+            return;
+        }
+    }
+
+    anchorStages.push_back(incomingStage);
+}
+
+// [WWoW-DIVERGENCE] 2026-05-22: targeted final-tile cleanup for stacked dead-end
+// slabs proven by probe coordinates. This is bake-time only and intentionally
+// tile-local: when an anchor coordinate has at least one real support polygon at
+// the expected surface height, disable competing tiny overlapping ground slabs in
+// the same local stack that cannot actually support that anchor.
+static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
+    const std::vector<DetourPolyDiagnostics>& diagnostics, std::vector<unsigned char>& liveGroundMask,
+    const float xyExtent, const float zExtent, const float supportZTolerance,
+    const std::vector<AnchorPolyStackCoord>& anchorCoords)
+{
+    if (!tile.header || anchorCoords.empty())
+        return 0;
+
+    std::unique_ptr<dtNavMeshQuery, decltype(&dtFreeNavMeshQuery)> query(dtAllocNavMeshQuery(), &dtFreeNavMeshQuery);
+    if (!query)
+    {
+        printf("[DT-ANCHOR-CULL] tile=%d,%d query allocation failed\n", tile.header->x, tile.header->y);
+        return 0;
+    }
+
+    const int maxNodes = 4096;
+    if (dtStatusFailed(query->init(&navMesh, maxNodes)))
+    {
+        printf("[DT-ANCHOR-CULL] tile=%d,%d query init failed maxNodes=%d\n", tile.header->x, tile.header->y, maxNodes);
+        return 0;
+    }
+
+    const dtPolyRef tileRefBase = navMesh.getPolyRefBase(&tile);
+    int culled = 0;
+
+    for (const AnchorPolyStackCoord& anchor : anchorCoords)
+    {
+        const float detourPos[3] = { anchor.wowY, anchor.wowZ, anchor.wowX };
+        const float supportBandMinY = anchor.wowZ + ANCHOR_POLY_STACK_MIN_SUPPORT_DELTA - 0.35f;
+        const float supportBandMaxY = anchor.wowZ + supportZTolerance + 0.75f;
+
+        std::vector<int> windowPolyIndices;
+        std::vector<AnchorPolyStackProbeResult> probeResults;
+        std::vector<unsigned char> supportMask(tile.header->polyCount, 0);
+        int exactSupportCount = 0;
+        int closestFallbackSupportCount = 0;
+
+        for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+        {
+            if (!liveGroundMask[polyIndex])
+                continue;
+
+            const dtPoly& poly = tile.polys[polyIndex];
+            if (!IsWalkableLandPoly(poly))
+                continue;
+
+            if (!IntersectsAnchorWindow(diagnostics[polyIndex], anchor.wowY, anchor.wowZ, anchor.wowX, xyExtent, zExtent))
+                continue;
+
+            windowPolyIndices.push_back(polyIndex);
+            probeResults.push_back(ProbeAnchorPolyAtCoord(*query, tileRefBase | static_cast<dtPolyRef>(polyIndex), detourPos));
+
+            const AnchorPolyStackProbeResult& probe = probeResults.back();
+            float supportSurfaceZ = 0.0f;
+            bool usedClosestFallback = false;
+            if (!TryGetAnchorProbeSupportSurfaceZ(probe, supportSurfaceZ, usedClosestFallback))
+                continue;
+
+            const float surfaceDelta = supportSurfaceZ - anchor.wowZ;
+            if (IsAnchorSupportSurfaceDeltaValid(surfaceDelta, supportZTolerance))
+            {
+                supportMask[polyIndex] = 1;
+                if (usedClosestFallback)
+                    ++closestFallbackSupportCount;
+                else
+                    ++exactSupportCount;
+            }
+        }
+
+        int supportCount = 0;
+        for (const int polyIndex : windowPolyIndices)
+            supportCount += supportMask[polyIndex] ? 1 : 0;
+
+        if (supportCount == 0)
+        {
+            std::vector<int> upperFringeCandidates;
+            for (const int polyIndex : windowPolyIndices)
+            {
+                if (!liveGroundMask[polyIndex] || !IsWalkableLandPoly(tile.polys[polyIndex]))
+                    continue;
+
+                const DetourPolyDiagnostics& polyDiagnostics = diagnostics[polyIndex];
+                if (polyDiagnostics.maxY < anchor.wowZ + ANCHOR_UPPER_FRINGE_MIN_TOP_DELTA)
+                    continue;
+                if (polyDiagnostics.minY > anchor.wowZ + supportZTolerance + 0.75f)
+                    continue;
+
+                upperFringeCandidates.push_back(polyIndex);
+            }
+
+            int lowerFringeCulled = 0;
+            if (!upperFringeCandidates.empty())
+            {
+                for (const int candidateIndex : windowPolyIndices)
+                {
+                    if (!liveGroundMask[candidateIndex])
+                        continue;
+
+                    dtPoly& candidatePoly = tile.polys[candidateIndex];
+                    if (!IsWalkableLandPoly(candidatePoly))
+                        continue;
+
+                    const DetourPolyDiagnostics& candidateDiagnostics = diagnostics[candidateIndex];
+                    if (candidateDiagnostics.maxY > anchor.wowZ + ANCHOR_LOWER_FRINGE_MAX_TOP_DELTA)
+                        continue;
+
+                    const float minOverlapArea = rcMax(
+                        STACKED_SLIVER_MIN_OVERLAP_AREA_2D,
+                        rcMin(candidateDiagnostics.horizontalArea2D * STACKED_SLIVER_MIN_OVERLAP_RATIO, 4.0f));
+
+                    bool overlapsUpperFringe = false;
+                    for (const int upperIndex : upperFringeCandidates)
+                    {
+                        if (upperIndex == candidateIndex || !liveGroundMask[upperIndex])
+                            continue;
+
+                        if (GetDetourBoundsOverlapArea2D(candidateDiagnostics, diagnostics[upperIndex]) < minOverlapArea)
+                            continue;
+
+                        overlapsUpperFringe = true;
+                        break;
+                    }
+
+                    if (!overlapsUpperFringe)
+                        continue;
+
+                    candidatePoly.flags = 0;
+                    candidatePoly.setArea(AREA_NONE);
+                    liveGroundMask[candidateIndex] = 0;
+                    ++culled;
+                    ++lowerFringeCulled;
+                }
+            }
+
+            int posOverCount = 0;
+            int surfacedCount = 0;
+            int nearClosestCount = 0;
+            int supportBandCandidateCount = 0;
+            float closestDistance2DMin = std::numeric_limits<float>::max();
+            int bestSurfacePolyIndex = -1;
+            float bestSurfaceZ = 0.0f;
+            float bestSurfaceDelta = std::numeric_limits<float>::max();
+            int bestSurfacePosOver = 0;
+            for (size_t probeIndex = 0; probeIndex < probeResults.size(); ++probeIndex)
+            {
+                const AnchorPolyStackProbeResult& probe = probeResults[probeIndex];
+                if (probe.posOverPoly)
+                    ++posOverCount;
+                if (probe.hasSurfaceZ)
+                    ++surfacedCount;
+                if (probe.hasClosestPoint)
+                {
+                    closestDistance2DMin = rcMin(closestDistance2DMin, probe.closestDistance2D);
+                    if (probe.closestDistance2D <= STACKED_SLIVER_MAX_CLOSEST_SUPPORT_DISTANCE_2D)
+                        ++nearClosestCount;
+                }
+
+                float candidateSurfaceZ = 0.0f;
+                bool usedClosestFallback = false;
+                if (!TryGetAnchorProbeSupportSurfaceZ(probe, candidateSurfaceZ, usedClosestFallback))
+                    continue;
+
+                const float surfaceDelta = candidateSurfaceZ - anchor.wowZ;
+                if (fabsf(surfaceDelta) < fabsf(bestSurfaceDelta))
+                {
+                    bestSurfaceDelta = surfaceDelta;
+                    bestSurfaceZ = candidateSurfaceZ;
+                    bestSurfacePolyIndex = windowPolyIndices[probeIndex];
+                    bestSurfacePosOver = probe.posOverPoly ? 1 : 0;
+                }
+
+                if (IsAnchorSupportSurfaceDeltaValid(surfaceDelta, supportZTolerance))
+                    ++supportBandCandidateCount;
+            }
+
+            if (closestDistance2DMin == std::numeric_limits<float>::max())
+                closestDistance2DMin = -1.0f;
+            if (bestSurfaceDelta == std::numeric_limits<float>::max())
+                bestSurfaceDelta = 0.0f;
+
+            printf("[DT-ANCHOR-CULL-SKIP] tile=%d,%d anchor=(%.3f,%.3f,%.3f) window=%zu supports=0 upperFringe=%zu lowerFringeCulled=%d posOver=%d surfaced=%d nearClosest=%d supportBandCandidates=%d closest2DMin=%.3f bestSurfacePoly=%d bestSurfaceZ=%.3f bestSurfaceDelta=%.3f bestSurfacePosOver=%d\n",
+                tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+                windowPolyIndices.size(), upperFringeCandidates.size(), lowerFringeCulled,
+                posOverCount, surfacedCount, nearClosestCount,
+                supportBandCandidateCount, closestDistance2DMin,
+                bestSurfacePolyIndex, bestSurfaceZ, bestSurfaceDelta, bestSurfacePosOver);
+            continue;
+        }
+
+        int anchorCulled = 0;
+        for (size_t candidateListIndex = 0; candidateListIndex < windowPolyIndices.size(); ++candidateListIndex)
+        {
+            const int candidateIndex = windowPolyIndices[candidateListIndex];
+            if (!liveGroundMask[candidateIndex] || supportMask[candidateIndex])
+                continue;
+
+            const dtPoly& candidatePoly = tile.polys[candidateIndex];
+            if (!IsWalkableLandPoly(candidatePoly))
+                continue;
+
+            if (!IntersectsAnchorSupportBand(diagnostics[candidateIndex], supportBandMinY, supportBandMaxY))
+                continue;
+
+            const AnchorPolyStackProbeResult& probe = probeResults[candidateListIndex];
+            float candidateSurfaceZ = 0.0f;
+            bool usedClosestFallback = false;
+            const bool hasCandidateSurface = TryGetAnchorProbeSupportSurfaceZ(probe, candidateSurfaceZ, usedClosestFallback);
+            const bool mismatchedSupport =
+                !hasCandidateSurface ||
+                !IsAnchorSupportSurfaceDeltaValid(candidateSurfaceZ - anchor.wowZ, supportZTolerance);
+            if (!mismatchedSupport)
+                continue;
+
+            bool overlapsSupport = false;
+            const float minOverlapArea = rcMax(
+                STACKED_SLIVER_MIN_OVERLAP_AREA_2D,
+                rcMin(diagnostics[candidateIndex].horizontalArea2D * STACKED_SLIVER_MIN_OVERLAP_RATIO, 4.0f));
+
+            for (const int supportIndex : windowPolyIndices)
+            {
+                if (!supportMask[supportIndex])
+                    continue;
+
+                if (GetDetourBoundsOverlapArea2D(diagnostics[candidateIndex], diagnostics[supportIndex]) < minOverlapArea)
+                    continue;
+
+                overlapsSupport = true;
+                break;
+            }
+
+            if (!overlapsSupport)
+                continue;
+
+            dtPoly& candidatePolyMutable = const_cast<dtPoly&>(candidatePoly);
+            candidatePolyMutable.flags = 0;
+            candidatePolyMutable.setArea(AREA_NONE);
+            liveGroundMask[candidateIndex] = 0;
+            ++culled;
+            ++anchorCulled;
+        }
+
+        printf("[DT-ANCHOR-CULL] tile=%d,%d anchor=(%.3f,%.3f,%.3f) window=%zu supports=%d exact=%d closest=%d culled=%d\n",
+            tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+            windowPolyIndices.size(), supportCount, exactSupportCount, closestFallbackSupportCount, anchorCulled);
+    }
+
+    return culled;
 }
 
 static bool HasShadowingUpperGroundPoly(const dtMeshTile& tile, const int polyIndex,
@@ -1279,6 +3604,33 @@ static bool HasShadowingUpperGroundPoly(const dtMeshTile& tile, const int polyIn
         const DetourPolyDiagnostics& other = diagnostics[otherIndex];
         const float verticalGap = other.minY - candidate.maxY;
         if (verticalGap < SHADOWED_LEDGE_MIN_VERTICAL_GAP || verticalGap > SHADOWED_LEDGE_MAX_VERTICAL_GAP)
+            continue;
+
+        if (GetDetourBoundsOverlapArea2D(candidate, other) < minOverlapArea)
+            continue;
+
+        return true;
+    }
+
+    return false;
+}
+
+static bool HasShadowingUpperGroundPocketPoly(const dtMeshTile& tile, const int polyIndex,
+    const std::vector<DetourPolyDiagnostics>& diagnostics, const std::vector<unsigned char>& liveGroundMask)
+{
+    const DetourPolyDiagnostics& candidate = diagnostics[polyIndex];
+    const float minOverlapArea = rcMax(
+        SHADOWED_POCKET_MIN_OVERLAP_AREA_2D,
+        rcMin(candidate.horizontalArea2D * SHADOWED_POCKET_MIN_OVERLAP_RATIO, 6.0f));
+
+    for (int otherIndex = 0; otherIndex < tile.header->polyCount; ++otherIndex)
+    {
+        if (otherIndex == polyIndex || !liveGroundMask[otherIndex])
+            continue;
+
+        const DetourPolyDiagnostics& other = diagnostics[otherIndex];
+        const float verticalGap = other.minY - candidate.maxY;
+        if (verticalGap < SHADOWED_POCKET_MIN_VERTICAL_GAP || verticalGap > SHADOWED_POCKET_MAX_VERTICAL_GAP)
             continue;
 
         if (GetDetourBoundsOverlapArea2D(candidate, other) < minOverlapArea)
@@ -1351,7 +3703,179 @@ static ShadowedLedgeComponent CollectShadowedLedgeComponent(const dtMeshTile& ti
     return component;
 }
 
-static int CullSuspiciousDetourPolys(dtMeshTile& tile, const float maxClimbWorld, const bool trimShadowedLedges)
+static bool IsTinyShadowedLedgeFallbackCandidate(const DetourPolyDiagnostics& memberDiagnostics)
+{
+    const float memberHeightRange = memberDiagnostics.maxY - memberDiagnostics.minY;
+    if (memberDiagnostics.horizontalArea2D > SHADOWED_LEDGE_FALLBACK_MEMBER_MAX_AREA_2D)
+        return false;
+
+    if (memberDiagnostics.maxEdge2D > SHADOWED_LEDGE_FALLBACK_MEMBER_MAX_EDGE_2D)
+        return false;
+
+    if (memberHeightRange > SHADOWED_LEDGE_FALLBACK_MEMBER_MAX_Z_RANGE)
+        return false;
+
+    return true;
+}
+
+static bool OverlapsShadowedLedgeSeedCandidate(const DetourPolyDiagnostics& seedDiagnostics,
+    const DetourPolyDiagnostics& memberDiagnostics)
+{
+    const float minOverlapArea = rcMax(
+        SHADOWED_LEDGE_MIN_OVERLAP_AREA_2D,
+        rcMin(seedDiagnostics.horizontalArea2D * SHADOWED_LEDGE_MIN_OVERLAP_RATIO, 3.0f));
+    return GetDetourBoundsOverlapArea2D(seedDiagnostics, memberDiagnostics) >= minOverlapArea;
+}
+
+struct ShadowedPocketComponent
+{
+    std::vector<int> members;
+    float totalHorizontalArea2D = 0.0f;
+    float minHeight = std::numeric_limits<float>::max();
+    float maxHeight = -std::numeric_limits<float>::max();
+    bool hasShadowingUpperGround = false;
+};
+
+static ShadowedPocketComponent CollectShadowedPocketComponent(const dtMeshTile& tile, const int startPolyIndex,
+    const std::vector<DetourPolyDiagnostics>& diagnostics, const std::vector<unsigned char>& liveGroundMask,
+    std::vector<unsigned char>& visitedMask)
+{
+    ShadowedPocketComponent component;
+    std::vector<int> pending;
+    pending.push_back(startPolyIndex);
+    visitedMask[startPolyIndex] = 1;
+
+    while (!pending.empty())
+    {
+        const int polyIndex = pending.back();
+        pending.pop_back();
+        const dtPoly& poly = tile.polys[polyIndex];
+        const DetourPolyDiagnostics& polyDiagnostics = diagnostics[polyIndex];
+
+        component.members.push_back(polyIndex);
+        component.totalHorizontalArea2D += polyDiagnostics.horizontalArea2D;
+        component.minHeight = rcMin(component.minHeight, polyDiagnostics.minY);
+        component.maxHeight = rcMax(component.maxHeight, polyDiagnostics.maxY);
+        component.hasShadowingUpperGround = component.hasShadowingUpperGround ||
+            HasShadowingUpperGroundPocketPoly(tile, polyIndex, diagnostics, liveGroundMask);
+
+        for (int edgeIndex = 0; edgeIndex < poly.vertCount; ++edgeIndex)
+        {
+            const unsigned short neighbor = poly.neis[edgeIndex];
+            if (neighbor == 0 || (neighbor & DT_EXT_LINK) != 0)
+                continue;
+
+            const int neighborIndex = static_cast<int>(neighbor) - 1;
+            if (neighborIndex < 0 || neighborIndex >= tile.header->polyCount)
+                continue;
+
+            if (visitedMask[neighborIndex] || !liveGroundMask[neighborIndex])
+                continue;
+
+            if (!IsShadowedPocketCandidate(diagnostics[neighborIndex]))
+                continue;
+
+            visitedMask[neighborIndex] = 1;
+            pending.push_back(neighborIndex);
+        }
+    }
+
+    if (component.minHeight == std::numeric_limits<float>::max())
+        component.minHeight = 0.0f;
+    if (component.maxHeight == -std::numeric_limits<float>::max())
+        component.maxHeight = 0.0f;
+
+    return component;
+}
+
+struct OffMeshAnchorSteepTrimComponent
+{
+    std::vector<int> members;
+    float totalHorizontalArea2D = 0.0f;
+    float minHeight = std::numeric_limits<float>::max();
+    float maxHeight = -std::numeric_limits<float>::max();
+};
+
+static OffMeshAnchorSteepTrimComponent CollectOffMeshAnchorSteepTrimComponent(const dtMeshTile& tile,
+    const int startPolyIndex, const std::vector<DetourPolyDiagnostics>& diagnostics,
+    const std::vector<unsigned char>& liveGroundMask, std::vector<unsigned char>& visitedMask,
+    const OffMeshAnchorSteepTrimSettings& settings)
+{
+    OffMeshAnchorSteepTrimComponent component;
+    std::vector<int> pending;
+    pending.push_back(startPolyIndex);
+    visitedMask[startPolyIndex] = 1;
+
+    while (!pending.empty())
+    {
+        const int polyIndex = pending.back();
+        pending.pop_back();
+        const dtPoly& poly = tile.polys[polyIndex];
+        const DetourPolyDiagnostics& polyDiagnostics = diagnostics[polyIndex];
+
+        component.members.push_back(polyIndex);
+        component.totalHorizontalArea2D += polyDiagnostics.horizontalArea2D;
+        component.minHeight = rcMin(component.minHeight, polyDiagnostics.minY);
+        component.maxHeight = rcMax(component.maxHeight, polyDiagnostics.maxY);
+
+        for (int edgeIndex = 0; edgeIndex < poly.vertCount; ++edgeIndex)
+        {
+            const unsigned short neighbor = poly.neis[edgeIndex];
+            if (neighbor == 0 || (neighbor & DT_EXT_LINK) != 0)
+                continue;
+
+            const int neighborIndex = static_cast<int>(neighbor) - 1;
+            if (neighborIndex < 0 || neighborIndex >= tile.header->polyCount)
+                continue;
+
+            if (visitedMask[neighborIndex] || !liveGroundMask[neighborIndex])
+                continue;
+
+            if (!IsOffMeshAnchorSteepTrimCandidate(diagnostics[neighborIndex], settings))
+                continue;
+
+            visitedMask[neighborIndex] = 1;
+            pending.push_back(neighborIndex);
+        }
+    }
+
+    if (component.minHeight == std::numeric_limits<float>::max())
+        component.minHeight = 0.0f;
+    if (component.maxHeight == -std::numeric_limits<float>::max())
+        component.maxHeight = 0.0f;
+
+    return component;
+}
+
+static int FindOffMeshStartLandingPolyIndex(const dtNavMesh& navMesh, const dtMeshTile& tile,
+    const dtOffMeshConnection& connection)
+{
+    if (!tile.header || connection.poly >= tile.header->polyCount)
+        return -1;
+
+    const dtPoly& offMeshPoly = tile.polys[connection.poly];
+    for (unsigned int linkIndex = offMeshPoly.firstLink; linkIndex != DT_NULL_LINK; linkIndex = tile.links[linkIndex].next)
+    {
+        const dtLink& link = tile.links[linkIndex];
+        if (link.edge != 0)
+            continue;
+
+        const dtMeshTile* linkedTile = nullptr;
+        const dtPoly* linkedPoly = nullptr;
+        if (dtStatusFailed(navMesh.getTileAndPolyByRef(link.ref, &linkedTile, &linkedPoly)) || linkedTile != &tile || !linkedPoly)
+            continue;
+
+        return static_cast<int>(linkedPoly - tile.polys);
+    }
+
+    return -1;
+}
+
+static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const float maxClimbWorld,
+    const bool trimShadowedLedges, const bool trimOffMeshAnchorSteepTrim, const bool trimShadowedPockets,
+    const OffMeshAnchorSteepTrimSettings& offMeshAnchorSteepTrimSettings,
+    const bool trimAnchorPolyStacks, const float anchorPolyStackXyExtent, const float anchorPolyStackZExtent,
+    const float anchorPolyStackSupportZTolerance, const std::vector<AnchorPolyStackCoord>& anchorPolyStackCoords)
 {
     if (!tile.header)
         return 0;
@@ -1385,6 +3909,60 @@ static int CullSuspiciousDetourPolys(dtMeshTile& tile, const float maxClimbWorld
         ++culled;
     }
 
+    if (trimOffMeshAnchorSteepTrim)
+    {
+        std::vector<unsigned char> visitedMask(tile.header->polyCount, 0);
+        for (int offMeshIndex = 0; offMeshIndex < tile.header->offMeshConCount; ++offMeshIndex)
+        {
+            const dtOffMeshConnection& connection = tile.offMeshCons[offMeshIndex];
+            const int landingPolyIndex = FindOffMeshStartLandingPolyIndex(navMesh, tile, connection);
+            if (landingPolyIndex < 0 || landingPolyIndex >= tile.header->polyCount)
+                continue;
+
+            if (visitedMask[landingPolyIndex] || !liveGroundMask[landingPolyIndex])
+                continue;
+
+            if (!IsOffMeshAnchorSteepTrimCandidate(diagnostics[landingPolyIndex], offMeshAnchorSteepTrimSettings))
+                continue;
+
+            const OffMeshAnchorSteepTrimComponent component = CollectOffMeshAnchorSteepTrimComponent(
+                tile, landingPolyIndex, diagnostics, liveGroundMask, visitedMask, offMeshAnchorSteepTrimSettings);
+
+            const float componentHeightRange = component.maxHeight - component.minHeight;
+            const bool componentTooLarge =
+                component.totalHorizontalArea2D > offMeshAnchorSteepTrimSettings.componentMaxArea2D ||
+                componentHeightRange > offMeshAnchorSteepTrimSettings.componentMaxZRange;
+            if (componentTooLarge)
+            {
+                printf("[DT-OFFMESH-TRIM] tile=%d,%d offMesh=%d landingPoly=%d members=%zu area=%.2f zRange=%.2f action=skip-too-large\n",
+                    tile.header->x, tile.header->y, offMeshIndex, landingPolyIndex,
+                    component.members.size(), component.totalHorizontalArea2D, componentHeightRange);
+                continue;
+            }
+
+            int componentCulled = 0;
+            for (const int memberIndex : component.members)
+            {
+                dtPoly& memberPoly = tile.polys[memberIndex];
+                if (!liveGroundMask[memberIndex] || !IsWalkableLandPoly(memberPoly))
+                    continue;
+
+                memberPoly.flags = 0;
+                memberPoly.setArea(AREA_NONE);
+                liveGroundMask[memberIndex] = 0;
+                ++culled;
+                ++componentCulled;
+            }
+
+            if (componentCulled > 0)
+            {
+                printf("[DT-OFFMESH-TRIM] tile=%d,%d offMesh=%d landingPoly=%d members=%zu area=%.2f zRange=%.2f culled=%d\n",
+                    tile.header->x, tile.header->y, offMeshIndex, landingPolyIndex,
+                    component.members.size(), component.totalHorizontalArea2D, componentHeightRange, componentCulled);
+            }
+        }
+    }
+
     if (trimShadowedLedges)
     {
         std::vector<unsigned char> visitedMask(tile.header->polyCount, 0);
@@ -1401,9 +3979,120 @@ static int CullSuspiciousDetourPolys(dtMeshTile& tile, const float maxClimbWorld
                 tile, polyIndex, diagnostics, liveGroundMask, visitedMask);
 
             const float componentHeightRange = component.maxHeight - component.minHeight;
+            const bool componentTooWide = component.totalHorizontalArea2D > SHADOWED_LEDGE_COMPONENT_MAX_AREA_2D;
+            const bool componentTooTall = componentHeightRange > SHADOWED_LEDGE_COMPONENT_MAX_Z_RANGE;
+            if (!component.hasShadowingUpperGround || componentTooWide || componentTooTall)
+            {
+                if (component.hasShadowingUpperGround)
+                {
+                    const DetourPolyDiagnostics& seedDiagnostics = diagnostics[polyIndex];
+                    printf("[DT-SHADOW-LEDGE-SKIP] tile=%d,%d seedPoly=%d members=%zu area=%.2f zRange=%.2f shadow=1 tooWide=%d tooTall=%d\n",
+                        tile.header->x, tile.header->y, polyIndex, component.members.size(),
+                        component.totalHorizontalArea2D, componentHeightRange,
+                        componentTooWide ? 1 : 0, componentTooTall ? 1 : 0);
+
+                    std::vector<int> fallbackCandidates;
+                    fallbackCandidates.reserve(component.members.size());
+                    for (const int memberIndex : component.members)
+                    {
+                        const dtPoly& memberPoly = tile.polys[memberIndex];
+                        if (!liveGroundMask[memberIndex] || !IsWalkableLandPoly(memberPoly))
+                            continue;
+
+                        const DetourPolyDiagnostics& memberDiagnostics = diagnostics[memberIndex];
+                        if (!IsTinyShadowedLedgeFallbackCandidate(memberDiagnostics))
+                            continue;
+
+                        if (!OverlapsShadowedLedgeSeedCandidate(seedDiagnostics, memberDiagnostics))
+                            continue;
+
+                        if (!HasShadowingUpperGroundPoly(tile, memberIndex, diagnostics, liveGroundMask))
+                            continue;
+
+                        fallbackCandidates.push_back(memberIndex);
+                    }
+
+                    std::sort(fallbackCandidates.begin(), fallbackCandidates.end(),
+                        [&](const int lhs, const int rhs)
+                        {
+                            const DetourPolyDiagnostics& left = diagnostics[lhs];
+                            const DetourPolyDiagnostics& right = diagnostics[rhs];
+                            if (left.horizontalArea2D != right.horizontalArea2D)
+                                return left.horizontalArea2D > right.horizontalArea2D;
+                            if (left.maxEdge2D != right.maxEdge2D)
+                                return left.maxEdge2D > right.maxEdge2D;
+                            return lhs < rhs;
+                        });
+
+                    int fallbackCulled = 0;
+                    for (const int memberIndex : fallbackCandidates)
+                    {
+                        if (fallbackCulled >= SHADOWED_LEDGE_FALLBACK_MAX_CULLS_PER_COMPONENT)
+                            break;
+
+                        dtPoly& memberPoly = tile.polys[memberIndex];
+                        if (!liveGroundMask[memberIndex] || !IsWalkableLandPoly(memberPoly))
+                            continue;
+
+                        memberPoly.flags = 0;
+                        memberPoly.setArea(AREA_NONE);
+                        liveGroundMask[memberIndex] = 0;
+                        ++culled;
+                        ++fallbackCulled;
+                    }
+
+                    if (fallbackCulled > 0)
+                    {
+                        printf("[DT-SHADOW-LEDGE-FALLBACK] tile=%d,%d seedPoly=%d members=%zu area=%.2f zRange=%.2f culled=%d\n",
+                            tile.header->x, tile.header->y, polyIndex, component.members.size(),
+                            component.totalHorizontalArea2D, componentHeightRange, fallbackCulled);
+                    }
+                }
+                continue;
+            }
+
+            int componentCulled = 0;
+            for (const int memberIndex : component.members)
+            {
+                dtPoly& memberPoly = tile.polys[memberIndex];
+                if (!liveGroundMask[memberIndex] || !IsWalkableLandPoly(memberPoly))
+                    continue;
+
+                memberPoly.flags = 0;
+                memberPoly.setArea(AREA_NONE);
+                liveGroundMask[memberIndex] = 0;
+                ++culled;
+                ++componentCulled;
+            }
+
+            if (componentCulled > 0)
+            {
+                printf("[DT-SHADOW-LEDGE-CULL] tile=%d,%d seedPoly=%d members=%zu area=%.2f zRange=%.2f culled=%d\n",
+                    tile.header->x, tile.header->y, polyIndex, component.members.size(),
+                    component.totalHorizontalArea2D, componentHeightRange, componentCulled);
+            }
+        }
+    }
+
+    if (trimShadowedPockets)
+    {
+        std::vector<unsigned char> visitedMask(tile.header->polyCount, 0);
+        for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+        {
+            dtPoly& poly = tile.polys[polyIndex];
+            if (visitedMask[polyIndex] || !liveGroundMask[polyIndex] || !IsWalkableLandPoly(poly))
+                continue;
+
+            if (!IsShadowedPocketCandidate(diagnostics[polyIndex]))
+                continue;
+
+            const ShadowedPocketComponent component = CollectShadowedPocketComponent(
+                tile, polyIndex, diagnostics, liveGroundMask, visitedMask);
+
+            const float componentHeightRange = component.maxHeight - component.minHeight;
             if (!component.hasShadowingUpperGround ||
-                component.totalHorizontalArea2D > SHADOWED_LEDGE_COMPONENT_MAX_AREA_2D ||
-                componentHeightRange > SHADOWED_LEDGE_COMPONENT_MAX_Z_RANGE)
+                component.totalHorizontalArea2D > SHADOWED_POCKET_COMPONENT_MAX_AREA_2D ||
+                componentHeightRange > SHADOWED_POCKET_COMPONENT_MAX_Z_RANGE)
                 continue;
 
             for (const int memberIndex : component.members)
@@ -1418,6 +4107,14 @@ static int CullSuspiciousDetourPolys(dtMeshTile& tile, const float maxClimbWorld
                 ++culled;
             }
         }
+    }
+
+    if (trimAnchorPolyStacks)
+    {
+        culled += CullAnchorPolyStacks(
+            navMesh, tile, diagnostics, liveGroundMask,
+            anchorPolyStackXyExtent, anchorPolyStackZExtent, anchorPolyStackSupportZTolerance,
+            anchorPolyStackCoords);
     }
 
     return culled;
@@ -1445,6 +4142,51 @@ static void from_json(const json& j, rcConfig& config)
         config.maxVertsPerPoly = DT_VERTS_PER_POLYGON;
     config.detailSampleDist       = j["detailSampleDist"].get<float>();
     config.detailSampleMaxError   = j["detailSampleMaxError"].get<float>();
+}
+
+enum class RegionPartitionType
+{
+    Watershed,
+    Monotone,
+    Layers,
+};
+
+static RegionPartitionType ParseRegionPartitionType(const json& j)
+{
+    std::string partitionType = "watershed";
+    auto partitionTypeIt = j.find("partitionType");
+    if (partitionTypeIt != j.end())
+    {
+        if (partitionTypeIt->is_string())
+            partitionType = partitionTypeIt->get<std::string>();
+        else
+            printf("[CONFIG] partitionType present but not a string: %s\n", partitionTypeIt->dump().c_str());
+    }
+
+    if (partitionType == "watershed")
+        return RegionPartitionType::Watershed;
+    if (partitionType == "monotone")
+        return RegionPartitionType::Monotone;
+    if (partitionType == "layers")
+        return RegionPartitionType::Layers;
+
+    printf("[CONFIG] Unknown partitionType='%s'; falling back to watershed\n", partitionType.c_str());
+    return RegionPartitionType::Watershed;
+}
+
+static const char* ToString(RegionPartitionType partitionType)
+{
+    switch (partitionType)
+    {
+        case RegionPartitionType::Watershed:
+            return "watershed";
+        case RegionPartitionType::Monotone:
+            return "monotone";
+        case RegionPartitionType::Layers:
+            return "layers";
+    }
+
+    return "watershed";
 }
 
 namespace MMAP
@@ -1687,8 +4429,8 @@ namespace MMAP
         rcConfig config;
         memset(&config, 0, sizeof(rcConfig));
         json jsonTileConfig = getTileConfig(mapID, tileX, tileY);
-        DebugStageCrop debugStageCrop = ReadDebugStageCrop(jsonTileConfig);
-        if (m_debug && debugStageCrop.enabled)
+        const std::vector<DebugStageCrop> debugStageCrops = ReadDebugStageCrops(jsonTileConfig);
+        if (m_debug && !debugStageCrops.empty())
             ResetDebugStageFiles(mapID, tileX, tileY);
         int const quickFromConfig = jsonTileConfig["quick"].get<int>();
         if (quickFromConfig >= 0)
@@ -1810,6 +4552,192 @@ namespace MMAP
         int inWaterGround = config.walkableHeight;
         int stepForGroundInheriteWater = (int)ceilf(30.0f / config.ch);
         int gameObjectMarks = 0;
+        const bool trimAnchorSourceSupportCompactSpans = jsonTileConfig["preRegionCullAnchorSourceSupportCompetingSpans"].get<bool>();
+        const bool restoreAnchorSourceSupportAfterErode = jsonTileConfig["preRegionRestoreAnchorSourceSupportAfterErode"].get<bool>();
+        const bool anchorSourceSupportFallbackToWindow = jsonTileConfig["preRegionCullAnchorSourceSupportFallbackToWindow"].get<bool>();
+        const bool writeAnchorStageManifest = jsonTileConfig.value("writeAnchorStageManifest", false);
+        const bool logAnchorStageDiagnostics = jsonTileConfig.value("logAnchorStageDiagnostics", false);
+        const bool trimAnchorPolyStacks = jsonTileConfig["postDetourCullAnchorPolyStacks"].get<bool>();
+        const float anchorSourceSupportXyExtent = JsonFloatOrDefault(
+            jsonTileConfig, "postDetourCullAnchorPolyStacksXyExtent", 2.0f);
+        const float anchorSourceSupportZExtent = JsonFloatOrDefault(
+            jsonTileConfig, "postDetourCullAnchorPolyStacksZExtent", 10.0f);
+        const float anchorSourceSupportZTolerance = JsonFloatOrDefault(
+            jsonTileConfig, "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f);
+        const bool trimAnchorUpperCompactSpans = jsonTileConfig["preRegionCullAnchorUpperCompactSpans"].get<bool>();
+        const std::vector<AnchorPolyStackCoord> anchorPolyStackCoords =
+            (trimAnchorSourceSupportCompactSpans || writeAnchorStageManifest || trimAnchorUpperCompactSpans || trimAnchorPolyStacks)
+                ? ParseAnchorPolyStackCoords(jsonTileConfig)
+                : std::vector<AnchorPolyStackCoord>();
+        const std::vector<AnchorPolyStackCoord> anchorManifestExtraCoords =
+            writeAnchorStageManifest
+                ? ParseAnchorStageManifestCoords(jsonTileConfig)
+                : std::vector<AnchorPolyStackCoord>();
+        const std::vector<AnchorPolyStackCoord> anchorManifestCoords =
+            writeAnchorStageManifest
+                ? MergeUniqueAnchorCoords(anchorPolyStackCoords, anchorManifestExtraCoords)
+                : std::vector<AnchorPolyStackCoord>();
+        const float walkableSlopeAngleTerrain = config.walkableSlopeAngle;
+        const float walkableSlopeAngleVMaps = jsonTileConfig["walkableSlopeAngleVMaps"].get<float>();
+        const float playerClimbLimit = cosf(52.0f / 180.0f * RC_PI);
+        const float maxClimbLimitTerrain = cosf(walkableSlopeAngleTerrain / 180.0f * RC_PI);
+        const float maxClimbLimitVmaps = cosf(walkableSlopeAngleVMaps / 180.0f * RC_PI);
+        std::vector<unsigned char> rasterAreas(tTriCount, AREA_NONE);
+        float norm[3];
+        for (int triIndex = 0; triIndex < tTriCount; ++triIndex)
+        {
+            const int* tri = &tTris[triIndex * 3];
+            calcTriNormal(&tVerts[tri[0] * 3], &tVerts[tri[1] * 3], &tVerts[tri[2] * 3], norm);
+            const bool terrain = meshData.IsTerrainTriangle(triIndex);
+            float climbHardLimit = terrain ? maxClimbLimitTerrain : maxClimbLimitVmaps;
+            if (norm[1] > playerClimbLimit)
+                rasterAreas[triIndex] = AREA_GROUND;
+            else if (norm[1] > climbHardLimit)
+                rasterAreas[triIndex] = AREA_STEEP_SLOPE;
+
+            if (!terrain)
+            {
+                switch (rasterAreas[triIndex])
+                {
+                case AREA_GROUND:
+                    rasterAreas[triIndex] = AREA_GROUND_MODEL;
+                    break;
+                case AREA_STEEP_SLOPE:
+                    rasterAreas[triIndex] = AREA_STEEP_SLOPE_MODEL;
+                    break;
+                }
+            }
+
+            if (!terrain && rasterAreas[triIndex] && !m_quick)
+            {
+                float verts[9];
+                for (int corner = 0; corner < 3; ++corner)
+                    for (int coord = 0; coord < 3; ++coord)
+                        verts[3 * corner + coord] = (5 * tVerts[tri[corner] * 3 + coord] + tVerts[tri[(corner + 1) % 3] * 3 + coord] + tVerts[tri[(corner + 2) % 3] * 3 + coord]) / 7;
+
+                if (m_terrainBuilder->IsUnderMap(&verts[0]) && m_terrainBuilder->IsUnderMap(&verts[3]) && m_terrainBuilder->IsUnderMap(&verts[6]))
+                    rasterAreas[triIndex] = AREA_NONE;
+            }
+        }
+        const std::vector<AnchorSourceSupportProbe> anchorSourceSupports =
+            (trimAnchorSourceSupportCompactSpans || restoreAnchorSourceSupportAfterErode)
+                ? ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorPolyStackCoords,
+                    logAnchorStageDiagnostics)
+                : std::vector<AnchorSourceSupportProbe>();
+        const std::vector<AnchorSourceSupportProbe> anchorManifestSupports =
+            writeAnchorStageManifest
+                ? ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorManifestCoords,
+                    logAnchorStageDiagnostics)
+                : std::vector<AnchorSourceSupportProbe>();
+        json anchorStageManifest;
+        if (writeAnchorStageManifest && !anchorManifestSupports.empty())
+        {
+            anchorStageManifest =
+            {
+                { "schemaVersion", 1 },
+                { "mapId", mapID },
+                { "tileX", tileX },
+                { "tileY", tileY },
+                { "configKey", std::to_string(tileX) + std::to_string(tileY) },
+                { "analysisWindow",
+                    {
+                        { "xyExtent", anchorSourceSupportXyExtent },
+                        { "zExtent", anchorSourceSupportZExtent },
+                        { "supportZTolerance", anchorSourceSupportZTolerance },
+                    }
+                },
+                { "anchors", json::array() },
+            };
+
+            for (const AnchorSourceSupportProbe& manifestSupport : anchorManifestSupports)
+            {
+                anchorStageManifest["anchors"].push_back(
+                    {
+                        { "id", FormatAnchorStageId(manifestSupport.anchor) },
+                        { "label", FormatAnchorStageId(manifestSupport.anchor) },
+                        { "wowX", manifestSupport.anchor.wowX },
+                        { "wowY", manifestSupport.anchor.wowY },
+                        { "wowZ", manifestSupport.anchor.wowZ },
+                        { "sourceSupport", BuildAnchorSourceSupportJson(manifestSupport) },
+                        { "stages", json::array() },
+                    });
+            }
+        }
+
+        auto appendHeightfieldManifestStage = [&](const char* stageName, const rcHeightfield& hf)
+        {
+            if (!writeAnchorStageManifest)
+                return;
+
+            for (size_t anchorIndex = 0; anchorIndex < anchorManifestSupports.size(); ++anchorIndex)
+            {
+                MergeAnchorStageIntoManifest(
+                    anchorStageManifest["anchors"][anchorIndex]["stages"],
+                    BuildHeightfieldAnchorStageSummary(
+                        stageName,
+                        hf,
+                        anchorSourceSupportXyExtent,
+                        anchorSourceSupportZTolerance,
+                        anchorManifestSupports[anchorIndex]));
+            }
+        };
+
+        auto appendCompactManifestStage = [&](const char* stageName, const rcCompactHeightfield& chf, const bool includeComponents)
+        {
+            if (!writeAnchorStageManifest)
+                return;
+
+            for (size_t anchorIndex = 0; anchorIndex < anchorManifestSupports.size(); ++anchorIndex)
+            {
+                MergeAnchorStageIntoManifest(
+                    anchorStageManifest["anchors"][anchorIndex]["stages"],
+                    BuildCompactAnchorStageSummary(
+                        stageName,
+                        chf,
+                        anchorSourceSupportXyExtent,
+                        anchorSourceSupportZTolerance,
+                        anchorManifestSupports[anchorIndex],
+                        includeComponents));
+            }
+        };
+
+        auto appendContourManifestStage = [&](const rcContourSet& contours)
+        {
+            if (!writeAnchorStageManifest)
+                return;
+
+            for (size_t anchorIndex = 0; anchorIndex < anchorManifestSupports.size(); ++anchorIndex)
+            {
+                MergeAnchorStageIntoManifest(
+                    anchorStageManifest["anchors"][anchorIndex]["stages"],
+                    BuildContourAnchorStageSummary(
+                        contours,
+                        anchorSourceSupportXyExtent,
+                        anchorSourceSupportZTolerance,
+                        anchorManifestSupports[anchorIndex]));
+            }
+        };
+
+        auto appendPolyMeshManifestStage = [&](const rcPolyMesh& mesh)
+        {
+            if (!writeAnchorStageManifest)
+                return;
+
+            for (size_t anchorIndex = 0; anchorIndex < anchorManifestSupports.size(); ++anchorIndex)
+            {
+                MergeAnchorStageIntoManifest(
+                    anchorStageManifest["anchors"][anchorIndex]["stages"],
+                    BuildPolyMeshAnchorStageSummary(
+                        mesh,
+                        anchorSourceSupportXyExtent,
+                        anchorSourceSupportZTolerance,
+                        anchorManifestSupports[anchorIndex]));
+            }
+        };
 
         // allocate subregions : tiles
         Tile* tiles = new Tile[TILES_PER_MAP * TILES_PER_MAP];
@@ -1885,76 +4813,21 @@ namespace MMAP
                 }
                 rcRasterizeTriangles(m_rcContext, lVerts, lVertCount, lTris, lTriAreas, lTriCount, *liquidsTile.solid, 0);
 
-                /// 3. Mark all triangles with correct flags:
-                // Can't use rcMarkWalkableTriangles. We need something really more specific.
-                // The trick is that we use different MaxClimb angle depending if:
-                // - We are on a terrain
-                // - We are on a model (WMO...)
-                // - Also we want to remove under-terrain triangles
-                unsigned char* areas = new unsigned char[tTriCount];
-                memset(areas, AREA_NONE, tTriCount * sizeof(unsigned char));
-                float norm[3];
-
-                // allow modifying walkable slopes using config.json
-                const float walkableSlopeAngleTerrain = config.walkableSlopeAngle;
-                // Custom parameter (not part of rcConfig)
-                const float walkableSlopeAngleVMaps = jsonTileConfig["walkableSlopeAngleVMaps"].get<float>();
-                // Player slope angle is fix (client side controlled)
-                const float playerClimbLimit = cosf(52.0f / 180.0f * RC_PI);
-                const float maxClimbLimitTerrain = cosf(walkableSlopeAngleTerrain / 180.0f * RC_PI);
-                const float maxClimbLimitVmaps = cosf(walkableSlopeAngleVMaps / 180.0f * RC_PI);
-
-                for (int i = 0; i < tTriCount; ++i)
-                {
-                    const int* tri = &tTris[i * 3];
-                    calcTriNormal(&tVerts[tri[0] * 3], &tVerts[tri[1] * 3], &tVerts[tri[2] * 3], norm);
-                    bool terrain = meshData.IsTerrainTriangle(i);
-                    // 3.1 Check if the face is walkable: different angle for different type of triangle
-                    // NPCs, charges, ... can climb up to the HardLimit
-                    // blinks, randomPosGenerator ... can climb up to playerClimbLimit
-                    // With playerClimbLimit < HardLimit
-                    float climbHardLimit = terrain ? maxClimbLimitTerrain : maxClimbLimitVmaps;
-                    if (norm[1] > playerClimbLimit)
-                        areas[i] = AREA_GROUND;
-                    else if (norm[1] > climbHardLimit)
-                        areas[i] = AREA_STEEP_SLOPE;
-                    if (!terrain)
-                    {
-                        switch (areas[i])
-                        {
-                        case AREA_GROUND:
-                            areas[i] = AREA_GROUND_MODEL;
-                            break;
-                        case AREA_STEEP_SLOPE:
-                            areas[i] = AREA_STEEP_SLOPE_MODEL;
-                            break;
-                        }
-                    }
-                    // Now we remove underterrain triangles (actually set flags to 0)
-                    // This prevents selecting wrong poly for a player in the server later.
-                    if (!terrain && areas[i] && !m_quick)
-                    {
-                        // Get triangle corners (as usual, yzx positions)
-                        // (actually we push these corners towards the center a bit to prevent collision with border models etc...)
-                        float verts[9];
-                        for (int c = 0; c < 3; ++c) // Corner
-                            for (int v = 0; v < 3; ++v) // Coordinate
-                                verts[3 * c + v] = (5 * tVerts[tri[c] * 3 + v] + tVerts[tri[(c + 1) % 3] * 3 + v] + tVerts[tri[(c + 2) % 3] * 3 + v]) / 7;
-                        // A triangle is undermap if all corners are undermap
-
-                        if (m_terrainBuilder->IsUnderMap(&verts[0]) && m_terrainBuilder->IsUnderMap(&verts[3]) && m_terrainBuilder->IsUnderMap(&verts[6]))
-                        {
-                            areas[i] = AREA_NONE;
-                            continue;
-                        }
-                    }
-                }
-                /// 4. Every triangle is correctly marked now, we can rasterize everything
-                SortAndRasterizeTriangles(m_rcContext, tVerts, tVertCount, tTris, areas, tTriCount, *tile.solid, 0);
-                delete[] areas;
+                /// 3. Triangle walkability was already classified once for the
+                // full tile above; the per-subtile bake reuses that stable
+                // classification so the stage manifest can aggregate by tile.
+                /// 4. Every triangle is correctly marked now, we can rasterize everything.
+                // 2026-05-21 upstream Recast sync: the old local SortAndRasterizeTriangles
+                // wrapper was retired with the vendor upgrade. Use upstream
+                // rcRasterizeTriangles directly to keep the bake pipeline on the
+                // migrated Recast surface.
+                rcRasterizeTriangles(m_rcContext, tVerts, tVertCount, tTris, rasterAreas.data(), tTriCount, *tile.solid, 0);
                 dumpHeightfieldColumn("rasterize", dbgCellX, dbgCellY, *tile.solid);
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportHeightfieldStage("rasterize", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                appendHeightfieldManifestStage("rasterize", *tile.solid);
                 if (m_debug)
-                    WriteHeightfieldStageCsv("rasterize", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
+                    WriteHeightfieldStageCsv("rasterize", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
 
                 /// 5. Don't walk over too high Obstacles.
                 // We can pass higher terrain obstacles, or model obstacles.
@@ -1963,8 +4836,11 @@ namespace MMAP
                 // 5.1 walkableClimbTerrain >= walkableClimbModelTransition so do it first
                 rcFilterLowHangingWalkableObstacles(m_rcContext, walkableClimbTerrain, *tile.solid);
                 dumpHeightfieldColumn("filterLowHanging", dbgCellX, dbgCellY, *tile.solid);
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportHeightfieldStage("filterLowHanging", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                appendHeightfieldManifestStage("filterLowHanging", *tile.solid);
                 if (m_debug)
-                    WriteHeightfieldStageCsv("filterLowHanging", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
+                    WriteHeightfieldStageCsv("filterLowHanging", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
                 // 5.2 maps <-> vmaps transition
                 // PFS-OVERHAUL-006 / Phase 6: pull per-tile ledge-filter knobs from JSON.
                 // Defaults (true / false) preserve legacy on tiles that don't opt in.
@@ -1974,8 +4850,11 @@ namespace MMAP
                                  treatOobNeighborAsCliff, mixedAreaUsesTerrainClimb);
                 //rcFilterLedgeSpans(m_rcContext, tileCfg.walkableHeight, walkableClimbTerrain, *tile.solid); // Default recast code
                 dumpHeightfieldColumn("filterLedge", dbgCellX, dbgCellY, *tile.solid);
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportHeightfieldStage("filterLedge", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                appendHeightfieldManifestStage("filterLedge", *tile.solid);
                 if (m_debug)
-                    WriteHeightfieldStageCsv("filterLedge", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
+                    WriteHeightfieldStageCsv("filterLedge", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
 
                 /// 6. Now we are happy because we have the correct flags.
                 // Set's cleanup tmp flags used by the generator, so we don't have a too
@@ -1983,20 +4862,29 @@ namespace MMAP
                 // (We dont care if a poly comes from Terrain or Model at runtime)
                 filterRemoveUselessAreas(*tile.solid);
                 dumpHeightfieldColumn("removeUseless", dbgCellX, dbgCellY, *tile.solid);
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportHeightfieldStage("removeUseless", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                appendHeightfieldManifestStage("removeUseless", *tile.solid);
                 if (m_debug)
-                    WriteHeightfieldStageCsv("removeUseless", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
+                    WriteHeightfieldStageCsv("removeUseless", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
                 rcFilterWalkableLowHeightSpans(m_rcContext, tileCfg.walkableHeight, *tile.solid);
                 dumpHeightfieldColumn("filterLowHeight", dbgCellX, dbgCellY, *tile.solid);
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportHeightfieldStage("filterLowHeight", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                appendHeightfieldManifestStage("filterLowHeight", *tile.solid);
                 if (m_debug)
-                    WriteHeightfieldStageCsv("filterLowHeight", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
+                    WriteHeightfieldStageCsv("filterLowHeight", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
 
                 /// 7. Let's process water now.
                 // When water is not deep, we have a transition area (AREA_WATER_TRANSITION)
                 // Both ground and water creatures can be there.
                 // Otherwise, the terrain in deeper waters is considered as actual swim/water terrain.
                 filterWalkableLowHeightSpansWith(*liquidsTile.solid, *tile.solid, inWaterGround, stepForGroundInheriteWater);
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportHeightfieldStage("waterInheritance", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                appendHeightfieldManifestStage("waterInheritance", *tile.solid);
                 if (m_debug)
-                    WriteHeightfieldStageCsv("waterInheritance", mapID, tileX, tileY, x, y, debugStageCrop, *tile.solid);
+                    WriteHeightfieldStageCsv("waterInheritance", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
 
                 /// 8. Now let's move on with the last and more generic steps of navmesh generation.
                 // compact heightfield spans
@@ -2007,44 +4895,139 @@ namespace MMAP
                     continue;
                 }
                 dumpCompactHeightfieldColumn("buildCHF", dbgCellX, dbgCellY, *tile.chf);
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportCompactStage("buildCHF", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                appendCompactManifestStage("buildCHF", *tile.chf, false);
                 if (m_debug)
-                    WriteCompactHeightfieldStageCsv("buildCHF", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
+                    WriteCompactHeightfieldStageCsv("buildCHF", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
 
                 gameObjectMarks += MarkGameObjectAreas(m_rcContext, mapID, tileX, tileY, tileCfg, *tile.chf);
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportCompactStage("markGameObjects", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                appendCompactManifestStage("markGameObjects", *tile.chf, false);
                 if (m_debug)
-                    WriteCompactHeightfieldStageCsv("markGameObjects", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
+                    WriteCompactHeightfieldStageCsv("markGameObjects", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
 
                 // build polymesh intermediates
+                const std::vector<unsigned char> preErodeAreas =
+                    restoreAnchorSourceSupportAfterErode
+                        ? std::vector<unsigned char>(tile.chf->areas, tile.chf->areas + tile.chf->spanCount)
+                        : std::vector<unsigned char>();
                 if (!rcErodeWalkableArea(m_rcContext, walkableErosionRadius, *tile.chf))
                 {
                     printf("%s Failed eroding area!                               \n", tileString);
                     continue;
                 }
                 dumpCompactHeightfieldColumn("erode", dbgCellX, dbgCellY, *tile.chf);
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportCompactStage("erode", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                appendCompactManifestStage("erode", *tile.chf, false);
                 if (m_debug)
-                    WriteCompactHeightfieldStageCsv("erode", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
+                    WriteCompactHeightfieldStageCsv("erode", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
+
+                if (restoreAnchorSourceSupportAfterErode)
+                {
+                    const int restoredSourceSupportSpans = RestoreAnchorSourceSupportCompactSpansAfterErode(
+                        *tile.chf,
+                        preErodeAreas,
+                        anchorSourceSupportXyExtent,
+                        anchorSourceSupports,
+                        logAnchorStageDiagnostics);
+                    if (restoredSourceSupportSpans > 0)
+                    {
+                        printf("[CHF-SRC-RESTORE] map=%u tile=%u,%u: restored %d compact span(s) after erode\n",
+                            mapID, tileX, tileY, restoredSourceSupportSpans);
+                    }
+                    if (m_debug)
+                        WriteCompactHeightfieldStageCsv("anchorSourceSupportRestore", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
+                }
 
                 if (!rcMedianFilterWalkableArea(m_rcContext, *tile.chf))
                 {
                     printf("%s Failed filtering area!                             \n", tileString);
                     continue;
                 }
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportCompactStage("median", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
+                    LogAnchorSourceSupportCompactComponents("median", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                appendCompactManifestStage("median", *tile.chf, true);
                 if (m_debug)
-                    WriteCompactHeightfieldStageCsv("median", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
+                    WriteCompactHeightfieldStageCsv("median", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
 
-                if (!rcBuildDistanceField(m_rcContext, *tile.chf))
+                if (trimAnchorSourceSupportCompactSpans)
                 {
-                    printf("%s Failed building distance field!                    \n", tileString);
-                    continue;
+                    const int culledSourceSupportCompactSpans = CullAnchorSourceSupportCompactSpans(
+                        *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance,
+                        anchorSourceSupportFallbackToWindow, anchorSourceSupports,
+                        logAnchorStageDiagnostics);
+                    if (culledSourceSupportCompactSpans > 0)
+                    {
+                        printf("[CHF-SRC-ANCHOR-CULL] map=%u tile=%u,%u: nulled %d compact span(s) from source support floors before regions\n",
+                            mapID, tileX, tileY, culledSourceSupportCompactSpans);
+                    }
+                    if (logAnchorStageDiagnostics)
+                    {
+                        LogAnchorSourceSupportCompactStage("anchorSourceSupportCull", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                        LogAnchorSourceSupportCompactComponents("anchorSourceSupportCull", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    }
+                    if (m_debug)
+                        WriteCompactHeightfieldStageCsv("anchorSourceSupportCull", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
                 }
 
-                if (!rcBuildRegions(m_rcContext, *tile.chf, tileCfg.borderSize, tileCfg.minRegionArea, tileCfg.mergeRegionArea))
+                if (trimAnchorUpperCompactSpans)
                 {
-                    printf("%s Failed building regions!                           \n", tileString);
-                    continue;
+                    const float anchorPolyStackXyExtent = JsonFloatOrDefault(
+                        jsonTileConfig, "postDetourCullAnchorPolyStacksXyExtent", 2.0f);
+                    const float anchorPolyStackSupportZTolerance = JsonFloatOrDefault(
+                        jsonTileConfig, "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f);
+                    const int culledCompactSpans = CullAnchorUpperCompactSpans(
+                        *tile.chf, anchorPolyStackXyExtent, anchorPolyStackSupportZTolerance, anchorPolyStackCoords,
+                        logAnchorStageDiagnostics);
+                    if (culledCompactSpans > 0)
+                    {
+                        printf("[CHF-ANCHOR-CULL] map=%u tile=%u,%u: nulled %d compact span(s) before regions\n",
+                            mapID, tileX, tileY, culledCompactSpans);
+                    }
+                    if (m_debug)
+                        WriteCompactHeightfieldStageCsv("anchorCompactCull", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
                 }
+
+                const RegionPartitionType partitionType = ParseRegionPartitionType(jsonTileConfig);
+                if (partitionType == RegionPartitionType::Watershed)
+                {
+                    if (!rcBuildDistanceField(m_rcContext, *tile.chf))
+                    {
+                        printf("%s Failed building distance field!                    \n", tileString);
+                        continue;
+                    }
+
+                    if (!rcBuildRegions(m_rcContext, *tile.chf, tileCfg.borderSize, tileCfg.minRegionArea, tileCfg.mergeRegionArea))
+                    {
+                        printf("%s Failed building watershed regions!                 \n", tileString);
+                        continue;
+                    }
+                }
+                else if (partitionType == RegionPartitionType::Monotone)
+                {
+                    if (!rcBuildRegionsMonotone(m_rcContext, *tile.chf, tileCfg.borderSize, tileCfg.minRegionArea, tileCfg.mergeRegionArea))
+                    {
+                        printf("%s Failed building monotone regions!                  \n", tileString);
+                        continue;
+                    }
+                }
+                else
+                {
+                    if (!rcBuildLayerRegions(m_rcContext, *tile.chf, tileCfg.borderSize, tileCfg.minRegionArea))
+                    {
+                        printf("%s Failed building layer regions!                     \n", tileString);
+                        continue;
+                    }
+                }
+                printf("[REGION] map=%u tile=%u,%u partition=%s\n", mapID, tileX, tileY, ToString(partitionType));
+                appendCompactManifestStage("regions", *tile.chf, true);
                 if (m_debug)
-                    WriteCompactHeightfieldStageCsv("regions", mapID, tileX, tileY, x, y, debugStageCrop, *tile.chf);
+                    WriteCompactHeightfieldStageCsv("regions", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
 
                 tile.cset = rcAllocContourSet();
                 if (!tile.cset || !rcBuildContours(m_rcContext, *tile.chf, tileCfg.maxSimplificationError, tileCfg.maxEdgeLen, *tile.cset))
@@ -2052,8 +5035,9 @@ namespace MMAP
                     printf("%s Failed building contours!                          \n", tileString);
                     continue;
                 }
+                appendContourManifestStage(*tile.cset);
                 if (m_debug)
-                    WriteContourStageCsv(mapID, tileX, tileY, x, y, debugStageCrop, *tile.cset);
+                    WriteContourStageCsv(mapID, tileX, tileY, x, y, debugStageCrops, *tile.cset);
 
                 // build polymesh
                 tile.pmesh = rcAllocPolyMesh();
@@ -2062,6 +5046,7 @@ namespace MMAP
                     printf("%s Failed building polymesh!                          \n", tileString);
                     continue;
                 }
+                appendPolyMeshManifestStage(*tile.pmesh);
 
                 tile.dmesh = rcAllocPolyMeshDetail();
                 if (!tile.dmesh || !rcBuildPolyMeshDetail(m_rcContext, *tile.pmesh, *tile.chf, tileCfg.detailSampleDist, tileCfg.detailSampleMaxError, *tile.dmesh))
@@ -2276,11 +5261,79 @@ namespace MMAP
             {
                 dtMeshTile* addedTile = const_cast<dtMeshTile*>(addedTileConst);
                 const bool trimShadowedLedges = jsonTileConfig["postDetourCullShadowedLedges"].get<bool>();
-                const int culledDetourPolys = CullSuspiciousDetourPolys(*addedTile, agentMaxClimbTerrain, trimShadowedLedges);
+                const bool trimOffMeshAnchorSteepTrim = jsonTileConfig["postDetourCullOffMeshAnchorSteepTrim"].get<bool>();
+                const bool trimShadowedPockets = jsonTileConfig["postDetourCullShadowedPockets"].get<bool>();
+                OffMeshAnchorSteepTrimSettings offMeshAnchorSteepTrimSettings;
+                offMeshAnchorSteepTrimSettings.minAverageSlopeDegrees = JsonFloatOrDefault(
+                    jsonTileConfig, "postDetourCullOffMeshAnchorSteepTrimMinAverageSlopeDegrees",
+                    OFFMESH_ANCHOR_STEEP_TRIM_MIN_AVERAGE_SLOPE_DEGREES);
+                offMeshAnchorSteepTrimSettings.maxEdge2D = JsonFloatOrDefault(
+                    jsonTileConfig, "postDetourCullOffMeshAnchorSteepTrimMaxEdge2D",
+                    OFFMESH_ANCHOR_STEEP_TRIM_MAX_EDGE_2D);
+                offMeshAnchorSteepTrimSettings.maxArea2D = JsonFloatOrDefault(
+                    jsonTileConfig, "postDetourCullOffMeshAnchorSteepTrimMaxArea2D",
+                    OFFMESH_ANCHOR_STEEP_TRIM_MAX_AREA_2D);
+                offMeshAnchorSteepTrimSettings.maxZRange = JsonFloatOrDefault(
+                    jsonTileConfig, "postDetourCullOffMeshAnchorSteepTrimMaxZRange",
+                    OFFMESH_ANCHOR_STEEP_TRIM_MAX_Z_RANGE);
+                offMeshAnchorSteepTrimSettings.componentMaxArea2D = JsonFloatOrDefault(
+                    jsonTileConfig, "postDetourCullOffMeshAnchorSteepTrimComponentMaxArea2D",
+                    OFFMESH_ANCHOR_STEEP_TRIM_COMPONENT_MAX_AREA_2D);
+                offMeshAnchorSteepTrimSettings.componentMaxZRange = JsonFloatOrDefault(
+                    jsonTileConfig, "postDetourCullOffMeshAnchorSteepTrimComponentMaxZRange",
+                    OFFMESH_ANCHOR_STEEP_TRIM_COMPONENT_MAX_Z_RANGE);
+                const float anchorPolyStackXyExtent = JsonFloatOrDefault(
+                    jsonTileConfig, "postDetourCullAnchorPolyStacksXyExtent", 2.0f);
+                const float anchorPolyStackZExtent = JsonFloatOrDefault(
+                    jsonTileConfig, "postDetourCullAnchorPolyStacksZExtent", 10.0f);
+                const float anchorPolyStackSupportZTolerance = JsonFloatOrDefault(
+                    jsonTileConfig, "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f);
+                if (trimAnchorPolyStacks)
+                {
+                    printf("[DT-ANCHOR-CULL] map=%u tile=%u,%u config enabled coords=%zu xy=%.2f z=%.2f supportTol=%.2f\n",
+                        mapID, tileX, tileY, anchorPolyStackCoords.size(), anchorPolyStackXyExtent,
+                        anchorPolyStackZExtent, anchorPolyStackSupportZTolerance);
+                }
+                const int culledDetourPolys = CullSuspiciousDetourPolys(
+                    *navMesh, *addedTile, agentMaxClimbTerrain,
+                    trimShadowedLedges, trimOffMeshAnchorSteepTrim, trimShadowedPockets,
+                    offMeshAnchorSteepTrimSettings,
+                    trimAnchorPolyStacks, anchorPolyStackXyExtent, anchorPolyStackZExtent,
+                    anchorPolyStackSupportZTolerance, anchorPolyStackCoords);
                 if (culledDetourPolys > 0)
                 {
                     printf("[DT-POLY-CULL] map=%u tile=%u,%u: disabled %d final suspicious Detour polygon(s)\n",
                         mapID, tileX, tileY, culledDetourPolys);
+                }
+
+                if (writeAnchorStageManifest && !anchorManifestSupports.empty())
+                {
+                    std::vector<DetourPolyDiagnostics> finalDiagnostics(addedTile->header->polyCount);
+                    std::vector<unsigned char> finalLiveGroundMask(addedTile->header->polyCount, 0);
+                    for (int polyIndex = 0; polyIndex < addedTile->header->polyCount; ++polyIndex)
+                    {
+                        const dtPoly& poly = addedTile->polys[polyIndex];
+                        if (poly.getType() != DT_POLYTYPE_GROUND || poly.vertCount < 3)
+                            continue;
+
+                        finalDiagnostics[polyIndex] = AnalyzeDetourPoly(*addedTile, polyIndex, DETOUR_FINAL_CULL_MAX_SLOPE_DEGREES);
+                        if (IsWalkableLandPoly(poly))
+                            finalLiveGroundMask[polyIndex] = 1;
+                    }
+
+                    for (size_t anchorIndex = 0; anchorIndex < anchorManifestSupports.size(); ++anchorIndex)
+                    {
+                        anchorStageManifest["anchors"][anchorIndex]["stages"].push_back(
+                            BuildFinalDetourAnchorStageSummary(
+                                *navMesh,
+                                *addedTile,
+                                finalDiagnostics,
+                                finalLiveGroundMask,
+                                anchorSourceSupportXyExtent,
+                                anchorSourceSupportZExtent,
+                                anchorSourceSupportZTolerance,
+                                anchorManifestSupports[anchorIndex]));
+                    }
                 }
             }
 
@@ -2308,6 +5361,32 @@ namespace MMAP
             // write data
             fwrite(navData, sizeof(unsigned char), navDataSize, file);
             fclose(file);
+
+            if (writeAnchorStageManifest && !anchorManifestSupports.empty())
+            {
+                anchorStageManifest["outputTileFileName"] = fileName;
+                anchorStageManifest["outputTileSize"] = navDataSize;
+                anchorStageManifest["postDetourCullSummary"] =
+                {
+                    { "shadowedLedgesEnabled", jsonTileConfig["postDetourCullShadowedLedges"].get<bool>() },
+                    { "offMeshAnchorSteepTrimEnabled", jsonTileConfig["postDetourCullOffMeshAnchorSteepTrim"].get<bool>() },
+                    { "shadowedPocketsEnabled", jsonTileConfig["postDetourCullShadowedPockets"].get<bool>() },
+                    { "anchorPolyStacksEnabled", jsonTileConfig["postDetourCullAnchorPolyStacks"].get<bool>() },
+                };
+
+                char manifestFileName[256];
+                sprintf(manifestFileName, "meshes/map%03u%02u%02u_anchor_stage_manifest.json", mapID, tileY, tileX);
+                std::ofstream manifestFile(manifestFileName, std::ios::binary | std::ios::trunc);
+                if (manifestFile)
+                {
+                    manifestFile << anchorStageManifest.dump(2);
+                }
+                else
+                {
+                    printf("[ANCHOR-STAGE] map=%u tile=%u,%u failed to write manifest %s\n",
+                        mapID, tileX, tileY, manifestFileName);
+                }
+            }
 
             if (m_debug)
             {
@@ -2346,6 +5425,7 @@ namespace MMAP
             { "maxEdgeLen",              0     }, // placeholder
             { "maxVertsPerPoly",         DT_VERTS_PER_POLYGON },
             { "maxSimplificationError",  1.8f  },
+            { "partitionType",           "watershed" },
             { "mergeRegionArea",         10    },
             { "minRegionArea",           30    },
             { "walkableClimb",           0     }, // placeholder
@@ -2362,7 +5442,36 @@ namespace MMAP
             { "treatOobNeighborAsCliff",  true  },
             { "mixedAreaUsesTerrainClimb", false },
             { "postDetourCullShadowedLedges", false },
+            { "postDetourCullOffMeshAnchorSteepTrim", false },
+            { "postDetourCullOffMeshAnchorSteepTrimMinAverageSlopeDegrees", OFFMESH_ANCHOR_STEEP_TRIM_MIN_AVERAGE_SLOPE_DEGREES },
+            { "postDetourCullOffMeshAnchorSteepTrimMaxEdge2D", OFFMESH_ANCHOR_STEEP_TRIM_MAX_EDGE_2D },
+            { "postDetourCullOffMeshAnchorSteepTrimMaxArea2D", OFFMESH_ANCHOR_STEEP_TRIM_MAX_AREA_2D },
+            { "postDetourCullOffMeshAnchorSteepTrimMaxZRange", OFFMESH_ANCHOR_STEEP_TRIM_MAX_Z_RANGE },
+            { "postDetourCullOffMeshAnchorSteepTrimComponentMaxArea2D", OFFMESH_ANCHOR_STEEP_TRIM_COMPONENT_MAX_AREA_2D },
+            { "postDetourCullOffMeshAnchorSteepTrimComponentMaxZRange", OFFMESH_ANCHOR_STEEP_TRIM_COMPONENT_MAX_Z_RANGE },
+            { "postDetourCullShadowedPockets", false },
+            { "preRegionCullAnchorSourceSupportCompetingSpans", false },
+            { "preRegionRestoreAnchorSourceSupportAfterErode", false },
+            { "preRegionCullAnchorSourceSupportFallbackToWindow", false },
+            { "preRegionCullAnchorUpperCompactSpans", false },
+            { "postDetourCullAnchorPolyStacks", false },
+            { "postDetourCullAnchorPolyStacksXyExtent", 2.0f },
+            { "postDetourCullAnchorPolyStacksZExtent", 10.0f },
+            { "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f },
+            { "postDetourCullAnchorPolyStacksCoordsWow", json::array() },
+            { "anchorStageManifestCoordsWow", json::array() },
+            { "writeAnchorStageManifest", false },
+            { "logAnchorStageDiagnostics", false },
         };
+    }
+
+    static void MergeConfigValues(json& target, const json& source)
+    {
+        if (!source.is_object())
+            return;
+
+        for (auto it = source.begin(); it != source.end(); ++it)
+            target[it.key()] = it.value();
     }
 
     json TileWorker::getMapIdConfig(uint32 mapId)
@@ -2371,7 +5480,7 @@ namespace MMAP
 
         json config = getDefaultConfig();
         if (m_config.find(key) != m_config.end())
-            config.update(m_config.at(key));
+            MergeConfigValues(config, m_config.at(key));
 
         return config;
     }
@@ -2382,7 +5491,10 @@ namespace MMAP
 
         json config = getMapIdConfig(mapId);
         if (config.find(key) != config.end())
-            config.update(config.at(key));
+        {
+            const json tileOverrides = config.at(key);
+            MergeConfigValues(config, tileOverrides);
+        }
 
         for (json::iterator it = config.begin(); it != config.end();) {
             if ((*it).is_object())

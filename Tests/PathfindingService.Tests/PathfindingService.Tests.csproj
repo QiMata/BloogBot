@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\Exports\GameData.Core\GameData.Core.csproj" />
     <ProjectReference Include="..\..\Exports\WoWSharpClient\WoWSharpClient.csproj" />
     <ProjectReference Include="..\..\Services\PathfindingService\PathfindingService.csproj" />
+    <ProjectReference Include="..\..\tools\NavDataAudit\NavDataAudit.csproj" />
     <ProjectReference Include="..\Tests.Infrastructure\Tests.Infrastructure.csproj" />
   </ItemGroup>
 

@@ -1410,24 +1410,11 @@ void PathFinder::BuildPointPath(const float* startPoint, const float* endPoint)
 		m_pathPoints[i] = Vector3(pathPoints[i * VERTEX_SIZE + 2], pathPoints[i * VERTEX_SIZE], pathPoints[i * VERTEX_SIZE + 1]);
 	}
 
-	const float wallClearance = m_useStraightPath
-		? m_capsuleRadius
-		: std::max(m_capsuleRadius, SmoothPathPreferredStaticClearance);
-	ApplyWallClearanceToPath(m_navMeshQuery, m_filter, wallClearance, m_pathPoints);
-	if (!m_useStraightPath)
-		RefinePathForSteepUphill(m_mapId, m_pathPoints, m_capsuleRadius, m_capsuleHeight);
-
     auto afterRefine = afterSmooth;
     auto afterSimplify = afterSmooth;
     if (HasActiveDynamicObjectOverlay())
     {
         CaptureFirstDynamicOverlayBlock();
-
-        RefinePathForWalkability(m_mapId, m_pathPoints, m_capsuleRadius, m_capsuleHeight);
-        afterRefine = std::chrono::steady_clock::now();
-
-        SimplifyPathForWalkability(m_mapId, m_pathPoints, m_capsuleRadius, m_capsuleHeight);
-        afterSimplify = std::chrono::steady_clock::now();
     }
 
 	{

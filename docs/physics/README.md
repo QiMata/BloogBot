@@ -50,6 +50,7 @@ Read these documents in order for a complete understanding of the physics pipeli
 | [PHYSX_CCT_RULES.md](./PHYSX_CCT_RULES.md) | PhysX CCT behavioral rules reference |
 | [PHYSX_CAPSULE_SWEEP_RULES.md](./PHYSX_CAPSULE_SWEEP_RULES.md) | Capsule sweep test rules |
 | [MMAP_NAVMESH_GENERATION.md](./MMAP_NAVMESH_GENERATION.md) | MMAP/Recast v6 audit, manifest, and Tauren-clearance generation requirements |
+| [RECAST_WOW_GEOMETRY_RESEARCH.md](./RECAST_WOW_GEOMETRY_RESEARCH.md) | Upstream Recast research plus WWoW-specific guidance for mixed-wall / overlap-like navmesh artifacts |
 | [DETOUR_UPGRADE_BASELINE.md](./DETOUR_UPGRADE_BASELINE.md) | Detour vendor compatibility, v6 mmap contract, and local customization baseline |
 | [SWEEP_TEST_MOVE_CHARACTER_REFERENCE.md](./SWEEP_TEST_MOVE_CHARACTER_REFERENCE.md) | Additional `moveCharacter` reference |
 | [VANILLA_WOW_PHYSICS_INTENTION_RESEARCH.md](./VANILLA_WOW_PHYSICS_INTENTION_RESEARCH.md) | Research on WoW physics intentions |

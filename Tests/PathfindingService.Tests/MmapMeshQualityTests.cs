@@ -39,6 +39,20 @@ public sealed class MmapMeshQualityTests
     //   STEEP_SLOPE=3, STEEP_SLOPE_MODEL=4 (plus water/magma/slime above).
     private const byte AreaSteepSlope = 3;
     private const byte AreaSteepSlopeModel = 4;
+    private const float SteepSurfaceEpsilonDegrees = 1.0f;
+    private const float SteepSurfaceMinTriangleNormal = 1e-5f;
+    private const float MixedWallPolyMinSteepAreaRatio = 0.08f;
+    private const float MixedWallPolyMinZRange = 1.0f;
+    private const float MixedWallPolyMinEdgeLength2D = 6.0f;
+    private const float MixedWallPolyMinArea2D = 8.0f;
+    private const float MixedWallPolyClimbOvershoot = 0.15f;
+    private const float ShadowedLedgeMaxArea2D = 20.0f;
+    private const float ShadowedLedgeMaxEdge2D = 7.0f;
+    private const float ShadowedLedgeMaxZRange = 1.5f;
+    private const float ShadowedLedgeMinVerticalGap = 1.0f;
+    private const float ShadowedLedgeMaxVerticalGap = 4.0f;
+    private const float ShadowedLedgeMinOverlapArea2D = 0.5f;
+    private const float ShadowedLedgeMinOverlapRatio = 0.35f;
 
     [Fact]
     public void OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons()
@@ -60,6 +74,60 @@ public sealed class MmapMeshQualityTests
 
         Assert.True(offenders.Length == 0,
             "Expected no large bridge/auto-completed polygon across the mostly-flat OG zeppelin top ramp/deck crop."
+            + Environment.NewLine
+            + FormatOffenders(offenders));
+    }
+
+    [Fact]
+    public void OrgrimmarZeppelinTopRampDeck_HasNoSuspiciousMixedWallPolygons()
+    {
+        var dataDir = ResolveDataDir();
+        var tilePath = Path.Combine(dataDir, "mmaps", OgTopRampDeckTile);
+        Assert.True(File.Exists(tilePath), $"Expected OG tower mmap tile at {tilePath}");
+
+        var tile = MmapTile.Read(tilePath);
+        var stats = tile.GetPolygonStats(OgTopRampDeckCrop).ToArray();
+
+        Assert.True(stats.Length > 0, $"Expected at least one walkable polygon in crop {OgTopRampDeckCrop}");
+
+        var offenders = stats
+            .Where(static s => s.SuspiciousMixedWall)
+            .OrderByDescending(static s => s.ZRange)
+            .ThenByDescending(static s => s.SteepDetailAreaRatio)
+            .ThenByDescending(static s => s.MaxDetailSlopeDegrees)
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Expected no suspicious mixed-wall polygons in the OG zeppelin top ramp/deck crop. "
+            + "These are the classic 'flat floor plus wall creep' slabs: enough steep detail-triangle area, "
+            + "too much Z spread, and enough footprint that the final runtime tile should have culled them."
+            + Environment.NewLine
+            + FormatOffenders(offenders));
+    }
+
+    [Fact]
+    public void OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons()
+    {
+        var dataDir = ResolveDataDir();
+        var tilePath = Path.Combine(dataDir, "mmaps", OgTopRampDeckTile);
+        Assert.True(File.Exists(tilePath), $"Expected OG tower mmap tile at {tilePath}");
+
+        var tile = MmapTile.Read(tilePath);
+        var stats = tile.GetPolygonStats(OgTopRampDeckCrop).ToArray();
+
+        Assert.True(stats.Length > 0, $"Expected at least one walkable polygon in crop {OgTopRampDeckCrop}");
+
+        var offenders = stats
+            .Where(static s => IsWalkableLandPoly(s) && IsShadowedLedgeCandidate(s))
+            .Where(s => HasShadowingUpperGroundPoly(s, stats))
+            .OrderByDescending(static s => s.HorizontalArea2D)
+            .ThenByDescending(static s => s.MaxEdge2D)
+            .ThenByDescending(static s => s.ZRange)
+            .ToArray();
+
+        Assert.True(offenders.Length == 0,
+            "Expected no lower trim ledge polygons that sit directly under an upper ground slab in the OG top-ramp/deck crop. "
+            + "These are the tiny shadowed ledges that the final per-tile Detour trim is meant to remove."
             + Environment.NewLine
             + FormatOffenders(offenders));
     }
@@ -220,10 +288,76 @@ public sealed class MmapMeshQualityTests
             builder.AppendLine(
                 $"polyIndex={offender.PolyIndex} zRange={offender.ZRange:F3} maxEdge2D={offender.MaxEdge2D:F3} "
                 + $"horizontalArea2D={offender.HorizontalArea2D:F3} area={offender.Area} flags=0x{offender.Flags:X2} "
+                + $"avgSlope={offender.AvgDetailSlopeDegrees:F3} maxSlope={offender.MaxDetailSlopeDegrees:F3} "
+                + $"steepRatio={offender.SteepDetailAreaRatio:F3} suspiciousMixedWall={offender.SuspiciousMixedWall} "
                 + $"bounds={offender.Bounds}");
         }
 
         return builder.ToString();
+    }
+
+    private static bool IsSuspiciousMixedWallPoly(DetailPolyMetrics detailMetrics, WowBounds bounds, float maxEdge2D, float horizontalArea2D, float walkableClimb)
+    {
+        if (detailMetrics.TotalSurfaceArea <= 0f)
+            return false;
+
+        var steepAreaRatio = detailMetrics.SteepSurfaceArea / detailMetrics.TotalSurfaceArea;
+        var zRange = bounds.MaxZ - bounds.MinZ;
+        var minRequiredZRange = MathF.Max(MixedWallPolyMinZRange, walkableClimb + MixedWallPolyClimbOvershoot);
+
+        return steepAreaRatio >= MixedWallPolyMinSteepAreaRatio
+            && detailMetrics.MaxSlopeDegrees > 50f + SteepSurfaceEpsilonDegrees
+            && zRange >= minRequiredZRange
+            && (maxEdge2D >= MixedWallPolyMinEdgeLength2D || horizontalArea2D >= MixedWallPolyMinArea2D);
+    }
+
+    private static bool IsWalkableLandPoly(PolygonStats stats)
+    {
+        return stats.Flags != 0 && (stats.Flags & NavGround) != 0 && stats.Area != 0;
+    }
+
+    private static bool IsShadowedLedgeCandidate(PolygonStats stats)
+    {
+        return stats.HorizontalArea2D <= ShadowedLedgeMaxArea2D
+            && stats.MaxEdge2D <= ShadowedLedgeMaxEdge2D
+            && stats.ZRange <= ShadowedLedgeMaxZRange;
+    }
+
+    private static bool HasShadowingUpperGroundPoly(PolygonStats candidate, IReadOnlyList<PolygonStats> stats)
+    {
+        var minOverlapArea = MathF.Max(
+            ShadowedLedgeMinOverlapArea2D,
+            MathF.Min(candidate.HorizontalArea2D * ShadowedLedgeMinOverlapRatio, 3.0f));
+
+        foreach (var other in stats)
+        {
+            if (other.PolyIndex == candidate.PolyIndex || !IsWalkableLandPoly(other))
+                continue;
+
+            var verticalGap = other.Bounds.MinZ - candidate.Bounds.MaxZ;
+            if (verticalGap < ShadowedLedgeMinVerticalGap || verticalGap > ShadowedLedgeMaxVerticalGap)
+                continue;
+
+            if (GetBoundsOverlapArea2D(candidate.Bounds, other.Bounds) < minOverlapArea)
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static float GetBoundsOverlapArea2D(WowBounds a, WowBounds b)
+    {
+        var overlapX = MathF.Min(a.MaxX, b.MaxX) - MathF.Max(a.MinX, b.MinX);
+        if (overlapX <= 0f)
+            return 0f;
+
+        var overlapY = MathF.Min(a.MaxY, b.MaxY) - MathF.Max(a.MinY, b.MinY);
+        if (overlapY <= 0f)
+            return 0f;
+
+        return overlapX * overlapY;
     }
 
     private sealed class MmapTile
@@ -359,7 +493,8 @@ public sealed class MmapMeshQualityTests
                     GetHorizontalArea2D(poly),
                     bounds,
                     poly.Flags,
-                    (byte)(poly.AreaAndType & 0x3F));
+                    (byte)(poly.AreaAndType & 0x3F),
+                    GetDetailPolyMetrics(polyIndex, 50f));
             }
         }
 
@@ -435,6 +570,60 @@ public sealed class MmapMeshQualityTests
             return MathF.Abs(area) * 0.5f;
         }
 
+        private Vec3 GetDetailTriVertex(Poly poly, PolyDetail detail, byte triVertIndex)
+        {
+            if (triVertIndex < poly.VertCount)
+                return _verts[poly.Verts[triVertIndex]];
+
+            return _detailVerts[(int)detail.VertBase + triVertIndex - poly.VertCount];
+        }
+
+        private DetailPolyMetrics GetDetailPolyMetrics(int polyIndex, float walkableSlopeDegrees)
+        {
+            var poly = _polys[polyIndex];
+            var detail = polyIndex < _detailMeshes.Length ? _detailMeshes[polyIndex] : new PolyDetail(0, 0, 0, 0);
+            var totalSurfaceArea = 0f;
+            var steepSurfaceArea = 0f;
+            var weightedUpComponent = 0f;
+            var maxSlopeDegrees = 0f;
+
+            for (var triIndex = 0; triIndex < detail.TriCount; triIndex++)
+            {
+                var tri = _detailTris[(int)detail.TriBase + triIndex];
+                var a = GetDetailTriVertex(poly, detail, tri.V0);
+                var b = GetDetailTriVertex(poly, detail, tri.V1);
+                var c = GetDetailTriVertex(poly, detail, tri.V2);
+
+                var edgeAb = new Vec3(b.X - a.X, b.Y - a.Y, b.Z - a.Z);
+                var edgeAc = new Vec3(c.X - a.X, c.Y - a.Y, c.Z - a.Z);
+                var normal = new Vec3(
+                    edgeAb.Y * edgeAc.Z - edgeAb.Z * edgeAc.Y,
+                    edgeAb.Z * edgeAc.X - edgeAb.X * edgeAc.Z,
+                    edgeAb.X * edgeAc.Y - edgeAb.Y * edgeAc.X);
+
+                var normalLength = MathF.Sqrt(normal.X * normal.X + normal.Y * normal.Y + normal.Z * normal.Z);
+                if (normalLength <= SteepSurfaceMinTriangleNormal)
+                    continue;
+
+                var area = normalLength * 0.5f;
+                var upComponent = Math.Clamp(MathF.Abs(normal.Y) / normalLength, 0f, 1f);
+                var slopeDegrees = MathF.Acos(upComponent) * (180f / MathF.PI);
+
+                totalSurfaceArea += area;
+                weightedUpComponent += upComponent * area;
+                maxSlopeDegrees = MathF.Max(maxSlopeDegrees, slopeDegrees);
+                if (slopeDegrees > walkableSlopeDegrees + SteepSurfaceEpsilonDegrees)
+                    steepSurfaceArea += area;
+            }
+
+            if (totalSurfaceArea <= 0f)
+                return new DetailPolyMetrics(0f, 0f, 0f, 0f);
+
+            var avgUpComponent = Math.Clamp(weightedUpComponent / totalSurfaceArea, 0f, 1f);
+            var avgSlopeDegrees = MathF.Acos(avgUpComponent) * (180f / MathF.PI);
+            return new DetailPolyMetrics(totalSurfaceArea, steepSurfaceArea, avgSlopeDegrees, maxSlopeDegrees);
+        }
+
         private static bool IsOffMesh(Poly poly) => (poly.AreaAndType >> 6) == 1;
 
         private static Vec3 DetourToWow(Vec3 v) => new(v.Z, v.X, v.Y);
@@ -459,6 +648,12 @@ public sealed class MmapMeshQualityTests
 
     private readonly record struct Vec3(float X, float Y, float Z);
 
+    private readonly record struct DetailPolyMetrics(
+        float TotalSurfaceArea,
+        float SteepSurfaceArea,
+        float AvgSlopeDegrees,
+        float MaxSlopeDegrees);
+
     private readonly record struct PolygonStats(
         int PolyIndex,
         float ZRange,
@@ -466,7 +661,14 @@ public sealed class MmapMeshQualityTests
         float HorizontalArea2D,
         WowBounds Bounds,
         ushort Flags,
-        byte Area);
+        byte Area,
+        DetailPolyMetrics DetailMetrics)
+    {
+        public float AvgDetailSlopeDegrees => DetailMetrics.AvgSlopeDegrees;
+        public float MaxDetailSlopeDegrees => DetailMetrics.MaxSlopeDegrees;
+        public float SteepDetailAreaRatio => DetailMetrics.TotalSurfaceArea <= 0f ? 0f : DetailMetrics.SteepSurfaceArea / DetailMetrics.TotalSurfaceArea;
+        public bool SuspiciousMixedWall => MmapMeshQualityTests.IsSuspiciousMixedWallPoly(DetailMetrics, Bounds, MaxEdge2D, HorizontalArea2D, 1.8f);
+    }
 
     private readonly record struct WowBounds(float MinX, float MinY, float MinZ, float MaxX, float MaxY, float MaxZ)
     {

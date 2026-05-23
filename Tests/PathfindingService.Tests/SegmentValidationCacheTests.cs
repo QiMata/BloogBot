@@ -15,13 +15,10 @@ public sealed class SegmentValidationCacheTests
         _fixture = fixture;
     }
 
-    // Drives a CalculateValidatedPath against a short Durotar segment and
-    // asserts the segment-validation cache was used. Misses > 0 proves the
-    // scope wrapped the call; hits >= 0 (often > 0 in practice because
-    // resolver attempts and repair passes share segments).
     [Fact]
-    public void CalculateValidatedPath_PopulatesSegmentValidationCacheCounters()
+    public void CalculateValidatedPath_DoesNotPopulateSegmentValidationCacheCounters_InRawMode()
     {
+        Navigation.ResetSegmentValidationCacheCountersForTests();
         var start = new XYZ(-562.225f, -4189.092f, 70.789f);
         var end = new XYZ(-568.0f, -4180.0f, 70.789f);
 
@@ -32,32 +29,26 @@ public sealed class SegmentValidationCacheTests
             smoothPath: true);
 
         var (hits, misses) = Navigation.GetLastCompletedSegmentValidationCacheCounters();
-        Assert.True(
-            misses > 0 || hits > 0,
-            $"Expected the segment-validation cache to record at least one access; got hits={hits} misses={misses}");
+        Assert.Equal(0, hits);
+        Assert.Equal(0, misses);
     }
 
-    // Two consecutive CalculateValidatedPath calls share NO cache state
-    // (per-call scope). After the second call the LastCompleted snapshot
-    // is the second call's counters, not the cumulative total.
     [Fact]
-    public void CalculateValidatedPath_CacheScopeIsPerCall()
+    public void CalculateValidatedPath_LeavesSegmentValidationCacheCountersZeroAcrossRepeatedCalls()
     {
+        Navigation.ResetSegmentValidationCacheCountersForTests();
         var start = new XYZ(-562.225f, -4189.092f, 70.789f);
         var end = new XYZ(-568.0f, -4180.0f, 70.789f);
 
         _ = _fixture.Navigation.CalculateValidatedPath(1, start, end, smoothPath: true);
         var (firstHits, firstMisses) = Navigation.GetLastCompletedSegmentValidationCacheCounters();
-        var firstTotal = firstHits + firstMisses;
 
         _ = _fixture.Navigation.CalculateValidatedPath(1, start, end, smoothPath: true);
         var (secondHits, secondMisses) = Navigation.GetLastCompletedSegmentValidationCacheCounters();
-        var secondTotal = secondHits + secondMisses;
 
-        Assert.True(firstTotal > 0);
-        Assert.True(secondTotal > 0);
-        // Second call's total should be in the same order of magnitude as
-        // the first — the scope is per-call, not cumulative.
-        Assert.True(secondTotal < firstTotal * 10);
+        Assert.Equal(0, firstHits);
+        Assert.Equal(0, firstMisses);
+        Assert.Equal(0, secondHits);
+        Assert.Equal(0, secondMisses);
     }
 }

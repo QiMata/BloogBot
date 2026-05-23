@@ -46,15 +46,14 @@ using Movement::PointsArray;
 // MAX_PATH_LENGTH: max polygon-corridor length (dtPolyRef[]). BRM long routes
 // land at ~340 polys, OG zeppelin at <40 — 740 has comfortable headroom.
 #define MAX_PATH_LENGTH         740//74
-// MAX_POINT_PATH_LENGTH: max smooth-path waypoint count. With Cycle 17e
-// Z-delta interpolation, a single horizontal step can emit up to
-// dtAbs(dz)/MAX_SMOOTH_PATH_SEGMENT_Z_DELTA extra waypoints. Keep this
-// modest — long outdoor routes truncate gracefully (findSmoothPath now
-// returns DT_SUCCESS on buffer-full instead of DT_FAILURE; the bot's
-// NavigationPath replans the next chunk when it nears truncation).
-// 1024 covers ~600y of hilly outdoor walking; longer routes plan in
-// 600y chunks via replans.
-#define MAX_POINT_PATH_LENGTH   1024
+// MAX_POINT_PATH_LENGTH: max smooth-path waypoint count. The old 1024-point
+// cap assumed PathfindingService would stitch long travel through route-pack /
+// replan chunking. The raw-runtime cutover intentionally retires that managed
+// repair/stitch layer, so the native smooth path needs enough headroom to
+// return full city-scale routes on its own. 4096 keeps stack usage modest
+// while clearing the Orgrimmar flight-master -> zeppelin family that was
+// truncating exactly at 1024 points.
+#define MAX_POINT_PATH_LENGTH   4096
 
 #define SMOOTH_PATH_STEP_SIZE   2.0f
 #define SMOOTH_PATH_SLOP        0.3f

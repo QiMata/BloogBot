@@ -68,11 +68,11 @@ public readonly record struct RouteResultCacheSnapshot(
     int EntryCount,
     int InFlightCount);
 
-public sealed class RouteResultCache
-{
-    public const string StaticOverlaySignature = "static";
-    public const string RouteAlgorithmSignature =
-        "PathfindingService.RouteResultCache.v9|Navigation.CalculateValidatedPath|StaticRoutePack.v9|LocalPhysicsReachability.v4|TransportStaging.v1|BakedMMapOnlyOverlayDefault.v2";
+    public sealed class RouteResultCache
+    {
+        public const string StaticOverlaySignature = "static";
+        public const string RouteAlgorithmSignature =
+        "PathfindingService.RouteResultCache.v10|Navigation.CalculateRawPath|StaticRoutePack.v10|RawNativeRuntime.v1|TransportStaging.v1|BakedMMapOnlyOverlayDefault.v3";
 
     private readonly RouteResultCacheOptions _options;
     private readonly ConcurrentDictionary<RouteResultCacheKey, RouteResultCacheEntry> _entries = new();

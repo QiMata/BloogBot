@@ -43,6 +43,26 @@ The tower approach success check also requires deck-ish Z before the test moves
 on to the zeppelin leg; ground-level proximity to `(1341.0,-4638.6)` is no
 longer enough.
 
+## Diagnostic Screenshot Modes
+
+Long-pathing reverse-engineering is screenshot-first. Use these modes before
+guessing at bake or runtime fixes:
+
+- `WWOW_LONG_PATHING_TIMELINE=1`
+  The test writes paired PNG+JSON timeline checkpoints under
+  `tmp/test-runtime/screenshots/long-pathing/timeline/<TestName>/`.
+- `WWOW_OG_RAMP_WAYPOINT_INSPECT=1`
+  Runs `OgRampWaypointInspect`, which teleports to each suspect zeppelin-ramp
+  waypoint, waits for settle, and captures screenshot + snapshot evidence.
+- `WWOW_OG_DECK_LIP_VERIFY=1`
+  Runs `OgDeckLipAnchorVerification`, which does the same for deck-lip support
+  points where the path and the real standable surface may disagree.
+
+For short suspect routes or a narrowed suspect window, prefer one capture per
+reached waypoint plus every stall/replan/failure checkpoint. For longer routes,
+keep the timeline checkpoints at every poll interval and never skip stall
+evidence.
+
 ## Offline Route Gate
 
 Live Crossroads -> Undercity validation is gated by

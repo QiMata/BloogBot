@@ -52,6 +52,14 @@ internal static class Program
     private const float MixedWallPolyMinEdgeLength2D = 6.0f;
     private const float MixedWallPolyMinArea2D = 8.0f;
     private const float MixedWallPolyClimbOvershoot = 0.15f;
+    private const ushort NavGround = 0x01;
+    private const float ShadowedLedgeMaxArea2D = 20.0f;
+    private const float ShadowedLedgeMaxEdge2D = 7.0f;
+    private const float ShadowedLedgeMaxZRange = 1.5f;
+    private const float ShadowedLedgeMinVerticalGap = 1.0f;
+    private const float ShadowedLedgeMaxVerticalGap = 4.0f;
+    private const float ShadowedLedgeMinOverlapArea2D = 0.5f;
+    private const float ShadowedLedgeMinOverlapRatio = 0.35f;
 
     private static int Main(string[] args)
     {
@@ -790,6 +798,59 @@ internal static class Program
                (maxEdge2D >= MixedWallPolyMinEdgeLength2D || horizontalArea2D >= MixedWallPolyMinArea2D);
     }
 
+    private static bool IsWalkableLandPoly(PolyReportRow row)
+    {
+        return row.PolyType == 0 &&
+               row.Flags != 0 &&
+               (row.Flags & NavGround) != 0 &&
+               row.Area != 0;
+    }
+
+    private static bool IsShadowedLedgeCandidate(PolyReportRow row)
+    {
+        var zRange = row.Bounds.MaxZ - row.Bounds.MinZ;
+        return row.HorizontalArea2D <= ShadowedLedgeMaxArea2D &&
+               row.MaxEdge2D <= ShadowedLedgeMaxEdge2D &&
+               zRange <= ShadowedLedgeMaxZRange;
+    }
+
+    private static float GetBoundsOverlapArea2D(in WowBounds a, in WowBounds b)
+    {
+        var overlapX = MathF.Min(a.MaxX, b.MaxX) - MathF.Max(a.MinX, b.MinX);
+        if (overlapX <= 0f)
+            return 0f;
+
+        var overlapY = MathF.Min(a.MaxY, b.MaxY) - MathF.Max(a.MinY, b.MinY);
+        if (overlapY <= 0f)
+            return 0f;
+
+        return overlapX * overlapY;
+    }
+
+    private static bool HasShadowingUpperGroundPoly(IReadOnlyList<PolyReportRow> rows, PolyReportRow candidate)
+    {
+        var minOverlapArea = MathF.Max(
+            ShadowedLedgeMinOverlapArea2D,
+            MathF.Min(candidate.HorizontalArea2D * ShadowedLedgeMinOverlapRatio, 3.0f));
+
+        foreach (var other in rows)
+        {
+            if (other.PolyIndex == candidate.PolyIndex || !IsWalkableLandPoly(other))
+                continue;
+
+            var verticalGap = other.Bounds.MinZ - candidate.Bounds.MaxZ;
+            if (verticalGap < ShadowedLedgeMinVerticalGap || verticalGap > ShadowedLedgeMaxVerticalGap)
+                continue;
+
+            if (GetBoundsOverlapArea2D(candidate.Bounds, other.Bounds) < minOverlapArea)
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
     private static int CountInternalNeighbors(Poly poly)
     {
         var count = 0;
@@ -808,10 +869,7 @@ internal static class Program
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
-        using var writer = new StreamWriter(path, append: false, Encoding.UTF8);
-        writer.NewLine = "\n";
-        writer.WriteLine("polyIndex,polyType,area,flags,vertCount,detailTriCount,centroidX,centroidY,centroidZ,minX,maxX,minY,maxY,minZ,maxZ,zRange,maxEdge2D,horizontalArea2D,internalNeighbors,avgDetailSlope,maxDetailSlope,steepDetailAreaRatio,suspiciousMixedWall");
-
+        var rows = new List<PolyReportRow>(polyIndices.Count);
         foreach (var polyIndex in polyIndices)
         {
             var poly = tile.Polys[polyIndex];
@@ -828,30 +886,60 @@ internal static class Program
             var steepDetailAreaRatio = detailMetrics.TotalSurfaceArea <= 0f ? 0f : detailMetrics.SteepSurfaceArea / detailMetrics.TotalSurfaceArea;
             var suspiciousMixedWall = IsSuspiciousMixedWallPoly(tile, polyIndex, bounds, maxEdge2D, horizontalArea);
 
+            rows.Add(new PolyReportRow(
+                polyIndex,
+                polyType,
+                area,
+                poly.Flags,
+                poly.VertCount,
+                detailTriCount,
+                centroid,
+                bounds,
+                zRange,
+                maxEdge2D,
+                horizontalArea,
+                neighbors,
+                detailMetrics.AvgSlopeDegrees,
+                detailMetrics.MaxSlopeDegrees,
+                steepDetailAreaRatio,
+                suspiciousMixedWall));
+        }
+
+        using var writer = new StreamWriter(path, append: false, Encoding.UTF8);
+        writer.NewLine = "\n";
+        writer.WriteLine("polyIndex,polyType,area,flags,vertCount,detailTriCount,centroidX,centroidY,centroidZ,minX,maxX,minY,maxY,minZ,maxZ,zRange,maxEdge2D,horizontalArea2D,internalNeighbors,avgDetailSlope,maxDetailSlope,steepDetailAreaRatio,suspiciousMixedWall,shadowedLedgeCandidate,shadowedByUpperGround");
+
+        foreach (var row in rows)
+        {
+            var shadowedLedgeCandidate = IsWalkableLandPoly(row) && IsShadowedLedgeCandidate(row);
+            var shadowedByUpperGround = shadowedLedgeCandidate && HasShadowingUpperGroundPoly(rows, row);
+
             writer.WriteLine(string.Join(',',
-                polyIndex.ToString(CultureInfo.InvariantCulture),
-                polyType.ToString(CultureInfo.InvariantCulture),
-                area.ToString(CultureInfo.InvariantCulture),
-                poly.Flags.ToString(CultureInfo.InvariantCulture),
-                poly.VertCount.ToString(CultureInfo.InvariantCulture),
-                detailTriCount.ToString(CultureInfo.InvariantCulture),
-                centroid.X.ToString("F4", CultureInfo.InvariantCulture),
-                centroid.Y.ToString("F4", CultureInfo.InvariantCulture),
-                centroid.Z.ToString("F4", CultureInfo.InvariantCulture),
-                bounds.MinX.ToString("F4", CultureInfo.InvariantCulture),
-                bounds.MaxX.ToString("F4", CultureInfo.InvariantCulture),
-                bounds.MinY.ToString("F4", CultureInfo.InvariantCulture),
-                bounds.MaxY.ToString("F4", CultureInfo.InvariantCulture),
-                bounds.MinZ.ToString("F4", CultureInfo.InvariantCulture),
-                bounds.MaxZ.ToString("F4", CultureInfo.InvariantCulture),
-                zRange.ToString("F4", CultureInfo.InvariantCulture),
-                maxEdge2D.ToString("F4", CultureInfo.InvariantCulture),
-                horizontalArea.ToString("F4", CultureInfo.InvariantCulture),
-                neighbors.ToString(CultureInfo.InvariantCulture),
-                detailMetrics.AvgSlopeDegrees.ToString("F4", CultureInfo.InvariantCulture),
-                detailMetrics.MaxSlopeDegrees.ToString("F4", CultureInfo.InvariantCulture),
-                steepDetailAreaRatio.ToString("F4", CultureInfo.InvariantCulture),
-                suspiciousMixedWall ? "1" : "0"));
+                row.PolyIndex.ToString(CultureInfo.InvariantCulture),
+                row.PolyType.ToString(CultureInfo.InvariantCulture),
+                row.Area.ToString(CultureInfo.InvariantCulture),
+                row.Flags.ToString(CultureInfo.InvariantCulture),
+                row.VertCount.ToString(CultureInfo.InvariantCulture),
+                row.DetailTriCount.ToString(CultureInfo.InvariantCulture),
+                row.Centroid.X.ToString("F4", CultureInfo.InvariantCulture),
+                row.Centroid.Y.ToString("F4", CultureInfo.InvariantCulture),
+                row.Centroid.Z.ToString("F4", CultureInfo.InvariantCulture),
+                row.Bounds.MinX.ToString("F4", CultureInfo.InvariantCulture),
+                row.Bounds.MaxX.ToString("F4", CultureInfo.InvariantCulture),
+                row.Bounds.MinY.ToString("F4", CultureInfo.InvariantCulture),
+                row.Bounds.MaxY.ToString("F4", CultureInfo.InvariantCulture),
+                row.Bounds.MinZ.ToString("F4", CultureInfo.InvariantCulture),
+                row.Bounds.MaxZ.ToString("F4", CultureInfo.InvariantCulture),
+                row.ZRange.ToString("F4", CultureInfo.InvariantCulture),
+                row.MaxEdge2D.ToString("F4", CultureInfo.InvariantCulture),
+                row.HorizontalArea2D.ToString("F4", CultureInfo.InvariantCulture),
+                row.InternalNeighbors.ToString(CultureInfo.InvariantCulture),
+                row.AvgDetailSlopeDegrees.ToString("F4", CultureInfo.InvariantCulture),
+                row.MaxDetailSlopeDegrees.ToString("F4", CultureInfo.InvariantCulture),
+                row.SteepDetailAreaRatio.ToString("F4", CultureInfo.InvariantCulture),
+                row.SuspiciousMixedWall ? "1" : "0",
+                shadowedLedgeCandidate ? "1" : "0",
+                shadowedByUpperGround ? "1" : "0"));
         }
     }
 
@@ -1036,6 +1124,24 @@ internal sealed record VmapSpawn(
     Vec3 BoundLow,
     Vec3 BoundHigh,
     string Name);
+
+internal readonly record struct PolyReportRow(
+    int PolyIndex,
+    int PolyType,
+    int Area,
+    ushort Flags,
+    byte VertCount,
+    int DetailTriCount,
+    Vec3 Centroid,
+    WowBounds Bounds,
+    float ZRange,
+    float MaxEdge2D,
+    float HorizontalArea2D,
+    int InternalNeighbors,
+    float AvgDetailSlopeDegrees,
+    float MaxDetailSlopeDegrees,
+    float SteepDetailAreaRatio,
+    bool SuspiciousMixedWall);
 
 internal sealed class Args
 {

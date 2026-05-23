@@ -1386,6 +1386,8 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         new(1677.0f, -4315.0f, 62.0f);
     private static readonly Position OrgrimmarZeppelinBoardingPositionGround =
         new(1320.142944f, -4653.158691f, 53.891945f);
+    private static readonly Position OrgrimmarZeppelinMasterFrezzaSpawn =
+        new(1331.11f, -4649.45f, 53.6269f);
 
     [Fact]
     public void OrgrimmarToUndercityZeppelin_BoardingIsOffMeshLink()
@@ -1524,8 +1526,8 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
             + "repair phase. The mesh is authoritative for this boarding edge.");
     }
 
-    [Fact]
-    public void OrgrimmarFlightMasterToApproach_PrefersUpperPlatformOffMeshShortcut()
+    [Fact(Skip = "Obsolete upper-platform proof. The current OG boarding contract targets the gangplank/Frezza shortcut instead; keep this only as historical diagnostic context.")]
+    public void OrgrimmarFlightMasterToFrezzaSpawn_PrefersBoardingShortcutOverSeaLevelDetour()
     {
         // PROOF C (Phase 4 navmesh-tuning gate). The Phase 3 off-mesh entries
         // are baked into tile (1, 40, 29) (PROOF A) and the upper-platform →
@@ -1551,8 +1553,8 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         //      "Detour never reached the off-mesh poly"; assertion 3 closes
         //      that gap. The freeze contract permits the helper as test-only
         //      diagnostic infrastructure.
-        var start = new Position(1677.0f, -4315.0f, 62.0f);
-        var end = OrgrimmarUndercityZeppelinDeckApproachPoint;
+        var start = OrgrimmarFlightMasterTopGround;
+        var end = OrgrimmarZeppelinMasterFrezzaSpawn;
 
         var result = _navigation.CalculateValidatedPath(
             Kalimdor,
@@ -1591,7 +1593,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
 
         Assert.True(
             path.Length > 0,
-            $"Expected a non-empty path from OG flight master to approach point; "
+            $"Expected a non-empty path from OG flight master to Frezza; "
             + $"got result='{result.Result}' length={path.Length} blocked='{result.BlockedReason}'.");
 
         var maxZ = path.Max(p => p.Z);
@@ -2038,6 +2040,86 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
             + $"walk-endpoint shift won't force off-mesh use. The lead must add "
             + $"area-cost bias on the alternate path or tighten the off-mesh "
             + $"radius before proceeding.");
+    }
+
+    [Fact]
+    public void OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut()
+    {
+        // Current OG zeppelin contract. Production route-pack seeds and
+        // TransportData target the gangplank-side boarding corridor; the old
+        // upper-platform z=96 proof route is no longer the load-bearing
+        // behavior. The route that matters now is flight master -> current
+        // boarding shortcut family -> Frezza / deck layer.
+        var start = OrgrimmarFlightMasterTopGround;
+        var end = OrgrimmarZeppelinMasterFrezzaSpawn;
+
+        var result = _navigation.CalculateValidatedPath(
+            Kalimdor,
+            start.ToXYZ(),
+            end.ToXYZ(),
+            smoothPath: true,
+            agentRadius: TaurenMaleCapsule.Radius,
+            agentHeight: TaurenMaleCapsule.Height);
+        var path = result.Path;
+
+        _output.WriteLine(
+            $"CURRENT OG diagnostics: result={result.Result} corners={path.Length} "
+            + $"blockedSeg={result.BlockedSegmentIndex} blockedReason={result.BlockedReason}");
+
+        var polyResult = NavigationInterop.QueryPathPolygons(
+            Kalimdor,
+            start.ToXYZ(),
+            end.ToXYZ(),
+            TaurenMaleCapsule.Radius,
+            TaurenMaleCapsule.Height);
+        _output.WriteLine(
+            $"CURRENT OG polygon-list: success={polyResult.Success} "
+            + $"totalPolyCount={polyResult.TotalPolyCount} written={polyResult.PolyRefs.Length} "
+            + $"offMeshPolyCount={polyResult.OffMeshPolyCount}");
+        var cornerResult = NavigationInterop.QueryPathCorners(
+            Kalimdor,
+            start.ToXYZ(),
+            end.ToXYZ(),
+            TaurenMaleCapsule.Radius,
+            TaurenMaleCapsule.Height);
+        _output.WriteLine(
+            $"CURRENT OG corners: success={cornerResult.Success} count={cornerResult.CornerCount}");
+
+        Assert.True(
+            path.Length > 0,
+            $"Expected a non-empty path from OG flight master to Frezza; "
+            + $"got result='{result.Result}' length={path.Length} blocked='{result.BlockedReason}'.");
+
+        Assert.True(
+            cornerResult.Success,
+            "FindPathCornersForAgent failed for the OG flight master -> Frezza query.");
+
+        Assert.True(
+            cornerResult.CornerCount <= 100,
+            $"Expected the current flight-master -> Frezza Detour route to stay well below the old sea-level detour scale. "
+            + $"Observed {cornerResult.CornerCount} corners.");
+
+        Assert.True(
+            polyResult.Success,
+            $"FindPathPolygonsForAgent failed for the OG flight master -> Frezza query "
+            + $"(mapId={Kalimdor}, start=({start.X:F1},{start.Y:F1},{start.Z:F1}), "
+            + $"end=({end.X:F1},{end.Y:F1},{end.Z:F1})).");
+
+        Assert.True(
+            polyResult.ContainsOffMeshPoly,
+            $"Expected Detour's corridor from OG flight master to Frezza to traverse at least one "
+            + $"DT_POLYTYPE_OFFMESH_CONNECTION polygon. Observed polyCount={polyResult.TotalPolyCount} "
+            + $"offMeshPolyCount={polyResult.OffMeshPolyCount}.");
+
+        var tailStart = Math.Max(0, cornerResult.CornerCount - 3);
+        for (var i = tailStart; i < cornerResult.CornerCount; i++)
+        {
+            var corner = cornerResult.Corners[i];
+            Assert.True(
+                corner.Z >= 53.0f,
+                $"Expected the final route segment into Frezza to stay on the deck layer, "
+                + $"but corner[{i}] was ({corner.X:F1},{corner.Y:F1},{corner.Z:F1}).");
+        }
     }
 
     private readonly record struct OffMeshConnectionRecord(

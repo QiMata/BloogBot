@@ -56,6 +56,11 @@ for the master plan, freeze contract, sequencing, and exit criteria.
   fix is in `contrib/mmap/src/TileWorker.cpp` /
   `MapBuilder::buildGameObject(...)` — never a managed-side repair, never a
   hardcoded blocker coordinate, never a route-pack.
+- **Post-path generation repair is an anti-pattern.** If a static-world route
+  only goes green because PathfindingService or `Navigation.dll` patched it
+  after query generation, the tile is still wrong. Move the fix into the bake
+  pipeline, off-mesh authoring, or a serialized final-tile cull and keep the
+  route gate red until the baked data itself is correct.
 - **Transports belong in `offmesh.txt`.** Zeppelins, gangplanks, elevators,
   boats, teleport pads. One line per direction (or use the bidirectional
   flag). Do not hand-code `ApproachPosition` / `BoardingPosition` constants
@@ -67,6 +72,10 @@ for the master plan, freeze contract, sequencing, and exit criteria.
 - **Every regeneration must produce a manifest.** `NavDataAudit
   --write-manifest <path>` records nav-data signature, agent dimensions,
   per-tile hashes. The signature feeds PathfindingService's route cache key.
+- **Verify serialized final-tile edits with hash + probe, not size alone.**
+  Post-addTile Detour culls can change which polys survive without changing the
+  `.mmtile` byte length. Always confirm with `Get-FileHash`, `NavDataAudit`,
+  and a route/poly-stack probe before claiming a final-tile fix landed.
 
 ## Build
 
@@ -88,6 +97,16 @@ expected order in a comment block.
   for that single tile. Used for tuning `maxSimplificationError`,
   `detailSampleDist`, and capsule overrides on city tiles where geometry is
   pathological.
+- `writeAnchorStageManifest` / `logAnchorStageDiagnostics` - tile-local stacked-
+  support debugging controls. Prefer `writeAnchorStageManifest=true`: it writes
+  `meshes/map<map><tileY><tileX>_anchor_stage_manifest.json`, and
+  `tools/scripts/bake-tile.ps1` copies that into
+  `tmp/bake-sweeps/<variant>/analysis/` plus a `NavDataAudit` summary JSON/CSV.
+  Use `anchorStageManifestCoordsWow` for analysis-only extra probe coords when
+  you need stage answers for shifted dead-end points without changing the
+  actual compact-span / final-Detour cull coord list.
+  Leave `logAnchorStageDiagnostics=false` unless you explicitly need the older
+  per-subtile `HF-SRC-ANCHOR` / `CHF-SRC-ANCHOR` / `CHF-SRC-COMP` print stream.
 - [offmesh.txt](offmesh.txt) — off-mesh connections. Format is one connection
   per line; see the file header for the exact grammar. WWoW-specific entries
   are tagged `// WWoW:` and live above the divider; inherited vmangos
@@ -97,7 +116,10 @@ expected order in a comment block.
 
 - Don't introduce a separate generator (DotRecast, TrinityCore mmaps_generator)
   without an ADR + tile-format compatibility plan. The runtime loader is
-  strict.
+  strict. Also verify the geometry-input contract before treating a sibling
+  generator as a candidate fix: stock TrinityCore/AzerothCore/vmangos
+  generator flow is `terrain + vmap + offmesh`, not WWoW's GO-spawn-aware bake.
+  On GO-sensitive city tiles, a straight swap is expected to regress routes.
 - Don't bypass `NavDataAudit` for "the change is small / focused / obvious."
   The audit is what catches walkable-radius regressions, GO bake misses,
   and Detour version drift.
@@ -115,15 +137,23 @@ expected order in a comment block.
 
 - **Never blanket-kill `dotnet.exe` or `Game.exe`.** See the root
   `AGENTS.md`. MmapGen runs do not need any kill operations.
-- **MmapGen.exe runs against `D:/MaNGOS/data` in-place.** Always back up the
-  affected `mmaps/<mapId>*.mmtile` files before a regen if you might want
-  to roll back. The historical pattern is
-  `D:/MaNGOS/data/mmaps/regen-backup-<UTC-stamp>/`.
+- **Canonical iteration now bakes into `D:/wwow-bot/test-data`.** Use
+  `tools/scripts/bake-tile.ps1` (or run `MmapGen.exe` with cwd set to the
+  chosen data root) so test-data receives the new `mmaps/` tile first, then
+  promote the approved tile into `D:/wwow-bot/prod-data` with
+  `tools/MmapGen/promote-mmaps.ps1`. `WWOW_VMANGOS_DATA_DIR` is the supported
+  fallback source for shared `gameobject_spawns.json` when the split test/prod
+  roots do not carry their own copy. If you still run directly against
+  `D:/MaNGOS/data`, treat that as a focused scratch/probe path and back up the
+  affected `mmaps/<mapId>*.mmtile` files first. The historical backup pattern
+  is `D:/MaNGOS/data/mmaps/regen-backup-<UTC-stamp>/`.
 
 ## Done criteria for any MmapGen edit
 
 1. `tools/MmapGen/build-mmapgen.ps1` succeeds.
-2. The targeted tile set was regenerated against `D:/MaNGOS/data`.
+2. The targeted tile set was regenerated against the intended mutable data root
+   (`D:/wwow-bot/test-data` for the normal loop, or an explicitly documented
+   scratch root for a focused probe).
 3. `tools/NavDataAudit` passes for the regenerated tiles and produces a
    manifest with the new nav-data signature.
 4. The matching `LongPathingRouteTests` gate (or new gate, if the slice adds

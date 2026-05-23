@@ -9,7 +9,8 @@ execution, or BG movement behavior.
 Generate the current reference bundles:
 
 ```powershell
-$env:WWOW_DATA_DIR = 'D:\MaNGOS\data'
+$env:WWOW_DATA_DIR = 'D:\wwow-bot\test-data'
+$env:WWOW_VMANGOS_DATA_DIR = 'D:\MaNGOS\data'
 .\tools\scripts\export-pathfinding-reference.ps1 -Route all -Resume
 .\tools\scripts\summarize-pathfinding-reference.ps1 -Route all
 ```
@@ -64,6 +65,35 @@ Read the artifacts in this order:
    player XYZ, current waypoint, velocity/stall state, and current task branch is
    not enough for root cause.
 
+Static-world post-path generation repair is an anti-pattern. If source,
+navmesh, or polygon-stack evidence says the baked route is wrong, move the fix
+to extraction, bake config, off-mesh authoring, or a serialized final-tile
+cull. Do not let a managed/native repair layer become the accepted fix.
+
+## Live Screenshot Loop
+
+When the offline bundle looks plausible but a live route still fails, screenshot
+evidence is the next required artifact, not an optional extra.
+
+- Enable timeline capture in the relevant live validation test so
+  `CaptureTimelineCheckpoint(...)` writes paired PNG+JSON files under
+  `tmp/test-runtime/screenshots/long-pathing/timeline/<TestName>/`.
+- For short suspect routes or narrowed suspect windows, capture every reached
+  waypoint in addition to stall/replan/failure checkpoints.
+- For long travel routes, capture at least every poll interval and every
+  stall/replan/off-mesh transition.
+- Use teleport-to-waypoint diagnostics for suspect corners or lips. WWoW
+  already has examples in
+  `Tests/BotRunner.Tests/LiveValidation/LongPathingTests.cs`:
+  `OgRampWaypointInspect` (`WWOW_OG_RAMP_WAYPOINT_INSPECT=1`) and
+  `OgDeckLipAnchorVerification` (`WWOW_OG_DECK_LIP_VERIFY=1`).
+- If a pathfinding investigation claims "this waypoint is wrong" without a
+  screenshot + settled-position proof, the investigation is incomplete.
+- If a bake-side final-tile cull is part of the experiment, prove the saved
+  tile changed with a hash and a follow-up probe. File-size-only checks are not
+  enough because Detour polygon flags/areas can change without changing the
+  wrapper length.
+
 ## Polygon Report Red Flags
 
 `MmapVisualize --poly-report` writes one row per rendered polygon after crop and
@@ -84,6 +114,14 @@ reachability filters. Inspect:
 - `suspiciousMixedWall`: focused flag for the "flat floor plus wall creep"
   class; this trips when a polygon has some clearly steep detail triangles plus
   too much vertical spread and footprint for the current climb assumptions.
+- `shadowedLedgeCandidate`: focused flag for tiny lower trim ledges that are
+  small, flat, and narrow enough to be candidates for the final Detour
+  shadow-trim pass.
+- `shadowedByUpperGround`: focused overlap flag for the same class. This trips
+  when a `shadowedLedgeCandidate` sits directly below another walkable ground
+  polygon with enough XY overlap and a plausible upper-deck vertical gap.
+  Treat this as a "why is this lower ledge still here?" proof aid, not as a
+  replacement for the mesh-quality tests.
 - reachable/unreachable split: use as a local-tile clue, not as full-route proof,
   because this simple visualizer does not resolve neighbor tiles.
 
@@ -103,16 +141,21 @@ The old `(29,40)` / `0014029.mmtile` artifacts were wrong-tile artifacts. They
 showed Feralas/Darnassus/Dire-Maul-looking VMAP assets and must not be used for
 the Orgrimmar tower investigation.
 
-Latest top-ramp/deck crop after the 2026-05-13 focused runtime regen:
+Latest top-ramp/deck crop after the 2026-05-22 full Recast vendor sync and
+split-root test-data bake:
 
-- `analysis/mmap_top_ramp_deck_polys.csv`: 171 polygons in the focused crop.
-- The previously confirmed large bridge polygon is gone. Current largest crop
-  polygon is `polyIndex=12061`, `zRange=0.100y`, `maxEdge2D=11.200y`,
-  `horizontalArea2D=39.750`.
-- Current worst Z-span polygon is `polyIndex=10834`, `zRange=1.200y`,
-  `maxEdge2D=5.714y`, `horizontalArea2D=8.250`.
-- `logs/mmapgen_tile_0012940.log` proves GO bake was active:
-  `[GO] map=1 tile=40,29: baked 16 gameobject model(s), triangles=516 vertices=350`.
+- `analysis/mmap_top_ramp_deck_polys.csv`: 268 polygons in the focused crop.
+- Reachability split in the same crop: `187` reachable, `81` unreachable.
+- The previously confirmed large bridge polygon is still gone. Current largest
+  crop polygon is `polyIndex=17644`, `zRange=0.100y`, `maxEdge2D=13.158y`,
+  `horizontalArea2D=48.250`.
+- Current worst Z-span polygon is `polyIndex=17194`, `zRange=1.000y`,
+  `maxEdge2D=6.831y`, `horizontalArea2D=5.500`.
+- The authoritative GO bake proof for this refreshed split-root run is the
+  test-data bake log
+  `tmp/bake-sweeps/recast-full-sync-og-4029-go-fallback-20260522T000716Z/bake.log`,
+  which reports:
+  `[GO] map=1 tile=40,29: baked 171 gameobject model(s), triangles=6363 vertices=3636 candidates=171 missing=0`.
 - `analysis/compiled_adt_vmap_go_source_triangles.csv` tags raw source
   triangles as terrain, vmap, gameobject, or liquid.
 - `analysis/mmapgen_stage_heightfield_spans.csv`,
@@ -537,4 +580,78 @@ For the nav-summary accelerator scaffold, next command:
 
 ```powershell
 dotnet test Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Debug --no-build -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavSummaryRouteResolverTests" --logger "console;verbosity=minimal"
+```
+
+## RecastDemo OG Route Bundles
+
+The generated RecastDemo layouts under
+`tools/recastnavigation/build-msvc/RecastDemo/Meshes/WorldOfWarcraft/Generated/Orgrimmar/`
+now carry layout metadata, not just raw marker lists:
+
+- `m defaultStartMarker ...` / `m defaultEndMarker ...` let the demo seed the
+  intended marker pair instead of guessing from label heuristics.
+- Top-deck layouts intentionally use a deck-local marker subset
+  (`top_ramp_lip`, `deck_lip_stall`, `frezza_spawn`, `boarding_pos`) so the
+  cropped view does not auto-arm off-crop route markers.
+- Full/tower layouts keep the broad route context and default to
+  `route_start -> boarding_pos`.
+- If `tmp/test-runtime/results-pathfinding/...trx` yields waypoints,
+  `tools/scripts/export-pathfinding-reference.ps1` stages
+  `route_waypoints.obj` into the same generated route folder so the current
+  route polyline can be inspected immediately in RecastDemo.
+
+Current OG layouts to prefer:
+
+- `og_zeppelin_runtime_mmap_top_deck.gset`
+- `og_zeppelin_runtime_mmap_tower_crop.gset`
+- `og_zeppelin_runtime_mmap_full.gset`
+
+For a quick refresh against the currently promoted nav data:
+
+```powershell
+$env:WWOW_DATA_DIR='D:\wwow-bot\prod-data'
+$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'
+powershell -ExecutionPolicy Bypass -File .\tools\scripts\export-pathfinding-reference.ps1 -Route og-zeppelin -DataDir D:\wwow-bot\prod-data -TrxPath "tmp/test-runtime/results-pathfinding/pathfinding_org_fm_static_blockers_full_recast_sync_proddata.trx" -Resume
+```
+
+## RecastDemo Explorer UI
+
+The RecastDemo app now has a dedicated `Explorer` panel so route debugging does
+not depend on a single giant layout combo box:
+
+- Filter by `Scope`, `Zone`, and `Stage`.
+- Search by route label, tile, map, or bundle title.
+- Keep raw `.obj` stage assets hidden by default, then opt into them with
+  `Show Raw OBJ Assets` when you want to inspect source/runtime crops directly.
+- Use `Stage Breakdown` to jump between exported source, polymesh, detail-mesh,
+  generated, runtime, and curated-layout views for the same route family.
+- Use the `Properties -> Debug Settings -> Pipeline Views` shortcuts after a
+  build to step through `Input Mesh -> Voxels -> Compact -> Contours -> Poly
+  Mesh -> Detail Mesh -> Navmesh` without hunting through the old draw-mode
+  combo.
+
+Current staged WoW zones in the demo library:
+
+- `Orgrimmar`
+- `RagefireChasm`
+- `BlackrockMountain`
+
+The Blackrock Mountain bundle now stages detail-mesh layouts alongside the
+existing source/runtime/polymesh sets:
+
+- `brm_focus_source_tiles.gset`
+- `brm_focus_runtime_tiles.gset`
+- `brm_focus_mmapgen_generated_tiles.gset`
+- `brm_focus_mmapgen_polymesh_tiles.gset`
+- `brm_focus_mmapgen_detailmesh_tiles.gset`
+- `brm_source_full_tiles.gset`
+
+If the build output is already present and you only need to refresh the staged
+demo assets, re-run:
+
+```powershell
+$env:WWOW_DATA_DIR='D:\wwow-bot\prod-data'
+$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'
+powershell -ExecutionPolicy Bypass -File .\tools\scripts\export-pathfinding-reference.ps1 -Route brd -DataDir D:\wwow-bot\prod-data -Resume
+powershell -ExecutionPolicy Bypass -File .\tools\scripts\export-pathfinding-reference.ps1 -Route rfc -DataDir D:\wwow-bot\prod-data -Resume
 ```

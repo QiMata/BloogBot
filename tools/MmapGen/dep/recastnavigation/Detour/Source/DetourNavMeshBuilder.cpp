@@ -382,7 +382,11 @@ bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData,
 		}
 	}
 
-	const int maxLinkCount = edgeCount + portalCount*2 + offMeshConLinkCount*2;
+	// Each stored off-mesh connection needs one extra start-tile link beyond the
+	// endpoint-based count above: baseOffMeshLinks always consumes 2 links on the
+	// start tile, and connectExtOffMeshLinks later needs a third link on that
+	// same off-mesh poly when the destination lands outside the source tile.
+	const int maxLinkCount = edgeCount + portalCount*2 + offMeshConLinkCount*2 + storedOffMeshConCount;
 	
 	// Find unique detail vertices.
 	int uniqueDetailVertCount = 0;
@@ -422,6 +426,21 @@ bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData,
 			detailTriCount += nv-2;
 		}
 	}
+
+	int actualBvNodeCount = 0;
+	dtBVNode* tempNavBvtree = 0;
+	if (params->buildBvTree)
+	{
+		const int maxBvNodeCount = params->polyCount*2;
+		tempNavBvtree = (dtBVNode*)dtAlloc(sizeof(dtBVNode)*maxBvNodeCount, DT_ALLOC_TEMP);
+		if (!tempNavBvtree)
+		{
+			dtFree(offMeshConClass);
+			return false;
+		}
+
+		actualBvNodeCount = createBVTree(params, tempNavBvtree, maxBvNodeCount);
+	}
 	
 	// Calculate data size
 	const int headerSize = dtAlign4(sizeof(dtMeshHeader));
@@ -431,7 +450,7 @@ bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData,
 	const int detailMeshesSize = dtAlign4(sizeof(dtPolyDetail)*params->polyCount);
 	const int detailVertsSize = dtAlign4(sizeof(float)*3*uniqueDetailVertCount);
 	const int detailTrisSize = dtAlign4(sizeof(unsigned char)*4*detailTriCount);
-	const int bvTreeSize = params->buildBvTree ? dtAlign4(sizeof(dtBVNode)*params->polyCount*2) : 0;
+	const int bvTreeSize = params->buildBvTree ? dtAlign4(sizeof(dtBVNode)*actualBvNodeCount) : 0;
 	const int offMeshConsSize = dtAlign4(sizeof(dtOffMeshConnection)*storedOffMeshConCount);
 	
 	const int dataSize = headerSize + vertsSize + polysSize + linksSize +
@@ -441,6 +460,7 @@ bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData,
 	unsigned char* data = (unsigned char*)dtAlloc(sizeof(unsigned char)*dataSize, DT_ALLOC_PERM);
 	if (!data)
 	{
+		dtFree(tempNavBvtree);
 		dtFree(offMeshConClass);
 		return false;
 	}
@@ -480,7 +500,7 @@ bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData,
 	header->walkableRadius = params->walkableRadius;
 	header->walkableClimb = params->walkableClimb;
 	header->offMeshConCount = storedOffMeshConCount;
-	header->bvNodeCount = params->buildBvTree ? params->polyCount*2 : 0;
+	header->bvNodeCount = actualBvNodeCount;
 	
 	const int offMeshVertsBase = params->vertCount;
 	const int offMeshPolyBase = params->polyCount;
@@ -624,7 +644,7 @@ bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData,
 	// Store and create BVtree.
 	if (params->buildBvTree)
 	{
-		createBVTree(params, navBvtree, 2*params->polyCount);
+		memcpy(navBvtree, tempNavBvtree, sizeof(dtBVNode)*actualBvNodeCount);
 	}
 	
 	// Store Off-Mesh connections.
@@ -649,6 +669,7 @@ bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData,
 		}
 	}
 		
+	dtFree(tempNavBvtree);
 	dtFree(offMeshConClass);
 	
 	*outData = data;

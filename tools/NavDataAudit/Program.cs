@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using NavDataAudit;
 
 const float CellSize = 0.2666666f;
 const float ContinentCellHeight = 0.25f;
@@ -22,6 +23,12 @@ var dataRoot = ResolveDataRoot(args);
 var mapId = GetUIntOption(args, "--map", MapKalimdor);
 var buildLogPath = ResolveBuildLogPath(args, dataRoot, mapId);
 var manifestPath = GetStringOption(args, "--write-manifest");
+var stageManifestPath = GetStringOption(args, "--stage-manifest");
+var stageSummaryPath = GetStringOption(args, "--write-stage-summary");
+var stageSummaryCsvPath = GetStringOption(args, "--write-stage-summary-csv");
+var stageSummaryOnly = HasFlag(args, "--stage-summary-only");
+var configPath = ResolveConfigPath(args, dataRoot);
+var spawnsPath = ResolveSpawnsPath(args, dataRoot);
 var tiles = GetTileOptions(args);
 if (tiles.Count == 0)
 {
@@ -41,17 +48,42 @@ var requiredHeightCells = (int)MathF.Ceiling(requiredHeight / ContinentCellHeigh
 
 var failures = new List<string>();
 
+if (stageSummaryOnly)
+{
+    if (string.IsNullOrWhiteSpace(stageManifestPath))
+    {
+        Fail(failures, "--stage-summary-only requires --stage-manifest <path>");
+    }
+    else
+    {
+        AnalyzeStageManifest(stageManifestPath!, stageSummaryPath, stageSummaryCsvPath, failures);
+    }
+
+    if (failures.Count == 0)
+    {
+        Console.WriteLine("RESULT: PASS");
+        return 0;
+    }
+
+    Console.WriteLine("RESULT: FAIL");
+    foreach (var failure in failures)
+        Console.WriteLine($"  - {failure}");
+    return 2;
+}
+
 Console.WriteLine("WWoW navigation data audit");
 Console.WriteLine($"Data root: {dataRoot}");
 Console.WriteLine($"Target capsule: Tauren Male radius={TaurenMaleRadius:F4} + padding={CapsulePadding:F2} => {requiredRadius:F4}, height={requiredHeight:F4}");
 Console.WriteLine($"Required Recast cells: walkableRadius >= {requiredRadiusCells} at cs={CellSize}, walkableHeight >= {requiredHeightCells} at ch={ContinentCellHeight}");
 Console.WriteLine();
 
-AuditConfig(dataRoot, mapId, requiredRadius, requiredHeight, requiredRadiusCells, requiredHeightCells, failures);
+AuditConfig(configPath, mapId, requiredRadius, requiredHeight, requiredRadiusCells, requiredHeightCells, failures);
 var tileAudits = AuditTileHeaders(dataRoot, mapId, tiles, requiredRadius, requiredHeight, failures);
-AuditGameObjectInputs(dataRoot, mapId, tiles, buildLogPath, failures);
+AuditGameObjectInputs(dataRoot, spawnsPath, mapId, tiles, buildLogPath, failures);
 if (!string.IsNullOrWhiteSpace(manifestPath))
-    WriteManifest(manifestPath, dataRoot, mapId, buildLogPath, requiredRadius, requiredHeight, requiredRadiusCells, requiredHeightCells, tileAudits);
+    WriteManifest(manifestPath, dataRoot, configPath, spawnsPath, mapId, buildLogPath, requiredRadius, requiredHeight, requiredRadiusCells, requiredHeightCells, tileAudits);
+if (!string.IsNullOrWhiteSpace(stageManifestPath))
+    AnalyzeStageManifest(stageManifestPath!, stageSummaryPath, stageSummaryCsvPath, failures);
 
 Console.WriteLine();
 if (failures.Count == 0)
@@ -78,6 +110,9 @@ static string ResolveDataRoot(string[] args)
     return Path.GetFullPath("D:/MaNGOS/data");
 }
 
+static bool HasFlag(string[] args, string name)
+    => args.Any(arg => string.Equals(arg, name, StringComparison.OrdinalIgnoreCase));
+
 static uint GetUIntOption(string[] args, string name, uint defaultValue)
 {
     for (var i = 0; i < args.Length - 1; i++)
@@ -101,6 +136,40 @@ static string ResolveBuildLogPath(string[] args, string dataRoot, uint mapId)
     }
 
     return Path.Combine(dataRoot, $"map{mapId}_build.log");
+}
+
+static string ResolveConfigPath(string[] args, string dataRoot)
+{
+    var explicitPath = GetStringOption(args, "--config-path");
+    if (!string.IsNullOrWhiteSpace(explicitPath))
+        return explicitPath;
+
+    var localPath = Path.Combine(dataRoot, "config.json");
+    if (File.Exists(localPath))
+        return localPath;
+
+    return Path.GetFullPath("tools/MmapGen/config.json");
+}
+
+static string ResolveSpawnsPath(string[] args, string dataRoot)
+{
+    var explicitPath = GetStringOption(args, "--spawns-path");
+    if (!string.IsNullOrWhiteSpace(explicitPath))
+        return explicitPath;
+
+    var localPath = Path.Combine(dataRoot, "gameobject_spawns.json");
+    if (File.Exists(localPath))
+        return localPath;
+
+    var vmangosDataDir = Environment.GetEnvironmentVariable("WWOW_VMANGOS_DATA_DIR");
+    if (!string.IsNullOrWhiteSpace(vmangosDataDir))
+    {
+        var vmangosPath = Path.Combine(vmangosDataDir, "gameobject_spawns.json");
+        if (File.Exists(vmangosPath))
+            return Path.GetFullPath(vmangosPath);
+    }
+
+    return localPath;
 }
 
 static string? GetStringOption(string[] args, string name)
@@ -135,7 +204,7 @@ static List<Tile> GetTileOptions(string[] args)
 }
 
 static void AuditConfig(
-    string dataRoot,
+    string configPath,
     uint mapId,
     float requiredRadius,
     float requiredHeight,
@@ -143,14 +212,14 @@ static void AuditConfig(
     int requiredHeightCells,
     List<string> failures)
 {
-    var path = Path.Combine(dataRoot, "config.json");
-    if (!File.Exists(path))
+    if (!File.Exists(configPath))
     {
-        Fail(failures, $"config.json missing at {path}");
+        Fail(failures, $"config.json missing at {configPath}");
         return;
     }
 
-    using var doc = JsonDocument.Parse(File.ReadAllText(path));
+    Info($"using config.json from {configPath}");
+    using var doc = JsonDocument.Parse(File.ReadAllText(configPath));
     if (!doc.RootElement.TryGetProperty(mapId.ToString(CultureInfo.InvariantCulture), out var mapConfig))
     {
         Fail(failures, $"config.json has no map {mapId} override");
@@ -164,12 +233,15 @@ static void AuditConfig(
 
     CheckFloat(failures, $"config map {mapId} agentRadius", agentRadius, requiredRadius);
     CheckFloat(failures, $"config map {mapId} agentHeight", agentHeight, requiredHeight);
-    CheckInt(failures, $"config map {mapId} walkableRadius", walkableRadius, requiredRadiusCells);
+    if (walkableRadius.HasValue && walkableRadius.Value > 0)
+        CheckInt(failures, $"config map {mapId} walkableRadius", walkableRadius, requiredRadiusCells);
+    else
+        Info($"config map {mapId} walkableRadius is auto-derived from agentRadius and cs; expected >= {requiredRadiusCells} cells at runtime.");
 
-    if (walkableHeight.HasValue)
+    if (walkableHeight.HasValue && walkableHeight.Value > 0)
         CheckInt(failures, $"config map {mapId} walkableHeight", walkableHeight, requiredHeightCells);
     else
-        Info($"config map {mapId} walkableHeight not set; generator must derive >= {requiredHeightCells} from agentHeight.");
+        Info($"config map {mapId} walkableHeight is auto-derived from agentHeight and ch; expected >= {requiredHeightCells} cells at runtime.");
 }
 
 static List<MMapTileAudit> AuditTileHeaders(string dataRoot, uint mapId, List<Tile> tiles, float requiredRadius, float requiredHeight, List<string> failures)
@@ -249,7 +321,7 @@ static DetourTileHeader? ReadTileHeader(string path)
         Convert.ToHexString(SHA256.HashData(bytes)));
 }
 
-static void AuditGameObjectInputs(string dataRoot, uint mapId, List<Tile> tiles, string buildLogPath, List<string> failures)
+static void AuditGameObjectInputs(string dataRoot, string spawnsPath, uint mapId, List<Tile> tiles, string buildLogPath, List<string> failures)
 {
     var tempModelsPath = Path.Combine(dataRoot, "vmaps", "temp_gameobject_models");
     var modelDisplayIds = ReadGameObjectModelDisplayIds(tempModelsPath);
@@ -258,7 +330,7 @@ static void AuditGameObjectInputs(string dataRoot, uint mapId, List<Tile> tiles,
     else
         Pass($"temp_gameobject_models contains {modelDisplayIds.Count} displayId model mappings.");
 
-    var spawnsPath = Path.Combine(dataRoot, "gameobject_spawns.json");
+    Info($"using gameobject_spawns.json from {spawnsPath}");
     var modeledTileSpawns = CountModeledTileSpawnsByTile(spawnsPath, mapId, tiles, modelDisplayIds);
     var modeledSpawnTotal = modeledTileSpawns.Values.Sum();
     if (modeledSpawnTotal <= 0)
@@ -418,6 +490,8 @@ static int ParseNamedCount(string line, string marker)
 static void WriteManifest(
     string manifestPath,
     string dataRoot,
+    string configPath,
+    string spawnsPath,
     uint mapId,
     string buildLogPath,
     float requiredRadius,
@@ -440,7 +514,7 @@ static void WriteManifest(
         dataRoot,
         mapId,
         buildLogPath,
-        configPath = Path.Combine(dataRoot, "config.json"),
+        configPath,
         generatorPath = ResolveKnownGeneratorPath(),
         detourNavMeshVersion = DetourNavMeshVersion,
         mmapWrapperVersion = MmapWrapperVersion,
@@ -451,7 +525,7 @@ static void WriteManifest(
         {
             mode = "model-geometry-with-aabb-fallback",
             sourceModels = Path.Combine(dataRoot, "vmaps", "temp_gameobject_models"),
-            sourceSpawns = Path.Combine(dataRoot, "gameobject_spawns.json"),
+            sourceSpawns = spawnsPath,
             requiredLogMarker = "[GO] map=<map> tile=<x>,<y>: baked <count> gameobject model(s), triangles=<n> vertices=<n> candidates=<n> missing=<n>"
         },
         agent = new
@@ -502,6 +576,110 @@ static string ComputeSignature(uint mapId, float requiredRadius, float requiredH
     }
 
     return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
+}
+
+static void AnalyzeStageManifest(string manifestPath, string? summaryPath, string? summaryCsvPath, List<string> failures)
+{
+    if (!File.Exists(manifestPath))
+    {
+        Fail(failures, $"missing anchor stage manifest {manifestPath}");
+        return;
+    }
+
+    var summary = StageManifestAnalyzer.Analyze(manifestPath);
+    if (summary.Anchors.Count == 0)
+    {
+        Fail(failures, $"anchor stage manifest has no anchors: {manifestPath}");
+        return;
+    }
+
+    Pass($"anchor stage manifest loaded: {manifestPath}");
+    foreach (var anchor in summary.Anchors)
+    {
+        var winnerSummary = string.IsNullOrWhiteSpace(anchor.FinalWinnerPolyRef)
+            ? "winner=none"
+            : $"winner={anchor.FinalWinnerPolyRef} support={anchor.FinalWinnerSupportCandidate?.ToString() ?? "null"} lower={anchor.FinalWinnerCompetingLower?.ToString() ?? "null"}";
+        var verdictSummary = anchor.FirstBadStage is null
+            ? "firstBadStage=<none>"
+            : $"firstBadStage={anchor.FirstBadStage} reason={anchor.FirstBadReason}";
+        Console.WriteLine($"[ANCHOR-STAGE] anchor={anchor.Label} coverage={anchor.PresentStageCount}/{StageManifestAnalyzer.ExpectedStages.Length} {verdictSummary} {winnerSummary}");
+    }
+
+    if (!string.IsNullOrWhiteSpace(summaryPath))
+        WriteStageSummary(summaryPath!, summary);
+    if (!string.IsNullOrWhiteSpace(summaryCsvPath))
+        WriteStageSummaryCsv(summaryCsvPath!, summary);
+}
+
+static void WriteStageSummary(string summaryPath, AnchorStageManifestSummary summary)
+{
+    Directory.CreateDirectory(Path.GetDirectoryName(summaryPath) ?? ".");
+    var payload = new
+    {
+        schemaVersion = 1,
+        manifestPath = summary.ManifestPath,
+        mapId = summary.MapId,
+        tileX = summary.TileX,
+        tileY = summary.TileY,
+        expectedStages = StageManifestAnalyzer.ExpectedStages,
+        anchors = summary.Anchors.Select(anchor => new
+        {
+            anchor.AnchorId,
+            anchor.Label,
+            anchor.WowX,
+            anchor.WowY,
+            anchor.WowZ,
+            anchor.SourceSupportFound,
+            anchor.PresentStageCount,
+            anchor.MissingStages,
+            anchor.FirstBadStage,
+            anchor.FirstBadReason,
+            anchor.FinalWinnerPolyRef,
+            anchor.FinalWinnerSupportCandidate,
+            anchor.FinalWinnerCompetingLower,
+            anchor.CoverageComplete,
+        }),
+    };
+
+    File.WriteAllText(summaryPath, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }), Encoding.UTF8);
+    Pass($"wrote anchor stage summary {summaryPath}");
+}
+
+static void WriteStageSummaryCsv(string summaryCsvPath, AnchorStageManifestSummary summary)
+{
+    Directory.CreateDirectory(Path.GetDirectoryName(summaryCsvPath) ?? ".");
+    var builder = new StringBuilder();
+    builder.AppendLine("anchorId,label,wowX,wowY,wowZ,sourceSupportFound,presentStageCount,coverageComplete,firstBadStage,firstBadReason,finalWinnerPolyRef,finalWinnerSupportCandidate,finalWinnerCompetingLower,missingStages");
+    foreach (var anchor in summary.Anchors)
+    {
+        builder.Append(Csv(anchor.AnchorId)).Append(',')
+            .Append(Csv(anchor.Label)).Append(',')
+            .Append(anchor.WowX.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+            .Append(anchor.WowY.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+            .Append(anchor.WowZ.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+            .Append(anchor.SourceSupportFound ? "true" : "false").Append(',')
+            .Append(anchor.PresentStageCount.ToString(CultureInfo.InvariantCulture)).Append(',')
+            .Append(anchor.CoverageComplete ? "true" : "false").Append(',')
+            .Append(Csv(anchor.FirstBadStage)).Append(',')
+            .Append(Csv(anchor.FirstBadReason)).Append(',')
+            .Append(Csv(anchor.FinalWinnerPolyRef)).Append(',')
+            .Append(Csv(anchor.FinalWinnerSupportCandidate?.ToString())).Append(',')
+            .Append(Csv(anchor.FinalWinnerCompetingLower?.ToString())).Append(',')
+            .Append(Csv(string.Join("|", anchor.MissingStages)))
+            .AppendLine();
+    }
+
+    File.WriteAllText(summaryCsvPath, builder.ToString(), Encoding.UTF8);
+    Pass($"wrote anchor stage summary CSV {summaryCsvPath}");
+}
+
+static string Csv(string? value)
+{
+    var text = value ?? string.Empty;
+    if (text.Contains('"') || text.Contains(',') || text.Contains('\n') || text.Contains('\r'))
+        return $"\"{text.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+
+    return text;
 }
 
 static float? TryGetSingle(JsonElement element, string property)

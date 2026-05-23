@@ -645,6 +645,13 @@ namespace PathfindingService.Repository
         public static (int Hits, int Misses) GetLastCompletedSegmentValidationCacheCounters()
             => _lastCompletedSegmentValidationScope;
 
+        public static void ResetSegmentValidationCacheCountersForTests()
+        {
+            _segmentValidationCacheHits = 0;
+            _segmentValidationCacheMisses = 0;
+            _lastCompletedSegmentValidationScope = (0, 0);
+        }
+
         // PFS-OVERHAUL-006 loop-24 Phase A5.2 — off-mesh-connection
         // detection cache, lifetime tied to the SegmentValidationCacheScope
         // (initialised in BeginSegmentValidationCacheScope, cleared in
@@ -764,7 +771,7 @@ namespace PathfindingService.Repository
             Func<uint, XYZ, XYZ, string?>? segmentBlockerReasonResolver = null)
         {
             _findPathResolver = findPathResolver is null
-                ? FindPathCorridorNative
+                ? FindPathRawNative
                 : (mapId, start, end, smoothPath, _, _) => NativePathResolution.FromPath(findPathResolver(mapId, start, end, smoothPath));
             _segmentBlocker = segmentBlocker ?? SegmentIntersectsDynamicObjectsInternal;
             _segmentBlockerReasonResolver = segmentBlockerReasonResolver ?? TryResolveDynamicObjectBlockReasonInternal;
@@ -814,7 +821,7 @@ namespace PathfindingService.Repository
         // ── Public API ──
 
         public XYZ[] CalculatePath(uint mapId, XYZ start, XYZ end, bool smoothPath)
-            => CalculateValidatedPath(mapId, start, end, smoothPath).Path;
+            => CalculateRawPath(mapId, start, end, smoothPath).Path;
 
         public void PreloadMap(uint mapId)
             => PreloadMapNative(mapId);
@@ -900,13 +907,13 @@ namespace PathfindingService.Repository
         public NavigationPathResult CalculateValidatedPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
             float agentRadius = 0.6f, float agentHeight = 2.0f)
         {
+            // PFS-OVERHAUL-006 / 2026-05-22: keep the public API shape for
+            // callers/tests, but route it straight to the raw native path.
+            // Query-time repair is being retired in favor of bake authority.
             var stopwatch = Stopwatch.StartNew();
-            using (BeginSegmentValidationCacheScope())
-            {
-                var result = CalculateValidatedPathCore(mapId, start, end, smoothPath, agentRadius, agentHeight);
-                NavigationPerformanceMetrics.RecordValidatedPath(stopwatch.Elapsed, result);
-                return result;
-            }
+            var result = CalculateRawPath(mapId, start, end, smoothPath, agentRadius, agentHeight);
+            NavigationPerformanceMetrics.RecordValidatedPath(stopwatch.Elapsed, result);
+            return result;
         }
 
         /// <summary>
@@ -923,55 +930,35 @@ namespace PathfindingService.Repository
         public NavigationPathResult CalculateRawPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
             float agentRadius = 0.6f, float agentHeight = 2.0f)
         {
-            var stopwatch = Stopwatch.StartNew();
-            var rawPath = TryFindPathNative(mapId, start, end, smoothPath, agentRadius, agentHeight);
-            stopwatch.Stop();
+            var resolution = _findPathResolver(mapId, start, end, smoothPath, agentRadius, agentHeight);
+            var rawPath = resolution.Path ?? Array.Empty<XYZ>();
+            var blockedReason = string.IsNullOrWhiteSpace(resolution.BlockedReason)
+                ? "none"
+                : resolution.BlockedReason;
             if (rawPath.Length == 0)
             {
                 return new NavigationPathResult(
                     Array.Empty<XYZ>(),
                     Array.Empty<XYZ>(),
                     "no_path",
-                    null);
+                    resolution.BlockedSegmentIndex,
+                    blockedReason);
             }
             return new NavigationPathResult(
                 rawPath,
                 rawPath,
                 "raw_detour",
-                null);
+                resolution.BlockedSegmentIndex,
+                blockedReason);
         }
 
         public NavigationPathResult CalculateRoutePackSeedPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
             float agentRadius = 0.6f, float agentHeight = 2.0f)
-        {
-            var resolution = FindPathCorridorResolution(mapId, start, end);
-            var rawPath = resolution.Path ?? Array.Empty<XYZ>();
-            if (rawPath.Length == 0)
-                return new NavigationPathResult(Array.Empty<XYZ>(), Array.Empty<XYZ>(), "no_path", null);
-
-            var pathForPack = rawPath;
-            var resultTag = "route_pack_corridor";
-
-            return BuildBoundedCorridorValidationResult(
-                mapId,
-                rawPath,
-                pathForPack,
-                smoothPath,
-                agentRadius,
-                agentHeight,
-                resultTag,
-                "route_pack_corridor_static_los",
-                "route_pack_corridor_local_physics_layer",
-                resolution.BlockedSegmentIndex,
-                resolution.BlockedReason);
-        }
+            => CalculateRawPath(mapId, start, end, smoothPath, agentRadius, agentHeight);
 
         public NavigationPathResult CalculateStaticRoutePackPath(uint mapId, XYZ start, XYZ end, bool smoothPath,
             float agentRadius = 0.6f, float agentHeight = 2.0f)
-        {
-            var generated = CalculateValidatedPath(mapId, start, end, smoothPath, agentRadius, agentHeight);
-            return EnforceStaticRoutePackSupport(mapId, generated, smoothPath, agentRadius, agentHeight);
-        }
+            => CalculateRawPath(mapId, start, end, smoothPath, agentRadius, agentHeight);
 
         private static NavigationPathResult EnforceStaticRoutePackSupport(
             uint mapId,
@@ -1549,6 +1536,16 @@ namespace PathfindingService.Repository
 
             return selected;
         }
+
+        private NativePathResolution FindPathRawNative(
+            uint mapId,
+            XYZ start,
+            XYZ end,
+            bool smoothPath,
+            float agentRadius,
+            float agentHeight)
+            => NativePathResolution.FromPath(
+                TryFindPathNative(mapId, start, end, smoothPath, agentRadius, agentHeight));
 
         private NativePathResolution FindPathCorridorNative(
             uint mapId,
