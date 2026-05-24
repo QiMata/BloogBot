@@ -2027,3 +2027,65 @@
   - next iteration should add pair-specific final reachability / candidate
     routeability proof, or a component-targeted basin cull
   - do not spend another loop only retuning support-band tolerances
+
+### 2026-05-24 routeability-aware trapped-component cull follow-up
+
+- Shipped:
+  - finalDetour manifest summary now carries:
+    - `FinalWinnerRouteableToAnyTarget`
+    - `FinalResolvedRouteTargetCount`
+    - `FinalRouteableSupportCandidateCount`
+    - `FinalRouteableSupportComponentCount`
+  - tile config now supports local chain targets through
+    `anchorRouteTargetsWow`
+  - optional experiment flag:
+    `postDetourCullAnchorTrappedComponents`
+- Build/test:
+  - `powershell -ExecutionPolicy Bypass -File tools/MmapGen/build-mmapgen.ps1 -Configuration Release`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut"`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes"`
+- Validated artifacts:
+  - `tmp/bake-sweeps/og_4029_anchor_routeability_cull-20260524T004027Z/`
+    - tile hash:
+      `B84D1CD2369E03721ECBDC83656EC4E700E546886CFF49C231F52F05CED086AF`
+  - `tmp/bake-sweeps/og_4029_anchor_routeability_chain_targets-20260524T005038Z/`
+    - tile hash:
+      `039BEDF73A2318B0D6559BDC0FB453D240875EDD08BA2319F56A0EA26D85EA94`
+  - `tmp/test-runtime/results-pathfinding/og_4029_anchor_routeability_chain_targets_focused.trx`
+  - `tmp/test-runtime/results-pathfinding/critical_walk_legs_og_4029_anchor_routeability_chain_targets.trx`
+- Results:
+  - focused slice stayed `7/7`
+  - full raw-Detour sweep stayed `17/23`
+  - failing labels stayed the same six reds:
+    - `orgrimmar_city_live_vertical_replan_recovery`
+    - `orgrimmar_city_hallway_live_wall_stall_recovery`
+    - `orgrimmar_city_hallway_exit_live_stall_recovery`
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_exterior_incline_live_stall_exact_recovery`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+- Key learning:
+  - city / hallway / hallway-exit anchors still show
+    `FinalRouteableSupportComponentCount=0`, so routeability did not reveal a
+    better local winner to keep
+  - the routeability cull therefore cannot solve those basins yet; it has no
+    alternate routeable support component to preserve
+  - `1364.867,-4374.000,26.109` and `1355.600,-4522.300,33.100` did become
+    routeable, which changed the underpass failure from a dead-end into a bad
+    overhead-ramp climb
+- Current default:
+  - keep the routeability summary fields and `anchorRouteTargetsWow`
+  - keep `postDetourCullAnchorTrappedComponents=false` in the checked-in tile
+    config until a branch improves route outcomes instead of only changing the
+    failure shape
+- Checked-in proof-only validation:
+  - `tmp/bake-sweeps/og_4029_anchor_routeability_proof_only-20260524T010701Z/`
+  - tile hash:
+    `6FA99D4CA18F7C3E8853712F7931DBD26A03C30C344508E15760E1E8CD459F52`
+  - focused slice stayed `7/7`
+  - full raw-Detour sweep stayed `17/23`
+- Next move:
+  - use the routeability fields as proof-only instrumentation
+  - stop spending loops on target rewiring when the hallway chain still reports
+    zero routeable support components
+  - go earlier in the bake on the hallway/city chain:
+    `polymesh` / `contours` / corridor connectivity preservation

@@ -938,6 +938,82 @@ is a chained final-Detour trapped-basin problem. The next useful move is a
 reachability-aware/component-targeted cull or earlier contour/polymesh
 prevention, not more support-band threshold tuning.
 
+### 2026-05-24 routeability-aware finalDetour cull follow-up
+
+I kept the finalDetour component metadata and extended it into a real
+routeability proof surface:
+
+- `anchorRouteTargetsWow` lets each anchor resolve a local escape target.
+- the manifest summary now records:
+  - `FinalWinnerRouteableToAnyTarget`
+  - `FinalResolvedRouteTargetCount`
+  - `FinalRouteableSupportCandidateCount`
+  - `FinalRouteableSupportComponentCount`
+- the optional experiment flag
+  `postDetourCullAnchorTrappedComponents=true` disables a trapped local winner
+  only when the same anchor window still contains another support component
+  that can route to the configured target.
+
+Validated experiment branches:
+
+- `tmp/bake-sweeps/og_4029_anchor_routeability_cull-20260524T004027Z/`
+  - saved tile hash:
+    `B84D1CD2369E03721ECBDC83656EC4E700E546886CFF49C231F52F05CED086AF`
+- `tmp/bake-sweeps/og_4029_anchor_routeability_chain_targets-20260524T005038Z/`
+  - saved tile hash:
+    `039BEDF73A2318B0D6559BDC0FB453D240875EDD08BA2319F56A0EA26D85EA94`
+
+Validation commands:
+
+```powershell
+$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'
+powershell -ExecutionPolicy Bypass -File 'E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1' -Map 1 -Tiles '40,29' -Variant 'og_4029_anchor_routeability_chain_targets' -DataDir 'D:\wwow-bot\test-data'
+
+$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'
+dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj' --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_anchor_routeability_chain_targets_focused.trx" --results-directory 'E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding'
+
+$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'
+dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj' --configuration Release --no-build --no-restore --settings 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings' -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_anchor_routeability_chain_targets.trx" --results-directory 'E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding'
+```
+
+Observed results:
+
+- focused OG slice stayed green `7/7`
+- full raw-Detour `CriticalWalkLegs` stayed flat at `17/23`
+- the six failing route labels did not change
+- the underpass failure changed shape: it no longer dead-ended, but the route
+  climbed toward the overhead ramp/ceiling within `1.6y` of the start before
+  moving horizontally out
+
+What the routeability proof actually taught us:
+
+- city / hallway / hallway-exit anchors still resolved `0` routeable support
+  components even with local chain targets:
+  - `1545.000,-4434.500,11.100`
+  - `1518.200,-4419.800,17.100`
+  - `1491.400,-4417.300,23.300`
+- the cull therefore had nothing actionable to remove on those chained trapped
+  basins
+- `1364.867,-4374.000,26.109` and `1355.600,-4522.300,33.100` did resolve
+  routeable support components, which is why the underpass/exterior branch
+  changed while the hallway chain did not
+
+Practical conclusion:
+
+- keep the routeability fields in the manifest and summary
+- keep `postDetourCullAnchorTrappedComponents` disabled in the default tile
+  config for now
+- do not spend another loop only rewiring route targets
+- the next productive fix surface is still earlier structural loss:
+  `polymesh`/`contours` for the hallway-city chain, and lower-vs-overhead
+  support disambiguation for the underpass
+- checked-in proof-only validation:
+  - `tmp/bake-sweeps/og_4029_anchor_routeability_proof_only-20260524T010701Z/`
+  - saved tile hash:
+    `6FA99D4CA18F7C3E8853712F7931DBD26A03C30C344508E15760E1E8CD459F52`
+  - focused slice stayed `7/7`
+  - full `CriticalWalkLegs` stayed `17/23`
+
 ### Follow-up: combined post-erode restore + source-support window cull
 
 - Why this branch existed:

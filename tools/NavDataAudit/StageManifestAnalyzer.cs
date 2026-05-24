@@ -27,8 +27,12 @@ public sealed record AnchorStageSummary(
     int? FinalWinnerComponentPolyCount,
     bool? FinalWinnerSupportCandidate,
     bool? FinalWinnerCompetingLower,
+    bool? FinalWinnerRouteableToAnyTarget,
     int? FinalSupportComponentCount,
     int? FinalLowerComponentCount,
+    int? FinalResolvedRouteTargetCount,
+    int? FinalRouteableSupportCandidateCount,
+    int? FinalRouteableSupportComponentCount,
     bool CoverageComplete);
 
 public static class StageManifestAnalyzer
@@ -143,8 +147,12 @@ public static class StageManifestAnalyzer
         int? finalWinnerComponentPolyCount = null;
         bool? finalWinnerSupport = null;
         bool? finalWinnerLower = null;
+        bool? finalWinnerRouteable = null;
         int? finalSupportComponentCount = null;
         int? finalLowerComponentCount = null;
+        int? finalResolvedRouteTargetCount = null;
+        int? finalRouteableSupportCandidateCount = null;
+        int? finalRouteableSupportComponentCount = null;
         if (stagesByName.TryGetValue("finalDetour", out var finalStage) &&
             finalStage.TryGetProperty("finalWinner", out var finalWinner))
         {
@@ -153,10 +161,14 @@ public static class StageManifestAnalyzer
             finalWinnerComponentPolyCount = GetInt(finalWinner, "componentPolyCount");
             finalWinnerSupport = GetBool(finalWinner, "supportCandidate");
             finalWinnerLower = GetBool(finalWinner, "competingLower");
+            finalWinnerRouteable = GetBool(finalWinner, "routeableToAnyTarget");
             var finalSupportCount = GetInt(finalStage, "supportCandidateCount") ?? 0;
             var finalSupportBandCount = GetInt(finalStage, "supportBandCandidateCount") ?? finalSupportCount;
             finalSupportComponentCount = GetInt(finalStage, "supportComponentCount");
             finalLowerComponentCount = GetInt(finalStage, "lowerComponentCount");
+            finalResolvedRouteTargetCount = GetInt(finalStage, "resolvedRouteTargetCount");
+            finalRouteableSupportCandidateCount = GetInt(finalStage, "routeableSupportCandidateCount");
+            finalRouteableSupportComponentCount = GetInt(finalStage, "routeableSupportComponentCount");
 
             if (firstBadStage is null &&
                 (finalWinnerLower ?? false) &&
@@ -164,6 +176,15 @@ public static class StageManifestAnalyzer
             {
                 firstBadStage = "finalDetour";
                 firstBadReason = "lower_competitor_dominant";
+            }
+            else if (firstBadStage is null &&
+                finalResolvedRouteTargetCount.GetValueOrDefault() > 0 &&
+                (finalWinnerSupport ?? false) &&
+                !(finalWinnerRouteable ?? false) &&
+                finalRouteableSupportCandidateCount.GetValueOrDefault() > 0)
+            {
+                firstBadStage = "finalDetour";
+                firstBadReason = "winner_component_trapped";
             }
             else if (firstBadStage is null &&
                 !(finalWinnerSupport ?? false) &&
@@ -192,8 +213,12 @@ public static class StageManifestAnalyzer
             FinalWinnerComponentPolyCount: finalWinnerComponentPolyCount,
             FinalWinnerSupportCandidate: finalWinnerSupport,
             FinalWinnerCompetingLower: finalWinnerLower,
+            FinalWinnerRouteableToAnyTarget: finalWinnerRouteable,
             FinalSupportComponentCount: finalSupportComponentCount,
             FinalLowerComponentCount: finalLowerComponentCount,
+            FinalResolvedRouteTargetCount: finalResolvedRouteTargetCount,
+            FinalRouteableSupportCandidateCount: finalRouteableSupportCandidateCount,
+            FinalRouteableSupportComponentCount: finalRouteableSupportComponentCount,
             CoverageComplete: missingStages.Count == 0);
     }
 

@@ -598,7 +598,7 @@ static void AnalyzeStageManifest(string manifestPath, string? summaryPath, strin
     {
         var winnerSummary = string.IsNullOrWhiteSpace(anchor.FinalWinnerPolyRef)
             ? "winner=none"
-            : $"winner={anchor.FinalWinnerPolyRef} support={anchor.FinalWinnerSupportCandidate?.ToString() ?? "null"} lower={anchor.FinalWinnerCompetingLower?.ToString() ?? "null"}";
+            : $"winner={anchor.FinalWinnerPolyRef} support={anchor.FinalWinnerSupportCandidate?.ToString() ?? "null"} lower={anchor.FinalWinnerCompetingLower?.ToString() ?? "null"} routeable={anchor.FinalWinnerRouteableToAnyTarget?.ToString() ?? "null"}";
         var verdictSummary = anchor.FirstBadStage is null
             ? "firstBadStage=<none>"
             : $"firstBadStage={anchor.FirstBadStage} reason={anchor.FirstBadReason}";
@@ -639,8 +639,12 @@ static void WriteStageSummary(string summaryPath, AnchorStageManifestSummary sum
             anchor.FinalWinnerComponentPolyCount,
             anchor.FinalWinnerSupportCandidate,
             anchor.FinalWinnerCompetingLower,
+            anchor.FinalWinnerRouteableToAnyTarget,
             anchor.FinalSupportComponentCount,
             anchor.FinalLowerComponentCount,
+            anchor.FinalResolvedRouteTargetCount,
+            anchor.FinalRouteableSupportCandidateCount,
+            anchor.FinalRouteableSupportComponentCount,
             anchor.CoverageComplete,
         }),
     };
@@ -653,7 +657,7 @@ static void WriteStageSummaryCsv(string summaryCsvPath, AnchorStageManifestSumma
 {
     Directory.CreateDirectory(Path.GetDirectoryName(summaryCsvPath) ?? ".");
     var builder = new StringBuilder();
-    builder.AppendLine("anchorId,label,wowX,wowY,wowZ,sourceSupportFound,presentStageCount,coverageComplete,firstBadStage,firstBadReason,finalWinnerPolyRef,finalWinnerComponentId,finalWinnerComponentPolyCount,finalWinnerSupportCandidate,finalWinnerCompetingLower,finalSupportComponentCount,finalLowerComponentCount,missingStages");
+    builder.AppendLine("anchorId,label,wowX,wowY,wowZ,sourceSupportFound,presentStageCount,coverageComplete,firstBadStage,firstBadReason,finalWinnerPolyRef,finalWinnerComponentId,finalWinnerComponentPolyCount,finalWinnerSupportCandidate,finalWinnerCompetingLower,finalWinnerRouteableToAnyTarget,finalSupportComponentCount,finalLowerComponentCount,finalResolvedRouteTargetCount,finalRouteableSupportCandidateCount,finalRouteableSupportComponentCount,missingStages");
     foreach (var anchor in summary.Anchors)
     {
         builder.Append(Csv(anchor.AnchorId)).Append(',')
@@ -671,8 +675,12 @@ static void WriteStageSummaryCsv(string summaryCsvPath, AnchorStageManifestSumma
             .Append(Csv(anchor.FinalWinnerComponentPolyCount?.ToString(CultureInfo.InvariantCulture))).Append(',')
             .Append(Csv(anchor.FinalWinnerSupportCandidate?.ToString())).Append(',')
             .Append(Csv(anchor.FinalWinnerCompetingLower?.ToString())).Append(',')
+            .Append(Csv(anchor.FinalWinnerRouteableToAnyTarget?.ToString())).Append(',')
             .Append(Csv(anchor.FinalSupportComponentCount?.ToString(CultureInfo.InvariantCulture))).Append(',')
             .Append(Csv(anchor.FinalLowerComponentCount?.ToString(CultureInfo.InvariantCulture))).Append(',')
+            .Append(Csv(anchor.FinalResolvedRouteTargetCount?.ToString(CultureInfo.InvariantCulture))).Append(',')
+            .Append(Csv(anchor.FinalRouteableSupportCandidateCount?.ToString(CultureInfo.InvariantCulture))).Append(',')
+            .Append(Csv(anchor.FinalRouteableSupportComponentCount?.ToString(CultureInfo.InvariantCulture))).Append(',')
             .Append(Csv(string.Join("|", anchor.MissingStages)))
             .AppendLine();
     }

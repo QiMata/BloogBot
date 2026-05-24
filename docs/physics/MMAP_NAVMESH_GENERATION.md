@@ -831,3 +831,63 @@ powershell -ExecutionPolicy Bypass -File 'E:\repos\Westworld of Warcraft\tools\s
   - next useful tooling/fix surface is pair-specific final reachability or a
     component-targeted cull of the current trapped winner basin, not more
     source-support threshold churn
+
+### 2026-05-24 routeability-aware trapped-component cull follow-up
+
+- New proof surface:
+  - `anchorRouteTargetsWow` adds local escape targets to the finalDetour
+    manifest
+  - the summary now carries:
+    - `FinalWinnerRouteableToAnyTarget`
+    - `FinalResolvedRouteTargetCount`
+    - `FinalRouteableSupportCandidateCount`
+    - `FinalRouteableSupportComponentCount`
+  - optional experiment flag:
+    `postDetourCullAnchorTrappedComponents`
+- Validated branches:
+  - `tmp/bake-sweeps/og_4029_anchor_routeability_cull-20260524T004027Z/`
+    - hash:
+      `B84D1CD2369E03721ECBDC83656EC4E700E546886CFF49C231F52F05CED086AF`
+  - `tmp/bake-sweeps/og_4029_anchor_routeability_chain_targets-20260524T005038Z/`
+    - hash:
+      `039BEDF73A2318B0D6559BDC0FB453D240875EDD08BA2319F56A0EA26D85EA94`
+- Commands:
+
+```powershell
+$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'
+powershell -ExecutionPolicy Bypass -File 'E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1' -Map 1 -Tiles '40,29' -Variant 'og_4029_anchor_routeability_chain_targets' -DataDir 'D:\wwow-bot\test-data'
+
+$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'
+dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj' --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_anchor_routeability_chain_targets_focused.trx" --results-directory 'E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding'
+
+$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'
+dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj' --configuration Release --no-build --no-restore --settings 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings' -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_anchor_routeability_chain_targets.trx" --results-directory 'E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding'
+```
+
+- Results:
+  - focused slice stayed `7/7`
+  - full `CriticalWalkLegs` stayed `17/23`
+  - the six failing route labels stayed the same
+  - the underpass route changed from "dead-end locally" to "routes out through
+    the overhead ramp/ceiling first"
+- Routeability summary interpretation on this branch:
+  - city / hallway / hallway-exit anchors still had
+    `FinalRouteableSupportComponentCount=0`
+  - the routeability cull therefore could not fix those basins; it had no
+    routeable alternate support component to preserve
+  - `1364.867,-4374.000,26.109` and `1355.600,-4522.300,33.100` did have
+    routeable support components, which is why only the exterior/underpass side
+    changed
+- Current rule:
+  - keep the routeability fields and target config as analysis scaffolding
+  - keep `postDetourCullAnchorTrappedComponents=false` in the default tile
+    config until a branch improves route outcomes
+  - if the routeability summary still says zero routeable support components
+    across the hallway chain, stop rewiring targets and go earlier in the bake
+    (`polymesh` / `contours` / corridor connectivity)
+- Checked-in proof-only validation:
+  - `tmp/bake-sweeps/og_4029_anchor_routeability_proof_only-20260524T010701Z/`
+  - saved tile hash:
+    `6FA99D4CA18F7C3E8853712F7931DBD26A03C30C344508E15760E1E8CD459F52`
+  - focused slice stayed `7/7`
+  - full `CriticalWalkLegs` stayed `17/23`

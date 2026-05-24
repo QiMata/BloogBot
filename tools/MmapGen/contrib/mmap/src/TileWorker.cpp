@@ -956,6 +956,11 @@ constexpr float ANCHOR_POLY_STACK_SUPPORT_EPSILON = 0.05f;
 constexpr float ANCHOR_LOWER_FRINGE_MAX_TOP_DELTA = 0.05f;
 constexpr float ANCHOR_UPPER_FRINGE_MIN_TOP_DELTA = 0.15f;
 constexpr float STACKED_SLIVER_MAX_SUPPORT_DELTA = 0.5f;
+constexpr float ANCHOR_ROUTE_TARGET_NEAREST_XY_EXTENT = 5.0f;
+constexpr float ANCHOR_ROUTE_TARGET_NEAREST_Z_EXTENT = 10.0f;
+constexpr float ANCHOR_ROUTE_TARGET_MAX_HEIGHT_ABOVE = 3.0f;
+constexpr int ANCHOR_ROUTE_QUERY_MAX_NODES = 32768;
+constexpr int ANCHOR_ROUTE_MAX_PATH_POLYS = 4096;
 constexpr float OFFMESH_ANCHOR_STEEP_TRIM_MIN_AVERAGE_SLOPE_DEGREES = 35.0f;
 constexpr float OFFMESH_ANCHOR_STEEP_TRIM_MAX_EDGE_2D = 4.5f;
 constexpr float OFFMESH_ANCHOR_STEEP_TRIM_MAX_AREA_2D = 6.0f;
@@ -1390,6 +1395,13 @@ struct AnchorPolyStackCoord
     float wowZ = 0.0f;
 };
 
+struct AnchorRouteTarget
+{
+    AnchorPolyStackCoord source;
+    AnchorPolyStackCoord target;
+    std::string label;
+};
+
 struct AnchorPolyStackProbeResult
 {
     bool posOverPoly = false;
@@ -1429,6 +1441,14 @@ static std::string FormatPolyRefHex(const dtPolyRef polyRef)
     char buffer[32];
     sprintf(buffer, "0x%llX", static_cast<unsigned long long>(polyRef));
     return std::string(buffer);
+}
+
+static bool AreAnchorCoordsEquivalent(const AnchorPolyStackCoord& lhs, const AnchorPolyStackCoord& rhs,
+    const float epsilon = 0.01f)
+{
+    return fabsf(lhs.wowX - rhs.wowX) <= epsilon &&
+        fabsf(lhs.wowY - rhs.wowY) <= epsilon &&
+        fabsf(lhs.wowZ - rhs.wowZ) <= epsilon;
 }
 
 static bool PointInPolygonXZ(const std::vector<Point2DXZ>& polygon, const float x, const float z)
@@ -1783,6 +1803,20 @@ static std::vector<AnchorPolyStackCoord> ParseAnchorCoords(const json& config, c
     return coords;
 }
 
+static bool TryParseAnchorCoordJson(const json& entry, AnchorPolyStackCoord& coord)
+{
+    if (!entry.is_array() || entry.size() != 3 ||
+        !entry[0].is_number() || !entry[1].is_number() || !entry[2].is_number())
+    {
+        return false;
+    }
+
+    coord.wowX = entry[0].get<float>();
+    coord.wowY = entry[1].get<float>();
+    coord.wowZ = entry[2].get<float>();
+    return true;
+}
+
 static std::vector<AnchorPolyStackCoord> ParseAnchorPolyStackCoords(const json& config)
 {
     return ParseAnchorCoords(config, "postDetourCullAnchorPolyStacksCoordsWow");
@@ -1791,6 +1825,43 @@ static std::vector<AnchorPolyStackCoord> ParseAnchorPolyStackCoords(const json& 
 static std::vector<AnchorPolyStackCoord> ParseAnchorStageManifestCoords(const json& config)
 {
     return ParseAnchorCoords(config, "anchorStageManifestCoordsWow");
+}
+
+static std::vector<AnchorRouteTarget> ParseAnchorRouteTargets(const json& config)
+{
+    std::vector<AnchorRouteTarget> routeTargets;
+
+    auto it = config.find("anchorRouteTargetsWow");
+    if (it == config.end() || !it->is_array())
+        return routeTargets;
+
+    for (const json& entry : *it)
+    {
+        if (!entry.is_object())
+            continue;
+
+        auto sourceIt = entry.find("source");
+        auto targetIt = entry.find("target");
+        if (sourceIt == entry.end() || targetIt == entry.end())
+            continue;
+
+        AnchorRouteTarget routeTarget;
+        if (!TryParseAnchorCoordJson(*sourceIt, routeTarget.source) ||
+            !TryParseAnchorCoordJson(*targetIt, routeTarget.target))
+        {
+            continue;
+        }
+
+        auto labelIt = entry.find("label");
+        if (labelIt != entry.end() && labelIt->is_string())
+            routeTarget.label = labelIt->get<std::string>();
+        else
+            routeTarget.label = FormatAnchorStageId(routeTarget.target);
+
+        routeTargets.push_back(routeTarget);
+    }
+
+    return routeTargets;
 }
 
 static std::vector<AnchorPolyStackCoord> MergeUniqueAnchorCoords(
@@ -1813,6 +1884,20 @@ static std::vector<AnchorPolyStackCoord> MergeUniqueAnchorCoords(
     }
 
     return merged;
+}
+
+static std::vector<const AnchorRouteTarget*> FindAnchorRouteTargets(
+    const std::vector<AnchorRouteTarget>& routeTargets,
+    const AnchorPolyStackCoord& anchor)
+{
+    std::vector<const AnchorRouteTarget*> matches;
+    for (const AnchorRouteTarget& routeTarget : routeTargets)
+    {
+        if (AreAnchorCoordsEquivalent(routeTarget.source, anchor))
+            matches.push_back(&routeTarget);
+    }
+
+    return matches;
 }
 
 // [WWoW-DIVERGENCE] 2026-05-22/23: pre-region compact-heightfield cleanup for
@@ -3163,6 +3248,29 @@ struct FinalDetourGroundComponentInfo
     float totalHorizontalArea2D = 0.0f;
 };
 
+struct AnchorRouteTargetResolution
+{
+    const AnchorRouteTarget* routeTarget = nullptr;
+    bool resolved = false;
+    dtPolyRef polyRef = 0;
+    float closestPoint[3] = { 0.0f, 0.0f, 0.0f };
+    float closestDistance2D = -1.0f;
+};
+
+struct FinalDetourComponentRouteability
+{
+    int componentId = -1;
+    int representativePolyIndex = -1;
+    dtPolyRef representativePolyRef = 0;
+    bool representativePosOverPoly = false;
+    float representativeClosestDistance2D = std::numeric_limits<float>::max();
+    float representativePoint[3] = { 0.0f, 0.0f, 0.0f };
+    bool hasRepresentativePoint = false;
+    bool routeableToAnyTarget = false;
+    int routeableTargetCount = 0;
+    json routeTargets = json::array();
+};
+
 static void BuildFinalDetourGroundComponents(dtNavMesh& navMesh, const dtMeshTile& tile,
     const std::vector<DetourPolyDiagnostics>& diagnostics, const std::vector<unsigned char>& liveGroundMask,
     std::vector<int>& componentIds, std::vector<FinalDetourGroundComponentInfo>& components)
@@ -3242,10 +3350,173 @@ static void BuildFinalDetourGroundComponents(dtNavMesh& navMesh, const dtMeshTil
     }
 }
 
+static dtQueryFilter BuildGroundOnlyFilter()
+{
+    dtQueryFilter filter;
+    filter.setIncludeFlags(NAV_GROUND);
+    filter.setExcludeFlags(0);
+    return filter;
+}
+
+static bool TryFindWalkableGroundPolyAtCoord(dtNavMeshQuery& query, const float detourPos[3], dtPolyRef& polyRef,
+    float closestPoint[3], float& closestDistance2D)
+{
+    const float extents[3] =
+    {
+        ANCHOR_ROUTE_TARGET_NEAREST_XY_EXTENT,
+        ANCHOR_ROUTE_TARGET_NEAREST_Z_EXTENT,
+        ANCHOR_ROUTE_TARGET_NEAREST_XY_EXTENT
+    };
+    dtQueryFilter filter = BuildGroundOnlyFilter();
+    if (dtStatusFailed(query.findNearestPoly(detourPos, extents, &filter, &polyRef, closestPoint)) || polyRef == 0)
+        return false;
+
+    if (closestPoint[1] > detourPos[1] + ANCHOR_ROUTE_TARGET_MAX_HEIGHT_ABOVE)
+        return false;
+
+    const float deltaX = closestPoint[0] - detourPos[0];
+    const float deltaZ = closestPoint[2] - detourPos[2];
+    closestDistance2D = sqrtf(deltaX * deltaX + deltaZ * deltaZ);
+    return true;
+}
+
+static std::vector<AnchorRouteTargetResolution> ResolveAnchorRouteTargetsForAnchor(
+    dtNavMeshQuery& query,
+    const AnchorPolyStackCoord& anchor,
+    const std::vector<AnchorRouteTarget>& routeTargets)
+{
+    std::vector<AnchorRouteTargetResolution> resolvedTargets;
+    const std::vector<const AnchorRouteTarget*> matches = FindAnchorRouteTargets(routeTargets, anchor);
+    resolvedTargets.reserve(matches.size());
+
+    for (const AnchorRouteTarget* routeTarget : matches)
+    {
+        AnchorRouteTargetResolution resolved;
+        resolved.routeTarget = routeTarget;
+        const float detourTargetPos[3] = { routeTarget->target.wowY, routeTarget->target.wowZ, routeTarget->target.wowX };
+        resolved.resolved = TryFindWalkableGroundPolyAtCoord(
+            query, detourTargetPos, resolved.polyRef, resolved.closestPoint, resolved.closestDistance2D);
+        resolvedTargets.push_back(resolved);
+    }
+
+    return resolvedTargets;
+}
+
+static void EvaluateFinalDetourAnchorComponentRouteability(dtNavMeshQuery& query,
+    const AnchorPolyStackCoord& anchor,
+    const std::vector<AnchorRouteTarget>& routeTargets,
+    const std::vector<int>& windowPolyIndices,
+    const std::vector<AnchorPolyStackProbeResult>& probeResults,
+    const std::vector<int>& componentIds,
+    const dtPolyRef tileRefBase,
+    std::unordered_map<int, FinalDetourComponentRouteability>& routeabilityByComponent,
+    std::vector<AnchorRouteTargetResolution>& resolvedTargets)
+{
+    routeabilityByComponent.clear();
+    resolvedTargets = ResolveAnchorRouteTargetsForAnchor(query, anchor, routeTargets);
+    if (resolvedTargets.empty())
+        return;
+
+    for (size_t probeIndex = 0; probeIndex < windowPolyIndices.size() && probeIndex < probeResults.size(); ++probeIndex)
+    {
+        const int polyIndex = windowPolyIndices[probeIndex];
+        if (polyIndex < 0 || polyIndex >= static_cast<int>(componentIds.size()))
+            continue;
+
+        const int componentId = componentIds[polyIndex];
+        if (componentId < 0)
+            continue;
+
+        FinalDetourComponentRouteability& routeability = routeabilityByComponent[componentId];
+        if (routeability.componentId < 0)
+            routeability.componentId = componentId;
+
+        const AnchorPolyStackProbeResult& probe = probeResults[probeIndex];
+        const float candidateDistance = probe.hasClosestPoint ? probe.closestDistance2D : std::numeric_limits<float>::max();
+        const bool preferCandidate =
+            !routeability.hasRepresentativePoint ||
+            (probe.posOverPoly && !routeability.representativePosOverPoly) ||
+            (probe.posOverPoly == routeability.representativePosOverPoly &&
+                candidateDistance < routeability.representativeClosestDistance2D);
+        if (!preferCandidate)
+            continue;
+
+        routeability.representativePolyIndex = polyIndex;
+        routeability.representativePolyRef = tileRefBase | static_cast<dtPolyRef>(polyIndex);
+        routeability.representativePosOverPoly = probe.posOverPoly;
+        routeability.representativeClosestDistance2D = candidateDistance;
+        routeability.hasRepresentativePoint = false;
+        if (probe.hasClosestPoint)
+        {
+            rcVcopy(routeability.representativePoint, probe.closestPoint);
+            routeability.hasRepresentativePoint = true;
+        }
+    }
+
+    dtQueryFilter filter = BuildGroundOnlyFilter();
+    std::vector<dtPolyRef> path(ANCHOR_ROUTE_MAX_PATH_POLYS);
+    for (auto& entry : routeabilityByComponent)
+    {
+        FinalDetourComponentRouteability& routeability = entry.second;
+        routeability.routeTargets = json::array();
+
+        if (!routeability.hasRepresentativePoint || routeability.representativePolyRef == 0)
+            continue;
+
+        for (const AnchorRouteTargetResolution& target : resolvedTargets)
+        {
+            json targetJson =
+            {
+                { "label", target.routeTarget ? target.routeTarget->label : "" },
+                { "targetId", target.routeTarget ? FormatAnchorStageId(target.routeTarget->target) : "" },
+                { "resolved", target.resolved },
+                { "targetPolyRef", target.resolved ? FormatPolyRefHex(target.polyRef) : "" },
+                { "targetClosestDistance2D", target.resolved ? target.closestDistance2D : -1.0f },
+                { "pathPolyCount", 0 },
+                { "reachesTarget", false },
+                { "statusHex", "" },
+            };
+
+            if (!target.resolved)
+            {
+                routeability.routeTargets.push_back(targetJson);
+                continue;
+            }
+
+            int pathCount = 0;
+            const dtStatus pathStatus = query.findPath(
+                routeability.representativePolyRef,
+                target.polyRef,
+                routeability.representativePoint,
+                target.closestPoint,
+                &filter,
+                path.data(),
+                &pathCount,
+                ANCHOR_ROUTE_MAX_PATH_POLYS);
+            const bool reachesTarget = pathCount > 0 && path[pathCount - 1] == target.polyRef;
+
+            char statusHex[32];
+            sprintf(statusHex, "0x%X", static_cast<unsigned int>(pathStatus));
+            targetJson["pathPolyCount"] = pathCount;
+            targetJson["reachesTarget"] = reachesTarget;
+            targetJson["statusHex"] = statusHex;
+
+            if (reachesTarget)
+            {
+                routeability.routeableToAnyTarget = true;
+                ++routeability.routeableTargetCount;
+            }
+
+            routeability.routeTargets.push_back(targetJson);
+        }
+    }
+}
+
 static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshTile& tile,
     const std::vector<DetourPolyDiagnostics>& diagnostics, const std::vector<unsigned char>& liveGroundMask,
     const float xyExtent, const float zExtent, const float supportZTolerance,
-    const AnchorSourceSupportProbe& support)
+    const AnchorSourceSupportProbe& support,
+    const std::vector<AnchorRouteTarget>& routeTargets)
 {
     json stage = BuildBaseAnchorStageJson("finalDetour", "final-detour", support);
     stage["candidates"] = json::array();
@@ -3254,7 +3525,7 @@ static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshT
         return stage;
 
     std::unique_ptr<dtNavMeshQuery, decltype(&dtFreeNavMeshQuery)> query(dtAllocNavMeshQuery(), &dtFreeNavMeshQuery);
-    if (!query || dtStatusFailed(query->init(&navMesh, 4096)))
+    if (!query || dtStatusFailed(query->init(&navMesh, ANCHOR_ROUTE_QUERY_MAX_NODES)))
     {
         stage["unprovenReason"] = "query_init_failed";
         return stage;
@@ -3280,6 +3551,9 @@ static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshT
     std::unordered_set<int> supportComponentIds;
     std::unordered_set<int> lowerComponentIds;
     std::unordered_map<dtPolyRef, json> candidateByRef;
+    std::vector<dtPolyRef> candidateOrder;
+    std::vector<int> windowPolyIndices;
+    std::vector<AnchorPolyStackProbeResult> windowProbeResults;
 
     for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
     {
@@ -3295,6 +3569,8 @@ static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshT
 
         const dtPolyRef polyRef = tileRefBase | static_cast<dtPolyRef>(polyIndex);
         const AnchorPolyStackProbeResult probe = ProbeAnchorPolyAtCoord(*query, polyRef, detourPos);
+        windowPolyIndices.push_back(polyIndex);
+        windowProbeResults.push_back(probe);
         float supportSurfaceZ = 0.0f;
         bool usedClosestFallback = false;
         const bool hasSurface = TryGetAnchorProbeSupportSurfaceZ(probe, supportSurfaceZ, usedClosestFallback);
@@ -3351,6 +3627,62 @@ static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshT
             { "componentArea2D", componentInfo ? componentInfo->totalHorizontalArea2D : 0.0f },
         };
         candidateByRef[polyRef] = candidate;
+        candidateOrder.push_back(polyRef);
+    }
+
+    std::unordered_map<int, FinalDetourComponentRouteability> routeabilityByComponent;
+    std::vector<AnchorRouteTargetResolution> resolvedTargets;
+    EvaluateFinalDetourAnchorComponentRouteability(
+        *query, support.anchor, routeTargets, windowPolyIndices, windowProbeResults,
+        componentIds, tileRefBase, routeabilityByComponent, resolvedTargets);
+
+    int resolvedRouteTargetCount = 0;
+    stage["routeTargets"] = json::array();
+    for (const AnchorRouteTargetResolution& target : resolvedTargets)
+    {
+        if (target.resolved)
+            ++resolvedRouteTargetCount;
+
+        stage["routeTargets"].push_back(
+            {
+                { "label", target.routeTarget ? target.routeTarget->label : "" },
+                { "targetId", target.routeTarget ? FormatAnchorStageId(target.routeTarget->target) : "" },
+                { "resolved", target.resolved },
+                { "targetPolyRef", target.resolved ? FormatPolyRefHex(target.polyRef) : "" },
+                { "targetClosestDistance2D", target.resolved ? target.closestDistance2D : -1.0f },
+            });
+    }
+
+    int routeableCandidateCount = 0;
+    int routeableSupportCandidateCount = 0;
+    int routeableLowerCandidateCount = 0;
+    std::unordered_set<int> routeableSupportComponentIds;
+    for (const dtPolyRef polyRef : candidateOrder)
+    {
+        json& candidate = candidateByRef[polyRef];
+        const int componentId = candidate.value("componentId", -1);
+        const auto routeabilityIt = routeabilityByComponent.find(componentId);
+        const FinalDetourComponentRouteability* routeability =
+            routeabilityIt != routeabilityByComponent.end() ? &routeabilityIt->second : nullptr;
+        const bool routeableToAnyTarget = routeability ? routeability->routeableToAnyTarget : false;
+        const int routeableTargetCount = routeability ? routeability->routeableTargetCount : 0;
+        candidate["routeableToAnyTarget"] = routeableToAnyTarget;
+        candidate["routeableTargetCount"] = routeableTargetCount;
+        candidate["routeTargets"] = routeability ? routeability->routeTargets : json::array();
+
+        if (routeableToAnyTarget)
+        {
+            ++routeableCandidateCount;
+            if (candidate.value("supportCandidate", false))
+            {
+                ++routeableSupportCandidateCount;
+                if (componentId >= 0)
+                    routeableSupportComponentIds.insert(componentId);
+            }
+            if (candidate.value("competingLower", false))
+                ++routeableLowerCandidateCount;
+        }
+
         stage["candidates"].push_back(candidate);
     }
 
@@ -3363,6 +3695,12 @@ static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshT
     stage["lowerContainsAnchorProjection"] = lowerContainsAnchor;
     stage["supportComponentCount"] = static_cast<int>(supportComponentIds.size());
     stage["lowerComponentCount"] = static_cast<int>(lowerComponentIds.size());
+    stage["routeTargetCount"] = static_cast<int>(resolvedTargets.size());
+    stage["resolvedRouteTargetCount"] = resolvedRouteTargetCount;
+    stage["routeableCandidateCount"] = routeableCandidateCount;
+    stage["routeableSupportCandidateCount"] = routeableSupportCandidateCount;
+    stage["routeableLowerCandidateCount"] = routeableLowerCandidateCount;
+    stage["routeableSupportComponentCount"] = static_cast<int>(routeableSupportComponentIds.size());
 
     const float nearestExtents[3] = { xyExtent, zExtent, xyExtent };
     dtQueryFilter filter;
@@ -3386,6 +3724,9 @@ static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshT
             winnerComponentId >= 0 && winnerComponentId < static_cast<int>(components.size())
                 ? &components[winnerComponentId]
                 : nullptr;
+        const auto winnerRouteabilityIt = routeabilityByComponent.find(winnerComponentId);
+        const FinalDetourComponentRouteability* winnerRouteability =
+            winnerRouteabilityIt != routeabilityByComponent.end() ? &winnerRouteabilityIt->second : nullptr;
         const bool winnerSupportBand =
             winnerPolyIndex >= 0 && winnerPolyIndex < tile.header->polyCount &&
             IntersectsAnchorSupportBand(diagnostics[winnerPolyIndex], supportFloorMinY, supportFloorMaxY);
@@ -3405,8 +3746,12 @@ static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshT
             { "componentId", winnerComponentId },
             { "componentPolyCount", winnerComponent ? winnerComponent->polyCount : 0 },
             { "componentArea2D", winnerComponent ? winnerComponent->totalHorizontalArea2D : 0.0f },
+            { "routeableToAnyTarget", winnerRouteability ? winnerRouteability->routeableToAnyTarget : false },
+            { "routeableTargetCount", winnerRouteability ? winnerRouteability->routeableTargetCount : 0 },
+            { "routeTargets", winnerRouteability ? winnerRouteability->routeTargets : json::array() },
         };
         stage["finalWinnerComponentId"] = winnerComponentId;
+        stage["finalWinnerRouteableToAnyTarget"] = winnerRouteability ? winnerRouteability->routeableToAnyTarget : false;
         stage["dominantLowerCandidate"] = winnerLower && supportBandCount > 0;
     }
 
@@ -3502,7 +3847,9 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
     const std::vector<DetourPolyDiagnostics>& diagnostics, std::vector<unsigned char>& liveGroundMask,
     const float xyExtent, const float zExtent, const float supportZTolerance,
     const std::vector<AnchorPolyStackCoord>& anchorCoords,
-    const std::vector<AnchorSourceSupportProbe>& sourceSupports)
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const bool trimAnchorTrappedComponents,
+    const std::vector<AnchorRouteTarget>& routeTargets)
 {
     if (!tile.header || anchorCoords.empty())
         return 0;
@@ -3514,7 +3861,7 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
         return 0;
     }
 
-    const int maxNodes = 4096;
+    const int maxNodes = ANCHOR_ROUTE_QUERY_MAX_NODES;
     if (dtStatusFailed(query->init(&navMesh, maxNodes)))
     {
         printf("[DT-ANCHOR-CULL] tile=%d,%d query init failed maxNodes=%d\n", tile.header->x, tile.header->y, maxNodes);
@@ -3767,9 +4114,114 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
             ++anchorCulled;
         }
 
-        printf("[DT-ANCHOR-CULL] tile=%d,%d anchor=(%.3f,%.3f,%.3f) window=%zu supports=%d exact=%d closest=%d culled=%d\n",
+        int routeCulled = 0;
+        if (trimAnchorTrappedComponents && !routeTargets.empty())
+        {
+            std::vector<int> componentIds;
+            std::vector<FinalDetourGroundComponentInfo> components;
+            BuildFinalDetourGroundComponents(navMesh, tile, diagnostics, liveGroundMask, componentIds, components);
+
+            std::unordered_map<int, FinalDetourComponentRouteability> routeabilityByComponent;
+            std::vector<AnchorRouteTargetResolution> resolvedTargets;
+            EvaluateFinalDetourAnchorComponentRouteability(
+                *query, anchor, routeTargets, windowPolyIndices, probeResults, componentIds, tileRefBase,
+                routeabilityByComponent, resolvedTargets);
+
+            int resolvedRouteTargetCount = 0;
+            std::unordered_set<int> routeableSupportComponentIds;
+            std::vector<int> routeableSupportPolyIndices;
+            for (const AnchorRouteTargetResolution& target : resolvedTargets)
+            {
+                if (target.resolved)
+                    ++resolvedRouteTargetCount;
+            }
+
+            for (const int polyIndex : windowPolyIndices)
+            {
+                if (!liveGroundMask[polyIndex] || !supportMask[polyIndex])
+                    continue;
+
+                if (polyIndex < 0 || polyIndex >= static_cast<int>(componentIds.size()))
+                    continue;
+
+                const int componentId = componentIds[polyIndex];
+                if (componentId < 0)
+                    continue;
+
+                const auto routeabilityIt = routeabilityByComponent.find(componentId);
+                if (routeabilityIt == routeabilityByComponent.end() || !routeabilityIt->second.routeableToAnyTarget)
+                    continue;
+
+                routeableSupportComponentIds.insert(componentId);
+                routeableSupportPolyIndices.push_back(polyIndex);
+            }
+
+            if (!routeableSupportComponentIds.empty())
+            {
+                for (size_t candidateListIndex = 0; candidateListIndex < windowPolyIndices.size(); ++candidateListIndex)
+                {
+                    const int candidateIndex = windowPolyIndices[candidateListIndex];
+                    if (!liveGroundMask[candidateIndex])
+                        continue;
+
+                    dtPoly& candidatePoly = tile.polys[candidateIndex];
+                    if (!IsWalkableLandPoly(candidatePoly))
+                        continue;
+
+                    if (candidateIndex < 0 || candidateIndex >= static_cast<int>(componentIds.size()))
+                        continue;
+
+                    const int componentId = componentIds[candidateIndex];
+                    if (componentId < 0)
+                        continue;
+
+                    const auto routeabilityIt = routeabilityByComponent.find(componentId);
+                    if (routeabilityIt == routeabilityByComponent.end() || routeabilityIt->second.routeableToAnyTarget)
+                        continue;
+
+                    const bool candidateIsSupport = supportMask[candidateIndex] != 0;
+                    bool overlapsRouteableSupport = candidateIsSupport;
+                    if (!overlapsRouteableSupport)
+                    {
+                        const float minOverlapArea = rcMax(
+                            STACKED_SLIVER_MIN_OVERLAP_AREA_2D,
+                            rcMin(diagnostics[candidateIndex].horizontalArea2D * STACKED_SLIVER_MIN_OVERLAP_RATIO, 4.0f));
+                        for (const int supportIndex : routeableSupportPolyIndices)
+                        {
+                            if (supportIndex == candidateIndex || !liveGroundMask[supportIndex])
+                                continue;
+
+                            if (GetDetourBoundsOverlapArea2D(diagnostics[candidateIndex], diagnostics[supportIndex]) < minOverlapArea)
+                                continue;
+
+                            overlapsRouteableSupport = true;
+                            break;
+                        }
+                    }
+
+                    if (!overlapsRouteableSupport)
+                        continue;
+
+                    candidatePoly.flags = 0;
+                    candidatePoly.setArea(AREA_NONE);
+                    liveGroundMask[candidateIndex] = 0;
+                    ++culled;
+                    ++anchorCulled;
+                    ++routeCulled;
+                }
+            }
+
+            if (!resolvedTargets.empty())
+            {
+                printf("[DT-ANCHOR-ROUTE] tile=%d,%d anchor=(%.3f,%.3f,%.3f) targets=%zu resolved=%d routeableSupportComponents=%zu routeCulled=%d\n",
+                    tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+                    resolvedTargets.size(), resolvedRouteTargetCount, routeableSupportComponentIds.size(), routeCulled);
+            }
+        }
+
+        printf("[DT-ANCHOR-CULL] tile=%d,%d anchor=(%.3f,%.3f,%.3f) window=%zu supports=%d exact=%d closest=%d culled=%d routeCulled=%d\n",
             tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
-            windowPolyIndices.size(), supportCount, exactSupportCount, closestFallbackSupportCount, anchorCulled);
+            windowPolyIndices.size(), supportCount, exactSupportCount, closestFallbackSupportCount, anchorCulled, routeCulled);
     }
 
     return culled;
@@ -4063,7 +4515,9 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
     const OffMeshAnchorSteepTrimSettings& offMeshAnchorSteepTrimSettings,
     const bool trimAnchorPolyStacks, const float anchorPolyStackXyExtent, const float anchorPolyStackZExtent,
     const float anchorPolyStackSupportZTolerance, const std::vector<AnchorPolyStackCoord>& anchorPolyStackCoords,
-    const std::vector<AnchorSourceSupportProbe>& anchorSourceSupports)
+    const std::vector<AnchorSourceSupportProbe>& anchorSourceSupports,
+    const bool trimAnchorTrappedComponents,
+    const std::vector<AnchorRouteTarget>& anchorRouteTargets)
 {
     if (!tile.header)
         return 0;
@@ -4302,7 +4756,8 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
         culled += CullAnchorPolyStacks(
             navMesh, tile, diagnostics, liveGroundMask,
             anchorPolyStackXyExtent, anchorPolyStackZExtent, anchorPolyStackSupportZTolerance,
-            anchorPolyStackCoords, anchorSourceSupports);
+            anchorPolyStackCoords, anchorSourceSupports,
+            trimAnchorTrappedComponents, anchorRouteTargets);
     }
 
     return culled;
@@ -4748,6 +5203,7 @@ namespace MMAP
         const bool writeAnchorStageManifest = jsonTileConfig.value("writeAnchorStageManifest", false);
         const bool logAnchorStageDiagnostics = jsonTileConfig.value("logAnchorStageDiagnostics", false);
         const bool trimAnchorPolyStacks = jsonTileConfig["postDetourCullAnchorPolyStacks"].get<bool>();
+        const bool trimAnchorTrappedComponents = jsonTileConfig.value("postDetourCullAnchorTrappedComponents", false);
         const float anchorSourceSupportXyExtent = JsonFloatOrDefault(
             jsonTileConfig, "postDetourCullAnchorPolyStacksXyExtent", 2.0f);
         const float anchorSourceSupportZExtent = JsonFloatOrDefault(
@@ -4767,6 +5223,10 @@ namespace MMAP
             writeAnchorStageManifest
                 ? MergeUniqueAnchorCoords(anchorPolyStackCoords, anchorManifestExtraCoords)
                 : std::vector<AnchorPolyStackCoord>();
+        const std::vector<AnchorRouteTarget> anchorRouteTargets =
+            (writeAnchorStageManifest || trimAnchorTrappedComponents)
+                ? ParseAnchorRouteTargets(jsonTileConfig)
+                : std::vector<AnchorRouteTarget>();
         const float walkableSlopeAngleTerrain = config.walkableSlopeAngle;
         const float walkableSlopeAngleVMaps = jsonTileConfig["walkableSlopeAngleVMaps"].get<float>();
         const float playerClimbLimit = cosf(52.0f / 180.0f * RC_PI);
@@ -5500,16 +5960,18 @@ namespace MMAP
                     jsonTileConfig, "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f);
                 if (trimAnchorPolyStacks)
                 {
-                    printf("[DT-ANCHOR-CULL] map=%u tile=%u,%u config enabled coords=%zu xy=%.2f z=%.2f supportTol=%.2f\n",
+                    printf("[DT-ANCHOR-CULL] map=%u tile=%u,%u config enabled coords=%zu xy=%.2f z=%.2f supportTol=%.2f trapped=%d routeTargets=%zu\n",
                         mapID, tileX, tileY, anchorPolyStackCoords.size(), anchorPolyStackXyExtent,
-                        anchorPolyStackZExtent, anchorPolyStackSupportZTolerance);
+                        anchorPolyStackZExtent, anchorPolyStackSupportZTolerance,
+                        trimAnchorTrappedComponents ? 1 : 0, anchorRouteTargets.size());
                 }
                 const int culledDetourPolys = CullSuspiciousDetourPolys(
                     *navMesh, *addedTile, agentMaxClimbTerrain,
                     trimShadowedLedges, trimOffMeshAnchorSteepTrim, trimShadowedPockets,
                     offMeshAnchorSteepTrimSettings,
                     trimAnchorPolyStacks, anchorPolyStackXyExtent, anchorPolyStackZExtent,
-                    anchorPolyStackSupportZTolerance, anchorPolyStackCoords, anchorSourceSupports);
+                    anchorPolyStackSupportZTolerance, anchorPolyStackCoords, anchorSourceSupports,
+                    trimAnchorTrappedComponents, anchorRouteTargets);
                 if (culledDetourPolys > 0)
                 {
                     printf("[DT-POLY-CULL] map=%u tile=%u,%u: disabled %d final suspicious Detour polygon(s)\n",
@@ -5542,7 +6004,8 @@ namespace MMAP
                                 anchorSourceSupportXyExtent,
                                 anchorSourceSupportZExtent,
                                 anchorSourceSupportZTolerance,
-                                anchorManifestSupports[anchorIndex]));
+                                anchorManifestSupports[anchorIndex],
+                                anchorRouteTargets));
                     }
                 }
             }
@@ -5582,6 +6045,7 @@ namespace MMAP
                     { "offMeshAnchorSteepTrimEnabled", jsonTileConfig["postDetourCullOffMeshAnchorSteepTrim"].get<bool>() },
                     { "shadowedPocketsEnabled", jsonTileConfig["postDetourCullShadowedPockets"].get<bool>() },
                     { "anchorPolyStacksEnabled", jsonTileConfig["postDetourCullAnchorPolyStacks"].get<bool>() },
+                    { "anchorTrappedComponentsEnabled", jsonTileConfig.value("postDetourCullAnchorTrappedComponents", false) },
                 };
 
                 char manifestFileName[256];
@@ -5666,11 +6130,13 @@ namespace MMAP
             { "preRegionCullAnchorSourceSupportFallbackToWindow", false },
             { "preRegionCullAnchorUpperCompactSpans", false },
             { "postDetourCullAnchorPolyStacks", false },
+            { "postDetourCullAnchorTrappedComponents", false },
             { "postDetourCullAnchorPolyStacksXyExtent", 2.0f },
             { "postDetourCullAnchorPolyStacksZExtent", 10.0f },
             { "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f },
             { "postDetourCullAnchorPolyStacksCoordsWow", json::array() },
             { "anchorStageManifestCoordsWow", json::array() },
+            { "anchorRouteTargetsWow", json::array() },
             { "writeAnchorStageManifest", false },
             { "logAnchorStageDiagnostics", false },
         };
