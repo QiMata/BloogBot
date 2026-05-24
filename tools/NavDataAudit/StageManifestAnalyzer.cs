@@ -23,8 +23,12 @@ public sealed record AnchorStageSummary(
     string? FirstBadStage,
     string? FirstBadReason,
     string? FinalWinnerPolyRef,
+    int? FinalWinnerComponentId,
+    int? FinalWinnerComponentPolyCount,
     bool? FinalWinnerSupportCandidate,
     bool? FinalWinnerCompetingLower,
+    int? FinalSupportComponentCount,
+    int? FinalLowerComponentCount,
     bool CoverageComplete);
 
 public static class StageManifestAnalyzer
@@ -135,21 +139,40 @@ public static class StageManifestAnalyzer
         }
 
         string? finalWinnerPolyRef = null;
+        int? finalWinnerComponentId = null;
+        int? finalWinnerComponentPolyCount = null;
         bool? finalWinnerSupport = null;
         bool? finalWinnerLower = null;
+        int? finalSupportComponentCount = null;
+        int? finalLowerComponentCount = null;
         if (stagesByName.TryGetValue("finalDetour", out var finalStage) &&
             finalStage.TryGetProperty("finalWinner", out var finalWinner))
         {
             finalWinnerPolyRef = GetString(finalWinner, "polyRef");
+            finalWinnerComponentId = GetInt(finalWinner, "componentId");
+            finalWinnerComponentPolyCount = GetInt(finalWinner, "componentPolyCount");
             finalWinnerSupport = GetBool(finalWinner, "supportCandidate");
             finalWinnerLower = GetBool(finalWinner, "competingLower");
+            var finalSupportCount = GetInt(finalStage, "supportCandidateCount") ?? 0;
+            var finalSupportBandCount = GetInt(finalStage, "supportBandCandidateCount") ?? finalSupportCount;
+            finalSupportComponentCount = GetInt(finalStage, "supportComponentCount");
+            finalLowerComponentCount = GetInt(finalStage, "lowerComponentCount");
 
             if (firstBadStage is null &&
                 (finalWinnerLower ?? false) &&
-                ((GetInt(finalStage, "supportCandidateCount") ?? 0) > 0))
+                finalSupportBandCount > 0)
             {
                 firstBadStage = "finalDetour";
                 firstBadReason = "lower_competitor_dominant";
+            }
+            else if (firstBadStage is null &&
+                !(finalWinnerSupport ?? false) &&
+                !(finalWinnerLower ?? false) &&
+                finalSupportBandCount > 0 &&
+                finalSupportCount == 0)
+            {
+                firstBadStage = "finalDetour";
+                firstBadReason = "support_footprint_missed_anchor";
             }
         }
 
@@ -165,8 +188,12 @@ public static class StageManifestAnalyzer
             FirstBadStage: firstBadStage,
             FirstBadReason: firstBadReason,
             FinalWinnerPolyRef: finalWinnerPolyRef,
+            FinalWinnerComponentId: finalWinnerComponentId,
+            FinalWinnerComponentPolyCount: finalWinnerComponentPolyCount,
             FinalWinnerSupportCandidate: finalWinnerSupport,
             FinalWinnerCompetingLower: finalWinnerLower,
+            FinalSupportComponentCount: finalSupportComponentCount,
+            FinalLowerComponentCount: finalLowerComponentCount,
             CoverageComplete: missingStages.Count == 0);
     }
 

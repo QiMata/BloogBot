@@ -903,6 +903,41 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     same anchor, do not resume generic knob churn; change the stage-local fix
     surface instead
 
+### 2026-05-24 final Detour component follow-up
+
+I extended the anchor manifest again, but only on the final Detour side: each
+candidate now records `componentId`, `componentPolyCount`, and
+`componentArea2D`, and the stage summary records how many support/lower final
+components survive around the anchor.
+
+Validated artifact:
+
+- `tmp/bake-sweeps/og_4029_component_manifest_links-20260524T000728Z/`
+- hash stayed
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+What this proved on the current hallway chain:
+
+- `1518.200,-4419.800,17.100` still has two final support candidates
+  (`0x1000000000AD7E`, `0x1000000000ADA1`) and still wins
+  `0x1000000000ADA1`.
+- `1520.600,-4426.500,17.900` still has seven final support candidates and
+  still wins `0x1000000000AD6E`.
+- `1523.800,-4425.900,17.100` is still the clean red:
+  `finalDetour -> lower_competitor_dominant`, winner `0x1000000000ADAB`.
+
+Direct runtime probes from those exact coords still fail:
+
+- `1518.2,-4419.8,17.1 -> goal` only walks into the short hallway trap.
+- `1520.6,-4426.5,17.9 -> goal` has no real route at all.
+- `1523.8,-4425.9,17.1 -> goal` returns only a 2-corner local trap.
+- `1491.4,-4417.3,23.3 -> goal` also dead-ends before escaping the hallway.
+
+So the remaining hallway/hall-exit issue is not just one bad endpoint snap. It
+is a chained final-Detour trapped-basin problem. The next useful move is a
+reachability-aware/component-targeted cull or earlier contour/polymesh
+prevention, not more support-band threshold tuning.
+
 ### Follow-up: combined post-erode restore + source-support window cull
 
 - Why this branch existed:

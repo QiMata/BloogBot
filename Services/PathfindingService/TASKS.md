@@ -1995,3 +1995,35 @@
     exact endpoints anymore
   - next route-fix loop should search for the next corridor break beyond those
     coords, not keep reworking the same endpoint support basin
+
+### 2026-05-24 finalDetour component manifest follow-up
+
+- Shipped:
+  - final anchor manifest now records final Detour candidate
+    `componentId/componentPolyCount/componentArea2D`
+  - `NavDataAudit` summary/CSV now carry:
+    - `FinalWinnerComponentId`
+    - `FinalWinnerComponentPolyCount`
+    - `FinalSupportComponentCount`
+    - `FinalLowerComponentCount`
+- Build/test:
+  - `powershell -ExecutionPolicy Bypass -File tools/MmapGen/build-mmapgen.ps1 -Configuration Release`
+  - `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~AnchorStageManifestAnalyzerTests"`
+  - both passed
+- Current analysis artifact:
+  - `tmp/bake-sweeps/og_4029_component_manifest_links-20260524T000728Z/`
+  - tile hash stayed
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- What the new proof says:
+  - `1518.2` still wins `0x1000000000ADA1` with two final support candidates
+  - `1520.6` still wins `0x1000000000AD6E` with seven final support candidates
+  - `1523.8` is still the clean red:
+    `finalDetour -> lower_competitor_dominant`
+  - direct runtime probes from `1518.2`, `1520.6`, `1523.8`, and `1491.4`
+    all still dead-end locally before escaping the hallway
+- Takeaway:
+  - the hallway/hall-exit issue is now proven to be a chained trapped-basin
+    problem in final Detour, not just one bad endpoint snap
+  - next iteration should add pair-specific final reachability / candidate
+    routeability proof, or a component-targeted basin cull
+  - do not spend another loop only retuning support-band tolerances

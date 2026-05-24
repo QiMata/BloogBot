@@ -107,6 +107,10 @@ expected order in a comment block.
   actual compact-span / final-Detour cull coord list.
   Leave `logAnchorStageDiagnostics=false` unless you explicitly need the older
   per-subtile `HF-SRC-ANCHOR` / `CHF-SRC-ANCHOR` / `CHF-SRC-COMP` print stream.
+  If exact dead-end coords are green in the manifest but live/raw-Detour
+  routes still stall, extend the final Detour manifest first (component ids,
+  candidate counts, direct runtime probes from those exact support coords)
+  before retuning support thresholds again.
 - [offmesh.txt](offmesh.txt) — off-mesh connections. Format is one connection
   per line; see the file header for the exact grammar. WWoW-specific entries
   are tagged `// WWoW:` and live above the divider; inherited vmangos

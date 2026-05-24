@@ -635,8 +635,12 @@ static void WriteStageSummary(string summaryPath, AnchorStageManifestSummary sum
             anchor.FirstBadStage,
             anchor.FirstBadReason,
             anchor.FinalWinnerPolyRef,
+            anchor.FinalWinnerComponentId,
+            anchor.FinalWinnerComponentPolyCount,
             anchor.FinalWinnerSupportCandidate,
             anchor.FinalWinnerCompetingLower,
+            anchor.FinalSupportComponentCount,
+            anchor.FinalLowerComponentCount,
             anchor.CoverageComplete,
         }),
     };
@@ -649,7 +653,7 @@ static void WriteStageSummaryCsv(string summaryCsvPath, AnchorStageManifestSumma
 {
     Directory.CreateDirectory(Path.GetDirectoryName(summaryCsvPath) ?? ".");
     var builder = new StringBuilder();
-    builder.AppendLine("anchorId,label,wowX,wowY,wowZ,sourceSupportFound,presentStageCount,coverageComplete,firstBadStage,firstBadReason,finalWinnerPolyRef,finalWinnerSupportCandidate,finalWinnerCompetingLower,missingStages");
+    builder.AppendLine("anchorId,label,wowX,wowY,wowZ,sourceSupportFound,presentStageCount,coverageComplete,firstBadStage,firstBadReason,finalWinnerPolyRef,finalWinnerComponentId,finalWinnerComponentPolyCount,finalWinnerSupportCandidate,finalWinnerCompetingLower,finalSupportComponentCount,finalLowerComponentCount,missingStages");
     foreach (var anchor in summary.Anchors)
     {
         builder.Append(Csv(anchor.AnchorId)).Append(',')
@@ -663,8 +667,12 @@ static void WriteStageSummaryCsv(string summaryCsvPath, AnchorStageManifestSumma
             .Append(Csv(anchor.FirstBadStage)).Append(',')
             .Append(Csv(anchor.FirstBadReason)).Append(',')
             .Append(Csv(anchor.FinalWinnerPolyRef)).Append(',')
+            .Append(Csv(anchor.FinalWinnerComponentId?.ToString(CultureInfo.InvariantCulture))).Append(',')
+            .Append(Csv(anchor.FinalWinnerComponentPolyCount?.ToString(CultureInfo.InvariantCulture))).Append(',')
             .Append(Csv(anchor.FinalWinnerSupportCandidate?.ToString())).Append(',')
             .Append(Csv(anchor.FinalWinnerCompetingLower?.ToString())).Append(',')
+            .Append(Csv(anchor.FinalSupportComponentCount?.ToString(CultureInfo.InvariantCulture))).Append(',')
+            .Append(Csv(anchor.FinalLowerComponentCount?.ToString(CultureInfo.InvariantCulture))).Append(',')
             .Append(Csv(string.Join("|", anchor.MissingStages)))
             .AppendLine();
     }

@@ -794,3 +794,40 @@ powershell -ExecutionPolicy Bypass -File 'E:\repos\Westworld of Warcraft\tools\s
   - the route failures now sit beyond those exact endpoint cells, so treat the
     next loop as a corridor/connectivity hunt, not another local support-cell
     cleanup pass at those same coords
+
+### 2026-05-24 finalDetour component manifest follow-up
+
+- The stage manifest now records final Detour component metadata per candidate:
+  - `componentId`
+  - `componentPolyCount`
+  - `componentArea2D`
+  - stage-level `supportComponentCount` / `lowerComponentCount`
+- Validated bake:
+  - `tmp/bake-sweeps/og_4029_component_manifest_links-20260524T000728Z/`
+  - hash stayed
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - because this was analysis-only, focused/full route expectations did not
+    need a second sweep beyond the existing `7/7` focused and `17/23` full
+    results already validated on the same hash
+- What the new manifest proved in the hallway chain:
+  - `1518.200,-4419.800,17.100` still has two final support candidates
+    (`0x1000000000AD7E`, `0x1000000000ADA1`)
+  - the winner is still `0x1000000000ADA1`
+  - `1520.600,-4426.500,17.900` still has seven final support candidates and
+    still wins `0x1000000000AD6E`
+  - `1523.800,-4425.900,17.100` is still
+    `finalDetour -> lower_competitor_dominant` with winner
+    `0x1000000000ADAB`
+- Runtime probes against the same hash:
+  - `1518.2,-4419.8,17.1 -> goal` still resolves only the short trapped
+    hallway route ending near `1520.567,-4426.500,17.909`
+  - `1520.6,-4426.5,17.9 -> goal` returns no real route (`FindPath <2 corners`)
+  - `1523.8,-4425.9,17.1 -> goal` returns only a 2-corner local trap
+  - `1491.4,-4417.3,23.3 -> goal` also dead-ends locally near
+    `1479.77,-4426.00,25.31`
+- Practical meaning:
+  - the hallway/hall-exit failure is no longer “one bad endpoint snap”
+  - it is a chain of trapped final Detour basins across the hallway anchors
+  - next useful tooling/fix surface is pair-specific final reachability or a
+    component-targeted cull of the current trapped winner basin, not more
+    source-support threshold churn
