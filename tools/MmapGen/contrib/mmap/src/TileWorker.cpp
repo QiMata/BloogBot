@@ -3861,7 +3861,7 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
         return 0;
     }
 
-    const int maxNodes = ANCHOR_ROUTE_QUERY_MAX_NODES;
+    const int maxNodes = 4096;
     if (dtStatusFailed(query->init(&navMesh, maxNodes)))
     {
         printf("[DT-ANCHOR-CULL] tile=%d,%d query init failed maxNodes=%d\n", tile.header->x, tile.header->y, maxNodes);
@@ -4121,10 +4121,31 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
             std::vector<FinalDetourGroundComponentInfo> components;
             BuildFinalDetourGroundComponents(navMesh, tile, diagnostics, liveGroundMask, componentIds, components);
 
+            std::unique_ptr<dtNavMeshQuery, decltype(&dtFreeNavMeshQuery)> routeQuery(dtAllocNavMeshQuery(), &dtFreeNavMeshQuery);
+            if (!routeQuery)
+            {
+                printf("[DT-ANCHOR-ROUTE] tile=%d,%d anchor=(%.3f,%.3f,%.3f) query allocation failed\n",
+                    tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ);
+                printf("[DT-ANCHOR-CULL] tile=%d,%d anchor=(%.3f,%.3f,%.3f) window=%zu supports=%d exact=%d closest=%d culled=%d routeCulled=%d\n",
+                    tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+                    windowPolyIndices.size(), supportCount, exactSupportCount, closestFallbackSupportCount, anchorCulled, routeCulled);
+                continue;
+            }
+
+            if (dtStatusFailed(routeQuery->init(&navMesh, ANCHOR_ROUTE_QUERY_MAX_NODES)))
+            {
+                printf("[DT-ANCHOR-ROUTE] tile=%d,%d anchor=(%.3f,%.3f,%.3f) query init failed maxNodes=%d\n",
+                    tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ, ANCHOR_ROUTE_QUERY_MAX_NODES);
+                printf("[DT-ANCHOR-CULL] tile=%d,%d anchor=(%.3f,%.3f,%.3f) window=%zu supports=%d exact=%d closest=%d culled=%d routeCulled=%d\n",
+                    tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+                    windowPolyIndices.size(), supportCount, exactSupportCount, closestFallbackSupportCount, anchorCulled, routeCulled);
+                continue;
+            }
+
             std::unordered_map<int, FinalDetourComponentRouteability> routeabilityByComponent;
             std::vector<AnchorRouteTargetResolution> resolvedTargets;
             EvaluateFinalDetourAnchorComponentRouteability(
-                *query, anchor, routeTargets, windowPolyIndices, probeResults, componentIds, tileRefBase,
+                *routeQuery, anchor, routeTargets, windowPolyIndices, probeResults, componentIds, tileRefBase,
                 routeabilityByComponent, resolvedTargets);
 
             int resolvedRouteTargetCount = 0;

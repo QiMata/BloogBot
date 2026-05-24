@@ -1008,11 +1008,16 @@ Practical conclusion:
   `polymesh`/`contours` for the hallway-city chain, and lower-vs-overhead
   support disambiguation for the underpass
 - checked-in proof-only validation:
-  - `tmp/bake-sweeps/og_4029_anchor_routeability_proof_only-20260524T010701Z/`
+  - `tmp/bake-sweeps/og_4029_anchor_routeability_proof_only_qfix_manifest_only-20260524T012055Z/`
   - saved tile hash:
-    `6FA99D4CA18F7C3E8853712F7931DBD26A03C30C344508E15760E1E8CD459F52`
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
   - focused slice stayed `7/7`
   - full `CriticalWalkLegs` stayed `17/23`
+  - compatibility note:
+    `1520.600,-4426.500,17.900` must stay manifest-only. When it leaked into
+    `postDetourCullAnchorPolyStacksCoordsWow`, the default routeability branch
+    drifted to a different tile hash and different local basin answers without
+    improving the route sweep.
 
 ### Follow-up: combined post-erode restore + source-support window cull
 

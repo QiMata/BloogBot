@@ -886,8 +886,10 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     across the hallway chain, stop rewiring targets and go earlier in the bake
     (`polymesh` / `contours` / corridor connectivity)
 - Checked-in proof-only validation:
-  - `tmp/bake-sweeps/og_4029_anchor_routeability_proof_only-20260524T010701Z/`
+  - `tmp/bake-sweeps/og_4029_anchor_routeability_proof_only_qfix_manifest_only-20260524T012055Z/`
   - saved tile hash:
-    `6FA99D4CA18F7C3E8853712F7931DBD26A03C30C344508E15760E1E8CD459F52`
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
   - focused slice stayed `7/7`
   - full `CriticalWalkLegs` stayed `17/23`
+  - keep `1520.600,-4426.500,17.900` in `anchorStageManifestCoordsWow`, not
+    `postDetourCullAnchorPolyStacksCoordsWow`
