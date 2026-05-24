@@ -935,3 +935,74 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
   - keep `borrowMissingAnchorSourceSupportFromNeighbors=false`
   - keep shifted hallway coords manifest-only or pre-region-only until a branch
     improves actual route outcomes
+
+### 2026-05-24: pre-poly contour preservation experiments on `1523.8`
+
+- New native experiment surfaces:
+  - `prePolyPreserveAnchorSupportCoordsWow`
+    - preserves `RC_BORDER_VERTEX` points on source-backed support-band contours
+      before `rcBuildPolyMesh()`
+  - `prePolyUseRawAnchorSupportContoursWow`
+    - swaps a source-backed support contour from simplified contour verts back
+      to raw contour verts immediately before `rcBuildPolyMesh()`
+- Baseline restore before these experiments:
+  - tile hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Combined raw+preserve branch:
+  - `og_4029_prepoly_raw_plus_preserve_1523_v1-20260524T143954Z`
+  - saved tile hash:
+    `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`
+  - focused slice stayed `7/7`
+  - full raw-Detour sweep stayed `17/23`
+  - exact validation commands:
+    - bake:
+      `powershell -ExecutionPolicy Bypass -File tools/scripts/bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_prepoly_raw_plus_preserve_1523_v1' -DataDir 'D:\wwow-bot\test-data'`
+    - focused:
+      `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut"`
+    - full:
+      `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" -- RunConfiguration.TestSessionTimeout=1200000`
+  - What it proved:
+    - `1523.800,-4425.900,17.100` moved from
+      `polymesh / upper_support_lost` to
+      `finalDetour / lower_competitor_dominant`
+    - the source-backed support band survived contour/polymesh as a
+      `19`-vertex contour, but final Detour still fragmented it into
+      `14` non-routeable support-band candidates
+    - hallway dead-end shape improved deeper to
+      `1514.0,-4426.5,20.2`
+  - Why it is not promotable yet:
+    - `FinalRouteableSupportComponentCount` for the hallway chain stayed `0`
+    - city / exit / exterior / underpass red count stayed unchanged at `17/23`
+- Rejected composition:
+  - `og_4029_pre_region_shifted_v2_plus_prepoly_raw_preserve_1523_v1-20260524T144503Z`
+  - combining the best shifted `preRegionAnchorCoordsWow` list with the
+    raw+preserve contour branch pushed `1523.8` back to
+    `polymesh / upper_support_lost`
+  - conclusion:
+    - the earlier shifted pre-region proof window and the later raw+preserve
+      contour branch are not composable as-is
+- Rejected `maxVertsPerPoly=4` follow-up:
+  - `og_4029_prepoly_raw_preserve_1523_maxverts4_v1-20260524T144728Z`
+  - saved tile hash:
+    `6530FC7C41C030557088AFED612BE667BB279F4BECB667F00C60CAB15E07F9C1`
+  - focused slice regressed to `5/7`
+  - exact focused failures:
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+  - practical read:
+    - a stage-backed `maxVertsPerPoly` increase really did make more
+      hallway/exit/exterior anchors routeable in the manifest, but it
+      reintroduced giant bridge polys and lost the intentional deck connector
+      footprint
+    - treat `maxVertsPerPoly=4` the same way we now treat `=6`: not
+      promotable on tile `40,29`
+- Checked-in default after this loop:
+  - restore bake:
+    `og_4029_restore_after_prepoly_iteration_20260524-20260524T145052Z`
+  - tile hash restored to:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - keep both pre-poly contour experiment keys absent from checked-in config
+  - next real fix surface:
+    - local contour resimplification between the default `8`-vertex support
+      contour and the raw-preserved `19`-vertex support contour, not another
+      global `maxVertsPerPoly` increase

@@ -1125,7 +1125,7 @@ bool rcBuildPolyMesh(rcContext* ctx, const rcContourSet& cset, const int nvp, rc
 			const int* v = &cont.verts[j*4];
 			indices[j] = addVertex((unsigned short)v[0], (unsigned short)v[1], (unsigned short)v[2],
 								   mesh.verts, firstVert, nextVert, mesh.nverts);
-			if (v[3] & RC_BORDER_VERTEX)
+			if ((v[3] & RC_BORDER_VERTEX) && !(v[3] & RC_PRESERVE_BORDER_VERTEX))
 			{
 				// This vertex should be removed.
 				vflags[indices[j]] = 1;

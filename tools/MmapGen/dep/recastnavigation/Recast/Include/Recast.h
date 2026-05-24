@@ -610,6 +610,13 @@ static const int RC_BORDER_VERTEX = 0x10000;
 /// @see rcCompactSpan::reg, #rcContour::verts, #rcContour::rverts
 static const int RC_AREA_BORDER = 0x20000;
 
+/// Preserve border vertex flag.
+/// [WWoW-DIVERGENCE] 2026-05-24: lets tile-local contour preservation opt
+/// specific border vertices out of rcBuildPolyMesh()'s border-vertex removal.
+/// (Used during the build process.)
+/// @see rcCompactSpan::reg, #rcContour::verts, #rcContour::rverts
+static const int RC_PRESERVE_BORDER_VERTEX = 0x40000;
+
 /// Contour build flags.
 /// @see rcBuildContours
 enum rcBuildContoursFlags

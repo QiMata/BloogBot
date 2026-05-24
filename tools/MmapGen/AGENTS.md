@@ -116,6 +116,19 @@ expected order in a comment block.
   Keep `borrowMissingAnchorSourceSupportFromNeighbors=false` by default; it can
   make a sourceSupport blind spot look green in the manifest while making the
   real hallway route shape worse.
+  If `1523.800,-4425.900,17.100` still dies at `polymesh`, the next allowed
+  experiment surface is the pre-poly contour pair:
+  `prePolyPreserveAnchorSupportCoordsWow` +
+  `prePolyUseRawAnchorSupportContoursWow`. On `2026-05-24` that pair moved
+  `1523.8` to `finalDetour / lower_competitor_dominant` while keeping the
+  focused deck slice `7/7`, which proves the contour can survive later in the
+  pipeline. It did NOT improve the full route count yet, so leave both keys
+  absent in the checked-in config until a branch improves more than the stage
+  answer.
+  Do not retry `maxVertsPerPoly=4` or `=6` as a follow-up to that contour
+  branch. Both values reintroduced top-deck connector / giant-bridge
+  regressions even though they made some hallway/exterior anchors look more
+  routeable in the manifest.
   Leave `logAnchorStageDiagnostics=false` unless you explicitly need the older
   per-subtile `HF-SRC-ANCHOR` / `CHF-SRC-ANCHOR` / `CHF-SRC-COMP` print stream.
   If exact dead-end coords are green in the manifest but live/raw-Detour

@@ -2196,3 +2196,56 @@
     route probe that stays on the intended lower-underpass support
   - the next real structural target is still `1523.8` at `polymesh`, with the
     underpass handled separately as a finalDetour support-footprint decision
+
+## 2026-05-24 - pre-poly contour preservation follow-up
+
+- Checked-in restore at end of loop:
+  - config restored to proof-only default
+  - live tile hash restored to:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_prepoly_iteration_20260524-20260524T145052Z/`
+- New native experiment surfaces now available but OFF by default:
+  - `RC_PRESERVE_BORDER_VERTEX`
+  - `prePolyPreserveAnchorSupportCoordsWow`
+  - `prePolyUseRawAnchorSupportContoursWow`
+- Best branch from this loop:
+  - bake:
+    `powershell -ExecutionPolicy Bypass -File tools/scripts/bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_prepoly_raw_plus_preserve_1523_v1' -DataDir 'D:\wwow-bot\test-data'`
+  - focused:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut"`
+  - full:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" -- RunConfiguration.TestSessionTimeout=1200000`
+  - saved tile hash:
+    `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`
+  - focused `7/7`
+  - full raw-Detour `17/23`
+- What that branch proved:
+  - `1523.800,-4425.900,17.100` moved from
+    `polymesh / upper_support_lost` to
+    `finalDetour / lower_competitor_dominant`
+  - the source-backed support contour survived as a `19`-vertex support-band
+    contour, but final Detour still broke it into `14` non-routeable
+    support-band candidates
+  - hallway route shape improved deeper to:
+    `1514.0,-4426.5,20.2`
+  - pass count still stayed `17/23`, so this is proof of the right fix surface
+    but not a complete route closure
+- Rejected branches:
+  - `og_4029_pre_region_shifted_v2_plus_prepoly_raw_preserve_1523_v1`
+    - combining shifted pre-region endpoint seeding with the raw+preserve
+      contour branch pushed `1523.8` back to
+      `polymesh / upper_support_lost`
+  - `og_4029_prepoly_raw_preserve_1523_maxverts4_v1`
+    - saved tile hash:
+      `6530FC7C41C030557088AFED612BE667BB279F4BECB667F00C60CAB15E07F9C1`
+    - focused regressed to `5/7`
+    - exact focused failures:
+      - `OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      - `OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+- Actual next move:
+  - do not retry global `maxVertsPerPoly` increases; `4` and `6` both regress
+    the deck crop
+  - next targeted native experiment should be a local contour resimplification
+    between the default `8`-vertex support contour and the raw-preserved
+    `19`-vertex contour for `1523.8`

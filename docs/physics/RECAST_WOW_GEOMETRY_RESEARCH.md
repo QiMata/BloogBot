@@ -1228,3 +1228,52 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
   - `tmp/bake-sweeps/og_4029_restore_after_iter_20260524-20260524T030827Z/`
   - tile hash restored to:
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-24 pre-poly contour preservation follow-up
+
+- Goal:
+  - prove whether `1523.800,-4425.900,17.100` can survive the
+    contour-to-polymesh handoff with a source-backed support contour instead of
+    disappearing before final Detour
+- New native experiment surfaces:
+  - `RC_PRESERVE_BORDER_VERTEX`
+  - `prePolyPreserveAnchorSupportCoordsWow`
+  - `prePolyUseRawAnchorSupportContoursWow`
+- Best experimental branch:
+  - `tmp/bake-sweeps/og_4029_prepoly_raw_plus_preserve_1523_v1-20260524T143954Z/`
+  - saved tile hash:
+    `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`
+  - focused OG slice stayed `7/7`
+  - full raw-Detour sweep stayed `17/23`
+- Strongest new proof from this loop:
+  - `1523.8` no longer first failed at `polymesh`; it moved to
+    `finalDetour / lower_competitor_dominant`
+  - the surviving support contour was no longer the coarse default contour:
+    - support-band contour vertex count grew to `19`
+    - the final Detour stage still broke it into `14` support-band candidates
+    - `FinalRouteableSupportComponentCount` stayed `0`
+  - interpretation:
+    - the support floor is present in the final tile on this branch
+    - it is just too fragmented/trapped to win a useful route
+- Rejected follow-ups:
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_v2_plus_prepoly_raw_preserve_1523_v1-20260524T144503Z/`
+    - combining the best shifted `preRegionAnchorCoordsWow` branch with the
+      raw+preserve contour branch regressed `1523.8` back to
+      `polymesh / upper_support_lost`
+  - `tmp/bake-sweeps/og_4029_prepoly_raw_preserve_1523_maxverts4_v1-20260524T144728Z/`
+    - saved tile hash:
+      `6530FC7C41C030557088AFED612BE667BB279F4BECB667F00C60CAB15E07F9C1`
+    - manifest looked better for several hallway/exit/exterior anchors, but
+      the focused deck slice regressed to `5/7`
+    - exact focused failures:
+      - `OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      - `OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+- Current best interpretation:
+  - the real target is not another global knob sweep
+  - the next structural bake fix should be a local contour resimplification
+    between the default `8`-vertex support contour and the raw-preserved
+    `19`-vertex contour for `1523.8`
+- Checked-in restore after this loop:
+  - `tmp/bake-sweeps/og_4029_restore_after_prepoly_iteration_20260524-20260524T145052Z/`
+  - tile hash restored to:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`

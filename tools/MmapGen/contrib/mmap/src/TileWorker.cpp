@@ -2,6 +2,7 @@
 #include "MapBuilder.h"
 #include "Maps/GridMapDefines.h"
 #include "DetourNavMeshQuery.h"
+#include "RecastAlloc.h"
 #include <algorithm>
 #include <array>
 #include <cfloat>
@@ -1918,6 +1919,16 @@ static std::vector<AnchorPolyStackCoord> ParseAnchorStageManifestCoords(const js
     return ParseAnchorCoords(config, "anchorStageManifestCoordsWow");
 }
 
+static std::vector<AnchorPolyStackCoord> ParsePrePolyPreserveAnchorSupportCoords(const json& config)
+{
+    return ParseAnchorCoords(config, "prePolyPreserveAnchorSupportCoordsWow");
+}
+
+static std::vector<AnchorPolyStackCoord> ParsePrePolyUseRawAnchorSupportContours(const json& config)
+{
+    return ParseAnchorCoords(config, "prePolyUseRawAnchorSupportContoursWow");
+}
+
 static std::vector<AnchorRouteTarget> ParseAnchorRouteTargets(const json& config)
 {
     std::vector<AnchorRouteTarget> routeTargets;
@@ -3332,6 +3343,202 @@ static json BuildPolyMeshAnchorStageSummary(const rcPolyMesh& mesh,
     stage["lowerContainsAnchorProjection"] = lowerContainsAnchor;
     stage["dominantLowerCandidate"] = lowerContainsAnchor && supportCount > 0 && !supportContainsAnchor;
     return stage;
+}
+
+// [WWoW-DIVERGENCE] 2026-05-24: support-backed OG hallway/city contours can
+// survive rcBuildContours() and then disappear when rcBuildPolyMesh() removes
+// border vertices. Preserve only the border vertices on support-band contours
+// for explicitly configured anchors so those contours survive the later
+// border-vertex removal pass without broad global knob changes.
+static int PreserveAnchorSupportContourBorderVertices(
+    rcContourSet& contours,
+    const float xyExtent,
+    const float supportZTolerance,
+    const std::vector<AnchorSourceSupportProbe>& supports,
+    const bool logDiagnostics)
+{
+    if (!contours.conts || supports.empty())
+        return 0;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+
+    int preservedVertexCount = 0;
+    int preservedContourCount = 0;
+
+    for (const AnchorSourceSupportProbe& support : supports)
+    {
+        if (!support.found)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+
+        for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
+        {
+            rcContour& contour = contours.conts[contourIndex];
+            if (contour.nverts < 3)
+                continue;
+
+            float minX = std::numeric_limits<float>::max();
+            float maxX = -std::numeric_limits<float>::max();
+            float minY = std::numeric_limits<float>::max();
+            float maxY = -std::numeric_limits<float>::max();
+            float minZ = std::numeric_limits<float>::max();
+            float maxZ = -std::numeric_limits<float>::max();
+            for (int vertIndex = 0; vertIndex < contour.nverts; ++vertIndex)
+            {
+                const int* cv = &contour.verts[vertIndex * 4];
+                const float recastX = contours.bmin[0] + cv[0] * contours.cs;
+                const float recastY = contours.bmin[1] + cv[1] * contours.ch;
+                const float recastZ = contours.bmin[2] + cv[2] * contours.cs;
+                minX = std::min(minX, recastX);
+                maxX = std::max(maxX, recastX);
+                minY = std::min(minY, recastY);
+                maxY = std::max(maxY, recastY);
+                minZ = std::min(minZ, recastZ);
+                maxZ = std::max(maxZ, recastZ);
+            }
+
+            if (maxX < anchorRecastX - xyExtent || minX > anchorRecastX + xyExtent ||
+                maxZ < anchorRecastZ - xyExtent || minZ > anchorRecastZ + xyExtent)
+            {
+                continue;
+            }
+
+            const bool supportBand = maxY >= supportFloorMinY && minY <= supportFloorMaxY;
+            if (!supportBand)
+                continue;
+
+            bool preservedThisContour = false;
+            for (int vertIndex = 0; vertIndex < contour.nverts; ++vertIndex)
+            {
+                int& flags = contour.verts[vertIndex * 4 + 3];
+                if ((flags & RC_BORDER_VERTEX) == 0 || (flags & RC_PRESERVE_BORDER_VERTEX) != 0)
+                    continue;
+
+                flags |= RC_PRESERVE_BORDER_VERTEX;
+                ++preservedVertexCount;
+                preservedThisContour = true;
+            }
+
+            if (preservedThisContour)
+            {
+                ++preservedContourCount;
+                if (logDiagnostics)
+                {
+                    printf("[CONTOUR-ANCHOR-PRESERVE] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u preservedBorderVerts=%d\n",
+                        support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                        contourIndex, static_cast<unsigned>(contour.reg), contour.nverts);
+                }
+            }
+        }
+    }
+
+    if (preservedVertexCount > 0)
+    {
+        printf("[CONTOUR-ANCHOR-PRESERVE] preserved %d border vertex(s) across %d contour(s)\n",
+            preservedVertexCount, preservedContourCount);
+    }
+
+    return preservedVertexCount;
+}
+
+// [WWoW-DIVERGENCE] 2026-05-24: if a support contour survives rcBuildContours()
+// but the simplified contour is much coarser than the raw contour, the
+// subsequent rcBuildPolyMesh() triangulation can erase the source-backed upper
+// support band entirely. Restoring the raw contour is a focused way to test
+// whether the loss happens in contour simplification rather than in later
+// polygon merging/culling.
+static int RestoreRawAnchorSupportContours(
+    rcContourSet& contours,
+    const float xyExtent,
+    const float supportZTolerance,
+    const std::vector<AnchorSourceSupportProbe>& supports,
+    const bool logDiagnostics)
+{
+    if (!contours.conts || supports.empty())
+        return 0;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+
+    int restoredContourCount = 0;
+
+    for (const AnchorSourceSupportProbe& support : supports)
+    {
+        if (!support.found)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+
+        for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
+        {
+            rcContour& contour = contours.conts[contourIndex];
+            if (contour.nverts < 3 || contour.nrverts <= contour.nverts || !contour.verts || !contour.rverts)
+                continue;
+
+            float minX = std::numeric_limits<float>::max();
+            float maxX = -std::numeric_limits<float>::max();
+            float minY = std::numeric_limits<float>::max();
+            float maxY = -std::numeric_limits<float>::max();
+            float minZ = std::numeric_limits<float>::max();
+            float maxZ = -std::numeric_limits<float>::max();
+            for (int vertIndex = 0; vertIndex < contour.nverts; ++vertIndex)
+            {
+                const int* cv = &contour.verts[vertIndex * 4];
+                const float recastX = contours.bmin[0] + cv[0] * contours.cs;
+                const float recastY = contours.bmin[1] + cv[1] * contours.ch;
+                const float recastZ = contours.bmin[2] + cv[2] * contours.cs;
+                minX = std::min(minX, recastX);
+                maxX = std::max(maxX, recastX);
+                minY = std::min(minY, recastY);
+                maxY = std::max(maxY, recastY);
+                minZ = std::min(minZ, recastZ);
+                maxZ = std::max(maxZ, recastZ);
+            }
+
+            if (maxX < anchorRecastX - xyExtent || minX > anchorRecastX + xyExtent ||
+                maxZ < anchorRecastZ - xyExtent || minZ > anchorRecastZ + xyExtent)
+            {
+                continue;
+            }
+
+            const bool supportBand = maxY >= supportFloorMinY && minY <= supportFloorMaxY;
+            if (!supportBand)
+                continue;
+
+            const int simplifiedVertexCount = contour.nverts;
+            int* replacementVerts = static_cast<int*>(rcAlloc(sizeof(int) * contour.nrverts * 4, RC_ALLOC_PERM));
+            if (!replacementVerts)
+                continue;
+
+            memcpy(replacementVerts, contour.rverts, sizeof(int) * contour.nrverts * 4);
+            rcFree(contour.verts);
+            contour.verts = replacementVerts;
+            contour.nverts = contour.nrverts;
+            ++restoredContourCount;
+
+            if (logDiagnostics)
+            {
+                printf("[CONTOUR-ANCHOR-RAW] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u verts=%d->%d\n",
+                    support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                    contourIndex, static_cast<unsigned>(contour.reg), simplifiedVertexCount, contour.nrverts);
+            }
+        }
+    }
+
+    if (restoredContourCount > 0)
+    {
+        printf("[CONTOUR-ANCHOR-RAW] restored raw vertices on %d support contour(s)\n", restoredContourCount);
+    }
+
+    return restoredContourCount;
 }
 
 struct FinalDetourGroundComponentInfo
@@ -5340,6 +5547,10 @@ namespace MMAP
             writeAnchorStageManifest
                 ? ParseAnchorStageManifestCoords(jsonTileConfig)
                 : std::vector<AnchorPolyStackCoord>();
+        const std::vector<AnchorPolyStackCoord> prePolyPreserveAnchorSupportCoords =
+            ParsePrePolyPreserveAnchorSupportCoords(jsonTileConfig);
+        const std::vector<AnchorPolyStackCoord> prePolyUseRawAnchorSupportContours =
+            ParsePrePolyUseRawAnchorSupportContours(jsonTileConfig);
         const std::vector<AnchorPolyStackCoord> anchorManifestBaseCoords =
             writeAnchorStageManifest
                 ? MergeUniqueAnchorCoords(anchorCompactWorkCoords, anchorPolyStackCoords)
@@ -5407,6 +5618,22 @@ namespace MMAP
                 ? ResolveAnchorSourceSupportProbes(
                     meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
                     anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorManifestCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
+                    logAnchorStageDiagnostics)
+                : std::vector<AnchorSourceSupportProbe>();
+        const std::vector<AnchorSourceSupportProbe> prePolyPreserveAnchorSupportProbes =
+            !prePolyPreserveAnchorSupportCoords.empty()
+                ? ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, prePolyPreserveAnchorSupportCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
+                    logAnchorStageDiagnostics)
+                : std::vector<AnchorSourceSupportProbe>();
+        const std::vector<AnchorSourceSupportProbe> prePolyUseRawAnchorSupportProbes =
+            !prePolyUseRawAnchorSupportContours.empty()
+                ? ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, prePolyUseRawAnchorSupportContours,
                     borrowMissingAnchorSourceSupportFromNeighbors,
                     logAnchorStageDiagnostics)
                 : std::vector<AnchorSourceSupportProbe>();
@@ -5835,6 +6062,26 @@ namespace MMAP
                 appendContourManifestStage(*tile.cset);
                 if (m_debug)
                     WriteContourStageCsv(mapID, tileX, tileY, x, y, debugStageCrops, *tile.cset);
+
+                if (!prePolyUseRawAnchorSupportProbes.empty())
+                {
+                    RestoreRawAnchorSupportContours(
+                        *tile.cset,
+                        anchorSourceSupportXyExtent,
+                        anchorSourceSupportZTolerance,
+                        prePolyUseRawAnchorSupportProbes,
+                        logAnchorStageDiagnostics);
+                }
+
+                if (!prePolyPreserveAnchorSupportProbes.empty())
+                {
+                    PreserveAnchorSupportContourBorderVertices(
+                        *tile.cset,
+                        anchorSourceSupportXyExtent,
+                        anchorSourceSupportZTolerance,
+                        prePolyPreserveAnchorSupportProbes,
+                        logAnchorStageDiagnostics);
+                }
 
                 // build polymesh
                 tile.pmesh = rcAllocPolyMesh();
