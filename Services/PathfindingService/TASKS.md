@@ -2139,3 +2139,60 @@
   - run shifted trapped-basin endpoint experiments against the pre-region list
   - focus on cases where direct starts still dead-end after green manifest
     answers, especially hallway/corridor exits and the city upper branch
+
+## 2026-05-24 - shifted pre-region endpoint seeding and rejected routeability combo
+
+- Verified restore point after this loop:
+  - checked-in config restored
+  - live tile hash restored to:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Shifted pre-region-only experiments:
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_traps_v1-20260524T025737Z/`
+    - tile hash:
+      `8533ACF1BD05DCAF7BCA7078BB54F9489E29B82C6D299BD0D8010DF57FB1DADE`
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_traps_v2-20260524T030130Z/`
+    - tile hash:
+      `0ABAF48CEB6879FC177644A83490C26206628D1E3D6B9E5CF1720C1A999BBA87`
+- What the shifted-endpoint seeding proved:
+  - promoting runtime dead-end coords into `preRegionAnchorCoordsWow` can move
+    the corridor collapse points deeper without touching the checked-in final
+    Detour cull list
+  - measured direct-probe movement:
+    - city full-goal branch:
+      `1545.0,-4434.5,11.1 -> 1537.2667,-4437.9,13.0089` on baseline
+      then `1539.2667,-4437.9,12.3089` on `v1`
+      then `1541.2667,-4437.9,12.0089` on `v2`
+    - hallway-to-exit branch:
+      `1518.2,-4419.8,17.1 -> 1513.9668,-4416.6,18.4089` on the first shifted
+      segment probe
+      then `1515.9668,-4418.6,17.9089` on `v2`
+  - stage side:
+    - `1522.500,-4424.100,17.000` returned to no `firstBadStage` on `v2`
+    - `1523.800,-4425.900,17.100` still first failed at
+      `polymesh / upper_support_lost`
+- Important limit:
+  - the exit/exterior chain did not close with endpoint seeding alone
+  - `1491.4 -> 1381.3` still only resolved to the local exact-exit anchor
+    `1471.3667,-4416.6,25.3089`, and `1381.3 -> boarding` still died at the
+    underpass branch
+- Rejected combo:
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_traps_v2_routecull-20260524T030400Z/`
+    - tile hash:
+      `B3086CD68A7778B7FFC14E2D7DAA2A353CACA6F2746B417E935C23F279984911`
+  - enabling `postDetourCullAnchorTrappedComponents` on top of the improved
+    pre-region branch was not promotable
+  - manifest evidence looked better for the underpass chain:
+    - `1364.867,-4374.000,26.109` became green + routeable
+    - `1381.300,-4370.600,26.000` flipped to
+      `finalDetour / upper_support_lost`
+  - real route shape got worse:
+    - `1381.3 -> boarding` dropped onto a much lower descending path toward
+      `1366.8667,-4374.0,14.0089`
+    - `1491.4 -> boarding` still failed at the same local exit dead-end
+      `1479.7667,-4426.0,25.3089`
+- Next move:
+  - keep the shifted pre-region endpoint idea as a useful experiment surface
+  - do not re-enable the routeability cull on this branch without a direct
+    route probe that stays on the intended lower-underpass support
+  - the next real structural target is still `1523.8` at `polymesh`, with the
+    underpass handled separately as a finalDetour support-footprint decision

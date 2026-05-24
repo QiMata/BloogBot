@@ -1179,3 +1179,52 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     - keep using the decoupled pre-region coord list for targeted experiments
     - do not promote neighbor borrowing again unless the direct route probes and
       full route sweep both improve, not just the manifest
+
+### Follow-up: shifted pre-region endpoint seeding moves the dead-end forward, but routeability cull is still wrong
+
+- Experimental branches:
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_traps_v1-20260524T025737Z/`
+    - tile hash:
+      `8533ACF1BD05DCAF7BCA7078BB54F9489E29B82C6D299BD0D8010DF57FB1DADE`
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_traps_v2-20260524T030130Z/`
+    - tile hash:
+      `0ABAF48CEB6879FC177644A83490C26206628D1E3D6B9E5CF1720C1A999BBA87`
+- Method:
+  - take the actual partial-path endpoints from direct runtime probes and seed
+    them into `preRegionAnchorCoordsWow` only, not the checked-in final Detour
+    cull coord list
+- Positive learning:
+  - this does move the stalled city / hallway branch further along the corridor
+  - direct full-goal / segmented probe progression:
+    - baseline city branch:
+      `1545.0,-4434.5,11.1 -> 1537.2667,-4437.9,13.0089`
+    - shifted v1:
+      `1545.0,-4434.5,11.1 -> 1539.2667,-4437.9,12.3089`
+    - shifted v2:
+      `1545.0,-4434.5,11.1 -> 1541.2667,-4437.9,12.0089`
+    - hallway-to-exit segment moved from
+      `1513.9668,-4416.6,18.4089` to `1515.9668,-4418.6,17.9089`
+  - this is the first branch in this loop that materially advanced the
+    dead-end coords instead of only changing stage labels
+- Remaining limit:
+  - the exterior chain still did not close
+  - `1491.4 -> 1381.3` still only resolved to the local exact-exit anchor
+    `1471.3667,-4416.6,25.3089`
+  - `1381.3 -> boarding` still died at the underpass branch
+- Rejected combo:
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_traps_v2_routecull-20260524T030400Z/`
+    - tile hash:
+      `B3086CD68A7778B7FFC14E2D7DAA2A353CACA6F2746B417E935C23F279984911`
+  - combining the improved pre-region branch with
+    `postDetourCullAnchorTrappedComponents=true` is not promotable
+  - the manifest looked better at the underpass:
+    - `1364.867,-4374.000,26.109` became green + routeable
+    - `1381.300,-4370.600,26.000` flipped to
+      `finalDetour / upper_support_lost`
+  - but the actual route got worse:
+    - `1381.3 -> boarding` dropped onto a low descending branch toward
+      `1366.8667,-4374.0,14.0089`
+- Checked-in restore after these experiments:
+  - `tmp/bake-sweeps/og_4029_restore_after_iter_20260524-20260524T030827Z/`
+  - tile hash restored to:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
