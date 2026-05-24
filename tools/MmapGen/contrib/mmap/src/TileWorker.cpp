@@ -3541,6 +3541,398 @@ static int RestoreRawAnchorSupportContours(
     return restoredContourCount;
 }
 
+static float DistancePtSeg2D(const int x, const int z,
+    const int px, const int pz,
+    const int qx, const int qz)
+{
+    float pqx = static_cast<float>(qx - px);
+    float pqz = static_cast<float>(qz - pz);
+    float dx = static_cast<float>(x - px);
+    float dz = static_cast<float>(z - pz);
+    float d = pqx * pqx + pqz * pqz;
+    float t = pqx * dx + pqz * dz;
+    if (d > 0.0f)
+        t /= d;
+    if (t < 0.0f)
+        t = 0.0f;
+    else if (t > 1.0f)
+        t = 1.0f;
+
+    dx = px + t * pqx - x;
+    dz = pz + t * pqz - z;
+    return dx * dx + dz * dz;
+}
+
+static void SimplifyAnchorContour(
+    const std::vector<int>& points,
+    std::vector<int>& simplified,
+    const float maxError,
+    const int maxEdgeLen,
+    const int buildFlags)
+{
+    const int pointCount = static_cast<int>(points.size()) / 4;
+    if (pointCount < 3)
+        return;
+
+    bool hasConnections = false;
+    for (int i = 0; i < static_cast<int>(points.size()); i += 4)
+    {
+        if ((points[i + 3] & RC_CONTOUR_REG_MASK) != 0)
+        {
+            hasConnections = true;
+            break;
+        }
+    }
+
+    if (hasConnections)
+    {
+        for (int i = 0; i < pointCount; ++i)
+        {
+            const int ii = (i + 1) % pointCount;
+            const bool differentRegs =
+                (points[i * 4 + 3] & RC_CONTOUR_REG_MASK) != (points[ii * 4 + 3] & RC_CONTOUR_REG_MASK);
+            const bool areaBorders =
+                (points[i * 4 + 3] & RC_AREA_BORDER) != (points[ii * 4 + 3] & RC_AREA_BORDER);
+            if (differentRegs || areaBorders)
+            {
+                simplified.push_back(points[i * 4 + 0]);
+                simplified.push_back(points[i * 4 + 1]);
+                simplified.push_back(points[i * 4 + 2]);
+                simplified.push_back(i);
+            }
+        }
+    }
+
+    if (simplified.empty())
+    {
+        int llx = points[0];
+        int lly = points[1];
+        int llz = points[2];
+        int lli = 0;
+        int urx = points[0];
+        int ury = points[1];
+        int urz = points[2];
+        int uri = 0;
+        for (int i = 0; i < static_cast<int>(points.size()); i += 4)
+        {
+            const int x = points[i + 0];
+            const int y = points[i + 1];
+            const int z = points[i + 2];
+            if (x < llx || (x == llx && z < llz))
+            {
+                llx = x;
+                lly = y;
+                llz = z;
+                lli = i / 4;
+            }
+            if (x > urx || (x == urx && z > urz))
+            {
+                urx = x;
+                ury = y;
+                urz = z;
+                uri = i / 4;
+            }
+        }
+
+        simplified.push_back(llx);
+        simplified.push_back(lly);
+        simplified.push_back(llz);
+        simplified.push_back(lli);
+
+        simplified.push_back(urx);
+        simplified.push_back(ury);
+        simplified.push_back(urz);
+        simplified.push_back(uri);
+    }
+
+    for (int i = 0; i < static_cast<int>(simplified.size()) / 4; )
+    {
+        const int ii = (i + 1) % (static_cast<int>(simplified.size()) / 4);
+
+        int ax = simplified[i * 4 + 0];
+        int az = simplified[i * 4 + 2];
+        const int ai = simplified[i * 4 + 3];
+
+        int bx = simplified[ii * 4 + 0];
+        int bz = simplified[ii * 4 + 2];
+        const int bi = simplified[ii * 4 + 3];
+
+        float maxd = 0.0f;
+        int maxi = -1;
+        int ci;
+        int cinc;
+        int endi;
+
+        if (bx > ax || (bx == ax && bz > az))
+        {
+            cinc = 1;
+            ci = (ai + cinc) % pointCount;
+            endi = bi;
+        }
+        else
+        {
+            cinc = pointCount - 1;
+            ci = (bi + cinc) % pointCount;
+            endi = ai;
+            std::swap(ax, bx);
+            std::swap(az, bz);
+        }
+
+        if ((points[ci * 4 + 3] & RC_CONTOUR_REG_MASK) == 0 || (points[ci * 4 + 3] & RC_AREA_BORDER))
+        {
+            while (ci != endi)
+            {
+                const float d = DistancePtSeg2D(points[ci * 4 + 0], points[ci * 4 + 2], ax, az, bx, bz);
+                if (d > maxd)
+                {
+                    maxd = d;
+                    maxi = ci;
+                }
+                ci = (ci + cinc) % pointCount;
+            }
+        }
+
+        if (maxi != -1 && maxd > (maxError * maxError))
+        {
+            simplified.resize(simplified.size() + 4);
+            const int simplifiedCount = static_cast<int>(simplified.size()) / 4;
+            for (int j = simplifiedCount - 1; j > i; --j)
+            {
+                simplified[j * 4 + 0] = simplified[(j - 1) * 4 + 0];
+                simplified[j * 4 + 1] = simplified[(j - 1) * 4 + 1];
+                simplified[j * 4 + 2] = simplified[(j - 1) * 4 + 2];
+                simplified[j * 4 + 3] = simplified[(j - 1) * 4 + 3];
+            }
+            simplified[(i + 1) * 4 + 0] = points[maxi * 4 + 0];
+            simplified[(i + 1) * 4 + 1] = points[maxi * 4 + 1];
+            simplified[(i + 1) * 4 + 2] = points[maxi * 4 + 2];
+            simplified[(i + 1) * 4 + 3] = maxi;
+        }
+        else
+        {
+            ++i;
+        }
+    }
+
+    if (maxEdgeLen > 0 && (buildFlags & (RC_CONTOUR_TESS_WALL_EDGES | RC_CONTOUR_TESS_AREA_EDGES)) != 0)
+    {
+        for (int i = 0; i < static_cast<int>(simplified.size()) / 4; )
+        {
+            const int ii = (i + 1) % (static_cast<int>(simplified.size()) / 4);
+
+            const int ax = simplified[i * 4 + 0];
+            const int az = simplified[i * 4 + 2];
+            const int ai = simplified[i * 4 + 3];
+
+            const int bx = simplified[ii * 4 + 0];
+            const int bz = simplified[ii * 4 + 2];
+            const int bi = simplified[ii * 4 + 3];
+
+            int maxi = -1;
+            const int ci = (ai + 1) % pointCount;
+
+            bool tess = false;
+            if ((buildFlags & RC_CONTOUR_TESS_WALL_EDGES) && (points[ci * 4 + 3] & RC_CONTOUR_REG_MASK) == 0)
+                tess = true;
+            if ((buildFlags & RC_CONTOUR_TESS_AREA_EDGES) && (points[ci * 4 + 3] & RC_AREA_BORDER))
+                tess = true;
+
+            if (tess)
+            {
+                const int dx = bx - ax;
+                const int dz = bz - az;
+                if (dx * dx + dz * dz > maxEdgeLen * maxEdgeLen)
+                {
+                    const int n = bi < ai ? (bi + pointCount - ai) : (bi - ai);
+                    if (n > 1)
+                    {
+                        if (bx > ax || (bx == ax && bz > az))
+                            maxi = (ai + n / 2) % pointCount;
+                        else
+                            maxi = (ai + (n + 1) / 2) % pointCount;
+                    }
+                }
+            }
+
+            if (maxi != -1)
+            {
+                simplified.resize(simplified.size() + 4);
+                const int simplifiedCount = static_cast<int>(simplified.size()) / 4;
+                for (int j = simplifiedCount - 1; j > i; --j)
+                {
+                    simplified[j * 4 + 0] = simplified[(j - 1) * 4 + 0];
+                    simplified[j * 4 + 1] = simplified[(j - 1) * 4 + 1];
+                    simplified[j * 4 + 2] = simplified[(j - 1) * 4 + 2];
+                    simplified[j * 4 + 3] = simplified[(j - 1) * 4 + 3];
+                }
+                simplified[(i + 1) * 4 + 0] = points[maxi * 4 + 0];
+                simplified[(i + 1) * 4 + 1] = points[maxi * 4 + 1];
+                simplified[(i + 1) * 4 + 2] = points[maxi * 4 + 2];
+                simplified[(i + 1) * 4 + 3] = maxi;
+            }
+            else
+            {
+                ++i;
+            }
+        }
+    }
+
+    for (int i = 0; i < static_cast<int>(simplified.size()) / 4; ++i)
+    {
+        const int ai = (simplified[i * 4 + 3] + 1) % pointCount;
+        const int bi = simplified[i * 4 + 3];
+        simplified[i * 4 + 3] =
+            (points[ai * 4 + 3] & (RC_CONTOUR_REG_MASK | RC_AREA_BORDER)) |
+            (points[bi * 4 + 3] & RC_BORDER_VERTEX);
+    }
+}
+
+static void RemoveAnchorContourDegenerateSegments(std::vector<int>& simplified)
+{
+    auto vertsEqualXz = [&](const int lhsIndex, const int rhsIndex)
+    {
+        return simplified[lhsIndex * 4 + 0] == simplified[rhsIndex * 4 + 0] &&
+            simplified[lhsIndex * 4 + 2] == simplified[rhsIndex * 4 + 2];
+    };
+
+    int pointCount = static_cast<int>(simplified.size()) / 4;
+    for (int i = 0; i < pointCount; ++i)
+    {
+        const int ni = (i + 1 < pointCount) ? (i + 1) : 0;
+        if (!vertsEqualXz(i, ni))
+            continue;
+
+        for (int j = i; j < pointCount - 1; ++j)
+        {
+            simplified[j * 4 + 0] = simplified[(j + 1) * 4 + 0];
+            simplified[j * 4 + 1] = simplified[(j + 1) * 4 + 1];
+            simplified[j * 4 + 2] = simplified[(j + 1) * 4 + 2];
+            simplified[j * 4 + 3] = simplified[(j + 1) * 4 + 3];
+        }
+        simplified.resize(simplified.size() - 4);
+        --pointCount;
+        --i;
+    }
+}
+
+// [WWoW-DIVERGENCE] 2026-05-24: the raw-restored 1523.8 support contour proves
+// the upper floor can survive contour generation, but the fully raw contour
+// over-fragments into final support shards. Re-run Recast's own contour
+// simplifier locally on just the selected raw-restored support contours so we
+// can test a middle ground between the coarse default contour and the raw
+// contour without changing global tile simplification.
+static int ResimplifyRawAnchorSupportContours(
+    rcContourSet& contours,
+    const float xyExtent,
+    const float supportZTolerance,
+    const std::vector<AnchorSourceSupportProbe>& supports,
+    const float maxError,
+    const int maxEdgeLen,
+    const bool logDiagnostics)
+{
+    if (!contours.conts || supports.empty() || maxError < 0.0f)
+        return 0;
+
+    constexpr float kSupportFloorSlackBelow = 0.20f;
+    constexpr float kSupportFloorSlackAbove = 0.35f;
+
+    int resimplifiedContourCount = 0;
+    int removedVertexCount = 0;
+    std::vector<unsigned char> processed(static_cast<size_t>(contours.nconts), 0);
+
+    for (const AnchorSourceSupportProbe& support : supports)
+    {
+        if (!support.found)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
+        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+
+        for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
+        {
+            if (processed[static_cast<size_t>(contourIndex)] != 0)
+                continue;
+
+            rcContour& contour = contours.conts[contourIndex];
+            if (contour.nverts < 3 || contour.nrverts <= contour.nverts || !contour.verts || !contour.rverts)
+                continue;
+
+            float minX = std::numeric_limits<float>::max();
+            float maxX = -std::numeric_limits<float>::max();
+            float minY = std::numeric_limits<float>::max();
+            float maxY = -std::numeric_limits<float>::max();
+            float minZ = std::numeric_limits<float>::max();
+            float maxZ = -std::numeric_limits<float>::max();
+            for (int vertIndex = 0; vertIndex < contour.nverts; ++vertIndex)
+            {
+                const int* cv = &contour.verts[vertIndex * 4];
+                const float recastX = contours.bmin[0] + cv[0] * contours.cs;
+                const float recastY = contours.bmin[1] + cv[1] * contours.ch;
+                const float recastZ = contours.bmin[2] + cv[2] * contours.cs;
+                minX = std::min(minX, recastX);
+                maxX = std::max(maxX, recastX);
+                minY = std::min(minY, recastY);
+                maxY = std::max(maxY, recastY);
+                minZ = std::min(minZ, recastZ);
+                maxZ = std::max(maxZ, recastZ);
+            }
+
+            if (maxX < anchorRecastX - xyExtent || minX > anchorRecastX + xyExtent ||
+                maxZ < anchorRecastZ - xyExtent || minZ > anchorRecastZ + xyExtent)
+            {
+                continue;
+            }
+
+            const bool supportBand = maxY >= supportFloorMinY && minY <= supportFloorMaxY;
+            if (!supportBand)
+                continue;
+
+            std::vector<int> rawPoints(
+                contour.rverts,
+                contour.rverts + static_cast<size_t>(contour.nrverts) * 4);
+            std::vector<int> simplified;
+            simplified.reserve(rawPoints.size());
+            SimplifyAnchorContour(rawPoints, simplified, maxError, maxEdgeLen, RC_CONTOUR_TESS_WALL_EDGES);
+            RemoveAnchorContourDegenerateSegments(simplified);
+
+            const int simplifiedVertexCount = static_cast<int>(simplified.size()) / 4;
+            if (simplifiedVertexCount < 3 || simplifiedVertexCount >= contour.nverts)
+                continue;
+
+            int* replacementVerts = static_cast<int*>(rcAlloc(sizeof(int) * simplified.size(), RC_ALLOC_PERM));
+            if (!replacementVerts)
+                continue;
+
+            memcpy(replacementVerts, simplified.data(), sizeof(int) * simplified.size());
+            const int priorVertexCount = contour.nverts;
+            rcFree(contour.verts);
+            contour.verts = replacementVerts;
+            contour.nverts = simplifiedVertexCount;
+            processed[static_cast<size_t>(contourIndex)] = 1;
+            ++resimplifiedContourCount;
+            removedVertexCount += (priorVertexCount - simplifiedVertexCount);
+
+            if (logDiagnostics)
+            {
+                printf("[CONTOUR-ANCHOR-RESIMPLIFY] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u verts=%d->%d maxError=%.3f maxEdgeLen=%d\n",
+                    support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                    contourIndex, static_cast<unsigned>(contour.reg),
+                    priorVertexCount, simplifiedVertexCount, maxError, maxEdgeLen);
+            }
+        }
+    }
+
+    if (resimplifiedContourCount > 0)
+    {
+        printf("[CONTOUR-ANCHOR-RESIMPLIFY] resimplified %d contour(s), removed %d vertex(s), maxError=%.3f maxEdgeLen=%d\n",
+            resimplifiedContourCount, removedVertexCount, maxError, maxEdgeLen);
+    }
+
+    return resimplifiedContourCount;
+}
+
 struct FinalDetourGroundComponentInfo
 {
     int componentId = -1;
@@ -5551,6 +5943,10 @@ namespace MMAP
             ParsePrePolyPreserveAnchorSupportCoords(jsonTileConfig);
         const std::vector<AnchorPolyStackCoord> prePolyUseRawAnchorSupportContours =
             ParsePrePolyUseRawAnchorSupportContours(jsonTileConfig);
+        const float prePolyResimplifyAnchorSupportMaxError = JsonFloatOrDefault(
+            jsonTileConfig, "prePolyResimplifyAnchorSupportMaxError", -1.0f);
+        const int prePolyResimplifyAnchorSupportMaxEdgeLen =
+            jsonTileConfig.value("prePolyResimplifyAnchorSupportMaxEdgeLen", -1);
         const std::vector<AnchorPolyStackCoord> anchorManifestBaseCoords =
             writeAnchorStageManifest
                 ? MergeUniqueAnchorCoords(anchorCompactWorkCoords, anchorPolyStackCoords)
@@ -6070,6 +6466,22 @@ namespace MMAP
                         anchorSourceSupportXyExtent,
                         anchorSourceSupportZTolerance,
                         prePolyUseRawAnchorSupportProbes,
+                        logAnchorStageDiagnostics);
+                }
+
+                if (!prePolyUseRawAnchorSupportProbes.empty() && prePolyResimplifyAnchorSupportMaxError >= 0.0f)
+                {
+                    const int resimplifyMaxEdgeLen =
+                        prePolyResimplifyAnchorSupportMaxEdgeLen >= 0
+                            ? prePolyResimplifyAnchorSupportMaxEdgeLen
+                            : tileCfg.maxEdgeLen;
+                    ResimplifyRawAnchorSupportContours(
+                        *tile.cset,
+                        anchorSourceSupportXyExtent,
+                        anchorSourceSupportZTolerance,
+                        prePolyUseRawAnchorSupportProbes,
+                        prePolyResimplifyAnchorSupportMaxError,
+                        resimplifyMaxEdgeLen,
                         logAnchorStageDiagnostics);
                 }
 

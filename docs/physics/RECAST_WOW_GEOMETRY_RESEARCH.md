@@ -1277,3 +1277,71 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
   - `tmp/bake-sweeps/og_4029_restore_after_prepoly_iteration_20260524-20260524T145052Z/`
   - tile hash restored to:
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-24 upstream/sibling memo + local resimplify follow-up
+
+- Short source-backed memo:
+  - `docs/physics/RECAST_WOW_SIBLING_COMPARISON_2026_05_24.md`
+- New targeted native surface added in `TileWorker.cpp`:
+  - `prePolyResimplifyAnchorSupportMaxError`
+  - `prePolyResimplifyAnchorSupportMaxEdgeLen`
+  - `ResimplifyRawAnchorSupportContours(...)`
+- Why this was the right next experiment:
+  - official Recast keeps `maxSimplificationError` in the contour stage, and
+    upstream `simplifyContour` is exactly the logic that decides whether a raw
+    support outline stays coarse, gets split, or gets simplified away
+  - that made "locally re-run upstream contour simplification on just the
+    source-backed `1523.8` support contour" the highest-signal middle ground
+    between the default coarse contour and the fully raw contour
+- Exact experiment commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_prepoly_resimplify_1523_mse13_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_prepoly_resimplify_1523_mse13.json'`
+  - focused:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_prepoly_resimplify_1523_mse13_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - full:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_prepoly_resimplify_1523_mse13_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+- Observed result:
+  - artifact:
+    `tmp/bake-sweeps/og_4029_prepoly_resimplify_1523_mse13_v1-20260524T151711Z/`
+  - tile hash:
+    `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`
+  - focused stayed `7/7`
+  - full `CriticalWalkLegs` stayed `17/23`
+  - bake log proved the raw+preserve hooks fired, but no local resimplify
+    replacement ever won:
+    - `[CONTOUR-ANCHOR-RAW] restored raw vertices on 1 support contour(s)`
+    - `[CONTOUR-ANCHOR-PRESERVE] preserved 207 border vertex(s) across 1 contour(s)`
+    - no `[CONTOUR-ANCHOR-RESIMPLIFY] anchor=... verts=A->B ...`
+- Practical interpretation:
+  - this exact `maxError=1.3` local branch did not find a better intermediate
+    contour than the raw-restored contour
+  - the saved tile therefore matched the earlier raw+preserve hash instead of
+    creating a new serialized geometry branch
+- Current stage authority from the newest manifests:
+  - experimental `52D99...` branch:
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1522.500,-4424.100,17.000` ->
+      `finalDetour / support_footprint_missed_anchor`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - restored baseline `A01DEE...` branch:
+    - `1523.800,-4425.900,17.100` still ->
+      `finalDetour / lower_competitor_dominant`
+  - use these newest manifests as authority if older same-day notes disagree
+    about whether `1523.8` was first lost at `polymesh` or `finalDetour`
+- Checked-in restore after this follow-up:
+  - restore command:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_resimplify_iteration_20260524' -DataDir 'D:\wwow-bot\test-data'`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_resimplify_iteration_20260524-20260524T152623Z/`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Best next move after this loop:
+  - keep the local resimplify hook available, but do not blindly rerun the
+    same `1.3` branch
+  - the next promotable branch must either explicitly preserve an intermediate
+    contour or improve source-support / lower-competitor classification
+  - keep global knob churn off the table
