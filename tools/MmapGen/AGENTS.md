@@ -105,11 +105,17 @@ expected order in a comment block.
   Use `anchorStageManifestCoordsWow` for analysis-only extra probe coords when
   you need stage answers for shifted dead-end points without changing the
   actual compact-span / final-Detour cull coord list.
+  Use `preRegionAnchorCoordsWow` when a shifted hallway/city dead-end needs
+  earlier source-support / compact cleanup proof without also promoting that XY
+  into the checked-in final Detour stack-cull list.
   Use `anchorRouteTargetsWow` when a stage-clean anchor still dead-ends inside
   final Detour and you need reachability proof for the local winner component.
   Keep `postDetourCullAnchorTrappedComponents` off in the checked-in config
   unless a validated branch improves the real route sweep; on tile `1:40,29`
   the routeability evidence is useful, but the cull is not promotable yet.
+  Keep `borrowMissingAnchorSourceSupportFromNeighbors=false` by default; it can
+  make a sourceSupport blind spot look green in the manifest while making the
+  real hallway route shape worse.
   Leave `logAnchorStageDiagnostics=false` unless you explicitly need the older
   per-subtile `HF-SRC-ANCHOR` / `CHF-SRC-ANCHOR` / `CHF-SRC-COMP` print stream.
   If exact dead-end coords are green in the manifest but live/raw-Detour

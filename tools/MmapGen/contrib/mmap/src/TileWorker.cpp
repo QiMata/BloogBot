@@ -1421,6 +1421,8 @@ struct AnchorSourceSupportProbe
     int triIndex = -1;
     MMAP::MeshTriangleSource source = MMAP::MeshTriangleSource::Terrain;
     bool projectedInside = false;
+    bool borrowed = false;
+    AnchorPolyStackCoord borrowedFrom;
 };
 
 struct Point2DXZ
@@ -1594,6 +1596,7 @@ static std::vector<AnchorSourceSupportProbe> ResolveAnchorSourceSupportProbes(
     const float xyExtent,
     const float supportZTolerance,
     const std::vector<AnchorPolyStackCoord>& anchorCoords,
+    const bool allowNeighborBorrow,
     const bool logDiagnostics)
 {
     std::vector<AnchorSourceSupportProbe> probes;
@@ -1603,6 +1606,7 @@ static std::vector<AnchorSourceSupportProbe> ResolveAnchorSourceSupportProbes(
 
     constexpr float kSupportFloorBelowSlack = 0.35f;
     constexpr float kSupportFloorAboveSlack = 0.75f;
+    const float borrowRadius2D = xyExtent + 0.25f;
 
     for (const AnchorPolyStackCoord& anchor : anchorCoords)
     {
@@ -1658,21 +1662,88 @@ static std::vector<AnchorSourceSupportProbe> ResolveAnchorSourceSupportProbes(
             }
         }
 
-        if (logDiagnostics && best.found)
-        {
-            printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) supportY=%.3f delta=%.3f tri=%d source=%s dist2D=%.3f inside=%d\n",
-                anchor.wowX, anchor.wowY, anchor.wowZ,
-                best.supportY, best.supportY - anchor.wowZ, best.triIndex,
-                meshData.SourceNameForTriangle(best.triIndex),
-                best.distance2D, best.projectedInside ? 1 : 0);
-        }
-        else if (logDiagnostics)
-        {
-            printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) supportY=none\n",
-                anchor.wowX, anchor.wowY, anchor.wowZ);
-        }
-
         probes.push_back(best);
+    }
+
+    if (allowNeighborBorrow)
+    {
+        for (AnchorSourceSupportProbe& probe : probes)
+        {
+            if (probe.found)
+                continue;
+
+            const AnchorSourceSupportProbe* bestBorrow = nullptr;
+            float bestBorrowScore = FLT_MAX;
+            for (const AnchorSourceSupportProbe& candidate : probes)
+            {
+                if (!candidate.found || AreAnchorCoordsEquivalent(candidate.anchor, probe.anchor))
+                    continue;
+
+                const float deltaX = candidate.anchor.wowX - probe.anchor.wowX;
+                const float deltaY = candidate.anchor.wowY - probe.anchor.wowY;
+                const float anchorDistance2D = sqrtf(deltaX * deltaX + deltaY * deltaY);
+                if (anchorDistance2D > borrowRadius2D)
+                    continue;
+
+                const float supportDelta = candidate.supportY - probe.anchor.wowZ;
+                if (supportDelta < -kSupportFloorBelowSlack || supportDelta > supportZTolerance + kSupportFloorAboveSlack)
+                    continue;
+
+                const float insidePenalty = candidate.projectedInside ? 0.0f : 0.5f;
+                const float score = anchorDistance2D + candidate.distance2D + insidePenalty;
+                if (!bestBorrow || score < bestBorrowScore)
+                {
+                    bestBorrow = &candidate;
+                    bestBorrowScore = score;
+                }
+            }
+
+            if (!bestBorrow)
+                continue;
+
+            probe.found = true;
+            probe.supportY = bestBorrow->supportY;
+            probe.distance2D = bestBorrow->distance2D +
+                sqrtf((bestBorrow->anchor.wowX - probe.anchor.wowX) * (bestBorrow->anchor.wowX - probe.anchor.wowX) +
+                    (bestBorrow->anchor.wowY - probe.anchor.wowY) * (bestBorrow->anchor.wowY - probe.anchor.wowY));
+            probe.triIndex = bestBorrow->triIndex;
+            probe.source = bestBorrow->source;
+            probe.projectedInside = false;
+            probe.borrowed = true;
+            probe.borrowedFrom = bestBorrow->anchor;
+        }
+    }
+
+    if (logDiagnostics)
+    {
+        for (const AnchorSourceSupportProbe& probe : probes)
+        {
+            if (probe.found)
+            {
+                if (probe.borrowed)
+                {
+                    printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) supportY=%.3f delta=%.3f tri=%d source=%s dist2D=%.3f inside=%d borrowed=1 borrowedFrom=(%.3f,%.3f,%.3f)\n",
+                        probe.anchor.wowX, probe.anchor.wowY, probe.anchor.wowZ,
+                        probe.supportY, probe.supportY - probe.anchor.wowZ, probe.triIndex,
+                        meshData.SourceNameForTriangle(probe.triIndex),
+                        probe.distance2D, probe.projectedInside ? 1 : 0,
+                        probe.borrowedFrom.wowX, probe.borrowedFrom.wowY, probe.borrowedFrom.wowZ);
+                }
+                else
+                {
+                    printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) supportY=%.3f delta=%.3f tri=%d source=%s dist2D=%.3f inside=%d\n",
+                        probe.anchor.wowX, probe.anchor.wowY, probe.anchor.wowZ,
+                        probe.supportY, probe.supportY - probe.anchor.wowZ, probe.triIndex,
+                        meshData.SourceNameForTriangle(probe.triIndex),
+                        probe.distance2D, probe.projectedInside ? 1 : 0);
+                }
+            }
+            else
+            {
+                printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) supportY=none\n",
+                    probe.anchor.wowX, probe.anchor.wowY, probe.anchor.wowZ);
+            }
+        }
     }
 
     return probes;
@@ -1803,6 +1874,18 @@ static std::vector<AnchorPolyStackCoord> ParseAnchorCoords(const json& config, c
     return coords;
 }
 
+static std::vector<AnchorPolyStackCoord> ParseAnchorCoordsWithFallback(
+    const json& config,
+    const char* primaryKey,
+    const char* fallbackKey)
+{
+    std::vector<AnchorPolyStackCoord> coords = ParseAnchorCoords(config, primaryKey);
+    if (!coords.empty() || !fallbackKey)
+        return coords;
+
+    return ParseAnchorCoords(config, fallbackKey);
+}
+
 static bool TryParseAnchorCoordJson(const json& entry, AnchorPolyStackCoord& coord)
 {
     if (!entry.is_array() || entry.size() != 3 ||
@@ -1820,6 +1903,14 @@ static bool TryParseAnchorCoordJson(const json& entry, AnchorPolyStackCoord& coo
 static std::vector<AnchorPolyStackCoord> ParseAnchorPolyStackCoords(const json& config)
 {
     return ParseAnchorCoords(config, "postDetourCullAnchorPolyStacksCoordsWow");
+}
+
+static std::vector<AnchorPolyStackCoord> ParseAnchorCompactWorkCoords(const json& config)
+{
+    return ParseAnchorCoordsWithFallback(
+        config,
+        "preRegionAnchorCoordsWow",
+        "postDetourCullAnchorPolyStacksCoordsWow");
 }
 
 static std::vector<AnchorPolyStackCoord> ParseAnchorStageManifestCoords(const json& config)
@@ -2651,6 +2742,8 @@ static json BuildAnchorSourceSupportJson(const AnchorSourceSupportProbe& support
         { "triIndex", support.found ? support.triIndex : -1 },
         { "source", support.found ? MeshTriangleSourceName(support.source) : "none" },
         { "projectedInside", support.found && support.projectedInside },
+        { "borrowed", support.found && support.borrowed },
+        { "borrowedFromAnchorId", support.found && support.borrowed ? FormatAnchorStageId(support.borrowedFrom) : "" },
         { "deltaFromAnchorZ", support.found ? support.supportY - support.anchor.wowZ : 0.0f },
     };
 }
@@ -5221,6 +5314,8 @@ namespace MMAP
             jsonTileConfig["preMedianCullAnchorSourceSupportCompetingSpans"].get<bool>();
         const bool restoreAnchorSourceSupportAfterErode = jsonTileConfig["preRegionRestoreAnchorSourceSupportAfterErode"].get<bool>();
         const bool anchorSourceSupportFallbackToWindow = jsonTileConfig["preRegionCullAnchorSourceSupportFallbackToWindow"].get<bool>();
+        const bool borrowMissingAnchorSourceSupportFromNeighbors =
+            jsonTileConfig.value("borrowMissingAnchorSourceSupportFromNeighbors", false);
         const bool writeAnchorStageManifest = jsonTileConfig.value("writeAnchorStageManifest", false);
         const bool logAnchorStageDiagnostics = jsonTileConfig.value("logAnchorStageDiagnostics", false);
         const bool trimAnchorPolyStacks = jsonTileConfig["postDetourCullAnchorPolyStacks"].get<bool>();
@@ -5232,17 +5327,26 @@ namespace MMAP
         const float anchorSourceSupportZTolerance = JsonFloatOrDefault(
             jsonTileConfig, "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f);
         const bool trimAnchorUpperCompactSpans = jsonTileConfig["preRegionCullAnchorUpperCompactSpans"].get<bool>();
+        const std::vector<AnchorPolyStackCoord> anchorCompactWorkCoords =
+            (trimAnchorSourceSupportCompactSpans || trimAnchorSourceSupportCompactSpansBeforeMedian ||
+                restoreAnchorSourceSupportAfterErode || writeAnchorStageManifest || trimAnchorUpperCompactSpans)
+                ? ParseAnchorCompactWorkCoords(jsonTileConfig)
+                : std::vector<AnchorPolyStackCoord>();
         const std::vector<AnchorPolyStackCoord> anchorPolyStackCoords =
-            (trimAnchorSourceSupportCompactSpans || writeAnchorStageManifest || trimAnchorUpperCompactSpans || trimAnchorPolyStacks)
+            (trimAnchorPolyStacks || writeAnchorStageManifest)
                 ? ParseAnchorPolyStackCoords(jsonTileConfig)
                 : std::vector<AnchorPolyStackCoord>();
         const std::vector<AnchorPolyStackCoord> anchorManifestExtraCoords =
             writeAnchorStageManifest
                 ? ParseAnchorStageManifestCoords(jsonTileConfig)
                 : std::vector<AnchorPolyStackCoord>();
+        const std::vector<AnchorPolyStackCoord> anchorManifestBaseCoords =
+            writeAnchorStageManifest
+                ? MergeUniqueAnchorCoords(anchorCompactWorkCoords, anchorPolyStackCoords)
+                : std::vector<AnchorPolyStackCoord>();
         const std::vector<AnchorPolyStackCoord> anchorManifestCoords =
             writeAnchorStageManifest
-                ? MergeUniqueAnchorCoords(anchorPolyStackCoords, anchorManifestExtraCoords)
+                ? MergeUniqueAnchorCoords(anchorManifestBaseCoords, anchorManifestExtraCoords)
                 : std::vector<AnchorPolyStackCoord>();
         const std::vector<AnchorRouteTarget> anchorRouteTargets =
             (writeAnchorStageManifest || trimAnchorTrappedComponents)
@@ -5294,7 +5398,8 @@ namespace MMAP
             (trimAnchorSourceSupportCompactSpans || restoreAnchorSourceSupportAfterErode)
                 ? ResolveAnchorSourceSupportProbes(
                     meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
-                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorPolyStackCoords,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorCompactWorkCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
                     logAnchorStageDiagnostics)
                 : std::vector<AnchorSourceSupportProbe>();
         const std::vector<AnchorSourceSupportProbe> anchorManifestSupports =
@@ -5302,6 +5407,7 @@ namespace MMAP
                 ? ResolveAnchorSourceSupportProbes(
                     meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
                     anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorManifestCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
                     logAnchorStageDiagnostics)
                 : std::vector<AnchorSourceSupportProbe>();
         json anchorStageManifest;
@@ -5673,7 +5779,7 @@ namespace MMAP
                     const float anchorPolyStackSupportZTolerance = JsonFloatOrDefault(
                         jsonTileConfig, "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f);
                     const int culledCompactSpans = CullAnchorUpperCompactSpans(
-                        *tile.chf, anchorPolyStackXyExtent, anchorPolyStackSupportZTolerance, anchorPolyStackCoords,
+                        *tile.chf, anchorPolyStackXyExtent, anchorPolyStackSupportZTolerance, anchorCompactWorkCoords,
                         logAnchorStageDiagnostics);
                     if (culledCompactSpans > 0)
                     {
@@ -6150,6 +6256,8 @@ namespace MMAP
             { "preRegionRestoreAnchorSourceSupportAfterErode", false },
             { "preRegionCullAnchorSourceSupportFallbackToWindow", false },
             { "preRegionCullAnchorUpperCompactSpans", false },
+            { "borrowMissingAnchorSourceSupportFromNeighbors", false },
+            { "preRegionAnchorCoordsWow", json::array() },
             { "postDetourCullAnchorPolyStacks", false },
             { "postDetourCullAnchorTrappedComponents", false },
             { "postDetourCullAnchorPolyStacksXyExtent", 2.0f },

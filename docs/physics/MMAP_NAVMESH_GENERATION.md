@@ -893,3 +893,45 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
   - full `CriticalWalkLegs` stayed `17/23`
   - keep `1520.600,-4426.500,17.900` in `anchorStageManifestCoordsWow`, not
     `postDetourCullAnchorPolyStacksCoordsWow`
+
+### 2026-05-24: pre-region coord split and negative neighbor-borrow experiment
+
+- New surfaces:
+  - `preRegionAnchorCoordsWow`
+    - source-support / compact cleanup coords only
+    - does not automatically change the final Detour anchor stack cull list
+  - `borrowMissingAnchorSourceSupportFromNeighbors`
+    - experiment-only fallback for no-source-support anchors
+- Validation branch:
+  - `og_4029_pre_region_anchor_split_15206-20260524T023316Z`
+  - saved tile hash:
+    `B196C738FF6ABA04B35055461112E8722AD0A2209A515100F8A9E53A6DD9AAA5`
+  - focused slice stayed `7/7`
+  - full raw-Detour sweep stayed `17/23`
+- What it proved:
+  - the hallway `1520.600,-4426.500,17.900` coord's earlier success came from
+    pre-region/source cleanup, not from final Detour stack trimming
+  - with the coord moved into `preRegionAnchorCoordsWow` only:
+    - `1522.500,-4424.100,17.000` became green
+    - `1523.800,-4425.900,17.100` moved from
+      `finalDetour / lower_competitor_dominant` to
+      `polymesh / upper_support_lost`
+    - `1521.300,-4422.500,17.100` stayed blocked at
+      `sourceSupport / no_source_support_probe`
+- Negative borrow branch:
+  - `og_4029_pre_region_anchor_borrow_15213-20260524T024038Z`
+  - saved tile hash:
+    `98D17DF9AE904BD1DC544729D4B96980361644C950AE9053F9F7D497E81CA3FE`
+  - `1521.300,-4422.500,17.100` borrowed source support from
+    `1522.500,-4424.100,17.000` and stopped failing at `sourceSupport`
+  - this is not promotable:
+    - direct `1518.2,-4419.8,17.1 -> full goal` collapsed to an immediate
+      two-corner local path
+- Checked-in default:
+  - restore bake:
+    `og_4029_pre_region_split_default_restore-20260524T024742Z`
+  - tile hash restored to:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - keep `borrowMissingAnchorSourceSupportFromNeighbors=false`
+  - keep shifted hallway coords manifest-only or pre-region-only until a branch
+    improves actual route outcomes

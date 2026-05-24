@@ -1113,3 +1113,69 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     by those exact endpoint cells resolving onto the wrong local support layer
   - next diagnosis should look further along the corridor/connectivity surface,
     not blindly keep trimming the exact endpoint basin again
+
+### Follow-up: decoupled pre-region anchor coords and negative source-support borrow
+
+- Why this branch existed:
+  - the routeability-proof baseline taught us an important hygiene rule:
+    `1520.600,-4426.500,17.900` changed hallway answers when it leaked into
+    `postDetourCullAnchorPolyStacksCoordsWow`, but that did not prove the fix
+    belonged in the final Detour stack cull itself
+  - the next step was to separate "earlier compact/source cleanup work coords"
+    from "final Detour stack-cull coords" so we could test the hallway dead-end
+    effect at the right bake stage
+- New code/config surface:
+  - `preRegionAnchorCoordsWow`
+    - drives only the source-support / upper-compact cleanup windows
+    - falls back to `postDetourCullAnchorPolyStacksCoordsWow` for backward
+      compatibility when omitted
+  - `borrowMissingAnchorSourceSupportFromNeighbors`
+    - lets a no-source-support anchor temporarily borrow the nearest same-band
+      source support from a nearby anchor
+    - intentionally disabled by default; this is an experiment surface only
+- Variant 1:
+  `tmp/bake-sweeps/og_4029_pre_region_anchor_split_15206-20260524T023316Z/`
+  - saved tile hash:
+    `B196C738FF6ABA04B35055461112E8722AD0A2209A515100F8A9E53A6DD9AAA5`
+  - focused OG slice stayed `7/7`
+  - full raw-Detour `CriticalWalkLegs` stayed `17/23`
+  - stage-proof learning:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `polymesh / upper_support_lost`
+    - `1521.300,-4422.500,17.100` ->
+      still `sourceSupport / no_source_support_probe`
+  - conclusion:
+    - the old `1520.600,-4426.500,17.900` effect was real, but it was an
+      earlier compact/source cleanup effect, not proof that this XY belongs in
+      the checked-in final Detour cull coord list
+- Variant 2:
+  `tmp/bake-sweeps/og_4029_pre_region_anchor_borrow_15213-20260524T024038Z/`
+  - saved tile hash:
+    `98D17DF9AE904BD1DC544729D4B96980361644C950AE9053F9F7D497E81CA3FE`
+  - stage-proof learning:
+    - `1521.300,-4422.500,17.100` stopped failing at `sourceSupport`
+    - it borrowed from `1522.500,-4424.100,17.000`
+    - `1522.500,-4424.100,17.000` also stayed green
+    - `1523.800,-4425.900,17.100` still failed at
+      `polymesh / upper_support_lost`
+  - runtime negative result:
+    - direct `1518.2,-4419.8,17.1 -> full goal` collapsed to a two-corner path
+      immediately
+  - conclusion:
+    - filling the `1521.3` source-support blind spot by borrowing from a
+      neighbor improves the proof surface, but it is not promotable while it
+      worsens the real hallway route shape
+- Checked-in default restore:
+  - bake dir:
+    `tmp/bake-sweeps/og_4029_pre_region_split_default_restore-20260524T024742Z/`
+  - saved tile hash restored to the proof-only baseline:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - keep:
+    - `borrowMissingAnchorSourceSupportFromNeighbors=false`
+    - `1520.600,-4426.500,17.900` manifest-only, not in the checked-in final
+      Detour cull coord list
+  - practical next move:
+    - keep using the decoupled pre-region coord list for targeted experiments
+    - do not promote neighbor borrowing again unless the direct route probes and
+      full route sweep both improve, not just the manifest

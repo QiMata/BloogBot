@@ -2093,3 +2093,49 @@
     zero routeable support components
   - go earlier in the bake on the hallway/city chain:
     `polymesh` / `contours` / corridor connectivity preservation
+
+## 2026-05-24 - pre-region anchor coord split + borrow experiment
+
+- Landed code surface:
+  - `preRegionAnchorCoordsWow`
+    - decouples source-support / compact cleanup coords from
+      `postDetourCullAnchorPolyStacksCoordsWow`
+  - `borrowMissingAnchorSourceSupportFromNeighbors`
+    - experiment-only fallback for no-source-support anchors
+- Verified baseline restore:
+  - current checked-in tile hash is back on:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Useful artifacts:
+  - split-only branch:
+    `tmp/bake-sweeps/og_4029_pre_region_anchor_split_15206-20260524T023316Z/`
+  - borrow branch:
+    `tmp/bake-sweeps/og_4029_pre_region_anchor_borrow_15213-20260524T024038Z/`
+  - restored default:
+    `tmp/bake-sweeps/og_4029_pre_region_split_default_restore-20260524T024742Z/`
+- Results:
+  - split-only branch:
+    - hash:
+      `B196C738FF6ABA04B35055461112E8722AD0A2209A515100F8A9E53A6DD9AAA5`
+    - focused `7/7`
+    - full raw-Detour `17/23`
+    - key stage shift:
+      `1523.800,-4425.900,17.100` moved to
+      `polymesh / upper_support_lost`
+  - borrow branch:
+    - hash:
+      `98D17DF9AE904BD1DC544729D4B96980361644C950AE9053F9F7D497E81CA3FE`
+    - `1521.300,-4422.500,17.100` stopped failing at `sourceSupport`
+    - negative runtime result:
+      direct `1518.2 -> full goal` collapsed to a two-corner path, so do not
+      promote this branch
+- Current rule:
+  - use `preRegionAnchorCoordsWow` for targeted earlier-stage hallway/city
+    experiments
+  - keep `borrowMissingAnchorSourceSupportFromNeighbors=false` by default
+  - do not re-add `1520.600,-4426.500,17.900` to
+    `postDetourCullAnchorPolyStacksCoordsWow`; if it helps, it belongs in the
+    earlier source/compact work surface, not the checked-in final Detour cull
+- Next actual fix loop:
+  - run shifted trapped-basin endpoint experiments against the pre-region list
+  - focus on cases where direct starts still dead-end after green manifest
+    answers, especially hallway/corridor exits and the city upper branch
