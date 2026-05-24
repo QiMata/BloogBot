@@ -3480,7 +3480,7 @@ static int RestoreRawAnchorSupportContours(
         for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
         {
             rcContour& contour = contours.conts[contourIndex];
-            if (contour.nverts < 3 || contour.nrverts <= contour.nverts || !contour.verts || !contour.rverts)
+            if (contour.nrverts < 3 || !contour.verts || !contour.rverts)
                 continue;
 
             float minX = std::numeric_limits<float>::max();
@@ -3828,6 +3828,7 @@ static int ResimplifyRawAnchorSupportContours(
     const std::vector<AnchorSourceSupportProbe>& supports,
     const float maxError,
     const int maxEdgeLen,
+    const int buildFlags,
     const bool logDiagnostics)
 {
     if (!contours.conts || supports.empty() || maxError < 0.0f)
@@ -3856,7 +3857,7 @@ static int ResimplifyRawAnchorSupportContours(
                 continue;
 
             rcContour& contour = contours.conts[contourIndex];
-            if (contour.nverts < 3 || contour.nrverts <= contour.nverts || !contour.verts || !contour.rverts)
+            if (contour.nrverts < 3 || !contour.verts || !contour.rverts)
                 continue;
 
             float minX = std::numeric_limits<float>::max();
@@ -3894,10 +3895,18 @@ static int ResimplifyRawAnchorSupportContours(
                 contour.rverts + static_cast<size_t>(contour.nrverts) * 4);
             std::vector<int> simplified;
             simplified.reserve(rawPoints.size());
-            SimplifyAnchorContour(rawPoints, simplified, maxError, maxEdgeLen, RC_CONTOUR_TESS_WALL_EDGES);
+            SimplifyAnchorContour(rawPoints, simplified, maxError, maxEdgeLen, buildFlags);
             RemoveAnchorContourDegenerateSegments(simplified);
 
             const int simplifiedVertexCount = static_cast<int>(simplified.size()) / 4;
+            if (logDiagnostics)
+            {
+                printf("[CONTOUR-ANCHOR-RESIMPLIFY-CANDIDATE] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u rawVerts=%d candidateVerts=%d maxError=%.3f maxEdgeLen=%d buildFlags=0x%02X\n",
+                    support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                    contourIndex, static_cast<unsigned>(contour.reg),
+                    contour.nrverts, simplifiedVertexCount,
+                    maxError, maxEdgeLen, static_cast<unsigned>(buildFlags));
+            }
             if (simplifiedVertexCount < 3 || simplifiedVertexCount >= contour.nverts)
                 continue;
 
@@ -5947,6 +5956,10 @@ namespace MMAP
             jsonTileConfig, "prePolyResimplifyAnchorSupportMaxError", -1.0f);
         const int prePolyResimplifyAnchorSupportMaxEdgeLen =
             jsonTileConfig.value("prePolyResimplifyAnchorSupportMaxEdgeLen", -1);
+        const bool prePolyResimplifyAnchorSupportTessellateWallEdges =
+            jsonTileConfig.value("prePolyResimplifyAnchorSupportTessellateWallEdges", true);
+        const bool prePolyResimplifyAnchorSupportTessellateAreaEdges =
+            jsonTileConfig.value("prePolyResimplifyAnchorSupportTessellateAreaEdges", false);
         const std::vector<AnchorPolyStackCoord> anchorManifestBaseCoords =
             writeAnchorStageManifest
                 ? MergeUniqueAnchorCoords(anchorCompactWorkCoords, anchorPolyStackCoords)
@@ -6475,6 +6488,11 @@ namespace MMAP
                         prePolyResimplifyAnchorSupportMaxEdgeLen >= 0
                             ? prePolyResimplifyAnchorSupportMaxEdgeLen
                             : tileCfg.maxEdgeLen;
+                    int resimplifyBuildFlags = 0;
+                    if (prePolyResimplifyAnchorSupportTessellateWallEdges)
+                        resimplifyBuildFlags |= RC_CONTOUR_TESS_WALL_EDGES;
+                    if (prePolyResimplifyAnchorSupportTessellateAreaEdges)
+                        resimplifyBuildFlags |= RC_CONTOUR_TESS_AREA_EDGES;
                     ResimplifyRawAnchorSupportContours(
                         *tile.cset,
                         anchorSourceSupportXyExtent,
@@ -6482,6 +6500,7 @@ namespace MMAP
                         prePolyUseRawAnchorSupportProbes,
                         prePolyResimplifyAnchorSupportMaxError,
                         resimplifyMaxEdgeLen,
+                        resimplifyBuildFlags,
                         logAnchorStageDiagnostics);
                 }
 
