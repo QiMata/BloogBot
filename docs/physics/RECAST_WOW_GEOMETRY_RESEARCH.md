@@ -1655,3 +1655,37 @@ worked on the current `rcBuildContours()` output directly.
   - the next contour-stage retry must either isolate a single recovered contour
     more strictly or move the same support mask into the real
     `rcBuildContours(...)` simplifier instead of post-contour reinjection
+
+### 2026-05-25 UTC anchor-containing no-resimplify carry follow-up
+
+- WWoW then closed the obvious narrower retry on the same no-resimplify
+  surface:
+  - same raster patch
+  - same local carry radius (`4.0`)
+  - same preserve surface
+  - but `prePolySupportContourSelectionMode = anchorContaining`
+- Experiment:
+  - variant:
+    `og_4029_raster_support_patch06_carry_local_band_anchoronly_r4_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_carry_local_band_anchoronly_r4_v1-20260525T195224Z/`
+  - changed hash:
+    `1932EC1BC322393040870F3293C9CF9B9EA6CCBB640974A3595B87CC4D5839B8`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - selector diagnostics still isolated the same contour:
+    - `contour 1 / region 8 verts=226 containsAnchor=0 closestDistance2D=0.836`
+    - `contour 3 / region 7 verts=158 containsAnchor=1 closestDistance2D=0.200`
+    - `contour 4 / region 19 verts=10 containsAnchor=0 closestDistance2D=1.997`
+  - only the anchor-containing contour was reopened:
+    - `contour 3 / region 7 verts=11->31 injectedSupportBandRawVerts=20`
+  - `1523.800,-4425.900,17.100` still stayed
+    `finalDetour / lower_competitor_dominant`
+- Practical read:
+  - the failure was not just "too many same-band contours got reopened"
+  - even the single-contour no-resimplify branch still reproduces the same bad
+    deck / hallway-exit / underpass route family
+  - that closes the most plausible post-contour narrowing branch; the next
+    meaningful retry should move the support mask into the real
+    `rcBuildContours(...)` simplify phase or earlier

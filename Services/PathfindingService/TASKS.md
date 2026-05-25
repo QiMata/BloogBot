@@ -2475,6 +2475,56 @@
   - if contour-stage work continues, it needs to be narrower than this
     multi-contour carry or it needs to move earlier than contours again
 
+## 2026-05-25 UTC - anchor-containing no-resimplify carry follow-up
+- Active task: keep the same no-resimplify carry surface, but isolate the
+  single anchor-containing contour instead of reopening every same-band contour
+  in the local window.
+- Pass result: `bounded negative; selector tightening was not enough. Even when
+  only contour 3 / region 7 was reopened and preserved, the tile still landed
+  on the same 3/7 focused and 20/23 full regression family while 1523.8 stayed
+  at finalDetour`.
+- Last delta:
+  - Temp config stayed untracked:
+    `tmp/config-experiments/og_4029_raster_support_patch06_carry_local_band_anchoronly_r4.json`
+  - Artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_carry_local_band_anchoronly_r4_v1-20260525T195224Z/`
+  - Changed hash:
+    `1932EC1BC322393040870F3293C9CF9B9EA6CCBB640974A3595B87CC4D5839B8`
+  - Focused:
+    `3/7`
+  - Full:
+    `20/23`
+  - Decisive bake-log proof:
+    - selector still isolated:
+      - `contour 1 / region 8 verts=226 containsAnchor=0 closestDistance2D=0.836`
+      - `contour 3 / region 7 verts=158 containsAnchor=1 closestDistance2D=0.200`
+      - `contour 4 / region 19 verts=10 containsAnchor=0 closestDistance2D=1.997`
+    - only the selected contour was reopened and preserved:
+      - `contour 3 / region 7 verts=11->31 injectedSupportBandRawVerts=20 preserveRadius=4.000`
+      - `preservedBorderVerts=31`
+    - despite that narrower scope, `1523.800,-4425.900,17.100` still stayed
+      `finalDetour / lower_competitor_dominant`
+  - Stage summary for the important anchors stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - Validation/tests run:
+    - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_carry_local_band_anchoronly_r4_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_carry_local_band_anchoronly_r4.json'` -> passed.
+    - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `1932EC1BC322393040870F3293C9CF9B9EA6CCBB640974A3595B87CC4D5839B8`.
+    - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_carry_local_band_anchoronly_r4_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`.
+    - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_carry_local_band_anchoronly_r4_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`.
+    - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_carry_local_band_anchoronly_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
+    - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+- Practical read:
+  - narrowing the no-resimplify carry to the literal anchor-containing contour
+    was still not enough
+  - that closes the remaining obvious post-contour narrowing branch
+  - next serious work should move the support mask into the real
+    `rcBuildContours(...)` simplifier or earlier source/vertical staging
+
 ## 2026-05-25 UTC - support-footprint negatives after support-gap
 - Active task: test whether the remaining `1523.8` hole is fixable by
   combining the strongest surviving contour proof with the support-gap cull, or
