@@ -1561,3 +1561,55 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
   - next serious work should move from raster/finalDetour tuning into local
     contour-builder preservation or custom simplification for a source-backed
     recovered footprint
+
+### 2026-05-25 UTC boundary pre-seed follow-up
+
+The next contour-stage retry tested the official-Recast-style seed phase
+directly instead of another post-simplify reinjection pass.
+
+- New local surface:
+  - `SimplifyAnchorContour(..., mandatorySeedMask)`
+  - `BuildAnchorSupportBandBoundaryVertexMask(...)`
+  - config key:
+    `prePolyResimplifyAnchorSupportBandBoundarySeedRadius`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3.json'`
+  - focused/full validation:
+    - focused TRX:
+      `tmp/test-runtime/results-pathfinding/og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1_focused.trx`
+    - full TRX:
+      `tmp/test-runtime/results-pathfinding/critical_walk_legs_og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1.trx`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_boundary_preseed_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Artifact + hash:
+  - changed tile artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1-20260525T173241Z/`
+  - saved tile hash:
+    `EB6F72B9E86E550DB277BA767D2BCB07D5C99337E729191B0C52378CF487DADC`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive proof:
+  - the branch really did move the support-band boundary into the seed phase:
+    `[CONTOUR-ANCHOR-BAND-SEED] ... contour=3 region=7 seededBoundaryVerts=4 seedRadius=3.000`
+  - that still simplified to the same coarse shape:
+    `raw 11 -> 158`, then `158 -> 13`
+  - route results stayed on the same regression profile as the later boundary
+    carry family:
+    - focused:
+      `3/7`
+    - full:
+      `20/23`
+  - `1523.800,-4425.900,17.100` still ended at
+    `finalDetour / lower_competitor_dominant`
+- Practical conclusion:
+  - for this contour family, the missing lever is not simply "move the same
+    boundary endpoints earlier"
+  - the recovered region-7 footprint still collapses back to the same
+    non-routeable contour even when the support-band boundary becomes a
+    mandatory simplifier seed
+  - next serious work should stop iterating on boundary-seed timing alone and
+    instead change the contour-builder shape more fundamentally or move earlier
+    into source/vertical classification

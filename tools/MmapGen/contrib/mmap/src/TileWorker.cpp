@@ -3932,23 +3932,34 @@ static void SimplifyAnchorContour(
     std::vector<int>& simplified,
     const float maxError,
     const int maxEdgeLen,
-    const int buildFlags)
+    const int buildFlags,
+    const std::vector<unsigned char>* mandatorySeedMask = nullptr)
 {
     const int pointCount = static_cast<int>(points.size()) / 4;
     if (pointCount < 3)
         return;
 
     bool hasConnections = false;
+    bool hasMandatorySeeds = false;
     for (int i = 0; i < static_cast<int>(points.size()); i += 4)
     {
         if ((points[i + 3] & RC_CONTOUR_REG_MASK) != 0)
         {
             hasConnections = true;
+        }
+        if (mandatorySeedMask &&
+            i / 4 < static_cast<int>(mandatorySeedMask->size()) &&
+            (*mandatorySeedMask)[static_cast<size_t>(i / 4)] != 0)
+        {
+            hasMandatorySeeds = true;
+        }
+        if (hasConnections && hasMandatorySeeds)
+        {
             break;
         }
     }
 
-    if (hasConnections)
+    if (hasConnections || hasMandatorySeeds)
     {
         for (int i = 0; i < pointCount; ++i)
         {
@@ -3957,7 +3968,11 @@ static void SimplifyAnchorContour(
                 (points[i * 4 + 3] & RC_CONTOUR_REG_MASK) != (points[ii * 4 + 3] & RC_CONTOUR_REG_MASK);
             const bool areaBorders =
                 (points[i * 4 + 3] & RC_AREA_BORDER) != (points[ii * 4 + 3] & RC_AREA_BORDER);
-            if (differentRegs || areaBorders)
+            const bool mandatorySeed =
+                mandatorySeedMask &&
+                i < static_cast<int>(mandatorySeedMask->size()) &&
+                (*mandatorySeedMask)[static_cast<size_t>(i)] != 0;
+            if (differentRegs || areaBorders || mandatorySeed)
             {
                 simplified.push_back(points[i * 4 + 0]);
                 simplified.push_back(points[i * 4 + 1]);
@@ -4263,14 +4278,8 @@ static int InjectAnchorLocalRawVertices(
     return injectedVertexCount;
 }
 
-// [WWoW-DIVERGENCE] 2026-05-25: when a recovered support footprint survives
-// through regions but disappears at contours, preserve only the raw vertices
-// where the raw contour enters or exits the source-backed support band near
-// the bad anchor. This keeps the experiment on the recovered footprint
-// boundary instead of reopening the whole local raw window.
-static int InjectAnchorSupportBandBoundaryVertices(
+static int BuildAnchorSupportBandBoundaryVertexMask(
     const std::vector<int>& points,
-    std::vector<int>& simplified,
     const float anchorRecastX,
     const float anchorRecastZ,
     const float preserveRadius,
@@ -4280,14 +4289,15 @@ static int InjectAnchorSupportBandBoundaryVertices(
     const float contourBMinY,
     const float contourBMinZ,
     const float contourCellSize,
-    const float contourCellHeight)
+    const float contourCellHeight,
+    std::vector<unsigned char>& preserveMask)
 {
+    preserveMask.clear();
     if (preserveRadius <= 0.0f)
         return 0;
 
     const int pointCount = static_cast<int>(points.size()) / 4;
-    const int simplifiedCount = static_cast<int>(simplified.size()) / 4;
-    if (pointCount < 3 || simplifiedCount < 2)
+    if (pointCount < 3)
         return 0;
 
     auto pointWithinSupportBand = [&](const int rawIndex)
@@ -4319,7 +4329,18 @@ static int InjectAnchorSupportBandBoundaryVertices(
         return nearestDx * nearestDx + nearestDz * nearestDz <= preserveRadiusSq;
     };
 
-    std::vector<unsigned char> preserveMask(static_cast<size_t>(pointCount), 0);
+    preserveMask.assign(static_cast<size_t>(pointCount), 0);
+    int markedVertexCount = 0;
+    auto markRawIndex = [&](const int rawIndex)
+    {
+        unsigned char& flag = preserveMask[static_cast<size_t>(rawIndex)];
+        if (flag != 0)
+            return;
+
+        flag = 1;
+        ++markedVertexCount;
+    };
+
     for (int rawIndex = 0; rawIndex < pointCount; ++rawIndex)
     {
         const int nextRawIndex = (rawIndex + 1) % pointCount;
@@ -4328,9 +4349,53 @@ static int InjectAnchorSupportBandBoundaryVertices(
         if (!edgeTouchesWindow(rawIndex, nextRawIndex))
             continue;
 
-        preserveMask[static_cast<size_t>(rawIndex)] = 1;
-        preserveMask[static_cast<size_t>(nextRawIndex)] = 1;
+        markRawIndex(rawIndex);
+        markRawIndex(nextRawIndex);
     }
+
+    return markedVertexCount;
+}
+
+// [WWoW-DIVERGENCE] 2026-05-25: when a recovered support footprint survives
+// through regions but disappears at contours, preserve only the raw vertices
+// where the raw contour enters or exits the source-backed support band near
+// the bad anchor. This keeps the experiment on the recovered footprint
+// boundary instead of reopening the whole local raw window.
+static int InjectAnchorSupportBandBoundaryVertices(
+    const std::vector<int>& points,
+    std::vector<int>& simplified,
+    const float anchorRecastX,
+    const float anchorRecastZ,
+    const float preserveRadius,
+    const float supportFloorMinY,
+    const float supportFloorMaxY,
+    const float contourBMinX,
+    const float contourBMinY,
+    const float contourBMinZ,
+    const float contourCellSize,
+    const float contourCellHeight)
+{
+    const int pointCount = static_cast<int>(points.size()) / 4;
+    const int simplifiedCount = static_cast<int>(simplified.size()) / 4;
+    if (pointCount < 3 || simplifiedCount < 2)
+        return 0;
+
+    std::vector<unsigned char> preserveMask;
+    const int markedVertexCount = BuildAnchorSupportBandBoundaryVertexMask(
+        points,
+        anchorRecastX,
+        anchorRecastZ,
+        preserveRadius,
+        supportFloorMinY,
+        supportFloorMaxY,
+        contourBMinX,
+        contourBMinY,
+        contourBMinZ,
+        contourCellSize,
+        contourCellHeight,
+        preserveMask);
+    if (markedVertexCount <= 0)
+        return 0;
 
     std::vector<int> expanded;
     expanded.reserve(points.size());
@@ -4483,6 +4548,7 @@ static int ResimplifyRawAnchorSupportContours(
     const AnchorSupportContourSelectionMode selectionMode,
     const float maxError,
     const int maxEdgeLen,
+    const float bandBoundarySeedRadius,
     const float bandBoundaryRadius,
     const float bandLocalPreserveRadius,
     const float localPreserveRadius,
@@ -4564,9 +4630,33 @@ static int ResimplifyRawAnchorSupportContours(
             std::vector<int> rawPoints(
                 contour.rverts,
                 contour.rverts + static_cast<size_t>(contour.nrverts) * 4);
+            std::vector<unsigned char> boundarySeedMask;
+            int boundarySeededVertexCount = 0;
+            if (bandBoundarySeedRadius > 0.0f)
+            {
+                boundarySeededVertexCount = BuildAnchorSupportBandBoundaryVertexMask(
+                    rawPoints,
+                    anchorRecastX,
+                    anchorRecastZ,
+                    bandBoundarySeedRadius,
+                    supportFloorMinY,
+                    supportFloorMaxY,
+                    contours.bmin[0],
+                    contours.bmin[1],
+                    contours.bmin[2],
+                    contours.cs,
+                    contours.ch,
+                    boundarySeedMask);
+            }
             std::vector<int> simplified;
             simplified.reserve(rawPoints.size());
-            SimplifyAnchorContour(rawPoints, simplified, maxError, maxEdgeLen, buildFlags);
+            SimplifyAnchorContour(
+                rawPoints,
+                simplified,
+                maxError,
+                maxEdgeLen,
+                buildFlags,
+                boundarySeededVertexCount > 0 ? &boundarySeedMask : nullptr);
             int boundaryInjectedVertexCount = 0;
             if (bandBoundaryRadius > 0.0f)
             {
@@ -4634,6 +4724,13 @@ static int ResimplifyRawAnchorSupportContours(
                         support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
                         contourIndex, static_cast<unsigned>(contour.reg),
                         boundaryInjectedVertexCount, bandBoundaryRadius);
+                }
+                if (boundarySeededVertexCount > 0)
+                {
+                    printf("[CONTOUR-ANCHOR-BAND-SEED] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u seededBoundaryVerts=%d seedRadius=%.3f\n",
+                        support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                        contourIndex, static_cast<unsigned>(contour.reg),
+                        boundarySeededVertexCount, bandBoundarySeedRadius);
                 }
                 if (bandLocalInjectedVertexCount > 0)
                 {
@@ -6714,6 +6811,8 @@ namespace MMAP
             jsonTileConfig, "prePolyResimplifyAnchorSupportMaxError", -1.0f);
         const int prePolyResimplifyAnchorSupportMaxEdgeLen =
             jsonTileConfig.value("prePolyResimplifyAnchorSupportMaxEdgeLen", -1);
+        const float prePolyResimplifyAnchorSupportBandBoundarySeedRadius = JsonFloatOrDefault(
+            jsonTileConfig, "prePolyResimplifyAnchorSupportBandBoundarySeedRadius", -1.0f);
         const float prePolyResimplifyAnchorSupportBandBoundaryRadius = JsonFloatOrDefault(
             jsonTileConfig, "prePolyResimplifyAnchorSupportBandBoundaryRadius", -1.0f);
         const float prePolyResimplifyAnchorSupportBandLocalPreserveRadius = JsonFloatOrDefault(
@@ -7299,6 +7398,7 @@ namespace MMAP
                         prePolySupportContourSelectionMode,
                         prePolyResimplifyAnchorSupportMaxError,
                         resimplifyMaxEdgeLen,
+                        prePolyResimplifyAnchorSupportBandBoundarySeedRadius,
                         prePolyResimplifyAnchorSupportBandBoundaryRadius,
                         prePolyResimplifyAnchorSupportBandLocalPreserveRadius,
                         prePolyResimplifyAnchorSupportLocalPreserveRadius,
@@ -7759,6 +7859,7 @@ namespace MMAP
             { "logAnchorStageDiagnostics", false },
             { "prePolySupportContourSelectionMode", "" },
             { "prePolySelectAnchorContainingSupportContourOnly", false },
+            { "prePolyResimplifyAnchorSupportBandBoundarySeedRadius", -1.0f },
             { "prePolyResimplifyAnchorSupportBandBoundaryRadius", -1.0f },
             { "prePolyResimplifyAnchorSupportBandLocalPreserveRadius", -1.0f },
         };

@@ -606,6 +606,25 @@ obsolete because that branch never actually re-simplified the raw contour.
     next serious retry should move earlier into `rcBuildContours(...)` or
     another contour-builder shape instead of spending more time on the same
     post-contour reinjection family.
+  - follow-up later the same night on `2026-05-25` UTC: WWoW then tried that
+    "move earlier" idea in the smallest possible way by seeding the recovered
+    support-band boundary into the local simplifier's mandatory-point phase via
+    `prePolyResimplifyAnchorSupportBandBoundarySeedRadius`
+    - branch `og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1`
+      saved hash
+      `EB6F72B9E86E550DB277BA767D2BCB07D5C99337E729191B0C52378CF487DADC`
+    - focused tests regressed to `3/7`; full `CriticalWalkLegs` regressed to
+      `20/23`
+    - decisive log proof on the selected anchor-containing contour was:
+      `11 -> 158`, then
+      `[CONTOUR-ANCHOR-BAND-SEED] ... seededBoundaryVerts=4 seedRadius=3.000`,
+      yet the candidate still collapsed to
+      `158 -> 13`
+    Practical rule: if an upstream-style early seed of the same recovered
+    support-band boundary still collapses to the same coarse candidate and the
+    same route set, stop iterating only on boundary-seed timing. The next
+    compatible retry needs a different contour-builder shape, not just an
+    earlier insertion point for the same boundary endpoints.
 
 ## Restore State
 

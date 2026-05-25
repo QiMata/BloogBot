@@ -2846,4 +2846,75 @@
   - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_anchor_support_gap1_v1_focused.trx" --results-directory tmp/test-runtime/results-pathfinding` -> passed `7/7`.
   - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_anchor_support_gap1_v1.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> still `17/23`.
   - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_support_gap1_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
+
+## 2026-05-25 UTC - boundary pre-seed contour follow-up
+- Active task: keep the raster patch, raw restore, anchor-containing contour
+  selection, and local resimplify fixed, but move the recovered support-band
+  boundary into the local simplifier's initial seed phase instead of
+  reinserting those verts afterward.
+- Pass result: `delta shipped; the earlier boundary-preseed surface is another
+  bounded negative. It fired on the intended region-7 contour, but still
+  collapsed back to the same 13-vertex candidate and reproduced the same 3/7
+  focused and 20/23 full regression profile as the later boundary-carry
+  family`.
+- Last delta:
+  - Added `SimplifyAnchorContour(..., mandatorySeedMask)`,
+    `BuildAnchorSupportBandBoundaryVertexMask(...)`, and the opt-in tile config
+    key `prePolyResimplifyAnchorSupportBandBoundarySeedRadius` in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`.
+  - Experiment config stayed untracked:
+    `tmp/config-experiments/og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3.json`
+  - Artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1-20260525T173241Z/`
+  - Changed hash:
+    `EB6F72B9E86E550DB277BA767D2BCB07D5C99337E729191B0C52378CF487DADC`
+  - Focused:
+    `3/7`
+  - Full:
+    `20/23`
+  - Decisive bake-log proof:
+    - selector still isolated the anchor-containing contour:
+      `contour 3 / region 7`
+    - raw restore:
+      `11 -> 158`
+    - upstream-style earlier seed phase really fired:
+      `[CONTOUR-ANCHOR-BAND-SEED] ... seededBoundaryVerts=4 seedRadius=3.000`
+    - but the local simplifier still collapsed back to the same coarse
+      candidate:
+      `158 -> 13`
+    - `1523.800,-4425.900,17.100` still stayed
+      `finalDetour / lower_competitor_dominant`
+  - Stage summary for the important anchors stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - Shared focused failure profile stayed:
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found only `80` polygons
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+    - `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+  - Shared full failure profile stayed:
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+    - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+  - Practical read:
+    - moving the same recovered support-band boundary endpoints earlier into
+      the seed phase is not enough on this family
+    - the local simplifier still snaps back to the same 13-vertex region-7
+      contour and the same route set
+    - the next serious retry should not spend another loop only on
+      boundary-seed timing; it needs a different contour-builder shape or
+      earlier source/vertical classification work
+  - Validation/tests run:
+    - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+    - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3.json'` -> passed.
+    - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `EB6F72B9E86E550DB277BA767D2BCB07D5C99337E729191B0C52378CF487DADC`.
+    - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`.
+    - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`.
+    - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_boundary_preseed_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
+    - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
 - Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`

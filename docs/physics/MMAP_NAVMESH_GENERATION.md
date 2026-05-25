@@ -1596,3 +1596,82 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_band_local_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
   - restored hash:
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-25 UTC: boundary pre-seed contour follow-up
+
+- Active task:
+  - keep the raster patch, raw restore, anchor-containing contour selection,
+    and local resimplify fixed, but move the recovered support-band boundary
+    into the local simplifier's initial seed phase instead of reinserting those
+    verts after simplification
+- Pass result:
+  - `delta shipped; the earlier boundary-preseed surface is a bounded
+    negative. It fired on the intended recovered contour, but still collapsed
+    back to the same 13-vertex shape and reproduced the same 3/7 focused and
+    20/23 full regression profile as the later boundary-carry family.`
+- New native/config surface:
+  - `SimplifyAnchorContour(..., mandatorySeedMask)`
+  - `BuildAnchorSupportBandBoundaryVertexMask(...)`
+  - `prePolyResimplifyAnchorSupportBandBoundarySeedRadius`
+  - `[CONTOUR-ANCHOR-BAND-SEED]`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3.json'`
+  - changed hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+  - focused tests:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - full `CriticalWalkLegs`:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_boundary_preseed_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Artifacts:
+  - changed tile:
+    `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1-20260525T173241Z\`
+  - restore:
+    `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_restore_after_boundary_preseed_iteration_20260525-20260525T173619Z\`
+- Observed results:
+  - hash:
+    `EB6F72B9E86E550DB277BA767D2BCB07D5C99337E729191B0C52378CF487DADC`
+  - focused:
+    `3/7`
+  - full:
+    `20/23`
+  - decisive contour proof:
+    - selector still isolated `contour 3 / region 7`
+    - raw restore:
+      `11 -> 158`
+    - upstream-style early seeding really fired:
+      `[CONTOUR-ANCHOR-BAND-SEED] ... seededBoundaryVerts=4 seedRadius=3.000`
+    - but the resimplifier still collapsed back to the same coarse candidate:
+      `158 -> 13`
+    - `1523.800,-4425.900,17.100` still stayed
+      `finalDetour / lower_competitor_dominant`
+  - shared focused failures stayed:
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found only `80` polygons
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+    - `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+  - shared full failures stayed:
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+    - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+  - important anchor stages stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+- Practical read:
+  - moving the same recovered support-band boundary endpoints earlier into the
+    local contour-builder seed phase was not enough
+  - on this family, seed timing alone still snaps back to the same 13-vertex
+    region-7 contour and the same bad deck / hallway-exit / underpass route
+    profile
+  - the next serious retry should not spend another loop only on boundary-seed
+    timing; it needs a different contour-builder shape or genuinely earlier
+    source/vertical classification work
