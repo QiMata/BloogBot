@@ -2004,3 +2004,64 @@ back toward the anchor projection.
   - the next credible retry should not be another micro patch reshaping
     branch; it needs a more structural earlier raster/source change or a
     contour-builder/simplification change
+
+### 2026-05-25 UTC contour raw-bypass plus support-arc follow-up
+
+The next contour-focused loop closed three distinct "change the contour shape
+itself" branches for `1523.800,-4425.900,17.100`.
+
+- contour-build raw bypass:
+  - branch:
+    `og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1`
+  - hash:
+    `8E98F676F48FAB2952EF9D89CE6A22A40F8F3C3CC0CF8354A6B4C5AFD1F3E8A8`
+  - focused/full:
+    `3/7`, `19/23`
+  - decisive proof:
+    `[CONTOUR-BUILD-ANCHOR-SEED] region=7 rawVerts=158 simplifiedVerts=158 rawBypassVerts=158 seededSupportBandArcRawVerts=22 matchedOverrides=1`
+  - read:
+    even full raw contour carry inside `rcBuildContours()` still left
+    `1523.8 -> finalDetour / lower_competitor_dominant`
+- pre-poly support-arc on the anchor-containing contour:
+  - `r3` hash:
+    `52C9913EB0F4306A3912A8869D537689A227733560BD38DE4FE12E5F360F5C6B`
+  - `r6` hash:
+    `62D0AEA1268141CC44FC7D00C6CA2B891E446FFD96217339DC79ADA97CA30E5D`
+  - focused/full stayed:
+    `3/7`, `20/23`
+  - decisive proof widened exactly as intended:
+    `11 -> 158 -> 29` with `18` preserved arc verts at `r3`, then
+    `11 -> 158 -> 36` with `25` preserved arc verts at `r6`
+- pre-poly support-arc on the nearest non-containing support contour:
+  - branch:
+    `og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1`
+  - hash:
+    `A6A9FA5B231AD484EA72E364D0DE26C1F964D5AD797F5B45BC06C4DCEC04AB3D`
+  - focused/full:
+    `3/7`, `20/23`
+  - decisive proof:
+    `region 8` really did reopen from `13 -> 226 -> 124` with
+    `preservedSupportBandArcRawVerts=109`
+- cross-branch invariant:
+  - despite those real contour changes, the stable baseline `A01DEE...`, the
+    contour-build raw-bypass branch, and both support-arc families all kept
+    the same `1523.8` stage-summary counts:
+    - `contours`: `supportCandidateCount=1`, `lowerCandidateCount=8`
+    - `polymesh`: `supportCandidateCount=2`, `lowerCandidateCount=23`
+    - `finalDetour`: `supportCandidateCount=0`, `lowerCandidateCount=5`,
+      winner `0x1000000000ADAB`
+  - the important anchor outcomes stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+- practical read:
+  - the problem is no longer "which of the two plausible support contours
+    should get more raw vertices?"
+  - once both plausible contours and even the full raw contour keep the same
+    support/lower accounting, more late contour carry is just reshaping deck
+    quality without moving the real `1523.8` proof surface
+  - the next defensible retry must change earlier source/compact support
+    overlap, not another pre-poly contour-preserve variant

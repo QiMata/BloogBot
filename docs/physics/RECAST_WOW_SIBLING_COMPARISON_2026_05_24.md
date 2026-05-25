@@ -780,13 +780,51 @@ obsolete because that branch never actually re-simplified the raw contour.
     here. The next compatible retry needs to alter earlier raster/source input
     more materially or move into contour simplification itself.
 
+### 2026-05-25 UTC contour raw-bypass plus support-arc family closure
+
+WWoW then exhausted the remaining contour-shape family around `1523.8`.
+
+- branch
+  `og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1`
+  saved hash
+  `8E98F676F48FAB2952EF9D89CE6A22A40F8F3C3CC0CF8354A6B4C5AFD1F3E8A8`,
+  focused/full `3/7`, `19/23`, and proved that even a full raw
+  `158`-vertex contour through `rcBuildContours()` still stayed
+  `finalDetour / lower_competitor_dominant`
+- branch
+  `og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r6_v1`
+  saved hash
+  `62D0AEA1268141CC44FC7D00C6CA2B891E446FFD96217339DC79ADA97CA30E5D`,
+  focused/full `3/7`, `20/23`, and widened the selected anchor-containing
+  contour from `11 -> 158 -> 36` with `25` preserved support-band arc verts
+- branch
+  `og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1`
+  saved hash
+  `A6A9FA5B231AD484EA72E364D0DE26C1F964D5AD797F5B45BC06C4DCEC04AB3D`,
+  focused/full `3/7`, `20/23`, and widened the nearest non-containing support
+  contour from `13 -> 226 -> 124` with `109` preserved arc verts
+- decisive comparison result:
+  - the stable baseline `A01DEE...`, the raw-bypass branch, and both support
+    arc branches all kept the same `1523.8` stage-summary counts:
+    - `contours`: `supportCandidateCount=1`, `lowerCandidateCount=8`
+    - `polymesh`: `supportCandidateCount=2`, `lowerCandidateCount=23`
+    - `finalDetour`: `supportCandidateCount=0`, `lowerCandidateCount=5`,
+      final winner `0x1000000000ADAB`
+  - so the remaining issue is not "pick a different contour" or "carry more of
+    that contour later"
+- practical rule:
+  - if the stable tile and multiple contour-builder / pre-poly contour-carry
+    variants all preserve the exact same support/lower counts for the bad
+    anchor, stop comparing more late contour-shape families
+  - move earlier into source/compact footprint overlap instead
+
 ## Restore State
 
 At the end of this corrected loop, `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
 was restored to the stable baseline:
 
 - restore artifact:
-  - `tmp/bake-sweeps/og_4029_restore_after_bridge_support_iteration_20260525-20260525T220350Z/`
+  - `tmp/bake-sweeps/og_4029_restore_after_supportarc_iteration_20260525-20260525T235253Z/`
 - restored hash:
   - `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
 

@@ -46,8 +46,11 @@ void rcClearContourSimplifyAnchorOverrides()
 struct rcAnchorContourSimplifyStats
 {
 	int seededVertexCount = 0;
+	int seededArcVertexCount = 0;
 	int seededBoundaryVertexCount = 0;
 	int seededLocalVertexCount = 0;
+	int seededWindowVertexCount = 0;
+	int rawBypassVertexCount = 0;
 	int matchedOverrideCount = 0;
 };
 
@@ -255,6 +258,75 @@ static bool contourContainsAnchorCell(const rcTempVector<int>& points, const int
 	return inside;
 }
 
+static int seedAnchorLocalRawVertices(const rcTempVector<int>& points,
+	rcTempVector<int>& simplified,
+	const rcAnchorContourSimplifyOverride& anchorOverride)
+{
+	if (anchorOverride.localPreserveRadiusCells <= 0)
+		return 0;
+
+	const int pointCount = static_cast<int>(points.size()) / 4;
+	const int simplifiedCount = static_cast<int>(simplified.size()) / 4;
+	if (pointCount < 3 || simplifiedCount < 2)
+		return 0;
+
+	const int preserveRadiusSq =
+		anchorOverride.localPreserveRadiusCells * anchorOverride.localPreserveRadiusCells;
+	auto rawPointWithinWindow = [&](const int rawIndex)
+	{
+		const int dx = points[rawIndex * 4 + 0] - anchorOverride.windowCenterX;
+		const int dz = points[rawIndex * 4 + 2] - anchorOverride.windowCenterZ;
+		return dx * dx + dz * dz <= preserveRadiusSq;
+	};
+
+	rcTempVector<int> expanded;
+	expanded.reserve(points.size());
+
+	auto appendRawIndex = [&](const int rawIndex)
+	{
+		if (expanded.size() >= 4)
+		{
+			const int lastIndex = static_cast<int>(expanded.size()) / 4 - 1;
+			if (expanded[lastIndex * 4 + 0] == points[rawIndex * 4 + 0] &&
+				expanded[lastIndex * 4 + 2] == points[rawIndex * 4 + 2])
+			{
+				return false;
+			}
+		}
+
+		expanded.push_back(points[rawIndex * 4 + 0]);
+		expanded.push_back(points[rawIndex * 4 + 1]);
+		expanded.push_back(points[rawIndex * 4 + 2]);
+		expanded.push_back(rawIndex);
+		return true;
+	};
+
+	int injectedVertexCount = 0;
+	for (int i = 0; i < simplifiedCount; ++i)
+	{
+		const int ii = (i + 1) % simplifiedCount;
+		const int startRawIndex = simplified[i * 4 + 3];
+		const int endRawIndex = simplified[ii * 4 + 3];
+
+		appendRawIndex(startRawIndex);
+		int rawIndex = (startRawIndex + 1) % pointCount;
+		while (rawIndex != endRawIndex)
+		{
+			if (rawPointWithinWindow(rawIndex) && appendRawIndex(rawIndex))
+			{
+				++injectedVertexCount;
+			}
+
+			rawIndex = (rawIndex + 1) % pointCount;
+		}
+	}
+
+	if (expanded.size() > 0)
+		simplified.swap(expanded);
+
+	return injectedVertexCount;
+}
+
 static int seedAnchorSupportBandLocalRawVertices(const rcTempVector<int>& points,
 	rcTempVector<int>& simplified,
 	const rcAnchorContourSimplifyOverride& anchorOverride)
@@ -275,8 +347,8 @@ static int seedAnchorSupportBandLocalRawVertices(const rcTempVector<int>& points
 	};
 	auto rawPointWithinWindow = [&](const int rawIndex)
 	{
-		const int dx = points[rawIndex * 4 + 0] - anchorOverride.anchorX;
-		const int dz = points[rawIndex * 4 + 2] - anchorOverride.anchorZ;
+		const int dx = points[rawIndex * 4 + 0] - anchorOverride.windowCenterX;
+		const int dz = points[rawIndex * 4 + 2] - anchorOverride.windowCenterZ;
 		return dx * dx + dz * dz <= preserveRadiusSq;
 	};
 
@@ -330,6 +402,125 @@ static int seedAnchorSupportBandLocalRawVertices(const rcTempVector<int>& points
 	return injectedVertexCount;
 }
 
+static int seedAnchorSupportBandRawArcVertices(const rcTempVector<int>& points,
+	rcTempVector<int>& simplified,
+	const rcAnchorContourSimplifyOverride& anchorOverride)
+{
+	if (anchorOverride.supportBandArcPreserveRadiusCells <= 0)
+		return 0;
+
+	const int pointCount = static_cast<int>(points.size()) / 4;
+	const int simplifiedCount = static_cast<int>(simplified.size()) / 4;
+	if (pointCount < 3 || simplifiedCount < 2)
+		return 0;
+
+	const int preserveRadiusSq =
+		anchorOverride.supportBandArcPreserveRadiusCells * anchorOverride.supportBandArcPreserveRadiusCells;
+	auto rawPointWithinSupportBand = [&](const int rawIndex)
+	{
+		const int y = points[rawIndex * 4 + 1];
+		return y >= anchorOverride.supportFloorMinY && y <= anchorOverride.supportFloorMaxY;
+	};
+	auto rawPointWithinWindow = [&](const int rawIndex)
+	{
+		const int dx = points[rawIndex * 4 + 0] - anchorOverride.windowCenterX;
+		const int dz = points[rawIndex * 4 + 2] - anchorOverride.windowCenterZ;
+		return dx * dx + dz * dz <= preserveRadiusSq;
+	};
+
+	std::vector<int> matchingRawIndices;
+	matchingRawIndices.reserve(pointCount);
+	for (int rawIndex = 0; rawIndex < pointCount; ++rawIndex)
+	{
+		if (rawPointWithinSupportBand(rawIndex) && rawPointWithinWindow(rawIndex))
+			matchingRawIndices.push_back(rawIndex);
+	}
+
+	if (matchingRawIndices.empty())
+		return 0;
+
+	std::vector<unsigned char> preserveMask(static_cast<size_t>(pointCount), 0);
+	if (static_cast<int>(matchingRawIndices.size()) == pointCount)
+	{
+		for (int rawIndex = 0; rawIndex < pointCount; ++rawIndex)
+			preserveMask[static_cast<size_t>(rawIndex)] = 1;
+	}
+	else
+	{
+		int largestGap = -1;
+		int largestGapStartIndex = 0;
+		for (int matchIndex = 0; matchIndex < static_cast<int>(matchingRawIndices.size()); ++matchIndex)
+		{
+			const int currentIndex = matchingRawIndices[matchIndex];
+			const int nextIndex = matchingRawIndices[(matchIndex + 1) % static_cast<int>(matchingRawIndices.size())];
+			const int gap = (nextIndex - currentIndex + pointCount) % pointCount;
+			if (gap > largestGap)
+			{
+				largestGap = gap;
+				largestGapStartIndex = matchIndex;
+			}
+		}
+
+		const int runStart = matchingRawIndices[(largestGapStartIndex + 1) % static_cast<int>(matchingRawIndices.size())];
+		const int runEnd = matchingRawIndices[largestGapStartIndex];
+		int rawIndex = runStart;
+		for (;;)
+		{
+			preserveMask[static_cast<size_t>(rawIndex)] = 1;
+			if (rawIndex == runEnd)
+				break;
+			rawIndex = (rawIndex + 1) % pointCount;
+		}
+	}
+
+	rcTempVector<int> expanded;
+	expanded.reserve(points.size());
+
+	auto appendRawIndex = [&](const int rawIndex)
+	{
+		if (expanded.size() >= 4)
+		{
+			const int lastIndex = static_cast<int>(expanded.size()) / 4 - 1;
+			if (expanded[lastIndex * 4 + 0] == points[rawIndex * 4 + 0] &&
+				expanded[lastIndex * 4 + 2] == points[rawIndex * 4 + 2])
+			{
+				return false;
+			}
+		}
+
+		expanded.push_back(points[rawIndex * 4 + 0]);
+		expanded.push_back(points[rawIndex * 4 + 1]);
+		expanded.push_back(points[rawIndex * 4 + 2]);
+		expanded.push_back(rawIndex);
+		return true;
+	};
+
+	int injectedVertexCount = 0;
+	for (int i = 0; i < simplifiedCount; ++i)
+	{
+		const int ii = (i + 1) % simplifiedCount;
+		const int startRawIndex = simplified[i * 4 + 3];
+		const int endRawIndex = simplified[ii * 4 + 3];
+
+		appendRawIndex(startRawIndex);
+		int rawIndex = (startRawIndex + 1) % pointCount;
+		while (rawIndex != endRawIndex)
+		{
+			if (preserveMask[static_cast<size_t>(rawIndex)] != 0 && appendRawIndex(rawIndex))
+			{
+				++injectedVertexCount;
+			}
+
+			rawIndex = (rawIndex + 1) % pointCount;
+		}
+	}
+
+	if (expanded.size() > 0)
+		simplified.swap(expanded);
+
+	return injectedVertexCount;
+}
+
 static int buildAnchorSupportBandBoundaryVertexMask(const rcTempVector<int>& points,
 	const rcAnchorContourSimplifyOverride& anchorOverride,
 	std::vector<unsigned char>& preserveMask)
@@ -358,8 +549,8 @@ static int buildAnchorSupportBandBoundaryVertexMask(const rcTempVector<int>& poi
 		const float bz = static_cast<float>(points[rhsIndex * 4 + 2]);
 		const float pqx = bx - ax;
 		const float pqz = bz - az;
-		const float dx = static_cast<float>(anchorOverride.anchorX) - ax;
-		const float dz = static_cast<float>(anchorOverride.anchorZ) - az;
+		const float dx = static_cast<float>(anchorOverride.windowCenterX) - ax;
+		const float dz = static_cast<float>(anchorOverride.windowCenterZ) - az;
 		const float denom = pqx * pqx + pqz * pqz;
 		float t = 0.0f;
 		if (denom > 0.0f)
@@ -370,8 +561,8 @@ static int buildAnchorSupportBandBoundaryVertexMask(const rcTempVector<int>& poi
 			t = 1.0f;
 		const float nearestX = ax + t * pqx;
 		const float nearestZ = az + t * pqz;
-		const float nearestDx = nearestX - static_cast<float>(anchorOverride.anchorX);
-		const float nearestDz = nearestZ - static_cast<float>(anchorOverride.anchorZ);
+		const float nearestDx = nearestX - static_cast<float>(anchorOverride.windowCenterX);
+		const float nearestDz = nearestZ - static_cast<float>(anchorOverride.windowCenterZ);
 		return nearestDx * nearestDx + nearestDz * nearestDz <= preserveRadiusSq;
 	};
 
@@ -468,6 +659,19 @@ static int seedAnchorSupportBandBoundaryVertices(const rcTempVector<int>& points
 	return injectedVertexCount;
 }
 
+static void replaceSimplifiedWithRawContour(const rcTempVector<int>& points, rcTempVector<int>& simplified)
+{
+	simplified.clear();
+	simplified.reserve(points.size());
+	for (int rawIndex = 0; rawIndex < static_cast<int>(points.size()) / 4; ++rawIndex)
+	{
+		simplified.push_back(points[rawIndex * 4 + 0]);
+		simplified.push_back(points[rawIndex * 4 + 1]);
+		simplified.push_back(points[rawIndex * 4 + 2]);
+		simplified.push_back(rawIndex);
+	}
+}
+
 static void simplifyContour(rcTempVector<int>& points, rcTempVector<int>& simplified,
 							const float maxError, const int maxEdgeLen, const int buildFlags,
 							rcAnchorContourSimplifyStats* anchorStats = 0)
@@ -557,17 +761,35 @@ static void simplifyContour(rcTempVector<int>& points, rcTempVector<int>& simpli
 				continue;
 			}
 
+			const int seededArcVertexCount =
+				seedAnchorSupportBandRawArcVertices(points, simplified, anchorOverride);
 			const int seededBoundaryVertexCount =
 				seedAnchorSupportBandBoundaryVertices(points, simplified, anchorOverride);
 			const int seededLocalVertexCount =
 				seedAnchorSupportBandLocalRawVertices(points, simplified, anchorOverride);
-			const int seededVertexCount = seededBoundaryVertexCount + seededLocalVertexCount;
+			const int seededWindowVertexCount =
+				seedAnchorLocalRawVertices(points, simplified, anchorOverride);
+			const int seededVertexCount =
+				seededArcVertexCount + seededBoundaryVertexCount + seededLocalVertexCount + seededWindowVertexCount;
 			if (seededVertexCount > 0 && anchorStats)
 			{
 				anchorStats->seededVertexCount += seededVertexCount;
+				anchorStats->seededArcVertexCount += seededArcVertexCount;
 				anchorStats->seededBoundaryVertexCount += seededBoundaryVertexCount;
 				anchorStats->seededLocalVertexCount += seededLocalVertexCount;
+				anchorStats->seededWindowVertexCount += seededWindowVertexCount;
 				anchorStats->matchedOverrideCount += 1;
+			}
+
+			if (seededVertexCount > 0 && anchorOverride.bypassSimplificationOnSeedMatch)
+			{
+				replaceSimplifiedWithRawContour(points, simplified);
+				if (anchorStats)
+				{
+					anchorStats->rawBypassVertexCount =
+						static_cast<int>(points.size()) / 4;
+				}
+				break;
 			}
 		}
 	}
@@ -1212,12 +1434,15 @@ bool rcBuildContours(rcContext* ctx, const rcCompactHeightfield& chf,
 				simplifyContour(verts, simplified, maxError, maxEdgeLen, buildFlags, &anchorStats);
 				if (anchorStats.seededVertexCount > 0)
 				{
-					printf("[CONTOUR-BUILD-ANCHOR-SEED] region=%u rawVerts=%d simplifiedVerts=%d seededBoundaryVerts=%d seededSupportBandRawVerts=%d matchedOverrides=%d\n",
+					printf("[CONTOUR-BUILD-ANCHOR-SEED] region=%u rawVerts=%d simplifiedVerts=%d rawBypassVerts=%d seededSupportBandArcRawVerts=%d seededBoundaryVerts=%d seededSupportBandRawVerts=%d seededWindowRawVerts=%d matchedOverrides=%d\n",
 						static_cast<unsigned>(reg),
 						static_cast<int>(verts.size()) / 4,
 						static_cast<int>(simplified.size()) / 4,
+						anchorStats.rawBypassVertexCount,
+						anchorStats.seededArcVertexCount,
 						anchorStats.seededBoundaryVertexCount,
 						anchorStats.seededLocalVertexCount,
+						anchorStats.seededWindowVertexCount,
 						anchorStats.matchedOverrideCount);
 				}
 				removeDegenerateSegments(simplified);

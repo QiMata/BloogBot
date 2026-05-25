@@ -3545,4 +3545,94 @@
   - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`.
   - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_bridge_support_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
   - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
-- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+
+### 2026-05-25 - contour raw-bypass plus support-arc family closure
+- Active task: finish the contour-focused tile `1:40,29` loop without falling
+  back into generic knob churn, then leave the next handoff on a truly earlier
+  proof surface.
+- Pass result: `delta shipped; the new contour-builder raw-bypass and pre-poly
+  support-arc experiment surfaces are checked in, the current contour family is
+  now bounded by hard negatives on both plausible contours, and the live tile
+  is restored to the stable A01 baseline`.
+- Last delta:
+  - Added new loader-compatible experiment surfaces in
+    `tools/MmapGen/dep/recastnavigation/Recast/Include/Recast.h`,
+    `tools/MmapGen/dep/recastnavigation/Recast/Source/RecastContour.cpp`, and
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`:
+    - `contourBuildBypassSimplificationForMatchedAnchorSupportContour`
+    - `prePolyResimplifyAnchorSupportBandArcRadius`
+    - `prePolyResimplifyAnchorSupportCenterMode`
+    - helper/log surfaces around `replaceSimplifiedWithRawContour(...)` and
+      `InjectAnchorSupportBandRawArcVertices(...)`
+  - Proved the "move earlier" full-raw retry is a negative:
+    - branch
+      `og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1`
+    - artifact
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1-20260525T232236Z/`
+    - hash
+      `8E98F676F48FAB2952EF9D89CE6A22A40F8F3C3CC0CF8354A6B4C5AFD1F3E8A8`
+    - decisive proof:
+      `[CONTOUR-BUILD-ANCHOR-SEED] region=7 rawVerts=158 simplifiedVerts=158 rawBypassVerts=158 seededSupportBandArcRawVerts=22 matchedOverrides=1`
+    - focused/full:
+      `3/7`, `19/23`
+    - read:
+      even a full raw contour inside `rcBuildContours()` still left
+      `1523.8 -> finalDetour / lower_competitor_dominant`
+  - Proved the support-arc family is also negative on both plausible contours:
+    - anchor-containing `r3`:
+      `og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r3_v1`
+      hash
+      `52C9913EB0F4306A3912A8869D537689A227733560BD38DE4FE12E5F360F5C6B`,
+      proof `11 -> 158 -> 29`, focused/full `3/7`, `20/23`
+    - anchor-containing `r6`:
+      `og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r6_v1`
+      hash
+      `62D0AEA1268141CC44FC7D00C6CA2B891E446FFD96217339DC79ADA97CA30E5D`,
+      proof `11 -> 158 -> 36` with
+      `preservedSupportBandArcRawVerts=25`, focused/full `3/7`, `20/23`
+    - nearest non-containing `r6`:
+      `og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1`
+      artifact
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1-20260525T234723Z/`
+      hash
+      `A6A9FA5B231AD484EA72E364D0DE26C1F964D5AD797F5B45BC06C4DCEC04AB3D`,
+      proof
+      `contour=1 region=8 rawVerts=226 candidateVerts=124 ... preservedSupportBandArcRawVerts=109`,
+      focused/full `3/7`, `20/23`
+  - Cross-branch invariant for `1523.800,-4425.900,17.100`:
+    - stable baseline `A01DEE...`, raw-bypass, anchor-containing support-arc,
+      and nearest-non-containing support-arc all kept the same stage summary:
+      - `contours`: `supportCandidateCount=1`, `lowerCandidateCount=8`
+      - `polymesh`: `supportCandidateCount=2`, `lowerCandidateCount=23`
+      - `finalDetour`: `supportCandidateCount=0`, `lowerCandidateCount=5`,
+        winner `0x1000000000ADAB`
+    - important anchors still stayed:
+      - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+      - `1523.800,-4425.900,17.100` ->
+        `finalDetour / lower_competitor_dominant`
+      - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+      - `1364.867,-4374.000,26.109` ->
+        `finalDetour / winner_component_trapped`
+  - Live tile restore:
+    - restore artifact:
+      `tmp/bake-sweeps/og_4029_restore_after_supportarc_iteration_20260525-20260525T235253Z/`
+    - restored hash:
+      `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `8E98F676F48FAB2952EF9D89CE6A22A40F8F3C3CC0CF8354A6B4C5AFD1F3E8A8`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `19/23`.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r6_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r6.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `62D0AEA1268141CC44FC7D00C6CA2B891E446FFD96217339DC79ADA97CA30E5D`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r6_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r6_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A6A9FA5B231AD484EA72E364D0DE26C1F964D5AD797F5B45BC06C4DCEC04AB3D`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_supportarc_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+- Next command: inspect an earlier source/compact support-overlap proof for
+  `1523.8` before spending another iteration on late contour carry.

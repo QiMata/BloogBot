@@ -2403,3 +2403,104 @@ strip back toward the anchor projection.
   - the next credible retry needs to move earlier or deeper: a more structural
     source/raster modification, or a contour-builder change that alters the
     contour simplification itself rather than adding another tiny support patch
+
+### 2026-05-25 UTC contour raw-bypass plus support-arc family closure
+
+WWoW then closed the remaining contour-shape retries around `1523.8` using the
+new loader-compatible experiment surfaces in
+`tools/MmapGen/contrib/mmap/src/TileWorker.cpp` and
+`tools/MmapGen/dep/recastnavigation/Recast/Source/RecastContour.cpp`.
+
+- New surfaces:
+  - `contourBuildBypassSimplificationForMatchedAnchorSupportContour`
+  - `prePolyResimplifyAnchorSupportBandArcRadius`
+  - `prePolyResimplifyAnchorSupportCenterMode`
+  - helper/log surfaces around `replaceSimplifiedWithRawContour(...)` and
+    `InjectAnchorSupportBandRawArcVertices(...)`
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass.json'`
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r6_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r6.json'`
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6.json'`
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_supportarc_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Decisive results:
+  - contour-build raw bypass:
+    - branch:
+      `og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1`
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1-20260525T232236Z/`
+    - hash:
+      `8E98F676F48FAB2952EF9D89CE6A22A40F8F3C3CC0CF8354A6B4C5AFD1F3E8A8`
+    - focused/full:
+      `3/7`, `19/23`
+    - proof:
+      `[CONTOUR-BUILD-ANCHOR-SEED] region=7 rawVerts=158 simplifiedVerts=158 rawBypassVerts=158 seededSupportBandArcRawVerts=22 matchedOverrides=1`
+    - decisive read:
+      even a full raw `158`-vertex contour straight through
+      `rcBuildContours()` still left
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+      and regressed full route quality, so this branch is too broad
+  - pre-poly support-arc on the anchor-containing contour:
+    - `og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r3_v1`
+      -> artifact
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r3_v1-20260525T233448Z/`,
+      hash
+      `52C9913EB0F4306A3912A8869D537689A227733560BD38DE4FE12E5F360F5C6B`,
+      focused/full `3/7`, `20/23`,
+      proof `11 -> 158 -> 29` with
+      `preservedSupportBandArcRawVerts=18`
+    - `og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r6_v1`
+      -> artifact
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_anchoronly_r6_v1-20260525T234043Z/`,
+      hash
+      `62D0AEA1268141CC44FC7D00C6CA2B891E446FFD96217339DC79ADA97CA30E5D`,
+      focused/full `3/7`, `20/23`,
+      proof `11 -> 158 -> 36` with
+      `preservedSupportBandArcRawVerts=25`
+  - pre-poly support-arc on the nearest non-containing support contour:
+    - branch:
+      `og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1`
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1-20260525T234723Z/`
+    - hash:
+      `A6A9FA5B231AD484EA72E364D0DE26C1F964D5AD797F5B45BC06C4DCEC04AB3D`
+    - focused/full:
+      `3/7`, `20/23`
+    - proof:
+      `[CONTOUR-ANCHOR-SELECT] ... contour=1 region=8 reason=nearest_noncontaining ...`
+      then
+      `[CONTOUR-ANCHOR-RESIMPLIFY-CANDIDATE] ... contour=1 region=8 rawVerts=226 candidateVerts=124 ...`
+      plus
+      `[CONTOUR-ANCHOR-BAND-ARC] ... preservedSupportBandArcRawVerts=109 preserveRadius=6.000 centerMode=resolvedSupportPoint`
+- Cross-branch invariant:
+  - the stable baseline `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`,
+    the contour-build raw-bypass branch, and both pre-poly support-arc branch
+    families all kept the same `1523.8` stage-summary counts:
+    - `contours`: `supportCandidateCount=1`, `lowerCandidateCount=8`
+    - `polymesh`: `supportCandidateCount=2`, `lowerCandidateCount=23`
+    - `finalDetour`: `supportCandidateCount=0`, `lowerCandidateCount=5`,
+      final winner `0x1000000000ADAB`
+  - the important anchor outcomes also stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+- Restore state:
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_supportarc_iteration_20260525-20260525T235253Z/`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Practical read:
+  - this closes the current contour raw-carry / support-arc family for
+    `1523.8`
+  - once the stable baseline and the raw-bypass plus anchor-containing /
+    non-containing support-arc branches all keep the exact same
+    `contours -> polymesh -> finalDetour` support/lower counts, more late
+    contour-shape churn is not moving the real proof surface
+  - the next credible retry needs to change earlier source/compact overlap for
+    the recovered support footprint, not another late contour-preserve variant

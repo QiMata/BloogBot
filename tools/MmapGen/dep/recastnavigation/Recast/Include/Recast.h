@@ -457,10 +457,15 @@ struct rcAnchorContourSimplifyOverride
 {
 	int anchorX;						///< Anchor x cell in the contour build grid. [Units: vx]
 	int anchorZ;						///< Anchor z cell in the contour build grid. [Units: vx]
+	int windowCenterX;					///< Local preserve-window x cell in the contour build grid. [Units: vx]
+	int windowCenterZ;					///< Local preserve-window z cell in the contour build grid. [Units: vx]
 	int supportFloorMinY;				///< Minimum support-band y cell to preserve. [Units: vx]
 	int supportFloorMaxY;				///< Maximum support-band y cell to preserve. [Units: vx]
-	int preserveRadiusCells;			///< XY preserve radius around the anchor. [Units: vx]
+	int supportBandArcPreserveRadiusCells;	///< XY preserve radius for the shortest raw support-band arc around the local window. [Units: vx]
+	int preserveRadiusCells;			///< XY preserve radius for support-band-local raw vertices. [Units: vx]
 	int boundarySeedRadiusCells;		///< XY radius used to preserve support-band boundary crossings around the anchor. [Units: vx]
+	int localPreserveRadiusCells;		///< XY preserve radius for raw vertices regardless of support-band membership. [Units: vx]
+	bool bypassSimplificationOnSeedMatch;	///< When true, a matched seeded contour keeps its full raw contour through rcBuildContours().
 	bool requireContourContainsAnchor;	///< Limit seeding to contours that contain the anchor projection.
 };
 

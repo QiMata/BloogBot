@@ -3525,6 +3525,42 @@ static bool ParsePreRasterizeAnchorSupportPatchCenterMode(const nlohmann::json& 
     return false;
 }
 
+static bool ParseContourBuildSeedAnchorSupportCenterMode(const nlohmann::json& jsonTileConfig)
+{
+    std::string centerMode = JsonStringOrDefault(
+        jsonTileConfig, "contourBuildSeedAnchorSupportCenterMode", "anchor");
+    std::transform(centerMode.begin(), centerMode.end(), centerMode.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    if (centerMode.empty() || centerMode == "anchor")
+        return false;
+
+    if (centerMode == "resolvedsupportpoint")
+        return true;
+
+    printf("[CONFIG-WARN] unrecognized contourBuildSeedAnchorSupportCenterMode='%s'; falling back to 'anchor'.\n",
+        centerMode.c_str());
+    return false;
+}
+
+static bool ParsePrePolyResimplifyAnchorSupportCenterMode(const nlohmann::json& jsonTileConfig)
+{
+    std::string centerMode = JsonStringOrDefault(
+        jsonTileConfig, "prePolyResimplifyAnchorSupportCenterMode", "anchor");
+    std::transform(centerMode.begin(), centerMode.end(), centerMode.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    if (centerMode.empty() || centerMode == "anchor")
+        return false;
+
+    if (centerMode == "resolvedsupportpoint")
+        return true;
+
+    printf("[CONFIG-WARN] unrecognized prePolyResimplifyAnchorSupportCenterMode='%s'; falling back to 'anchor'.\n",
+        centerMode.c_str());
+    return false;
+}
+
 struct AnchorSupportContourSelection
 {
     int contourIndex = -1;
@@ -3569,11 +3605,19 @@ static std::vector<rcAnchorContourSimplifyOverride> BuildContourSimplifyAnchorOv
     const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& supports,
     const AnchorSupportContourSelectionMode selectionMode,
-    const float preserveRadius,
-    const float boundarySeedRadius)
+    const bool centerOnResolvedSupportPoint,
+    const float supportBandArcPreserveRadius,
+    const float supportBandLocalPreserveRadius,
+    const float boundarySeedRadius,
+    const float localPreserveRadius,
+    const bool bypassSimplificationOnSeedMatch,
+    const bool logDiagnostics)
 {
     std::vector<rcAnchorContourSimplifyOverride> overrides;
-    if (supports.empty() || (preserveRadius <= 0.0f && boundarySeedRadius <= 0.0f) || chf.cs <= 0.0f || chf.ch <= 0.0f)
+    if (supports.empty() ||
+        (supportBandArcPreserveRadius <= 0.0f && supportBandLocalPreserveRadius <= 0.0f &&
+            boundarySeedRadius <= 0.0f && localPreserveRadius <= 0.0f) ||
+        chf.cs <= 0.0f || chf.ch <= 0.0f)
         return overrides;
 
     overrides.reserve(supports.size());
@@ -3587,19 +3631,53 @@ static std::vector<rcAnchorContourSimplifyOverride> BuildContourSimplifyAnchorOv
         rcAnchorContourSimplifyOverride anchorOverride{};
         anchorOverride.anchorX = static_cast<int>(std::lround((support.anchor.wowY - chf.bmin[0]) / chf.cs));
         anchorOverride.anchorZ = static_cast<int>(std::lround((support.anchor.wowX - chf.bmin[2]) / chf.cs));
+        anchorOverride.windowCenterX =
+            centerOnResolvedSupportPoint
+                ? static_cast<int>(std::lround((support.supportRecastX - chf.bmin[0]) / chf.cs))
+                : anchorOverride.anchorX;
+        anchorOverride.windowCenterZ =
+            centerOnResolvedSupportPoint
+                ? static_cast<int>(std::lround((support.supportRecastZ - chf.bmin[2]) / chf.cs))
+                : anchorOverride.anchorZ;
         anchorOverride.supportFloorMinY = static_cast<int>(std::floor(
             (GetAnchorSupportFloorMinY(support, supportBandTuning) - chf.bmin[1]) / chf.ch));
         anchorOverride.supportFloorMaxY = static_cast<int>(std::ceil(
             (GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning) - chf.bmin[1]) / chf.ch));
+        anchorOverride.supportBandArcPreserveRadiusCells =
+            supportBandArcPreserveRadius > 0.0f
+                ? std::max(1, static_cast<int>(std::ceil(supportBandArcPreserveRadius / chf.cs)))
+                : 0;
         anchorOverride.preserveRadiusCells =
-            preserveRadius > 0.0f
-                ? std::max(1, static_cast<int>(std::ceil(preserveRadius / chf.cs)))
+            supportBandLocalPreserveRadius > 0.0f
+                ? std::max(1, static_cast<int>(std::ceil(supportBandLocalPreserveRadius / chf.cs)))
                 : 0;
         anchorOverride.boundarySeedRadiusCells =
             boundarySeedRadius > 0.0f
                 ? std::max(1, static_cast<int>(std::ceil(boundarySeedRadius / chf.cs)))
                 : 0;
+        anchorOverride.localPreserveRadiusCells =
+            localPreserveRadius > 0.0f
+                ? std::max(1, static_cast<int>(std::ceil(localPreserveRadius / chf.cs)))
+                : 0;
+        anchorOverride.bypassSimplificationOnSeedMatch = bypassSimplificationOnSeedMatch;
         anchorOverride.requireContourContainsAnchor = requireContourContainsAnchor;
+
+        if (logDiagnostics)
+        {
+            printf("[CONTOUR-BUILD-ANCHOR-OVERRIDE] anchor=(%.3f,%.3f,%.3f) center=(%.3f,%.3f,%.3f) centerMode=%s supportBandArcRadius=%.3f supportBandLocalRadius=%.3f boundarySeedRadius=%.3f localPreserveRadius=%.3f bypassSimplificationOnSeedMatch=%d requireContainsAnchor=%d\n",
+                support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                centerOnResolvedSupportPoint ? support.supportRecastZ : support.anchor.wowX,
+                centerOnResolvedSupportPoint ? support.supportRecastX : support.anchor.wowY,
+                support.supportY,
+                centerOnResolvedSupportPoint ? "resolvedSupportPoint" : "anchor",
+                supportBandArcPreserveRadius,
+                supportBandLocalPreserveRadius,
+                boundarySeedRadius,
+                localPreserveRadius,
+                bypassSimplificationOnSeedMatch ? 1 : 0,
+                requireContourContainsAnchor ? 1 : 0);
+        }
+
         overrides.push_back(anchorOverride);
     }
 
@@ -4701,6 +4779,137 @@ static int InjectAnchorSupportBandBoundaryVertices(
     return injectedVertexCount;
 }
 
+// [WWoW-DIVERGENCE] 2026-05-25: preserve the shortest contiguous raw contour
+// arc that stays on the recovered support band near the resolved support
+// point, then let the existing local resimplify continue from that footprint.
+static int InjectAnchorSupportBandRawArcVertices(
+    const std::vector<int>& points,
+    std::vector<int>& simplified,
+    const float centerRecastX,
+    const float centerRecastZ,
+    const float preserveRadius,
+    const float supportFloorMinY,
+    const float supportFloorMaxY,
+    const float contourBMinX,
+    const float contourBMinY,
+    const float contourBMinZ,
+    const float contourCellSize,
+    const float contourCellHeight)
+{
+    if (preserveRadius <= 0.0f)
+        return 0;
+
+    const int pointCount = static_cast<int>(points.size()) / 4;
+    const int simplifiedCount = static_cast<int>(simplified.size()) / 4;
+    if (pointCount < 3 || simplifiedCount < 2)
+        return 0;
+
+    const float preserveRadiusSq = preserveRadius * preserveRadius;
+    auto rawPointWithinSupportBand = [&](const int rawIndex)
+    {
+        const float recastY = contourBMinY + points[rawIndex * 4 + 1] * contourCellHeight;
+        return recastY >= supportFloorMinY && recastY <= supportFloorMaxY;
+    };
+    auto rawPointWithinWindow = [&](const int rawIndex)
+    {
+        const float recastX = contourBMinX + points[rawIndex * 4 + 0] * contourCellSize;
+        const float recastZ = contourBMinZ + points[rawIndex * 4 + 2] * contourCellSize;
+        const float dx = recastX - centerRecastX;
+        const float dz = recastZ - centerRecastZ;
+        return dx * dx + dz * dz <= preserveRadiusSq;
+    };
+
+    std::vector<int> matchingRawIndices;
+    matchingRawIndices.reserve(pointCount);
+    for (int rawIndex = 0; rawIndex < pointCount; ++rawIndex)
+    {
+        if (rawPointWithinSupportBand(rawIndex) && rawPointWithinWindow(rawIndex))
+            matchingRawIndices.push_back(rawIndex);
+    }
+
+    if (matchingRawIndices.empty())
+        return 0;
+
+    std::vector<unsigned char> preserveMask(static_cast<size_t>(pointCount), 0);
+    if (static_cast<int>(matchingRawIndices.size()) == pointCount)
+    {
+        for (int rawIndex = 0; rawIndex < pointCount; ++rawIndex)
+            preserveMask[static_cast<size_t>(rawIndex)] = 1;
+    }
+    else
+    {
+        int largestGap = -1;
+        int largestGapStartIndex = 0;
+        for (int matchIndex = 0; matchIndex < static_cast<int>(matchingRawIndices.size()); ++matchIndex)
+        {
+            const int currentIndex = matchingRawIndices[matchIndex];
+            const int nextIndex = matchingRawIndices[(matchIndex + 1) % static_cast<int>(matchingRawIndices.size())];
+            const int gap = (nextIndex - currentIndex + pointCount) % pointCount;
+            if (gap > largestGap)
+            {
+                largestGap = gap;
+                largestGapStartIndex = matchIndex;
+            }
+        }
+
+        const int runStart =
+            matchingRawIndices[(largestGapStartIndex + 1) % static_cast<int>(matchingRawIndices.size())];
+        const int runEnd = matchingRawIndices[largestGapStartIndex];
+        int rawIndex = runStart;
+        for (;;)
+        {
+            preserveMask[static_cast<size_t>(rawIndex)] = 1;
+            if (rawIndex == runEnd)
+                break;
+            rawIndex = (rawIndex + 1) % pointCount;
+        }
+    }
+
+    std::vector<int> expanded;
+    expanded.reserve(points.size());
+    auto appendRawIndex = [&](const int rawIndex)
+    {
+        if (!expanded.empty())
+        {
+            const int lastIndex = static_cast<int>(expanded.size()) / 4 - 1;
+            if (expanded[lastIndex * 4 + 0] == points[rawIndex * 4 + 0] &&
+                expanded[lastIndex * 4 + 2] == points[rawIndex * 4 + 2])
+            {
+                return false;
+            }
+        }
+
+        expanded.push_back(points[rawIndex * 4 + 0]);
+        expanded.push_back(points[rawIndex * 4 + 1]);
+        expanded.push_back(points[rawIndex * 4 + 2]);
+        expanded.push_back(rawIndex);
+        return true;
+    };
+
+    int injectedVertexCount = 0;
+    for (int i = 0; i < simplifiedCount; ++i)
+    {
+        const int ii = (i + 1) % simplifiedCount;
+        const int startRawIndex = simplified[i * 4 + 3];
+        const int endRawIndex = simplified[ii * 4 + 3];
+
+        appendRawIndex(startRawIndex);
+        int rawIndex = (startRawIndex + 1) % pointCount;
+        while (rawIndex != endRawIndex)
+        {
+            if (preserveMask[static_cast<size_t>(rawIndex)] != 0 && appendRawIndex(rawIndex))
+                ++injectedVertexCount;
+
+            rawIndex = (rawIndex + 1) % pointCount;
+        }
+    }
+
+    if (!expanded.empty())
+        simplified.swap(expanded);
+
+    return injectedVertexCount;
+}
+
 // [WWoW-DIVERGENCE] 2026-05-25: keep only the raw contour vertices that stay
 // on the recovered support band inside a small anchor-local window. This is a
 // midpoint between "boundary-only" carry and "all local raw points" carry.
@@ -4963,9 +5172,11 @@ static int ResimplifyRawAnchorSupportContours(
     const float maxError,
     const int maxEdgeLen,
     const float bandBoundarySeedRadius,
+    const float bandArcPreserveRadius,
     const float bandBoundaryRadius,
     const float bandLocalPreserveRadius,
     const float localPreserveRadius,
+    const bool centerOnResolvedSupportPoint,
     const int buildFlags,
     const bool logDiagnostics)
 {
@@ -5071,6 +5282,27 @@ static int ResimplifyRawAnchorSupportContours(
                 maxEdgeLen,
                 buildFlags,
                 boundarySeededVertexCount > 0 ? &boundarySeedMask : nullptr);
+            const float preserveCenterRecastX =
+                centerOnResolvedSupportPoint ? support.supportRecastX : anchorRecastX;
+            const float preserveCenterRecastZ =
+                centerOnResolvedSupportPoint ? support.supportRecastZ : anchorRecastZ;
+            int bandArcInjectedVertexCount = 0;
+            if (bandArcPreserveRadius > 0.0f)
+            {
+                bandArcInjectedVertexCount = InjectAnchorSupportBandRawArcVertices(
+                    rawPoints,
+                    simplified,
+                    preserveCenterRecastX,
+                    preserveCenterRecastZ,
+                    bandArcPreserveRadius,
+                    supportFloorMinY,
+                    supportFloorMaxY,
+                    contours.bmin[0],
+                    contours.bmin[1],
+                    contours.bmin[2],
+                    contours.cs,
+                    contours.ch);
+            }
             int boundaryInjectedVertexCount = 0;
             if (bandBoundaryRadius > 0.0f)
             {
@@ -5145,6 +5377,14 @@ static int ResimplifyRawAnchorSupportContours(
                         support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
                         contourIndex, static_cast<unsigned>(contour.reg),
                         boundarySeededVertexCount, bandBoundarySeedRadius);
+                }
+                if (bandArcInjectedVertexCount > 0)
+                {
+                    printf("[CONTOUR-ANCHOR-BAND-ARC] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u preservedSupportBandArcRawVerts=%d preserveRadius=%.3f centerMode=%s\n",
+                        support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                        contourIndex, static_cast<unsigned>(contour.reg),
+                        bandArcInjectedVertexCount, bandArcPreserveRadius,
+                        centerOnResolvedSupportPoint ? "resolvedSupportPoint" : "anchor");
                 }
                 if (bandLocalInjectedVertexCount > 0)
                 {
@@ -7235,16 +7475,28 @@ namespace MMAP
             jsonTileConfig, "prePolyCarryAnchorSupportBandLocalRadius", -1.0f);
         const float contourBuildSeedAnchorSupportBandLocalRadius = JsonFloatOrDefault(
             jsonTileConfig, "contourBuildSeedAnchorSupportBandLocalRadius", -1.0f);
+        const float contourBuildSeedAnchorSupportBandArcRadius = JsonFloatOrDefault(
+            jsonTileConfig, "contourBuildSeedAnchorSupportBandArcRadius", -1.0f);
         const float contourBuildSeedAnchorSupportBandBoundaryRadius = JsonFloatOrDefault(
             jsonTileConfig, "contourBuildSeedAnchorSupportBandBoundaryRadius", -1.0f);
+        const float contourBuildSeedAnchorSupportLocalPreserveRadius = JsonFloatOrDefault(
+            jsonTileConfig, "contourBuildSeedAnchorSupportLocalPreserveRadius", -1.0f);
+        const bool contourBuildBypassSimplificationForMatchedAnchorSupportContour =
+            jsonTileConfig.value("contourBuildBypassSimplificationForMatchedAnchorSupportContour", false);
+        const bool contourBuildSeedAnchorSupportCenterOnResolvedSupportPoint =
+            ParseContourBuildSeedAnchorSupportCenterMode(jsonTileConfig);
         const float prePolyResimplifyAnchorSupportBandBoundarySeedRadius = JsonFloatOrDefault(
             jsonTileConfig, "prePolyResimplifyAnchorSupportBandBoundarySeedRadius", -1.0f);
+        const float prePolyResimplifyAnchorSupportBandArcRadius = JsonFloatOrDefault(
+            jsonTileConfig, "prePolyResimplifyAnchorSupportBandArcRadius", -1.0f);
         const float prePolyResimplifyAnchorSupportBandBoundaryRadius = JsonFloatOrDefault(
             jsonTileConfig, "prePolyResimplifyAnchorSupportBandBoundaryRadius", -1.0f);
         const float prePolyResimplifyAnchorSupportBandLocalPreserveRadius = JsonFloatOrDefault(
             jsonTileConfig, "prePolyResimplifyAnchorSupportBandLocalPreserveRadius", -1.0f);
         const float prePolyResimplifyAnchorSupportLocalPreserveRadius = JsonFloatOrDefault(
             jsonTileConfig, "prePolyResimplifyAnchorSupportLocalPreserveRadius", -1.0f);
+        const bool prePolyResimplifyAnchorSupportCenterOnResolvedSupportPoint =
+            ParsePrePolyResimplifyAnchorSupportCenterMode(jsonTileConfig);
         const bool prePolyResimplifyAnchorSupportTessellateWallEdges =
             jsonTileConfig.value("prePolyResimplifyAnchorSupportTessellateWallEdges", true);
         const bool prePolyResimplifyAnchorSupportTessellateAreaEdges =
@@ -7815,16 +8067,23 @@ namespace MMAP
                 tile.cset = rcAllocContourSet();
                 const std::vector<rcAnchorContourSimplifyOverride> contourBuildAnchorOverrides =
                     !contourBuildSeedAnchorSupportProbes.empty() &&
-                    (contourBuildSeedAnchorSupportBandLocalRadius > 0.0f ||
-                        contourBuildSeedAnchorSupportBandBoundaryRadius > 0.0f)
+                    (contourBuildSeedAnchorSupportBandArcRadius > 0.0f ||
+                        contourBuildSeedAnchorSupportBandLocalRadius > 0.0f ||
+                        contourBuildSeedAnchorSupportBandBoundaryRadius > 0.0f ||
+                        contourBuildSeedAnchorSupportLocalPreserveRadius > 0.0f)
                         ? BuildContourSimplifyAnchorOverrides(
                             *tile.chf,
                             anchorSourceSupportZTolerance,
                             anchorSupportBandTuning,
                             contourBuildSeedAnchorSupportProbes,
                             prePolySupportContourSelectionMode,
+                            contourBuildSeedAnchorSupportCenterOnResolvedSupportPoint,
+                            contourBuildSeedAnchorSupportBandArcRadius,
                             contourBuildSeedAnchorSupportBandLocalRadius,
-                            contourBuildSeedAnchorSupportBandBoundaryRadius)
+                            contourBuildSeedAnchorSupportBandBoundaryRadius,
+                            contourBuildSeedAnchorSupportLocalPreserveRadius,
+                            contourBuildBypassSimplificationForMatchedAnchorSupportContour,
+                            logAnchorStageDiagnostics)
                         : std::vector<rcAnchorContourSimplifyOverride>();
                 if (!contourBuildAnchorOverrides.empty())
                 {
@@ -7879,9 +8138,11 @@ namespace MMAP
                         prePolyResimplifyAnchorSupportMaxError,
                         resimplifyMaxEdgeLen,
                         prePolyResimplifyAnchorSupportBandBoundarySeedRadius,
+                        prePolyResimplifyAnchorSupportBandArcRadius,
                         prePolyResimplifyAnchorSupportBandBoundaryRadius,
                         prePolyResimplifyAnchorSupportBandLocalPreserveRadius,
                         prePolyResimplifyAnchorSupportLocalPreserveRadius,
+                        prePolyResimplifyAnchorSupportCenterOnResolvedSupportPoint,
                         resimplifyBuildFlags,
                         logAnchorStageDiagnostics);
                 }
@@ -8365,16 +8626,25 @@ namespace MMAP
             { "writeAnchorStageManifest", false },
             { "logAnchorStageDiagnostics", false },
             { "contourBuildSeedAnchorSupportCoordsWow", json::array() },
+            { "contourBuildSeedAnchorSupportBandArcRadius", -1.0f },
             { "contourBuildSeedAnchorSupportBandLocalRadius", -1.0f },
             { "contourBuildSeedAnchorSupportBandBoundaryRadius", -1.0f },
+            { "contourBuildSeedAnchorSupportLocalPreserveRadius", -1.0f },
+            { "contourBuildBypassSimplificationForMatchedAnchorSupportContour", false },
+            { "contourBuildSeedAnchorSupportCenterMode", "anchor" },
             { "prePolyCarrySelectedRawAnchorSupportCoordsWow", json::array() },
             { "prePolyCarryAnchorSupportCoordsWow", json::array() },
             { "prePolyCarryAnchorSupportBandLocalRadius", -1.0f },
             { "prePolySupportContourSelectionMode", "" },
             { "prePolySelectAnchorContainingSupportContourOnly", false },
             { "prePolyResimplifyAnchorSupportBandBoundarySeedRadius", -1.0f },
+            { "prePolyResimplifyAnchorSupportBandArcRadius", -1.0f },
             { "prePolyResimplifyAnchorSupportBandBoundaryRadius", -1.0f },
             { "prePolyResimplifyAnchorSupportBandLocalPreserveRadius", -1.0f },
+            { "prePolyResimplifyAnchorSupportLocalPreserveRadius", -1.0f },
+            { "prePolyResimplifyAnchorSupportCenterMode", "anchor" },
+            { "prePolyResimplifyAnchorSupportTessellateWallEdges", true },
+            { "prePolyResimplifyAnchorSupportTessellateAreaEdges", false },
         };
     }
 
