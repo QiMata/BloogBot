@@ -1689,3 +1689,52 @@ worked on the current `rcBuildContours()` output directly.
   - that closes the most plausible post-contour narrowing branch; the next
     meaningful retry should move the support mask into the real
     `rcBuildContours(...)` simplify phase or earlier
+
+### 2026-05-25 UTC contour-build simplify-time seed follow-up
+
+WWoW then tested that exact earlier retry by moving the same support-band mask
+into upstream Recast's real `simplifyContour(...)` path during
+`rcBuildContours()`.
+
+- New local surface:
+  - `rcAnchorContourSimplifyOverride`
+  - `rcSetContourSimplifyAnchorOverrides(...)`
+  - `rcClearContourSimplifyAnchorOverrides()`
+  - `BuildContourSimplifyAnchorOverrides(...)`
+  - config keys:
+    `contourBuildSeedAnchorSupportCoordsWow`,
+    `contourBuildSeedAnchorSupportBandLocalRadius`
+- Experiment:
+  - variant:
+    `og_4029_raster_support_patch06_contourbuild_seed_local_anchoronly_r4_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_contourbuild_seed_local_anchoronly_r4_v1-20260525T200739Z/`
+  - changed hash:
+    `C0873DE50193A03921A761F75C278B82B001100B2E58BFCF4721DA8D827A5357`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the upstream simplify-time seed really fired on the selected recovered
+    contour:
+    `[CONTOUR-BUILD-ANCHOR-SEED] region=7 rawVerts=158 simplifiedVerts=33 seededSupportBandRawVerts=26 matchedOverrides=1`
+  - selector diagnostics still isolated the same contour family:
+    - `contour 1 / region 8 verts=226 containsAnchor=0 closestDistance2D=0.836`
+    - `contour 3 / region 7 verts=158 containsAnchor=1 closestDistance2D=0.200`
+    - `contour 4 / region 19 verts=10 containsAnchor=0 closestDistance2D=1.997`
+  - the later preserve pass still only touched `contour 3 / region 7`:
+    `preservedBorderVerts=33`
+  - most important manifest correction:
+    - `1523.8` still had nearby surviving support through
+      `contours supportCandidateCount=1` and
+      `polymesh supportCandidateCount=2`
+    - but `supportContainsAnchorProjection=false` throughout and
+      `finalDetour supportCount=0`
+    - the final answer still stayed:
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+- Practical read:
+  - this closes the most plausible "same mask, earlier timing" contour branch
+  - the surviving support is still missing the exact final footprint overlap at
+    `1523.8`, not just vanishing wholesale during contour extraction
+  - after this branch, contour-family retries are exhausted enough that the
+    next serious fallback should be the research-backed local `ch` override or
+    another genuinely earlier source/vertical classification experiment

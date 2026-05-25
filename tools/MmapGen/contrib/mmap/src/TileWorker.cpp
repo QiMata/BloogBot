@@ -3478,6 +3478,41 @@ static AnchorSupportContourSelectionMode ParseAnchorSupportContourSelectionMode(
     return AnchorSupportContourSelectionMode::All;
 }
 
+static std::vector<rcAnchorContourSimplifyOverride> BuildContourSimplifyAnchorOverrides(
+    const rcCompactHeightfield& chf,
+    const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
+    const std::vector<AnchorSourceSupportProbe>& supports,
+    const AnchorSupportContourSelectionMode selectionMode,
+    const float preserveRadius)
+{
+    std::vector<rcAnchorContourSimplifyOverride> overrides;
+    if (supports.empty() || preserveRadius <= 0.0f || chf.cs <= 0.0f || chf.ch <= 0.0f)
+        return overrides;
+
+    overrides.reserve(supports.size());
+    const bool requireContourContainsAnchor = selectionMode == AnchorSupportContourSelectionMode::AnchorContaining;
+
+    for (const AnchorSourceSupportProbe& support : supports)
+    {
+        if (!support.found)
+            continue;
+
+        rcAnchorContourSimplifyOverride anchorOverride{};
+        anchorOverride.anchorX = static_cast<int>(std::lround((support.anchor.wowY - chf.bmin[0]) / chf.cs));
+        anchorOverride.anchorZ = static_cast<int>(std::lround((support.anchor.wowX - chf.bmin[2]) / chf.cs));
+        anchorOverride.supportFloorMinY = static_cast<int>(std::floor(
+            (GetAnchorSupportFloorMinY(support, supportBandTuning) - chf.bmin[1]) / chf.ch));
+        anchorOverride.supportFloorMaxY = static_cast<int>(std::ceil(
+            (GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning) - chf.bmin[1]) / chf.ch));
+        anchorOverride.preserveRadiusCells = std::max(1, static_cast<int>(std::ceil(preserveRadius / chf.cs)));
+        anchorOverride.requireContourContainsAnchor = requireContourContainsAnchor;
+        overrides.push_back(anchorOverride);
+    }
+
+    return overrides;
+}
+
 static AnchorSupportContourSelection SelectAnchorSupportContour(
     const rcContourSet& contours,
     const float xyExtent,
@@ -7011,6 +7046,8 @@ namespace MMAP
             ParsePrePolyUseRawAnchorSupportContours(jsonTileConfig);
         const std::vector<AnchorPolyStackCoord> prePolyCarryAnchorSupportCoords =
             ParseAnchorCoords(jsonTileConfig, "prePolyCarryAnchorSupportCoordsWow");
+        const std::vector<AnchorPolyStackCoord> contourBuildSeedAnchorSupportCoords =
+            ParseAnchorCoords(jsonTileConfig, "contourBuildSeedAnchorSupportCoordsWow");
         const AnchorSupportContourSelectionMode prePolySupportContourSelectionMode =
             ParseAnchorSupportContourSelectionMode(jsonTileConfig);
         const float prePolyResimplifyAnchorSupportMaxError = JsonFloatOrDefault(
@@ -7019,6 +7056,8 @@ namespace MMAP
             jsonTileConfig.value("prePolyResimplifyAnchorSupportMaxEdgeLen", -1);
         const float prePolyCarryAnchorSupportBandLocalRadius = JsonFloatOrDefault(
             jsonTileConfig, "prePolyCarryAnchorSupportBandLocalRadius", -1.0f);
+        const float contourBuildSeedAnchorSupportBandLocalRadius = JsonFloatOrDefault(
+            jsonTileConfig, "contourBuildSeedAnchorSupportBandLocalRadius", -1.0f);
         const float prePolyResimplifyAnchorSupportBandBoundarySeedRadius = JsonFloatOrDefault(
             jsonTileConfig, "prePolyResimplifyAnchorSupportBandBoundarySeedRadius", -1.0f);
         const float prePolyResimplifyAnchorSupportBandBoundaryRadius = JsonFloatOrDefault(
@@ -7122,6 +7161,14 @@ namespace MMAP
                 ? ResolveAnchorSourceSupportProbes(
                     meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
                     anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, prePolyCarryAnchorSupportCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
+                    logAnchorStageDiagnostics)
+                : std::vector<AnchorSourceSupportProbe>();
+        const std::vector<AnchorSourceSupportProbe> contourBuildSeedAnchorSupportProbes =
+            !contourBuildSeedAnchorSupportCoords.empty()
+                ? ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, contourBuildSeedAnchorSupportCoords,
                     borrowMissingAnchorSourceSupportFromNeighbors,
                     logAnchorStageDiagnostics)
                 : std::vector<AnchorSourceSupportProbe>();
@@ -7573,7 +7620,28 @@ namespace MMAP
                     WriteCompactHeightfieldStageCsv("regions", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
 
                 tile.cset = rcAllocContourSet();
-                if (!tile.cset || !rcBuildContours(m_rcContext, *tile.chf, tileCfg.maxSimplificationError, tileCfg.maxEdgeLen, *tile.cset))
+                const std::vector<rcAnchorContourSimplifyOverride> contourBuildAnchorOverrides =
+                    !contourBuildSeedAnchorSupportProbes.empty() && contourBuildSeedAnchorSupportBandLocalRadius > 0.0f
+                        ? BuildContourSimplifyAnchorOverrides(
+                            *tile.chf,
+                            anchorSourceSupportZTolerance,
+                            anchorSupportBandTuning,
+                            contourBuildSeedAnchorSupportProbes,
+                            prePolySupportContourSelectionMode,
+                            contourBuildSeedAnchorSupportBandLocalRadius)
+                        : std::vector<rcAnchorContourSimplifyOverride>();
+                if (!contourBuildAnchorOverrides.empty())
+                {
+                    rcSetContourSimplifyAnchorOverrides(
+                        contourBuildAnchorOverrides.data(),
+                        static_cast<int>(contourBuildAnchorOverrides.size()));
+                }
+                const bool builtContours =
+                    tile.cset &&
+                    rcBuildContours(m_rcContext, *tile.chf, tileCfg.maxSimplificationError, tileCfg.maxEdgeLen, *tile.cset);
+                if (!contourBuildAnchorOverrides.empty())
+                    rcClearContourSimplifyAnchorOverrides();
+                if (!builtContours)
                 {
                     printf("%s Failed building contours!                          \n", tileString);
                     continue;
@@ -8086,6 +8154,8 @@ namespace MMAP
             { "anchorRouteTargetsWow", json::array() },
             { "writeAnchorStageManifest", false },
             { "logAnchorStageDiagnostics", false },
+            { "contourBuildSeedAnchorSupportCoordsWow", json::array() },
+            { "contourBuildSeedAnchorSupportBandLocalRadius", -1.0f },
             { "prePolyCarryAnchorSupportCoordsWow", json::array() },
             { "prePolyCarryAnchorSupportBandLocalRadius", -1.0f },
             { "prePolySupportContourSelectionMode", "" },

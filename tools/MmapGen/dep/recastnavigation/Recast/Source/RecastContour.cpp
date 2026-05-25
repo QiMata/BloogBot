@@ -20,9 +20,34 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 #include "Recast.h"
 #include "RecastAlloc.h"
 #include "RecastAssert.h"
+
+static thread_local std::vector<rcAnchorContourSimplifyOverride> s_contourSimplifyAnchorOverrides;
+
+void rcSetContourSimplifyAnchorOverrides(const rcAnchorContourSimplifyOverride* overrides, int count)
+{
+	s_contourSimplifyAnchorOverrides.clear();
+	if (!overrides || count <= 0)
+		return;
+
+	s_contourSimplifyAnchorOverrides.reserve(count);
+	for (int i = 0; i < count; ++i)
+		s_contourSimplifyAnchorOverrides.push_back(overrides[i]);
+}
+
+void rcClearContourSimplifyAnchorOverrides()
+{
+	s_contourSimplifyAnchorOverrides.clear();
+}
+
+struct rcAnchorContourSimplifyStats
+{
+	int seededVertexCount = 0;
+	int matchedOverrideCount = 0;
+};
 
 
 static int getCornerHeight(int x, int y, int i, int dir,
@@ -206,8 +231,106 @@ static float distancePtSeg(const int x, const int z,
 	return dx*dx + dz*dz;
 }
 
+static bool contourContainsAnchorCell(const rcTempVector<int>& points, const int anchorX, const int anchorZ)
+{
+	const int pointCount = static_cast<int>(points.size()) / 4;
+	if (pointCount < 3)
+		return false;
+
+	bool inside = false;
+	for (int i = 0, j = pointCount - 1; i < pointCount; j = i++)
+	{
+		const int ix = points[i * 4 + 0];
+		const int iz = points[i * 4 + 2];
+		const int jx = points[j * 4 + 0];
+		const int jz = points[j * 4 + 2];
+		const bool intersects = ((iz > anchorZ) != (jz > anchorZ)) &&
+			(anchorX < (jx - ix) * (anchorZ - iz) / (float)(jz - iz) + ix);
+		if (intersects)
+			inside = !inside;
+	}
+
+	return inside;
+}
+
+static int seedAnchorSupportBandLocalRawVertices(const rcTempVector<int>& points,
+	rcTempVector<int>& simplified,
+	const rcAnchorContourSimplifyOverride& anchorOverride)
+{
+	if (anchorOverride.preserveRadiusCells <= 0)
+		return 0;
+
+	const int pointCount = static_cast<int>(points.size()) / 4;
+	const int simplifiedCount = static_cast<int>(simplified.size()) / 4;
+	if (pointCount < 3 || simplifiedCount < 2)
+		return 0;
+
+	const int preserveRadiusSq = anchorOverride.preserveRadiusCells * anchorOverride.preserveRadiusCells;
+	auto rawPointWithinSupportBand = [&](const int rawIndex)
+	{
+		const int y = points[rawIndex * 4 + 1];
+		return y >= anchorOverride.supportFloorMinY && y <= anchorOverride.supportFloorMaxY;
+	};
+	auto rawPointWithinWindow = [&](const int rawIndex)
+	{
+		const int dx = points[rawIndex * 4 + 0] - anchorOverride.anchorX;
+		const int dz = points[rawIndex * 4 + 2] - anchorOverride.anchorZ;
+		return dx * dx + dz * dz <= preserveRadiusSq;
+	};
+
+	rcTempVector<int> expanded;
+	expanded.reserve(points.size());
+
+	auto appendRawIndex = [&](const int rawIndex)
+	{
+		if (expanded.size() >= 4)
+		{
+			const int lastIndex = static_cast<int>(expanded.size()) / 4 - 1;
+			if (expanded[lastIndex * 4 + 0] == points[rawIndex * 4 + 0] &&
+				expanded[lastIndex * 4 + 2] == points[rawIndex * 4 + 2])
+			{
+				return false;
+			}
+		}
+
+		expanded.push_back(points[rawIndex * 4 + 0]);
+		expanded.push_back(points[rawIndex * 4 + 1]);
+		expanded.push_back(points[rawIndex * 4 + 2]);
+		expanded.push_back(rawIndex);
+		return true;
+	};
+
+	int injectedVertexCount = 0;
+	for (int i = 0; i < simplifiedCount; ++i)
+	{
+		const int ii = (i + 1) % simplifiedCount;
+		const int startRawIndex = simplified[i * 4 + 3];
+		const int endRawIndex = simplified[ii * 4 + 3];
+
+		appendRawIndex(startRawIndex);
+		int rawIndex = (startRawIndex + 1) % pointCount;
+		while (rawIndex != endRawIndex)
+		{
+			if (rawPointWithinSupportBand(rawIndex) &&
+				rawPointWithinWindow(rawIndex) &&
+				appendRawIndex(rawIndex))
+			{
+				++injectedVertexCount;
+			}
+
+			rawIndex = (rawIndex + 1) % pointCount;
+		}
+	}
+
+	if (expanded.size() > 0)
+		simplified.swap(expanded);
+
+	return injectedVertexCount;
+}
+
 static void simplifyContour(rcTempVector<int>& points, rcTempVector<int>& simplified,
-							const float maxError, const int maxEdgeLen, const int buildFlags)
+							const float maxError, const int maxEdgeLen, const int buildFlags,
+							rcAnchorContourSimplifyStats* anchorStats = 0)
 {
 	// Add initial points.
 	bool hasConnections = false;
@@ -281,6 +404,26 @@ static void simplifyContour(rcTempVector<int>& points, rcTempVector<int>& simpli
 		simplified.push_back(ury);
 		simplified.push_back(urz);
 		simplified.push_back(uri);
+	}
+
+	if (!s_contourSimplifyAnchorOverrides.empty() && simplified.size() >= 8)
+	{
+		for (size_t overrideIndex = 0; overrideIndex < s_contourSimplifyAnchorOverrides.size(); ++overrideIndex)
+		{
+			const rcAnchorContourSimplifyOverride& anchorOverride = s_contourSimplifyAnchorOverrides[overrideIndex];
+			if (anchorOverride.requireContourContainsAnchor &&
+				!contourContainsAnchorCell(points, anchorOverride.anchorX, anchorOverride.anchorZ))
+			{
+				continue;
+			}
+
+			const int seededVertexCount = seedAnchorSupportBandLocalRawVertices(points, simplified, anchorOverride);
+			if (seededVertexCount > 0 && anchorStats)
+			{
+				anchorStats->seededVertexCount += seededVertexCount;
+				anchorStats->matchedOverrideCount += 1;
+			}
+		}
 	}
 	
 	// Add points until all raw points are within
@@ -919,7 +1062,17 @@ bool rcBuildContours(rcContext* ctx, const rcCompactHeightfield& chf,
 				ctx->stopTimer(RC_TIMER_BUILD_CONTOURS_TRACE);
 				
 				ctx->startTimer(RC_TIMER_BUILD_CONTOURS_SIMPLIFY);
-				simplifyContour(verts, simplified, maxError, maxEdgeLen, buildFlags);
+				rcAnchorContourSimplifyStats anchorStats;
+				simplifyContour(verts, simplified, maxError, maxEdgeLen, buildFlags, &anchorStats);
+				if (anchorStats.seededVertexCount > 0)
+				{
+					printf("[CONTOUR-BUILD-ANCHOR-SEED] region=%u rawVerts=%d simplifiedVerts=%d seededSupportBandRawVerts=%d matchedOverrides=%d\n",
+						static_cast<unsigned>(reg),
+						static_cast<int>(verts.size()) / 4,
+						static_cast<int>(simplified.size()) / 4,
+						anchorStats.seededVertexCount,
+						anchorStats.matchedOverrideCount);
+				}
 				removeDegenerateSegments(simplified);
 				ctx->stopTimer(RC_TIMER_BUILD_CONTOURS_SIMPLIFY);
 				

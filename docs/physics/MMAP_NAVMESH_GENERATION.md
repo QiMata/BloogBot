@@ -1813,3 +1813,81 @@ the local window.
   - that closes off the remaining "post-contour but narrower" retry; the next
     serious branch needs to move the local support mask into the actual
     `rcBuildContours(...)` simplifier or earlier source/vertical staging
+
+### 2026-05-25 UTC: contour-build simplify-time seed follow-up
+
+WWoW then closed that exact "move it into the real simplifier" retry by
+seeding the same local support-band mask inside upstream Recast's
+`simplifyContour(...)` during `rcBuildContours()`.
+
+- New local surface:
+  - `rcAnchorContourSimplifyOverride`
+  - `rcSetContourSimplifyAnchorOverrides(...)`
+  - `rcClearContourSimplifyAnchorOverrides()`
+  - `BuildContourSimplifyAnchorOverrides(...)`
+  - config keys:
+    `contourBuildSeedAnchorSupportCoordsWow`,
+    `contourBuildSeedAnchorSupportBandLocalRadius`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_contourbuild_seed_local_anchoronly_r4_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_contourbuild_seed_local_anchoronly_r4.json'`
+  - changed hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+  - focused tests:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_contourbuild_seed_local_anchoronly_r4_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - full `CriticalWalkLegs`:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_contourbuild_seed_local_anchoronly_r4_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_contourbuild_seed_local_anchoronly_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+  - restored hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- Artifact + hash:
+  - changed tile artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_contourbuild_seed_local_anchoronly_r4_v1-20260525T200739Z/`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_contourbuild_seed_local_anchoronly_iteration_20260525-20260525T201053Z/`
+  - saved tile hash:
+    `C0873DE50193A03921A761F75C278B82B001100B2E58BFCF4721DA8D827A5357`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive proof:
+  - upstream simplify-time seeding really fired on the intended recovered
+    contour:
+    `[CONTOUR-BUILD-ANCHOR-SEED] region=7 rawVerts=158 simplifiedVerts=33 seededSupportBandRawVerts=26 matchedOverrides=1`
+  - selector diagnostics still isolated the same target:
+    - `contour 1 / region 8 verts=226 containsAnchor=0 closestDistance2D=0.836`
+    - `contour 3 / region 7 verts=158 containsAnchor=1 closestDistance2D=0.200`
+    - `contour 4 / region 19 verts=10 containsAnchor=0 closestDistance2D=1.997`
+  - the later border-preserve pass still only touched that same contour:
+    `[CONTOUR-ANCHOR-PRESERVE] anchor=(1523.800,-4425.900,17.100) contour=3 region=7 preservedBorderVerts=33`
+  - the stage manifest tightened the remaining read on `1523.8`:
+    - `contours supportCandidateCount=1`
+    - `polymesh supportCandidateCount=2`
+    - but `supportContainsAnchorProjection=false` throughout
+    - `finalDetour supportCount=0`
+    - final answer still:
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - focused/full stayed on the same regression family:
+    - focused:
+      `3/7`
+    - full:
+      `20/23`
+- Stage summary for the important anchors stayed:
+  - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+  - `1523.800,-4425.900,17.100` ->
+    `finalDetour / lower_competitor_dominant`
+  - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+  - `1364.867,-4374.000,26.109` ->
+    `finalDetour / winner_component_trapped`
+- Practical conclusion:
+  - moving the same recovered support-band mask into the actual upstream
+    `rcBuildContours(...)` simplifier is still not enough
+  - the newest proof is no longer "support vanished too early"; it is that the
+    surviving support still misses the exact final footprint overlap at
+    `1523.8`
+  - this closes the most plausible contour-builder timing retry; the next
+    serious fallback should be a research-backed local `ch` override or another
+    genuinely earlier source/vertical classification branch, not more
+    seed-timing churn on the same support mask
