@@ -563,6 +563,30 @@ obsolete because that branch never actually re-simplified the raw contour.
     same-band contours intersecting the anchor window
   - in sibling ports, this is the boundary between a promotable local contour
     override and just another hidden global knob in disguise
+  - follow-up later the same night on `2026-05-25` UTC: WWoW added an explicit
+    single-contour selector surface
+    (`prePolySupportContourSelectionMode`, with the older
+    `prePolySelectAnchorContainingSupportContourOnly=true` preserved as a
+    legacy alias) and isolated the two plausible contours one at a time:
+    - branch `og_4029_raster_support_patch06_boundary_seed_anchoronly_r3_v1`
+      saved hash
+      `5FE8640E4B7D756F74DBCA47952345F8A06507C6C81BA330E400092228399340`
+    - branch
+      `og_4029_raster_support_patch06_boundary_seed_nearest_noncontaining_r3_v1`
+      saved hash
+      `84C09EFE50E2E04114DCF3A4F218A1DBF29E4E6F8776680CC966B47D2ADFB856`
+    - both branches still regressed to focused `3/7`, full `20/23`, and still
+      left `1523.8` at `finalDetour / lower_competitor_dominant`
+    - the decisive log proof was that the selector really did isolate the two
+      plausible candidates one at a time:
+      `contour 3 / region 7 containsAnchor=1 closestDistance2D=0.200`
+      versus
+      `contour 1 / region 8 containsAnchor=0 closestDistance2D=0.836`
+    Practical rule: once both the literal anchor-containing contour and the
+    nearest non-containing contour fail in isolation, stop spending cycles only
+    on contour choice. The next compatible retry needs a different local
+    contour preservation / simplification shape, not just a different contour
+    selector.
 
 ## Restore State
 

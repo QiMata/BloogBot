@@ -2626,6 +2626,95 @@
     contour/region touching the raster-patch neighborhood; do not re-open every
     same-band contour that intersects the anchor window
 
+## 2026-05-25 UTC - single-contour selector follow-up
+- Active task: keep the raster patch plus contour-local raw restore /
+  resimplify / preserve loop, but isolate exactly one support-band contour at a
+  time instead of reopening every same-band contour near `1523.8`.
+- Pass result: `delta shipped; the selector surface is a useful bounded proof,
+  but both isolated contour choices are negative. Selecting only the
+  anchor-containing contour or only the nearest non-containing contour still
+  leaves 1523.8 at finalDetour and still reproduces the bad deck bridge / trim
+  / static-blocker profile`.
+- Last delta:
+  - Added `AnchorSupportContourSelectionMode`,
+    `ParseAnchorSupportContourSelectionMode(...)`, and
+    `prePolySupportContourSelectionMode` in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`.
+  - Preserved the legacy config alias:
+    `prePolySelectAnchorContainingSupportContourOnly=true` still maps to
+    `AnchorContaining`.
+  - Anchor-containing artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_boundary_seed_anchoronly_r3_v1-20260525T042822Z/`
+  - Anchor-containing hash:
+    `5FE8640E4B7D756F74DBCA47952345F8A06507C6C81BA330E400092228399340`
+  - Nearest-non-containing artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_boundary_seed_nearest_noncontaining_r3_v1-20260525T043821Z/`
+  - Nearest-non-containing hash:
+    `84C09EFE50E2E04114DCF3A4F218A1DBF29E4E6F8776680CC966B47D2ADFB856`
+  - Decisive selector proof:
+    - both branches saw the same three candidate contours:
+      `region 8 / closestDistance2D=0.836 / containsAnchor=0`,
+      `region 7 / closestDistance2D=0.200 / containsAnchor=1`,
+      and
+      `region 19 / closestDistance2D=1.997 / containsAnchor=0`
+    - anchor-containing selected only `contour 3 / region 7` and changed it:
+      `11 -> 158 -> 13`, with `injectedBoundaryVerts=2`
+    - nearest-non-containing selected only `contour 1 / region 8` and changed
+      it:
+      `13 -> 226 -> 18`, with `injectedBoundaryVerts=3`
+    - both branches still kept
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - Stage summary for the important anchors stayed identical on both branches:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - Validation:
+    - build command:
+      `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+    - anchor-containing bake command:
+      `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_boundary_seed_anchoronly_r3_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_boundary_seed_anchoronly_r3.json'`
+    - anchor-containing focused command/result:
+      `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_boundary_seed_anchoronly_r3_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`
+    - anchor-containing full command/result:
+      `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_boundary_seed_anchoronly_r3_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`
+    - nearest-non-containing bake command:
+      `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_boundary_seed_nearest_noncontaining_r3_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_boundary_seed_nearest_noncontaining_r3.json'`
+    - nearest-non-containing focused command/result:
+      `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_boundary_seed_nearest_noncontaining_r3_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`
+    - nearest-non-containing full command/result:
+      `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_boundary_seed_nearest_noncontaining_r3_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`
+    - restore command:
+      `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_single_contour_selector_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+    - restore hash command/result:
+      `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` ->
+      `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - Shared failure profile on both branches:
+    - focused:
+      `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - focused:
+      `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found only `80` polygons
+    - focused:
+      `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+    - focused:
+      `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+    - full:
+      `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - full:
+      `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+    - full:
+      `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+- Practical read:
+  - reducing the earlier branch from "three contours" down to exactly
+    `region 7 only` or `region 8 only` still does not recover the routeable
+    footprint
+  - the next contour-stage retry should change the local preservation /
+    simplification shape itself, not keep swapping among the current contour
+    candidates
+
 ## 2026-05-25 UTC - support-gap finalDetour follow-up
 - Active task: test whether the anchor-stack cull can treat a small XY gap
   between nearby upper support fragments and the lower basin as enough evidence

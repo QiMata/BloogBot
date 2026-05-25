@@ -5,6 +5,7 @@
 #include "RecastAlloc.h"
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cfloat>
 #include <cmath>
 #include <cstdlib>
@@ -75,6 +76,15 @@ static uint32 JsonUIntOrDefault(const nlohmann::json& obj, const char* name, uin
         return defaultValue;
 
     return it->get<uint32>();
+}
+
+static std::string JsonStringOrDefault(const nlohmann::json& obj, const char* name, const char* defaultValue)
+{
+    auto it = obj.find(name);
+    if (it == obj.end() || !it->is_string())
+        return defaultValue;
+
+    return it->get<std::string>();
 }
 
 static void LoadGameObjectModelBounds()
@@ -3423,12 +3433,67 @@ static json BuildPolyMeshAnchorStageSummary(const rcPolyMesh& mesh,
 // border vertices. Preserve only the border vertices on support-band contours
 // for explicitly configured anchors so those contours survive the later
 // border-vertex removal pass without broad global knob changes.
+enum class AnchorSupportContourSelectionMode
+{
+    All = 0,
+    AnchorContaining,
+    NearestNonContaining,
+};
+
+struct AnchorSupportContourSelection
+{
+    int contourIndex = -1;
+    unsigned short region = 0;
+    bool containsAnchor = false;
+    float closestDistance2D = std::numeric_limits<float>::max();
+    int eligibleContourCount = 0;
+};
+
+static AnchorSupportContourSelectionMode ParseAnchorSupportContourSelectionMode(const nlohmann::json& jsonTileConfig)
+{
+    std::string selectionMode = JsonStringOrDefault(
+        jsonTileConfig, "prePolySupportContourSelectionMode", "");
+    std::transform(selectionMode.begin(), selectionMode.end(), selectionMode.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    if (selectionMode.empty() || selectionMode == "all")
+    {
+        if (jsonTileConfig.value("prePolySelectAnchorContainingSupportContourOnly", false))
+            return AnchorSupportContourSelectionMode::AnchorContaining;
+
+        return AnchorSupportContourSelectionMode::All;
+    }
+
+    if (selectionMode == "anchorcontaining")
+        return AnchorSupportContourSelectionMode::AnchorContaining;
+
+    if (selectionMode == "nearestnoncontaining")
+        return AnchorSupportContourSelectionMode::NearestNonContaining;
+
+    printf("[CONFIG-WARN] unrecognized prePolySupportContourSelectionMode='%s'; falling back to legacy prePolySelectAnchorContainingSupportContourOnly/all handling.\n",
+        selectionMode.c_str());
+    if (jsonTileConfig.value("prePolySelectAnchorContainingSupportContourOnly", false))
+        return AnchorSupportContourSelectionMode::AnchorContaining;
+
+    return AnchorSupportContourSelectionMode::All;
+}
+
+static AnchorSupportContourSelection SelectAnchorSupportContour(
+    const rcContourSet& contours,
+    const float xyExtent,
+    const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
+    const AnchorSourceSupportProbe& support,
+    const AnchorSupportContourSelectionMode selectionMode,
+    const bool logDiagnostics);
+
 static int PreserveAnchorSupportContourBorderVertices(
     rcContourSet& contours,
     const float xyExtent,
     const float supportZTolerance,
     const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& supports,
+    const AnchorSupportContourSelectionMode selectionMode,
     const bool logDiagnostics)
 {
     if (!contours.conts || supports.empty())
@@ -3442,6 +3507,20 @@ static int PreserveAnchorSupportContourBorderVertices(
         if (!support.found)
             continue;
 
+        const AnchorSupportContourSelection selectedContour =
+            selectionMode != AnchorSupportContourSelectionMode::All
+                ? SelectAnchorSupportContour(
+                    contours,
+                    xyExtent,
+                    supportZTolerance,
+                    supportBandTuning,
+                    support,
+                    selectionMode,
+                    logDiagnostics)
+                : AnchorSupportContourSelection();
+        if (selectionMode != AnchorSupportContourSelectionMode::All && selectedContour.contourIndex < 0)
+            continue;
+
         const float anchorRecastX = support.anchor.wowY;
         const float anchorRecastZ = support.anchor.wowX;
         const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
@@ -3449,6 +3528,9 @@ static int PreserveAnchorSupportContourBorderVertices(
 
         for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
         {
+            if (selectionMode != AnchorSupportContourSelectionMode::All && contourIndex != selectedContour.contourIndex)
+                continue;
+
             rcContour& contour = contours.conts[contourIndex];
             if (contour.nverts < 3)
                 continue;
@@ -3529,6 +3611,7 @@ static int RestoreRawAnchorSupportContours(
     const float supportZTolerance,
     const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& supports,
+    const AnchorSupportContourSelectionMode selectionMode,
     const bool logDiagnostics)
 {
     if (!contours.conts || supports.empty())
@@ -3541,6 +3624,20 @@ static int RestoreRawAnchorSupportContours(
         if (!support.found)
             continue;
 
+        const AnchorSupportContourSelection selectedContour =
+            selectionMode != AnchorSupportContourSelectionMode::All
+                ? SelectAnchorSupportContour(
+                    contours,
+                    xyExtent,
+                    supportZTolerance,
+                    supportBandTuning,
+                    support,
+                    selectionMode,
+                    logDiagnostics)
+                : AnchorSupportContourSelection();
+        if (selectionMode != AnchorSupportContourSelectionMode::All && selectedContour.contourIndex < 0)
+            continue;
+
         const float anchorRecastX = support.anchor.wowY;
         const float anchorRecastZ = support.anchor.wowX;
         const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
@@ -3548,6 +3645,9 @@ static int RestoreRawAnchorSupportContours(
 
         for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
         {
+            if (selectionMode != AnchorSupportContourSelectionMode::All && contourIndex != selectedContour.contourIndex)
+                continue;
+
             rcContour& contour = contours.conts[contourIndex];
             if (contour.nrverts < 3 || !contour.verts || !contour.rverts)
                 continue;
@@ -3630,6 +3730,201 @@ static float DistancePtSeg2D(const int x, const int z,
     dx = px + t * pqx - x;
     dz = pz + t * pqz - z;
     return dx * dx + dz * dz;
+}
+
+static float DistancePtSeg2D(const float x, const float z,
+    const int px, const int pz,
+    const int qx, const int qz)
+{
+    float pqx = static_cast<float>(qx - px);
+    float pqz = static_cast<float>(qz - pz);
+    float dx = x - static_cast<float>(px);
+    float dz = z - static_cast<float>(pz);
+    float d = pqx * pqx + pqz * pqz;
+    float t = pqx * dx + pqz * dz;
+    if (d > 0.0f)
+        t /= d;
+    if (t < 0.0f)
+        t = 0.0f;
+    else if (t > 1.0f)
+        t = 1.0f;
+
+    dx = static_cast<float>(px) + t * pqx - x;
+    dz = static_cast<float>(pz) + t * pqz - z;
+    return dx * dx + dz * dz;
+}
+
+static bool ContourContainsPoint2D(const int* verts, const int vertCount,
+    const float pointX, const float pointZ)
+{
+    if (!verts || vertCount < 3)
+        return false;
+
+    constexpr float kEdgeEpsilonSq = 0.0625f;
+    for (int i = 0, j = vertCount - 1; i < vertCount; j = i++)
+    {
+        if (DistancePtSeg2D(pointX, pointZ,
+            verts[j * 4 + 0], verts[j * 4 + 2],
+            verts[i * 4 + 0], verts[i * 4 + 2]) <= kEdgeEpsilonSq)
+        {
+            return true;
+        }
+    }
+
+    bool inside = false;
+    for (int i = 0, j = vertCount - 1; i < vertCount; j = i++)
+    {
+        const float xi = static_cast<float>(verts[i * 4 + 0]);
+        const float zi = static_cast<float>(verts[i * 4 + 2]);
+        const float xj = static_cast<float>(verts[j * 4 + 0]);
+        const float zj = static_cast<float>(verts[j * 4 + 2]);
+        const bool intersects = ((zi > pointZ) != (zj > pointZ)) &&
+            (pointX < (xj - xi) * (pointZ - zi) / (zj - zi) + xi);
+        if (intersects)
+            inside = !inside;
+    }
+
+    return inside;
+}
+
+static float ComputeClosestContourDistance2D(const int* verts, const int vertCount,
+    const float pointX, const float pointZ)
+{
+    float bestDistanceSq = std::numeric_limits<float>::max();
+    for (int i = 0, j = vertCount - 1; i < vertCount; j = i++)
+    {
+        bestDistanceSq = std::min(bestDistanceSq,
+            DistancePtSeg2D(pointX, pointZ,
+                verts[j * 4 + 0], verts[j * 4 + 2],
+                verts[i * 4 + 0], verts[i * 4 + 2]));
+    }
+
+    return std::sqrt(bestDistanceSq);
+}
+static AnchorSupportContourSelection SelectAnchorSupportContour(
+    const rcContourSet& contours,
+    const float xyExtent,
+    const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
+    const AnchorSourceSupportProbe& support,
+    const AnchorSupportContourSelectionMode selectionMode,
+    const bool logDiagnostics)
+{
+    AnchorSupportContourSelection best;
+
+    const float anchorRecastX = support.anchor.wowY;
+    const float anchorRecastZ = support.anchor.wowX;
+    const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+    const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
+    const float anchorCellX = (anchorRecastX - contours.bmin[0]) / contours.cs;
+    const float anchorCellZ = (anchorRecastZ - contours.bmin[2]) / contours.cs;
+
+    for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
+    {
+        const rcContour& contour = contours.conts[contourIndex];
+        const int* candidateVerts = nullptr;
+        int candidateVertCount = 0;
+        if (contour.rverts && contour.nrverts >= 3)
+        {
+            candidateVerts = contour.rverts;
+            candidateVertCount = contour.nrverts;
+        }
+        else if (contour.verts && contour.nverts >= 3)
+        {
+            candidateVerts = contour.verts;
+            candidateVertCount = contour.nverts;
+        }
+        else
+        {
+            continue;
+        }
+
+        float minX = std::numeric_limits<float>::max();
+        float maxX = -std::numeric_limits<float>::max();
+        float minY = std::numeric_limits<float>::max();
+        float maxY = -std::numeric_limits<float>::max();
+        float minZ = std::numeric_limits<float>::max();
+        float maxZ = -std::numeric_limits<float>::max();
+        for (int vertIndex = 0; vertIndex < candidateVertCount; ++vertIndex)
+        {
+            const int* cv = &candidateVerts[vertIndex * 4];
+            const float recastX = contours.bmin[0] + cv[0] * contours.cs;
+            const float recastY = contours.bmin[1] + cv[1] * contours.ch;
+            const float recastZ = contours.bmin[2] + cv[2] * contours.cs;
+            minX = std::min(minX, recastX);
+            maxX = std::max(maxX, recastX);
+            minY = std::min(minY, recastY);
+            maxY = std::max(maxY, recastY);
+            minZ = std::min(minZ, recastZ);
+            maxZ = std::max(maxZ, recastZ);
+        }
+
+        if (maxX < anchorRecastX - xyExtent || minX > anchorRecastX + xyExtent ||
+            maxZ < anchorRecastZ - xyExtent || minZ > anchorRecastZ + xyExtent)
+        {
+            continue;
+        }
+
+        const bool supportBand = maxY >= supportFloorMinY && minY <= supportFloorMaxY;
+        if (!supportBand)
+            continue;
+
+        const bool containsAnchor = ContourContainsPoint2D(
+            candidateVerts, candidateVertCount, anchorCellX, anchorCellZ);
+        const float closestDistance2D =
+            ComputeClosestContourDistance2D(candidateVerts, candidateVertCount, anchorCellX, anchorCellZ) * contours.cs;
+        ++best.eligibleContourCount;
+
+        if (logDiagnostics)
+        {
+            printf("[CONTOUR-ANCHOR-SELECT-CANDIDATE] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u verts=%d containsAnchor=%d closestDistance2D=%.3f\n",
+                support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                contourIndex, static_cast<unsigned>(contour.reg), candidateVertCount,
+                containsAnchor ? 1 : 0, closestDistance2D);
+        }
+
+        bool better = best.contourIndex < 0;
+        if (!better)
+        {
+            if (selectionMode == AnchorSupportContourSelectionMode::AnchorContaining &&
+                containsAnchor != best.containsAnchor)
+            {
+                better = containsAnchor;
+            }
+            else if (selectionMode == AnchorSupportContourSelectionMode::NearestNonContaining &&
+                containsAnchor != best.containsAnchor)
+            {
+                better = !containsAnchor;
+            }
+            else
+            {
+                better = closestDistance2D < best.closestDistance2D;
+            }
+        }
+        if (!better)
+            continue;
+
+        best.contourIndex = contourIndex;
+        best.region = contour.reg;
+        best.containsAnchor = containsAnchor;
+        best.closestDistance2D = closestDistance2D;
+    }
+
+    if (logDiagnostics && best.contourIndex >= 0)
+    {
+        const char* reason = best.containsAnchor
+            ? "contains_anchor"
+            : (selectionMode == AnchorSupportContourSelectionMode::NearestNonContaining
+                ? "nearest_noncontaining"
+                : "nearest_fallback");
+        printf("[CONTOUR-ANCHOR-SELECT] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u reason=%s eligibleContours=%d closestDistance2D=%.3f\n",
+            support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+            best.contourIndex, static_cast<unsigned>(best.region),
+            reason,
+            best.eligibleContourCount, best.closestDistance2D);
+    }
+
+    return best;
 }
 
 static void SimplifyAnchorContour(
@@ -4095,6 +4390,7 @@ static int ResimplifyRawAnchorSupportContours(
     const float supportZTolerance,
     const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& supports,
+    const AnchorSupportContourSelectionMode selectionMode,
     const float maxError,
     const int maxEdgeLen,
     const float bandBoundaryRadius,
@@ -4114,6 +4410,20 @@ static int ResimplifyRawAnchorSupportContours(
         if (!support.found)
             continue;
 
+        const AnchorSupportContourSelection selectedContour =
+            selectionMode != AnchorSupportContourSelectionMode::All
+                ? SelectAnchorSupportContour(
+                    contours,
+                    xyExtent,
+                    supportZTolerance,
+                    supportBandTuning,
+                    support,
+                    selectionMode,
+                    logDiagnostics)
+                : AnchorSupportContourSelection();
+        if (selectionMode != AnchorSupportContourSelectionMode::All && selectedContour.contourIndex < 0)
+            continue;
+
         const float anchorRecastX = support.anchor.wowY;
         const float anchorRecastZ = support.anchor.wowX;
         const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
@@ -4121,6 +4431,8 @@ static int ResimplifyRawAnchorSupportContours(
 
         for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
         {
+            if (selectionMode != AnchorSupportContourSelectionMode::All && contourIndex != selectedContour.contourIndex)
+                continue;
             if (processed[static_cast<size_t>(contourIndex)] != 0)
                 continue;
 
@@ -6281,6 +6593,8 @@ namespace MMAP
             ParsePrePolyPreserveAnchorSupportCoords(jsonTileConfig);
         const std::vector<AnchorPolyStackCoord> prePolyUseRawAnchorSupportContours =
             ParsePrePolyUseRawAnchorSupportContours(jsonTileConfig);
+        const AnchorSupportContourSelectionMode prePolySupportContourSelectionMode =
+            ParseAnchorSupportContourSelectionMode(jsonTileConfig);
         const float prePolyResimplifyAnchorSupportMaxError = JsonFloatOrDefault(
             jsonTileConfig, "prePolyResimplifyAnchorSupportMaxError", -1.0f);
         const int prePolyResimplifyAnchorSupportMaxEdgeLen =
@@ -6844,6 +7158,7 @@ namespace MMAP
                         anchorSourceSupportZTolerance,
                         anchorSupportBandTuning,
                         prePolyUseRawAnchorSupportProbes,
+                        prePolySupportContourSelectionMode,
                         logAnchorStageDiagnostics);
                 }
 
@@ -6864,6 +7179,7 @@ namespace MMAP
                         anchorSourceSupportZTolerance,
                         anchorSupportBandTuning,
                         prePolyUseRawAnchorSupportProbes,
+                        prePolySupportContourSelectionMode,
                         prePolyResimplifyAnchorSupportMaxError,
                         resimplifyMaxEdgeLen,
                         prePolyResimplifyAnchorSupportBandBoundaryRadius,
@@ -6880,6 +7196,7 @@ namespace MMAP
                         anchorSourceSupportZTolerance,
                         anchorSupportBandTuning,
                         prePolyPreserveAnchorSupportProbes,
+                        prePolySupportContourSelectionMode,
                         logAnchorStageDiagnostics);
                 }
 
@@ -7322,6 +7639,8 @@ namespace MMAP
             { "anchorRouteTargetsWow", json::array() },
             { "writeAnchorStageManifest", false },
             { "logAnchorStageDiagnostics", false },
+            { "prePolySupportContourSelectionMode", "" },
+            { "prePolySelectAnchorContainingSupportContourOnly", false },
             { "prePolyResimplifyAnchorSupportBandBoundaryRadius", -1.0f },
         };
     }
