@@ -3407,3 +3407,75 @@
   - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_contourbuild_boundary_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
   - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
 - Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+
+## 2026-05-25 UTC - raster patch resolved-support-point center follow-up
+- Active task: close the narrow "wrong patch center" hypothesis before doing
+  any larger raster/source-shape rewrite. Keep the proven `1523.8` raster
+  support patch size fixed, but center it on the resolved source-support
+  footprint instead of the anchor projection.
+- Pass result: bounded negative. The patch moved onto the resolved source
+  support, but the earliest support component distance and all route/test
+  outcomes stayed unchanged.
+- Last delta:
+  - Added support-point XY tracking to `AnchorSourceSupportProbe`.
+  - Added loader-compatible config key
+    `preRasterizeAnchorSupportPatchCenterMode` with experiment value
+    `resolvedSupportPoint`.
+  - Extended `[SRC-ANCHOR-SUPPORT]` and `[HF-ANCHOR-SUPPORT-PATCH]` logging so
+    the exact resolved support point and raster patch center are explicit in
+    the bake log.
+  - Experiment config stayed untracked:
+    `tmp/config-experiments/og_4029_raster_support_patch06_center_support_anchoronly.json`
+  - Artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_center_support_anchoronly_v1-20260525T214345Z/`
+  - Changed hash:
+    `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+  - Focused:
+    `3/7`
+  - Full:
+    `20/23`
+  - Decisive bake-log proof:
+    - `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) delta=0.604 tri=537325 source=vmap dist2D=0.306 inside=0`
+    - `[HF-ANCHOR-SUPPORT-PATCH] anchor=(1523.800,-4425.900,17.100) center=(1523.668,-4426.176,17.704) centerMode=resolvedSupportPoint halfExtent=0.600 source=1`
+    - despite that move, `median` still kept the nearest support component at
+      `minDistance2D=0.5315163135528564`
+    - `1523.800,-4425.900,17.100` still stayed
+      `finalDetour / lower_competitor_dominant`
+  - Stage summary for the important anchors still stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - Focused failure profile stayed:
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found only `80` polygons
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+    - `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+  - Focused route shape stayed bad:
+    - the flightmaster route still measured `364` points
+    - it still kept the lower flight-master bonfire, hallway-corner,
+      steep-incline, and rope-line blocker evidence
+  - Full failures stayed:
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+    - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+  - Practical read:
+    - patch placement alone is not the missing lever
+    - once the patch is centered on the resolved source-support footprint and
+      the earliest support component still stays `0.5315y` away, stop
+      iterating on center-only tuning
+    - the next serious retry should change the local raster patch shape itself
+      around `1523.8` such as a larger footprint or a bridge/segment-shaped
+      patch between the anchor and resolved support point
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_center_support_anchoronly_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_center_support_anchoronly.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_center_support_anchoronly_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_center_support_anchoronly_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_center_support_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`

@@ -1445,6 +1445,8 @@ struct AnchorSourceSupportProbe
     AnchorPolyStackCoord anchor;
     bool found = false;
     float supportY = 0.0f;
+    float supportRecastX = 0.0f;
+    float supportRecastZ = 0.0f;
     float distance2D = std::numeric_limits<float>::max();
     int triIndex = -1;
     MMAP::MeshTriangleSource source = MMAP::MeshTriangleSource::Terrain;
@@ -1575,10 +1577,12 @@ static void ClosestPointOnSegmentXZ(const float ax, const float az, const float 
 
 static bool TryResolveTriangleSupportY(const float a[3], const float b[3], const float c[3],
     const float anchorX, const float anchorZ, const float xyExtent,
-    float& supportY, float& distance2D, bool& projectedInside)
+    float& supportY, float& supportX, float& supportZ, float& distance2D, bool& projectedInside)
 {
     projectedInside = false;
     supportY = 0.0f;
+    supportX = 0.0f;
+    supportZ = 0.0f;
     distance2D = std::numeric_limits<float>::max();
 
     float projectedY = 0.0f;
@@ -1586,6 +1590,8 @@ static bool TryResolveTriangleSupportY(const float a[3], const float b[3], const
     {
         projectedInside = true;
         supportY = projectedY;
+        supportX = anchorX;
+        supportZ = anchorZ;
         distance2D = 0.0f;
         return true;
     }
@@ -1621,6 +1627,8 @@ static bool TryResolveTriangleSupportY(const float a[3], const float b[3], const
         return false;
 
     supportY = bestY;
+    supportX = bestX;
+    supportZ = bestZ;
     distance2D = bestDistance2D;
     return true;
 }
@@ -1690,9 +1698,13 @@ static std::vector<AnchorSourceSupportProbe> ResolveAnchorSourceSupportProbes(
             }
 
             float supportY = 0.0f;
+            float supportRecastX = 0.0f;
+            float supportRecastZ = 0.0f;
             float distance2D = std::numeric_limits<float>::max();
             bool projectedInside = false;
-            if (!TryResolveTriangleSupportY(a, b, c, anchorRecastX, anchorRecastZ, xyExtent, supportY, distance2D, projectedInside))
+            if (!TryResolveTriangleSupportY(
+                a, b, c, anchorRecastX, anchorRecastZ, xyExtent,
+                supportY, supportRecastX, supportRecastZ, distance2D, projectedInside))
                 continue;
 
             const float delta = supportY - anchor.wowZ;
@@ -1706,6 +1718,8 @@ static std::vector<AnchorSourceSupportProbe> ResolveAnchorSourceSupportProbes(
             {
                 best.found = true;
                 best.supportY = supportY;
+                best.supportRecastX = supportRecastX;
+                best.supportRecastZ = supportRecastZ;
                 best.distance2D = distance2D;
                 best.triIndex = triIndex;
                 best.source = meshData.SourceForTriangle(triIndex);
@@ -1755,6 +1769,8 @@ static std::vector<AnchorSourceSupportProbe> ResolveAnchorSourceSupportProbes(
 
             probe.found = true;
             probe.supportY = bestBorrow->supportY;
+            probe.supportRecastX = bestBorrow->supportRecastX;
+            probe.supportRecastZ = bestBorrow->supportRecastZ;
             probe.distance2D = bestBorrow->distance2D +
                 sqrtf((bestBorrow->anchor.wowX - probe.anchor.wowX) * (bestBorrow->anchor.wowX - probe.anchor.wowX) +
                     (bestBorrow->anchor.wowY - probe.anchor.wowY) * (bestBorrow->anchor.wowY - probe.anchor.wowY));
@@ -1774,18 +1790,18 @@ static std::vector<AnchorSourceSupportProbe> ResolveAnchorSourceSupportProbes(
             {
                 if (probe.borrowed)
                 {
-                    printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) supportY=%.3f delta=%.3f tri=%d source=%s dist2D=%.3f inside=%d borrowed=1 borrowedFrom=(%.3f,%.3f,%.3f)\n",
+                    printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) support=(%.3f,%.3f,%.3f) delta=%.3f tri=%d source=%s dist2D=%.3f inside=%d borrowed=1 borrowedFrom=(%.3f,%.3f,%.3f)\n",
                         probe.anchor.wowX, probe.anchor.wowY, probe.anchor.wowZ,
-                        probe.supportY, probe.supportY - probe.anchor.wowZ, probe.triIndex,
+                        probe.supportRecastZ, probe.supportRecastX, probe.supportY, probe.supportY - probe.anchor.wowZ, probe.triIndex,
                         meshData.SourceNameForTriangle(probe.triIndex),
                         probe.distance2D, probe.projectedInside ? 1 : 0,
                         probe.borrowedFrom.wowX, probe.borrowedFrom.wowY, probe.borrowedFrom.wowZ);
                 }
                 else
                 {
-                    printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) supportY=%.3f delta=%.3f tri=%d source=%s dist2D=%.3f inside=%d\n",
+                    printf("[SRC-ANCHOR-SUPPORT] anchor=(%.3f,%.3f,%.3f) support=(%.3f,%.3f,%.3f) delta=%.3f tri=%d source=%s dist2D=%.3f inside=%d\n",
                         probe.anchor.wowX, probe.anchor.wowY, probe.anchor.wowZ,
-                        probe.supportY, probe.supportY - probe.anchor.wowZ, probe.triIndex,
+                        probe.supportRecastZ, probe.supportRecastX, probe.supportY, probe.supportY - probe.anchor.wowZ, probe.triIndex,
                         meshData.SourceNameForTriangle(probe.triIndex),
                         probe.distance2D, probe.projectedInside ? 1 : 0);
                 }
@@ -2428,6 +2444,7 @@ static int RasterizeAnchorSupportPatches(rcContext* context,
     rcHeightfield& hf,
     const float halfExtent,
     const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const bool centerOnResolvedSupportPoint,
     const bool logDiagnostics)
 {
     if (!context || !hf.spans || sourceSupports.empty() || halfExtent <= 0.0f)
@@ -2443,9 +2460,9 @@ static int RasterizeAnchorSupportPatches(rcContext* context,
         if (!support.projectedInside && support.distance2D > kMaxSourceDistance2D)
             continue;
 
-        const float centerX = support.anchor.wowY;
+        const float centerX = centerOnResolvedSupportPoint ? support.supportRecastX : support.anchor.wowY;
         const float centerY = support.supportY;
-        const float centerZ = support.anchor.wowX;
+        const float centerZ = centerOnResolvedSupportPoint ? support.supportRecastZ : support.anchor.wowX;
         if (centerX + halfExtent < hf.bmin[0] || centerX - halfExtent > hf.bmax[0] ||
             centerZ + halfExtent < hf.bmin[2] || centerZ - halfExtent > hf.bmax[2])
         {
@@ -2465,9 +2482,11 @@ static int RasterizeAnchorSupportPatches(rcContext* context,
 
         if (logDiagnostics)
         {
-            printf("[HF-ANCHOR-SUPPORT-PATCH] anchor=(%.3f,%.3f,%.3f) supportY=%.3f halfExtent=%.3f source=%d\n",
+            printf("[HF-ANCHOR-SUPPORT-PATCH] anchor=(%.3f,%.3f,%.3f) center=(%.3f,%.3f,%.3f) centerMode=%s halfExtent=%.3f source=%d\n",
                 support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
-                support.supportY, halfExtent, (int)support.source);
+                centerZ, centerX, support.supportY,
+                centerOnResolvedSupportPoint ? "resolvedSupportPoint" : "anchor",
+                halfExtent, (int)support.source);
         }
     }
 
@@ -2844,6 +2863,10 @@ static json BuildAnchorSourceSupportJson(const AnchorSourceSupportProbe& support
     {
         { "found", support.found },
         { "supportY", support.found ? support.supportY : 0.0f },
+        { "supportRecastX", support.found ? support.supportRecastX : 0.0f },
+        { "supportRecastZ", support.found ? support.supportRecastZ : 0.0f },
+        { "supportWowX", support.found ? support.supportRecastZ : 0.0f },
+        { "supportWowY", support.found ? support.supportRecastX : 0.0f },
         { "distance2D", support.found ? support.distance2D : -1.0f },
         { "triIndex", support.found ? support.triIndex : -1 },
         { "source", support.found ? MeshTriangleSourceName(support.source) : "none" },
@@ -3439,6 +3462,24 @@ enum class AnchorSupportContourSelectionMode
     AnchorContaining,
     NearestNonContaining,
 };
+
+static bool ParsePreRasterizeAnchorSupportPatchCenterMode(const nlohmann::json& jsonTileConfig)
+{
+    std::string centerMode = JsonStringOrDefault(
+        jsonTileConfig, "preRasterizeAnchorSupportPatchCenterMode", "anchor");
+    std::transform(centerMode.begin(), centerMode.end(), centerMode.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    if (centerMode.empty() || centerMode == "anchor")
+        return false;
+
+    if (centerMode == "resolvedsupportpoint")
+        return true;
+
+    printf("[CONFIG-WARN] unrecognized preRasterizeAnchorSupportPatchCenterMode='%s'; falling back to 'anchor'.\n",
+        centerMode.c_str());
+    return false;
+}
 
 struct AnchorSupportContourSelection
 {
@@ -7286,6 +7327,8 @@ namespace MMAP
                 : std::vector<AnchorSourceSupportProbe>();
         const float preRasterizeAnchorSupportPatchHalfExtent = JsonFloatOrDefault(
             jsonTileConfig, "preRasterizeAnchorSupportPatchHalfExtent", 0.0f);
+        const bool preRasterizeAnchorSupportPatchCenterOnResolvedSupportPoint =
+            ParsePreRasterizeAnchorSupportPatchCenterMode(jsonTileConfig);
         json anchorStageManifest;
         if (writeAnchorStageManifest && !anchorManifestSupports.empty())
         {
@@ -7486,6 +7529,7 @@ namespace MMAP
                         *tile.solid,
                         preRasterizeAnchorSupportPatchHalfExtent,
                         preRasterizeAnchorSupportPatchProbes,
+                        preRasterizeAnchorSupportPatchCenterOnResolvedSupportPoint,
                         logAnchorStageDiagnostics);
                     if (rasterizedSupportPatches > 0)
                     {
@@ -8260,6 +8304,7 @@ namespace MMAP
             { "borrowMissingAnchorSourceSupportFromNeighbors", false },
             { "preRasterizeAnchorSupportPatchCoordsWow", json::array() },
             { "preRasterizeAnchorSupportPatchHalfExtent", 0.0f },
+            { "preRasterizeAnchorSupportPatchCenterMode", "anchor" },
             { "preRegionAnchorCoordsWow", json::array() },
             { "postDetourCullAnchorPolyStacks", false },
             { "postDetourCullAnchorTrappedComponents", false },

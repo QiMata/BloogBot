@@ -1924,3 +1924,46 @@ itself.
     family
   - the next retry needs a denser contour-builder reshape or an even earlier
     raw-contour / region / source-stage change
+
+### 2026-05-25 UTC raster patch resolved-support-point center follow-up
+
+The next targeted question was whether the `1523.8` raster patch simply sat on
+the wrong XY. WWoW added a loader-compatible
+`preRasterizeAnchorSupportPatchCenterMode` surface so the injected support
+patch could be centered on the resolved source-support footprint rather than
+the anchor itself.
+
+- Experiment:
+  - new surface:
+    `preRasterizeAnchorSupportPatchCenterMode`
+    plus support-point XY tracking in `AnchorSourceSupportProbe`
+  - variant:
+    `og_4029_raster_support_patch06_center_support_anchoronly_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_center_support_anchoronly_v1-20260525T214345Z/`
+  - changed hash:
+    `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_center_support_iteration_20260525-20260525T214839Z/`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the source-support probe resolved the nearest real support at
+    `support=(1523.668,-4426.176,17.704)` with `dist2D=0.306`
+  - the injected raster patch really did move onto that resolved point:
+    `[HF-ANCHOR-SUPPORT-PATCH] ... center=(1523.668,-4426.176,17.704) centerMode=resolvedSupportPoint halfExtent=0.600 ...`
+  - yet the earliest support evidence stayed exactly the same:
+    - `median` still kept the nearest support component at
+      `minDistance2D=0.5315163135528564`
+    - `regions` stayed identical
+    - `contours` still kept only `supportCandidateCount=1`
+    - `polymesh` still kept only `supportCandidateCount=2`
+    - `1523.8` still ended at
+      `finalDetour / lower_competitor_dominant`
+- Practical read:
+  - the local source-support XY was real, but centering the patch on it still
+    did not populate the missing anchor cell or change the downstream support
+    components
+  - this closes the "maybe the patch center is wrong" branch
+  - the next serious retry should alter the raster patch shape itself, not
+    just its center

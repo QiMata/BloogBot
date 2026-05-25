@@ -728,6 +728,32 @@ obsolete because that branch never actually re-simplified the raw contour.
     iterating on that sparse boundary-only family. The next compatible retry
     needs a denser contour-builder reshape or an even earlier raw-contour /
     region / source-stage change.
+  - follow-up later the same night on `2026-05-25` UTC: WWoW then closed the
+    "wrong patch center" hypothesis by moving the raster support patch from the
+    anchor projection onto the resolved source-support footprint itself.
+    - new surface:
+      `preRasterizeAnchorSupportPatchCenterMode` plus support-point XY tracking
+      in `AnchorSourceSupportProbe`
+    - branch
+      `og_4029_raster_support_patch06_center_support_anchoronly_v1`
+      saved hash
+      `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_center_support_anchoronly_v1-20260525T214345Z/`
+    - focused/full stayed:
+      `3/7`, `20/23`
+    - decisive proof:
+      `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) ... dist2D=0.306 inside=0`
+      and
+      `[HF-ANCHOR-SUPPORT-PATCH] ... center=(1523.668,-4426.176,17.704) centerMode=resolvedSupportPoint halfExtent=0.600 ...`
+    - decisive result:
+      even after centering the patch on the resolved support point, the
+      earliest surviving support component still stayed `0.5315y` away and
+      `1523.8` still ended at
+      `finalDetour / lower_competitor_dominant`
+    Practical rule: patch placement alone is not the missing lever. The next
+    compatible retry should change the local raster patch shape itself, not
+    just move its center or revisit contour timing.
 
 ## Restore State
 
@@ -735,7 +761,7 @@ At the end of this corrected loop, `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
 was restored to the stable baseline:
 
 - restore artifact:
-  - `tmp/bake-sweeps/og_4029_restore_after_contourbuild_boundary_iteration_20260525-20260525T212518Z/`
+  - `tmp/bake-sweeps/og_4029_restore_after_center_support_iteration_20260525-20260525T214839Z/`
 - restored hash:
   - `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
 
