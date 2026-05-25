@@ -2715,6 +2715,94 @@
     simplification shape itself, not keep swapping among the current contour
     candidates
 
+## 2026-05-25 UTC - support-band-local contour preserve follow-up
+- Active task: keep the raster patch plus anchor-containing contour selection
+  fixed, but change the preserved shape itself by carrying only the raw contour
+  verts that remain inside the recovered support band within a local anchor
+  window around `1523.8`.
+- Pass result: `delta shipped; the new support-band-local preserve surface is a
+  bounded negative. It produced a richer anchor-containing contour than the
+  earlier boundary-only branch, but 1523.8 still stayed at finalDetour and the
+  route regressions stayed on the same 3/7 focused and 20/23 full profile as
+  the earlier selector negatives`.
+- Last delta:
+  - Added `InjectAnchorSupportBandLocalRawVertices(...)` plus the opt-in tile
+    config key `prePolyResimplifyAnchorSupportBandLocalPreserveRadius` in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`.
+  - Experiment config stayed untracked:
+    `tmp/config-experiments/og_4029_raster_support_patch06_band_local_anchoronly_r6.json`
+  - Artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_band_local_anchoronly_r6_v1-20260525T165251Z/`
+  - Changed hash:
+    `B9E24E82A964DDFD4E7EB10B8401CFB645681DB2EF0ECAF3D784D26B7AA2981A`
+  - Focused:
+    `3/7`
+  - Full:
+    `20/23`
+  - Decisive bake-log proof:
+    - selector still isolated the anchor-containing contour:
+      `contour 3 / region 7`
+    - raw restore:
+      `11 -> 158`
+    - resimplify candidate:
+      `158 -> 34`
+    - new local carry:
+      `[CONTOUR-ANCHOR-BAND-LOCAL] ... preservedSupportBandRawVerts=23 preserveRadius=6.000`
+    - border preservation still fired only lightly afterward:
+      `[CONTOUR-ANCHOR-PRESERVE] preserved 2 border vertex(s) across 1 contour(s)`
+    - despite the richer local shape, the anchor still stayed
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - Stage summary for the important anchors stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - Shared failure profile stayed the same as the selector negatives:
+    - focused:
+      `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - focused:
+      `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found only `80` polygons
+    - focused:
+      `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+    - focused:
+      `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+    - full:
+      `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - full:
+      `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+    - full:
+      `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+  - Validation:
+    - build command:
+      `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+    - bake command:
+      `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_band_local_anchoronly_r6_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_band_local_anchoronly_r6.json'`
+    - changed hash command/result:
+      `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` ->
+      `B9E24E82A964DDFD4E7EB10B8401CFB645681DB2EF0ECAF3D784D26B7AA2981A`
+    - focused command/result:
+      `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_band_local_anchoronly_r6_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`
+    - full command/result:
+      `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_band_local_anchoronly_r6_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`
+    - restore command:
+      `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_band_local_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+    - restore artifact:
+      `tmp/bake-sweeps/og_4029_restore_after_band_local_iteration_20260525-20260525T165615Z/`
+    - restore hash command/result:
+      `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` ->
+      `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Practical read:
+  - this branch proves the missing lever is not merely "preserve a denser local
+    arc on region 7"
+  - boundary-only carry was too sparse, full local-raw carry was too broad, and
+    this support-band-local midpoint is still not promotable
+  - if contour-stage work continues, move earlier into `rcBuildContours(...)`
+    or change the contour-builder shape again; do not keep churning the same
+    post-contour preserve family on the same selected contour
+
 ## 2026-05-25 UTC - support-gap finalDetour follow-up
 - Active task: test whether the anchor-stack cull can treat a small XY gap
   between nearby upper support fragments and the lower basin as enough evidence

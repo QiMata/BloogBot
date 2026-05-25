@@ -588,13 +588,32 @@ obsolete because that branch never actually re-simplified the raw contour.
     contour preservation / simplification shape, not just a different contour
     selector.
 
+  - follow-up later on `2026-05-25` UTC: WWoW then tried the midpoint between
+    the too-sparse boundary carry and the too-broad local-raw carry by adding
+    `prePolyResimplifyAnchorSupportBandLocalPreserveRadius`
+    (support-band-local raw-vertex reinjection around the recovered anchor
+    footprint)
+    - branch `og_4029_raster_support_patch06_band_local_anchoronly_r6_v1`
+      saved hash
+      `B9E24E82A964DDFD4E7EB10B8401CFB645681DB2EF0ECAF3D784D26B7AA2981A`
+    - focused tests regressed to `3/7`; full `CriticalWalkLegs` regressed to
+      `20/23`
+    - decisive log proof on the selected anchor-containing contour was:
+      `11 -> 158 -> 34`, with `preservedSupportBandRawVerts=23`, yet
+      `1523.8` still ended at `finalDetour / lower_competitor_dominant`
+    Practical rule: boundary-only carry is too sparse, full local-raw carry is
+    too broad, and this support-band-local midpoint is still not enough. The
+    next serious retry should move earlier into `rcBuildContours(...)` or
+    another contour-builder shape instead of spending more time on the same
+    post-contour reinjection family.
+
 ## Restore State
 
 At the end of this corrected loop, `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
 was restored to the stable baseline:
 
 - restore artifact:
-  - `tmp/bake-sweeps/og_4029_restore_after_boundary_seed_iteration_fullrerun_20260525-20260525T024951Z/`
+  - `tmp/bake-sweeps/og_4029_restore_after_band_local_iteration_20260525-20260525T165615Z/`
 - restored hash:
   - `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
 

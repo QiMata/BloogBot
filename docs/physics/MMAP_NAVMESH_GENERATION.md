@@ -1517,3 +1517,82 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_single_contour_selector_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
   - restored hash:
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-25 UTC: support-band-local contour preserve follow-up
+
+- Active task:
+  - keep the raster patch plus anchor-containing contour fixed, but change the
+    preserved shape itself by carrying only the raw contour verts that remain
+    inside the recovered support band within a local anchor window around
+    `1523.8`
+- Pass result:
+  - `delta shipped; the support-band-local preserve surface is a bounded
+    negative. It created a richer anchor-containing contour than the
+    boundary-only branch, but still left 1523.8 at finalDetour and still
+    reproduced the same bad deck / static-blocker profile.`
+- New native/config surface:
+  - `InjectAnchorSupportBandLocalRawVertices(...)`
+  - `prePolyResimplifyAnchorSupportBandLocalPreserveRadius`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_band_local_anchoronly_r6_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_band_local_anchoronly_r6.json'`
+  - changed hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+  - focused tests:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_band_local_anchoronly_r6_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - full `CriticalWalkLegs`:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_band_local_anchoronly_r6_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+- Artifacts:
+  - changed tile:
+    `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_raster_support_patch06_band_local_anchoronly_r6_v1-20260525T165251Z\`
+  - restore:
+    `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_restore_after_band_local_iteration_20260525-20260525T165615Z\`
+- Observed results:
+  - hash:
+    `B9E24E82A964DDFD4E7EB10B8401CFB645681DB2EF0ECAF3D784D26B7AA2981A`
+  - focused:
+    `3/7`
+  - full:
+    `20/23`
+  - decisive contour proof:
+    - selector still isolated `contour 3 / region 7`
+    - raw restore:
+      `11 -> 158`
+    - local support-band preserve produced a richer candidate contour:
+      `158 -> 34`
+    - new log:
+      `[CONTOUR-ANCHOR-BAND-LOCAL] ... preservedSupportBandRawVerts=23 preserveRadius=6.000`
+    - but `1523.800,-4425.900,17.100` still stayed
+      `finalDetour / lower_competitor_dominant`
+  - shared focused failures stayed:
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found only `80` polygons
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+    - `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+  - shared full failures stayed:
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+    - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+  - important anchor stages stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+- Practical read:
+  - boundary-only carry was too sparse, full local-raw carry was too broad, and
+    this support-band-local midpoint is still not enough
+  - the current missing lever is no longer "pick a denser local arc on
+    region 7"
+  - the next serious retry should move earlier into `rcBuildContours(...)` or
+    a different contour-builder shape, not more post-contour reinjection on the
+    same selected contour
+- Restore after this loop:
+  - command:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_band_local_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
