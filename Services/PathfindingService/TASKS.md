@@ -2565,6 +2565,73 @@
   - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
 - Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
 
+## 2026-05-25 UTC - local `ch=0.2` override follow-up
+- Active task: close the other local-`ch` direction too by keeping the raster
+  support patch fixed, but raising tile `1:40,29` from `ch=0.1` to `ch=0.2`
+  in the sibling-style coarser direction without changing the loader contract.
+- Pass result: `delta shipped; coarser local ch is also a bounded negative. It
+  changed the serialized tile a lot, but 1523.8 still finished at finalDetour
+  and the route set simply snapped back to the same 3/7 focused and 20/23 full
+  contour-family regression profile`.
+- Last delta:
+  - Experiment config stayed untracked:
+    `tmp/config-experiments/og_4029_raster_support_patch06_ch020.json`
+  - Artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_ch020_v1-20260525T204524Z/`
+  - Restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_ch020_iteration_20260525-20260525T205010Z/`
+  - Changed hash:
+    `55E5288EC5464DACC1BC696B70BBA6F0A8F808B29A97BAA9A7FA47F266C8A428`
+  - Focused:
+    `3/7`
+  - Full:
+    `20/23`
+  - Decisive bake/manifest proof:
+    - saved tile size changed substantially:
+      `8775316 -> 2434340` bytes (`delta=-6340976`)
+    - the decisive anchor still did not move:
+      - `1523.8` kept
+        `rasterize supportCandidateCount=138`,
+        `erode supportCandidateCount=8`,
+        `median supportCandidateCount=56`,
+        `regions supportCandidateCount=56`,
+        `contours supportCandidateCount=1`,
+        `polymesh supportCandidateCount=2`,
+        `finalDetour supportCandidateCount=0`
+      - final answer still stayed:
+        `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - Focused failures stayed:
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found `85`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+    - `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+  - Full failures stayed:
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+    - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+  - Stage summary for the important anchors stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - Practical read:
+    - local `ch` is now exhausted in both directions for the exact `1523.8`
+      failure
+    - the next serious retry should return to contour/source-shape work, not
+      another vertical-quantization override
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_ch020_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_ch020.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `55E5288EC5464DACC1BC696B70BBA6F0A8F808B29A97BAA9A7FA47F266C8A428`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_ch020_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_ch020_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_ch020_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+
 ## 2026-05-25 UTC - existing-simplified local support-band carry follow-up
 - Active task: keep the raster support patch fixed, avoid local resimplify
   entirely, and splice only local support-band raw verts back into the current

@@ -650,6 +650,25 @@ obsolete because that branch never actually re-simplified the raw contour.
     tile. If local `ch` stays on the table after contour-family exhaustion, the
     next compatible retry is the coarser sibling-style direction, not more
     "smaller `ch` adds precision" churn.
+  - follow-up later the same night on `2026-05-25` UTC: WWoW then closed that
+    coarser sibling-style direction too
+    - branch `og_4029_raster_support_patch06_ch020_v1`
+      saved hash
+      `55E5288EC5464DACC1BC696B70BBA6F0A8F808B29A97BAA9A7FA47F266C8A428`
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_ch020_v1-20260525T204524Z/`
+    - focused/full snapped back to
+      `3/7`, `20/23`
+    - decisive result:
+      the tile still changed dramatically
+      (`8775316 -> 2434340`, delta `-6340976` bytes), but `1523.8` still kept
+      `contours supportCandidateCount=1`,
+      `polymesh supportCandidateCount=2`,
+      `finalDetour supportCandidateCount=0`, and therefore still ended at
+      `finalDetour / lower_competitor_dominant`
+    Practical rule: the local-`ch` fallback is now exhausted in both
+    directions for this anchor. A future compatible retry needs a different
+    contour/source-shape change, not more `ch` churn.
 
 ## Restore State
 

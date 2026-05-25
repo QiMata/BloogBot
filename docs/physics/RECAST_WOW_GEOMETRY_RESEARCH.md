@@ -1789,3 +1789,41 @@ hold the raster support patch fixed, but lower tile `1:40,29` from
   - if local `ch` remains worth testing after contour-family exhaustion, the
     only defensible next move is the coarser sibling-style direction, not more
     finer-precision retries
+
+### 2026-05-25 UTC local `ch=0.2` override follow-up
+
+WWoW then closed the coarser sibling-style direction too by raising tile
+`1:40,29` from `ch=0.1` to `ch=0.2` while keeping the same raster support
+patch fixed.
+
+- Experiment:
+  - variant:
+    `og_4029_raster_support_patch06_ch020_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_ch020_v1-20260525T204524Z/`
+  - changed hash:
+    `55E5288EC5464DACC1BC696B70BBA6F0A8F808B29A97BAA9A7FA47F266C8A428`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the branch still changed the saved tile heavily
+    (`8775316 -> 2434340`, delta `-6340976` bytes)
+  - but the decisive anchor still stayed on the same read:
+    - `1523.8` kept
+      `contours supportCandidateCount=1`
+      and `polymesh supportCandidateCount=2`
+    - `finalDetour supportCandidateCount=0`
+    - final answer still stayed:
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - the route profile simply snapped back to the same contour-family
+    regression set:
+    - focused deck/static-blocker slice back to `3/7`
+    - full `CriticalWalkLegs` back to the same `20/23` with
+      `hallway_exit_corridor`, `ramp_underpass_stall_screenshot_recovery`, and
+      `underpass_live_stall_exact_recovery`
+- Practical read:
+  - the sibling-style coarser `ch` direction is also a bounded negative
+  - with both `ch=0.05` and `ch=0.2` negative, the local-`ch` fallback is now
+    exhausted in both directions for the exact `1523.8` failure
+  - the next credible branch should return to contour/source shape work, not
+    another vertical-quantization override
