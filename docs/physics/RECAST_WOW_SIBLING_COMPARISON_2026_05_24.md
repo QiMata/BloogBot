@@ -625,6 +625,31 @@ obsolete because that branch never actually re-simplified the raw contour.
     same route set, stop iterating only on boundary-seed timing. The next
     compatible retry needs a different contour-builder shape, not just an
     earlier insertion point for the same boundary endpoints.
+  - follow-up later the same night on `2026-05-25` UTC: WWoW then took the
+    research-backed local-`ch` fallback in the finer direction
+    - branch `og_4029_raster_support_patch06_ch005_v1`
+      saved hash
+      `4E8C3C6AF492AAA995044BD30345E3A2DB2BDEAA64B1D96D6E6332A2513EC4B9`
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_ch005_v1-20260525T202957Z/`
+    - focused/full regressed further to
+      `4/7`, `17/23`
+    - decisive proof:
+      Recast's `rcConfig` docs say smaller `ch` increases vertical raster
+      precision and that `walkableClimb` is derived from `ch`, while TrinityCore's
+      current mmaps discussion shows a real map-local `config.ch *= 2` override,
+      so this was a valid sibling-style fallback rather than folklore
+    - decisive result:
+      the saved tile changed dramatically
+      (`8775316 -> 2398200`, delta `-6377116` bytes), but `1523.8` still kept
+      `contours supportCandidateCount=1`,
+      `polymesh supportCandidateCount=2`,
+      `finalDetour supportCandidateCount=0`, and therefore still ended at
+      `finalDetour / lower_competitor_dominant`
+    Practical rule: finer local `ch` is a strong bounded negative for this
+    tile. If local `ch` stays on the table after contour-family exhaustion, the
+    next compatible retry is the coarser sibling-style direction, not more
+    "smaller `ch` adds precision" churn.
 
 ## Restore State
 

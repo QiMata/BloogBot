@@ -1891,3 +1891,95 @@ seeding the same local support-band mask inside upstream Recast's
     serious fallback should be a research-backed local `ch` override or another
     genuinely earlier source/vertical classification branch, not more
     seed-timing churn on the same support mask
+
+### 2026-05-25 UTC: local `ch=0.05` override follow-up
+
+WWoW then took the documented local-`ch` fallback in the finer direction first:
+keep the proven raster support patch fixed at `1523.8`, but lower `ch` from the
+checked-in `0.1` to `0.05` only for tile `1:40,29`.
+
+- Research basis:
+  - Recast documents `ch` as the y-axis voxel height and explicitly notes that
+    smaller values increase vertical raster precision, with practical minimums
+    usually around `0.05`.
+  - Recast also defines `walkableClimb` and `walkableHeight` in voxel units
+    derived from `ch`, so changing `ch` is not a cosmetic knob; it changes the
+    vertical quantization contract for raster, ledge filtering, and compact
+    heightfield traversal.
+  - TrinityCore's current mmaps discussion documents a real map-local
+    `config.ch *= 2` override for a pathological map, so a tile-local `ch`
+    branch is a legitimate sibling-style fallback rather than random knob
+    churn.
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_ch005_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_ch005.json'`
+  - changed hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+  - focused tests:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_ch005_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - full `CriticalWalkLegs`:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_ch005_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_ch005_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+  - restored hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- Artifact + hash:
+  - changed tile artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_ch005_v1-20260525T202957Z/`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_ch005_iteration_20260525-20260525T203203Z/`
+  - saved tile hash:
+    `4E8C3C6AF492AAA995044BD30345E3A2DB2BDEAA64B1D96D6E6332A2513EC4B9`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive proof:
+  - the branch changed the serialized tile dramatically without changing the
+    decisive `1523.8` answer:
+    - `beforeLen=8775316`
+    - `afterLen=2398200`
+    - `deltaBytes=-6377116`
+  - the stage manifest for `1523.8` stayed on the same answer:
+    - `rasterize supportCandidateCount=138`
+    - `erode supportCandidateCount=8`
+    - `median supportCandidateCount=56`
+    - `regions supportCandidateCount=56`
+    - `contours supportCandidateCount=1`
+    - `polymesh supportCandidateCount=2`
+    - `finalDetour supportCandidateCount=0`
+    - final answer still:
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - focused/full regressed well beyond the current best contour-family branch:
+    - focused:
+      `4/7`
+    - full:
+      `17/23`
+  - focused failures:
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found only `79`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+  - full failures:
+    - `orgrimmar_city_live_vertical_replan_recovery`
+    - `orgrimmar_city_hallway_live_wall_stall_recovery`
+    - `orgrimmar_city_hallway_exit_live_stall_recovery`
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_exterior_incline_live_stall_exact_recovery`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+- Stage summary for the important anchors stayed:
+  - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+  - `1523.800,-4425.900,17.100` ->
+    `finalDetour / lower_competitor_dominant`
+  - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+  - `1364.867,-4374.000,26.109` ->
+    `finalDetour / winner_component_trapped`
+- Practical conclusion:
+  - finer `ch` did exactly what upstream says it can do: it changed the
+    vertical voxelization contract enough to massively reshape the serialized
+    tile
+  - but the exact `1523.8` failure did not move at all, so finer vertical
+    precision is not the missing lever for this support footprint
+  - this is a strong bounded negative for the "smaller `ch`" direction
+  - if local `ch` is still worth pursuing, the only defensible next retry is
+    the coarser sibling-style direction, not more finer-precision churn

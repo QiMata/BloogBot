@@ -1738,3 +1738,54 @@ into upstream Recast's real `simplifyContour(...)` path during
   - after this branch, contour-family retries are exhausted enough that the
     next serious fallback should be the research-backed local `ch` override or
     another genuinely earlier source/vertical classification experiment
+
+### 2026-05-25 UTC local `ch=0.05` override follow-up
+
+WWoW then took the research-backed local-`ch` fallback in the finer direction:
+hold the raster support patch fixed, but lower tile `1:40,29` from
+`ch=0.1` to `ch=0.05`.
+
+- Upstream basis:
+  - Recast's `rcConfig` docs define `ch` as the y-axis voxel size, say smaller
+    values increase vertical raster precision, and call out a practical minimum
+    around `0.05`.
+  - The same docs define `walkableClimb` and `walkableHeight` in voxel units
+    derived from `ch`, so a `ch` override changes the vertical quantization and
+    ledge/clearance contract rather than just adding detail.
+  - TrinityCore's current mmaps discussion documents a real map-local
+    `config.ch *= 2` override for a pathological map, so tile-local `ch`
+    handling is a legitimate sibling pattern.
+- Experiment:
+  - variant:
+    `og_4029_raster_support_patch06_ch005_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_ch005_v1-20260525T202957Z/`
+  - changed hash:
+    `4E8C3C6AF492AAA995044BD30345E3A2DB2BDEAA64B1D96D6E6332A2513EC4B9`
+  - focused/full:
+    `4/7`, `17/23`
+- Decisive proof:
+  - the branch heavily reshaped the saved tile
+    (`8775316 -> 2398200`, delta `-6377116` bytes)
+  - but the decisive anchor did not move:
+    - `1523.8` still kept
+      `contours supportCandidateCount=1`
+      and `polymesh supportCandidateCount=2`
+    - `finalDetour supportCandidateCount=0`
+    - final answer still stayed:
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - the regression widened outside the prior contour-family failure set:
+    - new full reds:
+      `orgrimmar_city_live_vertical_replan_recovery`,
+      `orgrimmar_city_hallway_live_wall_stall_recovery`,
+      `orgrimmar_city_hallway_exit_live_stall_recovery`,
+      `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`,
+      `orgrimmar_exterior_incline_live_stall_exact_recovery`,
+      `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+- Practical read:
+  - finer `ch` is a real bounded negative on `40,29`
+  - it proves the missing lever is not simply "more vertical precision near the
+    recovered support footprint"
+  - if local `ch` remains worth testing after contour-family exhaustion, the
+    only defensible next move is the coarser sibling-style direction, not more
+    finer-precision retries
