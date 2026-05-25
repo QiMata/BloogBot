@@ -436,6 +436,52 @@ obsolete because that branch never actually re-simplified the raw contour.
     research-backed local `ch` branch as the only sibling-style override still
     worth testing here
 
+### 2026-05-25 UTC: support-gap finalDetour follow-up
+
+- New native experiment surface in `TileWorker.cpp`:
+  - `postDetourCullAnchorPolyStacksSupportGap2D`
+  - helper `GetDetourBoundsGap2D(...)`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - gap `1.0` bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_anchor_support_gap1_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_anchor_support_gap1.json'`
+  - focused tests:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_anchor_support_gap1_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - full tests:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_anchor_support_gap1_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_support_gap1_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Results:
+  - artifact:
+    `tmp/bake-sweeps/og_4029_anchor_support_gap1_v1-20260525T005200Z/`
+  - hash:
+    `33F6D5DA3189CF1985120B247D23C9EF0C978995B10FF79C90A65DB5ABFE991D`
+  - focused:
+    `7/7`
+  - full:
+    `17/23`
+  - decisive bake-side proof:
+    - `1523.8` changed from
+      `lowerFringeCulled=0`
+      to
+      `lowerFringeCulled=2`
+    - new log:
+      `[DT-ANCHOR-CULL-SKIP] ... lowerFringeCulled=2 ... bestSupportGap2D=0.300`
+  - stage authority stayed flat:
+    - `1523.800,-4425.900,17.100` still ->
+      `finalDetour / lower_competitor_dominant`
+    - `1522.500,-4424.100,17.000` stayed ->
+      no first-bad stage
+    - the same six `CriticalWalkLegs` reds remained
+- Interpretation:
+  - this proves the finalDetour cull can reach a small lower fringe around
+    `1523.8`, but that fringe is not the dominant surviving basin
+  - the support-gap surface is therefore useful instrumentation and a bounded
+    experiment, not a promotable fix at `1.0`
+  - the next serious branch needs to move earlier again, into
+    source-support / compact-heightfield footprint handling
+
 ## Restore State
 
 At the end of this corrected loop, `D:\wwow-bot\test-data\mmaps\0012940.mmtile`

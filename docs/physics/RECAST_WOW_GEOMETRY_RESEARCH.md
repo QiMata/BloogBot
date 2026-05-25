@@ -1437,3 +1437,44 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     `tmp/bake-sweeps/og_4029_restore_after_localraw_window_iteration_20260525-20260525T002411Z/`
   - restored hash:
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-25 UTC support-gap follow-up
+
+- New targeted native surface:
+  - `postDetourCullAnchorPolyStacksSupportGap2D`
+  - helper `GetDetourBoundsGap2D(...)`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_anchor_support_gap1_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_anchor_support_gap1.json'`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_support_gap1_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Observed results:
+  - saved hash:
+    `33F6D5DA3189CF1985120B247D23C9EF0C978995B10FF79C90A65DB5ABFE991D`
+  - focused:
+    `7/7`
+  - full:
+    `17/23`
+  - the new cull did fire at the red anchor:
+    - `1523.8` changed from
+      `lowerFringeCulled=0`
+      to
+      `lowerFringeCulled=2`
+    - measured `bestSupportGap2D=0.300`
+  - but the stage answer did not move:
+    - `1523.800,-4425.900,17.100` still ->
+      `finalDetour / lower_competitor_dominant`
+- Current best interpretation:
+  - the real lower basin is broader than the tiny no-overlap fringe this cull
+    can see
+  - that makes the support-gap branch a good proof surface but not a sufficient
+    fix
+  - the next branch should move earlier into compact/source-support footprint
+    work rather than widening this same finalDetour idea blindly
+- Checked-in restore after this loop:
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_support_gap1_iteration_20260525-20260525T005613Z/`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`

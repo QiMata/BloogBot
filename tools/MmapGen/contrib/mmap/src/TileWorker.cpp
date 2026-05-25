@@ -1355,6 +1355,23 @@ static float GetDetourBoundsOverlapArea2D(const DetourPolyDiagnostics& candidate
     return overlapX * overlapZ;
 }
 
+static float GetDetourBoundsGap2D(const DetourPolyDiagnostics& candidate, const DetourPolyDiagnostics& other)
+{
+    float gapX = 0.0f;
+    if (candidate.maxX < other.minX)
+        gapX = other.minX - candidate.maxX;
+    else if (other.maxX < candidate.minX)
+        gapX = candidate.minX - other.maxX;
+
+    float gapZ = 0.0f;
+    if (candidate.maxZ < other.minZ)
+        gapZ = other.minZ - candidate.maxZ;
+    else if (other.maxZ < candidate.minZ)
+        gapZ = candidate.minZ - other.maxZ;
+
+    return sqrtf(gapX * gapX + gapZ * gapZ);
+}
+
 static bool IsShadowedLedgeCandidate(const DetourPolyDiagnostics& diagnostics)
 {
     return diagnostics.totalSurfaceArea > 0.0f &&
@@ -4649,6 +4666,7 @@ static void MergeAnchorStageIntoManifest(json& anchorStages, const json& incomin
 static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
     const std::vector<DetourPolyDiagnostics>& diagnostics, std::vector<unsigned char>& liveGroundMask,
     const float xyExtent, const float zExtent, const float supportZTolerance,
+    const float supportGap2D,
     const std::vector<AnchorPolyStackCoord>& anchorCoords,
     const std::vector<AnchorSourceSupportProbe>& sourceSupports,
     const bool trimAnchorTrappedComponents,
@@ -4767,6 +4785,7 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
 
             const std::vector<int>& overlapSupportCandidates =
                 !supportBandCandidates.empty() ? supportBandCandidates : upperFringeCandidates;
+            float bestSupportGap2D = std::numeric_limits<float>::max();
             if (!overlapSupportCandidates.empty())
             {
                 for (const int candidateIndex : windowPolyIndices)
@@ -4792,11 +4811,25 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
                         if (upperIndex == candidateIndex || !liveGroundMask[upperIndex])
                             continue;
 
-                        if (GetDetourBoundsOverlapArea2D(candidateDiagnostics, diagnostics[upperIndex]) < minOverlapArea)
-                            continue;
+                        const float overlapArea = GetDetourBoundsOverlapArea2D(candidateDiagnostics, diagnostics[upperIndex]);
+                        if (overlapArea >= minOverlapArea)
+                        {
+                            overlapsUpperFringe = true;
+                            bestSupportGap2D = 0.0f;
+                            break;
+                        }
 
-                        overlapsUpperFringe = true;
-                        break;
+                        if (supportGap2D > 0.0f)
+                        {
+                            const float supportGap = GetDetourBoundsGap2D(candidateDiagnostics, diagnostics[upperIndex]);
+                            bestSupportGap2D = rcMin(bestSupportGap2D, supportGap);
+                            if (supportGap <= supportGap2D)
+                            {
+                                overlapsUpperFringe = true;
+                                break;
+                            }
+                        }
+
                     }
 
                     if (!overlapsUpperFringe)
@@ -4852,14 +4885,16 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
 
             if (closestDistance2DMin == std::numeric_limits<float>::max())
                 closestDistance2DMin = -1.0f;
+            if (bestSupportGap2D == std::numeric_limits<float>::max())
+                bestSupportGap2D = -1.0f;
             if (bestSurfaceDelta == std::numeric_limits<float>::max())
                 bestSurfaceDelta = 0.0f;
 
-            printf("[DT-ANCHOR-CULL-SKIP] tile=%d,%d anchor=(%.3f,%.3f,%.3f) window=%zu supports=0 upperFringe=%zu lowerFringeCulled=%d posOver=%d surfaced=%d nearClosest=%d supportBandCandidates=%d closest2DMin=%.3f bestSurfacePoly=%d bestSurfaceZ=%.3f bestSurfaceDelta=%.3f bestSurfacePosOver=%d\n",
+            printf("[DT-ANCHOR-CULL-SKIP] tile=%d,%d anchor=(%.3f,%.3f,%.3f) window=%zu supports=0 upperFringe=%zu lowerFringeCulled=%d posOver=%d surfaced=%d nearClosest=%d supportBandCandidates=%d closest2DMin=%.3f bestSupportGap2D=%.3f bestSurfacePoly=%d bestSurfaceZ=%.3f bestSurfaceDelta=%.3f bestSurfacePosOver=%d\n",
                 tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
                 windowPolyIndices.size(), upperFringeCandidates.size(), lowerFringeCulled,
                 posOverCount, surfacedCount, nearClosestCount,
-                supportBandCandidateCount, closestDistance2DMin,
+                supportBandCandidateCount, closestDistance2DMin, bestSupportGap2D,
                 bestSurfacePolyIndex, bestSurfaceZ, bestSurfaceDelta, bestSurfacePosOver);
             continue;
         }
@@ -5338,7 +5373,8 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
     const bool trimShadowedLedges, const bool trimOffMeshAnchorSteepTrim, const bool trimShadowedPockets,
     const OffMeshAnchorSteepTrimSettings& offMeshAnchorSteepTrimSettings,
     const bool trimAnchorPolyStacks, const float anchorPolyStackXyExtent, const float anchorPolyStackZExtent,
-    const float anchorPolyStackSupportZTolerance, const std::vector<AnchorPolyStackCoord>& anchorPolyStackCoords,
+    const float anchorPolyStackSupportZTolerance, const float anchorPolyStackSupportGap2D,
+    const std::vector<AnchorPolyStackCoord>& anchorPolyStackCoords,
     const std::vector<AnchorSourceSupportProbe>& anchorSourceSupports,
     const bool trimAnchorTrappedComponents,
     const std::vector<AnchorRouteTarget>& anchorRouteTargets)
@@ -5580,6 +5616,7 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
         culled += CullAnchorPolyStacks(
             navMesh, tile, diagnostics, liveGroundMask,
             anchorPolyStackXyExtent, anchorPolyStackZExtent, anchorPolyStackSupportZTolerance,
+            anchorPolyStackSupportGap2D,
             anchorPolyStackCoords, anchorSourceSupports,
             trimAnchorTrappedComponents, anchorRouteTargets);
     }
@@ -6868,11 +6905,13 @@ namespace MMAP
                     jsonTileConfig, "postDetourCullAnchorPolyStacksZExtent", 10.0f);
                 const float anchorPolyStackSupportZTolerance = JsonFloatOrDefault(
                     jsonTileConfig, "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f);
+                const float anchorPolyStackSupportGap2D = JsonFloatOrDefault(
+                    jsonTileConfig, "postDetourCullAnchorPolyStacksSupportGap2D", 0.0f);
                 if (trimAnchorPolyStacks)
                 {
-                    printf("[DT-ANCHOR-CULL] map=%u tile=%u,%u config enabled coords=%zu xy=%.2f z=%.2f supportTol=%.2f trapped=%d routeTargets=%zu\n",
+                    printf("[DT-ANCHOR-CULL] map=%u tile=%u,%u config enabled coords=%zu xy=%.2f z=%.2f supportTol=%.2f supportGap=%.2f trapped=%d routeTargets=%zu\n",
                         mapID, tileX, tileY, anchorPolyStackCoords.size(), anchorPolyStackXyExtent,
-                        anchorPolyStackZExtent, anchorPolyStackSupportZTolerance,
+                        anchorPolyStackZExtent, anchorPolyStackSupportZTolerance, anchorPolyStackSupportGap2D,
                         trimAnchorTrappedComponents ? 1 : 0, anchorRouteTargets.size());
                 }
                 const int culledDetourPolys = CullSuspiciousDetourPolys(
@@ -6880,7 +6919,8 @@ namespace MMAP
                     trimShadowedLedges, trimOffMeshAnchorSteepTrim, trimShadowedPockets,
                     offMeshAnchorSteepTrimSettings,
                     trimAnchorPolyStacks, anchorPolyStackXyExtent, anchorPolyStackZExtent,
-                    anchorPolyStackSupportZTolerance, anchorPolyStackCoords, anchorSourceSupports,
+                    anchorPolyStackSupportZTolerance, anchorPolyStackSupportGap2D,
+                    anchorPolyStackCoords, anchorSourceSupports,
                     trimAnchorTrappedComponents, anchorRouteTargets);
                 if (culledDetourPolys > 0)
                 {

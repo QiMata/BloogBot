@@ -1163,3 +1163,41 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     `tmp/bake-sweeps/og_4029_restore_after_localraw_window_iteration_20260525-20260525T002411Z/`
   - restored hash:
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-25 UTC: support-gap finalDetour follow-up
+
+- New targeted native surface:
+  - `postDetourCullAnchorPolyStacksSupportGap2D`
+  - helper `GetDetourBoundsGap2D(...)`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_anchor_support_gap1_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_anchor_support_gap1.json'`
+  - focused/full validation:
+    - `og_4029_anchor_support_gap1_v1`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_support_gap1_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Results:
+  - artifact:
+    `tmp/bake-sweeps/og_4029_anchor_support_gap1_v1-20260525T005200Z/`
+  - hash:
+    `33F6D5DA3189CF1985120B247D23C9EF0C978995B10FF79C90A65DB5ABFE991D`
+  - focused:
+    `7/7`
+  - full:
+    `17/23`
+  - key proof:
+    - `1523.8` logged
+      `[DT-ANCHOR-CULL-SKIP] ... lowerFringeCulled=2 ... bestSupportGap2D=0.300`
+    - but the anchor still ended at
+      `finalDetour / lower_competitor_dominant`
+- Practical read:
+  - the finalDetour cull can now touch a small lower fringe around `1523.8`
+  - that fringe is not the dominant surviving basin, so this branch is another
+    bounded negative result rather than a promotable fix
+- Restore after this loop:
+  - artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_support_gap1_iteration_20260525-20260525T005613Z/`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
