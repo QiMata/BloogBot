@@ -3777,14 +3777,6 @@ static void SimplifyAnchorContour(
         }
     }
 
-    for (int i = 0; i < static_cast<int>(simplified.size()) / 4; ++i)
-    {
-        const int ai = (simplified[i * 4 + 3] + 1) % pointCount;
-        const int bi = simplified[i * 4 + 3];
-        simplified[i * 4 + 3] =
-            (points[ai * 4 + 3] & (RC_CONTOUR_REG_MASK | RC_AREA_BORDER)) |
-            (points[bi * 4 + 3] & RC_BORDER_VERTEX);
-    }
 }
 
 static void RemoveAnchorContourDegenerateSegments(std::vector<int>& simplified)
@@ -3815,6 +3807,98 @@ static void RemoveAnchorContourDegenerateSegments(std::vector<int>& simplified)
     }
 }
 
+static void FinalizeAnchorContourFlags(
+    const std::vector<int>& points,
+    std::vector<int>& simplified)
+{
+    const int pointCount = static_cast<int>(points.size()) / 4;
+    if (pointCount < 3)
+        return;
+
+    for (int i = 0; i < static_cast<int>(simplified.size()) / 4; ++i)
+    {
+        const int ai = (simplified[i * 4 + 3] + 1) % pointCount;
+        const int bi = simplified[i * 4 + 3];
+        simplified[i * 4 + 3] =
+            (points[ai * 4 + 3] & (RC_CONTOUR_REG_MASK | RC_AREA_BORDER)) |
+            (points[bi * 4 + 3] & RC_BORDER_VERTEX);
+    }
+}
+
+// [WWoW-DIVERGENCE] 2026-05-24: the fully raw 448-vertex support contour is
+// too fragmented, while upstream-style resimplify falls back to a near-coarse
+// 21/22-vertex contour. Preserve all raw contour vertices only within a small
+// local window around the configured anchor so we can hold detail near the
+// bad hallway footprint without exploding the entire contour back to raw.
+static int InjectAnchorLocalRawVertices(
+    const std::vector<int>& points,
+    std::vector<int>& simplified,
+    const float anchorCellX,
+    const float anchorCellZ,
+    const float preserveRadiusCells)
+{
+    if (preserveRadiusCells <= 0.0f)
+        return 0;
+
+    const int pointCount = static_cast<int>(points.size()) / 4;
+    const int simplifiedCount = static_cast<int>(simplified.size()) / 4;
+    if (pointCount < 3 || simplifiedCount < 2)
+        return 0;
+
+    const float preserveRadiusSq = preserveRadiusCells * preserveRadiusCells;
+    auto rawPointWithinWindow = [&](const int rawIndex)
+    {
+        const float dx = static_cast<float>(points[rawIndex * 4 + 0]) - anchorCellX;
+        const float dz = static_cast<float>(points[rawIndex * 4 + 2]) - anchorCellZ;
+        return dx * dx + dz * dz <= preserveRadiusSq;
+    };
+
+    std::vector<int> expanded;
+    expanded.reserve(points.size());
+
+    auto appendRawIndex = [&](const int rawIndex)
+    {
+        if (!expanded.empty())
+        {
+            const int lastIndex = static_cast<int>(expanded.size()) / 4 - 1;
+            if (expanded[lastIndex * 4 + 0] == points[rawIndex * 4 + 0] &&
+                expanded[lastIndex * 4 + 2] == points[rawIndex * 4 + 2])
+            {
+                return false;
+            }
+        }
+
+        expanded.push_back(points[rawIndex * 4 + 0]);
+        expanded.push_back(points[rawIndex * 4 + 1]);
+        expanded.push_back(points[rawIndex * 4 + 2]);
+        expanded.push_back(rawIndex);
+        return true;
+    };
+
+    int injectedVertexCount = 0;
+    for (int i = 0; i < simplifiedCount; ++i)
+    {
+        const int ii = (i + 1) % simplifiedCount;
+        const int startRawIndex = simplified[i * 4 + 3];
+        const int endRawIndex = simplified[ii * 4 + 3];
+
+        appendRawIndex(startRawIndex);
+        int rawIndex = (startRawIndex + 1) % pointCount;
+        while (rawIndex != endRawIndex)
+        {
+            if (rawPointWithinWindow(rawIndex) && appendRawIndex(rawIndex))
+                ++injectedVertexCount;
+
+            rawIndex = (rawIndex + 1) % pointCount;
+        }
+    }
+
+    if (!expanded.empty())
+        simplified.swap(expanded);
+
+    return injectedVertexCount;
+}
+
 // [WWoW-DIVERGENCE] 2026-05-24: the raw-restored 1523.8 support contour proves
 // the upper floor can survive contour generation, but the fully raw contour
 // over-fragments into final support shards. Re-run Recast's own contour
@@ -3828,6 +3912,7 @@ static int ResimplifyRawAnchorSupportContours(
     const std::vector<AnchorSourceSupportProbe>& supports,
     const float maxError,
     const int maxEdgeLen,
+    const float localPreserveRadius,
     const int buildFlags,
     const bool logDiagnostics)
 {
@@ -3896,7 +3981,17 @@ static int ResimplifyRawAnchorSupportContours(
             std::vector<int> simplified;
             simplified.reserve(rawPoints.size());
             SimplifyAnchorContour(rawPoints, simplified, maxError, maxEdgeLen, buildFlags);
+            int localInjectedVertexCount = 0;
+            if (localPreserveRadius > 0.0f)
+            {
+                const float anchorCellX = (anchorRecastX - contours.bmin[0]) / contours.cs;
+                const float anchorCellZ = (anchorRecastZ - contours.bmin[2]) / contours.cs;
+                const float preserveRadiusCells = localPreserveRadius / contours.cs;
+                localInjectedVertexCount = InjectAnchorLocalRawVertices(
+                    rawPoints, simplified, anchorCellX, anchorCellZ, preserveRadiusCells);
+            }
             RemoveAnchorContourDegenerateSegments(simplified);
+            FinalizeAnchorContourFlags(rawPoints, simplified);
 
             const int simplifiedVertexCount = static_cast<int>(simplified.size()) / 4;
             if (logDiagnostics)
@@ -3906,6 +4001,13 @@ static int ResimplifyRawAnchorSupportContours(
                     contourIndex, static_cast<unsigned>(contour.reg),
                     contour.nrverts, simplifiedVertexCount,
                     maxError, maxEdgeLen, static_cast<unsigned>(buildFlags));
+                if (localInjectedVertexCount > 0)
+                {
+                    printf("[CONTOUR-ANCHOR-LOCAL-RAW] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u injectedRawVerts=%d preserveRadius=%.3f\n",
+                        support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                        contourIndex, static_cast<unsigned>(contour.reg),
+                        localInjectedVertexCount, localPreserveRadius);
+                }
             }
             if (simplifiedVertexCount < 3 || simplifiedVertexCount >= contour.nverts)
                 continue;
@@ -5956,6 +6058,8 @@ namespace MMAP
             jsonTileConfig, "prePolyResimplifyAnchorSupportMaxError", -1.0f);
         const int prePolyResimplifyAnchorSupportMaxEdgeLen =
             jsonTileConfig.value("prePolyResimplifyAnchorSupportMaxEdgeLen", -1);
+        const float prePolyResimplifyAnchorSupportLocalPreserveRadius = JsonFloatOrDefault(
+            jsonTileConfig, "prePolyResimplifyAnchorSupportLocalPreserveRadius", -1.0f);
         const bool prePolyResimplifyAnchorSupportTessellateWallEdges =
             jsonTileConfig.value("prePolyResimplifyAnchorSupportTessellateWallEdges", true);
         const bool prePolyResimplifyAnchorSupportTessellateAreaEdges =
@@ -6500,6 +6604,7 @@ namespace MMAP
                         prePolyUseRawAnchorSupportProbes,
                         prePolyResimplifyAnchorSupportMaxError,
                         resimplifyMaxEdgeLen,
+                        prePolyResimplifyAnchorSupportLocalPreserveRadius,
                         resimplifyBuildFlags,
                         logAnchorStageDiagnostics);
                 }

@@ -1092,3 +1092,74 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     `tmp/bake-sweeps/og_4029_restore_after_resimplify_bugfix_iteration_20260524-20260524T231759Z`
   - restored hash:
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-25 UTC: local raw-window contour reinjection follow-up
+
+- New targeted native surface in `TileWorker.cpp`:
+  - `prePolyResimplifyAnchorSupportLocalPreserveRadius`
+  - helper `InjectAnchorLocalRawVertices(...)`
+  - refactor helper `FinalizeAnchorContourFlags(...)`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - radius `3.0` bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_prepoly_resimplify_1523_localraw_r3_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_prepoly_resimplify_1523_localraw_r3.json'`
+  - radius `6.0` bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_prepoly_resimplify_1523_localraw_r6_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_prepoly_resimplify_1523_localraw_r6.json'`
+  - focused/full validation rerun for both changed hashes:
+    - `og_4029_prepoly_resimplify_1523_localraw_r3_v1`
+    - `og_4029_prepoly_resimplify_1523_localraw_r6_v1`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_localraw_window_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Results:
+  - radius `3.0` artifact:
+    `tmp/bake-sweeps/og_4029_prepoly_resimplify_1523_localraw_r3_v1-20260525T001650Z/`
+  - radius `3.0` contour/log facts:
+    - `448 -> 46`
+    - `[CONTOUR-ANCHOR-LOCAL-RAW] ... injectedRawVerts=25 preserveRadius=3.000`
+    - hash:
+      `F076A6FA0974755EA1F8384BB3C2154E064804EDD8604001030F6C6D637C2DC5`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - manifest:
+      - `1523.800,-4425.900,17.100` still ->
+        `finalDetour / lower_competitor_dominant`
+      - `1522.500,-4424.100,17.000` still ->
+        no first-bad stage
+    - bake-side proof:
+      - `1523.8` still logged
+        `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=2 lowerFringeCulled=0 supportBandCandidates=2`
+  - radius `6.0` artifact:
+    `tmp/bake-sweeps/og_4029_prepoly_resimplify_1523_localraw_r6_v1-20260525T002119Z/`
+  - radius `6.0` contour/log facts:
+    - `448 -> 145`
+    - `[CONTOUR-ANCHOR-LOCAL-RAW] ... injectedRawVerts=124 preserveRadius=6.000`
+    - hash:
+      `5997F2588CE58B979CE0CC8C199076F7C5A979284C2AEFFB837E99377A21E459`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - manifest regression:
+      - `1522.500,-4424.100,17.000` ->
+        `finalDetour / support_footprint_missed_anchor`
+    - route-shape regression:
+      - `orgrimmar_city_hallway_live_wall_stall_recovery` ended deeper at
+        `(1514.0,-4426.5,20.2)`
+    - bake-side proof:
+      - `1523.8` still logged
+        `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=14 lowerFringeCulled=0 supportBandCandidates=14`
+- Practical read:
+  - the local raw-window family is not promotable
+  - a real intermediate contour by itself does not help if the final support
+    footprint still misses the anchor
+  - the next fix must target support-footprint / overlap behavior or move
+    earlier into source-support classification; do not keep spending loops on
+    "more local raw contour detail"
+- Restore after this negative loop:
+  - artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_localraw_window_iteration_20260525-20260525T002411Z/`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
