@@ -2556,6 +2556,76 @@
   - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` ->
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
 
+## 2026-05-25 UTC - raster patch + contour-band boundary carry negative
+- Active task: test a contour-local follow-up to the raster-patch proof by
+  reinjecting only source-support band boundary vertices near
+  `1523.800,-4425.900,17.100`, instead of restoring the whole raw contour.
+- Pass result: `delta shipped; the contour-local surface is useful as a bounded
+  proof, but this specific boundary-shape is not promotable. It touched
+  multiple same-band contours, reintroduced the top-ramp bridge/trim
+  regressions, and still left 1523.8 at finalDetour`.
+- Last delta:
+  - Added `InjectAnchorSupportBandBoundaryVertices(...)` plus the opt-in tile
+    config key `prePolyResimplifyAnchorSupportBandBoundaryRadius` in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`.
+  - Focused artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_boundary_seed_r3_v1-20260525T024153Z/`
+  - Mandatory full-rerun artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_boundary_seed_r3_v1_fullrerun-20260525T024605Z/`
+  - Restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_boundary_seed_iteration_fullrerun_20260525-20260525T024951Z/`
+  - Changed hash:
+    `E58B0DF11E71196123A377094B4A41710238591B8D454352BDF93B7C825D424F`
+  - Restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - Decisive bake-log proof:
+    - `[HF-ANCHOR-SUPPORT-PATCH] ... rasterized 1 support patch(es)`
+    - raw restore expanded three contours near `1523.8`:
+      `13 -> 226`, `11 -> 158`, `3 -> 10`
+    - boundary carry then injected only two of those contours:
+      `contour 1 / region 8 injectedBoundaryVerts=3`
+      and
+      `contour 3 / region 7 injectedBoundaryVerts=2`
+    - the resulting re-simplified contours were:
+      `226 -> 18`, `158 -> 13`, `10 -> 3`
+  - Stage summary for the important anchors stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - Validation:
+    - focused command:
+      `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_boundary_seed_r3_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+    - focused result:
+      `3/7`
+    - focused failures:
+      - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+      - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+        found only `80` polygons
+      - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+      - `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+    - full command:
+      `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_boundary_seed_r3_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+    - full result:
+      `20/23`
+    - full failures:
+      - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+      - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+      - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - restore command:
+      `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_boundary_seed_iteration_fullrerun_20260525' -DataDir 'D:\wwow-bot\test-data'`
+    - restore hash command:
+      `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- Practical read:
+  - the current boundary-carry shape is too broad semantically: it preserved
+    the wrong same-band contour family instead of the one recovered footprint
+    we actually care about
+  - if this family is retried, constrain it to the single recovered
+    contour/region touching the raster-patch neighborhood; do not re-open every
+    same-band contour that intersects the anchor window
+
 ## 2026-05-25 UTC - support-gap finalDetour follow-up
 - Active task: test whether the anchor-stack cull can treat a small XY gap
   between nearby upper support fragments and the lower basin as enough evidence

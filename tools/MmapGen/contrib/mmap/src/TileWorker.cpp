@@ -3968,6 +3968,121 @@ static int InjectAnchorLocalRawVertices(
     return injectedVertexCount;
 }
 
+// [WWoW-DIVERGENCE] 2026-05-25: when a recovered support footprint survives
+// through regions but disappears at contours, preserve only the raw vertices
+// where the raw contour enters or exits the source-backed support band near
+// the bad anchor. This keeps the experiment on the recovered footprint
+// boundary instead of reopening the whole local raw window.
+static int InjectAnchorSupportBandBoundaryVertices(
+    const std::vector<int>& points,
+    std::vector<int>& simplified,
+    const float anchorRecastX,
+    const float anchorRecastZ,
+    const float preserveRadius,
+    const float supportFloorMinY,
+    const float supportFloorMaxY,
+    const float contourBMinX,
+    const float contourBMinY,
+    const float contourBMinZ,
+    const float contourCellSize,
+    const float contourCellHeight)
+{
+    if (preserveRadius <= 0.0f)
+        return 0;
+
+    const int pointCount = static_cast<int>(points.size()) / 4;
+    const int simplifiedCount = static_cast<int>(simplified.size()) / 4;
+    if (pointCount < 3 || simplifiedCount < 2)
+        return 0;
+
+    auto pointWithinSupportBand = [&](const int rawIndex)
+    {
+        const float recastY = contourBMinY + points[rawIndex * 4 + 1] * contourCellHeight;
+        return recastY >= supportFloorMinY && recastY <= supportFloorMaxY;
+    };
+
+    const float preserveRadiusSq = preserveRadius * preserveRadius;
+    auto edgeTouchesWindow = [&](const int lhsIndex, const int rhsIndex)
+    {
+        const float ax = contourBMinX + points[lhsIndex * 4 + 0] * contourCellSize;
+        const float az = contourBMinZ + points[lhsIndex * 4 + 2] * contourCellSize;
+        const float bx = contourBMinX + points[rhsIndex * 4 + 0] * contourCellSize;
+        const float bz = contourBMinZ + points[rhsIndex * 4 + 2] * contourCellSize;
+        const float pqx = bx - ax;
+        const float pqz = bz - az;
+        const float dx = anchorRecastX - ax;
+        const float dz = anchorRecastZ - az;
+        const float denom = pqx * pqx + pqz * pqz;
+        float t = 0.0f;
+        if (denom > 0.0f)
+            t = (pqx * dx + pqz * dz) / denom;
+        t = std::clamp(t, 0.0f, 1.0f);
+        const float nearestX = ax + t * pqx;
+        const float nearestZ = az + t * pqz;
+        const float nearestDx = nearestX - anchorRecastX;
+        const float nearestDz = nearestZ - anchorRecastZ;
+        return nearestDx * nearestDx + nearestDz * nearestDz <= preserveRadiusSq;
+    };
+
+    std::vector<unsigned char> preserveMask(static_cast<size_t>(pointCount), 0);
+    for (int rawIndex = 0; rawIndex < pointCount; ++rawIndex)
+    {
+        const int nextRawIndex = (rawIndex + 1) % pointCount;
+        if (pointWithinSupportBand(rawIndex) == pointWithinSupportBand(nextRawIndex))
+            continue;
+        if (!edgeTouchesWindow(rawIndex, nextRawIndex))
+            continue;
+
+        preserveMask[static_cast<size_t>(rawIndex)] = 1;
+        preserveMask[static_cast<size_t>(nextRawIndex)] = 1;
+    }
+
+    std::vector<int> expanded;
+    expanded.reserve(points.size());
+
+    auto appendRawIndex = [&](const int rawIndex)
+    {
+        if (!expanded.empty())
+        {
+            const int lastIndex = static_cast<int>(expanded.size()) / 4 - 1;
+            if (expanded[lastIndex * 4 + 0] == points[rawIndex * 4 + 0] &&
+                expanded[lastIndex * 4 + 2] == points[rawIndex * 4 + 2])
+            {
+                return false;
+            }
+        }
+
+        expanded.push_back(points[rawIndex * 4 + 0]);
+        expanded.push_back(points[rawIndex * 4 + 1]);
+        expanded.push_back(points[rawIndex * 4 + 2]);
+        expanded.push_back(rawIndex);
+        return true;
+    };
+
+    int injectedVertexCount = 0;
+    for (int i = 0; i < simplifiedCount; ++i)
+    {
+        const int ii = (i + 1) % simplifiedCount;
+        const int startRawIndex = simplified[i * 4 + 3];
+        const int endRawIndex = simplified[ii * 4 + 3];
+
+        appendRawIndex(startRawIndex);
+        int rawIndex = (startRawIndex + 1) % pointCount;
+        while (rawIndex != endRawIndex)
+        {
+            if (preserveMask[static_cast<size_t>(rawIndex)] != 0 && appendRawIndex(rawIndex))
+                ++injectedVertexCount;
+
+            rawIndex = (rawIndex + 1) % pointCount;
+        }
+    }
+
+    if (!expanded.empty())
+        simplified.swap(expanded);
+
+    return injectedVertexCount;
+}
+
 // [WWoW-DIVERGENCE] 2026-05-24: the raw-restored 1523.8 support contour proves
 // the upper floor can survive contour generation, but the fully raw contour
 // over-fragments into final support shards. Re-run Recast's own contour
@@ -3982,6 +4097,7 @@ static int ResimplifyRawAnchorSupportContours(
     const std::vector<AnchorSourceSupportProbe>& supports,
     const float maxError,
     const int maxEdgeLen,
+    const float bandBoundaryRadius,
     const float localPreserveRadius,
     const int buildFlags,
     const bool logDiagnostics)
@@ -4048,6 +4164,23 @@ static int ResimplifyRawAnchorSupportContours(
             std::vector<int> simplified;
             simplified.reserve(rawPoints.size());
             SimplifyAnchorContour(rawPoints, simplified, maxError, maxEdgeLen, buildFlags);
+            int boundaryInjectedVertexCount = 0;
+            if (bandBoundaryRadius > 0.0f)
+            {
+                boundaryInjectedVertexCount = InjectAnchorSupportBandBoundaryVertices(
+                    rawPoints,
+                    simplified,
+                    anchorRecastX,
+                    anchorRecastZ,
+                    bandBoundaryRadius,
+                    supportFloorMinY,
+                    supportFloorMaxY,
+                    contours.bmin[0],
+                    contours.bmin[1],
+                    contours.bmin[2],
+                    contours.cs,
+                    contours.ch);
+            }
             int localInjectedVertexCount = 0;
             if (localPreserveRadius > 0.0f)
             {
@@ -4074,6 +4207,13 @@ static int ResimplifyRawAnchorSupportContours(
                         support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
                         contourIndex, static_cast<unsigned>(contour.reg),
                         localInjectedVertexCount, localPreserveRadius);
+                }
+                if (boundaryInjectedVertexCount > 0)
+                {
+                    printf("[CONTOUR-ANCHOR-BAND-BOUNDARY] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u injectedBoundaryVerts=%d boundaryRadius=%.3f\n",
+                        support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                        contourIndex, static_cast<unsigned>(contour.reg),
+                        boundaryInjectedVertexCount, bandBoundaryRadius);
                 }
             }
             if (simplifiedVertexCount < 3 || simplifiedVertexCount >= contour.nverts)
@@ -6145,6 +6285,8 @@ namespace MMAP
             jsonTileConfig, "prePolyResimplifyAnchorSupportMaxError", -1.0f);
         const int prePolyResimplifyAnchorSupportMaxEdgeLen =
             jsonTileConfig.value("prePolyResimplifyAnchorSupportMaxEdgeLen", -1);
+        const float prePolyResimplifyAnchorSupportBandBoundaryRadius = JsonFloatOrDefault(
+            jsonTileConfig, "prePolyResimplifyAnchorSupportBandBoundaryRadius", -1.0f);
         const float prePolyResimplifyAnchorSupportLocalPreserveRadius = JsonFloatOrDefault(
             jsonTileConfig, "prePolyResimplifyAnchorSupportLocalPreserveRadius", -1.0f);
         const bool prePolyResimplifyAnchorSupportTessellateWallEdges =
@@ -6724,6 +6866,7 @@ namespace MMAP
                         prePolyUseRawAnchorSupportProbes,
                         prePolyResimplifyAnchorSupportMaxError,
                         resimplifyMaxEdgeLen,
+                        prePolyResimplifyAnchorSupportBandBoundaryRadius,
                         prePolyResimplifyAnchorSupportLocalPreserveRadius,
                         resimplifyBuildFlags,
                         logAnchorStageDiagnostics);
@@ -7179,6 +7322,7 @@ namespace MMAP
             { "anchorRouteTargetsWow", json::array() },
             { "writeAnchorStageManifest", false },
             { "logAnchorStageDiagnostics", false },
+            { "prePolyResimplifyAnchorSupportBandBoundaryRadius", -1.0f },
         };
     }
 

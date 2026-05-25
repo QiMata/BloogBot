@@ -523,13 +523,54 @@ obsolete because that branch never actually re-simplified the raw contour.
     for a recovered source-backed footprint, not more generic per-tile slack
     overrides and not more finalDetour-only tuning
 
+### 2026-05-25 UTC: contour-band boundary carry follow-up
+
+- WWoW then tried the next contour-local shape on top of that raster proof:
+  `prePolyResimplifyAnchorSupportBandBoundaryRadius`.
+- This branch was selected from official Recast behavior, not guesswork:
+  - `rcBuildContours(...)` documents that raw contours match the region
+    outlines exactly, while the simplified contour only guarantees mandatory
+    portal/area vertices:
+    https://recastnav.com/group__recast.html
+  - upstream `simplifyContour(...)` first seeds points where region or area
+    transitions occur, then falls back to coarse seeds before its error-based
+    splits:
+    https://raw.githubusercontent.com/recastnavigation/recastnavigation/main/Recast/Source/RecastContour.cpp
+- Exact experiment:
+  - variant:
+    `og_4029_raster_support_patch06_boundary_seed_r3_v1`
+  - full-rerun artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_boundary_seed_r3_v1_fullrerun-20260525T024605Z/`
+  - changed hash:
+    `E58B0DF11E71196123A377094B4A41710238591B8D454352BDF93B7C825D424F`
+  - focused:
+    `3/7`
+  - full:
+    `20/23`
+- The important negative proof is where the helper fired:
+  - raw restore expanded three same-band contours near `1523.8`:
+    `13 -> 226`, `11 -> 158`, and `3 -> 10`
+  - the boundary carry then injected `3` verts on contour `1 / region 8` and
+    `2` verts on contour `3 / region 7`
+  - the anchor-stage answer still stayed
+    `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - but the deck crop regressed back into the old bridge/trim failure class
+- Practical sibling update:
+  - this is the first strong proof that a contour-local preservation idea can
+    still be the wrong *semantic scope*
+  - the next compatible branch should isolate the single recovered
+    contour/region that actually touches the raster-patch neighborhood, not all
+    same-band contours intersecting the anchor window
+  - in sibling ports, this is the boundary between a promotable local contour
+    override and just another hidden global knob in disguise
+
 ## Restore State
 
 At the end of this corrected loop, `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
 was restored to the stable baseline:
 
 - restore artifact:
-  - `tmp/bake-sweeps/og_4029_restore_after_support_floor_slack_iteration_20260525-20260525T013646Z/`
+  - `tmp/bake-sweeps/og_4029_restore_after_boundary_seed_iteration_fullrerun_20260525-20260525T024951Z/`
 - restored hash:
   - `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
 
@@ -544,6 +585,8 @@ Accessed on 2026-05-24 unless the page itself states a generated date.
 - Recast official sample/discussion showing partition tradeoffs and standard
   build order:
   - https://github.com/recastnavigation/recastnavigation/discussions/583
+- Recast official `rcBuildContours(...)` docs:
+  - https://recastnav.com/group__recast.html
 - Recast official contour simplifier source:
   - https://raw.githubusercontent.com/recastnavigation/recastnavigation/main/Recast/Source/RecastContour.cpp
 - AzerothCore current global mmaps defaults:
