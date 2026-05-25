@@ -2325,7 +2325,81 @@ itself.
   - once the patch is centered on the resolved source-support footprint and the
     earliest surviving support component still stays `0.5315y` away, stop
     iterating on center-only tuning
-  - the next credible retry has to change the local raster patch shape itself
-    around `1523.8` such as a larger footprint or a bridge/segment-shaped
-    patch between the anchor and resolved support point, not another contour
-    timing branch
+  - one narrow bridge/segment-shaped patch between the resolved support point
+    and anchor projection was still a fair last raster-shape retry, but if it
+    stayed hash-identical then the tiny patch-shape family was exhausted
+
+### 2026-05-25 UTC: raster patch resolved-support-to-anchor bridge follow-up
+
+WWoW then spent that one remaining small raster-shape retry on a narrow bridge
+strip back toward the anchor projection.
+
+- Code surface:
+  - new loader-compatible config key:
+    `preRasterizeAnchorSupportPatchBridgeHalfWidth`
+  - when `preRasterizeAnchorSupportPatchBridgeHalfWidth > 0`, the support patch
+    pass also rasterizes an oriented quad strip between the resolved
+    source-support point and the anchor projection
+  - new diagnostic log:
+    `[HF-ANCHOR-SUPPORT-BRIDGE]`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_bridge_support_anchoronly_w030.json'`
+  - changed hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+  - focused tests:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - full `CriticalWalkLegs`:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_bridge_support_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+  - restored hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- Artifact + hash:
+  - changed tile artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1-20260525T220138Z/`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_bridge_support_iteration_20260525-20260525T220350Z/`
+  - saved tile hash:
+    `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive proof:
+  - the branch really did rasterize both the resolved-center patch and the
+    bridge strip:
+    - `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) delta=0.604 tri=537325 source=vmap dist2D=0.306 inside=0`
+    - `[HF-ANCHOR-SUPPORT-PATCH] anchor=(1523.800,-4425.900,17.100) center=(1523.668,-4426.176,17.704) centerMode=resolvedSupportPoint halfExtent=0.600 source=1`
+    - `[HF-ANCHOR-SUPPORT-BRIDGE] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) halfWidth=0.300 length=0.306 source=1`
+    - `[HF-ANCHOR-SUPPORT-PATCH] map=1 tile=40,29: rasterized 2 support patch(es)`
+  - despite the extra strip, the bake output stayed byte-for-byte identical to
+    the resolved-center-only branch:
+    - saved hash stayed
+      `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+    - `median` components stayed byte-for-byte identical, including component
+      `0` at `minDistance2D=0.5315163135528564`
+    - `regions` components also stayed identical
+    - `1523.800,-4425.900,17.100` still ended at
+      `finalDetour / lower_competitor_dominant`
+  - the stage summary for the important anchors still stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - focused/full stayed:
+    - focused:
+      `3/7`
+    - full:
+      `20/23`
+  - focused failures and full failures stayed identical to the center-only
+    branch
+- Practical read:
+  - once the resolved-center patch and the support-to-anchor bridge strip still
+    serialize to the exact same tile hash, stop iterating on tiny local raster
+    patch-shape variants in this family
+  - the next credible retry needs to move earlier or deeper: a more structural
+    source/raster modification, or a contour-builder change that alters the
+    contour simplification itself rather than adding another tiny support patch

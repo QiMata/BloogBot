@@ -1965,5 +1965,42 @@ the anchor itself.
     did not populate the missing anchor cell or change the downstream support
     components
   - this closes the "maybe the patch center is wrong" branch
-  - the next serious retry should alter the raster patch shape itself, not
-    just its center
+  - one narrow bridge-shaped patch between that resolved support point and the
+    anchor projection was still worth testing, but if it produced the same tile
+    hash then the raster micro-shape family was exhausted
+
+### 2026-05-25 UTC raster patch resolved-support-to-anchor bridge follow-up
+
+WWoW then spent that last small raster-shape retry on a narrow bridge strip
+back toward the anchor projection.
+
+- Experiment:
+  - new surface:
+    `preRasterizeAnchorSupportPatchBridgeHalfWidth`
+  - variant:
+    `og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1-20260525T220138Z/`
+  - changed hash:
+    `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_bridge_support_iteration_20260525-20260525T220350Z/`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the bake log proved the new strip executed:
+    `[HF-ANCHOR-SUPPORT-BRIDGE] ... halfWidth=0.300 length=0.306 ...`
+  - the support pass reported `rasterized 2 support patch(es)` for the center
+    patch plus bridge strip
+  - yet the saved tile hash stayed exactly the same as the resolved-center-only
+    branch:
+    `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+  - `median` and `regions` component lists stayed byte-for-byte identical
+  - `1523.8` still ended at
+    `finalDetour / lower_competitor_dominant`
+- Practical read:
+  - this closes not just "wrong patch center" but also these tiny local raster
+    patch-shape micro-variants at this size/placement
+  - the next credible retry should not be another micro patch reshaping
+    branch; it needs a more structural earlier raster/source change or a
+    contour-builder/simplification change

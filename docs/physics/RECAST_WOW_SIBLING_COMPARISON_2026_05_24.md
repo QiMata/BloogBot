@@ -751,9 +751,34 @@ obsolete because that branch never actually re-simplified the raw contour.
       earliest surviving support component still stayed `0.5315y` away and
       `1523.8` still ended at
       `finalDetour / lower_competitor_dominant`
-    Practical rule: patch placement alone is not the missing lever. The next
-    compatible retry should change the local raster patch shape itself, not
-    just move its center or revisit contour timing.
+    Practical rule: patch placement alone is not the missing lever. One bridge
+    strip back toward the anchor projection was still a fair last raster-shape
+    retry, but if that stayed hash-identical then the tiny patch-shape family
+    was exhausted.
+  - final same-night follow-up on `2026-05-25` UTC: WWoW added that narrow
+    bridge strip between the resolved support point and the anchor projection.
+    - new surface:
+      `preRasterizeAnchorSupportPatchBridgeHalfWidth`
+    - branch
+      `og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1`
+      saved hash
+      `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1-20260525T220138Z/`
+    - focused/full stayed:
+      `3/7`, `20/23`
+    - decisive proof:
+      `[HF-ANCHOR-SUPPORT-BRIDGE] ... halfWidth=0.300 length=0.306 ...`
+      and the support pass logged
+      `[HF-ANCHOR-SUPPORT-PATCH] map=1 tile=40,29: rasterized 2 support patch(es)`
+    - decisive result:
+      the bridge strip changed nothing material: the saved tile hash, the
+      `median` / `regions` components, and the bad `1523.8 ->
+      finalDetour / lower_competitor_dominant` answer all stayed identical to
+      the resolved-center-only branch
+    Practical rule: stop iterating on tiny local raster patch-shape variants
+    here. The next compatible retry needs to alter earlier raster/source input
+    more materially or move into contour simplification itself.
 
 ## Restore State
 
@@ -761,7 +786,7 @@ At the end of this corrected loop, `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
 was restored to the stable baseline:
 
 - restore artifact:
-  - `tmp/bake-sweeps/og_4029_restore_after_center_support_iteration_20260525-20260525T214839Z/`
+  - `tmp/bake-sweeps/og_4029_restore_after_bridge_support_iteration_20260525-20260525T220350Z/`
 - restored hash:
   - `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
 

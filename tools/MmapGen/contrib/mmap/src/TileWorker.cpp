@@ -2445,6 +2445,7 @@ static int RasterizeAnchorSupportPatches(rcContext* context,
     const float halfExtent,
     const std::vector<AnchorSourceSupportProbe>& sourceSupports,
     const bool centerOnResolvedSupportPoint,
+    const float bridgeHalfWidth,
     const bool logDiagnostics)
 {
     if (!context || !hf.spans || sourceSupports.empty() || halfExtent <= 0.0f)
@@ -2487,6 +2488,49 @@ static int RasterizeAnchorSupportPatches(rcContext* context,
                 centerZ, centerX, support.supportY,
                 centerOnResolvedSupportPoint ? "resolvedSupportPoint" : "anchor",
                 halfExtent, (int)support.source);
+        }
+
+        const float anchorX = support.anchor.wowY;
+        const float anchorZ = support.anchor.wowX;
+        const float bridgeStartX = support.supportRecastX;
+        const float bridgeStartZ = support.supportRecastZ;
+        const float bridgeDeltaX = anchorX - bridgeStartX;
+        const float bridgeDeltaZ = anchorZ - bridgeStartZ;
+        const float bridgeLength = sqrtf(bridgeDeltaX * bridgeDeltaX + bridgeDeltaZ * bridgeDeltaZ);
+        if (bridgeHalfWidth > 0.0f && bridgeLength > 1.0e-4f)
+        {
+            const float invBridgeLength = 1.0f / bridgeLength;
+            const float tangentX = bridgeDeltaX * invBridgeLength;
+            const float tangentZ = bridgeDeltaZ * invBridgeLength;
+            const float perpX = -tangentZ * bridgeHalfWidth;
+            const float perpZ = tangentX * bridgeHalfWidth;
+
+            float bridgeVerts[12] =
+            {
+                bridgeStartX + perpX, centerY, bridgeStartZ + perpZ,
+                anchorX + perpX, centerY, anchorZ + perpZ,
+                anchorX - perpX, centerY, anchorZ - perpZ,
+                bridgeStartX - perpX, centerY, bridgeStartZ - perpZ,
+            };
+
+            const float minBridgeX = std::min(std::min(bridgeVerts[0], bridgeVerts[3]), std::min(bridgeVerts[6], bridgeVerts[9]));
+            const float maxBridgeX = std::max(std::max(bridgeVerts[0], bridgeVerts[3]), std::max(bridgeVerts[6], bridgeVerts[9]));
+            const float minBridgeZ = std::min(std::min(bridgeVerts[2], bridgeVerts[5]), std::min(bridgeVerts[8], bridgeVerts[11]));
+            const float maxBridgeZ = std::max(std::max(bridgeVerts[2], bridgeVerts[5]), std::max(bridgeVerts[8], bridgeVerts[11]));
+            if (!(maxBridgeX < hf.bmin[0] || minBridgeX > hf.bmax[0] ||
+                maxBridgeZ < hf.bmin[2] || minBridgeZ > hf.bmax[2]))
+            {
+                rcRasterizeTriangles(context, bridgeVerts, 4, tris, areas, 2, hf, 0);
+                ++patchCount;
+
+                if (logDiagnostics)
+                {
+                    printf("[HF-ANCHOR-SUPPORT-BRIDGE] anchor=(%.3f,%.3f,%.3f) support=(%.3f,%.3f,%.3f) halfWidth=%.3f length=%.3f source=%d\n",
+                        support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                        support.supportRecastZ, support.supportRecastX, support.supportY,
+                        bridgeHalfWidth, bridgeLength, (int)support.source);
+                }
+            }
         }
     }
 
@@ -7327,6 +7371,8 @@ namespace MMAP
                 : std::vector<AnchorSourceSupportProbe>();
         const float preRasterizeAnchorSupportPatchHalfExtent = JsonFloatOrDefault(
             jsonTileConfig, "preRasterizeAnchorSupportPatchHalfExtent", 0.0f);
+        const float preRasterizeAnchorSupportPatchBridgeHalfWidth = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeAnchorSupportPatchBridgeHalfWidth", 0.0f);
         const bool preRasterizeAnchorSupportPatchCenterOnResolvedSupportPoint =
             ParsePreRasterizeAnchorSupportPatchCenterMode(jsonTileConfig);
         json anchorStageManifest;
@@ -7530,6 +7576,7 @@ namespace MMAP
                         preRasterizeAnchorSupportPatchHalfExtent,
                         preRasterizeAnchorSupportPatchProbes,
                         preRasterizeAnchorSupportPatchCenterOnResolvedSupportPoint,
+                        preRasterizeAnchorSupportPatchBridgeHalfWidth,
                         logAnchorStageDiagnostics);
                     if (rasterizedSupportPatches > 0)
                     {
@@ -8305,6 +8352,7 @@ namespace MMAP
             { "preRasterizeAnchorSupportPatchCoordsWow", json::array() },
             { "preRasterizeAnchorSupportPatchHalfExtent", 0.0f },
             { "preRasterizeAnchorSupportPatchCenterMode", "anchor" },
+            { "preRasterizeAnchorSupportPatchBridgeHalfWidth", 0.0f },
             { "preRegionAnchorCoordsWow", json::array() },
             { "postDetourCullAnchorPolyStacks", false },
             { "postDetourCullAnchorTrappedComponents", false },
