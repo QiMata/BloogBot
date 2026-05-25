@@ -2410,6 +2410,76 @@
   - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_localraw_window_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
 - Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
 
+## 2026-05-25 UTC - support-footprint negatives after support-gap
+- Active task: test whether the remaining `1523.8` hole is fixable by
+  combining the strongest surviving contour proof with the support-gap cull, or
+  by widening the source-support band slightly below the sampled support floor.
+- Pass result: `delta shipped; both branches were bounded negatives, and they
+  sharpened the next rule: do not keep widening finalDetour support-gap or
+  generic support-floor slack around 1523.8`.
+- Last delta:
+  - Added `AnchorSupportBandTuning` plus the tile-local config surface
+    `anchorSourceSupportFloorSlackBelow` in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`.
+  - Combined raw+preserve contour proof with the existing support-gap cull:
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raw_preserve_support_gap1_v1-20260525T011748Z/`
+    - hash:
+      `EFD2DCE534EFB2A9039447DFBE84C6F695701C507ED60DC0592C71752EB783FD`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - decisive proof:
+      - `1523.8` still logged
+        `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=14 lowerFringeCulled=2 ... supportBandCandidates=14 ... bestSupportGap2D=0.300`
+      - `1523.800,-4425.900,17.100` still ->
+        `finalDetour / lower_competitor_dominant`
+      - `1522.500,-4424.100,17.000` regressed ->
+        `finalDetour / support_footprint_missed_anchor`
+  - Widened the support floor below the sampled source-support Y:
+    - artifact:
+      `tmp/bake-sweeps/og_4029_support_floor_slack035_v1-20260525T013354Z/`
+    - hash:
+      `CD5F1EB58003C4326D03B8A638EA154AF2855F3547520000AE39E45E59163FE0`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - decisive proof:
+      - `1523.8` logged
+        `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=4 lowerFringeCulled=0 ... supportBandCandidates=4 ... bestSupportGap2D=-1.000`
+      - `1523.800,-4425.900,17.100` still ->
+        `finalDetour / lower_competitor_dominant`
+      - `1522.500,-4424.100,17.000` regressed ->
+        `finalDetour / lower_competitor_dominant`
+      - `1521.267,-4425.600,17.609` regressed ->
+        `finalDetour / lower_competitor_dominant`
+- Practical read:
+  - combining raw+preserve support with a small finalDetour gap trim does not
+    make the surviving support routeable or dominant
+  - widening `anchorSourceSupportFloorSlackBelow` from the baseline `0.20` to
+    `0.35` is not a safe approximation of WoW supports here; it shrinks the
+    useful final support-band evidence and regresses sibling anchors
+  - the remaining best local clue is still the exact-neighborhood
+    support-footprint hole:
+    source-backed support survives nearby, but the anchor cell itself still
+    lands in the wrong basin
+  - next serious work should target exact-neighborhood support-footprint
+    bridging / overlap or earlier source-support classification, not more
+    generic slack or finalDetour gap widening
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raw_preserve_support_gap1_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raw_preserve_support_gap1.json'` -> passed.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raw_preserve_support_gap1_v1_focused.trx" --results-directory tmp/test-runtime/results-pathfinding` -> passed `7/7`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raw_preserve_support_gap1_v1.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> still `17/23`.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_support_floor_slack035_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_support_floor_slack035.json'` -> passed.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_support_floor_slack035_v1_focused.trx" --results-directory tmp/test-runtime/results-pathfinding` -> passed `7/7`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_support_floor_slack035_v1.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> still `17/23`.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_support_floor_slack_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` ->
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+
 ## 2026-05-25 UTC - support-gap finalDetour follow-up
 - Active task: test whether the anchor-stack cull can treat a small XY gap
   between nearby upper support fragments and the lower basin as enough evidence

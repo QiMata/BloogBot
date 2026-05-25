@@ -1201,3 +1201,62 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     `tmp/bake-sweeps/og_4029_restore_after_support_gap1_iteration_20260525-20260525T005613Z/`
   - restored hash:
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-25 UTC: support-footprint negatives after support-gap
+
+- New native/config surface:
+  - `AnchorSupportBandTuning`
+  - tile-local `anchorSourceSupportFloorSlackBelow`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - raw+preserve + gap bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raw_preserve_support_gap1_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raw_preserve_support_gap1.json'`
+  - support-floor slack bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_support_floor_slack035_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_support_floor_slack035.json'`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_support_floor_slack_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Observed results:
+  - raw+preserve + gap branch:
+    - hash:
+      `EFD2DCE534EFB2A9039447DFBE84C6F695701C507ED60DC0592C71752EB783FD`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - proof:
+      - `1523.8` still logged
+        `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=14 lowerFringeCulled=2 ... supportBandCandidates=14 ... bestSupportGap2D=0.300`
+      - `1523.800,-4425.900,17.100` stayed
+        `finalDetour / lower_competitor_dominant`
+      - `1522.500,-4424.100,17.000` regressed to
+        `finalDetour / support_footprint_missed_anchor`
+  - `anchorSourceSupportFloorSlackBelow=0.35` branch:
+    - hash:
+      `CD5F1EB58003C4326D03B8A638EA154AF2855F3547520000AE39E45E59163FE0`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - proof:
+      - `1523.8` logged
+        `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=4 lowerFringeCulled=0 ... supportBandCandidates=4 ... bestSupportGap2D=-1.000`
+      - `1523.800,-4425.900,17.100` stayed
+        `finalDetour / lower_competitor_dominant`
+      - `1522.500,-4424.100,17.000` regressed to
+        `finalDetour / lower_competitor_dominant`
+      - `1521.267,-4425.600,17.609` regressed to
+        `finalDetour / lower_competitor_dominant`
+- Current best interpretation:
+  - the finalDetour support-gap surface is useful proof, but combining it with
+    the raw+preserve contour branch still does not make the support shard
+    dominant or routeable
+  - widening the support floor below the sampled source-support Y is not a safe
+    WoW geometry approximation at this anchor; it regresses sibling supports
+    and reduces the useful support-band evidence
+  - the remaining clean clue is still the exact-neighborhood support-footprint
+    hole at `1523.8`: nearby source-backed support survives, but the anchor
+    cell itself still falls into the wrong final basin
+  - next branches should target exact-neighborhood support-footprint bridging /
+    overlap or earlier source-support classification, not more generic
+    `supportGap2D` or `supportFloorSlackBelow` widening

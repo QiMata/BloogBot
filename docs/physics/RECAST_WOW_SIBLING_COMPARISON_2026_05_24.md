@@ -482,13 +482,33 @@ obsolete because that branch never actually re-simplified the raw contour.
   - the next serious branch needs to move earlier again, into
     source-support / compact-heightfield footprint handling
 
+### 2026-05-25 UTC: support-footprint follow-up
+
+- Two next branches were tested against that same footprint hypothesis:
+  - raw+preserve contour + support-gap:
+    `EFD2DCE534EFB2A9039447DFBE84C6F695701C507ED60DC0592C71752EB783FD`
+  - `anchorSourceSupportFloorSlackBelow = 0.35`:
+    `CD5F1EB58003C4326D03B8A638EA154AF2855F3547520000AE39E45E59163FE0`
+- Both kept focused `7/7` and full `17/23`.
+- The sibling-style lesson is important:
+  - even though TrinityCore/AzerothCore-style local overrides are legitimate as
+    a category, this tile is now a concrete example of when **not** to keep
+    widening a generic local slack override
+  - the `0.35` support-floor widening reduced the useful support-band evidence
+    at `1523.8` and regressed sibling anchors, so it is not a promotable
+    "map-local override" for WWoW's WoW-geometry contract
+- The stronger compatible direction remains:
+  - exact-neighborhood support-footprint work that preserves `.mmtile` /
+    Detour compatibility
+  - or earlier source-support classification before contour/poly loss
+
 ## Restore State
 
 At the end of this corrected loop, `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
 was restored to the stable baseline:
 
 - restore artifact:
-  - `tmp/bake-sweeps/og_4029_restore_after_resimplify_bugfix_iteration_20260524-20260524T231759Z/`
+  - `tmp/bake-sweeps/og_4029_restore_after_support_floor_slack_iteration_20260525-20260525T013646Z/`
 - restored hash:
   - `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
 

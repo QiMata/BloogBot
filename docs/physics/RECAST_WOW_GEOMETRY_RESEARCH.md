@@ -1478,3 +1478,47 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     `tmp/bake-sweeps/og_4029_restore_after_support_gap1_iteration_20260525-20260525T005613Z/`
   - restored hash:
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-25 UTC support-footprint follow-up
+
+- WWoW tested two follow-ups aimed at the remaining `1523.8` footprint hole.
+- Raw+preserve contour + support-gap combination:
+  - hash:
+    `EFD2DCE534EFB2A9039447DFBE84C6F695701C507ED60DC0592C71752EB783FD`
+  - focused/full:
+    `7/7`, `17/23`
+  - decisive proof:
+    - `1523.8` still logged
+      `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=14 lowerFringeCulled=2 ... supportBandCandidates=14 ... bestSupportGap2D=0.300`
+    - `1523.800,-4425.900,17.100` still ->
+      `finalDetour / lower_competitor_dominant`
+    - `1522.500,-4424.100,17.000` regressed ->
+      `finalDetour / support_footprint_missed_anchor`
+- Support-band floor-slack widening:
+  - native/config surface:
+    `AnchorSupportBandTuning` /
+    `anchorSourceSupportFloorSlackBelow`
+  - tested local override:
+    `anchorSourceSupportFloorSlackBelow = 0.35`
+  - hash:
+    `CD5F1EB58003C4326D03B8A638EA154AF2855F3547520000AE39E45E59163FE0`
+  - focused/full:
+    `7/7`, `17/23`
+  - decisive proof:
+    - `1523.8` still logged
+      `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=4 lowerFringeCulled=0 ... supportBandCandidates=4 ... bestSupportGap2D=-1.000`
+    - `1523.800,-4425.900,17.100` still ->
+      `finalDetour / lower_competitor_dominant`
+    - `1522.500,-4424.100,17.000` and
+      `1521.267,-4425.600,17.609` both regressed ->
+      `finalDetour / lower_competitor_dominant`
+- Interpretation:
+  - these are two more bounded negatives, but they narrow the search well
+  - the surviving support at `1523.8` is not failing because the contour or
+    support floor is generically too small; it is failing because the exact
+    anchor neighborhood still does not overlap the right surviving support
+    footprint
+  - do not keep widening generic support-band slack or small finalDetour gap
+    trims here
+  - the next serious family should be exact-neighborhood support-footprint
+    bridging / overlap or earlier source-support classification

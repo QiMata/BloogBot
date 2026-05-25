@@ -1443,11 +1443,35 @@ struct AnchorSourceSupportProbe
     AnchorPolyStackCoord borrowedFrom;
 };
 
+struct AnchorSupportBandTuning
+{
+    float supportFloorSlackBelow = 0.20f;
+    float supportFloorSlackAbove = 0.35f;
+    float competingLowerFloorMinDrop = 0.25f;
+};
+
 struct Point2DXZ
 {
     float x = 0.0f;
     float z = 0.0f;
 };
+
+static float GetAnchorSupportFloorMinY(const AnchorSourceSupportProbe& support, const AnchorSupportBandTuning& tuning)
+{
+    return support.supportY - tuning.supportFloorSlackBelow;
+}
+
+static float GetAnchorSupportFloorMaxY(const AnchorSourceSupportProbe& support,
+    const float supportZTolerance, const AnchorSupportBandTuning& tuning)
+{
+    return support.supportY + std::max(tuning.supportFloorSlackAbove, supportZTolerance);
+}
+
+static bool IsAnchorCompetingLowerFloor(const float spanFloor,
+    const AnchorSourceSupportProbe& support, const AnchorSupportBandTuning& tuning)
+{
+    return spanFloor < support.supportY - tuning.competingLowerFloorMinDrop;
+}
 
 static std::string FormatAnchorStageId(const AnchorPolyStackCoord& anchor)
 {
@@ -2133,15 +2157,13 @@ static int CullAnchorUpperCompactSpans(rcCompactHeightfield& chf,
 // support floor to null lower competing compact spans before region building.
 static int CullAnchorSourceSupportCompactSpans(rcCompactHeightfield& chf,
     const float xyExtent, const float supportZTolerance, const bool fallbackToWindowSupport,
+    const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& sourceSupports,
     const bool logDiagnostics)
 {
     if (!chf.cells || !chf.spans || !chf.areas || sourceSupports.empty())
         return 0;
 
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
-    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
     constexpr float kFallbackCullRadius = 0.85f;
 
     struct AnchorWindowCell
@@ -2166,8 +2188,8 @@ static int CullAnchorSourceSupportCompactSpans(rcCompactHeightfield& chf,
         {
             continue;
         }
-        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
         const bool allowFallbackBasinCull = support.projectedInside || support.distance2D <= 0.5f;
 
         std::vector<AnchorWindowCell> windowCells;
@@ -2227,7 +2249,7 @@ static int CullAnchorSourceSupportCompactSpans(rcCompactHeightfield& chf,
 
                         const rcCompactSpan& span = chf.spans[i];
                         const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
-                        if (spanFloor >= support.supportY - kCompetingLowerFloorMinDrop)
+                        if (!IsAnchorCompetingLowerFloor(spanFloor, support, supportBandTuning))
                             continue;
 
                         chf.areas[i] = RC_NULL_AREA;
@@ -2249,7 +2271,7 @@ static int CullAnchorSourceSupportCompactSpans(rcCompactHeightfield& chf,
 
                     const rcCompactSpan& span = chf.spans[i];
                     const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
-                    if (spanFloor >= windowCell.bestSupportFloor - kCompetingLowerFloorMinDrop)
+                    if (spanFloor >= windowCell.bestSupportFloor - supportBandTuning.competingLowerFloorMinDrop)
                         continue;
 
                     chf.areas[i] = RC_NULL_AREA;
@@ -2275,7 +2297,7 @@ static int CullAnchorSourceSupportCompactSpans(rcCompactHeightfield& chf,
 
                     const rcCompactSpan& span = chf.spans[i];
                     const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
-                    if (spanFloor >= support.supportY - kCompetingLowerFloorMinDrop)
+                    if (!IsAnchorCompetingLowerFloor(spanFloor, support, supportBandTuning))
                         continue;
 
                     chf.areas[i] = RC_NULL_AREA;
@@ -2310,14 +2332,13 @@ static int CullAnchorSourceSupportCompactSpans(rcCompactHeightfield& chf,
 static int RestoreAnchorSourceSupportCompactSpansAfterErode(rcCompactHeightfield& chf,
     const std::vector<unsigned char>& preErodeAreas,
     const float xyExtent,
+    const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& sourceSupports,
     const bool logDiagnostics)
 {
     if (!chf.cells || !chf.spans || !chf.areas || sourceSupports.empty() || preErodeAreas.size() != chf.spanCount)
         return 0;
 
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
     constexpr float kMaxSourceDistance2D = 0.50f;
 
     int restored = 0;
@@ -2336,8 +2357,8 @@ static int RestoreAnchorSourceSupportCompactSpansAfterErode(rcCompactHeightfield
             continue;
         }
 
-        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-        const float supportFloorMaxY = support.supportY + kSupportFloorSlackAbove;
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = support.supportY + supportBandTuning.supportFloorSlackAbove;
         int restoredCells = 0;
         int restoredSpans = 0;
 
@@ -2389,14 +2410,11 @@ static int RestoreAnchorSourceSupportCompactSpansAfterErode(rcCompactHeightfield
 
 static void LogAnchorSourceSupportHeightfieldStage(const char* stage, const rcHeightfield& hf,
     const float xyExtent, const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& sourceSupports)
 {
     if (!hf.spans || sourceSupports.empty())
         return;
-
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
-    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
 
     for (const AnchorSourceSupportProbe& support : sourceSupports)
     {
@@ -2410,8 +2428,8 @@ static void LogAnchorSourceSupportHeightfieldStage(const char* stage, const rcHe
         {
             continue;
         }
-        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
 
         int supportCells = 0;
         int supportSpans = 0;
@@ -2445,7 +2463,7 @@ static void LogAnchorSourceSupportHeightfieldStage(const char* stage, const rcHe
                         ++supportSpans;
                         bestSupportDelta = std::min(bestSupportDelta, fabsf(spanFloor - support.supportY));
                     }
-                    else if (spanFloor < support.supportY - kCompetingLowerFloorMinDrop)
+                    else if (IsAnchorCompetingLowerFloor(spanFloor, support, supportBandTuning))
                     {
                         cellHasLower = true;
                         ++lowerSpans;
@@ -2470,14 +2488,11 @@ static void LogAnchorSourceSupportHeightfieldStage(const char* stage, const rcHe
 
 static void LogAnchorSourceSupportCompactStage(const char* stage, const rcCompactHeightfield& chf,
     const float xyExtent, const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& sourceSupports)
 {
     if (!chf.cells || !chf.spans || !chf.areas || sourceSupports.empty())
         return;
-
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
-    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
 
     for (const AnchorSourceSupportProbe& support : sourceSupports)
     {
@@ -2486,8 +2501,8 @@ static void LogAnchorSourceSupportCompactStage(const char* stage, const rcCompac
 
         const float anchorRecastX = support.anchor.wowY;
         const float anchorRecastZ = support.anchor.wowX;
-        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
 
         int supportCells = 0;
         int supportSpans = 0;
@@ -2523,7 +2538,7 @@ static void LogAnchorSourceSupportCompactStage(const char* stage, const rcCompac
                         ++supportSpans;
                         bestSupportDelta = std::min(bestSupportDelta, fabsf(spanFloor - support.supportY));
                     }
-                    else if (spanFloor < support.supportY - kCompetingLowerFloorMinDrop)
+                    else if (IsAnchorCompetingLowerFloor(spanFloor, support, supportBandTuning))
                     {
                         cellHasLower = true;
                         ++lowerSpans;
@@ -2548,14 +2563,11 @@ static void LogAnchorSourceSupportCompactStage(const char* stage, const rcCompac
 
 static void LogAnchorSourceSupportCompactComponents(const char* stage, const rcCompactHeightfield& chf,
     const float xyExtent, const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& sourceSupports)
 {
     if (!chf.cells || !chf.spans || !chf.areas || sourceSupports.empty())
         return;
-
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
-    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
 
     struct WindowSpan
     {
@@ -2594,8 +2606,8 @@ static void LogAnchorSourceSupportCompactComponents(const char* stage, const rcC
             continue;
         }
 
-        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
 
         std::vector<WindowSpan> windowSpans;
         std::vector<int> localByGlobalSpan(chf.spanCount, -1);
@@ -2643,7 +2655,7 @@ static void LogAnchorSourceSupportCompactComponents(const char* stage, const rcC
                     windowSpan.floor = spanFloor;
                     windowSpan.distance2D = cellDistance2D;
                     windowSpan.supportRange = spanFloor >= supportFloorMinY && spanFloor <= supportFloorMaxY;
-                    windowSpan.competingLower = spanFloor < support.supportY - kCompetingLowerFloorMinDrop;
+                    windowSpan.competingLower = IsAnchorCompetingLowerFloor(spanFloor, support, supportBandTuning);
                     localByGlobalSpan[i] = static_cast<int>(windowSpans.size());
                     windowSpans.push_back(windowSpan);
                 }
@@ -2797,6 +2809,7 @@ static json BuildBaseAnchorStageJson(const char* stageName, const char* kind, co
 
 static json BuildHeightfieldAnchorStageSummary(const char* stageName, const rcHeightfield& hf,
     const float xyExtent, const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const AnchorSourceSupportProbe& support)
 {
     json stage = BuildBaseAnchorStageJson(stageName, "heightfield", support);
@@ -2809,14 +2822,10 @@ static json BuildHeightfieldAnchorStageSummary(const char* stageName, const rcHe
     if (!hf.spans || !support.found)
         return stage;
 
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
-    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
-
     const float anchorRecastX = support.anchor.wowY;
     const float anchorRecastZ = support.anchor.wowX;
-    const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-    const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+    const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+    const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
 
     int supportCells = 0;
     int supportSpans = 0;
@@ -2850,7 +2859,7 @@ static json BuildHeightfieldAnchorStageSummary(const char* stageName, const rcHe
                     ++supportSpans;
                     bestSupportDelta = std::min(bestSupportDelta, fabsf(spanFloor - support.supportY));
                 }
-                else if (spanFloor < support.supportY - kCompetingLowerFloorMinDrop)
+                else if (IsAnchorCompetingLowerFloor(spanFloor, support, supportBandTuning))
                 {
                     cellHasLower = true;
                     ++lowerSpans;
@@ -2878,6 +2887,7 @@ static json BuildHeightfieldAnchorStageSummary(const char* stageName, const rcHe
 
 static json BuildCompactAnchorStageSummary(const char* stageName, const rcCompactHeightfield& chf,
     const float xyExtent, const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const AnchorSourceSupportProbe& support, const bool includeComponents)
 {
     json stage = BuildBaseAnchorStageJson(stageName, "compact", support);
@@ -2890,10 +2900,6 @@ static json BuildCompactAnchorStageSummary(const char* stageName, const rcCompac
     if (!chf.cells || !chf.spans || !chf.areas || !support.found)
         return stage;
 
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
-    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
-
     const float anchorRecastX = support.anchor.wowY;
     const float anchorRecastZ = support.anchor.wowX;
     if (anchorRecastX < chf.bmin[0] - xyExtent || anchorRecastX > chf.bmax[0] + xyExtent ||
@@ -2903,8 +2909,8 @@ static json BuildCompactAnchorStageSummary(const char* stageName, const rcCompac
         return stage;
     }
 
-    const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-    const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+    const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+    const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
 
     int supportCells = 0;
     int supportSpans = 0;
@@ -2978,7 +2984,7 @@ static json BuildCompactAnchorStageSummary(const char* stageName, const rcCompac
                 const rcCompactSpan& span = chf.spans[i];
                 const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
                 const bool supportRange = spanFloor >= supportFloorMinY && spanFloor <= supportFloorMaxY;
-                const bool competingLower = spanFloor < support.supportY - kCompetingLowerFloorMinDrop;
+                const bool competingLower = IsAnchorCompetingLowerFloor(spanFloor, support, supportBandTuning);
 
                 if (supportRange)
                 {
@@ -3152,6 +3158,7 @@ static json BuildCompactAnchorStageSummary(const char* stageName, const rcCompac
 
 static json BuildContourAnchorStageSummary(const rcContourSet& contours,
     const float xyExtent, const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const AnchorSourceSupportProbe& support)
 {
     json stage = BuildBaseAnchorStageJson("contours", "contours", support);
@@ -3160,14 +3167,10 @@ static json BuildContourAnchorStageSummary(const rcContourSet& contours,
     if (!contours.conts || !support.found)
         return stage;
 
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
-    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
-
     const float anchorRecastX = support.anchor.wowY;
     const float anchorRecastZ = support.anchor.wowX;
-    const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-    const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+    const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+    const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
 
     bool supportContainsAnchor = false;
     bool lowerContainsAnchor = false;
@@ -3211,7 +3214,7 @@ static json BuildContourAnchorStageSummary(const rcContourSet& contours,
 
         const bool containsAnchorProjection = PointInPolygonXZ(polygon, anchorRecastX, anchorRecastZ);
         const bool supportBand = maxY >= supportFloorMinY && minY <= supportFloorMaxY;
-        const bool competingLower = maxY < support.supportY - kCompetingLowerFloorMinDrop;
+        const bool competingLower = maxY < support.supportY - supportBandTuning.competingLowerFloorMinDrop;
         if (!containsAnchorProjection && !supportBand && !competingLower)
             continue;
 
@@ -3254,6 +3257,7 @@ static json BuildContourAnchorStageSummary(const rcContourSet& contours,
 
 static json BuildPolyMeshAnchorStageSummary(const rcPolyMesh& mesh,
     const float xyExtent, const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const AnchorSourceSupportProbe& support)
 {
     json stage = BuildBaseAnchorStageJson("polymesh", "polymesh", support);
@@ -3262,14 +3266,10 @@ static json BuildPolyMeshAnchorStageSummary(const rcPolyMesh& mesh,
     if (!mesh.polys || !mesh.verts || !support.found)
         return stage;
 
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
-    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
-
     const float anchorRecastX = support.anchor.wowY;
     const float anchorRecastZ = support.anchor.wowX;
-    const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-    const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+    const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+    const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
 
     bool supportContainsAnchor = false;
     bool lowerContainsAnchor = false;
@@ -3321,7 +3321,7 @@ static json BuildPolyMeshAnchorStageSummary(const rcPolyMesh& mesh,
 
         const bool containsAnchorProjection = PointInPolygonXZ(polygon, anchorRecastX, anchorRecastZ);
         const bool supportBand = maxY >= supportFloorMinY && minY <= supportFloorMaxY;
-        const bool competingLower = maxY < support.supportY - kCompetingLowerFloorMinDrop;
+        const bool competingLower = maxY < support.supportY - supportBandTuning.competingLowerFloorMinDrop;
         if (!containsAnchorProjection && !supportBand && !competingLower)
             continue;
 
@@ -3371,14 +3371,12 @@ static int PreserveAnchorSupportContourBorderVertices(
     rcContourSet& contours,
     const float xyExtent,
     const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& supports,
     const bool logDiagnostics)
 {
     if (!contours.conts || supports.empty())
         return 0;
-
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
 
     int preservedVertexCount = 0;
     int preservedContourCount = 0;
@@ -3390,8 +3388,8 @@ static int PreserveAnchorSupportContourBorderVertices(
 
         const float anchorRecastX = support.anchor.wowY;
         const float anchorRecastZ = support.anchor.wowX;
-        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
 
         for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
         {
@@ -3473,14 +3471,12 @@ static int RestoreRawAnchorSupportContours(
     rcContourSet& contours,
     const float xyExtent,
     const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& supports,
     const bool logDiagnostics)
 {
     if (!contours.conts || supports.empty())
         return 0;
-
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
 
     int restoredContourCount = 0;
 
@@ -3491,8 +3487,8 @@ static int RestoreRawAnchorSupportContours(
 
         const float anchorRecastX = support.anchor.wowY;
         const float anchorRecastZ = support.anchor.wowX;
-        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
 
         for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
         {
@@ -3926,6 +3922,7 @@ static int ResimplifyRawAnchorSupportContours(
     rcContourSet& contours,
     const float xyExtent,
     const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& supports,
     const float maxError,
     const int maxEdgeLen,
@@ -3935,9 +3932,6 @@ static int ResimplifyRawAnchorSupportContours(
 {
     if (!contours.conts || supports.empty() || maxError < 0.0f)
         return 0;
-
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
 
     int resimplifiedContourCount = 0;
     int removedVertexCount = 0;
@@ -3950,8 +3944,8 @@ static int ResimplifyRawAnchorSupportContours(
 
         const float anchorRecastX = support.anchor.wowY;
         const float anchorRecastZ = support.anchor.wowX;
-        const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-        const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
 
         for (int contourIndex = 0; contourIndex < contours.nconts; ++contourIndex)
         {
@@ -4335,6 +4329,7 @@ static void EvaluateFinalDetourAnchorComponentRouteability(dtNavMeshQuery& query
 static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshTile& tile,
     const std::vector<DetourPolyDiagnostics>& diagnostics, const std::vector<unsigned char>& liveGroundMask,
     const float xyExtent, const float zExtent, const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
     const AnchorSourceSupportProbe& support,
     const std::vector<AnchorRouteTarget>& routeTargets)
 {
@@ -4351,13 +4346,9 @@ static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshT
         return stage;
     }
 
-    constexpr float kSupportFloorSlackBelow = 0.20f;
-    constexpr float kSupportFloorSlackAbove = 0.35f;
-    constexpr float kCompetingLowerFloorMinDrop = 0.25f;
-
     const float detourPos[3] = { support.anchor.wowY, support.anchor.wowZ, support.anchor.wowX };
-    const float supportFloorMinY = support.supportY - kSupportFloorSlackBelow;
-    const float supportFloorMaxY = support.supportY + std::max(kSupportFloorSlackAbove, supportZTolerance);
+    const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+    const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
     const dtPolyRef tileRefBase = navMesh.getPolyRefBase(&tile);
     std::vector<int> componentIds;
     std::vector<FinalDetourGroundComponentInfo> components;
@@ -4397,7 +4388,7 @@ static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshT
         const bool supportBand = IntersectsAnchorSupportBand(diagnostics[polyIndex], supportFloorMinY, supportFloorMaxY);
         const bool supportCandidate = (hasSurface && supportSurfaceZ >= supportFloorMinY && supportSurfaceZ <= supportFloorMaxY) ||
             (probe.posOverPoly && supportBand);
-        const bool lowerCandidate = hasSurface && supportSurfaceZ < support.supportY - kCompetingLowerFloorMinDrop;
+        const bool lowerCandidate = hasSurface && IsAnchorCompetingLowerFloor(supportSurfaceZ, support, supportBandTuning);
 
         if (supportBand)
             ++supportBandCount;
@@ -4552,7 +4543,7 @@ static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshT
             IntersectsAnchorSupportBand(diagnostics[winnerPolyIndex], supportFloorMinY, supportFloorMaxY);
         const bool winnerSupport = (winnerHasSurface && winnerSurfaceZ >= supportFloorMinY && winnerSurfaceZ <= supportFloorMaxY) ||
             (winnerProbe.posOverPoly && winnerSupportBand);
-        const bool winnerLower = winnerHasSurface && winnerSurfaceZ < support.supportY - kCompetingLowerFloorMinDrop;
+        const bool winnerLower = winnerHasSurface && IsAnchorCompetingLowerFloor(winnerSurfaceZ, support, supportBandTuning);
         stage["finalWinner"] =
         {
             { "polyRef", FormatPolyRefHex(nearestRef) },
@@ -6073,6 +6064,9 @@ namespace MMAP
             jsonTileConfig, "postDetourCullAnchorPolyStacksZExtent", 10.0f);
         const float anchorSourceSupportZTolerance = JsonFloatOrDefault(
             jsonTileConfig, "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f);
+        AnchorSupportBandTuning anchorSupportBandTuning;
+        anchorSupportBandTuning.supportFloorSlackBelow = JsonFloatOrDefault(
+            jsonTileConfig, "anchorSourceSupportFloorSlackBelow", 0.20f);
         const bool trimAnchorUpperCompactSpans = jsonTileConfig["preRegionCullAnchorUpperCompactSpans"].get<bool>();
         const std::vector<AnchorPolyStackCoord> anchorCompactWorkCoords =
             (trimAnchorSourceSupportCompactSpans || trimAnchorSourceSupportCompactSpansBeforeMedian ||
@@ -6236,6 +6230,7 @@ namespace MMAP
                         hf,
                         anchorSourceSupportXyExtent,
                         anchorSourceSupportZTolerance,
+                        anchorSupportBandTuning,
                         anchorManifestSupports[anchorIndex]));
             }
         };
@@ -6254,6 +6249,7 @@ namespace MMAP
                         chf,
                         anchorSourceSupportXyExtent,
                         anchorSourceSupportZTolerance,
+                        anchorSupportBandTuning,
                         anchorManifestSupports[anchorIndex],
                         includeComponents));
             }
@@ -6272,6 +6268,7 @@ namespace MMAP
                         contours,
                         anchorSourceSupportXyExtent,
                         anchorSourceSupportZTolerance,
+                        anchorSupportBandTuning,
                         anchorManifestSupports[anchorIndex]));
             }
         };
@@ -6289,6 +6286,7 @@ namespace MMAP
                         mesh,
                         anchorSourceSupportXyExtent,
                         anchorSourceSupportZTolerance,
+                        anchorSupportBandTuning,
                         anchorManifestSupports[anchorIndex]));
             }
         };
@@ -6378,7 +6376,7 @@ namespace MMAP
                 rcRasterizeTriangles(m_rcContext, tVerts, tVertCount, tTris, rasterAreas.data(), tTriCount, *tile.solid, 0);
                 dumpHeightfieldColumn("rasterize", dbgCellX, dbgCellY, *tile.solid);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportHeightfieldStage("rasterize", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportHeightfieldStage("rasterize", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 appendHeightfieldManifestStage("rasterize", *tile.solid);
                 if (m_debug)
                     WriteHeightfieldStageCsv("rasterize", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
@@ -6391,7 +6389,7 @@ namespace MMAP
                 rcFilterLowHangingWalkableObstacles(m_rcContext, walkableClimbTerrain, *tile.solid);
                 dumpHeightfieldColumn("filterLowHanging", dbgCellX, dbgCellY, *tile.solid);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportHeightfieldStage("filterLowHanging", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportHeightfieldStage("filterLowHanging", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 appendHeightfieldManifestStage("filterLowHanging", *tile.solid);
                 if (m_debug)
                     WriteHeightfieldStageCsv("filterLowHanging", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
@@ -6405,7 +6403,7 @@ namespace MMAP
                 //rcFilterLedgeSpans(m_rcContext, tileCfg.walkableHeight, walkableClimbTerrain, *tile.solid); // Default recast code
                 dumpHeightfieldColumn("filterLedge", dbgCellX, dbgCellY, *tile.solid);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportHeightfieldStage("filterLedge", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportHeightfieldStage("filterLedge", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 appendHeightfieldManifestStage("filterLedge", *tile.solid);
                 if (m_debug)
                     WriteHeightfieldStageCsv("filterLedge", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
@@ -6417,14 +6415,14 @@ namespace MMAP
                 filterRemoveUselessAreas(*tile.solid);
                 dumpHeightfieldColumn("removeUseless", dbgCellX, dbgCellY, *tile.solid);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportHeightfieldStage("removeUseless", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportHeightfieldStage("removeUseless", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 appendHeightfieldManifestStage("removeUseless", *tile.solid);
                 if (m_debug)
                     WriteHeightfieldStageCsv("removeUseless", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
                 rcFilterWalkableLowHeightSpans(m_rcContext, tileCfg.walkableHeight, *tile.solid);
                 dumpHeightfieldColumn("filterLowHeight", dbgCellX, dbgCellY, *tile.solid);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportHeightfieldStage("filterLowHeight", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportHeightfieldStage("filterLowHeight", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 appendHeightfieldManifestStage("filterLowHeight", *tile.solid);
                 if (m_debug)
                     WriteHeightfieldStageCsv("filterLowHeight", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
@@ -6435,7 +6433,7 @@ namespace MMAP
                 // Otherwise, the terrain in deeper waters is considered as actual swim/water terrain.
                 filterWalkableLowHeightSpansWith(*liquidsTile.solid, *tile.solid, inWaterGround, stepForGroundInheriteWater);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportHeightfieldStage("waterInheritance", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportHeightfieldStage("waterInheritance", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 appendHeightfieldManifestStage("waterInheritance", *tile.solid);
                 if (m_debug)
                     WriteHeightfieldStageCsv("waterInheritance", mapID, tileX, tileY, x, y, debugStageCrops, *tile.solid);
@@ -6450,14 +6448,14 @@ namespace MMAP
                 }
                 dumpCompactHeightfieldColumn("buildCHF", dbgCellX, dbgCellY, *tile.chf);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportCompactStage("buildCHF", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportCompactStage("buildCHF", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 appendCompactManifestStage("buildCHF", *tile.chf, false);
                 if (m_debug)
                     WriteCompactHeightfieldStageCsv("buildCHF", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
 
                 gameObjectMarks += MarkGameObjectAreas(m_rcContext, mapID, tileX, tileY, tileCfg, *tile.chf);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportCompactStage("markGameObjects", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportCompactStage("markGameObjects", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 appendCompactManifestStage("markGameObjects", *tile.chf, false);
                 if (m_debug)
                     WriteCompactHeightfieldStageCsv("markGameObjects", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
@@ -6474,7 +6472,7 @@ namespace MMAP
                 }
                 dumpCompactHeightfieldColumn("erode", dbgCellX, dbgCellY, *tile.chf);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportCompactStage("erode", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportCompactStage("erode", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 appendCompactManifestStage("erode", *tile.chf, false);
                 if (m_debug)
                     WriteCompactHeightfieldStageCsv("erode", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
@@ -6485,6 +6483,7 @@ namespace MMAP
                         *tile.chf,
                         preErodeAreas,
                         anchorSourceSupportXyExtent,
+                        anchorSupportBandTuning,
                         anchorSourceSupports,
                         logAnchorStageDiagnostics);
                     if (restoredSourceSupportSpans > 0)
@@ -6500,7 +6499,7 @@ namespace MMAP
                 {
                     const int preMedianCulledSourceSupportCompactSpans = CullAnchorSourceSupportCompactSpans(
                         *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance,
-                        anchorSourceSupportFallbackToWindow, anchorSourceSupports,
+                        anchorSourceSupportFallbackToWindow, anchorSupportBandTuning, anchorSourceSupports,
                         logAnchorStageDiagnostics);
                     if (preMedianCulledSourceSupportCompactSpans > 0)
                     {
@@ -6509,8 +6508,8 @@ namespace MMAP
                     }
                     if (logAnchorStageDiagnostics)
                     {
-                        LogAnchorSourceSupportCompactStage("anchorSourceSupportCullPreMedian", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
-                        LogAnchorSourceSupportCompactComponents("anchorSourceSupportCullPreMedian", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                        LogAnchorSourceSupportCompactStage("anchorSourceSupportCullPreMedian", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
+                        LogAnchorSourceSupportCompactComponents("anchorSourceSupportCullPreMedian", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                     }
                     if (m_debug)
                         WriteCompactHeightfieldStageCsv("anchorSourceSupportCullPreMedian", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
@@ -6522,9 +6521,9 @@ namespace MMAP
                     continue;
                 }
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportCompactStage("median", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportCompactStage("median", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
-                    LogAnchorSourceSupportCompactComponents("median", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                    LogAnchorSourceSupportCompactComponents("median", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                 appendCompactManifestStage("median", *tile.chf, true);
                 if (m_debug)
                     WriteCompactHeightfieldStageCsv("median", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
@@ -6533,7 +6532,7 @@ namespace MMAP
                 {
                     const int culledSourceSupportCompactSpans = CullAnchorSourceSupportCompactSpans(
                         *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance,
-                        anchorSourceSupportFallbackToWindow, anchorSourceSupports,
+                        anchorSourceSupportFallbackToWindow, anchorSupportBandTuning, anchorSourceSupports,
                         logAnchorStageDiagnostics);
                     if (culledSourceSupportCompactSpans > 0)
                     {
@@ -6542,8 +6541,8 @@ namespace MMAP
                     }
                     if (logAnchorStageDiagnostics)
                     {
-                        LogAnchorSourceSupportCompactStage("anchorSourceSupportCull", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
-                        LogAnchorSourceSupportCompactComponents("anchorSourceSupportCull", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSourceSupports);
+                        LogAnchorSourceSupportCompactStage("anchorSourceSupportCull", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
+                        LogAnchorSourceSupportCompactComponents("anchorSourceSupportCull", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
                     }
                     if (m_debug)
                         WriteCompactHeightfieldStageCsv("anchorSourceSupportCull", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
@@ -6619,6 +6618,7 @@ namespace MMAP
                         *tile.cset,
                         anchorSourceSupportXyExtent,
                         anchorSourceSupportZTolerance,
+                        anchorSupportBandTuning,
                         prePolyUseRawAnchorSupportProbes,
                         logAnchorStageDiagnostics);
                 }
@@ -6638,6 +6638,7 @@ namespace MMAP
                         *tile.cset,
                         anchorSourceSupportXyExtent,
                         anchorSourceSupportZTolerance,
+                        anchorSupportBandTuning,
                         prePolyUseRawAnchorSupportProbes,
                         prePolyResimplifyAnchorSupportMaxError,
                         resimplifyMaxEdgeLen,
@@ -6652,6 +6653,7 @@ namespace MMAP
                         *tile.cset,
                         anchorSourceSupportXyExtent,
                         anchorSourceSupportZTolerance,
+                        anchorSupportBandTuning,
                         prePolyPreserveAnchorSupportProbes,
                         logAnchorStageDiagnostics);
                 }
@@ -6954,6 +6956,7 @@ namespace MMAP
                                 anchorSourceSupportXyExtent,
                                 anchorSourceSupportZExtent,
                                 anchorSourceSupportZTolerance,
+                                anchorSupportBandTuning,
                                 anchorManifestSupports[anchorIndex],
                                 anchorRouteTargets));
                     }
@@ -7078,6 +7081,7 @@ namespace MMAP
             { "preRegionCullAnchorSourceSupportCompetingSpans", false },
             { "preRegionRestoreAnchorSourceSupportAfterErode", false },
             { "preRegionCullAnchorSourceSupportFallbackToWindow", false },
+            { "anchorSourceSupportFloorSlackBelow", 0.20f },
             { "preRegionCullAnchorUpperCompactSpans", false },
             { "borrowMissingAnchorSourceSupportFromNeighbors", false },
             { "preRegionAnchorCoordsWow", json::array() },
