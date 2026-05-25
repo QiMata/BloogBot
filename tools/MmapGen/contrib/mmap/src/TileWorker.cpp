@@ -4287,6 +4287,88 @@ static bool BuildAnchorContourRawIndexView(
     return true;
 }
 
+// [WWoW-DIVERGENCE] 2026-05-25: prior anchor-only contour experiments still
+// kept only subsets of the selected raw contour (band-local, boundary, or
+// seeded points). This experiment swaps exactly one selected support-band
+// contour back to its full raw rverts payload before rcBuildPolyMesh() so we
+// can test whether the missing 1523.8 footprint is lost because every prior
+// branch still left that contour partially simplified.
+static int CarrySelectedRawAnchorSupportContours(
+    rcContourSet& contours,
+    const float xyExtent,
+    const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
+    const std::vector<AnchorSourceSupportProbe>& supports,
+    const AnchorSupportContourSelectionMode selectionMode,
+    const bool logDiagnostics)
+{
+    if (!contours.conts || supports.empty())
+        return 0;
+
+    int carriedContourCount = 0;
+    int addedVertexCount = 0;
+    std::vector<unsigned char> processed(static_cast<size_t>(contours.nconts), 0);
+
+    for (const AnchorSourceSupportProbe& support : supports)
+    {
+        if (!support.found)
+            continue;
+
+        const AnchorSupportContourSelection selectedContour =
+            SelectAnchorSupportContour(
+                contours,
+                xyExtent,
+                supportZTolerance,
+                supportBandTuning,
+                support,
+                selectionMode,
+                logDiagnostics);
+        if (selectedContour.contourIndex < 0)
+            continue;
+
+        if (processed[static_cast<size_t>(selectedContour.contourIndex)] != 0)
+            continue;
+
+        rcContour& contour = contours.conts[selectedContour.contourIndex];
+        if (!contour.verts || contour.nverts < 3 || !contour.rverts || contour.nrverts < 3)
+            continue;
+
+        const int carriedVertexTotal = contour.nrverts;
+        if (carriedVertexTotal <= contour.nverts)
+            continue;
+
+        int* replacementVerts = static_cast<int*>(rcAlloc(sizeof(int) * static_cast<size_t>(contour.nrverts) * 4, RC_ALLOC_PERM));
+        if (!replacementVerts)
+            continue;
+
+        memcpy(replacementVerts, contour.rverts, sizeof(int) * static_cast<size_t>(contour.nrverts) * 4);
+        const int originalVertexCount = contour.nverts;
+        rcFree(contour.verts);
+        contour.verts = replacementVerts;
+        contour.nverts = carriedVertexTotal;
+        processed[static_cast<size_t>(selectedContour.contourIndex)] = 1;
+        ++carriedContourCount;
+        addedVertexCount += carriedVertexTotal - originalVertexCount;
+
+        if (logDiagnostics)
+        {
+            printf("[CONTOUR-ANCHOR-FULL-RAW-CARRY] anchor=(%.3f,%.3f,%.3f) contour=%d region=%u verts=%d->%d rawVerts=%d addedVerts=%d\n",
+                support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                selectedContour.contourIndex, static_cast<unsigned>(contour.reg),
+                originalVertexCount, carriedVertexTotal,
+                contour.nrverts, carriedVertexTotal - originalVertexCount);
+        }
+    }
+
+    if (carriedContourCount > 0)
+    {
+        printf("[CONTOUR-ANCHOR-FULL-RAW-CARRY] carried %d raw contour vertex(s) across %d contour(s)\n",
+            addedVertexCount, carriedContourCount);
+    }
+
+    return carriedContourCount;
+}
+
 // [WWoW-DIVERGENCE] 2026-05-24: the fully raw 448-vertex support contour is
 // too fragmented, while upstream-style resimplify falls back to a near-coarse
 // 21/22-vertex contour. Preserve all raw contour vertices only within a small
@@ -7044,6 +7126,8 @@ namespace MMAP
             ParsePrePolyPreserveAnchorSupportCoords(jsonTileConfig);
         const std::vector<AnchorPolyStackCoord> prePolyUseRawAnchorSupportContours =
             ParsePrePolyUseRawAnchorSupportContours(jsonTileConfig);
+        const std::vector<AnchorPolyStackCoord> prePolyCarrySelectedRawAnchorSupportContours =
+            ParseAnchorCoords(jsonTileConfig, "prePolyCarrySelectedRawAnchorSupportCoordsWow");
         const std::vector<AnchorPolyStackCoord> prePolyCarryAnchorSupportCoords =
             ParseAnchorCoords(jsonTileConfig, "prePolyCarryAnchorSupportCoordsWow");
         const std::vector<AnchorPolyStackCoord> contourBuildSeedAnchorSupportCoords =
@@ -7161,6 +7245,14 @@ namespace MMAP
                 ? ResolveAnchorSourceSupportProbes(
                     meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
                     anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, prePolyCarryAnchorSupportCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
+                    logAnchorStageDiagnostics)
+                : std::vector<AnchorSourceSupportProbe>();
+        const std::vector<AnchorSourceSupportProbe> prePolyCarrySelectedRawAnchorSupportProbes =
+            !prePolyCarrySelectedRawAnchorSupportContours.empty()
+                ? ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, prePolyCarrySelectedRawAnchorSupportContours,
                     borrowMissingAnchorSourceSupportFromNeighbors,
                     logAnchorStageDiagnostics)
                 : std::vector<AnchorSourceSupportProbe>();
@@ -7690,6 +7782,18 @@ namespace MMAP
                         logAnchorStageDiagnostics);
                 }
 
+                if (!prePolyCarrySelectedRawAnchorSupportProbes.empty())
+                {
+                    CarrySelectedRawAnchorSupportContours(
+                        *tile.cset,
+                        anchorSourceSupportXyExtent,
+                        anchorSourceSupportZTolerance,
+                        anchorSupportBandTuning,
+                        prePolyCarrySelectedRawAnchorSupportProbes,
+                        prePolySupportContourSelectionMode,
+                        logAnchorStageDiagnostics);
+                }
+
                 if (!prePolyCarryAnchorSupportProbes.empty() && prePolyCarryAnchorSupportBandLocalRadius > 0.0f)
                 {
                     CarryLocalRawVerticesIntoExistingAnchorSupportContours(
@@ -8156,6 +8260,7 @@ namespace MMAP
             { "logAnchorStageDiagnostics", false },
             { "contourBuildSeedAnchorSupportCoordsWow", json::array() },
             { "contourBuildSeedAnchorSupportBandLocalRadius", -1.0f },
+            { "prePolyCarrySelectedRawAnchorSupportCoordsWow", json::array() },
             { "prePolyCarryAnchorSupportCoordsWow", json::array() },
             { "prePolyCarryAnchorSupportBandLocalRadius", -1.0f },
             { "prePolySupportContourSelectionMode", "" },

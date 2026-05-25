@@ -2057,3 +2057,97 @@ from `ch=0.1` to `ch=0.2`.
     fallback in both directions for the exact `1523.8` failure
   - the next serious retry should go back to a shape-specific contour /
     source-stage experiment, not another vertical-quantization knob branch
+
+### 2026-05-25 UTC: selected full-raw contour carry follow-up
+
+WWoW then closed the last obvious pre-polymesh carry branch by swapping only
+the selected anchor-containing support contour back to its full raw
+`rverts` payload before `rcBuildPolyMesh()`.
+
+- Upstream basis:
+  - Recast `rcContour` docs define `rverts` as the raw contour and `verts` as
+    the simplified contour:
+    `https://recastnav.com/structrcContour.html`
+  - Recast `rcBuildContours()` docs say the raw contours match the region
+    outlines exactly:
+    `https://recastnav.com/group__recast.html`
+- New local surface:
+  - `CarrySelectedRawAnchorSupportContours(...)`
+  - config key:
+    `prePolyCarrySelectedRawAnchorSupportCoordsWow`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_fullraw_anchoronly_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_fullraw_anchoronly.json'`
+  - changed hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+  - focused tests:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_fullraw_anchoronly_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - full `CriticalWalkLegs`:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_fullraw_anchoronly_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_fullraw_anchoronly_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+  - restored hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- Artifact + hash:
+  - changed tile artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_fullraw_anchoronly_v1-20260525T210253Z/`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_fullraw_anchoronly_iteration_20260525-20260525T210710Z/`
+  - saved tile hash:
+    `1B0620C72AC82213750CB15175DC509BD1B55D77F99827DD911E2AB9EF1C11D3`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive proof:
+  - the new carry surface really restored the whole selected raw contour before
+    polymesh:
+    `[CONTOUR-ANCHOR-FULL-RAW-CARRY] carried 147 raw contour vertex(s) across 1 contour(s)`
+  - on the same selected anchor-containing contour, that means the branch
+    reopened the simplified contour from `11` vertices back to its `158` raw
+    vertices before `rcBuildPolyMesh()`
+  - despite that, the decisive anchor did not move:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - route quality actually worsened:
+    - focused:
+      `3/7`
+    - full:
+      `19/23`
+  - focused failures:
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found only `80` polygons
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+    - `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+  - focused route proof got more pathological, not less:
+    - the flightmaster route expanded to `1037` points
+    - it still reported the same steep-incline and rope-line blocker evidence
+  - full failures widened to:
+    - `orgrimmar_city_hallway_live_wall_stall_recovery`
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+    - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+  - decisive full-route failure details:
+    - `orgrimmar_city_hallway_live_wall_stall_recovery` stopped at
+      `(1514.7,-4426.7,20.0)`, `300.5y` from the goal
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor` opened with a
+      `46.2y` first segment
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+      stopped at `(1350.9,-4522.1,32.7)`, `136.3y` from the goal
+    - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery` returned
+      `no_path`
+- Practical conclusion:
+  - even restoring the selected contour to its full raw `rverts` payload before
+    polymesh is not enough to recover the exact `1523.8` footprint
+  - that closes the remaining "just carry more raw contour later" family:
+    the missing overlap is not merely one more pre-polymesh simplification loss
+  - because the branch also worsened routeability into long pathological paths
+    and `no_path`, broader pre-polymesh raw carry is now a bounded negative
+  - the next credible retry should change the contour-builder shape itself
+    inside or before `rcBuildContours()`, not widen the same pre-polymesh
+    carry family again

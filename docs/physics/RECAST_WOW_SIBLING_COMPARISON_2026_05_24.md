@@ -669,6 +669,37 @@ obsolete because that branch never actually re-simplified the raw contour.
     Practical rule: the local-`ch` fallback is now exhausted in both
     directions for this anchor. A future compatible retry needs a different
     contour/source-shape change, not more `ch` churn.
+  - follow-up later the same night on `2026-05-25` UTC: WWoW then closed the
+    last obvious pre-polymesh carry retry by swapping only the selected
+    anchor-containing contour back to its full raw `rverts` payload before
+    `rcBuildPolyMesh()`
+    - upstream basis:
+      Recast's `rcContour` docs define `rverts` as raw contour data and
+      `verts` as the simplified contour, while `rcBuildContours()` says the
+      raw contours match the region outlines exactly
+    - new surface:
+      `CarrySelectedRawAnchorSupportContours(...)` plus
+      `prePolyCarrySelectedRawAnchorSupportCoordsWow`
+    - branch `og_4029_raster_support_patch06_fullraw_anchoronly_v1`
+      saved hash
+      `1B0620C72AC82213750CB15175DC509BD1B55D77F99827DD911E2AB9EF1C11D3`
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_fullraw_anchoronly_v1-20260525T210253Z/`
+    - focused/full regressed to
+      `3/7`, `19/23`
+    - decisive proof:
+      `[CONTOUR-ANCHOR-FULL-RAW-CARRY] carried 147 raw contour vertex(s) across 1 contour(s)`,
+      i.e. the selected contour was reopened from `11` simplified vertices
+      back to its full `158` raw vertices before polymesh
+    - decisive result:
+      `1523.8` still kept the same final answer
+      `finalDetour / lower_competitor_dominant`, while route quality got worse
+      into a `1037`-point flightmaster path, a new hallway wall stall, and a
+      direct `no_path` on the underpass exact recovery
+    Practical rule: once the selected contour's full raw `rverts` payload
+    still fails before `rcBuildPolyMesh()`, stop widening the same
+    pre-polymesh raw-carry family. The next compatible retry has to change the
+    contour-builder shape itself inside or before `rcBuildContours()`.
 
 ## Restore State
 
@@ -676,7 +707,7 @@ At the end of this corrected loop, `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
 was restored to the stable baseline:
 
 - restore artifact:
-  - `tmp/bake-sweeps/og_4029_restore_after_band_local_iteration_20260525-20260525T165615Z/`
+  - `tmp/bake-sweeps/og_4029_restore_after_fullraw_anchoronly_iteration_20260525-20260525T210710Z/`
 - restored hash:
   - `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
 
@@ -693,6 +724,8 @@ Accessed on 2026-05-24 unless the page itself states a generated date.
   - https://github.com/recastnavigation/recastnavigation/discussions/583
 - Recast official `rcBuildContours(...)` docs:
   - https://recastnav.com/group__recast.html
+- Recast official `rcContour` raw-vs-simplified struct docs:
+  - https://recastnav.com/structrcContour.html
 - Recast official contour simplifier source:
   - https://raw.githubusercontent.com/recastnavigation/recastnavigation/main/Recast/Source/RecastContour.cpp
 - AzerothCore current global mmaps defaults:

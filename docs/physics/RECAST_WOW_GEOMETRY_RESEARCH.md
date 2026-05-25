@@ -1827,3 +1827,56 @@ patch fixed.
     exhausted in both directions for the exact `1523.8` failure
   - the next credible branch should return to contour/source shape work, not
     another vertical-quantization override
+
+### 2026-05-25 UTC selected full-raw contour carry follow-up
+
+WWoW then closed the last obvious pre-polymesh carry retry by swapping only
+the selected anchor-containing support contour back to its full raw
+`rverts` payload before `rcBuildPolyMesh()`.
+
+- Upstream basis:
+  - Recast's `rcContour` docs define `rverts` as raw contour data and `verts`
+    as the simplified contour:
+    `https://recastnav.com/structrcContour.html`
+  - Recast's `rcBuildContours()` docs say the raw contours match the region
+    outlines exactly:
+    `https://recastnav.com/group__recast.html`
+- Experiment:
+  - new local surface:
+    `CarrySelectedRawAnchorSupportContours(...)`
+  - config key:
+    `prePolyCarrySelectedRawAnchorSupportCoordsWow`
+  - variant:
+    `og_4029_raster_support_patch06_fullraw_anchoronly_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_fullraw_anchoronly_v1-20260525T210253Z/`
+  - changed hash:
+    `1B0620C72AC82213750CB15175DC509BD1B55D77F99827DD911E2AB9EF1C11D3`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_fullraw_anchoronly_iteration_20260525-20260525T210710Z/`
+  - focused/full:
+    `3/7`, `19/23`
+- Decisive proof:
+  - the carry surface really fired:
+    `[CONTOUR-ANCHOR-FULL-RAW-CARRY] carried 147 raw contour vertex(s) across 1 contour(s)`
+  - on the same selected contour, that means the branch reopened the shape from
+    `11` simplified vertices back to its full `158` raw vertices before
+    polymesh
+  - yet the decisive anchor still stayed:
+    `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - the route profile got worse rather than better:
+    - deck connector surfaces dropped to `80`
+    - the flightmaster route exploded to `1037` points while still keeping the
+      same steep-incline and rope-line blocker evidence
+    - full `CriticalWalkLegs` regressed to `19/23` with a new hallway wall
+      stall, a `46.2y` first corridor segment, a `136.3y` early stop on the
+      ramp-underpass route, and a direct `no_path` on the underpass exact
+      recovery
+- Practical read:
+  - this closes the remaining "restore more raw contour later" family
+  - because the full raw selected contour still leaves the same final anchor
+    answer, the missing `1523.8` overlap is not merely a later
+    pre-polymesh simplification loss
+  - the next credible retry should change the contour-builder shape itself
+    inside or before `rcBuildContours()`, not widen the same pre-polymesh raw
+    carry family again
