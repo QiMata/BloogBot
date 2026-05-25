@@ -460,6 +460,7 @@ struct rcAnchorContourSimplifyOverride
 	int supportFloorMinY;				///< Minimum support-band y cell to preserve. [Units: vx]
 	int supportFloorMaxY;				///< Maximum support-band y cell to preserve. [Units: vx]
 	int preserveRadiusCells;			///< XY preserve radius around the anchor. [Units: vx]
+	int boundarySeedRadiusCells;		///< XY radius used to preserve support-band boundary crossings around the anchor. [Units: vx]
 	bool requireContourContainsAnchor;	///< Limit seeding to contours that contain the anchor projection.
 };
 

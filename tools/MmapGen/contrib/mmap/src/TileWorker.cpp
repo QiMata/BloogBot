@@ -3484,10 +3484,11 @@ static std::vector<rcAnchorContourSimplifyOverride> BuildContourSimplifyAnchorOv
     const AnchorSupportBandTuning& supportBandTuning,
     const std::vector<AnchorSourceSupportProbe>& supports,
     const AnchorSupportContourSelectionMode selectionMode,
-    const float preserveRadius)
+    const float preserveRadius,
+    const float boundarySeedRadius)
 {
     std::vector<rcAnchorContourSimplifyOverride> overrides;
-    if (supports.empty() || preserveRadius <= 0.0f || chf.cs <= 0.0f || chf.ch <= 0.0f)
+    if (supports.empty() || (preserveRadius <= 0.0f && boundarySeedRadius <= 0.0f) || chf.cs <= 0.0f || chf.ch <= 0.0f)
         return overrides;
 
     overrides.reserve(supports.size());
@@ -3505,7 +3506,14 @@ static std::vector<rcAnchorContourSimplifyOverride> BuildContourSimplifyAnchorOv
             (GetAnchorSupportFloorMinY(support, supportBandTuning) - chf.bmin[1]) / chf.ch));
         anchorOverride.supportFloorMaxY = static_cast<int>(std::ceil(
             (GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning) - chf.bmin[1]) / chf.ch));
-        anchorOverride.preserveRadiusCells = std::max(1, static_cast<int>(std::ceil(preserveRadius / chf.cs)));
+        anchorOverride.preserveRadiusCells =
+            preserveRadius > 0.0f
+                ? std::max(1, static_cast<int>(std::ceil(preserveRadius / chf.cs)))
+                : 0;
+        anchorOverride.boundarySeedRadiusCells =
+            boundarySeedRadius > 0.0f
+                ? std::max(1, static_cast<int>(std::ceil(boundarySeedRadius / chf.cs)))
+                : 0;
         anchorOverride.requireContourContainsAnchor = requireContourContainsAnchor;
         overrides.push_back(anchorOverride);
     }
@@ -7142,6 +7150,8 @@ namespace MMAP
             jsonTileConfig, "prePolyCarryAnchorSupportBandLocalRadius", -1.0f);
         const float contourBuildSeedAnchorSupportBandLocalRadius = JsonFloatOrDefault(
             jsonTileConfig, "contourBuildSeedAnchorSupportBandLocalRadius", -1.0f);
+        const float contourBuildSeedAnchorSupportBandBoundaryRadius = JsonFloatOrDefault(
+            jsonTileConfig, "contourBuildSeedAnchorSupportBandBoundaryRadius", -1.0f);
         const float prePolyResimplifyAnchorSupportBandBoundarySeedRadius = JsonFloatOrDefault(
             jsonTileConfig, "prePolyResimplifyAnchorSupportBandBoundarySeedRadius", -1.0f);
         const float prePolyResimplifyAnchorSupportBandBoundaryRadius = JsonFloatOrDefault(
@@ -7713,14 +7723,17 @@ namespace MMAP
 
                 tile.cset = rcAllocContourSet();
                 const std::vector<rcAnchorContourSimplifyOverride> contourBuildAnchorOverrides =
-                    !contourBuildSeedAnchorSupportProbes.empty() && contourBuildSeedAnchorSupportBandLocalRadius > 0.0f
+                    !contourBuildSeedAnchorSupportProbes.empty() &&
+                    (contourBuildSeedAnchorSupportBandLocalRadius > 0.0f ||
+                        contourBuildSeedAnchorSupportBandBoundaryRadius > 0.0f)
                         ? BuildContourSimplifyAnchorOverrides(
                             *tile.chf,
                             anchorSourceSupportZTolerance,
                             anchorSupportBandTuning,
                             contourBuildSeedAnchorSupportProbes,
                             prePolySupportContourSelectionMode,
-                            contourBuildSeedAnchorSupportBandLocalRadius)
+                            contourBuildSeedAnchorSupportBandLocalRadius,
+                            contourBuildSeedAnchorSupportBandBoundaryRadius)
                         : std::vector<rcAnchorContourSimplifyOverride>();
                 if (!contourBuildAnchorOverrides.empty())
                 {
@@ -8260,6 +8273,7 @@ namespace MMAP
             { "logAnchorStageDiagnostics", false },
             { "contourBuildSeedAnchorSupportCoordsWow", json::array() },
             { "contourBuildSeedAnchorSupportBandLocalRadius", -1.0f },
+            { "contourBuildSeedAnchorSupportBandBoundaryRadius", -1.0f },
             { "prePolyCarrySelectedRawAnchorSupportCoordsWow", json::array() },
             { "prePolyCarryAnchorSupportCoordsWow", json::array() },
             { "prePolyCarryAnchorSupportBandLocalRadius", -1.0f },

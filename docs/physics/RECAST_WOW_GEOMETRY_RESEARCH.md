@@ -1880,3 +1880,47 @@ the selected anchor-containing support contour back to its full raw
   - the next credible retry should change the contour-builder shape itself
     inside or before `rcBuildContours()`, not widen the same pre-polymesh raw
     carry family again
+
+### 2026-05-25 UTC contour-build boundary-only seed follow-up
+
+WWoW then tried the remaining earlier boundary-shape retry by seeding only the
+support-band boundary crossings during `rcBuildContours()` simplification
+itself.
+
+- Experiment:
+  - new surface:
+    `boundarySeedRadiusCells` on `rcAnchorContourSimplifyOverride`,
+    `buildAnchorSupportBandBoundaryVertexMask(...)`,
+    `seedAnchorSupportBandBoundaryVertices(...)`, and
+    `contourBuildSeedAnchorSupportBandBoundaryRadius`
+  - variant:
+    `og_4029_raster_support_patch06_contourbuild_seed_boundary_anchoronly_r3_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_contourbuild_seed_boundary_anchoronly_r3_v1-20260525T212238Z/`
+  - changed hash:
+    `3F9EB2930393D48E13B28267D6C11B0E9C0D5282C488D9CE8CC4403FB6C269E4`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_contourbuild_boundary_iteration_20260525-20260525T212518Z/`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the earliest boundary-only seed really fired:
+    `[CONTOUR-BUILD-ANCHOR-SEED] region=7 rawVerts=158 simplifiedVerts=11 seededBoundaryVerts=2 seededSupportBandRawVerts=0 matchedOverrides=1`
+  - that is the key negative: it touched the selected contour, but still left
+    the contour at the same `11` simplified vertices
+  - `1523.8` still stayed:
+    `finalDetour / lower_competitor_dominant`
+  - the route profile stayed bad rather than getting cleaner:
+    - focused still `3/7`
+    - full `CriticalWalkLegs` still `20/23`
+    - the flightmaster route was still invalid, now with `364` points and a
+      lower flight-master bonfire blocker added to the same hallway /
+      steep-incline / rope-line evidence
+- Practical read:
+  - earliest boundary-only contour seeding is too sparse or too inert on this
+    tile
+  - once the seed fires and the selected contour still stays at the same
+    simplified vertex count, stop iterating on that sparse boundary-only
+    family
+  - the next retry needs a denser contour-builder reshape or an even earlier
+    raw-contour / region / source-stage change

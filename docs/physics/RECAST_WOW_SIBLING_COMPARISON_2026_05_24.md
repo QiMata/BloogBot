@@ -700,6 +700,34 @@ obsolete because that branch never actually re-simplified the raw contour.
     still fails before `rcBuildPolyMesh()`, stop widening the same
     pre-polymesh raw-carry family. The next compatible retry has to change the
     contour-builder shape itself inside or before `rcBuildContours()`.
+  - follow-up later the same night on `2026-05-25` UTC: WWoW then tried the
+    remaining earlier boundary-shape retry by seeding only the support-band
+    boundary crossings during `rcBuildContours()` simplification itself
+    - new surface:
+      `boundarySeedRadiusCells` on
+      `rcAnchorContourSimplifyOverride`,
+      `buildAnchorSupportBandBoundaryVertexMask(...)`,
+      `seedAnchorSupportBandBoundaryVertices(...)`, and
+      `contourBuildSeedAnchorSupportBandBoundaryRadius`
+    - branch
+      `og_4029_raster_support_patch06_contourbuild_seed_boundary_anchoronly_r3_v1`
+      saved hash
+      `3F9EB2930393D48E13B28267D6C11B0E9C0D5282C488D9CE8CC4403FB6C269E4`
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_contourbuild_seed_boundary_anchoronly_r3_v1-20260525T212238Z/`
+    - focused/full stayed:
+      `3/7`, `20/23`
+    - decisive proof:
+      `[CONTOUR-BUILD-ANCHOR-SEED] region=7 rawVerts=158 simplifiedVerts=11 seededBoundaryVerts=2 seededSupportBandRawVerts=0 matchedOverrides=1`
+    - decisive result:
+      the earliest boundary-only seed fired on the right contour but still left
+      the same `11` simplified vertices and the same
+      `1523.8 -> finalDetour / lower_competitor_dominant` answer
+    Practical rule: once the earliest boundary-only seed fires and the
+    selected contour still keeps the same simplified vertex count, stop
+    iterating on that sparse boundary-only family. The next compatible retry
+    needs a denser contour-builder reshape or an even earlier raw-contour /
+    region / source-stage change.
 
 ## Restore State
 
@@ -707,7 +735,7 @@ At the end of this corrected loop, `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
 was restored to the stable baseline:
 
 - restore artifact:
-  - `tmp/bake-sweeps/og_4029_restore_after_fullraw_anchoronly_iteration_20260525-20260525T210710Z/`
+  - `tmp/bake-sweeps/og_4029_restore_after_contourbuild_boundary_iteration_20260525-20260525T212518Z/`
 - restored hash:
   - `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
 
