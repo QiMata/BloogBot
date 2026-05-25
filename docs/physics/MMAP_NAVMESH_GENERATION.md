@@ -1675,3 +1675,83 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
   - the next serious retry should not spend another loop only on boundary-seed
     timing; it needs a different contour-builder shape or genuinely earlier
     source/vertical classification work
+
+### 2026-05-25 UTC: existing-simplified local support-band carry follow-up
+
+The next contour-stage retry removed the resimplify step entirely and worked on
+the current `rcBuildContours()` output directly.
+
+- Upstream motivation before touching WWoW code:
+  - Recast's `simplifyContour(...)` copies raw contour points into the
+    simplified contour while carrying raw indices until the final flag rewrite,
+    so a same-order XYZ remap on the existing simplified contour is a valid
+    bounded way to splice raw verts back in without rerunning simplification:
+    https://raw.githubusercontent.com/recastnavigation/recastnavigation/main/Recast/Source/RecastContour.cpp
+- New local surface:
+  - `BuildAnchorContourRawIndexView(...)`
+  - `CarryLocalRawVerticesIntoExistingAnchorSupportContours(...)`
+  - config keys:
+    `prePolyCarryAnchorSupportCoordsWow`,
+    `prePolyCarryAnchorSupportBandLocalRadius`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_carry_local_band_r4_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_carry_local_band_r4.json'`
+  - changed hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+  - focused tests:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_carry_local_band_r4_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - full `CriticalWalkLegs`:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_carry_local_band_r4_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_carry_local_band_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Artifact + hash:
+  - changed tile artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_carry_local_band_r4_v1-20260525T193344Z/`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_carry_local_band_iteration_20260525-20260525T193752Z/`
+  - saved tile hash:
+    `3D3BEA0EFB858DBC0B4D72C501CCE50864CE4A7A8F3D2DA8280A2356ECAD97E3`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive proof:
+  - the branch did avoid resimplify and still produced a real local carry on
+    the existing simplified contours:
+    - `contour 1 / region 8 verts=13->42 injectedSupportBandRawVerts=29`
+    - `contour 3 / region 7 verts=11->31 injectedSupportBandRawVerts=20`
+    - `contour 4 / region 19 verts=3->10 injectedSupportBandRawVerts=7`
+  - the tile did not fall back to the old shard hash, but it still regressed
+    into the same focused deck family:
+    - focused:
+      `3/7`
+    - full:
+      `20/23`
+  - shared focused failures stayed:
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found only `80` polygons
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+    - `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+  - shared full failures stayed:
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+    - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+  - `1523.800,-4425.900,17.100` still ended at
+    `finalDetour / lower_competitor_dominant`
+- Stage summary for the important anchors stayed:
+  - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+  - `1523.800,-4425.900,17.100` ->
+    `finalDetour / lower_competitor_dominant`
+  - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+  - `1364.867,-4374.000,26.109` ->
+    `finalDetour / winner_component_trapped`
+- Practical conclusion:
+  - the resimplify step was not the only thing pushing this family into the
+    bad deck/bridge profile
+  - even a direct local raw carry on top of the existing simplified contours
+    still reintroduces the same 3/7 focused and 20/23 full regression family
+    while leaving `1523.8` at `finalDetour`
+  - if contour work continues, the next retry must be narrower than this
+    multi-contour local carry or move earlier than contours entirely; do not
+    assume "skip re-simplify" is enough by itself

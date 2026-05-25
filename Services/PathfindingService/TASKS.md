@@ -2410,6 +2410,71 @@
   - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_localraw_window_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
 - Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
 
+## 2026-05-25 UTC - existing-simplified local support-band carry follow-up
+- Active task: keep the raster support patch fixed, avoid local resimplify
+  entirely, and splice only local support-band raw verts back into the current
+  `rcBuildContours()` simplified contours before `rcBuildPolyMesh()`.
+- Pass result: `delta shipped; the new existing-simplified local carry surface
+  is another bounded negative. It proved the carry can happen without
+  rerunning simplification, but the tile still regressed to the same 3/7
+  focused and 20/23 full deck/underpass family while 1523.8 stayed at
+  finalDetour`.
+- Last delta:
+  - Added `BuildAnchorContourRawIndexView(...)`,
+    `CarryLocalRawVerticesIntoExistingAnchorSupportContours(...)`, and the
+    opt-in tile config keys `prePolyCarryAnchorSupportCoordsWow` plus
+    `prePolyCarryAnchorSupportBandLocalRadius` in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`.
+  - Experiment config stayed untracked:
+    `tmp/config-experiments/og_4029_raster_support_patch06_carry_local_band_r4.json`
+  - Artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_carry_local_band_r4_v1-20260525T193344Z/`
+  - Changed hash:
+    `3D3BEA0EFB858DBC0B4D72C501CCE50864CE4A7A8F3D2DA8280A2356ECAD97E3`
+  - Focused:
+    `3/7`
+  - Full:
+    `20/23`
+  - Decisive bake-log proof:
+    - the branch did not call the local resimplifier
+    - direct local carry still fired across three nearby contours:
+      - `contour 1 / region 8 verts=13->42 injectedSupportBandRawVerts=29`
+      - `contour 3 / region 7 verts=11->31 injectedSupportBandRawVerts=20`
+      - `contour 4 / region 19 verts=3->10 injectedSupportBandRawVerts=7`
+    - despite that, `1523.800,-4425.900,17.100` still stayed
+      `finalDetour / lower_competitor_dominant`
+  - Stage summary for the important anchors stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - Shared focused failure profile stayed:
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoShadowedLowerTrimLedgePolygons`
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      found only `80` polygons
+    - `MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+    - `LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers`
+  - Shared full failure profile stayed:
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+    - `orgrimmar_zeppelin_tower_underpass_live_stall_exact_recovery`
+  - Validation/tests run:
+    - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+    - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_carry_local_band_r4_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_carry_local_band_r4.json'` -> passed.
+    - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `3D3BEA0EFB858DBC0B4D72C501CCE50864CE4A7A8F3D2DA8280A2356ECAD97E3`.
+    - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_carry_local_band_r4_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `3/7`.
+    - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_carry_local_band_r4_v1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> `20/23`.
+    - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_carry_local_band_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
+    - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+- Practical read:
+  - skipping the resimplify step is not enough by itself
+  - even a direct local raw carry on top of the existing simplified contours
+    still reintroduced the same bad deck / static-blocker family
+  - if contour-stage work continues, it needs to be narrower than this
+    multi-contour carry or it needs to move earlier than contours again
+
 ## 2026-05-25 UTC - support-footprint negatives after support-gap
 - Active task: test whether the remaining `1523.8` hole is fixable by
   combining the strongest surviving contour proof with the support-gap cull, or

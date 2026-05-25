@@ -1613,3 +1613,45 @@ directly instead of another post-simplify reinjection pass.
   - next serious work should stop iterating on boundary-seed timing alone and
     instead change the contour-builder shape more fundamentally or move earlier
     into source/vertical classification
+
+### 2026-05-25 UTC existing-simplified local carry follow-up
+
+The next contour-stage retry removed the local resimplify step entirely and
+worked on the current `rcBuildContours()` output directly.
+
+- Upstream Recast source review before touching WWoW code:
+  - `simplifyContour(...)` carries raw-point indices in the simplified contour
+    until the final flag rewrite, so a same-order XYZ remap back onto `rverts`
+    is a bounded, source-consistent way to splice raw vertices into the
+    existing simplified contour without rerunning the simplifier:
+    https://raw.githubusercontent.com/recastnavigation/recastnavigation/main/Recast/Source/RecastContour.cpp
+- New local surface:
+  - `BuildAnchorContourRawIndexView(...)`
+  - `CarryLocalRawVerticesIntoExistingAnchorSupportContours(...)`
+  - config keys:
+    `prePolyCarryAnchorSupportCoordsWow`,
+    `prePolyCarryAnchorSupportBandLocalRadius`
+- Experiment:
+  - variant:
+    `og_4029_raster_support_patch06_carry_local_band_r4_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_carry_local_band_r4_v1-20260525T193344Z/`
+  - changed hash:
+    `3D3BEA0EFB858DBC0B4D72C501CCE50864CE4A7A8F3D2DA8280A2356ECAD97E3`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the branch avoided local resimplify entirely
+  - direct local carry still fired on the existing simplified contours:
+    - `contour 1 / region 8 verts=13->42 injectedSupportBandRawVerts=29`
+    - `contour 3 / region 7 verts=11->31 injectedSupportBandRawVerts=20`
+    - `contour 4 / region 19 verts=3->10 injectedSupportBandRawVerts=7`
+  - `1523.800,-4425.900,17.100` still stayed
+    `finalDetour / lower_competitor_dominant`
+- Practical read:
+  - skipping resimplify is not enough by itself
+  - on this branch, the direct local carry was still too broad because it
+    reopened every same-band contour in the anchor window
+  - the next contour-stage retry must either isolate a single recovered contour
+    more strictly or move the same support mask into the real
+    `rcBuildContours(...)` simplifier instead of post-contour reinjection
