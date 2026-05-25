@@ -502,6 +502,27 @@ obsolete because that branch never actually re-simplified the raw contour.
     Detour compatibility
   - or earlier source-support classification before contour/poly loss
 
+### 2026-05-25 UTC: raster patch contour-loss follow-up
+
+- WWoW next tried a fully loader-compatible bake-side bridge:
+  `preRasterizeAnchorSupportPatchCoordsWow` +
+  `preRasterizeAnchorSupportPatchHalfExtent`.
+- The useful sibling-style lesson is not "ship a raster patch":
+  - raster patch only kept the stable baseline hash
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - but it changed the stage answer for `1523.8` earlier in the bake:
+    `median` and `regions` now had `supportCell=true`
+  - the same recovered footprint then died again at `contours`
+- Combining the raster patch with WWoW's raw+preserve contour carry landed
+  exactly on the old non-promotable shard hash
+  `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`.
+- Practical sibling comparison update:
+  - this tile is now a concrete example of a loader-compatible idea that is
+    valuable as proof even when it is not yet a ship candidate
+  - the next promising compatible family is local contour-builder preservation
+    for a recovered source-backed footprint, not more generic per-tile slack
+    overrides and not more finalDetour-only tuning
+
 ## Restore State
 
 At the end of this corrected loop, `D:\wwow-bot\test-data\mmaps\0012940.mmtile`

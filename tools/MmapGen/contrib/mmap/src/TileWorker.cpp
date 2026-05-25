@@ -2408,6 +2408,62 @@ static int RestoreAnchorSourceSupportCompactSpansAfterErode(rcCompactHeightfield
     return restored;
 }
 
+// [WWoW-DIVERGENCE] 2026-05-25: tile 1:40,29 still shows a source-backed
+// support footprint hole at 1523.8 that is already present during rasterize:
+// nearby support cells survive, but the exact anchor neighborhood never gains
+// any support cell through median. This experiment injects a tiny, local,
+// source-backed raster patch at the verified support floor to test whether the
+// missing footprint itself is the blocker before contours/final Detour.
+static int RasterizeAnchorSupportPatches(rcContext* context,
+    rcHeightfield& hf,
+    const float halfExtent,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const bool logDiagnostics)
+{
+    if (!context || !hf.spans || sourceSupports.empty() || halfExtent <= 0.0f)
+        return 0;
+
+    constexpr float kMaxSourceDistance2D = 0.50f;
+
+    int patchCount = 0;
+    for (const AnchorSourceSupportProbe& support : sourceSupports)
+    {
+        if (!support.found)
+            continue;
+        if (!support.projectedInside && support.distance2D > kMaxSourceDistance2D)
+            continue;
+
+        const float centerX = support.anchor.wowY;
+        const float centerY = support.supportY;
+        const float centerZ = support.anchor.wowX;
+        if (centerX + halfExtent < hf.bmin[0] || centerX - halfExtent > hf.bmax[0] ||
+            centerZ + halfExtent < hf.bmin[2] || centerZ - halfExtent > hf.bmax[2])
+        {
+            continue;
+        }
+        float verts[12] =
+        {
+            centerX - halfExtent, centerY, centerZ - halfExtent,
+            centerX + halfExtent, centerY, centerZ - halfExtent,
+            centerX + halfExtent, centerY, centerZ + halfExtent,
+            centerX - halfExtent, centerY, centerZ + halfExtent,
+        };
+        int tris[6] = { 0, 1, 2, 0, 2, 3 };
+        unsigned char areas[2] = { AREA_GROUND, AREA_GROUND };
+        rcRasterizeTriangles(context, verts, 4, tris, areas, 2, hf, 0);
+        ++patchCount;
+
+        if (logDiagnostics)
+        {
+            printf("[HF-ANCHOR-SUPPORT-PATCH] anchor=(%.3f,%.3f,%.3f) supportY=%.3f halfExtent=%.3f source=%d\n",
+                support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                support.supportY, halfExtent, (int)support.source);
+        }
+    }
+
+    return patchCount;
+}
+
 static void LogAnchorSourceSupportHeightfieldStage(const char* stage, const rcHeightfield& hf,
     const float xyExtent, const float supportZTolerance,
     const AnchorSupportBandTuning& supportBandTuning,
@@ -6181,6 +6237,18 @@ namespace MMAP
                     borrowMissingAnchorSourceSupportFromNeighbors,
                     logAnchorStageDiagnostics)
                 : std::vector<AnchorSourceSupportProbe>();
+        const std::vector<AnchorPolyStackCoord> preRasterizeAnchorSupportPatchCoords =
+            ParseAnchorCoords(jsonTileConfig, "preRasterizeAnchorSupportPatchCoordsWow");
+        const std::vector<AnchorSourceSupportProbe> preRasterizeAnchorSupportPatchProbes =
+            !preRasterizeAnchorSupportPatchCoords.empty()
+                ? ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, preRasterizeAnchorSupportPatchCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
+                    logAnchorStageDiagnostics)
+                : std::vector<AnchorSourceSupportProbe>();
+        const float preRasterizeAnchorSupportPatchHalfExtent = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeAnchorSupportPatchHalfExtent", 0.0f);
         json anchorStageManifest;
         if (writeAnchorStageManifest && !anchorManifestSupports.empty())
         {
@@ -6374,6 +6442,20 @@ namespace MMAP
                 // rcRasterizeTriangles directly to keep the bake pipeline on the
                 // migrated Recast surface.
                 rcRasterizeTriangles(m_rcContext, tVerts, tVertCount, tTris, rasterAreas.data(), tTriCount, *tile.solid, 0);
+                if (!preRasterizeAnchorSupportPatchProbes.empty() && preRasterizeAnchorSupportPatchHalfExtent > 0.0f)
+                {
+                    const int rasterizedSupportPatches = RasterizeAnchorSupportPatches(
+                        m_rcContext,
+                        *tile.solid,
+                        preRasterizeAnchorSupportPatchHalfExtent,
+                        preRasterizeAnchorSupportPatchProbes,
+                        logAnchorStageDiagnostics);
+                    if (rasterizedSupportPatches > 0)
+                    {
+                        printf("[HF-ANCHOR-SUPPORT-PATCH] map=%u tile=%u,%u: rasterized %d support patch(es)\n",
+                            mapID, tileX, tileY, rasterizedSupportPatches);
+                    }
+                }
                 dumpHeightfieldColumn("rasterize", dbgCellX, dbgCellY, *tile.solid);
                 if (trimAnchorSourceSupportCompactSpans && logAnchorStageDiagnostics)
                     LogAnchorSourceSupportHeightfieldStage("rasterize", *tile.solid, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, anchorSourceSupports);
@@ -7084,6 +7166,8 @@ namespace MMAP
             { "anchorSourceSupportFloorSlackBelow", 0.20f },
             { "preRegionCullAnchorUpperCompactSpans", false },
             { "borrowMissingAnchorSourceSupportFromNeighbors", false },
+            { "preRasterizeAnchorSupportPatchCoordsWow", json::array() },
+            { "preRasterizeAnchorSupportPatchHalfExtent", 0.0f },
             { "preRegionAnchorCoordsWow", json::array() },
             { "postDetourCullAnchorPolyStacks", false },
             { "postDetourCullAnchorTrappedComponents", false },

@@ -1260,3 +1260,58 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
   - next branches should target exact-neighborhood support-footprint bridging /
     overlap or earlier source-support classification, not more generic
     `supportGap2D` or `supportFloorSlackBelow` widening
+
+### 2026-05-25 UTC: raster support patch contour-loss proof
+
+- New native/config surface:
+  - `preRasterizeAnchorSupportPatchCoordsWow`
+  - `preRasterizeAnchorSupportPatchHalfExtent`
+  - helper `RasterizeAnchorSupportPatches(...)`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - raster patch only:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06.json'`
+  - raster patch + raw+preserve:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_raw_preserve_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_raw_preserve.json'`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_raster_patch_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Observed results:
+  - raster patch only:
+    - hash:
+      `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+      (unchanged from stable baseline)
+    - focused:
+      `7/7`
+    - decisive proof:
+      - `1523.8` moved to
+        `median: supportCell=true`
+        and
+        `regions: supportCell=true`
+      - but then fell back to
+        `contours: supportCell=false`
+        and still ended at
+        `finalDetour / lower_competitor_dominant`
+  - raster patch + raw+preserve:
+    - hash:
+      `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - decisive proof:
+      - the earlier stage gain survived
+        (`median/regions supportCell=true`)
+      - `polymesh supportCount` returned to `16`
+      - `finalDetour supportComponentCount` still stayed `0`
+      - the saved tile snapped exactly back to the old raw+preserve branch
+      - `1522.5` regressed again to
+        `finalDetour / support_footprint_missed_anchor`
+- Current best interpretation:
+  - the `1523.8` support footprint is recoverable before contours
+  - the next real loss is now proven to be `rcBuildContours(...)`
+  - carrying the raw contour later is still insufficient; it only recreates the
+    old non-routeable `52D99...` shard branch
+  - next work should focus on local contour-builder preservation /
+    simplification for a source-backed recovered footprint, not more
+    finalDetour or generic support-band tuning

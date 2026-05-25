@@ -2480,6 +2480,82 @@
   - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` ->
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
 
+## 2026-05-25 UTC - raster support patch and contour-loss proof
+- Active task: test whether the `1523.8` footprint hole can be closed earlier
+  than contours by injecting a tiny source-backed raster patch at the verified
+  support floor, then check whether contour/polymesh preservation can carry
+  that recovered footprint into the final Detour tile.
+- Pass result: `delta shipped; the raster patch produced the strongest new
+  stage proof of the day, but it was still a bounded negative. It proves the
+  recoverable support footprint can survive through median/regions and that the
+  next real loss is contours, not raster/buildCHF/erode anymore`.
+- Last delta:
+  - Added `preRasterizeAnchorSupportPatchCoordsWow`,
+    `preRasterizeAnchorSupportPatchHalfExtent`, and
+    `RasterizeAnchorSupportPatches(...)` in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`.
+  - Raster patch only:
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_v1-20260525T020334Z/`
+    - hash:
+      `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+      (exactly the stable baseline)
+    - focused:
+      `7/7`
+    - full:
+      not rerun because the saved tile hash matched the validated baseline
+    - decisive proof:
+      - `1523.8` changed from
+        `median: supportCell=false / regions: supportCell=false`
+        to
+        `median: supportCell=true / regions: supportCell=true`
+      - `1523.8` also gained much larger support counts at the earlier stages:
+        `rasterize 291`, `buildCHF 198`, `erode 57`, `median 174`
+      - the same anchor still fell back to
+        `contours: supportCell=false`
+        and then
+        `finalDetour / lower_competitor_dominant`
+  - Raster patch + raw+preserve contour carry:
+    - artifact:
+      `tmp/bake-sweeps/og_4029_raster_support_patch06_raw_preserve_v1-20260525T020748Z/`
+    - hash:
+      `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - decisive proof:
+      - `1523.8` still kept the earlier raster/median gain
+        (`median supportCell=true`, `regions supportCell=true`)
+      - `polymesh supportCount` returned to `16`, but
+        `finalDetour supportComponentCount` still stayed `0`
+      - the saved tile landed exactly on the old raw+preserve shard branch
+        (`52D99...`)
+      - `1522.500,-4424.100,17.000` regressed again to
+        `finalDetour / support_footprint_missed_anchor`
+- Practical read:
+  - the raster footprint itself is recoverable for `1523.8`
+  - the next true loss is now proven to be `rcBuildContours(...)`
+  - simply carrying the raw contour later is not enough; it just reproduces the
+    already-known non-routeable `52D99...` branch
+  - next serious work should target local contour-builder preservation /
+    simplification for a source-backed recovered footprint, not more finalDetour
+    gap tuning and not more generic support-floor slack widening
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` ->
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_v1_focused.trx" --results-directory tmp/test-runtime/results-pathfinding` -> passed `7/7`.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_raw_preserve_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_raw_preserve.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` ->
+    `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_raster_support_patch06_raw_preserve_v1_focused.trx" --results-directory tmp/test-runtime/results-pathfinding` -> passed `7/7`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/PathfindingService.Tests/test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_raster_support_patch06_raw_preserve_v1.trx" --results-directory tmp/test-runtime/results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> still `17/23`.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_raster_patch_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'` -> restored the stable tile.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` ->
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+
 ## 2026-05-25 UTC - support-gap finalDetour follow-up
 - Active task: test whether the anchor-stack cull can treat a small XY gap
   between nearby upper support fragments and the lower basin as enough evidence

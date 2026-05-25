@@ -1522,3 +1522,42 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     trims here
   - the next serious family should be exact-neighborhood support-footprint
     bridging / overlap or earlier source-support classification
+
+### 2026-05-25 UTC raster patch follow-up
+
+- WWoW then tested a source-backed raster footprint bridge at `1523.8`:
+  `preRasterizeAnchorSupportPatchCoordsWow` +
+  `preRasterizeAnchorSupportPatchHalfExtent`.
+- Raster patch only:
+  - hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+    (same as stable baseline)
+  - focused:
+    `7/7`
+  - decisive proof:
+    - `1523.8` gained support at
+      `median` and `regions`
+      (`supportCell=true`)
+    - but lost it again at
+      `contours`
+      and still ended at
+      `finalDetour / lower_competitor_dominant`
+- Raster patch + raw+preserve contour carry:
+  - hash:
+    `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`
+  - focused/full:
+    `7/7`, `17/23`
+  - decisive proof:
+    - the earlier recovered footprint survived through `regions`
+    - `polymesh supportCount` returned to `16`
+    - `finalDetour supportComponentCount` still stayed `0`
+    - the saved tile collapsed exactly to the old raw+preserve shard branch
+- Interpretation:
+  - this is the cleanest current stage proof for `1523.8`
+  - the footprint can be recovered before contour extraction, so the next real
+    loss is `rcBuildContours(...)`
+  - carrying raw contour vertices later is still insufficient once the branch
+    just reproduces `52D99...`
+  - next serious work should move from raster/finalDetour tuning into local
+    contour-builder preservation or custom simplification for a source-backed
+    recovered footprint
