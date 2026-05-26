@@ -2505,6 +2505,67 @@ new loader-compatible experiment surfaces in
   - the next credible retry needs to change earlier source/compact overlap for
     the recovered support footprint, not another late contour-preserve variant
 
+### 2026-05-26 UTC: pre-raster same-source corridor-promotion gate for `1523.8`
+
+WWoW then moved one step earlier than the compact restore lane and tried a
+source/raster-input branch that promotes real source triangles from the
+recovered `1523.800,-4425.900,17.100` support corridor before the normal
+Recast raster/filter/region/contour pipeline runs.
+
+- Code surface:
+  - new loader-compatible config keys:
+    - `preRasterizePromoteAnchorSourceSupportCoordsWow`
+    - `preRasterizePromoteAnchorSourceSupportCorridorHalfWidth`
+  - new helpers in `TileWorker.cpp`:
+    - `TriangleOverlapsAnchorSupportCorridorXZ(...)`
+    - `PromoteAnchorSourceSupportTriangles(...)`
+- Exact commands:
+  - build MmapGen:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake the pre-raster promotion branch:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_support_corridor_promote_w030_v2' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_support_corridor_promote_w030.json'`
+  - hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- Artifact + hash:
+  - artifact:
+    `tmp/bake-sweeps/og_4029_source_support_corridor_promote_w030_v2-20260526T031600Z/`
+  - saved hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive proof:
+  - the new pre-raster branch really executed on the intended anchor and did
+    NOT silently skip:
+    `[SRC-ANCHOR-PROMOTE] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) dist2D=0.306 halfWidth=0.300 source=vmap candidates=0 promotedSteep=0 promotedNull=0`
+  - critical stage accounting for the bad anchor stayed on the same baseline
+    profile:
+    - `rasterize`: `supportCandidateCount=138`, `lowerCandidateCount=3193`
+    - `buildCHF`: `supportCandidateCount=80`, `lowerCandidateCount=3040`
+    - `erode`: `supportCandidateCount=8`, `lowerCandidateCount=2882`
+    - `median`: `supportCandidateCount=56`, `lowerCandidateCount=0`
+    - `regions`: `supportCandidateCount=56`, `lowerCandidateCount=0`
+    - `contours`: `supportCandidateCount=1`, `lowerCandidateCount=8`
+    - `polymesh`: `supportCandidateCount=2`, `lowerCandidateCount=23`
+    - `finalDetour`: `supportCandidateCount=0`, `lowerCandidateCount=5`,
+      winner `0x1000000000ADAB`
+  - the important anchor outcomes stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - the tile hash never moved off the stable live baseline, so focused and full
+    route tests were intentionally NOT rerun for this bounded gate
+- Practical read:
+  - this closes the narrow same-source pre-raster triangle-promotion lane for
+    `1523.8` at `halfWidth=0.300`
+  - the important evidence is NOT only the stable hash; it is
+    `candidates=0 promotedSteep=0 promotedNull=0`, meaning the recovered
+    support source had no eligible steep/null triangles left in that corridor
+    to promote into the walkable raster input
+  - if the next retry still targets `1523.8`, it must create earlier overlap
+    from a different input surface than "same source + same corridor + promote
+    existing non-walkable triangles"
+
 ### 2026-05-26 UTC: post-median compact support bridge gate for `1523.8`
 
 WWoW then tried the exact earlier-surface follow-up the contour-family closure

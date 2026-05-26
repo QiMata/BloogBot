@@ -2001,9 +2001,65 @@ back toward the anchor projection.
 - Practical read:
   - this closes not just "wrong patch center" but also these tiny local raster
     patch-shape micro-variants at this size/placement
-  - the next credible retry should not be another micro patch reshaping
-    branch; it needs a more structural earlier raster/source change or a
-    contour-builder/simplification change
+- the next credible retry should not be another micro patch reshaping
+  branch; it needs a more structural earlier raster/source change or a
+  contour-builder/simplification change
+
+### 2026-05-26 pre-raster same-source corridor-promotion follow-up
+
+The next bounded retry moved exactly onto that earlier raster/source surface:
+promote real source triangles from the recovered `1523.8` support corridor
+before the normal Recast stages run, instead of trying to restore compact spans
+after the loss point.
+
+Exact branch:
+
+- branch:
+  `og_4029_source_support_corridor_promote_w030_v2`
+- artifact:
+  `tmp/bake-sweeps/og_4029_source_support_corridor_promote_w030_v2-20260526T031600Z/`
+- hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_support_corridor_promote_w030_v2' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_support_corridor_promote_w030.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+
+Decisive proof:
+
+- the branch really activated on the intended anchor:
+  `[SRC-ANCHOR-PROMOTE] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) dist2D=0.306 halfWidth=0.300 source=vmap candidates=0 promotedSteep=0 promotedNull=0`
+- that is stronger than "hash unchanged" by itself. It says the recovered
+  support source did not have any steep/null triangles left inside the tested
+  support->anchor corridor to promote into walkable raster input.
+- the bad anchor kept the same baseline-like stage profile:
+  - `buildCHF`: `supportCandidateCount=80`, `lowerCandidateCount=3040`
+  - `erode`: `supportCandidateCount=8`, `lowerCandidateCount=2882`
+  - `median`: `supportCandidateCount=56`, `lowerCandidateCount=0`
+  - `regions`: `supportCandidateCount=56`, `lowerCandidateCount=0`
+  - `contours`: `supportCandidateCount=1`, `lowerCandidateCount=8`
+  - `polymesh`: `supportCandidateCount=2`, `lowerCandidateCount=23`
+  - `finalDetour`: `supportCandidateCount=0`, `lowerCandidateCount=5`,
+    winner `0x1000000000ADAB`
+- important anchors stayed unchanged:
+  - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+  - `1523.800,-4425.900,17.100` ->
+    `finalDetour / lower_competitor_dominant`
+  - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+  - `1364.867,-4374.000,26.109` ->
+    `finalDetour / winner_component_trapped`
+
+Practical conclusion:
+
+- this is a clean bounded negative on the earlier source/raster-input branch
+  that used the SAME recovered support source and SAME narrow corridor
+- the next `1523.8` retry must move to a different input surface than
+  "existing same-source non-walkable triangles inside a `0.300` corridor"
+- because the serialized tile hash never moved off the stable baseline and the
+  early-stage manifest gate did not move, focused/full route reruns would have
+  been wasteful and were intentionally skipped
 
 ### 2026-05-26 post-median compact-bridge follow-up
 

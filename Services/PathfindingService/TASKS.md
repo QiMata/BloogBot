@@ -3698,3 +3698,67 @@
 - Next command: inspect an even earlier source/raster/compact-input retry for
   `1523.8`; the post-median bridge proved there is nothing left to recover in
   the compact corridor itself.
+
+### 2026-05-26 - pre-raster same-source corridor promotion gate for `1523.8`
+- Active task: continue the `40,29` manifest-first handoff by testing whether
+  the recovered `1523.8` support source still has any real source triangles
+  left to promote before erosion/regions, instead of restoring spans afterward.
+- Pass result: `delta shipped; a new opt-in pre-raster source-triangle
+  promotion surface is in source, the bounded 1523.8 branch executed, and it
+  proved there are zero eligible same-source steep/null triangles left in that
+  narrow corridor to promote into the walkable raster input`.
+- Last delta:
+  - Added loader-compatible experiment surfaces in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`:
+    - `preRasterizePromoteAnchorSourceSupportCoordsWow`
+    - `preRasterizePromoteAnchorSourceSupportCorridorHalfWidth`
+    - helpers `TriangleOverlapsAnchorSupportCorridorXZ(...)` and
+      `PromoteAnchorSourceSupportTriangles(...)`
+  - Documented the new experiment surface in `tools/MmapGen/config.json`.
+  - Ran the bounded branch:
+    - branch:
+      `og_4029_source_support_corridor_promote_w030_v2`
+    - artifact:
+      `tmp/bake-sweeps/og_4029_source_support_corridor_promote_w030_v2-20260526T031600Z/`
+    - hash:
+      `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - Decisive proof:
+    - bake log:
+      `[SRC-ANCHOR-PROMOTE] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) dist2D=0.306 halfWidth=0.300 source=vmap candidates=0 promotedSteep=0 promotedNull=0`
+    - critical `1523.8` manifest accounting stayed on the stable baseline
+      profile:
+      - `buildCHF`: `80/3040`
+      - `erode`: `8/2882`
+      - `median`: `56/0`
+      - `regions`: `56/0`
+      - `contours`: `1/8`
+      - `polymesh`: `2/23`
+      - `finalDetour`: `0/5`, winner `0x1000000000ADAB`
+    - `1523.800,-4425.900,17.100` still stayed
+      `finalDetour / lower_competitor_dominant`
+  - Important anchor summary stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - Practical read:
+    - this closes the narrow same-source pre-raster triangle-promotion lane
+      for `1523.8` at `halfWidth=0.300`
+    - the important evidence is `candidates=0`, not just the stable hash: the
+      recovered support source had no eligible steep/null triangles left in
+      that corridor to promote
+    - the next `1523.8` retry must move to a different input surface than
+      "same source + same corridor + promote existing non-walkable triangles"
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_support_corridor_promote_w030_v2' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_support_corridor_promote_w030.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+  - Focused tests and full `CriticalWalkLegs` intentionally SKIPPED because the
+    serialized tile hash never moved off the stable live baseline and the
+    manifest gate still failed before route-level proof changed.
+- Next command: try an even earlier or different input-surface proof for
+  `1523.8` than "same-source corridor promotion", or split back into the
+  separate `1364.867` trapped-component lane instead of spending more 1523.8
+  budget on finalDetour-only ideas.
