@@ -2423,6 +2423,81 @@ Practical read:
   code can choose between "support selection bug" and "literal same-group mesh
   gap" before adding another source-side fix surface
 
+### 2026-05-26 same-group source-footprint cap gate for `1523.8`
+
+After the detail trace narrowed the lane to one same-group source, WWoW tested
+the first true source-surface creation branch for that exact lane: if the
+nearest support is only `0.306` away and the miss lives inside
+`Ogrimmar.wmo#group133`, can a tiny same-detail source cap centered on the
+anchor move `sourceFootprint` before rasterization?
+
+Exact branch:
+
+- variant:
+  `og_4029_source_footprint_cap_v1`
+- authoritative artifact:
+  `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_cap_v1-20260526T141404Z\`
+- temp config:
+  `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_v1.json`
+- hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Code surface:
+
+- new helper in `TileWorker.cpp`:
+  `InjectAnchorSourceFootprintCaps(...)`
+- new opt-in keys:
+  - `preRasterizeCreateAnchorSourceFootprintCapCoordsWow`
+  - `preRasterizeCreateAnchorSourceFootprintCapHalfExtent`
+  - `preRasterizeCreateAnchorSourceFootprintCapMaxSupportDistance2D`
+  - `preRasterizeCreateAnchorSourceFootprintCapMinSameDetailLowerDrop`
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_cap_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_v1.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+
+Decisive negative:
+
+- the corrected rerun did arm the new support-probe list for the cap branch:
+  `bake.log` starts with the targeted
+  `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) ...`
+  read before the normal manifest-wide support stream
+- but the bake emitted no `[SRC-FOOTPRINT-CAP]` lines at all
+- the saved tile hash stayed byte-identical to the stable live baseline:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- the important stage-summary rows stayed unchanged:
+  - `1523.800,-4425.900,17.100` still ->
+    `FirstBadStage=finalDetour`,
+    `FirstBadReason=lower_competitor_dominant`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1522.500,-4424.100,17.000` still ->
+    no `FirstBadStage`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`
+  - `1521.267,-4425.600,17.609` still ->
+    no `FirstBadStage`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`
+
+Practical read:
+
+- this is another bounded negative for the `1523.8` source-footprint lane
+- the first same-group source-cap implementation was too strict or otherwise
+  failed to arm, despite the earlier candidate trace proving the same-group
+  lower overlap exists at that coord
+- do not waste route reruns here:
+  neither the manifest gate nor the saved tile hash moved
+- the next retry should keep the same source-cap surface but simplify or log the
+  precondition, instead of assuming the current "same-detail lower-overlap"
+  gate is the right one
+
 ### 2026-05-25 UTC contour raw-bypass plus support-arc follow-up
 
 The next contour-focused loop closed three distinct "change the contour shape

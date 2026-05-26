@@ -4011,3 +4011,68 @@
 - Next command: trace the raw `group133` candidate score/vertex neighborhood for
   `1523.800,-4425.900,17.100` so the next code branch can choose between a
   same-group support-selection fix and a same-group seam/gap fix.
+
+### 2026-05-26 - same-group source-footprint cap gate for `1523.8`
+- Active task: try the first real same-group source-surface creation branch for
+  `1523.800,-4425.900,17.100`. If the new `group133` proof is right, a tiny
+  pre-raster source cap should move `sourceFootprint` before any later contour
+  or finalDetour logic matters.
+- Pass result: `negative; the corrected rerun still saved the stable live tile,
+  emitted no [SRC-FOOTPRINT-CAP] lines, and left the 1523.8 sourceFootprint and
+  raster rows unchanged`.
+- Last delta:
+  - Added new helper in `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`:
+    `InjectAnchorSourceFootprintCaps(...)`
+  - Added new opt-in config keys:
+    - `preRasterizeCreateAnchorSourceFootprintCapCoordsWow`
+    - `preRasterizeCreateAnchorSourceFootprintCapHalfExtent`
+    - `preRasterizeCreateAnchorSourceFootprintCapMaxSupportDistance2D`
+    - `preRasterizeCreateAnchorSourceFootprintCapMinSameDetailLowerDrop`
+  - Ran the bounded experiment with temp config:
+    `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_v1.json`
+  - Variant + authoritative artifact:
+    - variant:
+      `og_4029_source_footprint_cap_v1`
+    - artifact:
+      `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_cap_v1-20260526T141404Z\`
+    - hash:
+      `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - Decisive proof:
+    - the corrected rerun did arm the dedicated support-probe surface:
+      `bake.log` begins with the targeted
+      `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) ...`
+      before the usual manifest-wide stream
+    - but `bake.log` emitted NO `[SRC-FOOTPRINT-CAP]` lines
+    - stage summary stayed unchanged:
+      - `1523.800,-4425.900,17.100` ->
+        `finalDetour / lower_competitor_dominant`,
+        `SourceFootprintContainsAnchorProjection=false`,
+        `SourceFootprintContainsAnchorCell=false`,
+        `RasterizeSupportContainsAnchorCell=false`
+      - `1522.500,-4424.100,17.000` ->
+        no `FirstBadStage`,
+        `SourceFootprintContainsAnchorProjection=false`,
+        `SourceFootprintContainsAnchorCell=false`,
+        `RasterizeSupportContainsAnchorCell=false`
+      - `1521.267,-4425.600,17.609` ->
+        no `FirstBadStage`,
+        `SourceFootprintContainsAnchorProjection=false`,
+        `SourceFootprintContainsAnchorCell=false`,
+        `RasterizeSupportContainsAnchorCell=false`
+  - Practical read:
+    - the first same-group source-cap implementation failed to arm
+    - treat that as a bounded negative for the current cap predicate, not as a
+      reason to abandon the source-cap surface entirely
+    - next retry should either log the precondition or relax it, because the
+      earlier detail trace already proved the same-group lower overlap exists at
+      `1523.8`
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_cap_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_v1.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+  - Focused tests and full `CriticalWalkLegs` intentionally SKIPPED because the
+    manifest gate and the saved tile hash never moved.
+- Next command: rerun the same `group133` source-cap idea with the over-strict
+  lower-overlap predicate removed or instrumented, so the branch actually tests
+  whether a tiny source-surface cap can move `sourceFootprint` for
+  `1523.800,-4425.900,17.100`.

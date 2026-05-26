@@ -2853,3 +2853,53 @@ group?
     is "exactly how does `group133` miss or clip the upper support at 1523.8?"
   - because the hash did not move, focused tests and full `CriticalWalkLegs`
     were intentionally skipped again
+
+### 2026-05-26 UTC: same-group source-footprint cap gate for `1523.8`
+
+WWoW then tried the first actual source-surface creation branch on that new
+same-group proof: synthesize a tiny same-detail source cap at
+`1523.800,-4425.900,17.100` before rasterization and see if the earliest
+manifest gate finally moves.
+
+- Code surface:
+  - new helper in `TileWorker.cpp`:
+    `InjectAnchorSourceFootprintCaps(...)`
+  - new opt-in keys:
+    - `preRasterizeCreateAnchorSourceFootprintCapCoordsWow`
+    - `preRasterizeCreateAnchorSourceFootprintCapHalfExtent`
+    - `preRasterizeCreateAnchorSourceFootprintCapMaxSupportDistance2D`
+    - `preRasterizeCreateAnchorSourceFootprintCapMinSameDetailLowerDrop`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_cap_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_v1.json'`
+  - hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- Authoritative artifact + hash:
+  - artifact:
+    `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_cap_v1-20260526T141404Z\`
+  - hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive negative:
+  - the rerun did arm the dedicated support-probe list for the branch:
+    `bake.log` starts with
+    `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) ...`
+    before the ordinary manifest-wide support stream
+  - but `bake.log` emitted no `[SRC-FOOTPRINT-CAP]` lines
+  - `1523.800,-4425.900,17.100` stayed unchanged at:
+    `finalDetour / lower_competitor_dominant`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`
+  - neighboring anchors `1522.500,-4424.100,17.000` and
+    `1521.267,-4425.600,17.609` also stayed unchanged
+- Practical read:
+  - the first same-group source-cap implementation did not actually arm its cap
+    injection despite the earlier trace proof surface
+  - treat this as another bounded negative, not as a route-level failure
+  - because the saved tile hash never moved, focused tests and full
+    `CriticalWalkLegs` were intentionally skipped
+  - the next retry should keep the same source-cap surface but relax or trace
+    the precondition instead of assuming the current lower-overlap gate is
+    correct
