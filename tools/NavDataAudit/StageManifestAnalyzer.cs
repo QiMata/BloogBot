@@ -204,7 +204,7 @@ public static class StageManifestAnalyzer
             WowY: wowY,
             WowZ: wowZ,
             SourceSupportFound: sourceSupportFound,
-            PresentStageCount: stagesByName.Count,
+            PresentStageCount: ExpectedStages.Count(stagesByName.ContainsKey),
             MissingStages: missingStages,
             FirstBadStage: firstBadStage,
             FirstBadReason: firstBadReason,

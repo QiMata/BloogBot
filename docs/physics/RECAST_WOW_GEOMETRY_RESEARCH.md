@@ -2005,6 +2005,57 @@ back toward the anchor projection.
     branch; it needs a more structural earlier raster/source change or a
     contour-builder/simplification change
 
+### 2026-05-26 post-median compact-bridge follow-up
+
+The next bounded retry moved later than raster but still earlier than
+contours/final Detour: a post-median compact-heightfield bridge keyed only to
+the recovered `1523.8` source-support footprint.
+
+Why the experiment was shaped this way:
+
+- official Recast docs describe `rcCompactHeightfield` as the compact
+  representation of open space used to form regions, and explicitly note that
+  it is not conducive to arbitrary span insertion/removal after build time:
+  https://recastnav.com/structrcCompactHeightfield.html and
+  https://recastnav.com/group__recast.html
+- because of that contract, the WWoW bridge pass did NOT invent new compact
+  spans; it only attempted to re-enable support-band spans that were already
+  walkable before erode and were still present in the compact span array
+
+Exact branch:
+
+- branch:
+  `og_4029_compact_support_bridge_anchor1523_w030_v2`
+- artifact:
+  `tmp/bake-sweeps/og_4029_compact_support_bridge_anchor1523_w030_v2-20260526T005547Z/`
+- hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Decisive proof:
+
+- the compact bridge executed on the right recovered support point:
+  `[CHF-SRC-BRIDGE] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) dist2D=0.306 bridgeHalfWidth=0.300 corridorCells=45 supportCells=1 nullSupportCandidates=0 restored=0`
+- the new `anchorSourceSupportBridge` stage was identical to `median`:
+  - `supportCandidateCount=56`
+  - `supportContainsAnchorProjection=false`
+  - `supportContainsAnchorCell=false`
+  - nearest support component stayed at
+    `minDistance2D=0.5315163135528564`
+- `regions` stayed identical to the bridge stage
+- the bad anchor still ended at
+  `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+
+Practical conclusion:
+
+- this is a clean bounded negative on the intended compact-stage restore
+  surface
+- the important proof is `nullSupportCandidates=0`: the support->anchor
+  corridor did not contain any erased support-band compact spans left to
+  recover after median
+- the next credible retry must move earlier than this pass and change the
+  source/raster/compact input so the missing support-band cells exist in the
+  compact data at all
+
 ### 2026-05-25 UTC contour raw-bypass plus support-arc follow-up
 
 The next contour-focused loop closed three distinct "change the contour shape

@@ -2434,6 +2434,124 @@ static int RestoreAnchorSourceSupportCompactSpansAfterErode(rcCompactHeightfield
     return restored;
 }
 
+// [WWoW-DIVERGENCE] 2026-05-26: tile 1:40,29 still keeps the recovered source
+// support footprint near 1523.8 as isolated compact components that never
+// overlap the anchor cell by the time regions build. This pass stays strictly
+// inside the compact-heightfield surface: it only restores support-band spans
+// that were already walkable before erode, are still null after median, and
+// lie inside a tiny support->anchor corridor. If this does not move compact or
+// region overlap for the anchor, record it as a bounded negative and stop.
+static int RestoreAnchorSourceSupportCompactBridge(rcCompactHeightfield& chf,
+    const std::vector<unsigned char>& preErodeAreas,
+    const float bridgeHalfWidth,
+    const AnchorSupportBandTuning& supportBandTuning,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const bool logDiagnostics)
+{
+    if (!chf.cells || !chf.spans || !chf.areas || sourceSupports.empty() ||
+        preErodeAreas.size() != chf.spanCount || bridgeHalfWidth <= 0.0f)
+    {
+        return 0;
+    }
+
+    constexpr float kMaxSourceDistance2D = 0.75f;
+
+    int restored = 0;
+    for (const AnchorSourceSupportProbe& support : sourceSupports)
+    {
+        if (!support.found)
+            continue;
+        if (!support.projectedInside && support.distance2D > kMaxSourceDistance2D)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        const float supportRecastX = support.supportRecastX;
+        const float supportRecastZ = support.supportRecastZ;
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = support.supportY + supportBandTuning.supportFloorSlackAbove;
+        const float corridorMargin = bridgeHalfWidth + chf.cs;
+        const float minCellX = std::min(anchorRecastX, supportRecastX) - corridorMargin;
+        const float maxCellX = std::max(anchorRecastX, supportRecastX) + corridorMargin;
+        const float minCellZ = std::min(anchorRecastZ, supportRecastZ) - corridorMargin;
+        const float maxCellZ = std::max(anchorRecastZ, supportRecastZ) + corridorMargin;
+        if (maxCellX < chf.bmin[0] || minCellX > chf.bmax[0] ||
+            maxCellZ < chf.bmin[2] || minCellZ > chf.bmax[2])
+        {
+            continue;
+        }
+
+        int bridgeCells = 0;
+        int supportCells = 0;
+        int nullSupportCandidates = 0;
+        int anchorRestored = 0;
+        for (int y = 0; y < chf.height; ++y)
+        {
+            const float cellCenterZ = chf.bmin[2] + (y + 0.5f) * chf.cs;
+            if (cellCenterZ < minCellZ || cellCenterZ > maxCellZ)
+                continue;
+
+            for (int x = 0; x < chf.width; ++x)
+            {
+                const float cellCenterX = chf.bmin[0] + (x + 0.5f) * chf.cs;
+                if (cellCenterX < minCellX || cellCenterX > maxCellX)
+                    continue;
+
+                float closestX = 0.0f;
+                float closestZ = 0.0f;
+                float closestY = 0.0f;
+                ClosestPointOnSegmentXZ(
+                    supportRecastX, supportRecastZ, support.supportY,
+                    anchorRecastX, anchorRecastZ, support.supportY,
+                    cellCenterX, cellCenterZ,
+                    closestX, closestZ, closestY);
+                const float dx = cellCenterX - closestX;
+                const float dz = cellCenterZ - closestZ;
+                const float distanceToSegment = sqrtf(dx * dx + dz * dz);
+                if (distanceToSegment > bridgeHalfWidth)
+                    continue;
+
+                ++bridgeCells;
+                const rcCompactCell& cell = chf.cells[x + y * chf.width];
+                bool cellHasSupport = false;
+                for (unsigned int i = cell.index; i < cell.index + cell.count; ++i)
+                {
+                    const rcCompactSpan& span = chf.spans[i];
+                    const float spanFloor = chf.bmin[1] + (float)span.y * chf.ch;
+                    const bool supportRange = spanFloor >= supportFloorMinY && spanFloor <= supportFloorMaxY;
+                    if (!supportRange)
+                        continue;
+
+                    if (chf.areas[i] != RC_NULL_AREA)
+                    {
+                        cellHasSupport = true;
+                        continue;
+                    }
+                    if (preErodeAreas[i] == RC_NULL_AREA)
+                        continue;
+
+                    ++nullSupportCandidates;
+                    chf.areas[i] = preErodeAreas[i];
+                    cellHasSupport = true;
+                    ++restored;
+                    ++anchorRestored;
+                }
+
+                if (cellHasSupport)
+                    ++supportCells;
+            }
+        }
+
+        printf("[CHF-SRC-BRIDGE] anchor=(%.3f,%.3f,%.3f) support=(%.3f,%.3f,%.3f) dist2D=%.3f bridgeHalfWidth=%.3f corridorCells=%d supportCells=%d nullSupportCandidates=%d restored=%d\n",
+            support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+            support.supportRecastZ, support.supportRecastX, support.supportY,
+            support.distance2D, bridgeHalfWidth,
+            bridgeCells, supportCells, nullSupportCandidates, anchorRestored);
+    }
+
+    return restored;
+}
+
 // [WWoW-DIVERGENCE] 2026-05-25: tile 1:40,29 still shows a source-backed
 // support footprint hole at 1523.8 that is already present during rasterize:
 // nearby support cells survive, but the exact anchor neighborhood never gains
@@ -7627,6 +7745,18 @@ namespace MMAP
             jsonTileConfig, "preRasterizeAnchorSupportPatchBridgeHalfWidth", 0.0f);
         const bool preRasterizeAnchorSupportPatchCenterOnResolvedSupportPoint =
             ParsePreRasterizeAnchorSupportPatchCenterMode(jsonTileConfig);
+        const std::vector<AnchorPolyStackCoord> preRegionRestoreAnchorSourceSupportBridgeCoords =
+            ParseAnchorCoords(jsonTileConfig, "preRegionRestoreAnchorSourceSupportBridgeCoordsWow");
+        const std::vector<AnchorSourceSupportProbe> preRegionRestoreAnchorSourceSupportBridgeProbes =
+            !preRegionRestoreAnchorSourceSupportBridgeCoords.empty()
+                ? ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, preRegionRestoreAnchorSourceSupportBridgeCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
+                    logAnchorStageDiagnostics)
+                : std::vector<AnchorSourceSupportProbe>();
+        const float preRegionRestoreAnchorSourceSupportBridgeHalfWidth = JsonFloatOrDefault(
+            jsonTileConfig, "preRegionRestoreAnchorSourceSupportBridgeHalfWidth", 0.0f);
         json anchorStageManifest;
         if (writeAnchorStageManifest && !anchorManifestSupports.empty())
         {
@@ -7924,7 +8054,9 @@ namespace MMAP
 
                 // build polymesh intermediates
                 const std::vector<unsigned char> preErodeAreas =
-                    restoreAnchorSourceSupportAfterErode
+                    (restoreAnchorSourceSupportAfterErode ||
+                        (!preRegionRestoreAnchorSourceSupportBridgeProbes.empty() &&
+                            preRegionRestoreAnchorSourceSupportBridgeHalfWidth > 0.0f))
                         ? std::vector<unsigned char>(tile.chf->areas, tile.chf->areas + tile.chf->spanCount)
                         : std::vector<unsigned char>();
                 if (!rcErodeWalkableArea(m_rcContext, walkableErosionRadius, *tile.chf))
@@ -8026,6 +8158,31 @@ namespace MMAP
                     }
                     if (m_debug)
                         WriteCompactHeightfieldStageCsv("anchorCompactCull", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
+                }
+
+                if (!preRegionRestoreAnchorSourceSupportBridgeProbes.empty() &&
+                    preRegionRestoreAnchorSourceSupportBridgeHalfWidth > 0.0f)
+                {
+                    const int restoredBridgeSpans = RestoreAnchorSourceSupportCompactBridge(
+                        *tile.chf,
+                        preErodeAreas,
+                        preRegionRestoreAnchorSourceSupportBridgeHalfWidth,
+                        anchorSupportBandTuning,
+                        preRegionRestoreAnchorSourceSupportBridgeProbes,
+                        logAnchorStageDiagnostics);
+                    if (restoredBridgeSpans > 0)
+                    {
+                        printf("[CHF-SRC-BRIDGE] map=%u tile=%u,%u: restored %d compact span(s) before regions\n",
+                            mapID, tileX, tileY, restoredBridgeSpans);
+                    }
+                    if (logAnchorStageDiagnostics)
+                    {
+                        LogAnchorSourceSupportCompactStage("anchorSourceSupportBridge", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, preRegionRestoreAnchorSourceSupportBridgeProbes);
+                        LogAnchorSourceSupportCompactComponents("anchorSourceSupportBridge", *tile.chf, anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, anchorSupportBandTuning, preRegionRestoreAnchorSourceSupportBridgeProbes);
+                    }
+                    appendCompactManifestStage("anchorSourceSupportBridge", *tile.chf, true);
+                    if (m_debug)
+                        WriteCompactHeightfieldStageCsv("anchorSourceSupportBridge", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
                 }
 
                 const RegionPartitionType partitionType = ParseRegionPartitionType(jsonTileConfig);
@@ -8614,6 +8771,8 @@ namespace MMAP
             { "preRasterizeAnchorSupportPatchHalfExtent", 0.0f },
             { "preRasterizeAnchorSupportPatchCenterMode", "anchor" },
             { "preRasterizeAnchorSupportPatchBridgeHalfWidth", 0.0f },
+            { "preRegionRestoreAnchorSourceSupportBridgeCoordsWow", json::array() },
+            { "preRegionRestoreAnchorSourceSupportBridgeHalfWidth", 0.0f },
             { "preRegionAnchorCoordsWow", json::array() },
             { "postDetourCullAnchorPolyStacks", false },
             { "postDetourCullAnchorTrappedComponents", false },

@@ -2504,3 +2504,71 @@ new loader-compatible experiment surfaces in
     contour-shape churn is not moving the real proof surface
   - the next credible retry needs to change earlier source/compact overlap for
     the recovered support footprint, not another late contour-preserve variant
+
+### 2026-05-26 UTC: post-median compact support bridge gate for `1523.8`
+
+WWoW then tried the exact earlier-surface follow-up the contour-family closure
+pointed to: a tiny post-median compact-heightfield bridge keyed only to the
+recovered `1523.800,-4425.900,17.100` source-support footprint.
+
+- Code surface:
+  - new loader-compatible config keys:
+    - `preRegionRestoreAnchorSourceSupportBridgeCoordsWow`
+    - `preRegionRestoreAnchorSourceSupportBridgeHalfWidth`
+  - new helper in `TileWorker.cpp`:
+    `RestoreAnchorSourceSupportCompactBridge(...)`
+  - new optional manifest stage:
+    `anchorSourceSupportBridge`
+  - `NavDataAudit` stage coverage now counts only the expected canonical
+    stages, so opt-in experiment stages no longer print misleading ratios like
+    `15/14`
+- Exact commands:
+  - build MmapGen:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - build NavDataAudit after the coverage fix:
+    `dotnet build E:\repos\Westworld of Warcraft\tools\NavDataAudit\NavDataAudit.csproj --configuration Release`
+  - bake the compact-bridge branch:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_compact_support_bridge_anchor1523_w030_v2' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_compact_support_bridge_anchor1523_w030.json'`
+  - hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+  - re-run stage-summary-only after the analyzer fix:
+    `dotnet run --project E:\repos\Westworld of Warcraft\tools\NavDataAudit\NavDataAudit.csproj --configuration Release --no-build -- --stage-summary-only --stage-manifest E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_compact_support_bridge_anchor1523_w030_v2-20260526T005547Z\analysis\map0012940_anchor_stage_manifest.json --stage-summary E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_compact_support_bridge_anchor1523_w030_v2-20260526T005547Z\analysis\map0012940_anchor_stage_summary.json --stage-summary-csv E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_compact_support_bridge_anchor1523_w030_v2-20260526T005547Z\analysis\map0012940_anchor_stage_summary.csv`
+- Artifact + hash:
+  - artifact:
+    `tmp/bake-sweeps/og_4029_compact_support_bridge_anchor1523_w030_v2-20260526T005547Z/`
+  - saved hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive proof:
+  - the bridge pass really executed on the recovered support footprint:
+    `[CHF-SRC-BRIDGE] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) dist2D=0.306 bridgeHalfWidth=0.300 corridorCells=45 supportCells=1 nullSupportCandidates=0 restored=0`
+  - the new `anchorSourceSupportBridge` manifest stage stayed byte-for-byte
+    identical to `median` for the bad anchor:
+    - `supportCandidateCount=56`
+    - `supportContainsAnchorProjection=false`
+    - `supportContainsAnchorCell=false`
+    - nearest support component still `minDistance2D=0.5315163135528564`
+  - `regions` stayed identical to `anchorSourceSupportBridge`
+  - `contours`, `polymesh`, and `finalDetour` also stayed identical to the
+    stable baseline:
+    - `contours`: `supportCandidateCount=1`, `lowerCandidateCount=8`
+    - `polymesh`: `supportCandidateCount=2`, `lowerCandidateCount=23`
+    - `finalDetour`: `supportCandidateCount=0`, `lowerCandidateCount=5`,
+      winner `0x1000000000ADAB`
+  - the important anchor outcomes stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - the tile hash never moved off the stable live baseline, so focused and full
+    route tests were intentionally NOT rerun for this bounded gate
+- Practical read:
+  - this closes the tiny post-median compact-restore corridor family for
+    `1523.8`
+  - the important negative is not just `restored=0`; it is
+    `nullSupportCandidates=0`, meaning the corridor contained no dormant
+    support-band compact spans left to recover after median
+  - if the next retry still wants to fix `1523.8`, it must alter earlier
+    source/raster/compact inputs so those support-band cells exist at all,
+    not another late contour carry and not another post-median re-enable pass
