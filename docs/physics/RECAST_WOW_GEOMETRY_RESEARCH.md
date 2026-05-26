@@ -2498,6 +2498,85 @@ Practical read:
   precondition, instead of assuming the current "same-detail lower-overlap"
   gate is the right one
 
+### 2026-05-26 source-cap anchor-frame fix plus region-zero follow-up
+
+The next pass proved that the first same-group source-cap "negative" was not a
+real rejection of the cap surface. The cap code was computing the anchor cell
+in the map-wide raster frame instead of the internal `213 x 213` subtile frame,
+so the branch never actually touched the `1523.8` cell it meant to test.
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_cap_force_v1_trace' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json'`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_cap_force_anchorframe_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+
+Artifacts:
+
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_cap_force_v1_trace-20260526T143246Z\`
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_cap_force_anchorframe_v1-20260526T144426Z\`
+- both runs preserved the stable live tile hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Code surface:
+
+- `TileWorker.cpp` now derives pre-raster anchor cells from the anchor's
+  internal raster subtile via:
+  - `BuildTileRasterConfig(...)`
+  - `TryBuildAnchorRasterConfig(...)`
+- both pre-raster source helpers now use that corrected subtile frame:
+  - `PromoteAnchorSupportCellTriangles(...)`
+  - `InjectAnchorSourceFootprintCaps(...)`
+- the source-cap branch also gained extra diagnostics:
+  - `preRasterizeCreateAnchorSourceFootprintCapRequireSameDetailLowerDrop`
+  - `[SRC-FOOTPRINT-CAP-SKIP] ...`
+  - `[SRC-FOOTPRINT-CAP-GATE] ...`
+  - richer `[SRC-FOOTPRINT-CAP] ...`
+
+Decisive proof:
+
+- the frame-trace run exposed the actual failure:
+  `[SRC-FOOTPRINT-CAP-SKIP] anchor=(1523.800,-4425.900,17.100) tri=537325 detail=Ogrimmar.wmo#group133 dist2D=0.306 reason=anchor_cell_oob cell=(3741,4571) dims=(241,241) bmin=(-4800.000,1066.667) cs=0.100`
+- after the anchor-frame fix, the branch finally armed:
+  `[SRC-FOOTPRINT-CAP] anchor=(1523.800,-4425.900,17.100) detail=Ogrimmar.wmo#group133 support=(1523.668,-4426.176,17.704) dist2D=0.306 capHalfExtent=0.300 requireLowerDrop=0 cellCandidates=2 resolvedCandidates=2 qualifiedLowerCandidates=2 sameDetailLowerMinY=16.116 sameDetailLowerDrop=1.588 added=2`
+- the early proof for `1523.800,-4425.900,17.100` moved exactly where the
+  earlier manifest gate required:
+  - `sourceFootprint` moved from
+    `supportContainsAnchorProjection=false`,
+    `supportContainsAnchorCell=false`
+    to
+    `supportContainsAnchorProjection=true`,
+    `supportContainsAnchorCell=true`
+  - `rasterize` moved from
+    `supportContainsAnchorCell=false`
+    to
+    `supportContainsAnchorCell=true`
+  - `median` and `regions` moved from `56/0` to `77/0` and gained a new
+    support component at the anchor:
+    `cellCount=21`, `supportSpanCount=21`, `containsAnchorCell=true`,
+    `touchesBoundary=false`, `regionIds=[]`
+- but the later route-defining stages did not move at all:
+  - `contours` still `1/8`
+  - `polymesh` still `2/23`
+  - `finalDetour` still `0/5`, winner `0x1000000000ADAB`
+  - saved tile hash still
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Practical read:
+
+- the first same-group source-cap negative was false because the anchor-cell
+  frame was wrong
+- once fixed, the source-footprint branch proved something sharper than
+  "cap works" or "cap fails": the new upper support survives into compact space
+  and reaches the anchor neighborhood, but it never acquires a nonzero region
+  id, so `rcBuildContours()` still sees the old world
+- the next credible `1523.8` branch is therefore not another contour carry or
+  finalDetour trim; it must connect or preserve that same-group support island
+  early enough that the region builder no longer leaves it at `regionIds=[]`
+- focused tests and full `CriticalWalkLegs` were intentionally skipped again
+  because the saved tile hash never moved
+
 ### 2026-05-25 UTC contour raw-bypass plus support-arc follow-up
 
 The next contour-focused loop closed three distinct "change the contour shape

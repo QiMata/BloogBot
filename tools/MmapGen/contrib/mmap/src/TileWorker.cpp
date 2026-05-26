@@ -186,6 +186,25 @@ static bool IntersectsRecast2D(float minX, float maxX, float minZ, float maxZ, c
         && minZ <= config.bmax[2];
 }
 
+static rcConfig BuildTileRasterConfig(const rcConfig& config, const int tileX, const int tileY)
+{
+    rcConfig tileConfig;
+    memcpy(&tileConfig, &config, sizeof(rcConfig));
+    tileConfig.width = config.tileSize + config.borderSize * 2;
+    tileConfig.height = config.tileSize + config.borderSize * 2;
+
+    tileConfig.bmin[0] = config.bmin[0] + tileX * float(config.tileSize * config.cs);
+    tileConfig.bmin[2] = config.bmin[2] + tileY * float(config.tileSize * config.cs);
+    tileConfig.bmax[0] = config.bmin[0] + (tileX + 1) * float(config.tileSize * config.cs);
+    tileConfig.bmax[2] = config.bmin[2] + (tileY + 1) * float(config.tileSize * config.cs);
+
+    tileConfig.bmin[0] -= tileConfig.borderSize * tileConfig.cs;
+    tileConfig.bmin[2] -= tileConfig.borderSize * tileConfig.cs;
+    tileConfig.bmax[0] += tileConfig.borderSize * tileConfig.cs;
+    tileConfig.bmax[2] += tileConfig.borderSize * tileConfig.cs;
+    return tileConfig;
+}
+
 static void ComputeRotatedAabb(const GameObjectSpawn& spawn, const GameObjectModelInfo& model,
                                float& minX, float& maxX, float& minY, float& maxY, float& minZ, float& maxZ)
 {
@@ -1505,6 +1524,24 @@ static bool AreAnchorCoordsEquivalent(const AnchorPolyStackCoord& lhs, const Anc
     return fabsf(lhs.wowX - rhs.wowX) <= epsilon &&
         fabsf(lhs.wowY - rhs.wowY) <= epsilon &&
         fabsf(lhs.wowZ - rhs.wowZ) <= epsilon;
+}
+
+static bool TryBuildAnchorRasterConfig(const rcConfig& config, const AnchorPolyStackCoord& anchor,
+    rcConfig& tileConfig, int& tileX, int& tileY)
+{
+    if (config.tileSize <= 0 || config.cs <= 0.0f)
+        return false;
+
+    const float tileWorldSpan = float(config.tileSize) * config.cs;
+    const float anchorRecastX = anchor.wowY;
+    const float anchorRecastZ = anchor.wowX;
+    tileX = static_cast<int>(floorf((anchorRecastX - config.bmin[0]) / tileWorldSpan));
+    tileY = static_cast<int>(floorf((anchorRecastZ - config.bmin[2]) / tileWorldSpan));
+    if (tileX < 0 || tileX >= MMAP::TILES_PER_MAP || tileY < 0 || tileY >= MMAP::TILES_PER_MAP)
+        return false;
+
+    tileConfig = BuildTileRasterConfig(config, tileX, tileY);
+    return true;
 }
 
 static bool PointInPolygonXZ(const std::vector<Point2DXZ>& polygon, const float x, const float z)
@@ -2868,20 +2905,26 @@ static int PromoteAnchorSupportCellTriangles(
         if (!support.projectedInside && support.distance2D > kMaxSourceDistance2D)
             continue;
 
-        const float anchorRecastX = support.anchor.wowY;
-        const float anchorRecastZ = support.anchor.wowX;
-        const int anchorCellX = static_cast<int>(floorf((anchorRecastX - config.bmin[0]) / config.cs));
-        const int anchorCellY = static_cast<int>(floorf((anchorRecastZ - config.bmin[2]) / config.cs));
-        if (anchorCellX < 0 || anchorCellX >= config.width || anchorCellY < 0 || anchorCellY >= config.height)
+        rcConfig anchorTileConfig;
+        int anchorTileX = -1;
+        int anchorTileY = -1;
+        if (!TryBuildAnchorRasterConfig(config, support.anchor, anchorTileConfig, anchorTileX, anchorTileY))
             continue;
 
-        const float cellMinX = config.bmin[0] + anchorCellX * config.cs;
-        const float cellMaxX = cellMinX + config.cs;
-        const float cellMinZ = config.bmin[2] + anchorCellY * config.cs;
-        const float cellMaxZ = cellMinZ + config.cs;
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        const int anchorCellX = static_cast<int>(floorf((anchorRecastX - anchorTileConfig.bmin[0]) / anchorTileConfig.cs));
+        const int anchorCellY = static_cast<int>(floorf((anchorRecastZ - anchorTileConfig.bmin[2]) / anchorTileConfig.cs));
+        if (anchorCellX < 0 || anchorCellX >= anchorTileConfig.width || anchorCellY < 0 || anchorCellY >= anchorTileConfig.height)
+            continue;
+
+        const float cellMinX = anchorTileConfig.bmin[0] + anchorCellX * anchorTileConfig.cs;
+        const float cellMaxX = cellMinX + anchorTileConfig.cs;
+        const float cellMinZ = anchorTileConfig.bmin[2] + anchorCellY * anchorTileConfig.cs;
+        const float cellMaxZ = cellMinZ + anchorTileConfig.cs;
         const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
         const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
-        const float resolveExtent = std::max(config.cs * 2.0f, 0.35f);
+        const float resolveExtent = std::max(anchorTileConfig.cs * 2.0f, 0.35f);
 
         int candidateTriangles = 0;
         int promotedTerrain = 0;
@@ -2982,6 +3025,7 @@ static int InjectAnchorSourceFootprintCaps(
     const float capHalfExtent,
     const float maxSupportDistance2D,
     const float minSameDetailLowerDrop,
+    const bool requireSameDetailLowerDrop,
     const bool logDiagnostics)
 {
     if (!tVerts || !tTris || sourceSupports.empty() || capHalfExtent <= 0.0f)
@@ -3001,24 +3045,71 @@ static int InjectAnchorSourceFootprintCaps(
 
         const char* detailLabelCStr = meshData.DetailLabelForTriangle(support.triIndex);
         if (!detailLabelCStr || !detailLabelCStr[0])
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-FOOTPRINT-CAP-SKIP] anchor=(%.3f,%.3f,%.3f) tri=%d source=%s dist2D=%.3f reason=missing_detail_label\n",
+                    support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                    support.triIndex,
+                    meshData.SourceNameForTriangle(support.triIndex),
+                    support.distance2D);
+            }
             continue;
+        }
         const std::string detailLabel(detailLabelCStr);
+
+        rcConfig anchorTileConfig;
+        int anchorTileX = -1;
+        int anchorTileY = -1;
+        if (!TryBuildAnchorRasterConfig(config, support.anchor, anchorTileConfig, anchorTileX, anchorTileY))
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-FOOTPRINT-CAP-SKIP] anchor=(%.3f,%.3f,%.3f) tri=%d detail=%s dist2D=%.3f reason=anchor_subtile_oob\n",
+                    support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                    support.triIndex,
+                    detailLabel.c_str(),
+                    support.distance2D);
+            }
+            continue;
+        }
 
         const float anchorRecastX = support.anchor.wowY;
         const float anchorRecastZ = support.anchor.wowX;
-        const int anchorCellX = static_cast<int>(floorf((anchorRecastX - config.bmin[0]) / config.cs));
-        const int anchorCellY = static_cast<int>(floorf((anchorRecastZ - config.bmin[2]) / config.cs));
-        if (anchorCellX < 0 || anchorCellX >= config.width || anchorCellY < 0 || anchorCellY >= config.height)
+        const int anchorCellX = static_cast<int>(floorf((anchorRecastX - anchorTileConfig.bmin[0]) / anchorTileConfig.cs));
+        const int anchorCellY = static_cast<int>(floorf((anchorRecastZ - anchorTileConfig.bmin[2]) / anchorTileConfig.cs));
+        if (anchorCellX < 0 || anchorCellX >= anchorTileConfig.width || anchorCellY < 0 || anchorCellY >= anchorTileConfig.height)
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-FOOTPRINT-CAP-SKIP] anchor=(%.3f,%.3f,%.3f) tri=%d detail=%s dist2D=%.3f reason=anchor_cell_oob subtile=(%d,%d) cell=(%d,%d) dims=(%d,%d) bmin=(%.3f,%.3f) cs=%.3f\n",
+                    support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                    support.triIndex,
+                    detailLabel.c_str(),
+                    support.distance2D,
+                    anchorTileX, anchorTileY,
+                    anchorCellX, anchorCellY,
+                    anchorTileConfig.width, anchorTileConfig.height,
+                    anchorTileConfig.bmin[0], anchorTileConfig.bmin[2],
+                    anchorTileConfig.cs);
+            }
             continue;
+        }
 
-        const float cellMinX = config.bmin[0] + anchorCellX * config.cs;
-        const float cellMaxX = cellMinX + config.cs;
-        const float cellMinZ = config.bmin[2] + anchorCellY * config.cs;
-        const float cellMaxZ = cellMinZ + config.cs;
-        const float resolveExtent = std::max(config.cs * 2.0f, kResolveExtentMin);
+        const float cellMinX = anchorTileConfig.bmin[0] + anchorCellX * anchorTileConfig.cs;
+        const float cellMaxX = cellMinX + anchorTileConfig.cs;
+        const float cellMinZ = anchorTileConfig.bmin[2] + anchorCellY * anchorTileConfig.cs;
+        const float cellMaxZ = cellMinZ + anchorTileConfig.cs;
+        const float resolveExtent = std::max(anchorTileConfig.cs * 2.0f, kResolveExtentMin);
 
         bool sameDetailLowerOverlap = false;
         float deepestSameDetailLowerY = support.supportY;
+        int sameDetailCellCandidates = 0;
+        int sameDetailResolvedCandidates = 0;
+        int sameDetailQualifiedLowerCandidates = 0;
+        int bestLowerTri = -1;
+        float bestLowerY = support.supportY;
+        float bestLowerDrop = -std::numeric_limits<float>::max();
 
         for (int triIndex = 0; triIndex < tTriCount; ++triIndex)
         {
@@ -3039,6 +3130,8 @@ static int InjectAnchorSourceFootprintCaps(
             if (!TriangleOverlapsAxisAlignedRectXZ(a, b, c, cellMinX, cellMinZ, cellMaxX, cellMaxZ))
                 continue;
 
+            ++sameDetailCellCandidates;
+
             float triSupportY = 0.0f;
             float triSupportRecastX = 0.0f;
             float triSupportRecastZ = 0.0f;
@@ -3054,16 +3147,41 @@ static int InjectAnchorSourceFootprintCaps(
                 continue;
             }
 
+            ++sameDetailResolvedCandidates;
             const float lowerDrop = support.supportY - triSupportY;
+            if (lowerDrop > bestLowerDrop)
+            {
+                bestLowerDrop = lowerDrop;
+                bestLowerY = triSupportY;
+                bestLowerTri = triIndex;
+            }
             if (lowerDrop < minSameDetailLowerDrop)
                 continue;
 
             sameDetailLowerOverlap = true;
             deepestSameDetailLowerY = std::min(deepestSameDetailLowerY, triSupportY);
+            ++sameDetailQualifiedLowerCandidates;
         }
 
-        if (!sameDetailLowerOverlap)
+        if (requireSameDetailLowerDrop && !sameDetailLowerOverlap)
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-FOOTPRINT-CAP-GATE] anchor=(%.3f,%.3f,%.3f) detail=%s support=(%.3f,%.3f,%.3f) dist2D=%.3f requireLowerDrop=1 cellCandidates=%d resolvedCandidates=%d qualifiedLowerCandidates=%d bestLowerTri=%d bestLowerY=%.3f bestLowerDrop=%.3f minLowerDrop=%.3f\n",
+                    support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                    detailLabel.c_str(),
+                    support.supportRecastZ, support.supportRecastX, support.supportY,
+                    support.distance2D,
+                    sameDetailCellCandidates,
+                    sameDetailResolvedCandidates,
+                    sameDetailQualifiedLowerCandidates,
+                    bestLowerTri,
+                    bestLowerY,
+                    bestLowerTri >= 0 ? bestLowerDrop : -1.0f,
+                    minSameDetailLowerDrop);
+            }
             continue;
+        }
 
         const int firstTri = meshData.solidTris.size() / 3;
         const int firstVert = meshData.solidVerts.size() / 3;
@@ -3104,12 +3222,16 @@ static int InjectAnchorSourceFootprintCaps(
 
         if (logDiagnostics)
         {
-            printf("[SRC-FOOTPRINT-CAP] anchor=(%.3f,%.3f,%.3f) detail=%s support=(%.3f,%.3f,%.3f) dist2D=%.3f capHalfExtent=%.3f sameDetailLowerMinY=%.3f sameDetailLowerDrop=%.3f added=2\n",
+            printf("[SRC-FOOTPRINT-CAP] anchor=(%.3f,%.3f,%.3f) detail=%s support=(%.3f,%.3f,%.3f) dist2D=%.3f capHalfExtent=%.3f requireLowerDrop=%d cellCandidates=%d resolvedCandidates=%d qualifiedLowerCandidates=%d sameDetailLowerMinY=%.3f sameDetailLowerDrop=%.3f added=2\n",
                 support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
                 detailLabel.c_str(),
                 support.supportRecastZ, support.supportRecastX, patchSupportY,
                 support.distance2D,
                 capHalfExtent,
+                requireSameDetailLowerDrop ? 1 : 0,
+                sameDetailCellCandidates,
+                sameDetailResolvedCandidates,
+                sameDetailQualifiedLowerCandidates,
                 deepestSameDetailLowerY,
                 support.supportY - deepestSameDetailLowerY);
         }
@@ -8546,6 +8668,8 @@ namespace MMAP
             jsonTileConfig, "preRasterizeCreateAnchorSourceFootprintCapMaxSupportDistance2D", 0.35f);
         const float preRasterizeCreateAnchorSourceFootprintCapMinSameDetailLowerDrop = JsonFloatOrDefault(
             jsonTileConfig, "preRasterizeCreateAnchorSourceFootprintCapMinSameDetailLowerDrop", 1.25f);
+        const bool preRasterizeCreateAnchorSourceFootprintCapRequireSameDetailLowerDrop =
+            jsonTileConfig.value("preRasterizeCreateAnchorSourceFootprintCapRequireSameDetailLowerDrop", true);
         const std::vector<AnchorSourceSupportProbe> preRasterizeCreateAnchorSourceFootprintCapProbes =
             (!preRasterizeCreateAnchorSourceFootprintCapCoords.empty() &&
                 preRasterizeCreateAnchorSourceFootprintCapHalfExtent > 0.0f)
@@ -8569,6 +8693,7 @@ namespace MMAP
                 preRasterizeCreateAnchorSourceFootprintCapHalfExtent,
                 preRasterizeCreateAnchorSourceFootprintCapMaxSupportDistance2D,
                 preRasterizeCreateAnchorSourceFootprintCapMinSameDetailLowerDrop,
+                preRasterizeCreateAnchorSourceFootprintCapRequireSameDetailLowerDrop,
                 logAnchorStageDiagnostics);
             if (injectedSourceCapTriangles > 0)
             {
@@ -9792,6 +9917,7 @@ namespace MMAP
             { "preRasterizeCreateAnchorSourceFootprintCapHalfExtent", 0.0f },
             { "preRasterizeCreateAnchorSourceFootprintCapMaxSupportDistance2D", 0.35f },
             { "preRasterizeCreateAnchorSourceFootprintCapMinSameDetailLowerDrop", 1.25f },
+            { "preRasterizeCreateAnchorSourceFootprintCapRequireSameDetailLowerDrop", true },
             { "traceSourceFootprintCandidateCoordsWow", json::array() },
             { "traceSourceFootprintCandidateLimit", 8 },
             { "contourBuildSeedAnchorSupportCoordsWow", json::array() },

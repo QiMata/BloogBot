@@ -4076,3 +4076,86 @@
   lower-overlap predicate removed or instrumented, so the branch actually tests
   whether a tiny source-surface cap can move `sourceFootprint` for
   `1523.800,-4425.900,17.100`.
+
+### 2026-05-26 - source-cap anchor-frame fix plus region-zero proof for `1523.8`
+- Active task: verify whether the first same-group source-cap failure was a real
+  negative on the cap surface, then keep tracing the earliest stage that still
+  blocks `1523.800,-4425.900,17.100`.
+- Pass result: `delta shipped; the cap branch was using the wrong raster frame,
+  the corrected rerun finally moved sourceFootprint/rasterize/median/regions
+  for 1523.8, but the saved tile hash and all contour/polymesh/finalDetour
+  results stayed on the stable baseline because the new support island still
+  never acquired a nonzero region id`.
+- Last delta:
+  - Added new helpers in `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`:
+    - `BuildTileRasterConfig(...)`
+    - `TryBuildAnchorRasterConfig(...)`
+  - Updated both pre-raster source helpers to use the anchor's internal raster
+    subtile frame instead of the map-wide frame:
+    - `PromoteAnchorSupportCellTriangles(...)`
+    - `InjectAnchorSourceFootprintCaps(...)`
+  - Added extra source-cap diagnostics:
+    - `preRasterizeCreateAnchorSourceFootprintCapRequireSameDetailLowerDrop`
+    - `[SRC-FOOTPRINT-CAP-SKIP] ...`
+    - `[SRC-FOOTPRINT-CAP-GATE] ...`
+    - richer `[SRC-FOOTPRINT-CAP] ...`
+  - Ran the frame-trace branch first:
+    - variant:
+      `og_4029_source_footprint_cap_force_v1_trace`
+    - artifact:
+      `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_cap_force_v1_trace-20260526T143246Z\`
+    - decisive log:
+      `[SRC-FOOTPRINT-CAP-SKIP] anchor=(1523.800,-4425.900,17.100) tri=537325 detail=Ogrimmar.wmo#group133 dist2D=0.306 reason=anchor_cell_oob cell=(3741,4571) dims=(241,241) bmin=(-4800.000,1066.667) cs=0.100`
+  - Reran the same temp config after the anchor-frame fix:
+    - temp config:
+      `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json`
+    - variant:
+      `og_4029_source_footprint_cap_force_anchorframe_v1`
+    - artifact:
+      `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_cap_force_anchorframe_v1-20260526T144426Z\`
+    - hash:
+      `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+    - decisive bake proof:
+      `[SRC-FOOTPRINT-CAP] anchor=(1523.800,-4425.900,17.100) detail=Ogrimmar.wmo#group133 support=(1523.668,-4426.176,17.704) dist2D=0.306 capHalfExtent=0.300 requireLowerDrop=0 cellCandidates=2 resolvedCandidates=2 qualifiedLowerCandidates=2 sameDetailLowerMinY=16.116 sameDetailLowerDrop=1.588 added=2`
+    - support probe moved to synthetic support tri `698742` with
+      `source=vmap dist2D=0.000 inside=1`
+  - Decisive manifest proof for `1523.800,-4425.900,17.100`:
+    - `sourceFootprint` moved from
+      `supportContainsAnchorProjection=false`,
+      `supportContainsAnchorCell=false`
+      to
+      `supportContainsAnchorProjection=true`,
+      `supportContainsAnchorCell=true`
+    - `rasterize` moved from
+      `supportContainsAnchorCell=false`
+      to
+      `supportContainsAnchorCell=true`
+    - `median` / `regions` moved from `56/0` to `77/0`, and the new anchor
+      support component became:
+      `cellCount=21`, `spanCount=21`, `supportSpanCount=21`,
+      `containsAnchorCell=true`, `touchesBoundary=false`, `regionIds=[]`
+    - but the later proof stayed identical to the stable baseline:
+      - `contours`: `1/8`
+      - `polymesh`: `2/23`
+      - `finalDetour`: `0/5`, winner `0x1000000000ADAB`
+  - Practical read:
+    - the first same-group source-cap negative was false because the branch was
+      computing the anchor cell in the wrong raster frame
+    - after the frame fix, `1523.8` is no longer best treated as an early
+      source-footprint miss; it is now a source/compact-to-region survival
+      problem
+    - the new support island reaches `median` and `regions`, but it never gets
+      a nonzero region id, so `rcBuildContours()` still sees the old shape
+    - the next credible branch must connect or preserve that early support
+      topology before region filtering, not spend more budget on late contour or
+      finalDetour variants
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_cap_force_v1_trace' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json'` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_cap_force_anchorframe_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+  - Focused tests and full `CriticalWalkLegs` intentionally SKIPPED because the
+    saved tile hash never moved.
+- Next command: try the next early-stage `1523.8` branch on the same
+  source-surface lane, but aim at connecting/preserving the new support island
+  through region assignment instead of reworking contours or finalDetour again.
