@@ -2789,3 +2789,67 @@ cell but stayed non-walkable before rasterization.
     selection/transform
   - focused tests and full `CriticalWalkLegs` were intentionally skipped
     because the early gate and the saved tile hash never moved
+
+### 2026-05-26 UTC: source-footprint candidate detail trace for `1523.8`
+
+The next source-surface loop stayed in instrumentation mode and answered a
+sharper question first: does the bad `1523.8` source-footprint miss live
+between source families, between WMO groups, or inside one already-selected
+group?
+
+- Code surface:
+  - `TerrainBuilder.h/cpp` now record VMap triangle-detail ownership with:
+    - `MeshTriangleDetailRange`
+    - `MeshData::AddDetailTriangleRange(...)`
+    - `MeshData::DetailLabelForTriangle(...)`
+  - `TileWorker.cpp` now adds opt-in candidate tracing with:
+    - `traceSourceFootprintCandidateCoordsWow`
+    - `traceSourceFootprintCandidateLimit`
+    - `[SRC-FOOTPRINT-CAND] ... detail=...`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - first trace bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_candidate_trace_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_v1.json'`
+  - comparison bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_candidate_trace_compare_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_compare_v1.json'`
+  - hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- Artifacts + hash:
+  - `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_candidate_trace_v1-20260526T134605Z\`
+  - `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_candidate_trace_compare_v1-20260526T135311Z\`
+  - both saved the stable live tile hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive proof:
+  - `1523.800,-4425.900,17.100`:
+    - upper support candidates
+      `537325`, `537328`, `537384`, `537388`, `537391`
+      all traced as `detail=Ogrimmar.wmo#group133`
+    - lower cell-overlap vmap candidates
+      `534606`, `537806`
+      also traced as `detail=Ogrimmar.wmo#group133`
+    - this is no longer best described as terrain-vs-vmap or cross-group seam
+  - comparison anchors proved the same-group split is real:
+    - `1522.500,-4424.100,17.000` support `532764` / `537807` and lower-cell
+      `534605` / `537804` all traced as `Ogrimmar.wmo#group133`, while the
+      anchor still stayed green at the canonical `FirstBadStage` surface
+    - `1521.267,-4425.600,17.609` support `537384` / `532767` / `532763` /
+      `537388` and lower-cell `534605` / `537804` / `532764` / `537807`
+      also all traced as `Ogrimmar.wmo#group133`, while the anchor still stayed
+      green
+    - raster-only cross-check still held:
+      `1479.767,-4426.000,25.309` traced an in-cell `group133` support
+      triangle (`531628`) and still stayed
+      `EarlyCoverageFinding=raster_anchor_cell_coverage_hole`
+  - the important per-anchor difference is now vertical separation inside the
+    same group:
+    - `1521.267` lower overlap sat `-0.480` below chosen support
+    - `1522.500` lower overlap sat `-0.965` below chosen support
+    - `1523.800` lower overlap sat `-1.588` below chosen support
+- Practical read:
+  - `1523.8` should now be treated as a same-group `Ogrimmar.wmo#group133`
+    footprint / support-selection lane
+  - the next credible branch is not "another source family" retry anymore; it
+    is "exactly how does `group133` miss or clip the upper support at 1523.8?"
+  - because the hash did not move, focused tests and full `CriticalWalkLegs`
+    were intentionally skipped again

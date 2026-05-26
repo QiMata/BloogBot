@@ -3937,3 +3937,77 @@
   triangles" to a real source-footprint / seam-creation branch that can move
   `SourceFootprintContainsAnchorProjection` or
   `SourceFootprintContainsAnchorCell` for `1523.800,-4425.900,17.100`.
+
+### 2026-05-26 - source-footprint candidate detail trace for `1523.8`
+- Active task: separate "cross-source seam" from "same-group footprint miss"
+  before touching behavior again. If the bad support and lower candidates all
+  belong to one source detail, the next fix surface is inside that loaded mesh,
+  not another family-level promotion/carry branch.
+- Pass result: `progress; new detail-label trace proved the critical 1523.8
+  split happens entirely inside Ogrimmar.wmo#group133, and comparison anchors
+  showed the same group can still be green even with the same early
+  sourceFootprint hole`.
+- Last delta:
+  - Added VMap detail ownership recording in
+    `tools/MmapGen/contrib/mmap/src/TerrainBuilder.h/cpp`:
+    - `MeshTriangleDetailRange`
+    - `MeshData::AddDetailTriangleRange(...)`
+    - `MeshData::DetailLabelForTriangle(...)`
+  - Added opt-in source-footprint candidate tracing in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`:
+    - `traceSourceFootprintCandidateCoordsWow`
+    - `traceSourceFootprintCandidateLimit`
+    - `[SRC-FOOTPRINT-CAND] ... detail=...`
+  - Ran first single-anchor trace with temp config:
+    `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_v1.json`
+  - Ran comparison trace with temp config:
+    `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_compare_v1.json`
+  - Variant + artifacts:
+    - `og_4029_source_footprint_candidate_trace_v1`
+    - `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_candidate_trace_v1-20260526T134605Z\`
+    - `og_4029_source_footprint_candidate_trace_compare_v1`
+    - `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_candidate_trace_compare_v1-20260526T135311Z\`
+    - both saved hash:
+      `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - Decisive proof:
+    - `1523.800,-4425.900,17.100`:
+      - upper support candidates `537325`, `537328`, `537384`, `537388`,
+        `537391` all traced as `detail=Ogrimmar.wmo#group133`
+      - lower cell-overlap vmap candidates `534606`, `537806` also traced as
+        `detail=Ogrimmar.wmo#group133`
+      - practical read: this is not a terrain/vmap split and not a cross-group
+        split
+    - `1522.500,-4424.100,17.000`:
+      - support `532764`, `537807` and lower cell-overlap `534605`, `537804`
+        also all traced as `Ogrimmar.wmo#group133`
+      - despite that same early hole, canonical answer still stayed
+        no `FirstBadStage`
+    - `1521.267,-4425.600,17.609`:
+      - support `537384`, `532767`, `532763`, `537388` and lower cell-overlap
+        `534605`, `537804`, `532764`, `537807` also all traced as
+        `Ogrimmar.wmo#group133`
+      - canonical answer still stayed no `FirstBadStage`
+    - raster-only cross-check remained clean:
+      `1479.767,-4426.000,25.309` traced an in-cell `group133` support triangle
+      (`531628`) and still stayed
+      `EarlyCoverageFinding=raster_anchor_cell_coverage_hole`
+    - strongest new quantitative split:
+      - `1521.267` lower same-group overlap sat `-0.480` below chosen support
+      - `1522.500` lower same-group overlap sat `-0.965` below chosen support
+      - `1523.800` lower same-group overlap sat `-1.588` below chosen support
+  - Practical read:
+    - `1523.8` is now a same-group `Ogrimmar.wmo#group133` lane
+    - next branch should decide between:
+      same-group support-selection bug,
+      same-group local source-footprint gap,
+      or same-group clipping/window loss
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_candidate_trace_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_v1.json'` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_candidate_trace_compare_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_compare_v1.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+  - Focused tests and full `CriticalWalkLegs` intentionally SKIPPED because the
+    saved tile hash never moved off the approved stable baseline.
+- Next command: trace the raw `group133` candidate score/vertex neighborhood for
+  `1523.800,-4425.900,17.100` so the next code branch can choose between a
+  same-group support-selection fix and a same-group seam/gap fix.

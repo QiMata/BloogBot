@@ -2318,6 +2318,111 @@ Practical read:
   source-family seam, tile/subtile clip, source window, or support-triangle
   selection/transform
 
+### 2026-05-26 source-footprint candidate detail trace follow-up
+
+The next bounded retry did not try to "fix" `1523.8` yet. Instead it answered
+the narrower structural question left by the new `sourceFootprint` stage:
+is the remaining miss a cross-source seam, a cross-group seam inside the same
+WMO, or a same-group footprint miss inside the already-selected source?
+
+Exact branches:
+
+- first trace variant:
+  `og_4029_source_footprint_candidate_trace_v1`
+- first trace artifact:
+  `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_candidate_trace_v1-20260526T134605Z\`
+- comparison trace variant:
+  `og_4029_source_footprint_candidate_trace_compare_v1`
+- comparison trace artifact:
+  `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_candidate_trace_compare_v1-20260526T135311Z\`
+- temp configs:
+  - `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_v1.json`
+  - `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_compare_v1.json`
+- saved tile hash for both runs:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Code surface:
+
+- `TerrainBuilder.h/cpp` now record source-detail ownership for VMap triangle
+  ranges via:
+  - `MeshTriangleDetailRange`
+  - `MeshData::AddDetailTriangleRange(...)`
+  - `MeshData::DetailLabelForTriangle(...)`
+- `TileWorker.cpp` now adds opt-in source-footprint candidate tracing via:
+  - `traceSourceFootprintCandidateCoordsWow`
+  - `traceSourceFootprintCandidateLimit`
+  - `[SRC-FOOTPRINT-CAND] ... detail=...` diagnostics
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_candidate_trace_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_v1.json'`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_candidate_trace_compare_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_compare_v1.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+
+Decisive proof:
+
+- `1523.800,-4425.900,17.100`:
+  - support candidates stayed the known upper set:
+    `537325`, `537328`, `537384`, `537388`, `537391`
+  - lower cell-overlap vmap candidates stayed:
+    `534606`, `537806`
+  - every one of those vmap triangles traced as
+    `detail=Ogrimmar.wmo#group133`
+  - the critical support/lower split therefore no longer looks like
+    terrain-vs-vmap or even group-vs-group; it is happening inside one WMO
+    group
+- comparison anchors proved the split is real, not a logging artifact:
+  - `1522.500,-4424.100,17.000` also traced only
+    `Ogrimmar.wmo#group133`
+    - support candidates:
+      `532764`, `537807`
+    - lower cell-overlap vmap candidates:
+      `534605`, `537804`
+    - summary still stayed:
+      no `FirstBadStage`,
+      `SourceFootprintContainsAnchorProjection=false`,
+      `SourceFootprintContainsAnchorCell=false`,
+      `RasterizeSupportContainsAnchorCell=false`
+  - `1521.267,-4425.600,17.609` also traced only
+    `Ogrimmar.wmo#group133`
+    - support candidates:
+      `537384`, `532767`, `532763`, `537388`
+    - lower cell-overlap vmap candidates:
+      `534605`, `537804`, `532764`, `537807`
+    - summary still stayed:
+      no `FirstBadStage`,
+      `SourceFootprintContainsAnchorProjection=false`,
+      `SourceFootprintContainsAnchorCell=false`,
+      `RasterizeSupportContainsAnchorCell=false`
+  - raster-only classifier cross-check still held:
+    `1479.767,-4426.000,25.309` traced an in-cell
+    `Ogrimmar.wmo#group133` support triangle (`531628`) and still stayed
+    `EarlyCoverageFinding=raster_anchor_cell_coverage_hole`
+- the strongest per-anchor delta is now vertical, not source-family:
+  - `1521.267` lower same-group cell overlap sat only `-0.480` below the chosen
+    support
+  - `1522.500` lower same-group cell overlap sat `-0.965` below the chosen
+    support
+  - `1523.800` lower same-group cell overlap sat `-1.588` below the chosen
+    support while the best upper support stayed only `0.306` away in XY
+
+Practical read:
+
+- `1523.8` is no longer best explained as a cross-source seam or a cross-group
+  seam
+- the next real `1523.8` branch should treat the miss as one of:
+  - same-group source-support selection inside `Ogrimmar.wmo#group133`
+  - same-group local source-footprint hole/gap inside that group
+  - same-group clipping/window loss before rasterization
+- because both trace variants kept the saved tile hash on the stable live
+  baseline, focused tests and full `CriticalWalkLegs` were intentionally
+  skipped
+- the next bounded instrumentation should trace raw candidate scores / exact
+  triangle vertices for the `group133` neighborhood around `1523.8` so the
+  code can choose between "support selection bug" and "literal same-group mesh
+  gap" before adding another source-side fix surface
+
 ### 2026-05-25 UTC contour raw-bypass plus support-arc follow-up
 
 The next contour-focused loop closed three distinct "change the contour shape

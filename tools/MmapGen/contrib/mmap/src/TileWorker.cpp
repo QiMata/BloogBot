@@ -1647,6 +1647,33 @@ static const char* MeshTriangleSourceName(const MMAP::MeshTriangleSource source)
     }
 }
 
+static const char* RasterAreaName(const unsigned char area)
+{
+    switch (area)
+    {
+    case AREA_NONE:
+        return "none";
+    case AREA_GROUND:
+        return "ground";
+    case AREA_GROUND_MODEL:
+        return "ground_model";
+    case AREA_STEEP_SLOPE:
+        return "steep_slope";
+    case AREA_STEEP_SLOPE_MODEL:
+        return "steep_slope_model";
+    case AREA_WATER:
+        return "water";
+    case AREA_WATER_TRANSITION:
+        return "water_transition";
+    case AREA_MAGMA:
+        return "magma";
+    case AREA_SLIME:
+        return "slime";
+    default:
+        return "unknown";
+    }
+}
+
 static std::vector<AnchorSourceSupportProbe> ResolveAnchorSourceSupportProbes(
     const MMAP::MeshData& meshData,
     const float* tVerts,
@@ -3451,6 +3478,7 @@ static json BuildBaseAnchorStageJson(const char* stageName, const char* kind, co
 }
 
 static json BuildSourceFootprintAnchorStageSummary(
+    const MMAP::MeshData& meshData,
     const rcHeightfield& hf,
     const float* tVerts,
     const int* tTris,
@@ -3459,7 +3487,9 @@ static json BuildSourceFootprintAnchorStageSummary(
     const float xyExtent,
     const float supportZTolerance,
     const AnchorSupportBandTuning& supportBandTuning,
-    const AnchorSourceSupportProbe& support)
+    const AnchorSourceSupportProbe& support,
+    const bool traceCandidates,
+    const int traceCandidateLimit)
 {
     json stage = BuildBaseAnchorStageJson("sourceFootprint", "source-footprint", support);
     stage["supportProjectionCandidateCount"] = 0;
@@ -3505,6 +3535,32 @@ static json BuildSourceFootprintAnchorStageSummary(
     int lowerCellCount = 0;
     float nearestSupportDistance2D = std::numeric_limits<float>::max();
 
+    struct SourceFootprintTraceCandidate
+    {
+        int triIndex = -1;
+        MMAP::MeshTriangleSource source = MMAP::MeshTriangleSource::Terrain;
+        const char* detailLabel = "";
+        unsigned char area = AREA_NONE;
+        float supportY = 0.0f;
+        float distance2D = std::numeric_limits<float>::max();
+        float supportWowX = 0.0f;
+        float supportWowY = 0.0f;
+        float minWowX = 0.0f;
+        float maxWowX = 0.0f;
+        float minWowY = 0.0f;
+        float maxWowY = 0.0f;
+        bool projectedInside = false;
+        bool overlapsAnchorCell = false;
+    };
+
+    std::vector<SourceFootprintTraceCandidate> tracedSupportCandidates;
+    std::vector<SourceFootprintTraceCandidate> tracedLowerCellCandidates;
+    if (traceCandidates)
+    {
+        tracedSupportCandidates.reserve(16);
+        tracedLowerCellCandidates.reserve(16);
+    }
+
     for (int triIndex = 0; triIndex < tTriCount; ++triIndex)
     {
         const unsigned char area = areas[triIndex];
@@ -3544,6 +3600,31 @@ static json BuildSourceFootprintAnchorStageSummary(
 
         const bool overlapsAnchorCell = TriangleOverlapsAxisAlignedRectXZ(
             a, b, c, cellMinX, cellMinZ, cellMaxX, cellMaxZ);
+
+        if (traceCandidates)
+        {
+            SourceFootprintTraceCandidate candidate;
+            candidate.triIndex = triIndex;
+            candidate.source = meshData.SourceForTriangle(triIndex);
+            candidate.detailLabel = meshData.DetailLabelForTriangle(triIndex);
+            candidate.area = area;
+            candidate.supportY = supportY;
+            candidate.distance2D = distance2D;
+            candidate.supportWowX = supportRecastZ;
+            candidate.supportWowY = supportRecastX;
+            candidate.minWowX = std::min(a[2], std::min(b[2], c[2]));
+            candidate.maxWowX = std::max(a[2], std::max(b[2], c[2]));
+            candidate.minWowY = std::min(a[0], std::min(b[0], c[0]));
+            candidate.maxWowY = std::max(a[0], std::max(b[0], c[0]));
+            candidate.projectedInside = projectedInside;
+            candidate.overlapsAnchorCell = overlapsAnchorCell;
+
+            if (supportRange)
+                tracedSupportCandidates.push_back(candidate);
+            if (competingLower && overlapsAnchorCell)
+                tracedLowerCellCandidates.push_back(candidate);
+        }
+
         if (supportRange)
         {
             ++supportCount;
@@ -3584,6 +3665,86 @@ static json BuildSourceFootprintAnchorStageSummary(
     stage["lowerCellCandidateCount"] = lowerCellCount;
     stage["nearestSupportDistance2D"] =
         nearestSupportDistance2D == std::numeric_limits<float>::max() ? -1.0f : nearestSupportDistance2D;
+
+    if (traceCandidates)
+    {
+        std::sort(tracedSupportCandidates.begin(), tracedSupportCandidates.end(),
+            [](const SourceFootprintTraceCandidate& left, const SourceFootprintTraceCandidate& right)
+            {
+                if ((left.projectedInside ? 1 : 0) != (right.projectedInside ? 1 : 0))
+                    return left.projectedInside > right.projectedInside;
+                if (fabsf(left.distance2D - right.distance2D) > 0.0001f)
+                    return left.distance2D < right.distance2D;
+                return left.triIndex < right.triIndex;
+            });
+        std::sort(tracedLowerCellCandidates.begin(), tracedLowerCellCandidates.end(),
+            [](const SourceFootprintTraceCandidate& left, const SourceFootprintTraceCandidate& right)
+            {
+                if (fabsf(left.distance2D - right.distance2D) > 0.0001f)
+                    return left.distance2D < right.distance2D;
+                return left.triIndex < right.triIndex;
+            });
+
+        const int supportTraceCount = traceCandidateLimit > 0
+            ? std::min<int>(traceCandidateLimit, static_cast<int>(tracedSupportCandidates.size()))
+            : static_cast<int>(tracedSupportCandidates.size());
+        const int lowerTraceCount = traceCandidateLimit > 0
+            ? std::min<int>(traceCandidateLimit, static_cast<int>(tracedLowerCellCandidates.size()))
+            : static_cast<int>(tracedLowerCellCandidates.size());
+
+        printf("[SRC-FOOTPRINT-CAND] anchor=(%.3f,%.3f,%.3f) supportCandidates=%d lowerCandidates=%d supportTrace=%d lowerCellTrace=%d supportCellCandidates=%d lowerCellCandidates=%d\n",
+            support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+            supportCount,
+            lowerCount,
+            supportTraceCount,
+            lowerTraceCount,
+            supportCellCount,
+            lowerCellCount);
+
+        for (int index = 0; index < supportTraceCount; ++index)
+        {
+            const SourceFootprintTraceCandidate& candidate = tracedSupportCandidates[index];
+            printf("[SRC-FOOTPRINT-CAND] kind=support rank=%d tri=%d source=%s detail=%s area=%s dist2D=%.3f supportY=%.3f deltaFromSupport=%.3f inside=%d overlapsCell=%d supportPoint=(%.3f,%.3f) bboxWowX=(%.3f,%.3f) bboxWowY=(%.3f,%.3f)\n",
+                index,
+                candidate.triIndex,
+                MeshTriangleSourceName(candidate.source),
+                candidate.detailLabel && candidate.detailLabel[0] ? candidate.detailLabel : "-",
+                RasterAreaName(candidate.area),
+                candidate.distance2D,
+                candidate.supportY,
+                candidate.supportY - support.supportY,
+                candidate.projectedInside ? 1 : 0,
+                candidate.overlapsAnchorCell ? 1 : 0,
+                candidate.supportWowX,
+                candidate.supportWowY,
+                candidate.minWowX,
+                candidate.maxWowX,
+                candidate.minWowY,
+                candidate.maxWowY);
+        }
+
+        for (int index = 0; index < lowerTraceCount; ++index)
+        {
+            const SourceFootprintTraceCandidate& candidate = tracedLowerCellCandidates[index];
+            printf("[SRC-FOOTPRINT-CAND] kind=lowerCell rank=%d tri=%d source=%s detail=%s area=%s dist2D=%.3f supportY=%.3f deltaFromSupport=%.3f inside=%d overlapsCell=%d supportPoint=(%.3f,%.3f) bboxWowX=(%.3f,%.3f) bboxWowY=(%.3f,%.3f)\n",
+                index,
+                candidate.triIndex,
+                MeshTriangleSourceName(candidate.source),
+                candidate.detailLabel && candidate.detailLabel[0] ? candidate.detailLabel : "-",
+                RasterAreaName(candidate.area),
+                candidate.distance2D,
+                candidate.supportY,
+                candidate.supportY - support.supportY,
+                candidate.projectedInside ? 1 : 0,
+                candidate.overlapsAnchorCell ? 1 : 0,
+                candidate.supportWowX,
+                candidate.supportWowY,
+                candidate.minWowX,
+                candidate.maxWowX,
+                candidate.minWowY,
+                candidate.maxWowY);
+        }
+    }
     return stage;
 }
 
@@ -8118,6 +8279,10 @@ namespace MMAP
             writeAnchorStageManifest
                 ? ParseAnchorStageManifestCoords(jsonTileConfig)
                 : std::vector<AnchorPolyStackCoord>();
+        const std::vector<AnchorPolyStackCoord> traceSourceFootprintCandidateCoords =
+            ParseAnchorCoords(jsonTileConfig, "traceSourceFootprintCandidateCoordsWow");
+        const int traceSourceFootprintCandidateLimit =
+            std::max(0, jsonTileConfig.value("traceSourceFootprintCandidateLimit", 8));
         const std::vector<AnchorPolyStackCoord> prePolyPreserveAnchorSupportCoords =
             ParsePrePolyPreserveAnchorSupportCoords(jsonTileConfig);
         const std::vector<AnchorPolyStackCoord> prePolyUseRawAnchorSupportContours =
@@ -8428,9 +8593,20 @@ namespace MMAP
 
             for (size_t anchorIndex = 0; anchorIndex < anchorManifestSupports.size(); ++anchorIndex)
             {
+                bool traceCandidates = false;
+                for (const AnchorPolyStackCoord& traceCoord : traceSourceFootprintCandidateCoords)
+                {
+                    if (AreAnchorCoordsEquivalent(traceCoord, anchorManifestSupports[anchorIndex].anchor))
+                    {
+                        traceCandidates = true;
+                        break;
+                    }
+                }
+
                 MergeAnchorStageIntoManifest(
                     anchorStageManifest["anchors"][anchorIndex]["stages"],
                     BuildSourceFootprintAnchorStageSummary(
+                        meshData,
                         hf,
                         tVerts,
                         tTris,
@@ -8439,7 +8615,9 @@ namespace MMAP
                         anchorSourceSupportXyExtent,
                         anchorSourceSupportZTolerance,
                         anchorSupportBandTuning,
-                        anchorManifestSupports[anchorIndex]));
+                        anchorManifestSupports[anchorIndex],
+                        traceCandidates,
+                        traceSourceFootprintCandidateLimit));
             }
         };
 
@@ -9421,6 +9599,8 @@ namespace MMAP
             { "anchorRouteTargetsWow", json::array() },
             { "writeAnchorStageManifest", false },
             { "logAnchorStageDiagnostics", false },
+            { "traceSourceFootprintCandidateCoordsWow", json::array() },
+            { "traceSourceFootprintCandidateLimit", 8 },
             { "contourBuildSeedAnchorSupportCoordsWow", json::array() },
             { "contourBuildSeedAnchorSupportBandArcRadius", -1.0f },
             { "contourBuildSeedAnchorSupportBandLocalRadius", -1.0f },
