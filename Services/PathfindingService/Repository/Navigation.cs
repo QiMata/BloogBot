@@ -944,6 +944,17 @@ namespace PathfindingService.Repository
                     resolution.BlockedSegmentIndex,
                     blockedReason);
             }
+
+            if (!HasUsableNativeEndpointAnchors(start, end, rawPath, out var endpointBlockedReason))
+            {
+                return new NavigationPathResult(
+                    rawPath,
+                    rawPath,
+                    "raw_detour",
+                    rawPath.Length >= 2 ? rawPath.Length - 2 : 0,
+                    endpointBlockedReason);
+            }
+
             return new NavigationPathResult(
                 rawPath,
                 rawPath,

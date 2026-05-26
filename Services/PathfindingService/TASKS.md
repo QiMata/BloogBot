@@ -168,7 +168,54 @@
   service startup or deterministic tests for a full session timeout.
 
 ## Session Handoff
-- Last updated: 2026-05-26 (local fixture pathfinding port handoff fixed; focused deck-lip live red moved to later local validation)
+- Last updated: 2026-05-26 (raw path contract now surfaces endpoint-projection failures honestly on the focused deck-lip live proof)
+
+### 2026-05-26 - raw path contract now reports endpoint-projection blocks at the later deck-lip stall
+- Active task: preserve the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+  baseline, keep the local-fixture `9020` handoff from commit `1238aba6`, and
+  stop the raw native path contract from pretending the later tower-approach
+  stub route is a clean path to the requested deck target.
+- Pass result: `shipped a service-contract fix; the focused deck-lip live rerun
+  still stalls at the same wall-facing tower anchor, but the local service now
+  exposes that the returned raw Detour stub ends ~130y short of the requested
+  destination via blockedReason=end_projection:130.2 instead of blockedReason=none`.
+- Last delta:
+  - `Navigation.CalculateRawPath(...)` now validates raw native endpoint
+    anchors before returning `raw_detour`. If a non-empty raw path never
+    reaches the requested end anchor, the service preserves the raw corners but
+    tags the response with `BlockedSegmentIndex` and `BlockedReason`.
+  - Added deterministic `RawPathContractTests` for the endpoint-projection
+    contract while keeping `NavigationOverlayAwarePathTests` and
+    `SlicedFindPathTests` green on the promoted data root.
+  - Reran the focused live proof against `D:\wwow-bot\test-data` and verified
+    the screenshot still shows the FG target pressed into the tower wall/dirt,
+    consistent with the now-honest partial route metadata.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RawPathContractTests|FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~SlicedFindPathTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_raw_contract_projection_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `aborted` because `WWOW_DATA_DIR` was unset and the strict startup gate exited before tests ran.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RawPathContractTests|FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~SlicedFindPathTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_raw_contract_projection_20260526_fix2.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (10/10)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_tauren_fg_20260526_endpoint_projection_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`62s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_raw_contract_projection_20260526.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_raw_contract_projection_20260526_fix2.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_tauren_fg_20260526_endpoint_projection_fix1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-Frezza-likely-LPATHFG1-client-30036-win0-20260526_190904.png`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+  - `D:\World of Warcraft\WWoWLogs\fg_LPATHFG120260526.log`
+- Practical read:
+  - The local service still produces the same short local path at the later
+    tower anchor; the path ends near the current position and never projects
+    toward the requested deck target.
+  - The critical improvement is response honesty:
+    `blockedReason=end_projection:130.2` now surfaces on both smooth and
+    straight raw requests instead of `blockedReason=none`.
+  - Example live evidence:
+    - `[PATH_DIAG] id=16 result=raw_detour pathLen=5 rawPathLen=5 blockedIdx=3 blockedReason=end_projection:130.2`
+    - `[PATH_DIAG] id=17 result=raw_detour pathLen=2 rawPathLen=2 blockedIdx=0 blockedReason=end_projection:130.2`
+    - `[NAV_PATH] service-request exit elapsedMs=1 corners=5 result=raw_detour blockedIndex=3 blockedReason=end_projection:130.2`
+  - This does not fix the tower approach yet, but it removes a misleading
+    success case from the live proof surface and proves the remaining red is a
+    real local path/topology miss, not a silent caller-side rejection.
+- Next command: `Select-String -Path 'E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_tauren_fg_20260526_endpoint_projection_fix1.trx','D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log' -Pattern 'end_projection:130.2|\[PATH_DIAG\] id=|\[NAV_PATH\] service-request exit'`
 
 ### 2026-05-26 - local fixture pathfinding port handoff fixed; current live red is later `NavigationPath` rejection
 - Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile`

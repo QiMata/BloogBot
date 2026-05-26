@@ -78,6 +78,51 @@ Treat the next iteration as a BotRunner local route-validation problem on the
 current promoted tile, not as a missing local pathfinding service or a
 Tauren-vs-Gnome capsule split.
 
+## 2026-05-26 Raw Path Contract Follow-Up
+
+The next bounded slice built on commit `1238aba6`
+(`Fix long-pathing local service port handoff`) without rebaking the promoted
+tile. The local service was still returning the same tiny later tower-approach
+stub route, but the service contract no longer hides that stub as a clean
+successful path.
+
+Focused verification commands and results:
+
+- `dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RawPathContractTests|FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~SlicedFindPathTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_raw_contract_projection_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  Result: `aborted` because `WWOW_DATA_DIR` was unset and the strict
+  PathfindingService data-root gate exited before test execution.
+- `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RawPathContractTests|FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~SlicedFindPathTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_raw_contract_projection_20260526_fix2.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  Result: `passed (10/10)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_tauren_fg_20260526_endpoint_projection_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+  Result: `failed (1/1)` after ~`62s`, still at the later tower wall/dirt
+  stall.
+
+Exact artifact paths for this follow-up:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_raw_contract_projection_20260526.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_raw_contract_projection_20260526_fix2.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_tauren_fg_20260526_endpoint_projection_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-Frezza-likely-LPATHFG1-client-30036-win0-20260526_190904.png`
+- `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- `D:\World of Warcraft\WWoWLogs\fg_LPATHFG120260526.log`
+
+Important proof points from the rerun:
+
+- The screenshot still shows the FG target jammed into the tower wall/dirt at
+  the later anchor, so the visual state agrees with the logs.
+- The raw Detour response is still only a short local stub:
+  - smooth: 5 corners ending near `(1352.2,-4527.0,36.2)`
+  - straight: 2 corners ending near `(1352.2,-4527.0,35.7)`
+- The service now reports the real problem instead of claiming success:
+  - `[PATH_DIAG] id=16 result=raw_detour pathLen=5 rawPathLen=5 blockedIdx=3 blockedReason=end_projection:130.2`
+  - `[PATH_DIAG] id=17 result=raw_detour pathLen=2 rawPathLen=2 blockedIdx=0 blockedReason=end_projection:130.2`
+  - `[NAV_PATH] service-request exit elapsedMs=1 corners=5 result=raw_detour blockedIndex=3 blockedReason=end_projection:130.2`
+  - `[NAV_PATH] service-request exit elapsedMs=1 corners=2 result=raw_detour blockedIndex=0 blockedReason=end_projection:130.2`
+
+Treat the next iteration as a true local path/topology investigation from
+`(1351.3,-4526.3,34.4)` toward `(1320.1,-4653.2,53.9)` on the current
+promoted data, not as a silent contract or fixture bug.
+
 ## Test Methods
 
 - `CrossroadsToUndercity_UsesFlightAndZeppelin`: stages the Horde target at

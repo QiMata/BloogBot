@@ -150,6 +150,65 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-05-26 (raw path contract now reports endpoint-projection stalls honestly on the focused deck-lip live proof)
+- Pass result: built on top of WWoW commit `1238aba6`
+  (`Fix long-pathing local service port handoff`), the local service no longer
+  mislabels the later tower-approach stub route as a clean `blockedReason=none`
+  success. The focused live rerun is still red on the same wall-facing stall,
+  but the service/BotRunner contract now reports the real failure shape:
+  the returned raw Detour path never anchors near the requested deck target and
+  is surfaced as `end_projection:130.2`.
+- Last delta:
+  - `Navigation.CalculateRawPath(...)` now applies the same endpoint-anchor
+    contract the validated pipeline already had. Non-empty raw paths that end
+    far from the requested destination are returned with
+    `BlockedSegmentIndex`/`BlockedReason` instead of pretending they are clean
+    route completions.
+  - Added deterministic `RawPathContractTests` so short local stub paths are
+    classified as `end_projection:*` while properly anchored raw paths stay
+    `blockedReason=none`.
+  - Reran the focused live `DeckLipClimbFromGruntToFrezza` proof against the
+    same promoted tile/data root with the contract fix in place.
+- Validation/tests run:
+  - First attempt:
+    - `dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RawPathContractTests|FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~SlicedFindPathTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_raw_contract_projection_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `aborted` because `WWOW_DATA_DIR` was not set; strict data-root gate fired before tests ran.
+  - Deterministic regression rerun:
+    - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~RawPathContractTests|FullyQualifiedName~NavigationOverlayAwarePathTests|FullyQualifiedName~SlicedFindPathTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=pathfinding_raw_contract_projection_20260526_fix2.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (10/10)`.
+  - Focused live rerun:
+    - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_tauren_fg_20260526_endpoint_projection_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`62s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_raw_contract_projection_20260526.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_raw_contract_projection_20260526_fix2.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_tauren_fg_20260526_endpoint_projection_fix1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-Frezza-likely-LPATHFG1-client-30036-win0-20260526_190904.png`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+  - `D:\World of Warcraft\WWoWLogs\fg_LPATHFG120260526.log`
+- Practical read:
+  - The latest screenshot shows the FG target pressed into the dirt/wall on
+    the same tower-approach stall rather than progressing toward the deck.
+    This matches the route data; it is not a screenshot/log disagreement.
+  - The service still returns the same tiny local stub path:
+    - smooth raw path: 5 corners ending near `(1352.2,-4527.0,36.2)`
+    - straight raw path: 2 corners ending near `(1352.2,-4527.0,35.7)`
+  - The difference from the prior slice is contract honesty:
+    - old evidence: `blockedReason=none`
+    - new evidence: `blockedIdx=3 blockedReason=end_projection:130.2` for the
+      5-corner path and `blockedIdx=0 blockedReason=end_projection:130.2` for
+      the 2-corner fallback.
+  - BotRunner now records the honest service block in
+    `botrunner_LPATHFG1.diag.log`:
+    - `[NAV_PATH] service-request exit elapsedMs=1 corners=5 result=raw_detour blockedIndex=3 blockedReason=end_projection:130.2`
+    - `[NAV_PATH] service-request exit elapsedMs=1 corners=2 result=raw_detour blockedIndex=0 blockedReason=end_projection:130.2`
+  - The live failure is therefore narrowed again:
+    the local route/execution layer is no longer hiding a bogus "successful"
+    path at this anchor. The remaining red is a true local pathfinding/topology
+    gap from `(1351.3,-4526.3,34.4)` toward `(1320.1,-4653.2,53.9)` on the
+    current promoted data.
+- Files changed:
+  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `Tests/PathfindingService.Tests/RawPathContractTests.cs`
+- Next command: `Select-String -Path 'E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_tauren_fg_20260526_endpoint_projection_fix1.trx','D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log' -Pattern 'end_projection:130.2|\[PATH_DIAG\] id=|\[NAV_PATH\] service-request exit'`
+
 ### 2026-05-26 (local PathfindingService port handoff fixed; deck-lip live red moved deeper into NavigationPath validation)
 - Pass result: the focused long-pathing fixture now uses the intended local
   PathfindingService port end-to-end. The earlier Grunt-base no-movement stall
