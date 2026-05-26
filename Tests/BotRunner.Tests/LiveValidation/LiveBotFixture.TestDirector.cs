@@ -36,13 +36,14 @@ public partial class LiveBotFixture
     public readonly record struct ItemDirective(uint ItemId, int Count);
 
     /// <summary>
-    /// Explicit action target for Shodan-shaped tests. Shodan is the production
-    /// GM-admin liaison (it lets human players on the live server request
-    /// on-demand activities from the WoWStateManager), and the LiveValidation
-    /// suite reuses it for setup tasks that require GM targeting — *only* for
-    /// setup. ObjectiveType.* dispatches must go to a dedicated test account
-    /// (TESTBOT1/TESTBOT2 or a category-specific sibling), never to Shodan.
-    /// <see cref="ResolveBotRunnerActionTargets"/> enforces that invariant.
+    /// Explicit action target for Shodan-shaped tests. By default Shodan is the
+    /// production GM-admin liaison (it lets human players on the live server
+    /// request on-demand activities from the WoWStateManager), and the
+    /// LiveValidation suite reuses it for setup tasks that require GM targeting
+    /// — *only* for setup. A small number of opt-in rosters intentionally bind
+    /// SHODAN to FG/BG so a live proof can be rerun with Shodan's capsule.
+    /// <see cref="ResolveBotRunnerActionTargets"/> rejects Shodan as an action
+    /// target unless the active config assigned SHODAN to FG/BG on purpose.
     /// </summary>
     public readonly record struct BotRunnerActionTarget(
         string RoleLabel,
@@ -85,6 +86,11 @@ public partial class LiveBotFixture
             ["Female"] = 1,
         };
 
+    private bool IsShodanActionRoleConfigured()
+        => !string.IsNullOrWhiteSpace(ShodanAccountName)
+            && (string.Equals(ShodanAccountName, FgAccountName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(ShodanAccountName, BgAccountName, StringComparison.OrdinalIgnoreCase));
+
     public IReadOnlyList<BotRunnerActionTarget> ResolveBotRunnerActionTargets(
         bool includeForegroundIfActionable = true,
         bool foregroundFirst = false)
@@ -111,19 +117,24 @@ public partial class LiveBotFixture
         if (!foregroundFirst)
             targets = targets.OrderBy(target => target.IsForeground ? 1 : 0).ToList();
 
-        foreach (var target in targets)
+        if (!IsShodanActionRoleConfigured())
         {
-            if (string.Equals(target.AccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+            foreach (var target in targets)
             {
-                throw new InvalidOperationException(
-                    "[SHODAN-ACTION-PLAN] Shodan resolved as a BotRunner action target. " +
-                    "Use a separate FG/BG account for actions under test.");
+                if (string.Equals(target.AccountName, ShodanAccountName, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "[SHODAN-ACTION-PLAN] Shodan resolved as a BotRunner action target. " +
+                        "Use a separate FG/BG account for actions under test, or opt into a roster " +
+                        "that explicitly assigns SHODAN to FG/BG.");
+                }
             }
         }
 
         _logger.LogInformation(
-            "[SHODAN-ACTION-PLAN] director={Director} targets={Targets}",
+            "[SHODAN-ACTION-PLAN] director={Director} sharedRole={SharedRole} targets={Targets}",
             ShodanAccountName,
+            IsShodanActionRoleConfigured(),
             string.Join(", ", targets.Select(target =>
                 $"{target.RoleLabel}:{target.AccountName}/{target.CharacterName ?? "?"}")));
 

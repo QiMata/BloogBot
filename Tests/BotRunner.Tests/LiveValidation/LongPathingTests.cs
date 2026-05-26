@@ -17,8 +17,8 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Focused staged long-pathing validation. Setup is fixture-owned through
-/// Shodan/test-director helpers; the BotRunner target receives only TravelTo.
+/// Focused staged long-pathing validation. Setup is fixture-owned through the
+/// active long-pathing roster; the BotRunner target receives only TravelTo.
 /// </summary>
 [Collection(LongPathingValidationCollection.Name)]
 public class LongPathingTests
@@ -57,9 +57,6 @@ public class LongPathingTests
     private const uint NpcFlagFlightMaster = (uint)NPCFlags.UNIT_NPC_FLAG_FLIGHTMASTER;
     private const long TravelCopper = 50000;
     private const float LongTravelStallMovementYards = 1.5f;
-    private const string LongPathingConfigFileName = "LongPathing.config.json";
-    private const string ExpectedTargetRace = "Tauren";
-    private const string ExpectedTargetGender = "Male";
     private const string InjectionDisablePacketHooksEnvVar = "Injection__DisablePacketHooks";
     private const string DisablePacketHooksEnvVar = "WWOW_DISABLE_PACKET_HOOKS";
     private const string ManualZeppelinCoordCaptureEnvVar = "WWOW_TEST_MANUAL_ZEPPELIN_COORD_CAPTURE";
@@ -1333,25 +1330,24 @@ public class LongPathingTests
 
     private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureLongPathingTargetAsync()
     {
-        var settingsPath = ResolveRepoPath(
-            "Services", "WoWStateManager", "Settings", "Configs", LongPathingConfigFileName);
+        var settingsPath = LongPathingSettings.ResolveSettingsPath();
+        var expectedTarget = LongPathingSettings.LoadForegroundTargetProfile(settingsPath);
 
         await _bot.EnsureSettingsAsync(settingsPath);
         _bot.SetOutput(_output);
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
         await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
-        global::Tests.Infrastructure.Skip.If(
-            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
-            $"Shodan director was not launched by {LongPathingConfigFileName}.");
 
         var target = _bot.ResolveBotRunnerActionTargets(
                 includeForegroundIfActionable: true,
                 foregroundFirst: true)
             .Single(target => target.IsForeground);
 
-        AssertConfiguredTaurenMaleTarget(settingsPath, target.AccountName);
+        Assert.True(
+            string.Equals(expectedTarget.AccountName, target.AccountName, StringComparison.OrdinalIgnoreCase),
+            $"Expected configured foreground account '{expectedTarget.AccountName}' from {settingsPath}, got '{target.AccountName}'.");
         _output.WriteLine(
-            $"[LONG-PATHING-TARGET] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: {ExpectedTargetRace} {ExpectedTargetGender} foreground target.");
+            $"[LONG-PATHING-TARGET] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: {expectedTarget.Race} {expectedTarget.Gender} foreground target.");
         return target;
     }
 
@@ -1569,19 +1565,6 @@ public class LongPathingTests
 
     private int? ResolveManagedWowProcessId(string account)
         => global::Tests.Infrastructure.ManagedWowProcessIdResolver.Resolve(account, _bot.GetStateManagerOutput());
-
-    private static void AssertConfiguredTaurenMaleTarget(string settingsPath, string account)
-    {
-        using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
-        var target = document.RootElement.EnumerateArray()
-            .SingleOrDefault(element =>
-                element.TryGetProperty("AccountName", out var accountProperty)
-                && string.Equals(accountProperty.GetString(), account, StringComparison.OrdinalIgnoreCase));
-
-        Assert.Equal(JsonValueKind.Object, target.ValueKind);
-        Assert.Equal(ExpectedTargetRace, target.GetProperty("CharacterRace").GetString());
-        Assert.Equal(ExpectedTargetGender, target.GetProperty("CharacterGender").GetString());
-    }
 
     private static bool IsNear(WoWActivitySnapshot? snapshot, uint mapId, float x, float y, float radius)
     {

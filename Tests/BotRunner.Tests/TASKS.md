@@ -140,6 +140,66 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-05-26 (dual-FG deck-lip live rerun proves the current live red is not capsule-specific)
+- Pass result: the long-pathing live harness can now swap rosters via
+  `WWOW_LONG_PATHING_SETTINGS_PATH`, and the focused
+  `DeckLipClimbFromGruntToFrezza` live proof was rerun against both the
+  default Tauren Male FG target and a new `SHODAN`-as-FG roster. Both live runs
+  failed identically at the Grunt-base spawn with zero movement, so the current
+  live red is not explained by the avatar/capsule difference alone.
+- Last delta:
+  - Added `Tests/BotRunner.Tests/LiveValidation/LongPathingSettings.cs` to
+    centralize long-pathing roster resolution plus the single runnable
+    foreground-target profile lookup.
+  - `LongPathingFixture` now honors
+    `WWOW_LONG_PATHING_SETTINGS_PATH` and falls back to
+    `Services/WoWStateManager/Settings/Configs/LongPathing.config.json`.
+  - `LiveBotFixture` + `ResolveBotRunnerActionTargets(...)` now permit SHODAN
+    to be an action target only when the active roster explicitly assigns
+    SHODAN to the foreground role; the default long-pathing roster still keeps
+    SHODAN director-only.
+  - Added the opt-in roster
+    `Services/WoWStateManager/Settings/Configs/LongPathing.ShodanForeground.config.json`.
+  - `LongPathingTests` and `BrmAscentReconTests` now resolve and log the active
+    configured foreground profile instead of hard-coding `LPATHFG1` /
+    `Tauren Male`.
+  - Added focused config coverage in
+    `BgOnlyBotFixtureConfigurationTests` for the new SHODAN-FG roster and for
+    preserving the default director-only SHODAN shape.
+- Validation/tests run:
+  - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BgOnlyBotFixtureConfigurationTests" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_shodan_fg_config_compilecheck_v2.trx" --results-directory tmp/test-runtime/results-botrunner` -> `passed (5/5)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_tauren_fg_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `32s`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; $env:WWOW_LONG_PATHING_SETTINGS_PATH='E:\repos\Westworld of Warcraft\Services\WoWStateManager\Settings\Configs\LongPathing.ShodanForeground.config.json'; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_shodan_fg_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `33s`.
+- Evidence:
+  - `tmp/test-runtime/results-botrunner/long_pathing_shodan_fg_config_compilecheck_v2.trx`
+  - `tmp/test-runtime/results-live/long_pathing_decklip_tauren_fg_20260526.trx`
+  - `tmp/test-runtime/results-live/long_pathing_decklip_shodan_fg_20260526.trx`
+  - `tmp/test-runtime/screenshots/long-pathing/Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-Frezza-likely-LPATHFG1-client-2948-win0-20260526_154454.png`
+  - `tmp/test-runtime/screenshots/long-pathing/Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-Frezza-likely-SHODAN-client-37528-win0-20260526_154717.png`
+  - `tmp/test-runtime/screenshots/long-pathing/timeline/DeckLipClimbFromGruntToFrezza/`
+- Practical read:
+  - Both rosters logged the expected target correctly:
+    - `FG LPATHFG1/Horuntusktmc: Tauren Male foreground target`
+    - `FG SHODAN/Shodan: Gnome Female foreground target`
+  - Both runs then failed on the same stall signature:
+    - `anchor=(1332.8,-4633.4,24.0) current=(1332.8,-4633.4,24.0) moved=0.0`
+    - `current=TravelTo`
+    - no `[TRAVEL_PLAN]`, `[TRAVEL_LEG]`, `[TRAVEL_WALK_NAV]`, or
+      `[TRAVEL_WAYPOINT_REACHED]` lines were emitted into either TRX
+  - Treat the current live red as a shared live execution / objective-start /
+    route-planning issue, not a Tauren-vs-Gnome capsule split.
+- Files changed:
+  - `Services/WoWStateManager/Settings/Configs/LongPathing.ShodanForeground.config.json`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingSettings.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.TestDirector.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/BrmAscentReconTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/BgOnlyBotFixtureConfigurationTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/docs/LongPathingTests.md`
+- Next command: `Select-String -Path tmp/test-runtime/results-live/long_pathing_decklip_tauren_fg_20260526.trx,tmp/test-runtime/results-live/long_pathing_decklip_shodan_fg_20260526.trx -Pattern "\[LONG-PATHING-TARGET\]|Long-travel stall before|failure: map=1 pos=|\[TRAVEL_PLAN\]|\[TRAVEL_LEG\]|\[TRAVEL_WALK_NAV\]|\[TRAVEL_WAYPOINT_REACHED\]"`
+
 ### 2026-05-06 (boarding target refresh green, live still misses transport)
 - Pass result: deterministic BotRunner boarding-target refresh coverage is
   green; focused live Crossroads -> Undercity still blocks on client transport

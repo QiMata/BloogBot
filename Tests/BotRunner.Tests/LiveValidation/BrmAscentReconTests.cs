@@ -40,8 +40,8 @@ namespace BotRunner.Tests.LiveValidation;
 /// x64 exports for <c>QueryPolyAtCoord</c>; see
 /// <see cref="Harness.LiveBakeValidationHost"/> for the same boundary).
 ///
-/// Gated on <c>WWOW_BRM_ASCENT_RECON=1</c>. Bot account: LPATHFG1 (the
-/// FG long-pathing target resolved by the LongPathing roster).
+/// Gated on <c>WWOW_BRM_ASCENT_RECON=1</c>. Bot account: whichever Foreground
+/// role the active long-pathing roster resolves.
 /// </summary>
 [Collection(LongPathingValidationCollection.Name)]
 public class BrmAscentReconTests
@@ -50,10 +50,6 @@ public class BrmAscentReconTests
     private const int FlameCrestMapId = 0;
     private const int SettleAfterTeleportMs = 2000;
     private const int SettleAfterOrientationMs = 500;
-    private const string LongPathingConfigFileName = "LongPathing.config.json";
-    private const string ExpectedTargetRace = "Tauren";
-    private const string ExpectedTargetGender = "Male";
-
     private readonly LongPathingFixture _bot;
     private readonly ITestOutputHelper _output;
 
@@ -257,25 +253,24 @@ public class BrmAscentReconTests
 
     private async Task<LiveBotFixture.BotRunnerActionTarget> EnsureFgTargetAsync()
     {
-        var settingsPath = ResolveRepoPath(
-            "Services", "WoWStateManager", "Settings", "Configs", LongPathingConfigFileName);
+        var settingsPath = LongPathingSettings.ResolveSettingsPath();
+        var expectedTarget = LongPathingSettings.LoadForegroundTargetProfile(settingsPath);
 
         await _bot.EnsureSettingsAsync(settingsPath);
         _bot.SetOutput(_output);
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
         await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
-        global::Tests.Infrastructure.Skip.If(
-            string.IsNullOrWhiteSpace(_bot.ShodanAccountName),
-            $"Shodan director was not launched by {LongPathingConfigFileName}.");
 
         var target = _bot.ResolveBotRunnerActionTargets(
                 includeForegroundIfActionable: true,
                 foregroundFirst: true)
             .Single(t => t.IsForeground);
 
-        AssertConfiguredTaurenMaleTarget(settingsPath, target.AccountName);
+        Assert.True(
+            string.Equals(expectedTarget.AccountName, target.AccountName, StringComparison.OrdinalIgnoreCase),
+            $"Expected configured foreground account '{expectedTarget.AccountName}' from {settingsPath}, got '{target.AccountName}'.");
         _output.WriteLine(
-            $"[RECON-TARGET] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: {ExpectedTargetRace} {ExpectedTargetGender}.");
+            $"[RECON-TARGET] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: {expectedTarget.Race} {expectedTarget.Gender}.");
         return target;
     }
 
@@ -331,29 +326,4 @@ public class BrmAscentReconTests
         return Directory.GetCurrentDirectory();
     }
 
-    private static string ResolveRepoPath(params string[] segments)
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine([dir.FullName, .. segments]);
-            if (File.Exists(candidate))
-                return candidate;
-            dir = dir.Parent;
-        }
-        throw new FileNotFoundException($"Could not locate repo path: {Path.Combine(segments)}");
-    }
-
-    private static void AssertConfiguredTaurenMaleTarget(string settingsPath, string account)
-    {
-        using var document = JsonDocument.Parse(File.ReadAllText(settingsPath));
-        var target = document.RootElement.EnumerateArray()
-            .SingleOrDefault(element =>
-                element.TryGetProperty("AccountName", out var accountProperty)
-                && string.Equals(accountProperty.GetString(), account, StringComparison.OrdinalIgnoreCase));
-
-        Assert.Equal(JsonValueKind.Object, target.ValueKind);
-        Assert.Equal(ExpectedTargetRace, target.GetProperty("CharacterRace").GetString());
-        Assert.Equal(ExpectedTargetGender, target.GetProperty("CharacterGender").GetString());
-    }
 }

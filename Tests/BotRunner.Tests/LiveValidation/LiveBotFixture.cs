@@ -949,7 +949,10 @@ public partial class LiveBotFixture : IAsyncLifetime
             else if (snap.AccountName.Equals(ShodanAccount, StringComparison.OrdinalIgnoreCase))
             {
                 newShodan = snap;
-                continue; // Shodan is GM-admin only; never assigned FG/BG roles.
+                if (!string.Equals(snap.AccountName, FgAccountName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue; // Default topology keeps SHODAN as director-only.
+                }
             }
 
             // Assign FG/BG: prefer seeded account names from config, fall back to "ends in 1" heuristic
@@ -1098,7 +1101,12 @@ public partial class LiveBotFixture : IAsyncLifetime
                         if (!string.IsNullOrWhiteSpace(shodanCharName))
                             configuredShodanCharacterName = shodanCharName.Trim();
                     }
-                    continue; // Shodan is GM-admin only; do not assign FG/BG.
+                    if (string.Equals(runnerType, "Foreground", StringComparison.OrdinalIgnoreCase))
+                    {
+                        configuredFgAccount = accountName;
+                    }
+
+                    continue;
                 }
 
                 if (string.Equals(accountName, CombatTestAccount, StringComparison.OrdinalIgnoreCase))

@@ -5,16 +5,28 @@ travel mode.
 
 ## Bot Execution Mode
 
-**Shodan-directed FG action** - `LongPathing.config.json` launches `LPATHFG1`
-as a Tauren Male foreground Warrior action target, `LPATHBG1` idle for
-topology parity, and SHODAN as director. The test body dispatches only
-`ObjectiveType.TravelTo` to the Tauren foreground target after fixture-owned
-Crossroads staging and taxi readiness.
+**Default roster: Shodan-directed FG action** - `LongPathing.config.json`
+launches `LPATHFG1` as a Tauren Male foreground Warrior action target,
+`LPATHBG1` idle for topology parity, and SHODAN as director. The test body
+dispatches only `ObjectiveType.TravelTo` to the configured foreground target
+after fixture-owned Crossroads staging and taxi readiness.
+
+**Alternate roster: Shodan foreground action** - set
+`WWOW_LONG_PATHING_SETTINGS_PATH` to
+`Services/WoWStateManager/Settings/Configs/LongPathing.ShodanForeground.config.json`
+to rerun the same live proof with SHODAN itself as the configured foreground
+target and `LPATHBG1` as the background parity bot. This is intended for
+capsule/regression confirmation on the same route, not as the default suite
+topology.
 
 The test scopes `Injection__DisablePacketHooks=true` and
 `WWOW_DISABLE_PACKET_HOOKS=1` for the full run because the Orgrimmar ->
 Undercity zeppelin is a foreground cross-map world transfer, matching the
 packet-hook crash guard used by dungeon and battleground transfer fixtures.
+
+The fixture resolves its roster from `WWOW_LONG_PATHING_SETTINGS_PATH` when
+that env var is set; otherwise it falls back to the checked-in
+`LongPathing.config.json`.
 
 ## Test Methods
 
@@ -24,6 +36,11 @@ packet-hook crash guard used by dungeon and battleground transfer fixtures.
   route: Crossroads taxi `25 -> 23`, Orgrimmar taxi arrival, walking to the
   Orgrimmar zeppelin tower, actual zeppelin transport state or map transfer,
   Eastern Kingdoms arrival, and final proximity to the Undercity destination.
+- `DeckLipClimbFromGruntToFrezza`: gated by `WWOW_DECKLIP_CLIMB_TEST=1`.
+  Teleports directly to the zeppelin-tower base Grunt and requires
+  `[TRAVEL_LEG] complete index=0 reason=walk_arrived` on the same
+  Undercity-bound walk leg that previously stalled on the deck lip. This is
+  the fastest live proof for the `40,29` lip/ramp lane.
 
 ## Fast-Fail Blockers
 

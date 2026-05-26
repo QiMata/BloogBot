@@ -18,6 +18,11 @@ namespace BotRunner.Tests.LiveValidation;
 /// (port 5001) is left untouched — it's the production target after a
 /// release, not a test dependency. Without the env var, behavior is
 /// unchanged (assumes someone is listening on port 5001).
+///
+/// The roster source can be overridden per run via
+/// `WWOW_LONG_PATHING_SETTINGS_PATH`, which lets the same live proof execute
+/// against alternate foreground capsules without editing the default checked-in
+/// `LongPathing.config.json`.
 /// </summary>
 public sealed class LongPathingFixture : LiveBotFixture, IAsyncLifetime
 {
@@ -36,7 +41,7 @@ public sealed class LongPathingFixture : LiveBotFixture, IAsyncLifetime
 
     async Task IAsyncLifetime.InitializeAsync()
     {
-        SetCustomSettingsPath(ResolveLongPathingSettingsPath());
+        SetCustomSettingsPath(LongPathingSettings.ResolveSettingsPath());
 
         if (PathfindingTestFixture.IsLocalPathfindingEnabled())
         {
@@ -64,27 +69,6 @@ public sealed class LongPathingFixture : LiveBotFixture, IAsyncLifetime
                 _pathfindingFixture = null;
             }
         }
-    }
-
-    private static string ResolveLongPathingSettingsPath()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            var candidate = Path.Combine(
-                dir.FullName,
-                "Services",
-                "WoWStateManager",
-                "Settings",
-                "Configs",
-                "LongPathing.config.json");
-            if (File.Exists(candidate))
-                return candidate;
-
-            dir = dir.Parent;
-        }
-
-        throw new FileNotFoundException("Could not find LongPathing.config.json.");
     }
 }
 

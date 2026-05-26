@@ -168,7 +168,31 @@
   service startup or deterministic tests for a full session timeout.
 
 ## Session Handoff
-- Last updated: 2026-05-22 (Detour PR #725 adapted port test)
+- Last updated: 2026-05-26 (dual-FG live deck-lip rerun after `1523.8` promotion)
+
+### 2026-05-26 - live deck-lip rerun is still red for both Tauren FG and Shodan FG
+- Active task: reconcile the promoted `1523.8` / tile `40,29` bake win with
+  the current live `DeckLipClimbFromGruntToFrezza` red.
+- Pass result: `no new bake delta; the live proof was rerun against the current
+  promoted tile through a fresh local PathfindingService using
+  D:\wwow-bot\test-data, and both Tauren FG and Shodan FG stalled identically
+  at the Grunt-base spawn with zero movement, so the current live failure is
+  not a capsule-specific split`.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_tauren_fg_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; $env:WWOW_LONG_PATHING_SETTINGS_PATH='E:\repos\Westworld of Warcraft\Services\WoWStateManager\Settings\Configs\LongPathing.ShodanForeground.config.json'; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_shodan_fg_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)`.
+- Evidence:
+  - `tmp/test-runtime/results-live/long_pathing_decklip_tauren_fg_20260526.trx`
+  - `tmp/test-runtime/results-live/long_pathing_decklip_shodan_fg_20260526.trx`
+  - `tmp/test-runtime/screenshots/long-pathing/Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-Frezza-likely-LPATHFG1-client-2948-win0-20260526_154454.png`
+  - `tmp/test-runtime/screenshots/long-pathing/Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-Frezza-likely-SHODAN-client-37528-win0-20260526_154717.png`
+- Practical read:
+  - both runs selected the intended FG target (`LPATHFG1` Tauren Male, then
+    `SHODAN` Gnome Female) and both failed at the same coordinates with
+    `moved=0.0`, `current=TravelTo`, and no emitted
+    `[TRAVEL_PLAN]` / `[TRAVEL_LEG]` / `[TRAVEL_WALK_NAV]` diagnostics.
+  - Treat the next investigation as a live execution / route-start gap on the
+    current promoted tile, not as a Tauren-only navmesh hole.
 
 ### 2026-05-22 - Detour PR #725 adapted port test
 - Active task: test whether upstream Detour `findNearestPoly` BV-tree metadata
