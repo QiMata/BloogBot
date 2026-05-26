@@ -33,6 +33,10 @@ public sealed record AnchorStageSummary(
     int? FinalResolvedRouteTargetCount,
     int? FinalRouteableSupportCandidateCount,
     int? FinalRouteableSupportComponentCount,
+    bool? SourceFootprintContainsAnchorProjection,
+    bool? SourceFootprintContainsAnchorCell,
+    bool? RasterizeSupportContainsAnchorCell,
+    string? EarlyCoverageFinding,
     bool CoverageComplete);
 
 public static class StageManifestAnalyzer
@@ -153,6 +157,36 @@ public static class StageManifestAnalyzer
         int? finalResolvedRouteTargetCount = null;
         int? finalRouteableSupportCandidateCount = null;
         int? finalRouteableSupportComponentCount = null;
+        bool? sourceFootprintContainsAnchorProjection = null;
+        bool? sourceFootprintContainsAnchorCell = null;
+        bool? rasterizeSupportContainsAnchorCell = null;
+        string? earlyCoverageFinding = null;
+
+        if (stagesByName.TryGetValue("sourceFootprint", out var sourceFootprintStage))
+        {
+            sourceFootprintContainsAnchorProjection = GetBool(sourceFootprintStage, "supportContainsAnchorProjection");
+            sourceFootprintContainsAnchorCell = GetBool(sourceFootprintStage, "supportContainsAnchorCell");
+        }
+
+        if (stagesByName.TryGetValue("rasterize", out var rasterizeStage))
+            rasterizeSupportContainsAnchorCell = GetBool(rasterizeStage, "supportContainsAnchorCell");
+
+        if (sourceFootprintContainsAnchorProjection.HasValue ||
+            sourceFootprintContainsAnchorCell.HasValue ||
+            rasterizeSupportContainsAnchorCell.HasValue)
+        {
+            var sourceProjection = sourceFootprintContainsAnchorProjection ?? false;
+            var sourceCell = sourceFootprintContainsAnchorCell ?? false;
+            var rasterCell = rasterizeSupportContainsAnchorCell ?? false;
+
+            if (!sourceProjection && !sourceCell)
+                earlyCoverageFinding = rasterCell ? "raster_only_anchor_cell_overlap" : "source_footprint_or_seam_hole";
+            else if (!rasterCell)
+                earlyCoverageFinding = "raster_anchor_cell_coverage_hole";
+            else
+                earlyCoverageFinding = "early_support_overlap_present";
+        }
+
         if (stagesByName.TryGetValue("finalDetour", out var finalStage) &&
             finalStage.TryGetProperty("finalWinner", out var finalWinner))
         {
@@ -219,6 +253,10 @@ public static class StageManifestAnalyzer
             FinalResolvedRouteTargetCount: finalResolvedRouteTargetCount,
             FinalRouteableSupportCandidateCount: finalRouteableSupportCandidateCount,
             FinalRouteableSupportComponentCount: finalRouteableSupportComponentCount,
+            SourceFootprintContainsAnchorProjection: sourceFootprintContainsAnchorProjection,
+            SourceFootprintContainsAnchorCell: sourceFootprintContainsAnchorCell,
+            RasterizeSupportContainsAnchorCell: rasterizeSupportContainsAnchorCell,
+            EarlyCoverageFinding: earlyCoverageFinding,
             CoverageComplete: missingStages.Count == 0);
     }
 

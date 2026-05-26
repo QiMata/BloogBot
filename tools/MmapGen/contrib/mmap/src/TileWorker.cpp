@@ -2591,6 +2591,115 @@ static bool TriangleOverlapsAnchorSupportCorridorXZ(
     return pointWithinCorridor(centerX, centerZ);
 }
 
+static bool PointInAxisAlignedRectXZ(
+    const float x, const float z,
+    const float minX, const float minZ,
+    const float maxX, const float maxZ)
+{
+    return x >= minX && x <= maxX && z >= minZ && z <= maxZ;
+}
+
+static float Cross2D(
+    const float ax, const float az,
+    const float bx, const float bz,
+    const float cx, const float cz)
+{
+    return (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+}
+
+static bool PointOnSegmentXZ(
+    const float ax, const float az,
+    const float bx, const float bz,
+    const float px, const float pz)
+{
+    constexpr float kSegmentEpsilon = 1.0e-5f;
+    if (fabsf(Cross2D(ax, az, bx, bz, px, pz)) > kSegmentEpsilon)
+        return false;
+
+    const float minX = std::min(ax, bx) - kSegmentEpsilon;
+    const float maxX = std::max(ax, bx) + kSegmentEpsilon;
+    const float minZ = std::min(az, bz) - kSegmentEpsilon;
+    const float maxZ = std::max(az, bz) + kSegmentEpsilon;
+    return px >= minX && px <= maxX && pz >= minZ && pz <= maxZ;
+}
+
+static bool SegmentsIntersectXZ(
+    const float ax, const float az,
+    const float bx, const float bz,
+    const float cx, const float cz,
+    const float dx, const float dz)
+{
+    constexpr float kIntersectEpsilon = 1.0e-5f;
+    const float c1 = Cross2D(ax, az, bx, bz, cx, cz);
+    const float c2 = Cross2D(ax, az, bx, bz, dx, dz);
+    const float c3 = Cross2D(cx, cz, dx, dz, ax, az);
+    const float c4 = Cross2D(cx, cz, dx, dz, bx, bz);
+
+    const bool properIntersect =
+        ((c1 > kIntersectEpsilon && c2 < -kIntersectEpsilon) || (c1 < -kIntersectEpsilon && c2 > kIntersectEpsilon)) &&
+        ((c3 > kIntersectEpsilon && c4 < -kIntersectEpsilon) || (c3 < -kIntersectEpsilon && c4 > kIntersectEpsilon));
+    if (properIntersect)
+        return true;
+
+    return PointOnSegmentXZ(ax, az, bx, bz, cx, cz) ||
+        PointOnSegmentXZ(ax, az, bx, bz, dx, dz) ||
+        PointOnSegmentXZ(cx, cz, dx, dz, ax, az) ||
+        PointOnSegmentXZ(cx, cz, dx, dz, bx, bz);
+}
+
+static bool TriangleOverlapsAxisAlignedRectXZ(
+    const float* a, const float* b, const float* c,
+    const float minX, const float minZ,
+    const float maxX, const float maxZ)
+{
+    const float triMinX = std::min(a[0], std::min(b[0], c[0]));
+    const float triMaxX = std::max(a[0], std::max(b[0], c[0]));
+    const float triMinZ = std::min(a[2], std::min(b[2], c[2]));
+    const float triMaxZ = std::max(a[2], std::max(b[2], c[2]));
+    if (triMaxX < minX || triMinX > maxX || triMaxZ < minZ || triMinZ > maxZ)
+        return false;
+
+    if (PointInAxisAlignedRectXZ(a[0], a[2], minX, minZ, maxX, maxZ) ||
+        PointInAxisAlignedRectXZ(b[0], b[2], minX, minZ, maxX, maxZ) ||
+        PointInAxisAlignedRectXZ(c[0], c[2], minX, minZ, maxX, maxZ))
+    {
+        return true;
+    }
+
+    float projectedY = 0.0f;
+    if (TryProjectPointToTriangleXZ(a, b, c, minX, minZ, projectedY) ||
+        TryProjectPointToTriangleXZ(a, b, c, maxX, minZ, projectedY) ||
+        TryProjectPointToTriangleXZ(a, b, c, maxX, maxZ, projectedY) ||
+        TryProjectPointToTriangleXZ(a, b, c, minX, maxZ, projectedY))
+    {
+        return true;
+    }
+
+    const float rect[4][2] =
+    {
+        { minX, minZ },
+        { maxX, minZ },
+        { maxX, maxZ },
+        { minX, maxZ },
+    };
+
+    const float* tri[3] = { a, b, c };
+    for (int triEdge = 0; triEdge < 3; ++triEdge)
+    {
+        const float* p0 = tri[triEdge];
+        const float* p1 = tri[(triEdge + 1) % 3];
+        for (int rectEdge = 0; rectEdge < 4; ++rectEdge)
+        {
+            const float* r0 = rect[rectEdge];
+            const float* r1 = rect[(rectEdge + 1) % 4];
+            if (SegmentsIntersectXZ(p0[0], p0[2], p1[0], p1[2], r0[0], r0[1], r1[0], r1[1]))
+                return true;
+        }
+    }
+
+    return false;
+}
+
 // [WWoW-DIVERGENCE] 2026-05-26: tile 1:40,29 exhausted tiny synthetic raster
 // patches for the recovered 1523.8 support footprint. The next earlier branch
 // promotes real local source triangles in the same support->anchor corridor so
@@ -3205,6 +3314,143 @@ static json BuildBaseAnchorStageJson(const char* stageName, const char* kind, co
     return stage;
 }
 
+static json BuildSourceFootprintAnchorStageSummary(
+    const rcHeightfield& hf,
+    const float* tVerts,
+    const int* tTris,
+    const unsigned char* areas,
+    const int tTriCount,
+    const float xyExtent,
+    const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
+    const AnchorSourceSupportProbe& support)
+{
+    json stage = BuildBaseAnchorStageJson("sourceFootprint", "source-footprint", support);
+    stage["supportProjectionCandidateCount"] = 0;
+    stage["supportCellCandidateCount"] = 0;
+    stage["lowerCellCandidateCount"] = 0;
+    stage["nearestSupportDistance2D"] = -1.0f;
+
+    if (!tVerts || !tTris || !areas || !support.found)
+        return stage;
+
+    const float anchorRecastX = support.anchor.wowY;
+    const float anchorRecastZ = support.anchor.wowX;
+    const int anchorCellX = static_cast<int>(floorf((anchorRecastX - hf.bmin[0]) / hf.cs));
+    const int anchorCellY = static_cast<int>(floorf((anchorRecastZ - hf.bmin[2]) / hf.cs));
+    if (anchorCellX < 0 || anchorCellX >= hf.width || anchorCellY < 0 || anchorCellY >= hf.height)
+    {
+        stage["unprovenReason"] = "anchor_outside_heightfield";
+        return stage;
+    }
+
+    const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+    const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
+    const float cellMinX = hf.bmin[0] + anchorCellX * hf.cs;
+    const float cellMaxX = cellMinX + hf.cs;
+    const float cellMinZ = hf.bmin[2] + anchorCellY * hf.cs;
+    const float cellMaxZ = cellMinZ + hf.cs;
+    const float windowMinX = anchorRecastX - xyExtent;
+    const float windowMaxX = anchorRecastX + xyExtent;
+    const float windowMinZ = anchorRecastZ - xyExtent;
+    const float windowMaxZ = anchorRecastZ + xyExtent;
+    const float stageMinX = hf.bmin[0];
+    const float stageMaxX = hf.bmax[0];
+    const float stageMinZ = hf.bmin[2];
+    const float stageMaxZ = hf.bmax[2];
+
+    bool supportContainsAnchorProjection = false;
+    bool supportContainsAnchorCell = false;
+    bool lowerContainsAnchorCell = false;
+    int supportCount = 0;
+    int lowerCount = 0;
+    int supportProjectionCount = 0;
+    int supportCellCount = 0;
+    int lowerCellCount = 0;
+    float nearestSupportDistance2D = std::numeric_limits<float>::max();
+
+    for (int triIndex = 0; triIndex < tTriCount; ++triIndex)
+    {
+        const unsigned char area = areas[triIndex];
+        if (area != AREA_GROUND && area != AREA_GROUND_MODEL)
+            continue;
+
+        const int* tri = &tTris[triIndex * 3];
+        const float* a = &tVerts[tri[0] * 3];
+        const float* b = &tVerts[tri[1] * 3];
+        const float* c = &tVerts[tri[2] * 3];
+
+        const float minX = std::min(a[0], std::min(b[0], c[0]));
+        const float maxX = std::max(a[0], std::max(b[0], c[0]));
+        const float minZ = std::min(a[2], std::min(b[2], c[2]));
+        const float maxZ = std::max(a[2], std::max(b[2], c[2]));
+        if (maxX < windowMinX || minX > windowMaxX || maxZ < windowMinZ || minZ > windowMaxZ)
+            continue;
+        if (maxX < stageMinX || minX > stageMaxX || maxZ < stageMinZ || minZ > stageMaxZ)
+            continue;
+
+        float supportY = 0.0f;
+        float supportRecastX = 0.0f;
+        float supportRecastZ = 0.0f;
+        float distance2D = std::numeric_limits<float>::max();
+        bool projectedInside = false;
+        if (!TryResolveTriangleSupportY(
+            a, b, c, anchorRecastX, anchorRecastZ, xyExtent,
+            supportY, supportRecastX, supportRecastZ, distance2D, projectedInside))
+        {
+            continue;
+        }
+
+        const bool supportRange = supportY >= supportFloorMinY && supportY <= supportFloorMaxY;
+        const bool competingLower = IsAnchorCompetingLowerFloor(supportY, support, supportBandTuning);
+        if (!supportRange && !competingLower)
+            continue;
+
+        const bool overlapsAnchorCell = TriangleOverlapsAxisAlignedRectXZ(
+            a, b, c, cellMinX, cellMinZ, cellMaxX, cellMaxZ);
+        if (supportRange)
+        {
+            ++supportCount;
+            nearestSupportDistance2D = std::min(nearestSupportDistance2D, distance2D);
+            if (projectedInside)
+            {
+                supportContainsAnchorProjection = true;
+                ++supportProjectionCount;
+            }
+            if (overlapsAnchorCell)
+            {
+                supportContainsAnchorCell = true;
+                ++supportCellCount;
+            }
+        }
+
+        if (competingLower)
+        {
+            ++lowerCount;
+            if (overlapsAnchorCell)
+            {
+                lowerContainsAnchorCell = true;
+                ++lowerCellCount;
+            }
+        }
+    }
+
+    stage["upperSupportExists"] = supportCount > 0;
+    stage["lowerCompetitorExists"] = lowerCount > 0;
+    stage["supportCandidateCount"] = supportCount;
+    stage["lowerCandidateCount"] = lowerCount;
+    stage["supportContainsAnchorProjection"] = supportContainsAnchorProjection;
+    stage["supportContainsAnchorCell"] = supportContainsAnchorCell;
+    stage["lowerContainsAnchorCell"] = lowerContainsAnchorCell;
+    stage["dominantLowerCandidate"] = lowerContainsAnchorCell && supportCount > 0 && !supportContainsAnchorCell;
+    stage["supportProjectionCandidateCount"] = supportProjectionCount;
+    stage["supportCellCandidateCount"] = supportCellCount;
+    stage["lowerCellCandidateCount"] = lowerCellCount;
+    stage["nearestSupportDistance2D"] =
+        nearestSupportDistance2D == std::numeric_limits<float>::max() ? -1.0f : nearestSupportDistance2D;
+    return stage;
+}
+
 static json BuildHeightfieldAnchorStageSummary(const char* stageName, const rcHeightfield& hf,
     const float xyExtent, const float supportZTolerance,
     const AnchorSupportBandTuning& supportBandTuning,
@@ -3224,12 +3470,16 @@ static json BuildHeightfieldAnchorStageSummary(const char* stageName, const rcHe
     const float anchorRecastZ = support.anchor.wowX;
     const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
     const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
+    const int anchorCellX = static_cast<int>(floorf((anchorRecastX - hf.bmin[0]) / hf.cs));
+    const int anchorCellY = static_cast<int>(floorf((anchorRecastZ - hf.bmin[2]) / hf.cs));
 
     int supportCells = 0;
     int supportSpans = 0;
     int lowerCells = 0;
     int lowerSpans = 0;
     float bestSupportDelta = std::numeric_limits<float>::max();
+    bool supportContainsAnchor = false;
+    bool lowerContainsAnchor = false;
 
     for (int y = 0; y < hf.height; ++y)
     {
@@ -3264,6 +3514,12 @@ static json BuildHeightfieldAnchorStageSummary(const char* stageName, const rcHe
                 }
             }
 
+            if (x == anchorCellX && y == anchorCellY)
+            {
+                supportContainsAnchor = cellHasSupport;
+                lowerContainsAnchor = cellHasLower;
+            }
+
             if (cellHasSupport)
                 ++supportCells;
             if (cellHasLower)
@@ -3279,6 +3535,8 @@ static json BuildHeightfieldAnchorStageSummary(const char* stageName, const rcHe
     stage["supportSpans"] = supportSpans;
     stage["lowerCells"] = lowerCells;
     stage["lowerSpans"] = lowerSpans;
+    stage["supportContainsAnchorCell"] = supportContainsAnchor;
+    stage["lowerContainsAnchorCell"] = lowerContainsAnchor;
     stage["bestSupportDelta"] = bestSupportDelta == std::numeric_limits<float>::max() ? -1.0f : bestSupportDelta;
     return stage;
 }
@@ -6245,11 +6503,15 @@ static void MergeAnchorStageSummary(json& existing, const json& incoming)
     mergeBool("lowerContainsAnchorProjection");
     mergeCount("supportCandidateCount");
     mergeCount("lowerCandidateCount");
+    mergeCount("supportProjectionCandidateCount");
+    mergeCount("supportCellCandidateCount");
+    mergeCount("lowerCellCandidateCount");
     mergeCount("supportCells");
     mergeCount("supportSpans");
     mergeCount("lowerCells");
     mergeCount("lowerSpans");
     mergeFloatMin("bestSupportDelta");
+    mergeFloatMin("nearestSupportDistance2D");
 
     for (const char* arrayName : { "components", "contours", "polys", "candidates" })
     {
@@ -7991,6 +8253,28 @@ namespace MMAP
             }
         };
 
+        auto appendSourceFootprintManifestStage = [&](const rcHeightfield& hf)
+        {
+            if (!writeAnchorStageManifest)
+                return;
+
+            for (size_t anchorIndex = 0; anchorIndex < anchorManifestSupports.size(); ++anchorIndex)
+            {
+                MergeAnchorStageIntoManifest(
+                    anchorStageManifest["anchors"][anchorIndex]["stages"],
+                    BuildSourceFootprintAnchorStageSummary(
+                        hf,
+                        tVerts,
+                        tTris,
+                        rasterAreas.data(),
+                        tTriCount,
+                        anchorSourceSupportXyExtent,
+                        anchorSourceSupportZTolerance,
+                        anchorSupportBandTuning,
+                        anchorManifestSupports[anchorIndex]));
+            }
+        };
+
         auto appendCompactManifestStage = [&](const char* stageName, const rcCompactHeightfield& chf, const bool includeComponents)
         {
             if (!writeAnchorStageManifest)
@@ -8124,6 +8408,7 @@ namespace MMAP
                 /// 3. Triangle walkability was already classified once for the
                 // full tile above; the per-subtile bake reuses that stable
                 // classification so the stage manifest can aggregate by tile.
+                appendSourceFootprintManifestStage(*tile.solid);
                 /// 4. Every triangle is correctly marked now, we can rasterize everything.
                 // 2026-05-21 upstream Recast sync: the old local SortAndRasterizeTriangles
                 // wrapper was retired with the vendor upgrade. Use upstream

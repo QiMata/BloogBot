@@ -2112,6 +2112,132 @@ Practical conclusion:
   source/raster/compact input so the missing support-band cells exist in the
   compact data at all
 
+### 2026-05-26 source-footprint vs raster anchor-cell coverage probe
+
+After the compact-bridge and same-source corridor-promotion negatives, the next
+bounded question was narrower: is the remaining `1523.8` miss a
+source-footprint / seam hole, or a raster-only anchor-cell coverage hole?
+
+Upstream Recast gives the right framing for that split:
+
+- the Recast README describes the build as triangle rasterization into voxels,
+  then filtering, regioning, and polygon generation:
+  https://github.com/recastnavigation/recastnavigation
+- `rcHeightfield` is documented as an xz-grid of span columns populated by
+  `rcRasterizeTriangle`, then consumed by `rcBuildCompactHeightfield`:
+  https://recastnav.com/structrcHeightfield.html
+  https://recastnav.com/Recast_8h.html
+- upstream `RecastRasterization.cpp` shows `rasterizeTri(...)` clipping each
+  triangle into every touched row and column, then adding spans per touched
+  cell:
+  https://raw.githubusercontent.com/recastnavigation/recastnavigation/main/Recast/Source/RecastRasterization.cpp
+
+Inference for WWoW: if the recovered support source never covers the anchor
+projection or anchor cell in a pre-raster `sourceFootprint` probe, there is no
+later raster-only anchor-cell fix to recover there. If the source footprint
+does cover the anchor but `rasterize` does not, that is a distinct raster
+coverage lane.
+
+Exact branch:
+
+- variant:
+  `og_4029_source_footprint_manifest_probe_v2`
+- artifact:
+  `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_manifest_probe_v2-20260526T044213Z\`
+- hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `dotnet build E:\repos\Westworld of Warcraft\tools\NavDataAudit\NavDataAudit.csproj --configuration Release`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_manifest_probe_v2' -DataDir 'D:\wwow-bot\test-data'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- `dotnet run --project E:\repos\Westworld of Warcraft\tools\NavDataAudit\NavDataAudit.csproj --configuration Release --no-build -- --stage-summary-only --stage-manifest E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_manifest_probe_v2-20260526T044213Z\analysis\map0012940_anchor_stage_manifest.json --write-stage-summary E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_manifest_probe_v2-20260526T044213Z\analysis\map0012940_anchor_stage_summary.json --write-stage-summary-csv E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_manifest_probe_v2-20260526T044213Z\analysis\map0012940_anchor_stage_summary.csv`
+
+What changed in the proof surface:
+
+- `TileWorker.cpp` now writes an earlier `sourceFootprint` manifest stage before
+  rasterization.
+- `NavDataAudit` now summarizes:
+  - `SourceFootprintContainsAnchorProjection`
+  - `SourceFootprintContainsAnchorCell`
+  - `RasterizeSupportContainsAnchorCell`
+  - `EarlyCoverageFinding`
+- important instrumentation correction: trust `v2`, not the superseded `v1`
+  probe branch. The final `v2` analyzer keeps the canonical `FirstBadStage`
+  contract intact by NOT promoting raw heightfield / compact lower-dominance
+  hints into the real first-bad-stage classification. That preserved the known
+  `1522.500,-4424.100,17.000 -> no firstBadStage` and
+  `1521.267,-4425.600,17.609 -> no firstBadStage` facts.
+
+Decisive proof for `1523.800,-4425.900,17.100`:
+
+- source support probe:
+  - `source=vmap`
+  - `triIndex=537325`
+  - `support=(1523.668,-4426.176,17.704)`
+  - `distance2D=0.30609676241874695`
+  - `projectedInside=false`
+- new early stages:
+  - `sourceFootprint`:
+    `supportCandidateCount=5`, `lowerCandidateCount=24`,
+    `supportContainsAnchorProjection=false`,
+    `supportContainsAnchorCell=false`,
+    `lowerContainsAnchorCell=true`,
+    `supportProjectionCandidateCount=0`,
+    `supportCellCandidateCount=0`,
+    `lowerCellCandidateCount=3`,
+    `nearestSupportDistance2D=0.30609676241874695`
+  - `rasterize`:
+    `supportCandidateCount=138`, `lowerCandidateCount=3193`,
+    `supportContainsAnchorCell=false`,
+    `lowerContainsAnchorCell=true`
+- later stages stayed on the stable baseline profile:
+  - `buildCHF`: `80/3040`
+  - `erode`: `8/2882`
+  - `median`: `56/0`
+  - `regions`: `56/0`
+  - `contours`: `1/8`
+  - `polymesh`: `2/23`
+  - `finalDetour`: `0/5`, winner `0x1000000000ADAB`
+- summary answer stayed canonical:
+  - `FirstBadStage=finalDetour`
+  - `FirstBadReason=lower_competitor_dominant`
+  - `EarlyCoverageFinding=source_footprint_or_seam_hole`
+
+Cross-check anchors:
+
+- unchanged anchors that must stay preserved:
+  - `1522.500,-4424.100,17.000` -> no `FirstBadStage`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1521.267,-4425.600,17.609` -> no `FirstBadStage`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1364.867,-4374.000,26.109` ->
+    `finalDetour / winner_component_trapped`,
+    `EarlyCoverageFinding=early_support_overlap_present`
+- classifier cross-check proving the new split is real, not tautological:
+  - `1479.767,-4426.000,25.309` kept no `FirstBadStage`, but showed
+    `SourceFootprintContainsAnchorProjection=true`,
+    `SourceFootprintContainsAnchorCell=true`,
+    `RasterizeSupportContainsAnchorCell=false`, and therefore
+    `EarlyCoverageFinding=raster_anchor_cell_coverage_hole`
+
+Practical read:
+
+- `1523.8` is now best treated as a source-footprint / seam-hole lane, not a
+  late contour lane, not a post-median compact-restore lane, and not the same
+  narrow same-source corridor-promotion lane that already returned
+  `candidates=0`.
+- `1364.867,-4374.000,26.109` remains a separate trapped-component lane; do
+  not spend more `1523.8` budget on trapped-component ideas unless a branch
+  clearly moves both for the same reason.
+- the saved tile hash stayed on the stable live baseline, so focused tests and
+  full `CriticalWalkLegs` were intentionally skipped for this instrumentation
+  branch.
+- confirmed live tile hash remains
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+
 ### 2026-05-25 UTC contour raw-bypass plus support-arc follow-up
 
 The next contour-focused loop closed three distinct "change the contour shape
