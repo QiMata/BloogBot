@@ -2577,6 +2577,97 @@ Practical read:
 - focused tests and full `CriticalWalkLegs` were intentionally skipped again
   because the saved tile hash never moved
 
+### 2026-05-26 same-detail source-footprint bridge turns region zero into region 30
+
+After the anchor-frame fix, the live question for `1523.800,-4425.900,17.100`
+was no longer "can we make sourceFootprint overlap exist?" but "can the new
+same-group support survive region assignment?" WWoW answered that by adding a
+second opt-in pre-raster helper that builds one narrow same-detail ribbon from
+the anchor to the farthest nearby support-band triangle inside the same source
+family.
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_bridge_anchorframe_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_source_footprint_bridge_anchorframe_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+- `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_source_footprint_bridge_anchorframe_v1_critical_walk_legs.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+
+Artifacts:
+
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_bridge_anchorframe_v1-20260526T151016Z\`
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_bridge_anchorframe_v1-20260526T151016Z\analysis\map0012940_anchor_stage_summary.json`
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_bridge_anchorframe_v1-20260526T151016Z\analysis\map0012940_anchor_stage_manifest.json`
+- saved tile hash:
+  `35579EA49C8CC1D2A2F1086EF5812D4C5F461BD2EC4E3135012AB60129175721`
+
+Code surface:
+
+- new helper in `TileWorker.cpp`:
+  `InjectAnchorSourceFootprintBridges(...)`
+- new opt-in config keys:
+  - `preRasterizeCreateAnchorSourceFootprintBridgeCoordsWow`
+  - `preRasterizeCreateAnchorSourceFootprintBridgeHalfWidth`
+  - `preRasterizeCreateAnchorSourceFootprintBridgeMaxTargetDistance2D`
+  - `preRasterizeCreateAnchorSourceFootprintBridgeMinTargetDistance2D`
+  - `preRasterizeCreateAnchorSourceFootprintBridgeMinSameDetailLowerDrop`
+  - `preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop`
+
+Decisive proof:
+
+- the bridge kept the same-group cap branch alive and targeted the farthest
+  known same-detail support-band candidate:
+  `[SRC-FOOTPRINT-BRIDGE] anchor=(1523.800,-4425.900,17.100) detail=Ogrimmar.wmo#group133 targetTri=537388 target=(1522.374,-4427.174,17.841) targetDist2D=1.912 bridgeHalfWidth=0.300 requireLowerDrop=0 cellCandidates=4 resolvedCandidates=4 qualifiedLowerCandidates=2 sameDetailLowerMinY=16.116 added=2`
+- the early proof stayed improved:
+  - `sourceFootprint`:
+    `supportCandidateCount=9`, `lowerCandidateCount=24`,
+    `supportContainsAnchorProjection=true`,
+    `supportContainsAnchorCell=true`
+  - `rasterize`:
+    `supportCandidateCount=282`, `lowerCandidateCount=3193`,
+    `supportContainsAnchorCell=true`
+- the compact/region seam finally moved in the way the earlier cap-only branch
+  could not:
+  - the anchor support component still existed at `median`, but now also kept
+    that connectivity through `regions`
+  - the decisive change was
+    `regionIds=[] -> regionIds=[30]` for the anchor support component
+- once that happened, the later stages moved coherently:
+  - `contours`: `supportCandidateCount=2`, `lowerCandidateCount=8`
+  - `polymesh`: `supportCandidateCount=9`, `lowerCandidateCount=23`
+  - `finalDetour`: `supportCandidateCount=3`, `lowerCandidateCount=5`
+  - final winner changed from the old lower competitor `0x1000000000ADAB` to
+    support winner `0x1000000000ADA5`
+- the summary row for `1523.800,-4425.900,17.100` is now:
+  - `FirstBadStage=null`
+  - `FirstBadReason=null`
+  - `FinalWinnerSupportCandidate=true`
+  - `FinalWinnerCompetingLower=false`
+  - `EarlyCoverageFinding=early_support_overlap_present`
+- the comparison anchors preserved the split that made this lane useful:
+  - `1522.500,-4424.100,17.000` stayed
+    `FirstBadStage=null` with
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1521.267,-4425.600,17.609` stayed
+    `FirstBadStage=null` with the same early coverage read
+  - `1364.867,-4374.000,26.109` still stayed
+    `finalDetour / winner_component_trapped`
+
+Practical read:
+
+- the `1523.8` lane is now best described as "same-group support island needed
+  real connectivity before region assignment," not as a contour or Detour-only
+  miss
+- once the cap branch has already moved `sourceFootprint` and `rasterize` but
+  leaves the anchor support component at `regionIds=[]`, the next credible
+  source-surface experiment is a same-detail bridge to the surviving support
+  band, not another late contour carry
+- focused validation passed `7/7`, and the required full `CriticalWalkLegs`
+  rerun stayed at the pre-existing `17/23` baseline with the same unrelated
+  six red legs, so the promoted hash fixed the target lane without reopening
+  the rest of the known backlog
+
 ### 2026-05-25 UTC contour raw-bypass plus support-arc follow-up
 
 The next contour-focused loop closed three distinct "change the contour shape

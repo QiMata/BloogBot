@@ -2986,3 +2986,111 @@ cap branch never actually evaluated the `1523.8` anchor cell.
     `regionIds=[]`
   - because the saved tile hash never moved, focused tests and full
     `CriticalWalkLegs` were intentionally skipped again
+
+### 2026-05-26 UTC: same-detail source-footprint bridge promotes `1523.8`
+
+The next loop stayed on the same early source-surface lane and tested the
+specific follow-up implied by the `regionIds=[]` proof: if the new same-group
+support island can already reach the anchor after the cap fix, does a narrow
+same-detail bridge to the farther surviving support band move that island into
+a real region before contours?
+
+- Code surface:
+  - `TileWorker.cpp` now exposes a second opt-in pre-raster helper:
+    `InjectAnchorSourceFootprintBridges(...)`
+  - new config keys:
+    - `preRasterizeCreateAnchorSourceFootprintBridgeCoordsWow`
+    - `preRasterizeCreateAnchorSourceFootprintBridgeHalfWidth`
+    - `preRasterizeCreateAnchorSourceFootprintBridgeMaxTargetDistance2D`
+    - `preRasterizeCreateAnchorSourceFootprintBridgeMinTargetDistance2D`
+    - `preRasterizeCreateAnchorSourceFootprintBridgeMinSameDetailLowerDrop`
+    - `preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_bridge_anchorframe_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json'`
+  - hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+  - focused validation:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_source_footprint_bridge_anchorframe_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  - full validation because the hash moved:
+    `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_source_footprint_bridge_anchorframe_v1_critical_walk_legs.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+- Artifacts + promoted hash:
+  - bake artifact:
+    `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_bridge_anchorframe_v1-20260526T151016Z\`
+  - stage summary:
+    `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_bridge_anchorframe_v1-20260526T151016Z\analysis\map0012940_anchor_stage_summary.json`
+  - stage manifest:
+    `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_bridge_anchorframe_v1-20260526T151016Z\analysis\map0012940_anchor_stage_manifest.json`
+  - focused TRX:
+    `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\og_4029_source_footprint_bridge_anchorframe_v1_focused.trx`
+  - full TRX:
+    `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\og_4029_source_footprint_bridge_anchorframe_v1_critical_walk_legs.trx`
+  - saved live tile hash after the bake and validation:
+    `35579EA49C8CC1D2A2F1086EF5812D4C5F461BD2EC4E3135012AB60129175721`
+- Decisive proof:
+  - the cap still armed at the exact anchor cell:
+    `[SRC-FOOTPRINT-CAP] anchor=(1523.800,-4425.900,17.100) detail=Ogrimmar.wmo#group133 support=(1523.668,-4426.176,17.704) dist2D=0.306 capHalfExtent=0.300 requireLowerDrop=0 cellCandidates=2 resolvedCandidates=2 qualifiedLowerCandidates=2 sameDetailLowerMinY=16.116 sameDetailLowerDrop=1.588 added=2`
+  - the new same-detail bridge chose the farthest nearby support-band target in
+    the same source/detail family:
+    `[SRC-FOOTPRINT-BRIDGE] anchor=(1523.800,-4425.900,17.100) detail=Ogrimmar.wmo#group133 targetTri=537388 target=(1522.374,-4427.174,17.841) targetDist2D=1.912 bridgeHalfWidth=0.300 requireLowerDrop=0 cellCandidates=4 resolvedCandidates=4 qualifiedLowerCandidates=2 sameDetailLowerMinY=16.116 added=2`
+  - the early proof surface stayed moved and expanded again:
+    - `sourceFootprint`:
+      `supportCandidateCount=9`, `lowerCandidateCount=24`,
+      `supportContainsAnchorProjection=true`,
+      `supportContainsAnchorCell=true`
+    - `rasterize`:
+      `supportCandidateCount=282`, `lowerCandidateCount=3193`,
+      `supportContainsAnchorCell=true`
+  - the compact-to-region transition finally changed in the meaningful way the
+    prior region-zero branch never could:
+    - `median`:
+      `supportCandidateCount=175`, `lowerCandidateCount=0`,
+      `containsAnchorCell=true`
+    - `regions`:
+      `supportCandidateCount=175`, `lowerCandidateCount=0`,
+      and the anchor support component changed from `regionIds=[]` to
+      `regionIds=[30]`
+  - later stages moved coherently with that early change:
+    - `contours`: `supportCandidateCount=2`, `lowerCandidateCount=8`
+    - `polymesh`: `supportCandidateCount=9`, `lowerCandidateCount=23`
+    - `finalDetour`: `supportCandidateCount=3`, `lowerCandidateCount=5`,
+      winner `0x1000000000ADA5`
+  - the canonical `1523.800,-4425.900,17.100` summary is now:
+    - `FirstBadStage=null`
+    - `FirstBadReason=null`
+    - `FinalWinnerSupportCandidate=true`
+    - `FinalWinnerCompetingLower=false`
+    - `EarlyCoverageFinding=early_support_overlap_present`
+  - preserved guard anchors after the promoted hash:
+    - `1522.500,-4424.100,17.000`:
+      `FirstBadStage=null`,
+      `EarlyCoverageFinding=source_footprint_or_seam_hole`
+    - `1521.267,-4425.600,17.609`:
+      `FirstBadStage=null`,
+      `EarlyCoverageFinding=source_footprint_or_seam_hole`
+    - `1364.867,-4374.000,26.109`:
+      still `finalDetour / winner_component_trapped`
+- Validation result:
+  - focused slice passed `7/7`
+  - full `CriticalWalkLegs` stayed at the pre-existing raw-Detour baseline
+    `17/23`, with the same six unrelated reds:
+    `orgrimmar_city_live_vertical_replan_recovery`,
+    `orgrimmar_city_hallway_live_wall_stall_recovery`,
+    `orgrimmar_city_hallway_exit_live_stall_recovery`,
+    `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`,
+    `orgrimmar_exterior_incline_live_stall_exact_recovery`, and
+    `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+- Practical read:
+  - the bridge branch is the first real `1523.8` fix, not just another proof
+    surface: it moved `sourceFootprint`, moved `regions`, changed the final
+    winner away from the old lower competitor, and preserved the focused route
+    slice under a new saved tile hash
+  - the important structural lesson is that once an early same-group cap moves
+    the anchor into compact space but leaves `regionIds=[]`, the next credible
+    branch is a same-detail bridge/connectivity test before reopening contours
+  - the unchanged `17/23` full sweep does not invalidate this tile fix; it
+    shows the old unrelated city/hallway/exterior/underpass legs remain their
+    own backlog lanes while `1523.8` itself is no longer the dominant lower
+    winner

@@ -4159,3 +4159,83 @@
 - Next command: try the next early-stage `1523.8` branch on the same
   source-surface lane, but aim at connecting/preserving the new support island
   through region assignment instead of reworking contours or finalDetour again.
+
+### 2026-05-26 - same-detail source-footprint bridge promotes `1523.8`
+- Active task: finish the source-footprint/seam lane for `1523.800,-4425.900,17.100`
+  by testing whether the post-cap `regionIds=[]` support island can be
+  connected back into the surviving same-detail support band before contours.
+- Pass result: `delta shipped; a new same-detail pre-raster bridge moved the
+  anchor support component from regionIds=[] to regionIds=[30], changed the
+  canonical 1523.8 summary from finalDetour/lower_competitor_dominant to no
+  first bad stage, and validated a new live tile hash without regressing the
+  broader 17/23 CriticalWalkLegs baseline`.
+- Last delta:
+  - Added a new opt-in helper in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`:
+    - `InjectAnchorSourceFootprintBridges(...)`
+  - Added new config keys:
+    - `preRasterizeCreateAnchorSourceFootprintBridgeCoordsWow`
+    - `preRasterizeCreateAnchorSourceFootprintBridgeHalfWidth`
+    - `preRasterizeCreateAnchorSourceFootprintBridgeMaxTargetDistance2D`
+    - `preRasterizeCreateAnchorSourceFootprintBridgeMinTargetDistance2D`
+    - `preRasterizeCreateAnchorSourceFootprintBridgeMinSameDetailLowerDrop`
+    - `preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop`
+  - Reused the temp config from the anchor-frame cap branch, now extended with
+    the bridge knobs:
+    - temp config:
+      `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json`
+    - variant:
+      `og_4029_source_footprint_bridge_anchorframe_v1`
+    - artifact:
+      `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_bridge_anchorframe_v1-20260526T151016Z\`
+    - promoted hash:
+      `35579EA49C8CC1D2A2F1086EF5812D4C5F461BD2EC4E3135012AB60129175721`
+  - Decisive bake proof:
+    - the cap still armed:
+      `[SRC-FOOTPRINT-CAP] anchor=(1523.800,-4425.900,17.100) detail=Ogrimmar.wmo#group133 support=(1523.668,-4426.176,17.704) dist2D=0.306 capHalfExtent=0.300 requireLowerDrop=0 cellCandidates=2 resolvedCandidates=2 qualifiedLowerCandidates=2 sameDetailLowerMinY=16.116 sameDetailLowerDrop=1.588 added=2`
+    - the new bridge targeted the farthest nearby same-detail support band:
+      `[SRC-FOOTPRINT-BRIDGE] anchor=(1523.800,-4425.900,17.100) detail=Ogrimmar.wmo#group133 targetTri=537388 target=(1522.374,-4427.174,17.841) targetDist2D=1.912 bridgeHalfWidth=0.300 requireLowerDrop=0 cellCandidates=4 resolvedCandidates=4 qualifiedLowerCandidates=2 sameDetailLowerMinY=16.116 added=2`
+  - Decisive manifest proof for `1523.800,-4425.900,17.100`:
+    - `sourceFootprint`:
+      `supportCandidateCount=9`, `lowerCandidateCount=24`,
+      `supportContainsAnchorProjection=true`,
+      `supportContainsAnchorCell=true`
+    - `rasterize`:
+      `supportCandidateCount=282`, `lowerCandidateCount=3193`,
+      `supportContainsAnchorCell=true`
+    - `median` / `regions`:
+      `175/0`, with the anchor support component changing from
+      `regionIds=[]` to `regionIds=[30]`
+    - later stages moved coherently:
+      - `contours`: `2/8`
+      - `polymesh`: `9/23`
+      - `finalDetour`: `3/5`, winner `0x1000000000ADA5`
+    - summary row now reads:
+      - `FirstBadStage=null`
+      - `FirstBadReason=null`
+      - `FinalWinnerSupportCandidate=true`
+      - `FinalWinnerCompetingLower=false`
+      - `EarlyCoverageFinding=early_support_overlap_present`
+  - Guard anchors preserved:
+    - `1522.500,-4424.100,17.000` stayed
+      `FirstBadStage=null` with
+      `EarlyCoverageFinding=source_footprint_or_seam_hole`
+    - `1521.267,-4425.600,17.609` stayed
+      `FirstBadStage=null` with the same early coverage read
+    - `1364.867,-4374.000,26.109` stayed
+      `finalDetour / winner_component_trapped`
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_bridge_anchorframe_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `35579EA49C8CC1D2A2F1086EF5812D4C5F461BD2EC4E3135012AB60129175721`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_source_footprint_bridge_anchorframe_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> passed `7/7`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_source_footprint_bridge_anchorframe_v1_critical_walk_legs.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000` -> still `17/23`, with the same six red legs as the prior baseline:
+    - `orgrimmar_city_live_vertical_replan_recovery`
+    - `orgrimmar_city_hallway_live_wall_stall_recovery`
+    - `orgrimmar_city_hallway_exit_live_stall_recovery`
+    - `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`
+    - `orgrimmar_exterior_incline_live_stall_exact_recovery`
+    - `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+- Next command: treat `1523.8` as fixed on the manifest/route surface and keep
+  the remaining backlog focused on the separate city/hallway/exterior/underpass
+  reds plus the still-independent trapped `1364.867` lane.

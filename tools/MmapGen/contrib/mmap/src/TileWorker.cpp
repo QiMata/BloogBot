@@ -3240,6 +3240,226 @@ static int InjectAnchorSourceFootprintCaps(
     return injectedTriangles;
 }
 
+// [WWoW-DIVERGENCE] 2026-05-26: once the same-group source-cap branch proved
+// that 1523.8 can regain early support locally, the next question became
+// whether that support can connect back into the surviving same-detail support
+// cluster before regions build. This experiment injects one narrow,
+// same-detail ribbon from the anchor to the farthest nearby support-band
+// triangle in the same source/detail family so we can distinguish a real
+// same-group seam gap from a pure region-threshold artifact.
+static int InjectAnchorSourceFootprintBridges(
+    MMAP::MeshData& meshData,
+    const rcConfig& config,
+    const float* tVerts,
+    const int* tTris,
+    std::vector<unsigned char>& rasterAreas,
+    const int tTriCount,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const float bridgeHalfWidth,
+    const float maxTargetDistance2D,
+    const float minTargetDistance2D,
+    const float minSameDetailLowerDrop,
+    const bool requireSameDetailLowerDrop,
+    const bool logDiagnostics)
+{
+    if (!tVerts || !tTris || sourceSupports.empty() || bridgeHalfWidth <= 0.0f)
+        return 0;
+
+    constexpr float kResolveExtentMin = 0.35f;
+    int injectedTriangles = 0;
+
+    for (const AnchorSourceSupportProbe& support : sourceSupports)
+    {
+        if (!support.found || support.triIndex < 0)
+            continue;
+        if (!support.projectedInside && support.distance2D > maxTargetDistance2D)
+            continue;
+        if (support.source == MMAP::MeshTriangleSource::Terrain)
+            continue;
+
+        const char* detailLabelCStr = meshData.DetailLabelForTriangle(support.triIndex);
+        if (!detailLabelCStr || !detailLabelCStr[0])
+            continue;
+        const std::string detailLabel(detailLabelCStr);
+
+        rcConfig anchorTileConfig;
+        int anchorTileX = -1;
+        int anchorTileY = -1;
+        if (!TryBuildAnchorRasterConfig(config, support.anchor, anchorTileConfig, anchorTileX, anchorTileY))
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        const int anchorCellX = static_cast<int>(floorf((anchorRecastX - anchorTileConfig.bmin[0]) / anchorTileConfig.cs));
+        const int anchorCellY = static_cast<int>(floorf((anchorRecastZ - anchorTileConfig.bmin[2]) / anchorTileConfig.cs));
+        if (anchorCellX < 0 || anchorCellX >= anchorTileConfig.width || anchorCellY < 0 || anchorCellY >= anchorTileConfig.height)
+            continue;
+
+        const float cellMinX = anchorTileConfig.bmin[0] + anchorCellX * anchorTileConfig.cs;
+        const float cellMaxX = cellMinX + anchorTileConfig.cs;
+        const float cellMinZ = anchorTileConfig.bmin[2] + anchorCellY * anchorTileConfig.cs;
+        const float cellMaxZ = cellMinZ + anchorTileConfig.cs;
+        const float resolveExtent = std::max(maxTargetDistance2D + bridgeHalfWidth, kResolveExtentMin);
+        const float supportFloorMinY = support.supportY - 0.35f;
+        const float supportFloorMaxY = support.supportY + 0.35f;
+
+        bool sameDetailLowerOverlap = false;
+        float deepestSameDetailLowerY = support.supportY;
+        int sameDetailCellCandidates = 0;
+        int sameDetailResolvedCandidates = 0;
+        int sameDetailQualifiedLowerCandidates = 0;
+
+        int bestTargetTri = -1;
+        float bestTargetDistance2D = -1.0f;
+        float bestTargetSupportY = support.supportY;
+        float bestTargetRecastX = 0.0f;
+        float bestTargetRecastZ = 0.0f;
+
+        for (int triIndex = 0; triIndex < tTriCount; ++triIndex)
+        {
+            const unsigned char area = rasterAreas[triIndex];
+            if (area != AREA_GROUND && area != AREA_GROUND_MODEL)
+                continue;
+            if (meshData.SourceForTriangle(triIndex) != support.source)
+                continue;
+
+            const char* triDetailLabel = meshData.DetailLabelForTriangle(triIndex);
+            if (!triDetailLabel || detailLabel != triDetailLabel)
+                continue;
+
+            const int* tri = &tTris[triIndex * 3];
+            const float* a = &tVerts[tri[0] * 3];
+            const float* b = &tVerts[tri[1] * 3];
+            const float* c = &tVerts[tri[2] * 3];
+
+            if (TriangleOverlapsAxisAlignedRectXZ(a, b, c, cellMinX, cellMinZ, cellMaxX, cellMaxZ))
+            {
+                ++sameDetailCellCandidates;
+
+                float triSupportY = 0.0f;
+                float triSupportRecastX = 0.0f;
+                float triSupportRecastZ = 0.0f;
+                float triDistance2D = std::numeric_limits<float>::max();
+                bool triProjectedInside = false;
+                if (TryResolveTriangleSupportY(
+                        a, b, c,
+                        anchorRecastX, anchorRecastZ,
+                        resolveExtent,
+                        triSupportY, triSupportRecastX, triSupportRecastZ,
+                        triDistance2D, triProjectedInside))
+                {
+                    ++sameDetailResolvedCandidates;
+                    const float lowerDrop = support.supportY - triSupportY;
+                    if (lowerDrop >= minSameDetailLowerDrop)
+                    {
+                        sameDetailLowerOverlap = true;
+                        deepestSameDetailLowerY = std::min(deepestSameDetailLowerY, triSupportY);
+                        ++sameDetailQualifiedLowerCandidates;
+                    }
+                }
+            }
+
+            if (triIndex == support.triIndex)
+                continue;
+
+            float triSupportY = 0.0f;
+            float triSupportRecastX = 0.0f;
+            float triSupportRecastZ = 0.0f;
+            float triDistance2D = std::numeric_limits<float>::max();
+            bool triProjectedInside = false;
+            if (!TryResolveTriangleSupportY(
+                    a, b, c,
+                    anchorRecastX, anchorRecastZ,
+                    resolveExtent,
+                    triSupportY, triSupportRecastX, triSupportRecastZ,
+                    triDistance2D, triProjectedInside))
+            {
+                continue;
+            }
+
+            if (triSupportY < supportFloorMinY || triSupportY > supportFloorMaxY)
+                continue;
+            if (triDistance2D < minTargetDistance2D || triDistance2D > maxTargetDistance2D)
+                continue;
+            if (triDistance2D <= bestTargetDistance2D)
+                continue;
+
+            bestTargetTri = triIndex;
+            bestTargetDistance2D = triDistance2D;
+            bestTargetSupportY = triSupportY;
+            bestTargetRecastX = triSupportRecastX;
+            bestTargetRecastZ = triSupportRecastZ;
+        }
+
+        if (requireSameDetailLowerDrop && !sameDetailLowerOverlap)
+            continue;
+        if (bestTargetTri < 0)
+            continue;
+
+        const float deltaX = bestTargetRecastX - anchorRecastX;
+        const float deltaZ = bestTargetRecastZ - anchorRecastZ;
+        const float bridgeLength = sqrtf(deltaX * deltaX + deltaZ * deltaZ);
+        if (bridgeLength <= 1.0e-4f)
+            continue;
+
+        const float invBridgeLength = 1.0f / bridgeLength;
+        const float tangentX = deltaX * invBridgeLength;
+        const float tangentZ = deltaZ * invBridgeLength;
+        const float perpX = -tangentZ * bridgeHalfWidth;
+        const float perpZ = tangentX * bridgeHalfWidth;
+
+        const int firstTri = meshData.solidTris.size() / 3;
+        const int firstVert = meshData.solidVerts.size() / 3;
+
+        meshData.solidVerts.append(anchorRecastX + perpX);
+        meshData.solidVerts.append(support.supportY);
+        meshData.solidVerts.append(anchorRecastZ + perpZ);
+        meshData.solidVerts.append(bestTargetRecastX + perpX);
+        meshData.solidVerts.append(bestTargetSupportY);
+        meshData.solidVerts.append(bestTargetRecastZ + perpZ);
+        meshData.solidVerts.append(bestTargetRecastX - perpX);
+        meshData.solidVerts.append(bestTargetSupportY);
+        meshData.solidVerts.append(bestTargetRecastZ - perpZ);
+        meshData.solidVerts.append(anchorRecastX - perpX);
+        meshData.solidVerts.append(support.supportY);
+        meshData.solidVerts.append(anchorRecastZ - perpZ);
+
+        meshData.solidTris.append(firstVert + 0);
+        meshData.solidTris.append(firstVert + 1);
+        meshData.solidTris.append(firstVert + 2);
+        meshData.solidTris.append(firstVert + 0);
+        meshData.solidTris.append(firstVert + 2);
+        meshData.solidTris.append(firstVert + 3);
+
+        const int lastTri = meshData.solidTris.size() / 3;
+        meshData.AddSourceTriangleRange(firstTri, lastTri, support.source);
+        meshData.AddDetailTriangleRange(firstTri, lastTri, support.source, detailLabel);
+
+        const unsigned char supportArea = rasterAreas[support.triIndex];
+        rasterAreas.push_back(supportArea);
+        rasterAreas.push_back(supportArea);
+        injectedTriangles += 2;
+
+        if (logDiagnostics)
+        {
+            printf("[SRC-FOOTPRINT-BRIDGE] anchor=(%.3f,%.3f,%.3f) detail=%s targetTri=%d target=(%.3f,%.3f,%.3f) targetDist2D=%.3f bridgeHalfWidth=%.3f requireLowerDrop=%d cellCandidates=%d resolvedCandidates=%d qualifiedLowerCandidates=%d sameDetailLowerMinY=%.3f added=2\n",
+                support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                detailLabel.c_str(),
+                bestTargetTri,
+                bestTargetRecastZ, bestTargetRecastX, bestTargetSupportY,
+                bestTargetDistance2D,
+                bridgeHalfWidth,
+                requireSameDetailLowerDrop ? 1 : 0,
+                sameDetailCellCandidates,
+                sameDetailResolvedCandidates,
+                sameDetailQualifiedLowerCandidates,
+                deepestSameDetailLowerY);
+        }
+    }
+
+    return injectedTriangles;
+}
+
 // [WWoW-DIVERGENCE] 2026-05-25: tile 1:40,29 still shows a source-backed
 // support footprint hole at 1523.8 that is already present during rasterize:
 // nearby support cells survive, but the exact anchor neighborhood never gains
@@ -8670,12 +8890,33 @@ namespace MMAP
             jsonTileConfig, "preRasterizeCreateAnchorSourceFootprintCapMinSameDetailLowerDrop", 1.25f);
         const bool preRasterizeCreateAnchorSourceFootprintCapRequireSameDetailLowerDrop =
             jsonTileConfig.value("preRasterizeCreateAnchorSourceFootprintCapRequireSameDetailLowerDrop", true);
+        const std::vector<AnchorPolyStackCoord> preRasterizeCreateAnchorSourceFootprintBridgeCoords =
+            ParseAnchorCoords(jsonTileConfig, "preRasterizeCreateAnchorSourceFootprintBridgeCoordsWow");
+        const float preRasterizeCreateAnchorSourceFootprintBridgeHalfWidth = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeCreateAnchorSourceFootprintBridgeHalfWidth", 0.0f);
+        const float preRasterizeCreateAnchorSourceFootprintBridgeMaxTargetDistance2D = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeCreateAnchorSourceFootprintBridgeMaxTargetDistance2D", 2.0f);
+        const float preRasterizeCreateAnchorSourceFootprintBridgeMinTargetDistance2D = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeCreateAnchorSourceFootprintBridgeMinTargetDistance2D", 1.0f);
+        const float preRasterizeCreateAnchorSourceFootprintBridgeMinSameDetailLowerDrop = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeCreateAnchorSourceFootprintBridgeMinSameDetailLowerDrop", 1.25f);
+        const bool preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop =
+            jsonTileConfig.value("preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop", true);
         const std::vector<AnchorSourceSupportProbe> preRasterizeCreateAnchorSourceFootprintCapProbes =
             (!preRasterizeCreateAnchorSourceFootprintCapCoords.empty() &&
                 preRasterizeCreateAnchorSourceFootprintCapHalfExtent > 0.0f)
                 ? ResolveAnchorSourceSupportProbes(
                     meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
                     anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, preRasterizeCreateAnchorSourceFootprintCapCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
+                    logAnchorStageDiagnostics)
+                : std::vector<AnchorSourceSupportProbe>();
+        const std::vector<AnchorSourceSupportProbe> preRasterizeCreateAnchorSourceFootprintBridgeProbes =
+            (!preRasterizeCreateAnchorSourceFootprintBridgeCoords.empty() &&
+                preRasterizeCreateAnchorSourceFootprintBridgeHalfWidth > 0.0f)
+                ? ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, preRasterizeCreateAnchorSourceFootprintBridgeCoords,
                     borrowMissingAnchorSourceSupportFromNeighbors,
                     logAnchorStageDiagnostics)
                 : std::vector<AnchorSourceSupportProbe>();
@@ -8703,6 +8944,33 @@ namespace MMAP
                 tTriCount = meshData.solidTris.size() / 3;
                 printf("[SRC-FOOTPRINT-CAP] map=%u tile=%u,%u: injected %d source-footprint cap triangle(s)\n",
                     mapID, tileX, tileY, injectedSourceCapTriangles);
+            }
+        }
+        if (!preRasterizeCreateAnchorSourceFootprintBridgeProbes.empty() &&
+            preRasterizeCreateAnchorSourceFootprintBridgeHalfWidth > 0.0f)
+        {
+            const int injectedSourceBridgeTriangles = InjectAnchorSourceFootprintBridges(
+                meshData,
+                config,
+                tVerts,
+                tTris,
+                rasterAreas,
+                tTriCount,
+                preRasterizeCreateAnchorSourceFootprintBridgeProbes,
+                preRasterizeCreateAnchorSourceFootprintBridgeHalfWidth,
+                preRasterizeCreateAnchorSourceFootprintBridgeMaxTargetDistance2D,
+                preRasterizeCreateAnchorSourceFootprintBridgeMinTargetDistance2D,
+                preRasterizeCreateAnchorSourceFootprintBridgeMinSameDetailLowerDrop,
+                preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop,
+                logAnchorStageDiagnostics);
+            if (injectedSourceBridgeTriangles > 0)
+            {
+                tVerts = meshData.solidVerts.getCArray();
+                tVertCount = meshData.solidVerts.size() / 3;
+                tTris = meshData.solidTris.getCArray();
+                tTriCount = meshData.solidTris.size() / 3;
+                printf("[SRC-FOOTPRINT-BRIDGE] map=%u tile=%u,%u: injected %d source-footprint bridge triangle(s)\n",
+                    mapID, tileX, tileY, injectedSourceBridgeTriangles);
             }
         }
         const std::vector<AnchorSourceSupportProbe> preRasterizePromoteAnchorSourceSupportProbes =
@@ -9918,6 +10186,12 @@ namespace MMAP
             { "preRasterizeCreateAnchorSourceFootprintCapMaxSupportDistance2D", 0.35f },
             { "preRasterizeCreateAnchorSourceFootprintCapMinSameDetailLowerDrop", 1.25f },
             { "preRasterizeCreateAnchorSourceFootprintCapRequireSameDetailLowerDrop", true },
+            { "preRasterizeCreateAnchorSourceFootprintBridgeCoordsWow", json::array() },
+            { "preRasterizeCreateAnchorSourceFootprintBridgeHalfWidth", 0.0f },
+            { "preRasterizeCreateAnchorSourceFootprintBridgeMaxTargetDistance2D", 2.0f },
+            { "preRasterizeCreateAnchorSourceFootprintBridgeMinTargetDistance2D", 1.0f },
+            { "preRasterizeCreateAnchorSourceFootprintBridgeMinSameDetailLowerDrop", 1.25f },
+            { "preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop", true },
             { "traceSourceFootprintCandidateCoordsWow", json::array() },
             { "traceSourceFootprintCandidateLimit", 8 },
             { "contourBuildSeedAnchorSupportCoordsWow", json::array() },
