@@ -1058,12 +1058,17 @@ function Export-OgCity {
         @{ Source = (Join-Path $latest 'mmap\og_city_tile_3928_mmapgen_polymesh.obj'); Target = 'og_city_tile_3928_mmapgen_polymesh.obj'; Required = $false },
         @{ Source = (Join-Path $latest 'mmap\og_city_tile_3929_mmapgen_polymesh.obj'); Target = 'og_city_tile_3929_mmapgen_polymesh.obj'; Required = $false },
         @{ Source = (Join-Path $latest 'mmap\og_city_tile_4028_mmapgen_polymesh.obj'); Target = 'og_city_tile_4028_mmapgen_polymesh.obj'; Required = $false },
-        @{ Source = (Join-Path $latest 'mmap\og_city_tile_4029_mmapgen_polymesh.obj'); Target = 'og_city_tile_4029_mmapgen_polymesh.obj'; Required = $false }
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_4029_mmapgen_polymesh.obj'); Target = 'og_city_tile_4029_mmapgen_polymesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_3928_mmapgen_detailmesh.obj'); Target = 'og_city_tile_3928_mmapgen_detailmesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_3929_mmapgen_detailmesh.obj'); Target = 'og_city_tile_3929_mmapgen_detailmesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_4028_mmapgen_detailmesh.obj'); Target = 'og_city_tile_4028_mmapgen_detailmesh.obj'; Required = $false },
+        @{ Source = (Join-Path $latest 'mmap\og_city_tile_4029_mmapgen_detailmesh.obj'); Target = 'og_city_tile_4029_mmapgen_detailmesh.obj'; Required = $false }
     ) @(
         @{ Name = 'og_city_source_tiles.gset'; Title = 'Orgrimmar City Source Tiles'; Files = @('og_city_tile_3928_source_full.obj', 'og_city_tile_3929_source_full.obj', 'og_city_tile_4028_source_full.obj', 'og_city_tile_4029_source_full.obj') },
         @{ Name = 'og_city_runtime_tiles.gset'; Title = 'Orgrimmar City Runtime Tiles'; Files = @('og_city_tile_3928_runtime_full.obj', 'og_city_tile_3929_runtime_full.obj', 'og_city_tile_4028_runtime_full.obj', 'og_city_tile_4029_runtime_full.obj') },
         @{ Name = 'og_city_mmapgen_generated_tiles.gset'; Title = 'Orgrimmar City MmapGen Generated Tiles'; Files = @('og_city_tile_3928_mmapgen_generated_full.obj', 'og_city_tile_3929_mmapgen_generated_full.obj', 'og_city_tile_4028_mmapgen_generated_full.obj', 'og_city_tile_4029_mmapgen_generated_full.obj') },
-        @{ Name = 'og_city_mmapgen_polymesh_tiles.gset'; Title = 'Orgrimmar City MmapGen Polymesh Tiles'; Files = @('og_city_tile_3928_mmapgen_polymesh.obj', 'og_city_tile_3929_mmapgen_polymesh.obj', 'og_city_tile_4028_mmapgen_polymesh.obj', 'og_city_tile_4029_mmapgen_polymesh.obj') }
+        @{ Name = 'og_city_mmapgen_polymesh_tiles.gset'; Title = 'Orgrimmar City MmapGen Polymesh Tiles'; Files = @('og_city_tile_3928_mmapgen_polymesh.obj', 'og_city_tile_3929_mmapgen_polymesh.obj', 'og_city_tile_4028_mmapgen_polymesh.obj', 'og_city_tile_4029_mmapgen_polymesh.obj') },
+        @{ Name = 'og_city_mmapgen_detailmesh_tiles.gset'; Title = 'Orgrimmar City MmapGen Detail Mesh Tiles'; Files = @('og_city_tile_3928_mmapgen_detailmesh.obj', 'og_city_tile_3929_mmapgen_detailmesh.obj', 'og_city_tile_4028_mmapgen_detailmesh.obj', 'og_city_tile_4029_mmapgen_detailmesh.obj') }
     )
 
     if (Test-Path (Join-Path $latest '_work')) {
