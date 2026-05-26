@@ -463,7 +463,8 @@ namespace BotRunner
                                     _botTasks,
                                     _container,
                                     _behaviorConfig,
-                                    EnqueueDiagnosticMessage),
+                                    EnqueueDiagnosticMessage,
+                                    DiagLog),
                                 cancellationToken);
                             await _taskDriver.DriveOneTickAsync(_botTasks, _pushedNotified, taskContext, cancellationToken)
                                 .ConfigureAwait(false);
@@ -725,7 +726,8 @@ namespace BotRunner
                 _botTasks,
                 _container,
                 _behaviorConfig,
-                EnqueueDiagnosticMessage);
+                EnqueueDiagnosticMessage,
+                DiagLog);
 
             _botTasks.Push(new Tasks.LoadoutTask(
                 context,
@@ -1076,7 +1078,7 @@ namespace BotRunner
             if ((DateTime.UtcNow - _lastDeathRecoveryPush).TotalSeconds < 5)
                 return;
 
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage, DiagLog);
 
             if (canReleaseSpirit)
             {
@@ -1164,7 +1166,7 @@ namespace BotRunner
                 return;
             }
 
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage, DiagLog);
 
             try
             {

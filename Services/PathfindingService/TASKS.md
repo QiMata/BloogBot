@@ -168,7 +168,54 @@
   service startup or deterministic tests for a full session timeout.
 
 ## Session Handoff
-- Last updated: 2026-05-26 (dual-FG live deck-lip rerun after `1523.8` promotion)
+- Last updated: 2026-05-26 (local fixture pathfinding port handoff fixed; focused deck-lip live red moved to later local validation)
+
+### 2026-05-26 - local fixture pathfinding port handoff fixed; current live red is later `NavigationPath` rejection
+- Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+  baseline, prove the focused deck-lip live proof is really using the
+  fixture-owned local PathfindingService instead of Docker `9002`, and isolate
+  the next runtime failure after that handoff is corrected.
+- Pass result: `shipped a live-fixture stability fix; the focused
+  DeckLipClimbFromGruntToFrezza live proof now connects StateManager and
+  BotRunner to the intended local PathfindingService on 127.0.0.1:9020, moves
+  off the Grunt-base spawn, and fails later because BotRunner rejects a
+  returned raw Detour path near (1351.3,-4526.3,34.5) rather than because the
+  service hangs or the promoted tile is missing the route`.
+- Last delta:
+  - Added `BotServiceFixture.ResolveCurrentPathfindingEndpoint()` so
+    `WWOW_TEST_PATHFINDING_IP` / `WWOW_TEST_PATHFINDING_PORT` are resolved at
+    use time instead of once during `MangosServerFixture` construction.
+  - Switched live fixture pathfinding consumers and monitoring logic off the
+    stale constructor snapshot; the live harness now waits on, logs, and
+    injects the currently-resolved endpoint into StateManager.
+  - Added `PathfindingFixtureConfigurationTests` so the env override path and
+    the default Docker fallback remain deterministic.
+  - Reused the existing BotRunner immediate diagnostics to prove the failure
+    surface moved from "no first travel diagnostic / no movement" to "service
+    returned a path but `IsPathUsable(...)` rejected it".
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingFixtureConfigurationTests|FullyQualifiedName~BgOnlyBotFixtureConfigurationTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~IBotTaskContractTests|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_pathfinding_port_handoff_regression_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (27/27)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_tauren_fg_20260526_localpf_portfix_probe_fix3.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`59s`, but no longer at the original spawn anchor.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_pathfinding_port_handoff_regression_20260526.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_tauren_fg_20260526_localpf_portfix_probe_fix3.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-Frezza-likely-LPATHFG1-client-19028-win0-20260526_184905.png`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+  - `D:\World of Warcraft\WWoWLogs\fg_LPATHFG120260526.log`
+- Practical read:
+  - This was a fixture/orchestration bug, not a tile regression: the local
+    PathfindingService launched on `9020`, but before the fix StateManager was
+    still waiting on and injecting Docker `9002` because the config snapshot
+    was captured too early.
+  - After the fix the rerun proves end-to-end `9020` usage and the service
+    returns a path quickly at the new stall anchor:
+    - smooth request: `corners=5 result=raw_detour blockedReason=none`
+    - unsmoothed request: `corners=2 result=raw_detour blockedReason=none`
+  - The next runtime gap is local to BotRunner validation:
+    `NavigationPath.IsPathUsable(...)` rejects both returned routes and
+    `GetNextWaypoint` becomes null at
+    `start=(1351.3,-4526.3,34.5)` -> `end=(1320.1,-4653.2,53.9)`.
+- Next command: `Select-String -Path 'D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log','D:\World of Warcraft\WWoWLogs\fg_LPATHFG120260526.log' -Pattern '\[NAV_PATH\]|\[NAV-DIAG\]|Path rejected by IsPathUsable'`
 
 ### 2026-05-26 - live deck-lip rerun is still red for both Tauren FG and Shodan FG
 - Active task: reconcile the promoted `1523.8` / tile `40,29` bake win with

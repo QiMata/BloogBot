@@ -181,6 +181,12 @@ public class BotServiceFixture : IAsyncLifetime
     private static string? ResolveDockerParityDataDir()
         => SceneDataParityPaths.ResolveDockerHostDataRoot();
 
+    public static (string IpAddress, int Port) ResolveCurrentPathfindingEndpoint()
+    {
+        var config = IntegrationTestConfig.FromEnvironment();
+        return (config.PathfindingServiceIp, config.PathfindingServicePort);
+    }
+
     public static TimeSpan GetGlobalMutexWaitTimeout()
     {
         var rawValue = Environment.GetEnvironmentVariable(MutexWaitMinutesEnvVar);
@@ -334,10 +340,11 @@ public class BotServiceFixture : IAsyncLifetime
             // Check if PathfindingService is available on its external endpoint.
             // Tests that require pathfinding (corpse run, movement, gathering) should skip when unavailable.
             PathfindingServiceReady = await WaitForPathfindingServiceAsync();
-            Log($"  PathfindingService ({_mangosFixture.Config.PathfindingServicePort}): {PathfindingServiceReady}");
+            var pathfindingEndpoint = ResolveCurrentPathfindingEndpoint();
+            Log($"  PathfindingService ({pathfindingEndpoint.Port}): {PathfindingServiceReady}");
             if (!PathfindingServiceReady)
             {
-                Log($"  [PathfindingService] WARNING: PathfindingService is not available on port {_mangosFixture.Config.PathfindingServicePort}.");
+                Log($"  [PathfindingService] WARNING: PathfindingService is not available on port {pathfindingEndpoint.Port}.");
                 Log("  [PathfindingService] Likely cause: WWOW_DATA_DIR is not set or does not contain mmaps/, maps/, vmaps/ subdirectories.");
                 Log("  [PathfindingService] Set WWOW_DATA_DIR to your nav data directory (e.g., D:\\World of Warcraft) and rebuild.");
                 Log("  [PathfindingService] Tests requiring pathfinding will be skipped.");
@@ -422,8 +429,9 @@ public class BotServiceFixture : IAsyncLifetime
                     // tests will fail with mysterious timeouts.
                     // Use TCP connect check instead of bind check — Docker-forwarded ports
                     // appear "free" to IsPortInUse even when the container is healthy.
-                    var pathfindingMonitorPort = _mangosFixture.Config.PathfindingServicePort;
-                    if (PathfindingServiceReady && !await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", pathfindingMonitorPort, 2000))
+                    var pathfindingEndpoint = ResolveCurrentPathfindingEndpoint();
+                    var pathfindingMonitorPort = pathfindingEndpoint.Port;
+                    if (PathfindingServiceReady && !await _mangosFixture.Health.IsServiceAvailableAsync(pathfindingEndpoint.IpAddress, pathfindingMonitorPort, 2000))
                     {
                         PathfindingServiceReady = false;
                         var msg = $"PathfindingService (port {pathfindingMonitorPort}) stopped responding at {DateTime.Now:HH:mm:ss}";
@@ -892,7 +900,9 @@ public class BotServiceFixture : IAsyncLifetime
     /// </summary>
     private async Task<bool> WaitForPathfindingServiceAsync()
     {
-        var pathfindingPort = _mangosFixture.Config.PathfindingServicePort;
+        var pathfindingEndpoint = ResolveCurrentPathfindingEndpoint();
+        var pathfindingIp = pathfindingEndpoint.IpAddress;
+        var pathfindingPort = pathfindingEndpoint.Port;
         const int maxWaitSeconds = 30;
 
         // If port is already in use, it's ready
@@ -905,7 +915,7 @@ public class BotServiceFixture : IAsyncLifetime
         Log($"  [PathfindingService] Waiting up to {maxWaitSeconds}s for port {pathfindingPort}...");
         for (int i = 0; i < maxWaitSeconds; i++)
         {
-            var ready = await _mangosFixture.Health.IsServiceAvailableAsync("127.0.0.1", pathfindingPort, 1000);
+            var ready = await _mangosFixture.Health.IsServiceAvailableAsync(pathfindingIp, pathfindingPort, 1000);
             if (ready)
             {
                 Log($"  [PathfindingService] Ready on port {pathfindingPort} after {i + 1}s.");
@@ -1073,8 +1083,10 @@ public class BotServiceFixture : IAsyncLifetime
             // Force the minimum endpoint config required for deterministic live test startup.
             psi.Environment["MangosSOAP__IpAddress"] =
                 $"http://127.0.0.1:{_mangosFixture.Config.SoapPort}";
-            psi.Environment["PathfindingService__IpAddress"] = _mangosFixture.Config.PathfindingServiceIp;
-            psi.Environment["PathfindingService__Port"] = _mangosFixture.Config.PathfindingServicePort.ToString();
+            var pathfindingEndpoint = ResolveCurrentPathfindingEndpoint();
+            psi.Environment["PathfindingService__IpAddress"] = pathfindingEndpoint.IpAddress;
+            psi.Environment["PathfindingService__Port"] = pathfindingEndpoint.Port.ToString();
+            Log($"  [StateManager] PathfindingService endpoint={pathfindingEndpoint.IpAddress}:{pathfindingEndpoint.Port}");
             psi.Environment["SceneDataService__IpAddress"] =
                 Environment.GetEnvironmentVariable("WWOW_SCENE_DATA_IP") ?? "127.0.0.1";
             psi.Environment["SceneDataService__Port"] =

@@ -77,7 +77,7 @@ namespace BotRunner
 
         private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
         {
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage, DiagLog);
             var builder = new BehaviourTreeBuilder()
                 .Sequence("StateManager Action Sequence");
 
@@ -1235,6 +1235,9 @@ namespace BotRunner
                             var target = new Position(targetX, targetY, targetZ);
                             if (_objectManager.Player.MapId != targetMapId)
                             {
+                                context.AddImmediateDiagnostic(
+                                    $"[TRAVEL_DISPATCH] cross-map stage playerMap={_objectManager.Player.MapId} " +
+                                    $"targetMap={targetMapId} target=({targetX:F1},{targetY:F1},{targetZ:F1}) stack={_botTasks.Count}");
                                 var options = new TravelOptions
                                 {
                                     PlayerFaction = TravelFaction.Horde,
@@ -1255,6 +1258,9 @@ namespace BotRunner
                                         targetY,
                                         targetZ);
                                 }
+
+                                context.AddImmediateDiagnostic(
+                                    $"[TRAVEL_DISPATCH] cross-map upsert={travelResult} stack={_botTasks.Count}");
 
                                 return BehaviourTreeStatus.Success;
                             }

@@ -28,6 +28,56 @@ The fixture resolves its roster from `WWOW_LONG_PATHING_SETTINGS_PATH` when
 that env var is set; otherwise it falls back to the checked-in
 `LongPathing.config.json`.
 
+## 2026-05-26 Focused Live Status
+
+The current focused `DeckLipClimbFromGruntToFrezza` live proof is no longer
+blocked at the Grunt-base spawn by a missing local-dev PathfindingService
+handoff. The relevant bounded fix was in the live fixture/orchestration layer:
+the fixture spawned `PathfindingService.exe` on `127.0.0.1:9020`, but
+StateManager and direct live-test probes were still using the constructor-time
+default `127.0.0.1:9002` until `BotServiceFixture` was changed to resolve the
+current endpoint from environment at use time.
+
+Focused verification commands and results:
+
+- `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingFixtureConfigurationTests|FullyQualifiedName~BgOnlyBotFixtureConfigurationTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~IBotTaskContractTests|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_pathfinding_port_handoff_regression_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner`
+  Result: `passed (27/27)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_tauren_fg_20260526_localpf_portfix_probe_fix3.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+  Result: `failed (1/1)` after ~`59s`, but the failure moved deeper into the
+  route and now proves the local service is really in play.
+
+Exact artifact paths for this slice:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_pathfinding_port_handoff_regression_20260526.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_tauren_fg_20260526_localpf_portfix_probe_fix3.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-Frezza-likely-LPATHFG1-client-19028-win0-20260526_184905.png`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\`
+- `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- `D:\World of Warcraft\WWoWLogs\fg_LPATHFG120260526.log`
+
+Important proof points from the rerun:
+
+- `PathfindingTestFixture` launched `PathfindingService.exe` on
+  `127.0.0.1:9020` and recorded `ready on port 9020`.
+- `BotServiceFixture` logged
+  `[StateManager] PathfindingService endpoint=127.0.0.1:9020`.
+- The bot processes attempted and established `127.0.0.1:9020` connections
+  instead of Docker `9002`.
+- The focused live proof moved off the original spawn stall
+  `(1332.8,-4633.4,24.0)` and advanced through multiple walk-leg waypoints.
+- The current red is later: near `anchor=(1352.0,-4527.1,35.5)` /
+  `current=(1351.3,-4526.3,34.5)` the local service returns:
+  - smoothed request: `corners=5 result=raw_detour blockedReason=none`
+  - unsmoothed request: `corners=2 result=raw_detour blockedReason=none`
+- BotRunner then rejects both returned routes locally:
+  - `[NavigationPath] Path rejected by IsPathUsable: raw=5 ... start=(1351.3,-4526.3,34.5) end=(1320.1,-4653.2,53.9)`
+  - `[NavigationPath] Path rejected by IsPathUsable: raw=2 ...`
+  - `[NAV-DIAG] TryNavigateToward: GetNextWaypoint returned null. pos=(1351.3,-4526.3,34.5), dest=(1320.1,-4653.2,53.9), map=1`
+
+Treat the next iteration as a BotRunner local route-validation problem on the
+current promoted tile, not as a missing local pathfinding service or a
+Tauren-vs-Gnome capsule split.
+
 ## Test Methods
 
 - `CrossroadsToUndercity_UsesFlightAndZeppelin`: stages the Horde target at

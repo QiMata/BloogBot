@@ -9,6 +9,7 @@ using Serilog;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -91,7 +92,22 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
         float minWaypointDistance = 0f,
         bool allowDirectRecovery = false)
     {
+        var traceImmediateNavigation = routePolicy == NavigationRoutePolicy.LongTravel;
+        if (traceImmediateNavigation)
+        {
+            BotContext.AddImmediateDiagnostic(
+                $"[NAV_EXEC] try-enter route={routePolicy} dest=({destination.X:F1},{destination.Y:F1},{destination.Z:F1})");
+        }
+
         var player = ObjectManager.Player;
+        if (traceImmediateNavigation)
+        {
+            var playerSummary = player?.Position == null
+                ? "null"
+                : $"map={player.MapId} pos=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1})";
+            BotContext.AddImmediateDiagnostic($"[NAV_EXEC] player-ready {playerSummary}");
+        }
+
         if (player?.Position == null)
         {
             Log.Warning("[NAV-DIAG] TryNavigateToward: player or position is null");
@@ -100,15 +116,44 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
 
         if (_navPath == null || _navPathPolicy != routePolicy)
         {
+            if (traceImmediateNavigation)
+            {
+                BotContext.AddImmediateDiagnostic(
+                    $"[NAV_EXEC] navpath-create enter cached={_navPath != null} policy={_navPathPolicy} next={routePolicy}");
+            }
+
             _navPath = NavigationPathFactory.Create(
                 Container.PathfindingClient,
                 ObjectManager,
                 routePolicy,
-                diagnosticSink: BotContext.AddDiagnosticMessage);
+                diagnosticSink: traceImmediateNavigation
+                    ? BotContext.AddImmediateDiagnostic
+                    : BotContext.AddDiagnosticMessage);
             _navPathPolicy = routePolicy;
+
+            if (traceImmediateNavigation)
+            {
+                BotContext.AddImmediateDiagnostic(
+                    $"[NAV_EXEC] navpath-create exit policy={_navPathPolicy} created={_navPath != null}");
+            }
         }
 
+        if (traceImmediateNavigation)
+        {
+            BotContext.AddImmediateDiagnostic("[NAV_EXEC] physics-read enter");
+        }
         var wallNormal = ObjectManager.PhysicsWallNormal2D;
+        if (traceImmediateNavigation)
+        {
+            BotContext.AddImmediateDiagnostic(
+                $"[NAV_EXEC] physics-read exit hitWall={ObjectManager.PhysicsHitWall} " +
+                $"blocked={ObjectManager.PhysicsBlockedFraction:F2} normal=({wallNormal.X:F2},{wallNormal.Y:F2})");
+            BotContext.AddImmediateDiagnostic(
+                $"[NAV_EXEC] waypoint-query enter map={player.MapId} start=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1}) " +
+                $"dest=({destination.X:F1},{destination.Y:F1},{destination.Z:F1})");
+        }
+
+        var waypointStopwatch = traceImmediateNavigation ? Stopwatch.StartNew() : null;
         var waypoint = _navPath.GetNextWaypoint(
             player.Position,
             destination,
@@ -121,6 +166,15 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
             blockedFraction: ObjectManager.PhysicsBlockedFraction,
             currentTransportGuid: player.TransportGuid,
             allowDirectRecovery: allowDirectRecovery);
+        waypointStopwatch?.Stop();
+        if (traceImmediateNavigation)
+        {
+            var waypointSummary = waypoint == null
+                ? "null"
+                : $"({waypoint.X:F1},{waypoint.Y:F1},{waypoint.Z:F1})";
+            BotContext.AddImmediateDiagnostic(
+                $"[NAV_EXEC] waypoint-query exit elapsedMs={waypointStopwatch!.ElapsedMilliseconds} waypoint={waypointSummary}");
+        }
 
         if (_navPath.ShouldHoldPositionForTransport(player.Position, waypoint))
         {

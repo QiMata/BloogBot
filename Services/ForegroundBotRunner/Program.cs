@@ -7,6 +7,7 @@ using Serilog;
 using Serilog.Events;
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.IO;
 using BotRunner;
 using ForegroundBotRunner.Diagnostics;
@@ -135,6 +136,7 @@ public static class Program
             {
                 File.AppendAllText(logPath, $"\n=== StartInjected() at {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
                 File.AppendAllText(logPath, $"BaseDir: {baseDir}\n");
+                LogManagedAssemblyFootprint(logPath);
             }
 
             Console.WriteLine("=== ForegroundBotRunner StartInjected() - Running inside WoW ===");
@@ -180,6 +182,56 @@ public static class Program
             Console.WriteLine($"Fatal error in StartInjected(): {ex}");
             try { if (!string.IsNullOrEmpty(logPath)) File.AppendAllText(logPath, $"EXCEPTION: {ex}\n"); } catch { }
         }
+    }
+
+    private static void LogManagedAssemblyFootprint(string logPath)
+    {
+        try
+        {
+            AppendAssemblyIdentity(logPath, "ForegroundBotRunner", typeof(Program).Assembly);
+            AppendAssemblyIdentity(logPath, "BotRunner", typeof(BotRunnerService).Assembly);
+            AppendAssemblyIdentity(logPath, "BotTask", typeof(BotRunner.Tasks.BotTask).Assembly);
+            File.AppendAllText(
+                logPath,
+                $"Env FOREGROUNDBOT_DLL_PATH={Environment.GetEnvironmentVariable("FOREGROUNDBOT_DLL_PATH") ?? "(null)"}{Environment.NewLine}");
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                File.AppendAllText(logPath, $"Assembly footprint logging failed: {ex}{Environment.NewLine}");
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private static void AppendAssemblyIdentity(string logPath, string label, Assembly assembly)
+    {
+        var location = "(dynamic)";
+        var lastWriteUtc = "(unknown)";
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(assembly.Location))
+            {
+                location = assembly.Location;
+                lastWriteUtc = File.Exists(location)
+                    ? File.GetLastWriteTimeUtc(location).ToString("yyyy-MM-dd HH:mm:ss")
+                    : "(missing)";
+            }
+        }
+        catch
+        {
+        }
+
+        var identity =
+            $"{label}: FullName={assembly.FullName}; " +
+            $"Location={location}; " +
+            $"LastWriteUtc={lastWriteUtc}; " +
+            $"Mvid={assembly.ManifestModule.ModuleVersionId}{Environment.NewLine}";
+        File.AppendAllText(logPath, identity);
     }
 
     public static IHostBuilder CreateHostBuilder(string[] args) =>

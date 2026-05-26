@@ -15,6 +15,97 @@ namespace BotRunner.Tests.Travel;
 public class TravelTaskTests
 {
     [Fact]
+    public void Update_GruntBaseDeckLipSlice_EmitsImmediatePlanAndWalkNavBoundaries()
+    {
+        var taskStack = new Stack<IBotTask>();
+        var diagnostics = new List<string>();
+        var immediateDiagnostics = new List<string>();
+
+        var playerPosition = new Position(1332.8f, -4633.4f, 24.0f);
+        var undercityTarget = new Position(1584.0f, 242.0f, -52.0f);
+        const uint mapId = 1u;
+        const ulong transportGuid = 0UL;
+        var movementFlags = MovementFlags.MOVEFLAG_NONE;
+
+        var player = new Mock<IWoWLocalPlayer>(MockBehavior.Loose);
+        player.SetupGet(p => p.MapId).Returns(mapId);
+        player.SetupGet(p => p.Position).Returns(() => playerPosition);
+        player.SetupGet(p => p.MovementFlags).Returns(() => movementFlags);
+        player.SetupGet(p => p.TransportGuid).Returns(() => transportGuid);
+        player.Setup(p => p.GetFacingForPosition(It.IsAny<Position>())).Returns(0f);
+
+        var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
+        objectManager.SetupGet(o => o.Player).Returns(player.Object);
+        objectManager.SetupGet(o => o.PhysicsHitWall).Returns(false);
+        objectManager.SetupGet(o => o.PhysicsBlockedFraction).Returns(1f);
+        objectManager.SetupGet(o => o.PhysicsWallNormal2D).Returns((0f, 0f));
+
+        var context = new Mock<IBotContext>(MockBehavior.Loose);
+        context.SetupGet(c => c.ObjectManager).Returns(objectManager.Object);
+        context.SetupGet(c => c.BotTasks).Returns(taskStack);
+        context.SetupGet(c => c.Config).Returns(new BotBehaviorConfig());
+        context.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(diagnostics.Add);
+        context.Setup(c => c.AddImmediateDiagnostic(It.IsAny<string>()))
+            .Callback<string>(immediateDiagnostics.Add);
+
+        var pathfinding = new Mock<PathfindingClient>(MockBehavior.Loose);
+        pathfinding
+            .Setup(p => p.GetPathResult(
+                It.IsAny<uint>(),
+                It.IsAny<Position>(),
+                It.IsAny<Position>(),
+                It.IsAny<IReadOnlyList<DynamicObjectProto>?>(),
+                It.IsAny<bool>(),
+                It.IsAny<Race>(),
+                It.IsAny<Gender>()))
+            .Returns((uint _, Position start, Position end, IReadOnlyList<DynamicObjectProto>? _, bool _, Race _, Gender _) =>
+                CreateSupportedPathResult(start, end));
+        var container = new Mock<IDependencyContainer>(MockBehavior.Loose);
+        container.SetupGet(c => c.PathfindingClient).Returns(pathfinding.Object);
+        context.SetupGet(c => c.Container).Returns(container.Object);
+
+        var task = new TravelTask(
+            context.Object,
+            0,
+            undercityTarget,
+            new TravelOptions
+            {
+                PlayerFaction = TravelFaction.Horde,
+                DiscoveredFlightNodes = [25u, 23u]
+            },
+            arrivalRadius: 15f);
+        taskStack.Push(task);
+
+        task.Update();
+
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[TRAVEL_EXEC] init enter", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[TRAVEL_EXEC] plan-route enter", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[TRAVEL_EXEC] plan-route exit", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[TRAVEL_EXEC] walk-nav enter leg=0", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] try-enter route=LongTravel", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] player-ready map=1 pos=(1332.8,-4633.4,24.0)", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] navpath-create enter", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] navpath-create exit policy=LongTravel created=True", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] physics-read enter", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] physics-read exit hitWall=False blocked=1.00 normal=(0.00,0.00)", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] waypoint-query enter map=1", StringComparison.Ordinal));
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[TRAVEL_EXEC] walk-nav exit leg=0 nav=True", StringComparison.Ordinal));
+        Assert.Contains(diagnostics, message => message.Contains("[TRAVEL_PLAN]", StringComparison.Ordinal));
+        pathfinding.Verify(
+            p => p.GetPathResult(
+                mapId,
+                It.IsAny<Position>(),
+                It.IsAny<Position>(),
+                It.IsAny<IReadOnlyList<DynamicObjectProto>?>(),
+                It.IsAny<bool>(),
+                It.IsAny<Race>(),
+                It.IsAny<Gender>()),
+            Times.AtLeastOnce);
+        objectManager.Verify(o => o.MoveToward(It.IsAny<Position>(), It.IsAny<float>()), Times.Once);
+    }
+
+    [Fact]
     public void Update_FlightPathLandingWithLingeringMountDisplay_CompletesFlightLeg()
     {
         var taskStack = new Stack<IBotTask>();

@@ -47,4 +47,11 @@ public interface IBotContext
     /// snapshot state itself lags behind.
     /// </summary>
     void AddDiagnosticMessage(string message);
+
+    /// <summary>
+    /// Write a diagnostic marker directly to the bot's immediate log sink.
+    /// Use this for execution boundaries where the bot may block before the
+    /// next snapshot flush can surface buffered diagnostics.
+    /// </summary>
+    void AddImmediateDiagnostic(string message);
 }

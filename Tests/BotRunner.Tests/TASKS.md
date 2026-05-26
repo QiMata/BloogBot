@@ -60,12 +60,22 @@
     boarding. The fresh preserved-service live rerun reached the Orgrimmar
     zeppelin/dock area and no longer failed on the prior lower-incline native
     fallback near `(1363.9,-4378.2,26.1)`.
+  - [x] Fix the local long-pathing fixture/pathfinding port handoff so
+    `WWOW_USE_LOCAL_PATHFINDING_SERVICE=1` actually routes StateManager and
+    BotRunner to the fixture-owned local PathfindingService instead of the
+    Docker `127.0.0.1:9002` endpoint.
   - [ ] Investigate the remaining Orgrimmar -> Undercity zeppelin
     boarding/transfer evidence gap. The deterministic boarding-target refresh
     coverage is green, but the latest live run still detected the zeppelin at
     the dock and missed client attachment before departure; final snapshot was
     `map=1 pos=(1336.7,-4658.3,49.3)`, `transport=0x0`.
   - [ ] Add focused live validation for `TravelTo` executing the staged route.
+  - [ ] Investigate the focused `DeckLipClimbFromGruntToFrezza` live red at the
+    later tower-approach stall after the port fix. Current live evidence shows
+    the local service returning a raw Detour route at
+    `start=(1351.3,-4526.3,34.5)` -> `end=(1320.1,-4653.2,53.9)`, but
+    `NavigationPath.IsPathUsable(...)` rejects both the 5-corner smoothed path
+    and the 2-corner unsmoothed fallback, leaving `GetNextWaypoint` null.
 
 0. Shodan test-director migration (started 2026-04-24)
 - [x] Audit top-level `LiveValidation/*.cs` for FG/BG GM-command usage and group by category. Inventory at `Tests/BotRunner.Tests/LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md`.
@@ -140,6 +150,74 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-05-26 (local PathfindingService port handoff fixed; deck-lip live red moved deeper into NavigationPath validation)
+- Pass result: the focused long-pathing fixture now uses the intended local
+  PathfindingService port end-to-end. The earlier Grunt-base no-movement stall
+  was caused by StateManager/BotRunner still targeting Docker
+  `127.0.0.1:9002` even when the fixture spawned a local service on `9020`.
+  After fixing the env-snapshot bug, `DeckLipClimbFromGruntToFrezza` moved off
+  spawn, advanced through multiple waypoints, and now fails later because
+  `NavigationPath.IsPathUsable(...)` rejects a returned raw Detour path near
+  the tower approach.
+- Last delta:
+  - Added `BotServiceFixture.ResolveCurrentPathfindingEndpoint()` and switched
+    live fixture/pathfinding call sites to resolve the current endpoint from
+    environment instead of constructor-snapshotted config.
+  - `BotServiceFixture` now logs the exact StateManager pathfinding endpoint and
+    waits/monitors the resolved host+port rather than the baked Docker default.
+  - `MovementParityTests` and `LiveBotFixture.ServerManagement` no longer
+    hard-code `9002`; both now use the same live fixture endpoint resolver.
+  - Added deterministic coverage in
+    `PathfindingFixtureConfigurationTests` for env override resolution and the
+    default Docker fallback.
+  - Kept the immediate travel/navigation diagnostics added to BotRunner so the
+    focused live proof can prove whether action dispatch, travel planning, and
+    waypoint generation are actually happening before the next stall.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingFixtureConfigurationTests|FullyQualifiedName~BgOnlyBotFixtureConfigurationTests|FullyQualifiedName~TravelTaskTests|FullyQualifiedName~IBotTaskContractTests|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_pathfinding_port_handoff_regression_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (27/27)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_tauren_fg_20260526_localpf_portfix_probe_fix3.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`59s`, but the failure moved from spawn to the later tower-approach stall.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_pathfinding_port_handoff_regression_20260526.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_tauren_fg_20260526_localpf_portfix_probe_fix3.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-Frezza-likely-LPATHFG1-client-19028-win0-20260526_184905.png`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+  - `D:\World of Warcraft\WWoWLogs\fg_LPATHFG120260526.log`
+- Practical read:
+  - The fixture-owned service launched on `127.0.0.1:9020`, and the rerun TRX
+    now records:
+    - `PathfindingTestFixture ... ready on port 9020`
+    - `[StateManager] PathfindingService endpoint=127.0.0.1:9020`
+    - `[LPATHBG1] Attempting to connect to 127.0.0.1:9020`
+    - `[SHODAN] Attempting to connect to 127.0.0.1:9020`
+  - The focused live proof no longer dies at the Grunt-base spawn with
+    `moved=0.0`; it advances through waypoints, then stalls at
+    `anchor=(1352.0,-4527.1,35.5)` / `current=(1351.3,-4526.3,34.5)` with
+    `moved=1.0`, `transport=0x0`, and `current=null`.
+  - At that later anchor, the local service returns quickly:
+    - smoothed request: `corners=5 result=raw_detour blockedReason=none`
+    - unsmoothed request: `corners=2 result=raw_detour blockedReason=none`
+  - BotRunner then rejects both paths locally:
+    - `[NavigationPath] Path rejected by IsPathUsable: raw=5 ... start=(1351.3,-4526.3,34.5) end=(1320.1,-4653.2,53.9)`
+    - `[NavigationPath] Path rejected by IsPathUsable: raw=2 ...`
+    - `[NAV-DIAG] TryNavigateToward: GetNextWaypoint returned null. pos=(1351.3,-4526.3,34.5), dest=(1320.1,-4653.2,53.9), map=1`
+- Files changed:
+  - `Tests/Tests.Infrastructure/BotServiceFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LiveBotFixture.ServerManagement.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/MovementParityTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/PathfindingFixtureConfigurationTests.cs`
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Exports/BotRunner/BotRunnerService.ActionMapping.cs`
+  - `Exports/BotRunner/BotRunnerService.cs`
+  - `Exports/BotRunner/Clients/PathfindingClient.cs`
+  - `Exports/BotRunner/Interfaces/IBotContext.cs`
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Exports/BotRunner/Tasks/BotTask.cs`
+  - `Exports/BotRunner/Tasks/Travel/TravelTask.cs`
+  - `Services/ForegroundBotRunner/Program.cs`
+  - `Tests/BotRunner.Tests/Travel/TravelTaskTests.cs`
+  - `Tests/BotRunner.Tests/Unit/Tasks/IBotTaskContractTests.cs`
+- Next command: `Select-String -Path 'D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log','D:\World of Warcraft\WWoWLogs\fg_LPATHFG120260526.log' -Pattern '\[NAV_PATH\]|\[NAV-DIAG\]|Path rejected by IsPathUsable'`
+
 ### 2026-05-26 (dual-FG deck-lip live rerun proves the current live red is not capsule-specific)
 - Pass result: the long-pathing live harness can now swap rosters via
   `WWOW_LONG_PATHING_SETTINGS_PATH`, and the focused

@@ -443,6 +443,10 @@ public class NavigationPath(
     private readonly Action<string>? _diagnosticSink = diagnosticSink;
     private readonly int _waypointDiagnosticCadence = waypointDiagnosticCadence;
     private long _waypointAdvanceCount;
+
+    private void EmitNavigationDiagnostic(string message)
+        => _diagnosticSink?.Invoke(message);
+
     private Position[] _waypoints = [];
     private float[] _waypointAcceptanceRadii = [];
     private Position? _pathStartPosition;
@@ -3301,23 +3305,36 @@ public class NavigationPath(
 
         var usedNearbyObjectOverlay = nearbyObjects is { Count: > 0 };
         var nearbyObjectCount = nearbyObjects?.Count ?? 0;
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] validated-path enter map={mapId} smooth={smoothPath} overlay={usedNearbyObjectOverlay} overlayCount={nearbyObjectCount} " +
+            $"start=({start.X:F1},{start.Y:F1},{start.Z:F1}) end=({end.X:F1},{end.Y:F1},{end.Z:F1})");
 
+        var serviceRequestStopwatch = Stopwatch.StartNew();
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] service-request enter map={mapId} smooth={smoothPath} overlay={usedNearbyObjectOverlay}");
         var rawPathResult = usedNearbyObjectOverlay
             ? _pathfinding.GetPathResult(mapId, start, end, nearbyObjects, smoothPath, _race, _gender)
             : _pathfinding.GetPathResult(mapId, start, end, nearbyObjects: null, smoothPath, _race, _gender);
+        serviceRequestStopwatch.Stop();
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] service-request exit elapsedMs={serviceRequestStopwatch.ElapsedMilliseconds} corners={rawPathResult.Corners.Length} " +
+            $"result={rawPathResult.Result} blockedIndex={(rawPathResult.BlockedSegmentIndex?.ToString() ?? "null")} blockedReason={rawPathResult.BlockedReason}");
         var serviceRejectedStaticBlock = IsServiceStaticBlock(rawPathResult);
         var rawPath = serviceRejectedStaticBlock
             ? Array.Empty<Position>()
             : rawPathResult.Corners;
         var sanitizedPath = SanitizePath(rawPath);
+        EmitNavigationDiagnostic($"[NAV_PATH] sanitize exit count={sanitizedPath.Length}");
         var prunedPath = _enableProbeHeuristics
             ? PruneProbeWaypoints(start, sanitizedPath)
             : sanitizedPath;
+        EmitNavigationDiagnostic($"[NAV_PATH] prune exit count={prunedPath.Length}");
         // LOS-based string-pulling: remove intermediate waypoints where a straight
         // line is unobstructed. Corners remain because LOS is blocked by walls.
         var pulledPath = _enableProbeHeuristics
             ? StringPullPath(mapId, start, prunedPath)
             : prunedPath;
+        EmitNavigationDiagnostic($"[NAV_PATH] string-pull exit count={pulledPath.Length}");
 
         // Phase 3: Validate path segments against dynamic objects (closed doors, etc.).
         // String-pulling already checks LOS, but consecutive navmesh waypoints (4y apart)
@@ -3336,11 +3353,14 @@ public class NavigationPath(
             || (_enableProbeHeuristics
             && pulledPath.Length > 0
             && dynValidatedPath.Length == 0);
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] dynamic-validate exit count={dynValidatedPath.Length} rejected={rejectedByDynamicBlocker}");
 
         // Phase 3a: Post-path Z correction — replace navmesh Z with collision ground Z
         // where they differ. Fixes Orgrimmar WMO areas where navmesh Z diverges from
         // the actual walkable surface by a few yards.
         var zCorrectedPath = CorrectPathZFromCollision(mapId, dynValidatedPath);
+        EmitNavigationDiagnostic($"[NAV_PATH] z-correct exit count={zCorrectedPath.Length}");
 
         // Phase 3b: replace or reject waypoints whose local collision support resolves
         // to a different WMO layer than the navmesh path. BG movement will snap to that
@@ -3349,6 +3369,7 @@ public class NavigationPath(
         var layerRepairedPath = validateLocalPhysicsSegments
             ? RepairCollisionLayerMismatchedWaypoints(mapId, start, zCorrectedPath)
             : zCorrectedPath;
+        EmitNavigationDiagnostic($"[NAV_PATH] layer-repair exit count={layerRepairedPath.Length}");
 
         var localPhysicsValidationLimit = _enableProbeHeuristics
             ? int.MaxValue
@@ -3356,12 +3377,14 @@ public class NavigationPath(
         var localPhysicsValidatedPath = validateLocalPhysicsSegments
             ? ValidateSegmentsAgainstLocalPhysics(mapId, start, layerRepairedPath, localPhysicsValidationLimit)
             : layerRepairedPath;
+        EmitNavigationDiagnostic($"[NAV_PATH] local-physics exit count={localPhysicsValidatedPath.Length}");
 
         // Phase 4b: Cliff rerouting — probe each segment for cliff edges and insert
         // offset waypoints to steer the bot away from dangerous drops.
         var cliffReroutedPath = _enableProbeHeuristics
             ? ReroutePathAroundCliffs(mapId, start, localPhysicsValidatedPath)
             : localPhysicsValidatedPath;
+        EmitNavigationDiagnostic($"[NAV_PATH] cliff-reroute exit count={cliffReroutedPath.Length}");
 
         var usable = IsPathUsable(mapId, start, end, cliffReroutedPath);
 
@@ -3376,6 +3399,8 @@ public class NavigationPath(
         }
 
         var result = usable ? cliffReroutedPath : [];
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] validated-path exit usable={usable} resultCount={result.Length} elapsedMs={sw.ElapsedMilliseconds}");
         Metrics.RecordPathLength(result.Length);
         if (result.Length == 0)
             Metrics.IncrementPathsFailed();
@@ -3821,6 +3846,10 @@ public class NavigationPath(
         if (force)
             Metrics.IncrementRecalculationsTriggered();
 
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] calculate-path enter map={mapId} force={force} reason={reason} " +
+            $"start=({start.X:F1},{start.Y:F1},{start.Z:F1}) end=({end.X:F1},{end.Y:F1},{end.Z:F1})");
+
         try
         {
             _beforePathCalculation?.Invoke();
@@ -3972,11 +4001,15 @@ public class NavigationPath(
                     alternateSelected,
                     endpointRetargeted),
                 reason);
+            EmitNavigationDiagnostic(
+                $"[NAV_PATH] calculate-path exit map={mapId} reason={reason} waypointCount={_waypoints.Length} currentIndex={_currentIndex}");
         }
         catch (Exception ex)
         {
             Serilog.Log.Warning("[NAV-DIAG] CalculatePath FAILED: map={MapId}, start=({SX:F1},{SY:F1},{SZ:F1}), end=({EX:F1},{EY:F1},{EZ:F1}): {Error}",
                 mapId, start.X, start.Y, start.Z, end.X, end.Y, end.Z, ex.Message);
+            EmitNavigationDiagnostic(
+                $"[NAV_PATH] calculate-path failed map={mapId} reason={reason} error={ex.GetType().Name}: {ex.Message}");
             _waypoints = [];
             _waypointAcceptanceRadii = [];
             _pathStartPosition = null;
