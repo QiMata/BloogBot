@@ -2808,6 +2808,142 @@ static int PromoteAnchorSourceSupportTriangles(
     return promoted;
 }
 
+// [WWoW-DIVERGENCE] 2026-05-26: tile 1:40,29's remaining 1523.8 lane now
+// looks earlier than raster-only loss and later than pure same-source support:
+// the source footprint itself misses the anchor cell while lower competitors do
+// not. This experiment promotes hidden support-band triangles that already
+// overlap the exact anchor cell so we can test whether the hole is a
+// cross-source seam / hidden-slope source-footprint miss instead of another
+// late contour failure.
+static int PromoteAnchorSupportCellTriangles(
+    const MMAP::MeshData& meshData,
+    const rcConfig& config,
+    const float* tVerts,
+    const int* tTris,
+    unsigned char* rasterAreas,
+    const int tTriCount,
+    const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const bool crossSourceOnly,
+    const bool logDiagnostics)
+{
+    if (!tVerts || !tTris || !rasterAreas || sourceSupports.empty())
+        return 0;
+
+    constexpr float kMaxSourceDistance2D = 2.50f;
+
+    int promoted = 0;
+    for (const AnchorSourceSupportProbe& support : sourceSupports)
+    {
+        if (!support.found)
+            continue;
+        if (!support.projectedInside && support.distance2D > kMaxSourceDistance2D)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        const int anchorCellX = static_cast<int>(floorf((anchorRecastX - config.bmin[0]) / config.cs));
+        const int anchorCellY = static_cast<int>(floorf((anchorRecastZ - config.bmin[2]) / config.cs));
+        if (anchorCellX < 0 || anchorCellX >= config.width || anchorCellY < 0 || anchorCellY >= config.height)
+            continue;
+
+        const float cellMinX = config.bmin[0] + anchorCellX * config.cs;
+        const float cellMaxX = cellMinX + config.cs;
+        const float cellMinZ = config.bmin[2] + anchorCellY * config.cs;
+        const float cellMaxZ = cellMinZ + config.cs;
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
+        const float resolveExtent = std::max(config.cs * 2.0f, 0.35f);
+
+        int candidateTriangles = 0;
+        int promotedTerrain = 0;
+        int promotedVmap = 0;
+        int promotedGameObject = 0;
+        int promotedSteep = 0;
+        int promotedNull = 0;
+
+        for (int triIndex = 0; triIndex < tTriCount; ++triIndex)
+        {
+            const unsigned char area = rasterAreas[triIndex];
+            if (area == AREA_GROUND || area == AREA_GROUND_MODEL)
+                continue;
+            if (area != AREA_STEEP_SLOPE && area != AREA_STEEP_SLOPE_MODEL && area != AREA_NONE)
+                continue;
+
+            const MMAP::MeshTriangleSource triSource = meshData.SourceForTriangle(triIndex);
+            if (crossSourceOnly && triSource == support.source)
+                continue;
+
+            const int* tri = &tTris[triIndex * 3];
+            const float* a = &tVerts[tri[0] * 3];
+            const float* b = &tVerts[tri[1] * 3];
+            const float* c = &tVerts[tri[2] * 3];
+            if (!TriangleOverlapsAxisAlignedRectXZ(a, b, c, cellMinX, cellMinZ, cellMaxX, cellMaxZ))
+                continue;
+
+            float triSupportY = 0.0f;
+            float triSupportRecastX = 0.0f;
+            float triSupportRecastZ = 0.0f;
+            float triDistance2D = std::numeric_limits<float>::max();
+            bool triProjectedInside = false;
+            if (!TryResolveTriangleSupportY(
+                    a, b, c,
+                    anchorRecastX, anchorRecastZ,
+                    resolveExtent,
+                    triSupportY, triSupportRecastX, triSupportRecastZ,
+                    triDistance2D, triProjectedInside))
+            {
+                continue;
+            }
+
+            if (triSupportY < supportFloorMinY || triSupportY > supportFloorMaxY)
+                continue;
+
+            ++candidateTriangles;
+            rasterAreas[triIndex] =
+                meshData.IsTerrainTriangle(triIndex) ? AREA_GROUND : AREA_GROUND_MODEL;
+            ++promoted;
+
+            switch (triSource)
+            {
+            case MMAP::MeshTriangleSource::GameObject:
+                ++promotedGameObject;
+                break;
+            case MMAP::MeshTriangleSource::VMap:
+                ++promotedVmap;
+                break;
+            case MMAP::MeshTriangleSource::Terrain:
+            default:
+                ++promotedTerrain;
+                break;
+            }
+
+            if (area == AREA_NONE)
+                ++promotedNull;
+            else
+                ++promotedSteep;
+        }
+
+        if (logDiagnostics)
+        {
+            printf("[SRC-ANCHOR-CELL-PROMOTE] anchor=(%.3f,%.3f,%.3f) support=(%.3f,%.3f,%.3f) dist2D=%.3f crossSourceOnly=%d candidates=%d promotedTerrain=%d promotedVmap=%d promotedGameObject=%d promotedSteep=%d promotedNull=%d\n",
+                support.anchor.wowX, support.anchor.wowY, support.anchor.wowZ,
+                support.supportRecastZ, support.supportRecastX, support.supportY,
+                support.distance2D,
+                crossSourceOnly ? 1 : 0,
+                candidateTriangles,
+                promotedTerrain,
+                promotedVmap,
+                promotedGameObject,
+                promotedSteep,
+                promotedNull);
+        }
+    }
+
+    return promoted;
+}
+
 // [WWoW-DIVERGENCE] 2026-05-25: tile 1:40,29 still shows a source-backed
 // support footprint hole at 1523.8 that is already present during rasterize:
 // nearby support cells survive, but the exact anchor neighborhood never gains
@@ -8086,6 +8222,10 @@ namespace MMAP
             ParseAnchorCoords(jsonTileConfig, "preRasterizePromoteAnchorSourceSupportCoordsWow");
         const float preRasterizePromoteAnchorSourceSupportCorridorHalfWidth = JsonFloatOrDefault(
             jsonTileConfig, "preRasterizePromoteAnchorSourceSupportCorridorHalfWidth", 0.0f);
+        const std::vector<AnchorPolyStackCoord> preRasterizePromoteAnchorSupportCellCoords =
+            ParseAnchorCoords(jsonTileConfig, "preRasterizePromoteAnchorSupportCellCoordsWow");
+        const bool preRasterizePromoteAnchorSupportCellCrossSourceOnly =
+            jsonTileConfig.value("preRasterizePromoteAnchorSupportCellCrossSourceOnly", false);
         const std::vector<AnchorSourceSupportProbe> preRasterizePromoteAnchorSourceSupportProbes =
             (!preRasterizePromoteAnchorSourceSupportCoords.empty() &&
                 preRasterizePromoteAnchorSourceSupportCorridorHalfWidth > 0.0f)
@@ -8113,6 +8253,34 @@ namespace MMAP
             {
                 printf("[SRC-ANCHOR-PROMOTE] map=%u tile=%u,%u: promoted %d source-support triangle(s)\n",
                     mapID, tileX, tileY, promotedSourceTriangles);
+            }
+        }
+        const std::vector<AnchorSourceSupportProbe> preRasterizePromoteAnchorSupportCellProbes =
+            !preRasterizePromoteAnchorSupportCellCoords.empty()
+                ? ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, preRasterizePromoteAnchorSupportCellCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
+                    logAnchorStageDiagnostics)
+                : std::vector<AnchorSourceSupportProbe>();
+        if (!preRasterizePromoteAnchorSupportCellProbes.empty())
+        {
+            const int promotedAnchorCellTriangles = PromoteAnchorSupportCellTriangles(
+                meshData,
+                config,
+                tVerts,
+                tTris,
+                rasterAreas.data(),
+                tTriCount,
+                anchorSourceSupportZTolerance,
+                anchorSupportBandTuning,
+                preRasterizePromoteAnchorSupportCellProbes,
+                preRasterizePromoteAnchorSupportCellCrossSourceOnly,
+                logAnchorStageDiagnostics);
+            if (promotedAnchorCellTriangles > 0)
+            {
+                printf("[SRC-ANCHOR-CELL-PROMOTE] map=%u tile=%u,%u: promoted %d anchor-cell triangle(s)\n",
+                    mapID, tileX, tileY, promotedAnchorCellTriangles);
             }
         }
         const std::vector<AnchorSourceSupportProbe> anchorSourceSupports =
@@ -9234,6 +9402,8 @@ namespace MMAP
             { "borrowMissingAnchorSourceSupportFromNeighbors", false },
             { "preRasterizePromoteAnchorSourceSupportCoordsWow", json::array() },
             { "preRasterizePromoteAnchorSourceSupportCorridorHalfWidth", 0.0f },
+            { "preRasterizePromoteAnchorSupportCellCoordsWow", json::array() },
+            { "preRasterizePromoteAnchorSupportCellCrossSourceOnly", false },
             { "preRasterizeAnchorSupportPatchCoordsWow", json::array() },
             { "preRasterizeAnchorSupportPatchHalfExtent", 0.0f },
             { "preRasterizeAnchorSupportPatchCenterMode", "anchor" },

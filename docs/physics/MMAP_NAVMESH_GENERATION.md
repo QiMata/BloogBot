@@ -2733,3 +2733,59 @@ anchor cell?
     tests and full `CriticalWalkLegs` were intentionally NOT rerun
   - confirmed live tile hash remains
     `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-26 UTC: pre-raster anchor-cell support-band promotion gate for `1523.8`
+
+The next source-surface retry asked whether the source-footprint miss was only
+"hidden" because a support-band triangle already overlapped the exact anchor
+cell but stayed non-walkable before rasterization.
+
+- Code surface:
+  - new helper in `TileWorker.cpp`:
+    `PromoteAnchorSupportCellTriangles(...)`
+  - new opt-in tile config keys:
+    - `preRasterizePromoteAnchorSupportCellCoordsWow`
+    - `preRasterizePromoteAnchorSupportCellCrossSourceOnly`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_anchorcell_promote_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_anchorcell_promote_v1.json'`
+  - hash:
+    `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- Artifact + hash:
+  - artifact:
+    `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_anchorcell_promote_v1-20260526T132241Z\`
+  - hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive negative:
+  - the corrected rerun still printed the known pre-raster support probe:
+    `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) delta=0.604 tri=537325 source=vmap dist2D=0.306 inside=0`
+  - but `bake.log` emitted no `[SRC-ANCHOR-CELL-PROMOTE]` lines
+  - the summary row for `1523.800,-4425.900,17.100` stayed unchanged:
+    `FirstBadStage=finalDetour`,
+    `FirstBadReason=lower_competitor_dominant`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - the neighboring seam-hole anchors stayed unchanged too:
+    `1522.500,-4424.100,17.000` and `1521.267,-4425.600,17.609`
+    still read as no `FirstBadStage`, but
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`
+  - classifier cross-check stayed intact:
+    `1479.767,-4426.000,25.309` still read as
+    `raster_anchor_cell_coverage_hole`
+- Practical read:
+  - this branch did not move the source footprint, the raster overlap, or the
+    tile hash, so it is another bounded negative
+  - do not spend more time on "promote hidden support-band triangles already in
+    the anchor cell" for `1523.8`
+  - the next branch must inspect where the source footprint is actually created
+    or clipped:
+    source-family seam, source window, tile/subtile boundary, or support-tri
+    selection/transform
+  - focused tests and full `CriticalWalkLegs` were intentionally skipped
+    because the early gate and the saved tile hash never moved

@@ -3863,3 +3863,77 @@
   `supportContainsAnchorCell`, or split back into the separate
   `1364.867,-4374.000,26.109` trapped-component lane instead of spending more
   `1523.8` budget on later contour or finalDetour churn.
+
+### 2026-05-26 - pre-raster anchor-cell support-band promotion gate for `1523.8`
+- Active task: test the narrowest remaining "hidden loaded geometry" lane for
+  `1523.800,-4425.900,17.100` before pivoting deeper into seam creation:
+  if a support-band triangle already overlaps the exact anchor cell before
+  rasterization, promote it and see whether `sourceFootprint` or `rasterize`
+  finally move.
+- Pass result: `negative; corrected rerun stayed byte-identical to the stable
+  live tile, emitted no [SRC-ANCHOR-CELL-PROMOTE] lines, and left the 1523.8
+  sourceFootprint/raster rows unchanged`.
+- Last delta:
+  - Added new pre-raster helper in
+    `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`:
+    `PromoteAnchorSupportCellTriangles(...)`
+  - Added new opt-in config keys:
+    - `preRasterizePromoteAnchorSupportCellCoordsWow`
+    - `preRasterizePromoteAnchorSupportCellCrossSourceOnly`
+  - Ran the bounded experiment with temp config:
+    `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_anchorcell_promote_v1.json`
+  - Variant + artifact:
+    - variant:
+      `og_4029_source_footprint_anchorcell_promote_v1`
+    - artifact:
+      `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_anchorcell_promote_v1-20260526T132241Z\`
+    - hash:
+      `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - Decisive proof:
+    - the corrected rerun still logged the known support probe:
+      `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) delta=0.604 tri=537325 source=vmap dist2D=0.306 inside=0`
+    - `bake.log` emitted NO `[SRC-ANCHOR-CELL-PROMOTE]` lines
+    - stage summary stayed unchanged:
+      - `1523.800,-4425.900,17.100` ->
+        `finalDetour / lower_competitor_dominant`,
+        `SourceFootprintContainsAnchorProjection=false`,
+        `SourceFootprintContainsAnchorCell=false`,
+        `RasterizeSupportContainsAnchorCell=false`,
+        `EarlyCoverageFinding=source_footprint_or_seam_hole`
+      - `1522.500,-4424.100,17.000` ->
+        no `FirstBadStage`,
+        `SourceFootprintContainsAnchorProjection=false`,
+        `SourceFootprintContainsAnchorCell=false`,
+        `RasterizeSupportContainsAnchorCell=false`,
+        `EarlyCoverageFinding=source_footprint_or_seam_hole`
+      - `1521.267,-4425.600,17.609` ->
+        no `FirstBadStage`,
+        `SourceFootprintContainsAnchorProjection=false`,
+        `SourceFootprintContainsAnchorCell=false`,
+        `RasterizeSupportContainsAnchorCell=false`,
+        `EarlyCoverageFinding=source_footprint_or_seam_hole`
+      - cross-check still held:
+        `1479.767,-4426.000,25.309` ->
+        `SourceFootprintContainsAnchorProjection=true`,
+        `SourceFootprintContainsAnchorCell=true`,
+        `RasterizeSupportContainsAnchorCell=false`,
+        `EarlyCoverageFinding=raster_anchor_cell_coverage_hole`
+  - Practical read:
+    - another bounded negative for `1523.8`
+    - this exhausts the "already-loaded hidden support-band triangle overlaps
+      the anchor cell" branch unless a future branch changes the source window
+      or source-family inputs first
+    - the next credible work should inspect where the source footprint is
+      missed:
+      source-family seam, tile/subtile clipping, source window, or support-tri
+      selection/transform
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1` -> passed.
+  - `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_anchorcell_promote_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_anchorcell_promote_v1.json'` -> passed.
+  - `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash` -> `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+  - Focused tests and full `CriticalWalkLegs` intentionally SKIPPED because the
+    early gate and the saved tile hash never moved.
+- Next command: pivot from "promote hidden already-loaded anchor-cell
+  triangles" to a real source-footprint / seam-creation branch that can move
+  `SourceFootprintContainsAnchorProjection` or
+  `SourceFootprintContainsAnchorCell` for `1523.800,-4425.900,17.100`.

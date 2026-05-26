@@ -2238,6 +2238,86 @@ Practical read:
 - confirmed live tile hash remains
   `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
 
+### 2026-05-26 pre-raster anchor-cell support-band promotion follow-up
+
+After the new `sourceFootprint` proof made `1523.800,-4425.900,17.100` look
+like a source-footprint / seam-hole lane, the next bounded retry asked an even
+earlier question: are there any already-loaded hidden support-band triangles
+touching the exact anchor cell that can be promoted before rasterization?
+
+Exact branch:
+
+- variant:
+  `og_4029_source_footprint_anchorcell_promote_v1`
+- artifact:
+  `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_anchorcell_promote_v1-20260526T132241Z\`
+- temp config:
+  `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_anchorcell_promote_v1.json`
+- hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Code surface:
+
+- `TileWorker.cpp` now includes
+  `PromoteAnchorSupportCellTriangles(...)`
+- new opt-in keys:
+  - `preRasterizePromoteAnchorSupportCellCoordsWow`
+  - `preRasterizePromoteAnchorSupportCellCrossSourceOnly`
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_anchorcell_promote_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_anchorcell_promote_v1.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+
+Decisive negative:
+
+- the corrected rerun emitted the expected pre-raster support probe:
+  - `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) delta=0.604 tri=537325 source=vmap dist2D=0.306 inside=0`
+- but the bake log emitted no `[SRC-ANCHOR-CELL-PROMOTE]` lines at all
+- the saved tile hash stayed byte-identical to the stable live baseline:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- the new stage summary stayed unchanged for the important anchors:
+  - `1523.800,-4425.900,17.100` still ->
+    `FirstBadStage=finalDetour`,
+    `FirstBadReason=lower_competitor_dominant`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1522.500,-4424.100,17.000` still ->
+    no `FirstBadStage`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1521.267,-4425.600,17.609` still ->
+    no `FirstBadStage`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - classifier cross-check stayed intact:
+    `1479.767,-4426.000,25.309` still ->
+    `SourceFootprintContainsAnchorProjection=true`,
+    `SourceFootprintContainsAnchorCell=true`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=raster_anchor_cell_coverage_hole`
+
+Practical read:
+
+- this branch failed the manifest gate immediately:
+  it did not move `sourceFootprint` or `rasterize` for `1523.8`
+- treat that as another bounded negative for the "hidden support-band triangle
+  already overlaps the anchor cell" hypothesis
+- because both the early gate and the tile hash stayed unchanged, focused tests
+  and full `CriticalWalkLegs` were intentionally skipped
+- the next credible `1523.8` branch must look earlier than "promote hidden
+  anchor-cell triangles already in the loaded mesh" and instead inspect where
+  the source footprint is missed or clipped in the first place:
+  source-family seam, tile/subtile clip, source window, or support-triangle
+  selection/transform
+
 ### 2026-05-25 UTC contour raw-bypass plus support-arc follow-up
 
 The next contour-focused loop closed three distinct "change the contour shape
