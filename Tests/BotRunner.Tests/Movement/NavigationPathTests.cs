@@ -2921,6 +2921,127 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump()
+    {
+        var current = new Position(1346.6f, -4525.0f, 32.3f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var boardingJump = new Position(1320.1f, -4653.2f, 53.7f);
+        var smoothBlockedPath = new[]
+        {
+            new Position(1346.6f, -4524.9f, 32.4f),
+            new Position(1343.6f, -4523.1f, 30.3f),
+            new Position(1342.0f, -4520.6f, 28.6f),
+            new Position(1342.0f, -4515.9f, 27.8f),
+            new Position(1343.6f, -4514.2f, 27.7f),
+            new Position(1345.5f, -4512.4f, 27.7f),
+            new Position(1347.5f, -4511.5f, 27.7f),
+            new Position(1348.9f, -4511.3f, 27.8f),
+            new Position(1354.3f, -4528.0f, 35.0f),
+            new Position(1350.1f, -4556.4f, 37.6f),
+            new Position(1344.4f, -4594.0f, 42.1f),
+            new Position(1338.6f, -4629.8f, 47.7f),
+            new Position(1332.9f, -4644.7f, 52.4f),
+            boardingJump,
+            destination,
+        };
+        var unsafeAlternatePath = new[]
+        {
+            new Position(1346.6f, -4524.9f, 32.4f),
+            new Position(1343.6f, -4523.1f, 30.3f),
+            new Position(1342.0f, -4520.6f, 28.6f),
+            new Position(1342.0f, -4515.9f, 27.8f),
+            new Position(1343.6f, -4514.2f, 27.7f),
+            new Position(1345.5f, -4512.4f, 27.7f),
+            new Position(1347.5f, -4511.5f, 27.7f),
+            new Position(1348.9f, -4511.3f, 27.8f),
+            new Position(1357.2f, -4516.2f, 32.2f),
+            boardingJump,
+            new Position(1322.3f, -4650.9f, 53.9f),
+            new Position(1328.3f, -4649.3f, 53.8f),
+        };
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners: smoothBlockedPath,
+                    Result: "raw_detour",
+                    RawCornerCount: (uint)smoothBlockedPath.Length,
+                    BlockedSegmentIndex: 12,
+                    BlockedReason: "interior_projection:13",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 3,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners: unsafeAlternatePath,
+                    Result: "raw_detour",
+                    RawCornerCount: (uint)unsafeAlternatePath.Length,
+                    BlockedSegmentIndex: null,
+                    BlockedReason: "none",
+                    MaxAffordance: PathSegmentAffordance.Drop,
+                    PathSupported: true,
+                    StepUpCount: 0,
+                    DropCount: 1,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 1,
+                    BlockedCount: 0,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            enableDynamicProbeSkipping: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 1.0247f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.True(trace.SmoothPath, $"Expected the long-travel replan to keep the smooth projection-blocked prefix. Trace={trace}");
+        Assert.DoesNotContain(pathfinding.SmoothCalls, smoothPath => !smoothPath);
+        Assert.False(trace.RouteDecision.AlternateSelected, $"Expected no unsafe alternate selection. Trace={trace}");
+        Assert.True(trace.PlannedWaypoints.Length >= 10, $"Expected a retained smooth prefix. Trace={trace}");
+        Assert.DoesNotContain(trace.PlannedWaypoints, point => point.DistanceTo2D(boardingJump) <= 0.1f);
+        Assert.Equal(1343.6f, trace.ActiveWaypoint!.X, 1);
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+    }
+
+    [Fact]
     public void GetNextWaypoint_LongTravelKeepsCompactRopeSupportStepBeforeStallPromotion()
     {
         var current = new Position(1371.1f, -4439.4f, 30.9f);

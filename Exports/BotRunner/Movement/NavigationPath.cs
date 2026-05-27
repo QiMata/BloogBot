@@ -3319,10 +3319,7 @@ public class NavigationPath(
         EmitNavigationDiagnostic(
             $"[NAV_PATH] service-request exit elapsedMs={serviceRequestStopwatch.ElapsedMilliseconds} corners={rawPathResult.Corners.Length} " +
             $"result={rawPathResult.Result} blockedIndex={(rawPathResult.BlockedSegmentIndex?.ToString() ?? "null")} blockedReason={rawPathResult.BlockedReason}");
-        var serviceRejectedStaticBlock = IsServiceStaticBlock(rawPathResult);
-        var rawPath = serviceRejectedStaticBlock
-            ? Array.Empty<Position>()
-            : rawPathResult.Corners;
+        var rawPath = SelectServiceSeedPath(rawPathResult);
         var sanitizedPath = SanitizePath(rawPath);
         EmitNavigationDiagnostic($"[NAV_PATH] sanitize exit count={sanitizedPath.Length}");
         var prunedPath = _enableProbeHeuristics
@@ -3415,6 +3412,49 @@ public class NavigationPath(
     private static bool IsServiceStaticBlock(PathfindingRouteResult routeResult)
         => routeResult.BlockedSegmentIndex.HasValue
             && !routeResult.BlockedReason.StartsWith("dynamic_overlay", StringComparison.OrdinalIgnoreCase);
+
+    private Position[] SelectServiceSeedPath(PathfindingRouteResult routeResult)
+    {
+        if (IsServiceDynamicOverlayBlock(routeResult))
+            return [];
+
+        if (TryGetProjectionBlockedPrefix(routeResult, out var prefix))
+        {
+            EmitNavigationDiagnostic(
+                $"[NAV_PATH] projection-prefix exit count={prefix.Length} blockedIndex={routeResult.BlockedSegmentIndex} blockedReason={routeResult.BlockedReason}");
+            return prefix;
+        }
+
+        return IsServiceStaticBlock(routeResult)
+            ? []
+            : routeResult.Corners;
+    }
+
+    private static bool TryGetProjectionBlockedPrefix(
+        PathfindingRouteResult routeResult,
+        out Position[] prefix)
+    {
+        prefix = [];
+        if (routeResult.Corners.Length < 2
+            || routeResult.BlockedSegmentIndex is not int blockedSegmentIndex
+            || !IsProjectionBlockedReason(routeResult.BlockedReason))
+        {
+            return false;
+        }
+
+        var prefixLength = Math.Clamp(blockedSegmentIndex + 1, 0, routeResult.Corners.Length);
+        if (prefixLength < 2)
+            return false;
+
+        prefix = new Position[prefixLength];
+        Array.Copy(routeResult.Corners, prefix, prefixLength);
+        return true;
+    }
+
+    private static bool IsProjectionBlockedReason(string? blockedReason)
+        => !string.IsNullOrWhiteSpace(blockedReason)
+            && (blockedReason.StartsWith("interior_projection:", StringComparison.OrdinalIgnoreCase)
+                || blockedReason.StartsWith("end_projection:", StringComparison.OrdinalIgnoreCase));
 
     private static string? BuildNearbyObjectOverlaySignature(IReadOnlyList<DynamicObjectProto>? nearbyObjects)
     {
