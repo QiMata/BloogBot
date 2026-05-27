@@ -2852,6 +2852,75 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void RecalculateAfterMovementStall_DeckLipAlternatePath_KeepsDescendingCorridorBeforeBoardingJump()
+    {
+        var pathfindingCalls = 0;
+        var current = new Position(1353.1f, -4525.3f, 34.6f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var ledgeReturn = new Position(1357.2f, -4516.2f, 32.2f);
+        var boardingJump = new Position(1320.1f, -4653.2f, 53.7f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            {
+                pathfindingCalls++;
+                return
+                [
+                    new Position(1346.6f, -4524.9f, 32.4f),
+                    new Position(1343.6f, -4523.1f, 30.3f),
+                    new Position(1342.0f, -4520.6f, 28.6f),
+                    new Position(1342.0f, -4515.9f, 27.8f),
+                    new Position(1343.6f, -4514.2f, 27.7f),
+                    new Position(1345.5f, -4512.4f, 27.7f),
+                    new Position(1347.5f, -4511.5f, 27.7f),
+                    new Position(1348.9f, -4511.3f, 27.8f),
+                    ledgeReturn,
+                    boardingJump,
+                    destination,
+                ];
+            },
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            enableDynamicProbeSkipping: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 1.0247f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var initialWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var recovered = navPath.RecalculateAfterMovementStall(
+            current,
+            destination,
+            mapId: 1);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(initialWaypoint);
+        Assert.True(recovered);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(
+            trace.CurrentWaypointIndex <= 7,
+            $"Expected deck-lip stall recovery to keep the active waypoint inside the local descending corridor before the ledge-return/boarding jump; got idx={trace.CurrentWaypointIndex} active=({trace.ActiveWaypoint!.X:F1},{trace.ActiveWaypoint.Y:F1},{trace.ActiveWaypoint.Z:F1}) calls={pathfindingCalls}.");
+        Assert.True(
+            trace.ActiveWaypoint!.DistanceTo2D(ledgeReturn) > 1f,
+            $"Expected deck-lip stall recovery to avoid promoting directly to the ledge-return waypoint; active=({trace.ActiveWaypoint.X:F1},{trace.ActiveWaypoint.Y:F1},{trace.ActiveWaypoint.Z:F1}).");
+        Assert.Equal(NavigationTraceReason.StalledNearWaypoint, trace.LastReplanReason);
+    }
+
+    [Fact]
     public void GetNextWaypoint_LongTravelKeepsCompactRopeSupportStepBeforeStallPromotion()
     {
         var current = new Position(1371.1f, -4439.4f, 30.9f);
