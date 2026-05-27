@@ -3814,6 +3814,185 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_LongTravelUsesMicroBlockedIndexZeroWallSupportFallbackWhenSmoothReturnsNoPath()
+    {
+        var current = new Position(1351.95f, -4526.90f, 35.26f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var microSupport = new Position(1352.20f, -4527.00f, 35.74f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners: [],
+                    Result: "no_path",
+                    RawCornerCount: 0,
+                    BlockedSegmentIndex: null,
+                    BlockedReason: "none",
+                    MaxAffordance: PathSegmentAffordance.Walk,
+                    PathSupported: false,
+                    StepUpCount: 0,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 0,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners:
+                    [
+                        current,
+                        microSupport,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 2,
+                    BlockedSegmentIndex: 0,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 1,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: true,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.True(
+            MathF.Abs(waypoint!.X - microSupport.X) < 0.05f
+            && MathF.Abs(waypoint.Y - microSupport.Y) < 0.05f
+            && MathF.Abs(waypoint.Z - microSupport.Z) < 0.05f,
+            $"Expected the tiny blocked-index-zero wall foothold to remain active when smooth returns no path. returned=({waypoint.X:F2},{waypoint.Y:F2},{waypoint.Z:F2}) idx={trace.CurrentWaypointIndex} active=({trace.ActiveWaypoint?.X:F2},{trace.ActiveWaypoint?.Y:F2},{trace.ActiveWaypoint?.Z:F2}) trace={trace}");
+        Assert.False(trace.SmoothPath, $"Expected the caller to promote the unsmoothed blocked-index-zero fallback only after the smooth request returned no path. Trace={trace}");
+        Assert.True(trace.RouteDecision.AlternateSelected, $"Expected the fallback path to come from the alternate unsmoothed request. Trace={trace}");
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(microSupport) < 0.05f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelRejectsBlockedIndexZeroWallSupportFallbackThatJumpsTooFarWhenSmoothReturnsNoPath()
+    {
+        var current = new Position(1352.10f, -4526.70f, 35.20f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var unsafeSupport = new Position(1352.24f, -4527.00f, 35.74f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners: [],
+                    Result: "no_path",
+                    RawCornerCount: 0,
+                    BlockedSegmentIndex: null,
+                    BlockedReason: "none",
+                    MaxAffordance: PathSegmentAffordance.Walk,
+                    PathSupported: false,
+                    StepUpCount: 0,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 0,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners:
+                    [
+                        current,
+                        unsafeSupport,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 2,
+                    BlockedSegmentIndex: 0,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 1,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: true,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.Null(waypoint);
+        Assert.False(trace.RouteDecision.HasPath, $"Expected the wider blocked-index-zero foothold to stay rejected even when smooth returns no path. Trace={trace}");
+        Assert.False(trace.RouteDecision.AlternateSelected, $"Expected the caller to leave the unsafe blocked-index-zero fallback rejected. Trace={trace}");
+        Assert.True(trace.SmoothPath, $"Expected the final trace to stay on the empty smooth decision when the blocked-index-zero foothold exceeds the micro support envelope. Trace={trace}");
+    }
+
+    [Fact]
     public void GetNextWaypoint_WaypointDiagnostics_DoNotThrowWhenAdvanceExhaustsCorridor()
     {
         var diagnostics = new List<string>();

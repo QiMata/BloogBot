@@ -444,6 +444,24 @@ Known remaining work in this owner: `0` items.
 - Next command:
   - `rg -n "SelectServiceSeedPath|TryGetProjectionBlockedPrefix|IsProjectionBlockedReason|IsPathUsable|segment_or_progress_gate|blockedIndex=0" E:\repos\Westworld of Warcraft\Exports\BotRunner\Movement\NavigationPath.cs E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\Movement\NavigationPathTests.cs`
 
+### 2026-05-27 (caller now admits the tiny blocked-index-zero foothold only after smooth collapses to `no_path`)
+- Pass result: built on the post-`d41caa41` findings handoff in `be3e6745`, `NavigationPath` now opens one more caller-only escape hatch for the literal-Frezza wall slice: if the smooth request has already collapsed to `no_path`, the unsmoothed fallback may keep a two-corner `blockedIndex=0 end_projection:*` foothold, but only inside a very small uphill support envelope. Larger blocked-index-zero fallbacks remain rejected. Two new deterministic tests pin both sides.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelUsesMicroBlockedIndexZeroWallSupportFallbackWhenSmoothReturnsNoPath|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelRejectsBlockedIndexZeroWallSupportFallbackThatJumpsTooFarWhenSmoothReturnsNoPath|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsMicroEndProjectionWallSupportPrefixAtPinnedWallSlice|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsMicroUphillWallSupportStepActiveAtPinnedWallSlice|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelDoesNotAutoCompleteFinalMicroUphillWallSupportWaypoint|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactEndProjectionWallSupportPrefixBeforeAlternateFallback|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsFollowUpCompactEndProjectionWallSupportPrefixAtHigherWallSlice|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_blockedindex0_micro_fallback_20260527_iter8a.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (8/8)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_blockedindex0_micro_fallback_20260527_iter8a.trx`
+- Practical read:
+  - The new gate is intentionally narrower than the earlier blocked-index-zero retention change. It only applies after the smooth path is already empty, only for `end_projection:*`, only for a 2-corner uphill foothold with no drop/jump markers, and only inside a ~`0.32y` / `0.55z` micro support window.
+  - Existing compact-prefix and pinned-wall regressions stayed green in the same bundle, so the new lane did not reopen the earlier unsafe alternate/jump shapes.
+- Files changed:
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Commits:
+  - `be3e6745` `Document post-d41caa41 decklip live fallback`
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_blockedindex0_micro_fallback_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
 ### 2026-05-26 (same-map `TravelTo` now enters `TravelTask`; the live literal-Frezza proof red moved to the later tower approach)
 - Pass result: built on top of commit `b3c107ba` (`Block false same-map TravelTo arrival below Frezza`). The literal Frezza proof now proves same-map `TravelTo` dispatch really enters `TravelTask` instead of hiding behind `GoToTask`, so the current live red is later route churn rather than startup.
 - Last delta:
