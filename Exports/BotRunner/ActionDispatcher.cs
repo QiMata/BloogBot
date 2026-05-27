@@ -1225,6 +1225,9 @@ namespace BotRunner
 
                     case CharacterAction.TravelTo:
                     {
+                        const float sameMapTravelArrivalTolerance = 15f;
+                        const float sameMapTravelVerticalArrivalTolerance = 4f;
+
                         // Params: [0]=mapId, [1]=x (float), [2]=y (float), [3]=z (float)
                         var targetMapId = (uint)Convert.ToInt32(actionEntry.Item2[0]);
                         var targetX = Convert.ToSingle(actionEntry.Item2[1]);
@@ -1247,7 +1250,7 @@ namespace BotRunner
                                         .ToArray()
                                 };
 
-                                var travelResult = UpsertTravelTask(_botTasks, context, targetMapId, target, options, arrivalRadius: 15f);
+                                var travelResult = UpsertTravelTask(_botTasks, context, targetMapId, target, options, arrivalRadius: sameMapTravelArrivalTolerance);
                                 if (travelResult != TravelTaskUpsertResult.Duplicate)
                                 {
                                     Log.Information(
@@ -1266,13 +1269,23 @@ namespace BotRunner
                             }
 
                             var finalDist = _objectManager.Player.Position.DistanceTo2D(target);
-                            if (finalDist <= 15f)
+                            var finalDz = Math.Abs(_objectManager.Player.Position.Z - target.Z);
+                            if (finalDist <= sameMapTravelArrivalTolerance
+                                && finalDz <= sameMapTravelVerticalArrivalTolerance)
                             {
                                 _objectManager.StopAllMovement();
                                 return BehaviourTreeStatus.Success;
                             }
 
-                            var result = UpsertGoToTask(_botTasks, context, targetX, targetY, targetZ, tolerance: 15f);
+                            var result = UpsertGoToTask(
+                                _botTasks,
+                                context,
+                                targetX,
+                                targetY,
+                                targetZ,
+                                tolerance: sameMapTravelArrivalTolerance,
+                                requireVerticalArrival: true,
+                                verticalTolerance: sameMapTravelVerticalArrivalTolerance);
                             if (result != GoToTaskUpsertResult.Duplicate)
                             {
                                 Log.Information("[BOT RUNNER] TravelTo upsert: {Result} target=({X:F1},{Y:F1},{Z:F1}) tolerance=15.0",
@@ -1318,21 +1331,30 @@ namespace BotRunner
             float x,
             float y,
             float z,
-            float tolerance)
+            float tolerance,
+            bool requireVerticalArrival = false,
+            float verticalTolerance = 0f)
         {
             var target = new Position(x, y, z);
             var normalizedTolerance = tolerance > 0f ? tolerance : 3f;
             var existingTask = botTasks.OfType<Tasks.GoToTask>().FirstOrDefault();
             if (existingTask != null)
             {
-                if (existingTask.MatchesTarget(target, normalizedTolerance))
+                if (existingTask.MatchesTarget(target, normalizedTolerance, requireVerticalArrival, verticalTolerance))
                     return GoToTaskUpsertResult.Duplicate;
 
-                existingTask.Retarget(target, normalizedTolerance);
+                existingTask.Retarget(target, normalizedTolerance, requireVerticalArrival, verticalTolerance);
                 return GoToTaskUpsertResult.Retargeted;
             }
 
-            botTasks.Push(new Tasks.GoToTask(botContext, target.X, target.Y, target.Z, normalizedTolerance));
+            botTasks.Push(new Tasks.GoToTask(
+                botContext,
+                target.X,
+                target.Y,
+                target.Z,
+                normalizedTolerance,
+                requireVerticalArrival,
+                verticalTolerance));
             return GoToTaskUpsertResult.Pushed;
         }
 

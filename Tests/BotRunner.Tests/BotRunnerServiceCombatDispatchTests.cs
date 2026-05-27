@@ -332,6 +332,8 @@ public class BotRunnerServiceCombatDispatchTests
         Assert.Equal(200f, goTo.Target.Y);
         Assert.Equal(15f, goTo.Target.Z);
         Assert.Equal(15f, goTo.Tolerance);
+        Assert.True(goTo.RequireVerticalArrival);
+        Assert.Equal(4f, goTo.VerticalTolerance);
     }
 
     [Fact]
@@ -353,10 +355,31 @@ public class BotRunnerServiceCombatDispatchTests
     }
 
     [Fact]
-    public void BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask()
+    public void BuildBehaviorTreeFromActions_TravelTo_WithinHorizontalToleranceButWrongVerticalLayer_UpsertsPersistentGoToTask()
     {
         var service = CreateService(out var objectManager);
         var player = new WoWLocalPlayer(new HighGuid(0x22))
+        {
+            MapId = 1,
+            Position = new Position(1332.1f, -4634.5f, 23.9f),
+        };
+        objectManager.SetupGet(o => o.Player).Returns(player);
+
+        var node = BuildActionTree(service, CharacterAction.TravelTo, 1, 1331.1f, -4649.5f, 53.6f);
+
+        Assert.Equal(BehaviourTreeStatus.Success, node.Tick(new TimeData(0.1f)));
+        objectManager.Verify(o => o.StopAllMovement(), Times.Never);
+
+        var goTo = Assert.IsType<GoToTask>(Assert.Single(GetBotTasks(service)));
+        Assert.True(goTo.RequireVerticalArrival);
+        Assert.Equal(4f, goTo.VerticalTolerance);
+    }
+
+    [Fact]
+    public void BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask()
+    {
+        var service = CreateService(out var objectManager);
+        var player = new WoWLocalPlayer(new HighGuid(0x23))
         {
             MapId = 1,
             Position = new Position(10f, 20f, 5f),

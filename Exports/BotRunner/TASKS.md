@@ -83,6 +83,35 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-05-26 (same-map `TravelTo` no longer false-completes on Frezza's lower lane; live red moved to spawn-geometry creep)
+- Pass result: built on top of commit `870a78a0` (`Document literal Frezza long-pathing proof`). Same-map `TravelTo` no longer accepts the literal Frezza objective as "arrived" from the lower Grunt-base lane just because XY fell inside the legacy 15y radius. The focused live proof now stays in `GoToTask`, moves a few yards for real, and fails on a new wall-collision creep against nearby spawn geometry instead of popping `GoToTask arrived`.
+- Last delta:
+  - Added an opt-in vertical-arrival gate to `GoToTask` and `UpsertGoToTask(...)`.
+  - Same-map `CharacterAction.TravelTo` now keeps the legacy 15y XY arrival radius but requires `|dz| <= 4y` before the action auto-completes or its persistent `GoToTask` can pop `arrived`.
+  - Added deterministic coverage for the exact literal-Frezza false-arrival shape.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_SameMap_UpsertsPersistentGoToTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_AlreadyWithinLegacyArrivalTolerance_StopsWithoutTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_WithinHorizontalToleranceButWrongVerticalLayer_UpsertsPersistentGoToTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask|FullyQualifiedName~BotRunnerServiceGoToDispatchTests|FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~Update_RequireVerticalArrival_DoesNotPopTaskWhenOnlyWithinHorizontalTolerance" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_same_map_travelto_vertical_arrival_20260526_fix2.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (12/12)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526_vertical_arrival_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`28s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_vertical_arrival_20260526_fix2.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_vertical_arrival_fix1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-wall-collision-creep-before-OG-zeppelin-tower-ramp-climb-from-base-t-LPATHFG1-client-20676-win0-20260526_204920.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+- Practical read:
+  - The prior false completion is gone: the new live snapshot no longer contains `[TASK] GoToTask pop reason=arrived`.
+  - The live proof now stays active long enough to move from `(1332.1,-4634.5,23.9)` to `(1329.7,-4635.0,23.8)` before stalling with forward intent held (`flags=0x1`, `currentSpeed=0.00`).
+  - BotRunner still emits only `[GOTO_ROUTE] plan=1 route=none drops=0 cliffs=0 vertical=0`; no `TRAVEL_*` diagnostics appear because same-map `TravelTo` still routes through `GoToTask`, not `TravelTask`.
+  - The local service continues to prove the literal Frezza query itself is real:
+    - `start=(1332.8,-4633.4,24.0) end=(1331.1,-4649.5,53.6)`
+    - `pathLen=144 blockedReason=interior_projection:98`
+  - The failure screenshot shows the FG target jammed against nearby Grunt-base tent/prop geometry at spawn, not climbing the ramp.
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Exports/BotRunner/Tasks/GoToTask.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceCombatDispatchTests.cs`
+  - `Tests/BotRunner.Tests/GoToTaskFallbackTests.cs`
+- Next command: `rg -n "CharacterAction.TravelTo|UpsertTravelTask|GoToTask|NavigationRoutePolicy.Standard|NavigationRoutePolicy.LongTravel" E:\repos\Westworld of Warcraft\Exports\BotRunner E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests`
+
 ### 2026-05-04 (stopped after screenshot-anchor cleanup)
 - Pass result: stopped before another live rerun; screenshot anchors are
   applied and BotRunner deterministic transport gates are green.

@@ -337,6 +337,31 @@ Treat the current red as a BotRunner same-map `TravelTo` decomposition /
 task-selection / objective-start bug, not as wrong Frezza coordinates and not
 as a reason to rebake the promoted tile.
 
+Follow-up on the same promoted tile, built on commit `870a78a0`
+(`Document literal Frezza long-pathing proof`):
+
+- `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_SameMap_UpsertsPersistentGoToTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_AlreadyWithinLegacyArrivalTolerance_StopsWithoutTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_WithinHorizontalToleranceButWrongVerticalLayer_UpsertsPersistentGoToTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask|FullyQualifiedName~BotRunnerServiceGoToDispatchTests|FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~Update_RequireVerticalArrival_DoesNotPopTaskWhenOnlyWithinHorizontalTolerance" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_same_map_travelto_vertical_arrival_20260526_fix2.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (12/12)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526_vertical_arrival_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`28s`.
+
+Evidence:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_vertical_arrival_20260526_fix2.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_vertical_arrival_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-wall-collision-creep-before-OG-zeppelin-tower-ramp-climb-from-base-t-LPATHFG1-client-20676-win0-20260526_204920.png`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+
+Decisive read:
+
+- Same-map `TravelTo` no longer falsely completes from the lower lane; the live
+  rerun removed `[TASK] GoToTask pop reason=arrived` and now moves a few yards
+  for real before failing.
+- The new honest live red is a spawn-geometry wall creep near
+  `(1329.7,-4635.0,23.8)` with only `[GOTO_ROUTE] plan=1 route=none`; it still
+  never enters the `TRAVEL_*` diagnostic path.
+- The promoted tile remains good enough to answer the literal Frezza route
+  query; the next credible fix surface is same-map `TravelTo` dispatch/executor
+  ownership, not another bake.
+
 (Legacy D2 prompt below preserved for context.) Start from the D1 stopping point, not from B/C bake or
 scale hypotheses. The original column stall mechanism is a BotRunner
 LongTravel corner-skip: the active waypoint advanced past

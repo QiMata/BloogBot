@@ -171,6 +171,50 @@ Treat the next iteration as a same-map `TravelTo` decomposition / task-name
 selection bug in BotRunner, not as a wrong Frezza coordinate or a missing
 direct path on the promoted tile.
 
+## 2026-05-26 Vertical-Arrival Follow-Up
+
+Built on top of commit `870a78a0` (`Document literal Frezza long-pathing proof`)
+without rebaking the promoted tile. This bounded slice closed the false
+same-map arrival gap that let the literal Frezza proof stop from the lower
+Grunt-base lane just because XY fell inside the legacy `15y` radius.
+
+Focused verification commands and results:
+
+- `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_SameMap_UpsertsPersistentGoToTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_AlreadyWithinLegacyArrivalTolerance_StopsWithoutTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_WithinHorizontalToleranceButWrongVerticalLayer_UpsertsPersistentGoToTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask|FullyQualifiedName~BotRunnerServiceGoToDispatchTests|FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~Update_RequireVerticalArrival_DoesNotPopTaskWhenOnlyWithinHorizontalTolerance" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_same_map_travelto_vertical_arrival_20260526_fix2.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner`
+  Result: `passed (12/12)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526_vertical_arrival_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+  Result: `failed (1/1)` after ~`28s`.
+
+Exact artifact paths for this follow-up:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_vertical_arrival_20260526_fix2.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_vertical_arrival_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-wall-collision-creep-before-OG-zeppelin-tower-ramp-climb-from-base-t-LPATHFG1-client-20676-win0-20260526_204920.png`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+
+Important proof points from the rerun:
+
+- The earlier false completion is gone:
+  - old: `[TASK] GoToTask pop reason=arrived`
+  - new: no `arrived` pop before failure
+- The live proof now stays active long enough to move from
+  `(1332.1,-4634.5,23.9)` to `(1329.7,-4635.0,23.8)` before stalling with
+  forward intent held and `currentSpeed=0.00`.
+- The service still answers the literal Frezza request during the live run:
+  - `[PATH_DIAG] ... start=(1332.8,-4633.4,24.0) end=(1331.1,-4649.5,53.6) ... pathLen=144 blockedReason=interior_projection:98`
+- The screenshot now shows the FG target jammed against nearby spawn/tent prop
+  geometry at the Grunt base instead of falsely "arriving" below the ramp.
+- The current live gap is still upstream of the expected staged travel
+  executor:
+  - latest snapshot chat shows `[GOTO_ROUTE] plan=1 route=none drops=0 cliffs=0 vertical=0`
+  - no `[TRAVEL_PLAN]`, `[TRAVEL_LEG]`, `[TRAVEL_WALK_NAV]`, or
+    `[TRAVEL_WAYPOINT_REACHED]` lines appear
+
+Treat the next iteration as a same-map `TravelTo` dispatch/executor problem:
+the objective no longer false-completes below Frezza, but it still runs as a
+`GoToTask`/`route=none` path instead of entering the `TravelTask` staged walk
+surface that owns `TRAVEL_*` diagnostics.
+
 ## Test Methods
 
 - `CrossroadsToUndercity_UsesFlightAndZeppelin`: stages the Horde target at
