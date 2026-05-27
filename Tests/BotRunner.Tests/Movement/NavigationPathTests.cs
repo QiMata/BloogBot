@@ -3099,6 +3099,64 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_LongTravelKeepsFirstCompactUphillLipSupportStepWhenPreviousContextComesFromPathStart()
+    {
+        var planStart = new Position(1353.5f, -4525.2f, 34.7f);
+        var current = new Position(1352.9f, -4525.9f, 35.0f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var lipSupport = new Position(1353.1f, -4525.7f, 35.9f);
+        var wallFacingFollowUp = new Position(1352.7f, -4526.3f, 36.0f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                lipSupport,
+                wallFacingFollowUp,
+            ]);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            supportsNativeLocalPhysicsQueries: false,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            planStart,
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathExhaustedStillFar);
+
+        var continuedWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+        var plannedSummary = string.Join(
+            " -> ",
+            trace.PlannedWaypoints.Select(point => $"({point.X:F1},{point.Y:F1},{point.Z:F1})"));
+
+        Assert.NotNull(continuedWaypoint);
+        Assert.True(
+            MathF.Abs(continuedWaypoint!.X - lipSupport.X) < 0.05f
+            && MathF.Abs(continuedWaypoint.Y - lipSupport.Y) < 0.05f
+            && MathF.Abs(continuedWaypoint.Z - lipSupport.Z) < 0.05f,
+            $"Expected the first compact uphill lip support step to remain active even when the previous support only exists in _pathStartPosition. returned=({continuedWaypoint.X:F1},{continuedWaypoint.Y:F1},{continuedWaypoint.Z:F1}) idx={trace.CurrentWaypointIndex} active=({trace.ActiveWaypoint?.X:F1},{trace.ActiveWaypoint?.Y:F1},{trace.ActiveWaypoint?.Z:F1}) planned=[{plannedSummary}]");
+        Assert.Equal(0, trace.CurrentWaypointIndex);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(lipSupport) < 0.05f);
+        Assert.NotEqual(wallFacingFollowUp.X, continuedWaypoint.X);
+        Assert.NotEqual(wallFacingFollowUp.Y, continuedWaypoint.Y);
+    }
+
+    [Fact]
     public void CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixWhenItOnlyMakesLocalClimbProgress()
     {
         var current = new Position(1352.8f, -4525.9f, 34.9f);

@@ -1611,9 +1611,12 @@ public class NavigationPath(
         if (waypoint.Z - currentPosition.Z <= WAYPOINT_VERTICAL_REACH_TOLERANCE * 0.5f)
             return false;
 
-        var incomingCompactUphill = waypointIndex > 0
-            && _waypoints[waypointIndex - 1].DistanceTo2D(waypoint) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
-            && waypoint.Z - _waypoints[waypointIndex - 1].Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
+        var previousWaypoint = waypointIndex > 0
+            ? _waypoints[waypointIndex - 1]
+            : _pathStartPosition;
+        var incomingCompactUphill = previousWaypoint is Position previous
+            && previous.DistanceTo2D(waypoint) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
+            && waypoint.Z - previous.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
         var outgoingCompactUphill = waypointIndex + 1 < _waypoints.Length
             && waypoint.DistanceTo2D(_waypoints[waypointIndex + 1]) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
             && _waypoints[waypointIndex + 1].Z - waypoint.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
