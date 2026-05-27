@@ -3308,18 +3308,57 @@ public class NavigationPath(
         PathfindingRouteResult routeResult)
     {
         if (path.Length == 0)
+        {
+            EmitPathUsabilityRejection("empty_path", start, end, path, routeResult);
             return false;
+        }
 
-        if (start.DistanceTo(path[0]) > MAX_FIRST_WAYPOINT_DISTANCE)
+        var firstWaypointDistance = start.DistanceTo(path[0]);
+        if (firstWaypointDistance > MAX_FIRST_WAYPOINT_DISTANCE)
+        {
+            EmitPathUsabilityRejection(
+                "first_waypoint_too_far",
+                start,
+                end,
+                path,
+                routeResult,
+                firstWaypointDistance: firstWaypointDistance);
             return false;
+        }
 
-        if (_strictPathValidation && !HasDestinationClosure(end, path))
+        var hasDestinationClosure = HasDestinationClosure(end, path);
+        if (_strictPathValidation && !hasDestinationClosure)
+        {
+            EmitPathUsabilityRejection(
+                "strict_destination_closure",
+                start,
+                end,
+                path,
+                routeResult,
+                firstWaypointDistance: firstWaypointDistance,
+                hasDestinationClosure: hasDestinationClosure);
             return false;
+        }
 
-        var hasDestinationProgress = HasDestinationProgress(start, end, path)
-            || ShouldAcceptProjectionBlockedLocalExecutionPrefix(start, end, path, routeResult);
-        if (!HasSaneSegments(path) || !hasDestinationProgress)
+        var hasSaneSegments = HasSaneSegments(path);
+        var hasBaseDestinationProgress = HasDestinationProgress(start, end, path);
+        var projectionPrefixAccepted = ShouldAcceptProjectionBlockedLocalExecutionPrefix(start, end, path, routeResult);
+        var hasDestinationProgress = hasBaseDestinationProgress || projectionPrefixAccepted;
+        if (!hasSaneSegments || !hasDestinationProgress)
+        {
+            EmitPathUsabilityRejection(
+                "segment_or_progress_gate",
+                start,
+                end,
+                path,
+                routeResult,
+                firstWaypointDistance: firstWaypointDistance,
+                hasDestinationClosure: hasDestinationClosure,
+                hasSaneSegments: hasSaneSegments,
+                hasBaseDestinationProgress: hasBaseDestinationProgress,
+                projectionPrefixAccepted: projectionPrefixAccepted);
             return false;
+        }
 
         // In non-strict mode, trust the navmesh path without collision-based LOS
         // validation between consecutive corners. Long outdoor paths (460y+ corpse
@@ -3328,7 +3367,69 @@ public class NavigationPath(
         if (!_strictPathValidation)
             return true;
 
-        return HasTraversableSegments(mapId, start, path);
+        var hasTraversableSegments = HasTraversableSegments(mapId, start, path);
+        if (!hasTraversableSegments)
+        {
+            EmitPathUsabilityRejection(
+                "strict_traversability",
+                start,
+                end,
+                path,
+                routeResult,
+                firstWaypointDistance: firstWaypointDistance,
+                hasDestinationClosure: hasDestinationClosure,
+                hasSaneSegments: hasSaneSegments,
+                hasBaseDestinationProgress: hasBaseDestinationProgress,
+                projectionPrefixAccepted: projectionPrefixAccepted,
+                hasTraversableSegments: hasTraversableSegments);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void EmitPathUsabilityRejection(
+        string reason,
+        Position start,
+        Position end,
+        IReadOnlyList<Position> path,
+        PathfindingRouteResult routeResult,
+        float firstWaypointDistance = float.NaN,
+        bool? hasDestinationClosure = null,
+        bool? hasSaneSegments = null,
+        bool? hasBaseDestinationProgress = null,
+        bool? projectionPrefixAccepted = null,
+        bool? hasTraversableSegments = null)
+    {
+        if (_diagnosticSink == null)
+            return;
+
+        var startToEndDistance = start.DistanceTo(end);
+        var bestDistanceToEnd = startToEndDistance;
+        var finalDistanceToEnd = path.Count > 0 ? path[^1].DistanceTo(end) : float.NaN;
+        var cumulative2D = 0f;
+        var bestNet2D = 0f;
+        var maxAbsZDelta = 0f;
+        var previous = start;
+        for (var i = 0; i < path.Count; i++)
+        {
+            var point = path[i];
+            cumulative2D += previous.DistanceTo2D(point);
+            bestNet2D = MathF.Max(bestNet2D, start.DistanceTo2D(point));
+            maxAbsZDelta = MathF.Max(maxAbsZDelta, MathF.Abs(point.Z - start.Z));
+            bestDistanceToEnd = MathF.Min(bestDistanceToEnd, point.DistanceTo(end));
+            previous = point;
+        }
+
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] usable-check reject reason={reason} strict={_strictPathValidation} count={path.Count} " +
+            $"firstDist={firstWaypointDistance:F2} closure={FormatUsabilityFlag(hasDestinationClosure)} " +
+            $"sane={FormatUsabilityFlag(hasSaneSegments)} baseProgress={FormatUsabilityFlag(hasBaseDestinationProgress)} " +
+            $"projPrefix={FormatUsabilityFlag(projectionPrefixAccepted)} traversable={FormatUsabilityFlag(hasTraversableSegments)} " +
+            $"startToEnd={startToEndDistance:F2} bestEnd={bestDistanceToEnd:F2} finalEnd={finalDistanceToEnd:F2} " +
+            $"cumulative2D={cumulative2D:F2} bestNet2D={bestNet2D:F2} maxAbsZ={maxAbsZDelta:F2} " +
+            $"blockedIndex={(routeResult.BlockedSegmentIndex?.ToString() ?? "null")} blockedReason={routeResult.BlockedReason} " +
+            $"first={FormatUsabilityPoint(path.Count > 0 ? path[0] : null)} last={FormatUsabilityPoint(path.Count > 0 ? path[^1] : null)}");
     }
 
     private static bool ShouldAcceptProjectionBlockedLocalExecutionPrefix(
@@ -3547,6 +3648,12 @@ public class NavigationPath(
         => !string.IsNullOrWhiteSpace(blockedReason)
             && (blockedReason.StartsWith("interior_projection:", StringComparison.OrdinalIgnoreCase)
                 || blockedReason.StartsWith("end_projection:", StringComparison.OrdinalIgnoreCase));
+
+    private static string FormatUsabilityFlag(bool? value)
+        => !value.HasValue ? "n/a" : value.Value ? "True" : "False";
+
+    private static string FormatUsabilityPoint(Position? point)
+        => point == null ? "none" : $"({point.X:F1},{point.Y:F1},{point.Z:F1})";
 
     private static string? BuildNearbyObjectOverlaySignature(IReadOnlyList<DynamicObjectProto>? nearbyObjects)
     {

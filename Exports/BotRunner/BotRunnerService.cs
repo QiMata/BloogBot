@@ -14,6 +14,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Networking.ClientComponents.I;
@@ -482,7 +483,25 @@ namespace BotRunner
                 catch (Exception ex)
                 {
                     Log.Error($"[BOT RUNNER] {ex}");
-                    DiagLog($"[LOOP-ERROR] {ex.GetType().Name}: {ex.Message}");
+                    var inner = ex is TargetInvocationException tie && tie.InnerException != null
+                        ? tie.InnerException
+                        : ex.InnerException;
+                    var innerSummary = string.Empty;
+                    if (inner != null)
+                    {
+                        innerSummary = $" inner={inner.GetType().Name}: {inner.Message}";
+                        if (!string.IsNullOrWhiteSpace(inner.StackTrace))
+                        {
+                            var stackTrace = inner.StackTrace!;
+                            var firstFrameBreak = stackTrace.IndexOfAny(['\r', '\n']);
+                            var firstFrame = firstFrameBreak >= 0
+                                ? stackTrace[..firstFrameBreak]
+                                : stackTrace;
+                            innerSummary += $" frame={firstFrame.Trim()}";
+                        }
+                    }
+
+                    DiagLog($"[LOOP-ERROR] {ex.GetType().Name}: {ex.Message}{innerSummary}");
                 }
 
                 await Task.Delay(100, cancellationToken);
