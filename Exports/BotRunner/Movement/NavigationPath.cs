@@ -1450,8 +1450,14 @@ public class NavigationPath(
             if (distanceToCurrentWaypoint2D <= PATH_POINT_DEDUP_EPSILON)
                 return true;
 
-            if (distanceToCurrentWaypoint2D <= GetCornerCommitDistance())
+            var requiresExactCompactUphillCommit =
+                RequiresExactCompactUphillSupportCommit(currentPosition, _currentIndex, distanceToCurrentWaypoint2D);
+            if (distanceToCurrentWaypoint2D <= GetCornerCommitDistance()
+                && !requiresExactCompactUphillCommit)
                 return true;
+
+            if (requiresExactCompactUphillCommit)
+                return false;
 
             if (ShouldHoldNearWaypointBeforeUphillLayerProgression(currentPosition, _currentIndex, distanceToCurrentWaypoint2D))
                 return false;
@@ -1526,6 +1532,34 @@ public class NavigationPath(
             return false;
 
         return next.Z - waypoint.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
+    }
+
+    private bool RequiresExactCompactUphillSupportCommit(
+        Position currentPosition,
+        int waypointIndex,
+        float distanceToWaypoint2D)
+    {
+        if (!_tightenDenseWaypointAcceptance
+            || !_requireVerticalWaypointArrival
+            || waypointIndex < 0
+            || waypointIndex >= _waypoints.Length
+            || distanceToWaypoint2D <= CORNER_COMMIT_DISTANCE
+            || distanceToWaypoint2D > GetCornerCommitDistance())
+        {
+            return false;
+        }
+
+        var waypoint = _waypoints[waypointIndex];
+        if (waypoint.Z - currentPosition.Z <= WAYPOINT_VERTICAL_REACH_TOLERANCE * 0.5f)
+            return false;
+
+        var incomingCompactUphill = waypointIndex > 0
+            && _waypoints[waypointIndex - 1].DistanceTo2D(waypoint) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
+            && waypoint.Z - _waypoints[waypointIndex - 1].Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
+        var outgoingCompactUphill = waypointIndex + 1 < _waypoints.Length
+            && waypoint.DistanceTo2D(_waypoints[waypointIndex + 1]) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
+            && _waypoints[waypointIndex + 1].Z - waypoint.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
+        return incomingCompactUphill || outgoingCompactUphill;
     }
 
     private bool ShouldHoldNearWaypointBeforeTightDescendingTransition(
