@@ -215,6 +215,54 @@ the objective no longer false-completes below Frezza, but it still runs as a
 `GoToTask`/`route=none` path instead of entering the `TravelTask` staged walk
 surface that owns `TRAVEL_*` diagnostics.
 
+## 2026-05-26 Same-Map TravelTask Dispatch Follow-Up
+
+Built on top of commit `b3c107ba` (`Block false same-map TravelTo arrival below Frezza`)
+without rebaking the promoted tile. This bounded slice closed the remaining
+same-map startup/task-selection gap: the literal Frezza live proof now enters
+`TravelTask` immediately and emits the same `TRAVEL_*` diagnostic surface as a
+staged long-travel objective.
+
+Focused verification commands and results:
+
+- `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_|FullyQualifiedName~Update_SameMapLiteralFrezzaSlice_EmitsTravelPlanAndWalkNavDiagnostics|FullyQualifiedName~Update_GruntBaseDeckLipSlice_EmitsImmediatePlanAndWalkNavBoundaries" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner`
+  Result: `passed (7/7)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+  Result: `failed (1/1)` after `1 m 41 s`.
+
+Exact artifact paths for this follow-up:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.log`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.log`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Expected-bot-to-walk-from-the-OG-tower-base-Grunt-spawn-to-literal-Frezza-1331.1-LPATHFG1-client-36448-win0-20260526_211122.png`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\03-final-LPATHFG1-20260527T011119Z.json`
+- `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+
+Important proof points from the rerun:
+
+- The same-map startup gap is closed:
+  - `botrunner_LPATHFG1.diag.log` now shows `[TRAVEL_DISPATCH] same-map stage`,
+    `[TRAVEL_PLAN] legs=1 Walk`, `[TRAVEL_LEG] start index=0 type=Walk`, and
+    many `[TRAVEL_WAYPOINT_REACHED]` events from the Grunt-base spawn.
+- The live red moved back to the later tower-approach stall, not spawn:
+  - final assertion: `Final position: (1353.1,-4525.3,34.6) map=1 dist2D=126.1y`
+  - the screenshot shows the FG target pressed into a wall/cliff face rather
+    than creeping into nearby spawn props.
+- The next credible gap is the later route/contract behavior on the same
+  promoted tile:
+  - early request still logs `corners=144 result=raw_detour blockedReason=interior_projection:98`
+  - later replans also log alternate unsmoothed responses with
+    `corners=14` or `corners=12`, `result=raw_detour`,
+    `blockedReason=none`
+  - the accepted short route includes a huge late jump from around
+    `(1357.2,-4516.2,32.2)` toward `(1320.1,-4653.2,53.7)`
+
+Treat the next iteration as a later raw-detour / alternate-path contract
+investigation on the current promoted tile, not as a coordinate or startup bug.
+
 ## Test Methods
 
 - `CrossroadsToUndercity_UsesFlightAndZeppelin`: stages the Horde target at
@@ -303,7 +351,9 @@ gameobject export, mmap generation, and regenerated map data.
 
 ## Runtime Linkage
 
-- `TravelTo` now queues `TravelTask` for cross-map destinations.
+- `TravelTo` now queues `TravelTask` for cross-map destinations and for
+  same-map long-pathing targets that are outside the legacy `15y` / `4y`
+  same-map arrival gate.
 - `CrossMapRouter` must plan the route as staged objectives instead of a
   single direct path or a Ratchet/Booty Bay neutral shortcut.
 - Walk legs must be resolved through PathfindingService with the configured

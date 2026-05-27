@@ -1236,26 +1236,27 @@ namespace BotRunner
                         builder.Do($"TravelTo map={targetMapId} ({targetX:F0},{targetY:F0},{targetZ:F0})", time =>
                         {
                             var target = new Position(targetX, targetY, targetZ);
+                            var options = new TravelOptions
+                            {
+                                PlayerFaction = TravelFaction.Horde,
+                                DiscoveredFlightNodes = FlightPathData
+                                    .GetNodesForFaction((int)_objectManager.Player.MapId, FlightPathData.Faction.Horde)
+                                    .Select(n => n.NodeId)
+                                    .ToArray()
+                            };
+
                             if (_objectManager.Player.MapId != targetMapId)
                             {
                                 context.AddImmediateDiagnostic(
                                     $"[TRAVEL_DISPATCH] cross-map stage playerMap={_objectManager.Player.MapId} " +
                                     $"targetMap={targetMapId} target=({targetX:F1},{targetY:F1},{targetZ:F1}) stack={_botTasks.Count}");
-                                var options = new TravelOptions
-                                {
-                                    PlayerFaction = TravelFaction.Horde,
-                                    DiscoveredFlightNodes = FlightPathData
-                                        .GetNodesForFaction((int)_objectManager.Player.MapId, FlightPathData.Faction.Horde)
-                                        .Select(n => n.NodeId)
-                                        .ToArray()
-                                };
 
-                                var travelResult = UpsertTravelTask(_botTasks, context, targetMapId, target, options, arrivalRadius: sameMapTravelArrivalTolerance);
-                                if (travelResult != TravelTaskUpsertResult.Duplicate)
+                                var crossMapTravelResult = UpsertTravelTask(_botTasks, context, targetMapId, target, options, arrivalRadius: sameMapTravelArrivalTolerance);
+                                if (crossMapTravelResult != TravelTaskUpsertResult.Duplicate)
                                 {
                                     Log.Information(
                                         "[BOT RUNNER] TravelTo staged upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1})",
-                                        travelResult,
+                                        crossMapTravelResult,
                                         targetMapId,
                                         targetX,
                                         targetY,
@@ -1263,7 +1264,7 @@ namespace BotRunner
                                 }
 
                                 context.AddImmediateDiagnostic(
-                                    $"[TRAVEL_DISPATCH] cross-map upsert={travelResult} stack={_botTasks.Count}");
+                                    $"[TRAVEL_DISPATCH] cross-map upsert={crossMapTravelResult} stack={_botTasks.Count}");
 
                                 return BehaviourTreeStatus.Success;
                             }
@@ -1277,20 +1278,29 @@ namespace BotRunner
                                 return BehaviourTreeStatus.Success;
                             }
 
-                            var result = UpsertGoToTask(
+                            context.AddImmediateDiagnostic(
+                                $"[TRAVEL_DISPATCH] same-map stage playerMap={_objectManager.Player.MapId} " +
+                                $"targetMap={targetMapId} target=({targetX:F1},{targetY:F1},{targetZ:F1}) stack={_botTasks.Count}");
+                            var sameMapTravelResult = UpsertTravelTask(
                                 _botTasks,
                                 context,
-                                targetX,
-                                targetY,
-                                targetZ,
-                                tolerance: sameMapTravelArrivalTolerance,
-                                requireVerticalArrival: true,
-                                verticalTolerance: sameMapTravelVerticalArrivalTolerance);
-                            if (result != GoToTaskUpsertResult.Duplicate)
+                                targetMapId,
+                                target,
+                                options,
+                                arrivalRadius: sameMapTravelArrivalTolerance);
+                            if (sameMapTravelResult != TravelTaskUpsertResult.Duplicate)
                             {
-                                Log.Information("[BOT RUNNER] TravelTo upsert: {Result} target=({X:F1},{Y:F1},{Z:F1}) tolerance=15.0",
-                                    result, targetX, targetY, targetZ);
+                                Log.Information(
+                                    "[BOT RUNNER] TravelTo same-map upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1}) arrivalRadius=15.0",
+                                    sameMapTravelResult,
+                                    targetMapId,
+                                    targetX,
+                                    targetY,
+                                    targetZ);
                             }
+
+                            context.AddImmediateDiagnostic(
+                                $"[TRAVEL_DISPATCH] same-map upsert={sameMapTravelResult} stack={_botTasks.Count}");
 
                             return BehaviourTreeStatus.Success;
                         });

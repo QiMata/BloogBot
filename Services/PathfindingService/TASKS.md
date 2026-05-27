@@ -168,7 +168,41 @@
   service startup or deterministic tests for a full session timeout.
 
 ## Session Handoff
-- Last updated: 2026-05-26 (literal Frezza direct proof shows the target coords are real; the live red is now upstream task selection)
+- Last updated: 2026-05-26 (same-map `TravelTask` proof closed the startup gap; the next live red is the later raw-detour contract split)
+
+### 2026-05-26 - same-map `TravelTask` proof exposed the later raw-detour contract split on the promoted tile
+- Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+  baseline (`35579EA49C8CC1D2A2F1086EF5812D4C5F461BD2EC4E3135012AB60129175721`)
+  and explain why the later tower-approach live replans can alternate between
+  smoothed `raw_detour` requests tagged `interior_projection` and short
+  unsmoothed `raw_detour` responses that still claim `blockedReason=none`.
+- Pass result: `no PathfindingService code changed in this slice; BotRunner now
+  enters TravelTask for the literal Frezza proof, which proves the live stack
+  is querying the promoted tile and moves the remaining service-side question
+  to the later alternate-path/raw-detour contract rather than spawn-startup or
+  target coordinates`.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_|FullyQualifiedName~Update_SameMapLiteralFrezzaSlice_EmitsTravelPlanAndWalkNavDiagnostics|FullyQualifiedName~Update_GruntBaseDeckLipSlice_EmitsImmediatePlanAndWalkNavBoundaries" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (7/7)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 41 s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.log`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Expected-bot-to-walk-from-the-OG-tower-base-Grunt-spawn-to-literal-Frezza-1331.1-LPATHFG1-client-36448-win0-20260526_211122.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\03-final-LPATHFG1-20260527T011119Z.json`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The same-map startup gap is no longer a PathfindingService suspect. The
+    live run now emits `[TRAVEL_PLAN]`, `[TRAVEL_LEG]`, and many
+    `[TRAVEL_WAYPOINT_REACHED]` events before failing, which proves the caller
+    is consuming the promoted tile through the intended long-travel surface.
+  - The current service-side evidence is a split contract on the later stall:
+    - earlier request: `corners=144 result=raw_detour blockedIndex=97 blockedReason=interior_projection:98`
+    - later alternate requests: `corners=14 result=raw_detour blockedIndex=null blockedReason=none`
+    - later alternate requests again: `corners=12 result=raw_detour blockedIndex=null blockedReason=none`
+  - The accepted short route includes a huge late jump from around
+    `(1357.2,-4516.2,32.2)` to `(1320.1,-4653.2,53.7)`, and the same run ends
+    in repeated `[TRAVEL_WALK_STALL]` churn near the later tower approach.
+- Next command: `Select-String -Path 'D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log' -Pattern 'blockedReason=interior_projection:98|corners=14 result=raw_detour blockedIndex=null blockedReason=none|corners=12 result=raw_detour blockedIndex=null blockedReason=none|\[TRAVEL_WALK_STALL\]'`
 
 ### 2026-05-26 - literal Frezza direct proof shows the promoted data can route to Frezza, but the live same-map objective pops `GoToTask` as arrived
 - Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile` baseline, preserve the raw-path contract instrumentation from commit `4ff2f765`, and answer the "wrong coordinates?" question against the exact Grunt-base -> Frezza NPC pair on both the service and live surfaces.

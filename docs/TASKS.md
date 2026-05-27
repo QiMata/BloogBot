@@ -362,6 +362,39 @@ Decisive read:
   query; the next credible fix surface is same-map `TravelTo` dispatch/executor
   ownership, not another bake.
 
+Follow-up on the same promoted tile, built on commit `b3c107ba`
+(`Block false same-map TravelTo arrival below Frezza`):
+
+- `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_|FullyQualifiedName~Update_SameMapLiteralFrezzaSlice_EmitsTravelPlanAndWalkNavDiagnostics|FullyQualifiedName~Update_GruntBaseDeckLipSlice_EmitsImmediatePlanAndWalkNavBoundaries" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (7/7)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 41 s`.
+
+Evidence:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.log`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.log`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Expected-bot-to-walk-from-the-OG-tower-base-Grunt-spawn-to-literal-Frezza-1331.1-LPATHFG1-client-36448-win0-20260526_211122.png`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\03-final-LPATHFG1-20260527T011119Z.json`
+- `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+
+Decisive read:
+
+- Same-map `TravelTo` now really enters `TravelTask` on the live proof surface:
+  the diag log shows `[TRAVEL_DISPATCH]`, `[TRAVEL_PLAN] legs=1 Walk`,
+  `[TRAVEL_LEG] start index=0 type=Walk`, and many
+  `[TRAVEL_WAYPOINT_REACHED]` events from the Grunt-base spawn.
+- The current live red moved later, not deeper into startup. The run now fails
+  at `Final position: (1353.1,-4525.3,34.6) map=1 dist2D=126.1y`, and the
+  screenshot shows wall/cliff pressure at the later tower approach rather than
+  the old spawn creep.
+- The next credible gap is route/contract behavior on the promoted tile:
+  later replans alternate between smoothed `raw_detour` requests tagged
+  `blockedReason=interior_projection:98` and short unsmoothed `raw_detour`
+  responses that still report `blockedReason=none` while jumping toward
+  `(1320.1,-4653.2,53.7)`.
+
 (Legacy D2 prompt below preserved for context.) Start from the D1 stopping point, not from B/C bake or
 scale hypotheses. The original column stall mechanism is a BotRunner
 LongTravel corner-skip: the active waypoint advanced past
