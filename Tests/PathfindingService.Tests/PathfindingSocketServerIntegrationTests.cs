@@ -63,6 +63,64 @@ public sealed class PathfindingSocketServerIntegrationTests(NavigationFixture fi
     }
 
     [Fact]
+    public async Task HandlePath_DeckLipGruntNpcToLiteralFrezza_ReturnsCurrentServicePathThroughIsolatedPort()
+    {
+        _ = _fixture.Navigation;
+        var port = GetFreePort();
+        using var server = new PathfindingSocketServer("127.0.0.1", port, NullLogger<PathfindingSocketServer>.Instance);
+        server.InitializeNavigation();
+
+        var request = new PathfindingRequest
+        {
+            Path = new CalculatePathRequest
+            {
+                MapId = 1,
+                Start = new Game.Position { X = 1332.76f, Y = -4633.40f, Z = 24.0783f },
+                End = new Game.Position { X = 1331.11f, Y = -4649.45f, Z = 53.6269f },
+                Straight = true,
+                Race = (uint)Race.Tauren,
+                Gender = (uint)Gender.Male,
+            }
+        };
+
+        var responseBudget = TimeSpan.FromSeconds(30);
+        var stopwatch = Stopwatch.StartNew();
+        var responseTask = SendRequestAsync(port, request);
+        var completedTask = await Task.WhenAny(responseTask, Task.Delay(responseBudget));
+        Assert.Same(responseTask, completedTask);
+
+        var response = await responseTask;
+        stopwatch.Stop();
+
+        Assert.Equal(PathfindingResponse.PayloadOneofCase.Path, response.PayloadCase);
+        Assert.Equal("raw_detour", response.Path.Result);
+        Assert.True(response.Path.HasBlockedSegment);
+        Assert.InRange(response.Path.BlockedSegmentIndex, 90, 110);
+        Assert.StartsWith("interior_projection:", response.Path.BlockedReason, StringComparison.Ordinal);
+        Assert.True(
+            response.Path.Corners.Count >= 120,
+            $"Expected the current promoted Grunt #1 -> Frezza service path to preserve the long tower climb; got {response.Path.Corners.Count} corners.");
+        Assert.True(stopwatch.Elapsed < responseBudget, $"Socket path response took {stopwatch.ElapsedMilliseconds}ms.");
+
+        var first = response.Path.Corners[0];
+        var last = response.Path.Corners[^1];
+        var startDistance2D = Distance2D(first.X, first.Y, request.Path.Start.X, request.Path.Start.Y);
+        var finalDistance2D = Distance2D(last.X, last.Y, request.Path.End.X, request.Path.End.Y);
+        var finalDeltaZ = MathF.Abs(last.Z - request.Path.End.Z);
+
+        Console.WriteLine(
+            $"Socket literal Frezza path: result={response.Path.Result} len={response.Path.Corners.Count} blockedSeg={(response.Path.HasBlockedSegment ? response.Path.BlockedSegmentIndex.ToString() : "null")} blockedReason={response.Path.BlockedReason} firstDist2D={startDistance2D:F2} final=({last.X:F2},{last.Y:F2},{last.Z:F2}) dist2D={finalDistance2D:F2} dz={finalDeltaZ:F2}");
+
+        Assert.InRange(startDistance2D, 0f, 10f);
+        Assert.True(
+            finalDistance2D <= 4f,
+            $"Expected the socket Grunt #1 -> Frezza path to finish near the literal Frezza spawn; final 2D distance was {finalDistance2D:F2}y.");
+        Assert.True(
+            finalDeltaZ <= 1f,
+            $"Expected the socket Grunt #1 -> Frezza path to finish on Frezza's upper-deck Z layer; final |dz| was {finalDeltaZ:F2}y.");
+    }
+
+    [Fact]
     public async Task HandlePath_RepeatedStaticRequest_UsesServiceRouteCacheThroughNormalContract()
     {
         using var overlayEnv = new EnvironmentVariableScope("WWOW_ENABLE_PATHFINDING_DYNAMIC_OVERLAY", null);
