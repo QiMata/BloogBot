@@ -362,6 +362,23 @@ Decisive read:
   query; the next credible fix surface is same-map `TravelTo` dispatch/executor
   ownership, not another bake.
 
+### 2026-05-27 - projection-blocked prefix retention landed without touching the promoted `.mmtile`; next gate is StateManager launch health
+- Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile` baseline, preserve the proven `Grunt #1 -> Frezza` contract (`len=144`, `blockedReason=interior_projection:98`), and stop BotRunner from discarding the usable smooth corridor prefix before the live proof is rerun.
+- Pass result: `shipped in commit 5346cd78; caller-side route consumption now preserves the usable smooth raw_detour prefix for projection-blocked results, so the remaining blocker is the separate WoWStateManager:9000 startup failure from the last takeover rerun, not a new reason to rebake or reopen the old Tauren-vs-Gnome theory`.
+- Last delta:
+  - `NavigationPath` now routes service results through `SelectServiceSeedPath(...)` and keeps a prefix for `interior_projection:*` / `end_projection:*` blocks when the service returned a valid blocked-segment index.
+  - Added deterministic coverage `NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump`.
+  - Revalidated the existing deck-lip deterministic bundle on the carried current-head workspace before committing.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump|FullyQualifiedName~NavigationPathTests.RecalculateAfterMovementStall_DeckLipAlternatePath_KeepsDescendingCorridorBeforeBoardingJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsTightDescendingRopeStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelMovementStuckPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_decklip_projection_prefix_20260527_takeover_iter1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (5/5)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_decklip_projection_prefix_20260527_takeover_iter1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_takeover_rerun.trx`
+- Practical read:
+  - The caller-side deterministic red is now closed on current HEAD without changing nav data.
+  - The immediate next live blocker is launch health: the most recent focused rerun never got a StateManager listener on `127.0.0.1:9000`, so the next bounded slice is reproducing/fixing that startup path and only then re-running the literal Frezza proof with screenshots.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_takeover_rerun.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
 Follow-up on the same promoted tile, built on commit `b3c107ba`
 (`Block false same-map TravelTo arrival below Frezza`):
 

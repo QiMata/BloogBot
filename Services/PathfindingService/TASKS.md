@@ -168,7 +168,20 @@
   service startup or deterministic tests for a full session timeout.
 
 ## Session Handoff
-- Last updated: 2026-05-26 (modeled BotRunner stall-recovery path did not reproduce the suspected boarding-jump promotion)
+- Last updated: 2026-05-27 (projection-blocked prefix retention committed; promoted pathfinding baseline preserved)
+
+### 2026-05-27 - caller-side projection-prefix retention landed; no PathfindingService or tile mutation yet
+- Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile` baseline and continue treating the focused `DeckLipClimbFromGruntToFrezza` / `DeckLipClimbFromGruntToLiteralFrezza` red as a caller/live-fixture problem unless new evidence disproves that.
+- Pass result: `no PathfindingService code changed in this slice; commit 5346cd78 closed the deterministic caller-side route-consumption bug by preserving smooth projection-blocked prefixes, so the next gate is WoWStateManager startup health on port 9000 before any new pathfinding-service/live route evidence is collected`.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump|FullyQualifiedName~NavigationPathTests.RecalculateAfterMovementStall_DeckLipAlternatePath_KeepsDescendingCorridorBeforeBoardingJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsTightDescendingRopeStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelMovementStuckPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_decklip_projection_prefix_20260527_takeover_iter1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (5/5)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_decklip_projection_prefix_20260527_takeover_iter1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_takeover_rerun.trx`
+- Practical read:
+  - The promoted service contract remains the same one already proven on 2026-05-26: `result=raw_detour len=144 blockedSeg=97 blockedReason=interior_projection:98 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`.
+  - Because the caller bug was deterministic and no nav data changed, there is still no rebake justification. The next bounded slice is reproducing/fixing the StateManager `127.0.0.1:9000` startup failure that made the last focused live rerun inconclusive.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_takeover_rerun.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
 
 ### 2026-05-26 - modeled BotRunner stall-recovery path did not reproduce the suspected boarding-jump promotion
 - Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile`

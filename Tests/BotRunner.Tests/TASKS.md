@@ -175,6 +175,26 @@ Known remaining work in this owner: `0` items.
 - Next command:
   - `Select-String -Path 'D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log' -Pattern 'idx=9 activeDist=130|stalled_near_waypoint|corners=12 result=raw_detour blockedIndex=null blockedReason=none|corners=14 result=raw_detour blockedIndex=null blockedReason=none'`
 
+### 2026-05-27 (projection-blocked long-travel prefix retention is committed; next live gate is StateManager port 9000 startup)
+- Pass result: shipped in commit `5346cd78` (`Fix projection-blocked long-travel prefix retention`). `NavigationPath` now keeps the usable smooth `raw_detour` prefix when the service reports `interior_projection:*` or `end_projection:*` with a blocked segment index, instead of discarding that corridor and falling through to the unsafe short alternate/jump shape.
+- Last delta:
+  - Added `SelectServiceSeedPath(...)`, `TryGetProjectionBlockedPrefix(...)`, and `IsProjectionBlockedReason(...)` in `Exports/BotRunner/Movement/NavigationPath.cs`.
+  - Added `NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump`.
+  - Kept dynamic-overlay rejection and non-projection static-block rejection unchanged.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump|FullyQualifiedName~NavigationPathTests.RecalculateAfterMovementStall_DeckLipAlternatePath_KeepsDescendingCorridorBeforeBoardingJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsTightDescendingRopeStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelMovementStuckPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_decklip_projection_prefix_20260527_takeover_iter1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (5/5)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_decklip_projection_prefix_20260527_takeover_iter1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_takeover_rerun.trx`
+- Practical read:
+  - The deterministic caller bug is now pinned and committed on the current promoted tile baseline; projection-blocked smooth corridors are preserved instead of being thrown away.
+  - The next blocker is separate launch health, not route theory: the last focused live rerun never got past `WoWStateManager` binding `127.0.0.1:9000`, so the immediate next surface is reproducing that startup path before re-running the literal Frezza proof.
+- Files changed:
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+- Next command:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_takeover_rerun.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
 ### 2026-05-26 (same-map `TravelTo` now enters `TravelTask`; the live literal-Frezza proof red moved to the later tower approach)
 - Pass result: built on top of commit `b3c107ba` (`Block false same-map TravelTo arrival below Frezza`). The literal Frezza proof now proves same-map `TravelTo` dispatch really enters `TravelTask` instead of hiding behind `GoToTask`, so the current live red is later route churn rather than startup.
 - Last delta:
