@@ -3340,7 +3340,7 @@ public class NavigationPath(
         if (path.Count == 0
             || path.Count > PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_WAYPOINTS
             || routeResult.BlockedSegmentIndex is not int blockedSegmentIndex
-            || blockedSegmentIndex <= 0
+            || blockedSegmentIndex < 0
             || !IsProjectionBlockedReason(routeResult.BlockedReason))
         {
             return false;
@@ -3532,7 +3532,9 @@ public class NavigationPath(
             return false;
         }
 
-        var prefixLength = Math.Clamp(blockedSegmentIndex + 1, 0, routeResult.Corners.Length);
+        var prefixLength = blockedSegmentIndex == 0
+            ? Math.Min(routeResult.Corners.Length, 2)
+            : Math.Clamp(blockedSegmentIndex + 1, 0, routeResult.Corners.Length);
         if (prefixLength < 2)
             return false;
 

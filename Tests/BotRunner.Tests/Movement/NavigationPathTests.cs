@@ -3298,6 +3298,75 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void CalculatePath_LongTravelKeepsTwoCornerProjectionBlockedSmoothPrefixAtDeckLipWallSlice()
+    {
+        var current = new Position(1351.7f, -4526.9f, 35.3f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var lipWallSupport = new Position(1352.4f, -4526.6f, 36.1f);
+        var upperWallSupport = new Position(1352.9f, -4526.0f, 36.6f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, _, _, _) => new PathfindingRouteResult(
+                Corners:
+                [
+                    lipWallSupport,
+                    upperWallSupport,
+                ],
+                Result: "raw_detour",
+                RawCornerCount: 2,
+                BlockedSegmentIndex: 0,
+                BlockedReason: "end_projection:124.2",
+                MaxAffordance: PathSegmentAffordance.StepUp,
+                PathSupported: false,
+                StepUpCount: 1,
+                DropCount: 0,
+                CliffCount: 0,
+                VerticalCount: 0,
+                TotalZGain: 0f,
+                TotalZLoss: 0f,
+                MaxSlopeAngleDeg: 0f,
+                JumpGapCount: 0,
+                SafeDropCount: 0,
+                UnsafeDropCount: 0,
+                BlockedCount: 1,
+                MaxClimbHeight: 0f,
+                MaxGapDistance: 0f,
+                MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            current,
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathUnavailable);
+
+        var traceAfterCalculate = navPath.TraceSnapshot;
+        var bestGlobalProgress = current.DistanceTo(destination)
+            - traceAfterCalculate.PlannedWaypoints.Min(point => point.DistanceTo(destination));
+
+        Assert.Equal(2, traceAfterCalculate.PlannedWaypoints.Length);
+        Assert.True(traceAfterCalculate.SmoothPath, $"Expected the two-corner projection-blocked wall-slice prefix to stay on the smooth route. Trace={traceAfterCalculate}");
+        Assert.False(traceAfterCalculate.RouteDecision.AlternateSelected, $"Expected no alternate route selection for the retained two-corner smooth prefix. Trace={traceAfterCalculate}");
+        Assert.True(bestGlobalProgress < 0.0f, $"Expected the retained wall-slice prefix to temporarily regress global destination distance while gaining height. progress={bestGlobalProgress:F2} trace={traceAfterCalculate}");
+        Assert.Contains(traceAfterCalculate.PlannedWaypoints, point => point.DistanceTo2D(upperWallSupport) < 0.05f);
+    }
+
+    [Fact]
     public void GetNextWaypoint_LongTravelKeepsCompactRopeSupportStepBeforeStallPromotion()
     {
         var current = new Position(1371.1f, -4439.4f, 30.9f);
