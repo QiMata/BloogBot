@@ -607,6 +607,11 @@ public class NavigationPath(
     private const float PATH_POINT_DEDUP_EPSILON = 0.05f;
     private const float MAX_FIRST_WAYPOINT_DISTANCE = 120f;
     private const float MIN_DESTINATION_PROGRESS = 1f;
+    private const int PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_WAYPOINTS = 4;
+    private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_CUMULATIVE_2D = 1.25f;
+    private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_NET_2D = 0.5f;
+    private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_Z_DELTA = 0.5f;
+    private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_DESTINATION_REGRESSION = 0.25f;
     private const float MAX_SEGMENT_DISTANCE = 1200f;
     private const float PATH_TRAVERSABILITY_SEGMENT_EPSILON = 0.05f;
     private const float STRICT_DESTINATION_ENDPOINT_DISTANCE = 8f;
@@ -3295,7 +3300,12 @@ public class NavigationPath(
         return true;
     }
 
-    private bool IsPathUsable(uint mapId, Position start, Position end, Position[] path)
+    private bool IsPathUsable(
+        uint mapId,
+        Position start,
+        Position end,
+        Position[] path,
+        PathfindingRouteResult routeResult)
     {
         if (path.Length == 0)
             return false;
@@ -3306,7 +3316,9 @@ public class NavigationPath(
         if (_strictPathValidation && !HasDestinationClosure(end, path))
             return false;
 
-        if (!HasSaneSegments(path) || !HasDestinationProgress(start, end, path))
+        var hasDestinationProgress = HasDestinationProgress(start, end, path)
+            || ShouldAcceptProjectionBlockedLocalExecutionPrefix(start, end, path, routeResult);
+        if (!HasSaneSegments(path) || !hasDestinationProgress)
             return false;
 
         // In non-strict mode, trust the navmesh path without collision-based LOS
@@ -3317,6 +3329,46 @@ public class NavigationPath(
             return true;
 
         return HasTraversableSegments(mapId, start, path);
+    }
+
+    private static bool ShouldAcceptProjectionBlockedLocalExecutionPrefix(
+        Position start,
+        Position end,
+        IReadOnlyList<Position> path,
+        PathfindingRouteResult routeResult)
+    {
+        if (path.Count == 0
+            || path.Count > PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_WAYPOINTS
+            || routeResult.BlockedSegmentIndex is not int blockedSegmentIndex
+            || blockedSegmentIndex <= 0
+            || !IsProjectionBlockedReason(routeResult.BlockedReason))
+        {
+            return false;
+        }
+
+        var startToEndDistance = start.DistanceTo(end);
+        var bestDistanceToEnd = startToEndDistance;
+        var cumulative2D = 0f;
+        var bestNet2D = 0f;
+        var maxAbsZDelta = 0f;
+        var previous = start;
+
+        for (var i = 0; i < path.Count; i++)
+        {
+            var point = path[i];
+            cumulative2D += previous.DistanceTo2D(point);
+            bestNet2D = MathF.Max(bestNet2D, start.DistanceTo2D(point));
+            maxAbsZDelta = MathF.Max(maxAbsZDelta, MathF.Abs(point.Z - start.Z));
+            bestDistanceToEnd = MathF.Min(bestDistanceToEnd, point.DistanceTo(end));
+            previous = point;
+        }
+
+        if (bestDistanceToEnd > startToEndDistance + PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_DESTINATION_REGRESSION)
+            return false;
+
+        return cumulative2D >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_CUMULATIVE_2D
+            && (bestNet2D >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_NET_2D
+                || maxAbsZDelta >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_Z_DELTA);
     }
 
     private ValidatedPathResult GetValidatedPath(uint mapId, Position start, Position end, bool smoothPath)
@@ -3417,7 +3469,7 @@ public class NavigationPath(
             : localPhysicsValidatedPath;
         EmitNavigationDiagnostic($"[NAV_PATH] cliff-reroute exit count={cliffReroutedPath.Length}");
 
-        var usable = IsPathUsable(mapId, start, end, cliffReroutedPath);
+        var usable = IsPathUsable(mapId, start, end, cliffReroutedPath, rawPathResult);
 
         sw.Stop();
         Metrics.RecordPathDuration(sw.ElapsedMilliseconds);
