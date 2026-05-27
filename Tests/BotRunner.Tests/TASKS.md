@@ -462,6 +462,27 @@ Known remaining work in this owner: `0` items.
 - Next command:
   - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_blockedindex0_micro_fallback_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
 
+### 2026-05-27 (live rerun after `0689fb5d` moved the red again; the new failure is wall-collision creep on the earlier compact lip-support slice)
+- Pass result: the focused literal-Frezza rerun after `0689fb5d` still failed live, but it no longer died at the prior `smooth no_path` / blocked-index-zero fallback surface. The new red is earlier and narrower: the bot now reaches the compact lip-support shelf near `(1353.2,-4525.4,34.7)`, keeps a 3-point smooth wall-support prefix alive, and then creeps into the wall with forward intent set and `currentSpeed=0.00 yd/s`.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_blockedindex0_micro_fallback_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 9 s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_blockedindex0_micro_fallback_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-wall-collision-creep-before-OG-zeppelin-tower-ramp-climb-from-base-t-LPATHFG1-client-7416-win0-20260527_084402.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00090-LPATHFG1-20260527T124351Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00100-LPATHFG1-20260527T124356Z.json`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - `0689fb5d` bought real caller progress: the run no longer collapses to `no_route` at the later pinned wall and instead climbs onto the earlier lip-support shelf.
+  - The screenshot still shows a real wall-face press. The fresh likely caller bug is earlier waypoint consumption: the live trace keeps rebuilding a compact 3-point smooth prefix around `(1353.5,-4525.2,34.7) -> (1353.1,-4525.7,35.9) -> (1352.7,-4526.3,36.0)` and then reports `[TRAVEL_WAYPOINT_REACHED] ... reason=in-radius` while the player is still about `0.9y` below that first climb support step.
+  - That points at the next narrow hypothesis: when the compact uphill support waypoint becomes the first planned corner after sanitize/prune, the exact-arrival guard loses its previous-step context and lets the caller auto-commit too early.
+- Files changed:
+  - `Tests/BotRunner.Tests/TASKS.md`
+- Commits:
+  - `0689fb5d` `Allow micro blocked-index-zero wall fallback`
+- Next command:
+  - `rg -n "RequiresExactCompactUphillSupportCommit|_pathStartPosition|GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp" E:\repos\Westworld of Warcraft\Exports\BotRunner\Movement\NavigationPath.cs E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\Movement\NavigationPathTests.cs`
+
 ### 2026-05-26 (same-map `TravelTo` now enters `TravelTask`; the live literal-Frezza proof red moved to the later tower approach)
 - Pass result: built on top of commit `b3c107ba` (`Block false same-map TravelTo arrival below Frezza`). The literal Frezza proof now proves same-map `TravelTo` dispatch really enters `TravelTask` instead of hiding behind `GoToTask`, so the current live red is later route churn rather than startup.
 - Last delta:
