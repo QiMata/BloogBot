@@ -611,6 +611,18 @@ public class NavigationPath(
     private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_CUMULATIVE_2D = 1.25f;
     private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_NET_2D = 0.5f;
     private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_Z_DELTA = 0.5f;
+    private const float PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_CUMULATIVE_2D = 0.18f;
+    private const float PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_NET_2D = 0.18f;
+    private const float PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_Z_DELTA = 0.9f;
+    private const float PROJECTION_PREFIX_MICRO_END_BLOCK_MAX_START_RADIUS_2D = 0.35f;
+    private const float PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_CUMULATIVE_2D = 0.1f;
+    private const float PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_NET_2D = 0.1f;
+    private const float PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_Z_DELTA = 0.3f;
+    private const float PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MAX_START_RADIUS_2D = 0.2f;
+    private const float MICRO_UPHILL_SUPPORT_REACH_MAX_RADIUS_2D = 0.35f;
+    private const float MICRO_UPHILL_SUPPORT_REACH_MIN_VERTICAL_DELTA = 0.25f;
+    private const float MICRO_UPHILL_SUPPORT_SEGMENT_MAX_DISTANCE = 0.35f;
+    private const float MICRO_UPHILL_SUPPORT_SEGMENT_MIN_Z_DELTA = 0.3f;
     private const float PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_CUMULATIVE_2D = 0.44f;
     private const float PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_NET_2D = 0.44f;
     private const float PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_Z_DELTA = 0.95f;
@@ -1227,7 +1239,10 @@ public class NavigationPath(
 
         var verticalDelta = MathF.Abs(currentPosition.Z - waypoint.Z);
         if (verticalDelta <= WAYPOINT_VERTICAL_REACH_TOLERANCE)
-            return true;
+        {
+            var reachIndex = waypointIndex ?? _currentIndex;
+            return !RequiresExactArrivalForMicroUphillSupport(currentPosition, waypoint, reachIndex, verticalDelta);
+        }
 
         var index = waypointIndex ?? _currentIndex;
         return CanTreatSmallCollisionLayerDriftAsReached(currentPosition, waypoint, index, verticalDelta);
@@ -1247,6 +1262,34 @@ public class NavigationPath(
             return false;
 
         return horizontalDelta >= MathF.Max(WAYPOINT_VERTICAL_LAYER_PROMOTION_MIN_2D, verticalDelta);
+    }
+
+    private bool RequiresExactArrivalForMicroUphillSupport(
+        Position currentPosition,
+        Position waypoint,
+        int waypointIndex,
+        float verticalDelta)
+    {
+        if (!_tightenDenseWaypointAcceptance
+            || !IsLongTravelStyleRoute()
+            || waypointIndex < 0
+            || waypointIndex >= _waypoints.Length
+            || verticalDelta <= MICRO_UPHILL_SUPPORT_REACH_MIN_VERTICAL_DELTA)
+        {
+            return false;
+        }
+
+        var horizontalDelta = currentPosition.DistanceTo2D(waypoint);
+        if (!float.IsFinite(horizontalDelta) || horizontalDelta > MICRO_UPHILL_SUPPORT_REACH_MAX_RADIUS_2D)
+            return false;
+
+        var incomingMicroUphill = waypointIndex > 0
+            && _waypoints[waypointIndex - 1].DistanceTo2D(waypoint) <= MICRO_UPHILL_SUPPORT_SEGMENT_MAX_DISTANCE
+            && waypoint.Z - _waypoints[waypointIndex - 1].Z >= MICRO_UPHILL_SUPPORT_SEGMENT_MIN_Z_DELTA;
+        var outgoingMicroUphill = waypointIndex + 1 < _waypoints.Length
+            && waypoint.DistanceTo2D(_waypoints[waypointIndex + 1]) <= MICRO_UPHILL_SUPPORT_SEGMENT_MAX_DISTANCE
+            && _waypoints[waypointIndex + 1].Z - waypoint.Z >= MICRO_UPHILL_SUPPORT_SEGMENT_MIN_Z_DELTA;
+        return incomingMicroUphill || outgoingMicroUphill;
     }
 
     private bool TryReplanFromNearVerticalLayerMismatch(
@@ -1551,7 +1594,6 @@ public class NavigationPath(
             || !_requireVerticalWaypointArrival
             || waypointIndex < 0
             || waypointIndex >= _waypoints.Length
-            || distanceToWaypoint2D <= CORNER_COMMIT_DISTANCE
             || distanceToWaypoint2D > GetCornerCommitDistance())
         {
             return false;
@@ -3481,6 +3523,18 @@ public class NavigationPath(
         if (meetsStandardProjectionPrefixGate)
             return true;
 
+        if (IsMicroEndProjectionWallSupportPrefix(
+            start,
+            path,
+            routeResult,
+            blockedSegmentIndex,
+            cumulative2D,
+            bestNet2D,
+            maxAbsZDelta))
+        {
+            return true;
+        }
+
         // Some lip-climb reroutes only expose a tiny end-projection support corridor
         // before the service runs out of projected corners. Keep that compact smooth
         // prefix when it still gains a full yard of height and leaves blocked corners
@@ -3492,6 +3546,58 @@ public class NavigationPath(
             && cumulative2D >= PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_CUMULATIVE_2D
             && bestNet2D >= PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_NET_2D
             && maxAbsZDelta >= PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_Z_DELTA;
+    }
+
+    private static bool IsMicroEndProjectionWallSupportPrefix(
+        Position start,
+        IReadOnlyList<Position> path,
+        PathfindingRouteResult routeResult,
+        int blockedSegmentIndex,
+        float cumulative2D,
+        float bestNet2D,
+        float maxAbsZDelta)
+    {
+        if (blockedSegmentIndex <= 0
+            || path.Count < 2
+            || routeResult.Corners.Length <= path.Count
+            || !routeResult.BlockedReason.StartsWith("end_projection:", StringComparison.OrdinalIgnoreCase)
+            || start.DistanceTo2D(path[0]) > PATH_POINT_DEDUP_EPSILON)
+        {
+            return false;
+        }
+
+        var minCumulative2D = path.Count >= 3
+            ? PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_CUMULATIVE_2D
+            : PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_CUMULATIVE_2D;
+        var minNet2D = path.Count >= 3
+            ? PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_NET_2D
+            : PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_NET_2D;
+        var minZDelta = path.Count >= 3
+            ? PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_Z_DELTA
+            : PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_Z_DELTA;
+        var maxStartRadiusLimit = path.Count >= 3
+            ? PROJECTION_PREFIX_MICRO_END_BLOCK_MAX_START_RADIUS_2D
+            : PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MAX_START_RADIUS_2D;
+        if (cumulative2D < minCumulative2D
+            || bestNet2D < minNet2D
+            || maxAbsZDelta < minZDelta)
+        {
+            return false;
+        }
+
+        var maxStartRadius2D = 0f;
+        var previousZ = start.Z;
+        for (var i = 0; i < path.Count; i++)
+        {
+            var point = path[i];
+            maxStartRadius2D = MathF.Max(maxStartRadius2D, start.DistanceTo2D(point));
+            if (point.Z + 0.05f < previousZ)
+                return false;
+
+            previousZ = point.Z;
+        }
+
+        return maxStartRadius2D <= maxStartRadiusLimit;
     }
 
     private ValidatedPathResult GetValidatedPath(uint mapId, Position start, Position end, bool smoothPath)
