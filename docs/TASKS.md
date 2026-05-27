@@ -303,6 +303,40 @@ Test gap covered in handoff §6 (`NavigationPathTests.cs` near line 2310).
 Tauren capsule, bake, and `Navigation.cs` 8-phase repair pipeline are NOT
 the fix surface.
 
+**2026-05-26 long-pathing update (post `035d1b82`).** The "are we using the
+right coordinates?" challenge is now answered on the promoted live tile
+baseline `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+(`35579EA49C8CC1D2A2F1086EF5812D4C5F461BD2EC4E3135012AB60129175721`):
+commit `aac53962` (`Add literal Frezza deck-lip proof`) added a direct
+Grunt-base -> literal Frezza live proof plus deterministic contract coverage.
+Exact commands/results:
+
+- `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests|FullyQualifiedName~WaypointDumpDiagnostic.Dump_GruntToFrezza_PolygonChain|FullyQualifiedName~WaypointDumpDiagnostic.Compare_GruntToFrezza_vs_GruntToSnurk_SmoothPaths|FullyQualifiedName~RawPathContractTests" --logger "console;verbosity=normal" --logger "trx;LogFileName=pathfinding_grunt_literal_frezza_contract_20260526_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (7/7)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`38s`.
+
+Evidence:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_grunt_literal_frezza_contract_20260526_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-40164-win0-20260526_202201.png`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+
+Decisive read:
+
+- The service really can route to literal Frezza on the promoted data:
+  `Navigation.CalculateRawPath(...)` returned `len=144 blockedSeg=97 blockedReason=interior_projection:98 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`.
+- The live run queried literal Frezza (`end=(1331.1,-4649.5,53.6)`) but never
+  emitted `[TRAVEL_PLAN]`, `[TRAVEL_LEG]`, `[TRAVEL_WALK_NAV]`, or
+  `[TRAVEL_WAYPOINT_REACHED]`.
+- Latest live snapshot/chat instead shows `[GOTO_ROUTE] plan=1 route=none`
+  followed by `[TASK] GoToTask pop reason=arrived`, with the stall anchored
+  near spawn at `anchor=(1332.8,-4633.4,24.0)` and
+  `current=(1332.1,-4634.5,23.9)`.
+
+Treat the current red as a BotRunner same-map `TravelTo` decomposition /
+task-selection / objective-start bug, not as wrong Frezza coordinates and not
+as a reason to rebake the promoted tile.
+
 (Legacy D2 prompt below preserved for context.) Start from the D1 stopping point, not from B/C bake or
 scale hypotheses. The original column stall mechanism is a BotRunner
 LongTravel corner-skip: the active waypoint advanced past

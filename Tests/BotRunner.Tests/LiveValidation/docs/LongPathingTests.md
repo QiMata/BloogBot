@@ -123,6 +123,54 @@ Treat the next iteration as a true local path/topology investigation from
 `(1351.3,-4526.3,34.4)` toward `(1320.1,-4653.2,53.9)` on the current
 promoted data, not as a silent contract or fixture bug.
 
+## 2026-05-26 Literal Frezza Direct Proof
+
+Commit `aac53962` (`Add literal Frezza deck-lip proof`) added a second focused
+surface for the user’s coordinate challenge: same Grunt-base staging, but
+`TravelTo` goes directly to Zeppelin Master Frezza’s literal map-1 spawn
+instead of the Undercity objective that later resolves through the boarding
+corridor.
+
+Focused verification commands and results:
+
+- `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests|FullyQualifiedName~WaypointDumpDiagnostic.Dump_GruntToFrezza_PolygonChain|FullyQualifiedName~WaypointDumpDiagnostic.Compare_GruntToFrezza_vs_GruntToSnurk_SmoothPaths|FullyQualifiedName~RawPathContractTests" --logger "console;verbosity=normal" --logger "trx;LogFileName=pathfinding_grunt_literal_frezza_contract_20260526_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+  Result: `passed (7/7)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+  Result: `failed (1/1)` after ~`38s`.
+
+Exact artifact paths for this direct-target slice:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_grunt_literal_frezza_contract_20260526_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-40164-win0-20260526_202201.png`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+- `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- `D:\World of Warcraft\WWoWLogs\fg_LPATHFG120260526.log`
+
+Important proof points from the direct-target rerun:
+
+- The deterministic service surface proves the literal Frezza coords are
+  valid on the promoted tile:
+  - `Navigation.CalculateRawPath(...)` returned
+    `len=144 blockedSeg=97 blockedReason=interior_projection:98`
+    with final waypoint `(1328.32,-4649.35,53.84)`, only `2.79y` from Frezza.
+  - `WaypointDumpDiagnostic.Dump_GruntToFrezza_PolygonChain` logged
+    `TotalPolyCount: 68`, `off-mesh count: 1`.
+- The live proof does query the exact Frezza coords:
+  - `[PATH_DIAG] ... start=(1332.8,-4633.4,24.0) end=(1331.1,-4649.5,53.6) ... pathLen=144 ...`
+- But the live same-map objective never turns into the expected `TravelTask`
+  climb:
+  - latest snapshot chat only shows `[GOTO_ROUTE] plan=1 route=none` and
+    `[TASK] GoToTask pop reason=arrived`
+  - no `[TRAVEL_PLAN]`, `[TRAVEL_LEG]`, `[TRAVEL_WALK_NAV]`, or
+    `[TRAVEL_WAYPOINT_REACHED]` lines are emitted before failure
+  - failure anchor/current stays at the Grunt-base spawn lane:
+    `anchor=(1332.8,-4633.4,24.0) current=(1332.1,-4634.5,23.9) moved=1.3`
+
+Treat the next iteration as a same-map `TravelTo` decomposition / task-name
+selection bug in BotRunner, not as a wrong Frezza coordinate or a missing
+direct path on the promoted tile.
+
 ## Test Methods
 
 - `CrossroadsToUndercity_UsesFlightAndZeppelin`: stages the Horde target at
@@ -136,6 +184,11 @@ promoted data, not as a silent contract or fixture bug.
   `[TRAVEL_LEG] complete index=0 reason=walk_arrived` on the same
   Undercity-bound walk leg that previously stalled on the deck lip. This is
   the fastest live proof for the `40,29` lip/ramp lane.
+- `DeckLipClimbFromGruntToLiteralFrezza`: gated by
+  `WWOW_DECKLIP_DIRECT_FREZZA_TEST=1`. Uses the same Grunt-base staging, but
+  dispatches `TravelTo` directly to Frezza's literal map-1 spawn. This is the
+  cleanest live proof for "are we using the right coordinates?" on the current
+  promoted tile.
 
 ## Fast-Fail Blockers
 

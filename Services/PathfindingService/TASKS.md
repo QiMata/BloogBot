@@ -168,7 +168,35 @@
   service startup or deterministic tests for a full session timeout.
 
 ## Session Handoff
-- Last updated: 2026-05-26 (raw path contract now surfaces endpoint-projection failures honestly on the focused deck-lip live proof)
+- Last updated: 2026-05-26 (literal Frezza direct proof shows the target coords are real; the live red is now upstream task selection)
+
+### 2026-05-26 - literal Frezza direct proof shows the promoted data can route to Frezza, but the live same-map objective pops `GoToTask` as arrived
+- Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile` baseline, preserve the raw-path contract instrumentation from commit `4ff2f765`, and answer the "wrong coordinates?" question against the exact Grunt-base -> Frezza NPC pair on both the service and live surfaces.
+- Pass result: `shipped in commit aac53962; the exact Frezza coords are not the bug. The service returns a real Grunt-base -> Frezza raw path with 144 corners and a final waypoint 2.79y from Frezza, but the new same-map live proof stalls at spawn because BotRunner emits only GoToTask route-none/arrived diagnostics instead of entering the TravelTask/TRAVEL_* path.`.
+- Last delta:
+  - Added `DeckLipRawPathContractTests` to pin both sides of the current promoted query shape:
+    - Grunt-base -> boarding corridor: `blockedReason=interior_projection:98`
+    - Grunt-base -> literal Frezza: same `interior_projection:98` but final waypoint settles near Frezza itself
+  - Added `LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza` so the live harness dispatches `TravelTo` directly to Frezza's literal map-1 spawn and captures screenshot/timeline evidence without the Undercity surrogate objective.
+  - Reran the direct polygon/smooth diagnostics already in `WaypointDumpDiagnostic` against `D:\wwow-bot\test-data` to keep the direct NPC pair on the same promoted tile/data root as the live proof.
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests|FullyQualifiedName~WaypointDumpDiagnostic.Dump_GruntToFrezza_PolygonChain|FullyQualifiedName~WaypointDumpDiagnostic.Compare_GruntToFrezza_vs_GruntToSnurk_SmoothPaths|FullyQualifiedName~RawPathContractTests" --logger "console;verbosity=normal" --logger "trx;LogFileName=pathfinding_grunt_literal_frezza_contract_20260526_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (7/7)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`38s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_grunt_literal_frezza_contract_20260526_fix1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-40164-win0-20260526_202201.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+- Practical read:
+  - Exact service-side direct-Frezza proof:
+    - `Navigation.CalculateRawPath(...)` logged `len=144 blockedSeg=97 blockedReason=interior_projection:98 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`
+    - `WaypointDumpDiagnostic.Dump_GruntToFrezza_PolygonChain` logged `TotalPolyCount: 68`, `off-mesh count: 1`, one tile-family chain
+  - Exact live-side failure shape:
+    - service query stayed on literal Frezza: `[PATH_DIAG] ... start=(1332.8,-4633.4,24.0) end=(1331.1,-4649.5,53.6) ... pathLen=144 ...`
+    - snapshot/chat at failure shows no `TRAVEL_*` diagnostics, only `[GOTO_ROUTE] plan=1 route=none` plus `[TASK] GoToTask pop reason=arrived`
+    - stall anchor/current remained at the spawn lane: `anchor=(1332.8,-4633.4,24.0) current=(1332.1,-4634.5,23.9) moved=1.3`
+  - The next credible fix surface is therefore NOT the promoted tile target coordinates. It is the BotRunner same-map `TravelTo` objective-start / task-selection layer deciding that this literal-target objective is already "arrived" before the long climb begins.
+- Next command: `Select-String -Path 'E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx','D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log' -Pattern 'GOTO_ROUTE|GoToTask pop reason=arrived|PATH_DIAG|ACTION-RECV'`
 
 ### 2026-05-26 - raw path contract now reports endpoint-projection blocks at the later deck-lip stall
 - Active task: preserve the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile`

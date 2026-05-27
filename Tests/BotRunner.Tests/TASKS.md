@@ -150,6 +150,40 @@ Known remaining work in this owner: `0` items.
 - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~SceneTileSocketServerTests|FullyQualifiedName~SceneDataServiceAssemblyTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-05-26 (literal Frezza live proof isolates same-map `TravelTo` task selection, not bad target coordinates)
+- Pass result: shipped in commit `aac53962` (`Add literal Frezza deck-lip proof`) and pushed to `origin/main`. The direct Grunt-base -> literal Frezza proof is now checked in on both the service and live surfaces. The focused live red is NOT "wrong coordinates": the pathfinding service returns the exact `start=(1332.8,-4633.4,24.0)` -> `end=(1331.1,-4649.5,53.6)` route with `144` smoothed corners, but the same-map live run never enters a `TravelTask` climb. It stalls after `1.3y` at spawn with only `[GOTO_ROUTE] plan=1 route=none` plus `[TASK] GoToTask pop reason=arrived`.
+- Last delta:
+  - Added `LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza`, gated by `WWOW_DECKLIP_DIRECT_FREZZA_TEST=1`, which teleports to the same Grunt spawn as the deck-lip proof but dispatches `TravelTo` directly to Frezza's literal map-1 spawn coords instead of the Undercity surrogate objective.
+  - Kept the screenshot/timeline artifact loop identical to the existing deck-lip proof so the literal-target run captures unattended evidence at start, each poll, and on failure.
+  - Added pathfinding-side contract coverage proving the current promoted data really can produce a direct Grunt-base -> literal Frezza route before BotRunner touches it.
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests|FullyQualifiedName~WaypointDumpDiagnostic.Dump_GruntToFrezza_PolygonChain|FullyQualifiedName~WaypointDumpDiagnostic.Compare_GruntToFrezza_vs_GruntToSnurk_SmoothPaths|FullyQualifiedName~RawPathContractTests" --logger "console;verbosity=normal" --logger "trx;LogFileName=pathfinding_grunt_literal_frezza_contract_20260526_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (7/7)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`38s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_grunt_literal_frezza_contract_20260526_fix1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-40164-win0-20260526_202201.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+  - `D:\World of Warcraft\WWoWLogs\fg_LPATHFG120260526.log`
+- Practical read:
+  - The deterministic direct-Frezza path is real on the promoted data:
+    - `Navigation.CalculateRawPath(...)` returned `len=144 blockedSeg=97 blockedReason=interior_projection:98 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`.
+    - `WaypointDumpDiagnostic.Dump_GruntToFrezza_PolygonChain` printed `TotalPolyCount: 68`, `off-mesh count: 1`, all within the same tile family.
+  - The live literal-target proof fails BEFORE the old later tower-approach rejection:
+    - stall signature: `map=1 anchor=(1332.8,-4633.4,24.0) current=(1332.1,-4634.5,23.9) moved=1.3 transport=0x0 current=null`
+    - latest snapshot chat: `[GOTO_ROUTE] plan=1 route=none drops=0 cliffs=0 vertical=0` and `[TASK] GoToTask pop reason=arrived`
+    - no `[TRAVEL_PLAN]`, `[TRAVEL_LEG]`, `[TRAVEL_WALK_NAV]`, or `[TRAVEL_WAYPOINT_REACHED]` lines appeared before the stall
+  - The service proves the exact Frezza coords were queried during the live run:
+    - `[PATH_DIAG] ... start=(1332.8,-4633.4,24.0) end=(1331.1,-4649.5,53.6) ... pathLen=144 ... blockedReason=interior_projection:98`
+  - Treat the next slice as a BotRunner same-map `TravelTo` decomposition / task-selection bug, likely around why the literal same-map objective becomes a `GoToTask` that immediately reports `arrived`, not as a coordinate-selection problem.
+- Files changed:
+  - `Services/PathfindingService/Repository/Navigation.cs`
+  - `Tests/PathfindingService.Tests/RawPathContractTests.cs`
+  - `Tests/PathfindingService.Tests/DeckLipRawPathContractTests.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/LongPathingTests.cs`
+- Next command: `Select-String -Path 'E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx','D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log' -Pattern 'GOTO_ROUTE|GoToTask pop reason=arrived|PATH_DIAG|ACTION-RECV'`
+
 ### 2026-05-26 (raw path contract now reports endpoint-projection stalls honestly on the focused deck-lip live proof)
 - Pass result: built on top of WWoW commit `1238aba6`
   (`Fix long-pathing local service port handoff`), the local service no longer
