@@ -168,6 +168,34 @@
   service startup or deterministic tests for a full session timeout.
 
 ## Session Handoff
+- Last updated: 2026-05-26 (modeled BotRunner stall-recovery path did not reproduce the suspected boarding-jump promotion)
+
+### 2026-05-26 - modeled BotRunner stall-recovery path did not reproduce the suspected boarding-jump promotion
+- Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+  baseline and check whether the later live `idx=9 activeDist=130.x` churn can
+  be reproduced deterministically from the later tower-approach alternate path
+  before touching service or bake surfaces again.
+- Pass result: `shipped in commit f3d4515b; the modeled
+  RecalculateAfterMovementStall(...) corridor stayed inside the local descent,
+  so the currently modeled caller-side stall-recovery shape does not reproduce
+  the suspected immediate promotion into the boarding jump`.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.RecalculateAfterMovementStall_DeckLipAlternatePath_KeepsDescendingCorridorBeforeBoardingJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsTightDescendingRopeStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelMovementStuckPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_decklip_altcorridor_falsification_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (4/4)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_decklip_altcorridor_falsification_20260526.trx`
+- Practical read:
+  - A live-looking alternate-path window rooted at current
+    `(1353.1,-4525.3,34.6)` and ending with
+    `ledgeReturn=(1357.2,-4516.2,32.2)` plus
+    `boardingJump=(1320.1,-4653.2,53.7)` stayed with
+    `TraceSnapshot.CurrentWaypointIndex <= 7` after
+    `RecalculateAfterMovementStall(...)`.
+  - That weakens the simple "stall recovery jumped straight into the boarding
+    gap" theory. The remaining red likely needs a different caller-state shape
+    than the one captured in this deterministic model, or a different
+    caller-side surface altogether.
+- Next command: `Select-String -Path 'D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log' -Pattern 'idx=9 activeDist=130|stalled_near_waypoint|corners=12 result=raw_detour blockedIndex=null blockedReason=none|corners=14 result=raw_detour blockedIndex=null blockedReason=none'`
+
 - Last updated: 2026-05-26 (isolated-port socket proof closed the coordinate/port question on Grunt #1 -> Frezza)
 
 ### 2026-05-26 - isolated-port socket proof closes the coordinate/port question on Grunt #1 -> Frezza

@@ -417,6 +417,28 @@ Decisive read:
   remains the later live execution layer around waypoint promotion / stall
   recovery after the bot has already left spawn and entered `TravelTask`.
 
+Follow-up on the caller-side reproduction surface, built on commit `f3d4515b`
+(`Add deck-lip stall recovery regression`):
+
+- `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.RecalculateAfterMovementStall_DeckLipAlternatePath_KeepsDescendingCorridorBeforeBoardingJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsTightDescendingRopeStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelMovementStuckPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_decklip_altcorridor_falsification_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (4/4)`.
+
+Evidence:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_decklip_altcorridor_falsification_20260526.trx`
+
+Decisive read:
+
+- A new deterministic `NavigationPath` regression modeled the later live
+  alternate-path window at current `(1353.1,-4525.3,34.6)` with the same
+  local descending corridor and the later `ledgeReturn=(1357.2,-4516.2,32.2)`
+  / `boardingJump=(1320.1,-4653.2,53.7)` suffix.
+- That modeled `RecalculateAfterMovementStall(...)` case stayed inside the
+  local corridor instead of immediately promoting into the boarding jump.
+- So the current "waypoint promotion bug" suspicion is now narrower: either
+  the live churn needs a different caller-state shape than this deterministic
+  model captured, or the real culprit is another caller-side surface after the
+  replan rather than `RecalculateAfterMovementStall(...)` itself.
+
 (Legacy D2 prompt below preserved for context.) Start from the D1 stopping point, not from B/C bake or
 scale hypotheses. The original column stall mechanism is a BotRunner
 LongTravel corner-skip: the active waypoint advanced past
