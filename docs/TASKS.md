@@ -532,6 +532,24 @@ Decisive read:
   - `d41caa41` `Hold micro end-projection wall support steps`
 - Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_micro_end_projection_wall_support_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
 
+### 2026-05-27 - live rerun after `d41caa41` moved the remaining red to a blocked-index-zero caller fallback
+- Pass result: the focused literal-Frezza rerun built on `d41caa41` and `4d85db82` still failed live, but the failure surface moved again without changing PathfindingService or the promoted tile. The previously fixed pinned-wall micro prefix no longer dominated. At the new wall slice, smooth returned `corners=0 result=no_path blockedIndex=null blockedReason=none`; the unsmoothed follow-up returned `corners=2 result=raw_detour blockedIndex=0 blockedReason=end_projection:124.2`; BotRunner then rejected that fallback with `projPrefix=False` / `segment_or_progress_gate` and the screenshot showed a true wall-face press.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_micro_end_projection_wall_support_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 15 s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_micro_end_projection_wall_support_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-26828-win0-20260527_082152.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00110-LPATHFG1-20260527T122145Z.json`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - `d41caa41` bought a little real movement (`moved=0.2`) and cleared the prior pinned-wall micro-prefix blocker.
+  - The remaining red is still caller-side route consumption/execution, but it is now a different slice: what to do when smooth collapses to `no_path` and the only local foothold left is a tiny blocked-index-zero `end_projection:124.2` fallback.
+  - There is still no rebake reason and no reason to reopen the old Tauren/Gnome, port, GM-command, or coordinate theories.
+- Commits:
+  - `d41caa41` `Hold micro end-projection wall support steps`
+  - `4d85db82` `Document micro wall-support caller fix`
+- Next command: `rg -n "SelectServiceSeedPath|TryGetProjectionBlockedPrefix|IsProjectionBlockedReason|IsPathUsable|segment_or_progress_gate|blockedIndex=0" E:\repos\Westworld of Warcraft\Exports\BotRunner\Movement\NavigationPath.cs E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\Movement\NavigationPathTests.cs`
+
 Follow-up on the same promoted tile, built on commit `b3c107ba`
 (`Block false same-map TravelTo arrival below Frezza`):
 

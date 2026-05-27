@@ -335,6 +335,25 @@
   - `d41caa41` `Hold micro end-projection wall support steps`
 - Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_micro_end_projection_wall_support_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
 
+### 2026-05-27 - post-`d41caa41` live evidence still does not reopen PathfindingService or the promoted tile
+- Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile` baseline and continue treating the literal-Frezza deck-lip red as BotRunner route acceptance/execution unless a later rerun changes the service contract itself.
+- Pass result: `no PathfindingService code, config, or tile data changed in this findings slice. The focused rerun after d41caa41 still failed live, but the new surface stayed caller-side: from the higher wall slice, smooth now returned no corners at all while the unsmoothed request returned a tiny blocked-index-zero end_projection fallback that BotRunner then rejected.`
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_micro_end_projection_wall_support_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 15 s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_micro_end_projection_wall_support_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-26828-win0-20260527_082152.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00110-LPATHFG1-20260527T122145Z.json`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The service/tile baseline did not move; only the live foothold position changed.
+  - The decisive service responses at the new wall slice were `smooth=True -> corners=0 result=no_path` and `smooth=False -> corners=2 result=raw_detour blockedIndex=0 blockedReason=end_projection:124.2`.
+  - BotRunner then rejected that fallback with `projPrefix=False` / `segment_or_progress_gate`, so there is still no rebake reason and no new PathfindingService work item reopened by this evidence.
+- Commits:
+  - `d41caa41` `Hold micro end-projection wall support steps`
+  - `4d85db82` `Document micro wall-support caller fix`
+- Next command: `Select-String -Path 'D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log' -Pattern 'corners=0 result=no_path blockedIndex=null blockedReason=none|corners=2 result=raw_detour blockedIndex=0 blockedReason=end_projection:124.2|usable-check reject reason=segment_or_progress_gate'`
+
 ### 2026-05-26 - modeled BotRunner stall-recovery path did not reproduce the suspected boarding-jump promotion
 - Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
   baseline and check whether the later live `idx=9 activeDist=130.x` churn can
