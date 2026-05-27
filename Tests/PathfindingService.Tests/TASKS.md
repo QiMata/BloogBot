@@ -74,6 +74,33 @@
 3. Route validity focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName=PathfindingService.Tests.PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_ReroutesAroundBlockedDirectLine|FullyQualifiedName=PathfindingService.Tests.PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_StraightRequestCompletesWithinBudget|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-05-26 (Grunt #1 -> Frezza socket contract proof)
+- Active task: answer the "wrong coordinates or wrong service port?" question
+  against the exact lower-deck Grunt NPC spawn
+  `(1332.76,-4633.40,24.0783)` and literal Frezza spawn
+  `(1331.11,-4649.45,53.6269)` on the promoted
+  `D:\wwow-bot\test-data\mmaps\0012940.mmtile` baseline.
+- Pass result: `delta shipped; direct Navigation and isolated-port socket
+  contract now agree on the same exact Grunt #1 -> Frezza route signature`.
+- Last delta:
+  - Added
+    `PathfindingSocketServerIntegrationTests.HandlePath_DeckLipGruntNpcToLiteralFrezza_ReturnsCurrentServicePathThroughIsolatedPort`
+    to prove the normal protobuf/TCP service contract returns the same
+    `raw_detour` corridor the direct Navigation contract already reported.
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests.CalculateRawPath_DeckLipGruntBaseToLiteralFrezza_EndsNearRequestedTargetDespiteInteriorProjectionGap|FullyQualifiedName~PathfindingSocketServerIntegrationTests.HandlePath_DeckLipGruntNpcToLiteralFrezza_ReturnsCurrentServicePathThroughIsolatedPort" --logger "console;verbosity=normal" --logger "trx;LogFileName=decklip_grunt1_to_frezza_socket_contract_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (2/2)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\decklip_grunt1_to_frezza_socket_contract_20260526.trx`
+- Practical read:
+  - Direct contract: `Literal Frezza path: result=raw_detour len=144 blockedSeg=97 blockedReason=interior_projection:98 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`
+  - Socket contract: `Socket literal Frezza path: result=raw_detour len=144 blockedSeg=97 blockedReason=interior_projection:98 firstDist2D=0.00 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`
+  - The promoted data and the normal service contract agree on the same route,
+    so the leading suspect remains the later live execution / waypoint
+    promotion surface, not bad Grunt/Frezza coordinates and not the isolated
+    local service port.
+- Commit: `fc01c417` (`Add socket proof for Grunt to Frezza path`)
+- Next command: `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsTightDescendingRopeStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelMovementStuckPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner`
+
 ### 2026-05-13 (Focused mmap regen visibility pass)
 - Active task: refresh visual mmap artifacts after focused OG/BRD/BRM runtime
   tile regeneration.

@@ -168,6 +168,31 @@
   service startup or deterministic tests for a full session timeout.
 
 ## Session Handoff
+- Last updated: 2026-05-26 (isolated-port socket proof closed the coordinate/port question on Grunt #1 -> Frezza)
+
+### 2026-05-26 - isolated-port socket proof closes the coordinate/port question on Grunt #1 -> Frezza
+- Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+  baseline (`35579EA49C8CC1D2A2F1086EF5812D4C5F461BD2EC4E3135012AB60129175721`)
+  and prove that the exact lower-deck Grunt NPC -> literal Frezza query
+  returns the same route through both direct `Navigation` and the normal
+  protobuf/TCP socket contract.
+- Pass result: `shipped in commit fc01c417; the direct and socket contracts now
+  report the same Grunt #1 -> Frezza route signature, so bad coordinates and
+  the isolated local service port are no longer the leading suspects for the
+  live red`.
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests.CalculateRawPath_DeckLipGruntBaseToLiteralFrezza_EndsNearRequestedTargetDespiteInteriorProjectionGap|FullyQualifiedName~PathfindingSocketServerIntegrationTests.HandlePath_DeckLipGruntNpcToLiteralFrezza_ReturnsCurrentServicePathThroughIsolatedPort" --logger "console;verbosity=normal" --logger "trx;LogFileName=decklip_grunt1_to_frezza_socket_contract_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (2/2)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\decklip_grunt1_to_frezza_socket_contract_20260526.trx`
+- Practical read:
+  - Direct route proof: `Literal Frezza path: result=raw_detour len=144 blockedSeg=97 blockedReason=interior_projection:98 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`
+  - Socket route proof: `Socket literal Frezza path: result=raw_detour len=144 blockedSeg=97 blockedReason=interior_projection:98 firstDist2D=0.00 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`
+  - The same exact route is now proven through the service contract BotRunner
+    uses, so the remaining live failure is more credibly in later caller-side
+    path consumption / waypoint promotion than in service-port selection or
+    Grunt/Frezza endpoint coordinates.
+- Next command: `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsTightDescendingRopeStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelMovementStuckPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner`
+
 - Last updated: 2026-05-26 (same-map `TravelTask` proof closed the startup gap; the next live red is the later raw-detour contract split)
 
 ### 2026-05-26 - same-map `TravelTask` proof exposed the later raw-detour contract split on the promoted tile

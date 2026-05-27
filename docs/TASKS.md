@@ -395,6 +395,28 @@ Decisive read:
   responses that still report `blockedReason=none` while jumping toward
   `(1320.1,-4653.2,53.7)`.
 
+Follow-up on the same promoted tile, built on commit `fc01c417`
+(`Add socket proof for Grunt to Frezza path`):
+
+- `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests.CalculateRawPath_DeckLipGruntBaseToLiteralFrezza_EndsNearRequestedTargetDespiteInteriorProjectionGap|FullyQualifiedName~PathfindingSocketServerIntegrationTests.HandlePath_DeckLipGruntNpcToLiteralFrezza_ReturnsCurrentServicePathThroughIsolatedPort" --logger "console;verbosity=normal" --logger "trx;LogFileName=decklip_grunt1_to_frezza_socket_contract_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (2/2)`.
+
+Evidence:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\decklip_grunt1_to_frezza_socket_contract_20260526.trx`
+
+Decisive read:
+
+- The exact lower-deck NPC start already in the proof surface is
+  `Grunt #1 = (1332.76,-4633.40,24.0783)` and the literal destination is
+  `Frezza = (1331.11,-4649.45,53.6269)`.
+- The direct Navigation contract and the normal protobuf/TCP socket contract
+  now agree on the same route signature:
+  `result=raw_detour len=144 blockedSeg=97 blockedReason=interior_projection:98 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`.
+- That closes out "wrong coordinates" and "wrong local pathfinding port" as
+  the leading explanation for the current live red. The next credible suspect
+  remains the later live execution layer around waypoint promotion / stall
+  recovery after the bot has already left spawn and entered `TravelTask`.
+
 (Legacy D2 prompt below preserved for context.) Start from the D1 stopping point, not from B/C bake or
 scale hypotheses. The original column stall mechanism is a BotRunner
 LongTravel corner-skip: the active waypoint advanced past
