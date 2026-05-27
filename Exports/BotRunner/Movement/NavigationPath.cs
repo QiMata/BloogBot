@@ -611,6 +611,8 @@ public class NavigationPath(
     private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_CUMULATIVE_2D = 1.25f;
     private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_NET_2D = 0.5f;
     private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_Z_DELTA = 0.5f;
+    private const float PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_CUMULATIVE_2D = 0.5f;
+    private const float PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_Z_DELTA = 1.0f;
     private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_DESTINATION_REGRESSION = 0.25f;
     private const float MAX_SEGMENT_DISTANCE = 1200f;
     private const float PATH_TRAVERSABILITY_SEGMENT_EPSILON = 0.05f;
@@ -3471,9 +3473,24 @@ public class NavigationPath(
             return false;
         }
 
-        return cumulative2D >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_CUMULATIVE_2D
+        var meetsStandardProjectionPrefixGate =
+            cumulative2D >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_CUMULATIVE_2D
             && (bestNet2D >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_NET_2D
                 || hasMeaningfulVerticalSupportGain);
+        if (meetsStandardProjectionPrefixGate)
+            return true;
+
+        // Some lip-climb reroutes only expose a tiny end-projection support corridor
+        // before the service runs out of projected corners. Keep that compact smooth
+        // prefix when it still gains a full yard of height and leaves blocked corners
+        // downstream, but do not reopen the blocked-index-zero alternate fallback.
+        return blockedSegmentIndex > 0
+            && path.Count >= 3
+            && routeResult.Corners.Length > path.Count
+            && routeResult.BlockedReason.StartsWith("end_projection:", StringComparison.OrdinalIgnoreCase)
+            && cumulative2D >= PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_CUMULATIVE_2D
+            && bestNet2D >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_NET_2D
+            && maxAbsZDelta >= PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_Z_DELTA;
     }
 
     private ValidatedPathResult GetValidatedPath(uint mapId, Position start, Position end, bool smoothPath)
