@@ -37,7 +37,6 @@ public class RawPathContractTests
             findPathResolver: (_, start, end, _) =>
             [
                 start,
-                new XYZ((start.X + end.X) / 2f, (start.Y + end.Y) / 2f, (start.Z + end.Z) / 2f),
                 end
             ],
             segmentBlocker: null,
@@ -51,7 +50,7 @@ public class RawPathContractTests
         Assert.Equal("raw_detour", result.Result);
         Assert.Null(result.BlockedSegmentIndex);
         Assert.Equal("none", result.BlockedReason);
-        Assert.Equal(3, result.Path.Length);
+        Assert.Equal(2, result.Path.Length);
         Assert.Equal(result.Path, result.RawPath);
     }
 }

@@ -34,6 +34,9 @@ public class LongPathingTests
     private const float OrgrimmarTaxiY = -4315.0f;
     // The long Orgrimmar walk leg should hand off at the front boarding zone,
     // not the back-side deck anchor.
+    private const float OrgrimmarFrezzaX = 1331.11f;
+    private const float OrgrimmarFrezzaY = -4649.45f;
+    private const float OrgrimmarFrezzaZ = 53.6269f;
     private const float OrgrimmarZeppelinRouteTargetX = 1320.142944f;
     private const float OrgrimmarZeppelinRouteTargetY = -4653.158691f;
     private const float OrgrimmarZeppelinRouteTargetZ = 53.891945f;
@@ -66,6 +69,7 @@ public class LongPathingTests
     private const string OgRampWaypointInspectEnvVar = "WWOW_OG_RAMP_WAYPOINT_INSPECT";
     private const string OgDeckLipVerifyEnvVar = "WWOW_OG_DECK_LIP_VERIFY";
     private const string DeckLipClimbEnvVar = "WWOW_DECKLIP_CLIMB_TEST";
+    private const string DeckLipLiteralFrezzaEnvVar = "WWOW_DECKLIP_DIRECT_FREZZA_TEST";
     private const string BrmDungeonTravelEnvVar = "WWOW_BRM_DUNGEON_TRAVEL_TEST";
 
     // Lava-zone exemptions for LavaHazardGuard. Tests targeting these maps are
@@ -913,6 +917,145 @@ public class LongPathingTests
             + $"that exceeds NavigationPath's WAYPOINT_VERTICAL_REACH_TOLERANCE=1.25y. "
             + $"Cadence diagnostic captured {seenWaypointDiagMessages.Count} [TRAVEL_WAYPOINT_REACHED] "
             + "events.");
+    }
+
+    /// <summary>
+    /// Literal-coordinate follow-up to <see cref="DeckLipClimbFromGruntToFrezza"/>.
+    /// Teleports directly to the same Orgrimmar Grunt spawn at the tower base,
+    /// but dispatches <see cref="ObjectiveType.TravelTo"/> to Zeppelin Master
+    /// Frezza's actual spawn coords on map 1 instead of the staged Undercity
+    /// target that later resolves to the boarding corridor. This isolates the
+    /// user's "wrong coordinates" question on the live stack itself: if the
+    /// literal Frezza target succeeds while the corridor surrogate stalls, the
+    /// red belongs to the surrogate route-start/goal shape rather than the
+    /// base spiral ramp coordinates.
+    /// </summary>
+    [SkippableFact]
+    [Trait("Category", "RequiresInfrastructure")]
+    public async Task DeckLipClimbFromGruntToLiteralFrezza()
+    {
+        global::Tests.Infrastructure.Skip.IfNot(
+            string.Equals(
+                Environment.GetEnvironmentVariable(DeckLipLiteralFrezzaEnvVar),
+                "1",
+                StringComparison.Ordinal),
+            $"Literal Frezza deck-lip sub-test disabled (set {DeckLipLiteralFrezzaEnvVar}=1).");
+
+        const string TimelineTestName = nameof(DeckLipClimbFromGruntToLiteralFrezza);
+        using var packetHookScope = DisableForegroundPacketHooksForCrossMapTransfers();
+        var target = await EnsureLongPathingTargetAsync();
+
+        using var timelineScope = new EnvironmentVariableScope(LongPathingTimelineEnvVar);
+        Environment.SetEnvironmentVariable(LongPathingTimelineEnvVar, "1");
+
+        using var cadenceScope = new EnvironmentVariableScope(WaypointCadenceEnvVar);
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(WaypointCadenceEnvVar)))
+            Environment.SetEnvironmentVariable(WaypointCadenceEnvVar, "2");
+
+        await _bot.EnsureCleanSlateAsync(target.AccountName, target.RoleLabel);
+
+        const float Grunt1X = 1332.76f;
+        const float Grunt1Y = -4633.40f;
+        const float Grunt1Z = 24.0783f;
+
+        await _bot.BotTeleportAsync(target.AccountName, OrgrimmarMapId, Grunt1X, Grunt1Y, Grunt1Z);
+        await Task.Delay(2500);
+        await _bot.RefreshSnapshotsAsync();
+        var startSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        CaptureTimelineCheckpoint(TimelineTestName, "01-teleported-tower-base", target.AccountName, startSnapshot);
+
+        var diagnosticBaseline = startSnapshot?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
+
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
+        {
+            ObjectiveType = ObjectiveType.TravelTo,
+            Parameters =
+            {
+                new RequestParameter { IntParam = OrgrimmarMapId },
+                new RequestParameter { FloatParam = OrgrimmarFrezzaX },
+                new RequestParameter { FloatParam = OrgrimmarFrezzaY },
+                new RequestParameter { FloatParam = OrgrimmarFrezzaZ },
+            },
+        });
+        Assert.Equal(ResponseResult.Success, dispatch);
+
+        var stuckGuard = new SnapshotStallGuard(
+            "OG zeppelin tower ramp climb from base to literal Frezza spawn",
+            TimeSpan.FromSeconds(20),
+            LongTravelStallMovementYards);
+
+        var pollCounter = 0;
+        var seenWaypointDiagMessages = new HashSet<string>(StringComparer.Ordinal);
+        var arrivedAtLiteralFrezza = await _bot.WaitForSnapshotConditionAsync(
+            target.AccountName,
+            snapshot =>
+            {
+                pollCounter++;
+                if (pollCounter % TimelinePollSampleEveryN == 0)
+                    CaptureTimelineCheckpoint(
+                        TimelineTestName,
+                        $"02-climb-poll-{pollCounter:D5}",
+                        target.AccountName,
+                        snapshot);
+
+                foreach (var msg in GetDeltaMessages(diagnosticBaseline, snapshot?.RecentChatMessages))
+                {
+                    if (msg.IndexOf("[TRAVEL_WAYPOINT_REACHED]", StringComparison.Ordinal) < 0)
+                        continue;
+                    if (!seenWaypointDiagMessages.Add(msg))
+                        continue;
+                    var advMatch = Regex.Match(msg, @"adv=(\d+)");
+                    var label = advMatch.Success
+                        ? $"wp-{int.Parse(advMatch.Groups[1].Value):D5}"
+                        : $"wp-msg-{seenWaypointDiagMessages.Count:D5}";
+                    CaptureTimelineCheckpoint(TimelineTestName, label, target.AccountName, snapshot);
+                }
+
+                stuckGuard.FailIfStalled(
+                    snapshot,
+                    (message, stallSnapshot) => FailWithScreenshot(message, target.AccountName, stallSnapshot));
+
+                if (snapshot?.RecentChatMessages != null)
+                {
+                    foreach (var msg in snapshot.RecentChatMessages)
+                    {
+                        if (msg.IndexOf("[TRAVEL_LEG] complete", StringComparison.Ordinal) >= 0
+                            && msg.IndexOf("reason=walk_arrived", StringComparison.Ordinal) >= 0)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                var pos = GetPosition(snapshot);
+                return pos != null
+                    && snapshot?.CurrentMapId == OrgrimmarMapId
+                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY) <= 6f
+                    && Math.Abs(pos.Z - OrgrimmarFrezzaZ) <= 4f;
+            },
+            TimeSpan.FromSeconds(90),
+            pollIntervalMs: 500,
+            progressLabel: $"{target.RoleLabel} OG zeppelin tower ramp climb from base to literal Frezza");
+
+        await _bot.RefreshSnapshotsAsync();
+        var finalSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
+        CaptureTimelineCheckpoint(TimelineTestName, "03-final", target.AccountName, finalSnapshot);
+
+        var finalPos = GetPosition(finalSnapshot);
+        var finalDist = finalPos != null
+            ? LiveBotFixture.Distance2D(finalPos.X, finalPos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY)
+            : float.NaN;
+
+        await AssertOrScreenshotAsync(
+            arrivedAtLiteralFrezza,
+            target.AccountName,
+            $"Expected bot to walk from the OG tower-base Grunt spawn to literal Frezza "
+            + $"({OrgrimmarFrezzaX:F2},{OrgrimmarFrezzaY:F2},{OrgrimmarFrezzaZ:F2}) within 90s. "
+            + $"Arrival is met by either [TRAVEL_LEG] complete reason=walk_arrived, OR final "
+            + $"2D-distance <= 6.0y and |dz| <= 4.0y on map {OrgrimmarMapId}. "
+            + $"Final position: ({finalPos?.X:F1},{finalPos?.Y:F1},{finalPos?.Z:F1}) "
+            + $"map={finalSnapshot?.CurrentMapId} dist2D={finalDist:F1}y. "
+            + $"Cadence diagnostic captured {seenWaypointDiagMessages.Count} [TRAVEL_WAYPOINT_REACHED] events.");
     }
 
     /// <summary>
