@@ -1171,11 +1171,11 @@ public class NavigationPath(
 
         var wpCount = _waypoints.Length;
         var idx = _currentIndex;
-        var wp = (idx >= 0 && idx < wpCount) ? _waypoints[idx] : default;
+        var wp = (idx >= 0 && idx < wpCount) ? _waypoints[idx] : null;
         _diagnosticSink(
             $"[TRAVEL_WAYPOINT_REACHED] adv={_waypointAdvanceCount} idx={idx}/{wpCount} reason={reason} "
             + $"player=({currentPosition.X:F1},{currentPosition.Y:F1},{currentPosition.Z:F1}) "
-            + $"waypoint=({wp.X:F1},{wp.Y:F1},{wp.Z:F1})");
+            + $"waypoint={FormatUsabilityPoint(wp)}");
     }
 
     /// <summary>

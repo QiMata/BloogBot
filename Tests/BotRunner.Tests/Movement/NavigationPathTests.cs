@@ -3367,6 +3367,40 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_WaypointDiagnostics_DoNotThrowWhenAdvanceExhaustsCorridor()
+    {
+        var diagnostics = new List<string>();
+        var current = new Position(0f, 0f, 0f);
+        var destination = new Position(2f, 0f, 0f);
+        var pathfinding = new DelegatePathfindingClient((_, start, _, _) =>
+        [
+            new Position(start.X, start.Y, start.Z),
+            new Position(start.X + 0.5f, start.Y, start.Z),
+            new Position(start.X + 1.0f, start.Y, start.Z),
+        ]);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            diagnosticSink: diagnostics.Add,
+            waypointDiagnosticCadence: 1);
+
+        var ex = Record.Exception(() => navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false));
+
+        Assert.Null(ex);
+        Assert.Contains(
+            diagnostics,
+            message => message.Contains("[TRAVEL_WAYPOINT_REACHED]")
+                && message.Contains("idx=3/3")
+                && message.Contains("waypoint=none"));
+    }
+
+    [Fact]
     public void GetNextWaypoint_LongTravelKeepsCompactRopeSupportStepBeforeStallPromotion()
     {
         var current = new Position(1371.1f, -4439.4f, 30.9f);
