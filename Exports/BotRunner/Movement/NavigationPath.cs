@@ -3363,12 +3363,16 @@ public class NavigationPath(
             previous = point;
         }
 
-        if (bestDistanceToEnd > startToEndDistance + PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_DESTINATION_REGRESSION)
+        var hasMeaningfulVerticalSupportGain = maxAbsZDelta >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_Z_DELTA;
+        if (bestDistanceToEnd > startToEndDistance + PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_DESTINATION_REGRESSION
+            && !hasMeaningfulVerticalSupportGain)
+        {
             return false;
+        }
 
         return cumulative2D >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_CUMULATIVE_2D
             && (bestNet2D >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_NET_2D
-                || maxAbsZDelta >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_Z_DELTA);
+                || hasMeaningfulVerticalSupportGain);
     }
 
     private ValidatedPathResult GetValidatedPath(uint mapId, Position start, Position end, bool smoothPath)
