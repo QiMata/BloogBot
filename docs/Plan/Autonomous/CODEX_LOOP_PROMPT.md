@@ -160,15 +160,26 @@ AUTONOMOUS DEFAULTS (do NOT ask a human; proceed + document in the commit
   hardcoded ids). Faction/item ids carrying "Unverified" flags
   (QUESTIONS.md Q-S0.9.x) must be verified against mangos.* before use.
 
-HUMAN-GATED WORK (the ONLY things you escalate)
-- A.6 Q-D5-1 OPERATOR DECISION: the pathfinding test-runner data-dir
-  repoint changes shared bake state. Propose the diff (recommended: point
-  run-pathfinding-tests.ps1 at D:\wwow-bot\prod-data), then leave the row
-  blocked:human-decision until approved. Continue other rows meanwhile.
-- LIVE-RE CAPTURE: new memory offsets / packet ids for un-RE'd content.
-  You CANNOT do this headless. Scaffold the wire/predicate, mark the row
-  blocked:human-RE, document exactly what capture is needed, and CONTINUE
-  to the next ready non-blocked row. Do not stall the loop.
+FULL AUTONOMY — DO NOT PAUSE FOR DECISIONS
+- There are NO decision gates. Make a documented autonomous-default for
+  every choice and proceed. Never stop to ask "which option?" — pick the
+  one the docs recommend (or the obviously-correct one), record WHY in the
+  commit + tracker, and keep moving. The ONLY things that stop the loop are
+  the STOP CONDITIONS below (failure modes) and the docker stack being down.
+- A.6 (Q-D5-1 pathfinding data-dir) is PRE-RESOLVED: just repoint
+  run-pathfinding-tests.ps1 (+ the 3 sibling scripts) to
+  D:\wwow-bot\prod-data. It is non-destructive (a test-runner default, not
+  a write to shared MaNGOS\data — never do the destructive sync). No
+  approval needed.
+- No live-RE rows are planned (WWoW's RE is mature). In the rare event a
+  row genuinely cannot proceed headless (a memory/packet capture needing a
+  human at the game client), scaffold the wire/predicate, document exactly
+  what capture is needed, mark the row blocked:human-RE, and CONTINUE to the
+  next ready row — do not stall, do not ask.
+- If you hit something that feels like a "fork that changes the Definition
+  of Done," do NOT pause — pick the interpretation that keeps the critical
+  path moving, note it as an autonomous-default in the commit, and proceed.
+  The operator reviews the commit log, not a question queue.
 
 DURABLE RULES (root + repo CLAUDE.md — non-negotiable)
 - R13 validate in order scene-data -> FG/BG physics parity -> pathfinding;
@@ -243,9 +254,10 @@ B.travel -> B.questing -> B.solo-xp -> C.* -> D.roster. Pure-unit rows
   (and the `00_INDEX.md` `done` claims are explicitly distrusted).
 - **The critical path is short.** Even a single unattended run that only
   reaches `C.goalplanner` produces a bot that autonomously levels.
-- **Human gates are isolated + non-blocking.** Only the `A.6` operator
-  decision + any live-RE capture need a person; the loop scaffolds and
-  routes around them.
+- **No decision gates.** Every choice is an autonomous-default the loop
+  makes + documents; the one prior gate (`A.6` data-dir) is pre-resolved
+  and no live-RE rows are planned. The loop only stops on a failure
+  STOP CONDITION or the docker stack being down.
 - **It fails loud, not silent.** Stop conditions catch flake-loops,
   regressions, and stuck states instead of churning forever.
 

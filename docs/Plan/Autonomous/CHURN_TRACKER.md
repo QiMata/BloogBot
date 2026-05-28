@@ -38,10 +38,14 @@
 - `todo` — not started or in progress (`Iters-Done` tracks partial).
 - `done` — `Accept` gate observed green *by a run this-or-a-prior
   iteration*, commit recorded.
-- `blocked:human-decision` — waiting on an operator decision that
-  changes shared state (e.g. the `Q-D5-1` pathfinding data-dir repoint).
-- `blocked:human-RE` — waiting on a human-only live capture (memory
-  offset / packet id for un-RE'd content).
+- `blocked:human-RE` — reserved vocabulary for a row that is
+  *physically impossible* headless (a live memory/packet capture a human
+  must perform). **No backlog row is in this state** — WWoW's RE is
+  mature, so none is planned. The loop should NOT invent a block: for any
+  design choice, make a documented autonomous-default and proceed (this is
+  a full-autonomy loop — see the Autonomy row in the snapshot). Only use
+  `blocked:human-RE` if a row genuinely cannot proceed without a human at
+  the game client, and even then scaffold + document + continue elsewhere.
 
 ## Accept-gate vocabulary
 
@@ -71,7 +75,8 @@
 | Rows done | 0 / 36 — fresh layout; nothing verified by this session (layout-only). |
 | Docker stack | `wow-mangosd`, `wow-realmd`, `maria-db`, `wwow-pathfinding` (9002), `wwow-scene-data` (9003) — all `Up (healthy)` 2026-05-28. The loop does NOT manage docker. |
 | Phase status (existing Plan) | Phase 0 **done** (2026-05-12). Phase 1 substrate **partial**: `S1.0` (IBotTask contract) ✅, `S1.2` (MovementController audit 33/33) ✅, `S1.3` (PathfindingService 23/0) ✅, `S1.15-S1.19` (BG `Network*Frame` paths) coded/parity-pending; `S1.1` physics-family checkpoints **open** → `A.8`; `S1.4-S1.14` task families **no dry-run** → Phase B; `S1.20` 1h shakeout **open** → `A.10`. Phases 2-12 **not-started**. |
-| Live baseline | **None re-verified this session (layout-only).** Slot baselines: `NavigationPathTests` 113/0/7, `OgZeppelin` 4/0, `RecordedTests.Pathing` 135/0, `PathfindingService` 143/14(3 pre-existing)/13. The OG-Zeppelin tower-climb live test (`A.7`) is RED; `Q-D5-1` data-dir drift (`A.6`) blocks pathfinding validation pending an operator decision. |
+| Live baseline | **None re-verified this session (layout-only).** Slot baselines: `NavigationPathTests` 113/0/7, `OgZeppelin` 4/0, `RecordedTests.Pathing` 135/0, `PathfindingService` 143/14(3 pre-existing)/13. The OG-Zeppelin tower-climb live test (`A.7`) is RED; `Q-D5-1` data-dir drift (`A.6`) is **pre-resolved** (Option A — repoint the pathfinding test runner to `prod-data`; the loop just does it, no operator gate). |
+| Autonomy | **Full autonomy — zero decision gates.** Every choice is an autonomous-default the loop makes + documents; there are **no `blocked:*` rows** in the backlog. The only pauses are the failure STOP CONDITIONS (build broken, unresolvable regression, flake loop, stuck) and the docker stack being down. No live-RE rows are planned (WWoW's RE is mature); if one is discovered the loop scaffolds + documents + routes around it without stopping. |
 | Critical path | **B.composer** (`S2.0` IActivity/IObjective + `IActivityComposer`) → **B.combat** → **B.travel** → **B.questing** → **B.solo-xp** → **C.statemodel** → **C.progression** → **C.unlock-runtime** → **C.goalplanner** → **D.roster** → **D.progression-loop**. `B.composer` and `C.goalplanner` are the two load-bearing unblockers: the composer turns a catalog row into a live Objective graph (today nothing does), and the goalplanner replaces the hardcoded `ProgressionPlanner` stub with a `decision-engine/`-driven chooser. |
 
 ---
@@ -92,7 +97,7 @@
 | A.3 | **Canonical single-bot live smoke anchor.** Identify (or write) the "login → in-world → writes latest artifacts" test that is the harness anchor — the WWoW equivalent of a boot-to-in-world check. Should boot a FG bot via StateManager (`StartForegroundBotRunner` → inject `Loader.dll` → connect on 9001), reach in-world, and write a snapshot + screenshot to `tmp/test-runtime/screenshots/<test>/` (R16). Prefer reusing an existing minimal `LiveValidation` login/connect test if one passes; otherwise add `ForegroundLoginSmokeTests`. | A.2 | 2 | 0 | `LIVE:` the anchor test passes **3/3** clean runs via `run-live.ps1`; artifacts written | todo | |
 | A.4 | **Trust-gap audit.** Re-run **every** Activity marked `done` or `partial` in [`../Activities/00_INDEX.md`](../Activities/00_INDEX.md) (the gathering family `done`; the dungeon task-family `done`/coordinator `partial`; economy `partial`) via `run-live.ps1`. For each: confirm green (record run date in `00_INDEX.md`) OR downgrade the status + open a fix row here. Honesty over optimism — the gathering/dungeon `done` claims predate a reliable headless harness. | A.3 | 3 | 0 | each audited `00_INDEX.md` row's status reflects a run executed this audit (green-with-date or downgraded+fix-row) | todo | |
 | A.5 | **Telemetry/observability spine for the loop.** A normalized failure-reason surface (extend the Phase-0 `FailureReason` enum) + a per-run JSON ledger the loop parses to decide done/blocked/flaky. Mine `Spec/10-13` + [`../06_PHASE5_OBSERVABILITY.md`](../06_PHASE5_OBSERVABILITY.md). Keep it minimal — the goal is a parseable run verdict, not full Grafana (that's `Plan/05`). | A.3 | 2 | 0 | `UNIT:` failure-enum mapping tests + a live run emits a parseable ledger the loop can read | todo | |
-| A.6 | **`Q-D5-1` pathfinding data-dir decision (operator gate).** The pathfinding test runner `tools/scripts/run-pathfinding-tests.ps1:59` defaults `DataDir` to `D:\MaNGOS\data` while loop-24 canonical bakes live at `D:\wwow-bot\prod-data\mmaps\` (md5 drift; the D5 OG-sea-level `no_route` was **test config drift, not code** — [`../Handoffs/2026-05-19-loop25-d5-og-sea-level-no-route-surface.md`](../Handoffs/2026-05-19-loop25-d5-og-sea-level-no-route-surface.md), [`QUESTIONS.md` Q-D5-1](../QUESTIONS.md)). **Recommended Option A:** repoint line 59 + 3 sibling scripts to `prod-data` (~4 LOC). Fallback: `$env:WWOW_DATA_DIR` override. Do NOT sync `MaNGOS\data ← prod-data`. The pathfinding overhaul freeze means mesh fixes go in `tools/MmapGen/`, not managed repair (`CLAUDE.md`). **This is an operator-decision gate** — propose the diff, then `blocked:human-decision` until approved. | A.2 | 1 | 0 | operator approves the repoint **and** the pathfinding validation suite (incl. the OG sea-level route) runs green against `prod-data` | blocked:human-decision | |
+| A.6 | **`Q-D5-1` pathfinding data-dir fix (decision pre-made — Option A).** The pathfinding test runner `tools/scripts/run-pathfinding-tests.ps1:59` defaults `DataDir` to `D:\MaNGOS\data` while loop-24 canonical bakes live at `D:\wwow-bot\prod-data\mmaps\` (md5 drift; the D5 OG-sea-level `no_route` was **test config drift, not code** — [`../Handoffs/2026-05-19-loop25-d5-og-sea-level-no-route-surface.md`](../Handoffs/2026-05-19-loop25-d5-og-sea-level-no-route-surface.md), [`QUESTIONS.md` Q-D5-1](../QUESTIONS.md)). **Operator pre-approved Option A:** repoint line 59 + the 3 sibling scripts to `D:\wwow-bot\prod-data` (~4 LOC) — just do it, no gate. This is non-destructive (it changes a *test-runner default* to read the canonical bake; it does NOT sync/write `MaNGOS\data` — that destructive Option C is forbidden). Honor the pathfinding overhaul freeze: mesh fixes go in `tools/MmapGen/`, not managed repair (`CLAUDE.md`). Verify the `prod-data\mmaps\` bake exists before repointing; if it does not, regenerate via `tools/MmapGen/` (do NOT fall back to `MaNGOS\data`). | A.2 | 1 | 0 | the repoint is applied **and** the pathfinding validation suite (incl. the OG sea-level route) runs green against `prod-data` | todo | |
 | A.7 | **OG Zeppelin tower-climb live test (the open nav thread).** `DeckLipClimbFromGruntToLiteralFrezza` / `ClimbOrgrimmarZeppelinTowerRampToFrezza` is the subject of a ~40-commit caller-side route-consumption loop (HEAD `be6c32af` and back): each fix lands a green unit test, then the live rerun stalls at the *next* micro wall-climb gate (latest `(1352.1,-4526.7,35.2)`). It is **unit-green, live-red**. This is a Codex INVESTIGATION/fix row (R16: read the captured PNG under `tmp/test-runtime/screenshots/`, not just the log). Mesh fixes → `tools/MmapGen/` only (freeze); caller-side route consumption → `Exports/BotRunner` `NavigationPath.cs`. Depends on `A.6` (D5 proved the data-dir matters). | A.6 | 4 | 0 | `LIVE:` the OG-Zeppelin tower-climb test reaches Frezza in a clean run | todo | |
 | A.8 | **`S1.1` physics-family checkpoints (Phase 1 substrate gate, R13).** Close the open `S1.1`: representative FG↔BG physics-parity checkpoints **per task family** (validate in order scene-data → FG/BG physics parity → pathfinding; the `FG_BG_PARITY_BREAK` canary is the signal — root `CLAUDE.md` R13). Today only OG guard checkpoints (12/12) exist. | A.4 | 3 | 0 | `UNIT:`/`LIVE:` FG↔BG physics parity within tolerance on ≥1 representative checkpoint per task family (travel/combat/recovery at minimum) | todo | |
 | A.9 | **`S1.15-S1.19` BG `Network*Frame` parity tests.** The 5 BG packet paths (Trade/Craft/Vendor/Taxi/Trainer `Network*Frame` adapters) are coded but parity tests are pending (TASKS.md). Add the FG↔BG parity tests that prove the BG path matches recorded FG behavior (root `CLAUDE.md`: BG validated against FG recordings). | A.4 | 2 | 0 | `UNIT:` BG↔FG parity tests green for all 5 `Network*Frame` paths | todo | |
@@ -247,11 +252,13 @@
   claims (gathering, dungeon task-family) that predate a reliable
   headless harness. `A.4` re-validates them; a row stays `done` here only
   if its `Accept` passed this iteration.
-- **The two human-gated items are isolated + flagged.** `A.6` is an
-  operator *decision* (the `Q-D5-1` pathfinding data-dir repoint —
-  changes shared bake state, so it needs a go-ahead). Any future
-  live-RE capture for un-RE'd content is `blocked:human-RE`. The loop
-  scaffolds and routes around both.
+- **Full autonomy — no decision gates.** The one prior gate (`A.6` /
+  `Q-D5-1` pathfinding data-dir) is pre-resolved (Option A — repoint the
+  test runner to `prod-data`); the loop just applies it. No row is
+  `blocked:*`. The loop makes + documents an autonomous-default for every
+  choice and only stops on the failure STOP CONDITIONS (build broken,
+  unresolvable regression, flake loop, stuck) or the docker stack being
+  down. No live-RE rows are planned.
 - **Honor the pathfinding overhaul freeze.** Mesh fixes go in
   `tools/MmapGen/`, not the managed repair pipeline (`CLAUDE.md`,
   `docs/physics/PATHFINDING_OVERHAUL.md`). `A.7`/`B.travel` touch

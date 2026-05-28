@@ -50,9 +50,10 @@
   [`S20_COMPOSER_PLAN.md`](S20_COMPOSER_PLAN.md) +
   [`PROGRESSION_LAYER_PLAN.md`](PROGRESSION_LAYER_PLAN.md).
 - **Two open threads the layout captured** (so nothing is dropped): the
-  `Q-D5-1` pathfinding data-dir drift (`A.6`, an operator-decision gate)
-  and the OG-Zeppelin tower-climb live test (`A.7`, unit-green/live-red,
-  the subject of a ~40-commit caller-side loop). The pathfinding overhaul
+  `Q-D5-1` pathfinding data-dir drift (`A.6`, pre-resolved to Option A —
+  repoint the test runner to `prod-data`; the loop just applies it) and
+  the OG-Zeppelin tower-climb live test (`A.7`, unit-green/live-red, the
+  subject of a ~40-commit caller-side loop). The pathfinding overhaul
   freeze is active (mesh fixes → `tools/MmapGen/` only).
 
 ## Your done condition (when the repo is "churnable")
@@ -77,9 +78,12 @@ Exactly the meta-acceptance in
    verified progress. Fix anything ambiguous in the prompt/tracker.
 
 When 1–4 hold, hand `CODEX_LOOP_PROMPT.md` to Codex; it churns the rest
-of the tracker (Phase B coverage + Phase D roster + the Phase E stretch),
-escalating only at the isolated `A.6` operator decision + any
-`blocked:human-RE` capture.
+of the tracker (Phase B coverage + Phase D roster + the Phase E stretch)
+**fully autonomously — there are no decision gates.** The one prior gate
+(`A.6` / `Q-D5-1` pathfinding data-dir) is pre-resolved (Option A —
+repoint the test runner to `prod-data`), and no live-RE rows are planned.
+The loop only stops on a failure STOP CONDITION or the docker stack being
+down.
 
 ## How to work
 
@@ -96,8 +100,10 @@ escalating only at the isolated `A.6` operator decision + any
   untracked logs + `*_wpftmp.csproj` + `tmp/test-runtime/`). Document
   each row's `Accept` result in the commit. Always
   `git -C "E:\repos\Westworld of Warcraft"`.
-- When you hit the `A.6` operator decision or live-RE-gated work,
-  scaffold + mark blocked + continue — do not stall.
+- **Do not pause for decisions.** `A.6` is pre-resolved (repoint the
+  pathfinding test runner to `prod-data`). For any other choice, make a
+  documented autonomous-default and proceed; only the failure STOP
+  CONDITIONS stop the loop.
 
 ---
 
@@ -174,10 +180,13 @@ HARD RULES:
   DATA (unlock-graph, leveling-priority, per-bracket-actions). The guide
   is the only authoritative rule source — do NOT hardcode the journey.
 
-AUTONOMY: proceed without asking; document every non-obvious decision in
-commit messages + the tracker. Ask the human ONLY if you hit a true fork
-that changes the Definition of Done, the A.6 operator decision (the
-Q-D5-1 pathfinding data-dir repoint), or the docker stack is down.
+AUTONOMY: FULL — proceed without asking; document every non-obvious
+decision in commit messages + the tracker. There are NO decision gates:
+A.6 is pre-resolved (repoint the pathfinding test runner to prod-data) and
+no live-RE rows are planned. Do NOT pause for "forks" — pick the
+interpretation that keeps the critical path moving and note it as an
+autonomous-default. The ONLY thing that stops you is a failure STOP
+CONDITION or the docker stack being down (then stop + report).
 
 WHEN YOUR DONE CONDITION HOLDS: update CHURN_TRACKER.md's snapshot, write
 a short "repo is churnable" note (what's green, what Codex should pick up
@@ -200,7 +209,8 @@ first ready critical-path row (A.1).
   `CODEX_LOOP_PROMPT.md` to Codex for the long-tail coverage (the rest of
   Phase B + the Phase D roster + the Phase E stretch), checking in at
   phase boundaries.
-- The only things that will ever need *you*: the `A.6` operator decision
-  (the `Q-D5-1` pathfinding data-dir repoint — it changes shared bake
-  state) and any live-RE capture for un-RE'd content. Both are isolated
-  per-row and clearly flagged.
+- **Nothing should need *you* mid-loop.** This is a full-autonomy loop:
+  the only `A.6` data-dir decision is pre-made, and no live-RE rows are
+  planned. The loop only surfaces you on a hard failure (build broken,
+  unresolvable regression, flake loop, stuck) or if the docker stack is
+  down. Review the commit log at phase boundaries.

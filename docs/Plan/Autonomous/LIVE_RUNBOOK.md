@@ -206,7 +206,7 @@ root-cause (`B.group` organic formation), not noise to retry past.
 |---|---|---|
 | Script exits `2` before any test | A VMaNGOS container is missing or not `Up` | Bring the stack up; re-run the `docker ps` check. The script never starts docker. |
 | Build fails with MSB3027 (DLL locked) | A `WoW.exe` from a prior FG run is still holding the injected DLLs | Kill the specific `WoW.exe` PID(s) (NOT a blanket kill — other repos run concurrently); `pwsh run-tests.ps1 -CleanupRepoScopedOnly` cleans repo-scoped processes. |
-| Pathfinding test reports `no_route` at an OG sea-level coord | Test-runner data-dir drift (`run-pathfinding-tests.ps1` defaults to `D:\MaNGOS\data` not `D:\wwow-bot\prod-data`) | Tracker `A.6` / `Q-D5-1` — operator-decision repoint. |
+| Pathfinding test reports `no_route` at an OG sea-level coord | Test-runner data-dir drift (`run-pathfinding-tests.ps1` defaults to `D:\MaNGOS\data` not `D:\wwow-bot\prod-data`) | Tracker `A.6` / `Q-D5-1` — repoint the runner to `prod-data` (pre-approved, just apply). |
 | OG-Zeppelin tower-climb live test stalls mid-climb | Caller-side route consumption gate (unit-green, live-red) | Tracker `A.7` — read the captured PNG (R16); mesh fixes go in `tools/MmapGen/` only (freeze). |
 | Setup times out, then `run-live.ps1` retries | Flaky client boot / injection | Expected — the wrapper retries up to `-MaxAttempts` (default 3) on setup-timeout only. A real behavioral failure is NOT retried. |
 | A WPF window pops up during a "headless" run | `WWOW_DISABLE_UI` not consumed yet (pre-A.1) | Land tracker `A.1`; or run with the Aspire/UI host disabled. |

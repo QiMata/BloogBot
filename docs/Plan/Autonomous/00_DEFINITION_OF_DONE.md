@@ -319,14 +319,16 @@ churnable" handoff — see
    test/predicate/doc that flips it to `done`, and an honest `Status`.
 3. **The `CODEX_LOOP_PROMPT.md` is self-contained** — an agent can
    start from it with zero prior context and make correct progress.
-4. **No human-only step is on the critical path** except the two
-   flagged decision/RE gates (the `Q-D5-1` pathfinding data-dir
-   decision; any live memory/offset capture for un-RE'd content), which
-   are isolated per-row and the loop scaffolds-and-defers around them.
+4. **No human-only step is on the critical path — full autonomy.** The
+   one prior decision gate (`Q-D5-1` pathfinding data-dir) is
+   pre-resolved (Option A — repoint the test runner to `prod-data`); no
+   live-RE rows are planned (WWoW's RE is mature). The loop makes +
+   documents an autonomous-default for every choice and only stops on a
+   failure STOP CONDITION or the docker stack being down.
 
 When 1–4 hold, the operator can hand `CODEX_LOOP_PROMPT.md` to Codex and
-walk away; Codex churns the tracker toward this Definition of Done,
-asking for a human only at the explicitly-flagged gates.
+walk away; Codex churns the tracker toward this Definition of Done with
+no decision gates, surfacing the operator only on a hard failure.
 
 ---
 
@@ -348,3 +350,10 @@ redirect cheaply:
 - **WoW-version scope.** This DoD targets **1.12.1 (Vanilla)** only.
   TBC/WotLK support (`CLAUDE.md` lists 2.4.3 / 3.3.5a) is out of scope
   for this loop.
+- **Full autonomy — `A.6` pre-resolved.** The operator pre-approved
+  Option A for the `Q-D5-1` pathfinding data-dir question (repoint the
+  test runner to `prod-data` — non-destructive; never sync to
+  `MaNGOS\data`). There are no remaining decision gates and no planned
+  live-RE rows; the loop runs unattended and only surfaces the operator
+  on a hard failure. If you would rather the loop pause on a given class
+  of decision, add a `blocked:*` row in `CHURN_TRACKER.md`.
