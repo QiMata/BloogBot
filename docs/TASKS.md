@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
+Last refresh: 2026-05-29 (DeckLip tower route green; dense deck commit + bridge preserve)
 
 ## Rules
 
@@ -71,20 +71,28 @@ Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
 
 ## Orgrimmar Zeppelin Tower Pathing Note (2026-05-29)
 
-- `DeckLipClimbFromGruntToFrezza` remains live red, but the failure surface
-  narrowed. `NavigationPath` no longer returns `null` during exhausted-prefix
-  recalc and no longer immediately auto-advances into deeper wall support
-  waypoints after `path_exhausted_still_far` / `stalled_near_waypoint` replans.
-- Latest deterministic gate:
-  `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (133/140, 7 skipped)`.
-- Latest live red command:
-  `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='2'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=normal" -- RunConfiguration.TestSessionTimeout=1200000` -> failed.
+- `DeckLipClimbFromGruntToFrezza` is now live green against
+  `D:\wwow-bot\test-data`. The old exhausted-prefix `waypoint=null` gap is
+  still fixed, the route no longer escapes to the exterior hill outside the
+  tower model bounds, and the final clean live run reached the Frezza/boarding
+  platform without `stalled_near_waypoint` replans after the initial path.
+- Mesh-side delta: tile `1:40,29` now preserves explicit physics-step bridge
+  ribbons through source and final Detour culls, keeping the lower tower
+  entrance route connected inside the WMO bounds.
+- Runtime delta: dense long-travel deck waypoints require close body-sized
+  commit when the bot is vertically offset from the waypoint surface, so the
+  Tauren capsule does not auto-complete upper-deck breadcrumbs while still
+  below the platform.
+- Latest deterministic gates:
+  `NavigationPathTests` focused dense/edge batch -> `passed (12/12)`;
+  `DeckLipRawPathContractTests` -> `passed (4/4)`;
+  focused PathfindingService deck/off-mesh seam batch -> `passed (11/11)`.
+- Latest live command:
+  `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='2'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=normal" -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (1/1)`; final clean run completed the live test in `54s`.
 - Current evidence:
-  `tmp/test-runtime/screenshots/long-pathing/timeline/DeckLipClimbFromGruntToFrezza/02-climb-poll-00100-LPATHFG1-20260529T051120Z.{png,json}`;
+  `tmp/test-runtime/screenshots/long-pathing/timeline/DeckLipClimbFromGruntToFrezza/02-climb-poll-00050-LPATHFG1-20260529T185315Z.{png,json}`;
+  `tmp/test-runtime/screenshots/long-pathing/timeline/DeckLipClimbFromGruntToFrezza/03-final-LPATHFG1-20260529T185318Z.{png,json}`;
   `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`.
-- Next investigation: reject the first held uphill support itself (for example
-  `(1354.0,-4524.9,35.1)` / `(1354.4,-4524.3,34.8)`) through local
-  physics/geometry validation. Do not resume generic waypoint-skip tuning.
 
 ## Parallel tracks
 

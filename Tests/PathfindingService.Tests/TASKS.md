@@ -74,6 +74,36 @@
 3. Route validity focus: `dotnet test Tests/PathfindingService.Tests/PathfindingService.Tests.csproj --configuration Release --no-restore --settings Tests/PathfindingService.Tests/test.runsettings --filter "FullyQualifiedName=PathfindingService.Tests.PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_ReroutesAroundBlockedDirectLine|FullyQualifiedName=PathfindingService.Tests.PathfindingTests.CalculatePath_OrgrimmarCorpseRun_LiveRetrieveRoute_StraightRequestCompletesWithinBudget|FullyQualifiedName~PathfindingBotTaskTests" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
+### 2026-05-29 (tile 4029 physics bridge preserve; DeckLip route contract green)
+- Active task: keep the Orgrimmar zeppelin tower tile route inside the
+  `Orczeppelinhouse.wmo` bounds and preserve physics-approved lower entrance
+  support ribbons through the final bake culls.
+- Pass result: `delta shipped; direct route contract remains green and live
+  BotRunner validation now reaches Frezza/boarding platform`.
+- Last delta:
+  - Added a lower entrance terrain support bridge from
+    `(1333.333,-4633.400,24.042)` to `(1340.225,-4638.338,24.709)`.
+  - MmapGen now ORs physics-step bridge preserve masks into both source
+    `polyMesh` and final Detour suspicious-cull masks, so the explicitly
+    physics-validated bridge polygons are not culled to `area=0 flags=0`.
+  - The real upper-deck off-mesh seam remains the only `offmesh.txt` OG
+    entry; stale exterior shortcuts stayed removed.
+- Validation/tests run:
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests" --logger "console;verbosity=minimal" -- RunConfiguration.TestSessionTimeout=300000` -> `passed (4/4)`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests|FullyQualifiedName~IsOffMeshConnectionAtCoordTests|FullyQualifiedName~LongPathingRouteTests.OrgrimmarToUndercityZeppelin_BoardingIsOffMeshLink|FullyQualifiedName~LongPathingRouteTests.OrgrimmarDeckEdgeToBoardingPosition_PolygonListIncludesOffMeshConnection|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToBoardingPosition_IntraTilePolygonListIncludesOffMeshConnection" --logger "console;verbosity=minimal" -- RunConfiguration.TestSessionTimeout=300000` -> `passed (11/11)`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; & 'Bot\Release\net8.0\PathPhysicsProbe.exe' --map 1 --start 1332.760,-4633.400,24.078 --end 1340.225,-4638.338,24.709 --detour-resolve --dump-polyrefs` -> route resolves with `9` corners.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; & 'Bot\Release\net8.0\PathPhysicsProbe.exe' --map 1 --start 1332.760,-4633.400,24.078 --end 1320.143,-4653.159,53.892 --detour-resolve --smooth --dump-polyrefs` -> route resolves with `131` corners and reaches the boarding platform.
+- Evidence:
+  - Bake variant: `og_tower_lower_entrance_bridge_preserve_v1`.
+  - Bake logs include `[POLY-PHYSICS-STEP-BRIDGE-PRESERVE]` and
+    `[DT-PHYSICS-STEP-BRIDGE-PRESERVE]`.
+- Files changed:
+  - `tools/MmapGen/config.json`
+  - `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`
+  - `tools/MmapGen/offmesh.txt`
+  - `Tests/PathfindingService.Tests/TASKS.md`
+- Next command: `git status --short`
+
 ### 2026-05-26 (Grunt #1 -> Frezza socket contract proof)
 - Active task: answer the "wrong coordinates or wrong service port?" question
   against the exact lower-deck Grunt NPC spawn

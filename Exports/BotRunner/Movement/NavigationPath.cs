@@ -544,6 +544,8 @@ public class NavigationPath(
     private const float DENSE_REVERSAL_TURN_ANGLE_DEG = 135f;
     private const float DENSE_REVERSAL_MIN_SEGMENT_DISTANCE = 1.5f;
     private const float DENSE_REVERSAL_ACCEPTANCE_CAPSULE_MULTIPLIER = 1.75f;
+    private const float DENSE_EDGE_CLEARANCE_MAX_SEGMENT_DISTANCE = 4.5f;
+    private const float DENSE_EDGE_CLEARANCE_MIN_VERTICAL_DELTA = 0.35f;
     private const float WAYPOINT_REACH_DISTANCE = 3.5f;   // default fallback (no radii computed)
     private const float WAYPOINT_VERTICAL_REACH_TOLERANCE = 1.25f;
     private const float WAYPOINT_VERTICAL_LAYER_DRIFT_TOLERANCE = 3.0f;
@@ -1260,11 +1262,60 @@ public class NavigationPath(
         if (verticalDelta <= WAYPOINT_VERTICAL_REACH_TOLERANCE)
         {
             var reachIndex = waypointIndex ?? _currentIndex;
+            if (RequiresTightCommitForDenseEdgeClearance(currentPosition, reachIndex, verticalDelta))
+                return false;
+
             return !RequiresExactArrivalForMicroUphillSupport(currentPosition, waypoint, reachIndex, verticalDelta);
         }
 
         var index = waypointIndex ?? _currentIndex;
         return CanTreatSmallCollisionLayerDriftAsReached(currentPosition, waypoint, index, verticalDelta);
+    }
+
+    private bool RequiresTightCommitForDenseEdgeClearance(
+        Position currentPosition,
+        int waypointIndex,
+        float verticalDelta)
+    {
+        if (!_tightenDenseWaypointAcceptance
+            || !IsLongTravelStyleRoute()
+            || waypointIndex < 0
+            || waypointIndex >= _waypoints.Length
+            || verticalDelta < DENSE_EDGE_CLEARANCE_MIN_VERTICAL_DELTA)
+        {
+            return false;
+        }
+
+        var waypoint = _waypoints[waypointIndex];
+        var horizontalDelta = currentPosition.DistanceTo2D(waypoint);
+        if (!float.IsFinite(horizontalDelta) || horizontalDelta <= GetCornerCommitDistance())
+            return false;
+
+        return IsDenseEdgeClearanceWaypoint(waypointIndex);
+    }
+
+    private bool IsDenseEdgeClearanceWaypoint(int waypointIndex)
+    {
+        if (waypointIndex < 0 || waypointIndex + 1 >= _waypoints.Length)
+            return false;
+
+        var previous = waypointIndex > 0
+            ? _waypoints[waypointIndex - 1]
+            : _pathStartPosition;
+        if (previous is not Position prev)
+            return false;
+
+        var current = _waypoints[waypointIndex];
+        var next = _waypoints[waypointIndex + 1];
+        var inbound = prev.DistanceTo2D(current);
+        var outbound = current.DistanceTo2D(next);
+        if (!float.IsFinite(inbound) || !float.IsFinite(outbound))
+            return false;
+
+        if (MathF.Max(inbound, outbound) > DENSE_EDGE_CLEARANCE_MAX_SEGMENT_DISTANCE)
+            return false;
+
+        return true;
     }
 
     private bool CanPromoteToWaypointOnCurrentLayer(Position currentPosition, Position waypoint)

@@ -85,13 +85,14 @@
     - [x] 2026-05-29 deterministic coverage pins immediate
       `path_exhausted_still_far` recalc plus early compact uphill support
       holds for both exhausted and stalled replans.
-    - [ ] 2026-05-29 live rerun still fails: latest evidence holds the first
-      support `(1354.0,-4524.9,35.1)` / `(1354.4,-4524.3,34.8)` instead of
-      auto-advancing deeper, but the screenshot shows FG still pressed into
-      the wall. Next proof should reject that first support through local
-      physics/geometry validation.
+    - [x] 2026-05-29 focused live rerun is now green after the tile-4029
+      physics-step bridge preserve bake plus dense surface-commit
+      `NavigationPath` guard. The final clean run had no
+      `stalled_near_waypoint` replan after the initial path and reached the
+      Frezza/boarding platform at `(1320.3,-4653.2,53.9)`.
       Evidence:
-      `tmp/test-runtime/screenshots/long-pathing/timeline/DeckLipClimbFromGruntToFrezza/02-climb-poll-00100-LPATHFG1-20260529T051120Z.{png,json}`;
+      `tmp/test-runtime/screenshots/long-pathing/timeline/DeckLipClimbFromGruntToFrezza/02-climb-poll-00050-LPATHFG1-20260529T185315Z.{png,json}`;
+      `tmp/test-runtime/screenshots/long-pathing/timeline/DeckLipClimbFromGruntToFrezza/03-final-LPATHFG1-20260529T185318Z.{png,json}`;
       log `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`.
 
 0. Shodan test-director migration (started 2026-04-24)

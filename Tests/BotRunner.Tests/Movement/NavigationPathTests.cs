@@ -4644,6 +4644,102 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_LongTravelDoesNotSkipUpperDeckEdgeWaypointFromLowerLayer()
+    {
+        var lowerLayerPosition = new Position(1345.3f, -4645.0f, 53.5f);
+        var deckEntry = new Position(1345.0f, -4644.6f, 54.1f);
+        var edgeCommit = new Position(1343.5f, -4642.6f, 54.1f);
+        var deckMid = new Position(1341.7f, -4643.3f, 54.1f);
+        var acrossDeck = new Position(1339.8f, -4644.1f, 54.1f);
+        var deckOuterEdge = new Position(1337.9f, -4644.8f, 54.1f);
+        var destination = new Position(1320.143f, -4653.159f, 53.892f);
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                deckEntry,
+                edgeCommit,
+                deckMid,
+                acrossDeck,
+                deckOuterEdge,
+                destination,
+            ],
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: true,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            lowerLayerPosition,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.True(waypoint!.DistanceTo2D(edgeCommit) < 0.05f);
+        Assert.True(MathF.Abs(waypoint.Z - edgeCommit.Z) < 0.05f);
+        Assert.Equal(1, navPath.TraceSnapshot.CurrentWaypointIndex);
+        Assert.True(waypoint.DistanceTo2D(acrossDeck) > 0.5f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelDoesNotSkipStraightUpperDeckBreadcrumbFromLowerLayer()
+    {
+        var lowerLayerPosition = new Position(1345.2f, -4642.5f, 53.5f);
+        var nearDeckCommit = new Position(1343.6f, -4642.0f, 54.1f);
+        var straightDeckCommit = new Position(1341.8f, -4642.9f, 54.1f);
+        var nextStraightDeck = new Position(1340.0f, -4643.8f, 54.1f);
+        var outerDeck = new Position(1338.2f, -4644.6f, 54.1f);
+        var destination = new Position(1320.143f, -4653.159f, 53.892f);
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                nearDeckCommit,
+                straightDeckCommit,
+                nextStraightDeck,
+                outerDeck,
+                destination,
+            ],
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: true,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            lowerLayerPosition,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.True(waypoint!.DistanceTo2D(straightDeckCommit) < 0.05f);
+        Assert.True(MathF.Abs(waypoint.Z - straightDeckCommit.Z) < 0.05f);
+        Assert.Equal(1, navPath.TraceSnapshot.CurrentWaypointIndex);
+        Assert.True(waypoint.DistanceTo2D(nextStraightDeck) > 0.5f);
+    }
+
+    [Fact]
     public void GetNextWaypoint_LongTravelKeepsDenseDetourCornerUntilActuallyClose()
     {
         var pathfinding = new DelegatePathfindingClient(

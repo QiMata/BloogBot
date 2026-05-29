@@ -1453,6 +1453,24 @@ struct AnchorRouteTarget
     std::string label;
 };
 
+struct PhysicsStepBridgeSegment
+{
+    AnchorPolyStackCoord start;
+    AnchorPolyStackCoord end;
+    std::string label;
+};
+
+struct WowBounds
+{
+    bool enabled = false;
+    float minX = 0.0f;
+    float minY = 0.0f;
+    float minZ = 0.0f;
+    float maxX = 0.0f;
+    float maxY = 0.0f;
+    float maxZ = 0.0f;
+};
+
 struct AnchorPolyStackProbeResult
 {
     bool posOverPoly = false;
@@ -2036,6 +2054,46 @@ static bool TryParseAnchorCoordJson(const json& entry, AnchorPolyStackCoord& coo
     return true;
 }
 
+static bool TryParseWowBoundsJson(const json& entry, WowBounds& bounds)
+{
+    if (!entry.is_array() || entry.size() != 6)
+        return false;
+
+    for (size_t i = 0; i < entry.size(); ++i)
+        if (!entry[i].is_number())
+            return false;
+
+    bounds.enabled = true;
+    bounds.minX = entry[0].get<float>();
+    bounds.minY = entry[1].get<float>();
+    bounds.minZ = entry[2].get<float>();
+    bounds.maxX = entry[3].get<float>();
+    bounds.maxY = entry[4].get<float>();
+    bounds.maxZ = entry[5].get<float>();
+    return bounds.minX <= bounds.maxX && bounds.minY <= bounds.maxY && bounds.minZ <= bounds.maxZ;
+}
+
+static WowBounds ParseWowBounds(const json& config, const char* key)
+{
+    WowBounds bounds;
+    auto it = config.find(key);
+    if (it == config.end())
+        return bounds;
+
+    if (!TryParseWowBoundsJson(*it, bounds))
+        bounds.enabled = false;
+
+    return bounds;
+}
+
+static bool IsInsideWowBounds(const AnchorPolyStackCoord& coord, const WowBounds& bounds)
+{
+    return !bounds.enabled ||
+        (coord.wowX >= bounds.minX && coord.wowX <= bounds.maxX &&
+            coord.wowY >= bounds.minY && coord.wowY <= bounds.maxY &&
+            coord.wowZ >= bounds.minZ && coord.wowZ <= bounds.maxZ);
+}
+
 static std::vector<AnchorPolyStackCoord> ParseAnchorPolyStackCoords(const json& config)
 {
     return ParseAnchorCoords(config, "postDetourCullAnchorPolyStacksCoordsWow");
@@ -2099,6 +2157,43 @@ static std::vector<AnchorRouteTarget> ParseAnchorRouteTargets(const json& config
     }
 
     return routeTargets;
+}
+
+static std::vector<PhysicsStepBridgeSegment> ParsePhysicsStepBridgeSegments(const json& config)
+{
+    std::vector<PhysicsStepBridgeSegment> segments;
+
+    auto it = config.find("preRasterizeCreatePhysicsStepBridgeSegmentsWow");
+    if (it == config.end() || !it->is_array())
+        return segments;
+
+    for (const json& entry : *it)
+    {
+        if (!entry.is_object())
+            continue;
+
+        auto startIt = entry.find("start");
+        auto endIt = entry.find("end");
+        if (startIt == entry.end() || endIt == entry.end())
+            continue;
+
+        PhysicsStepBridgeSegment segment;
+        if (!TryParseAnchorCoordJson(*startIt, segment.start) ||
+            !TryParseAnchorCoordJson(*endIt, segment.end))
+        {
+            continue;
+        }
+
+        auto labelIt = entry.find("label");
+        if (labelIt != entry.end() && labelIt->is_string())
+            segment.label = labelIt->get<std::string>();
+        else
+            segment.label = FormatAnchorStageId(segment.start) + "->" + FormatAnchorStageId(segment.end);
+
+        segments.push_back(segment);
+    }
+
+    return segments;
 }
 
 static std::vector<AnchorPolyStackCoord> MergeUniqueAnchorCoords(
@@ -2713,6 +2808,56 @@ static bool SegmentsIntersectXZ(
         PointOnSegmentXZ(ax, az, bx, bz, dx, dz) ||
         PointOnSegmentXZ(cx, cz, dx, dz, ax, az) ||
         PointOnSegmentXZ(cx, cz, dx, dz, bx, bz);
+}
+
+static float DistanceSquaredPointToSegmentXZ(
+    const float px, const float pz,
+    const float ax, const float az,
+    const float bx, const float bz)
+{
+    float closestX = 0.0f;
+    float closestZ = 0.0f;
+    float closestY = 0.0f;
+    ClosestPointOnSegmentXZ(ax, az, 0.0f, bx, bz, 0.0f, px, pz, closestX, closestZ, closestY);
+    const float dx = px - closestX;
+    const float dz = pz - closestZ;
+    return dx * dx + dz * dz;
+}
+
+static bool PolygonOverlapsSegmentCorridorXZ(
+    const std::vector<Point2DXZ>& polygon,
+    const float startX, const float startZ,
+    const float endX, const float endZ,
+    const float halfWidth)
+{
+    if (polygon.size() < 3 || halfWidth <= 0.0f)
+        return false;
+
+    if (PointInPolygonXZ(polygon, startX, startZ) || PointInPolygonXZ(polygon, endX, endZ))
+        return true;
+
+    const float halfWidthSq = halfWidth * halfWidth;
+    for (const Point2DXZ& point : polygon)
+    {
+        if (DistanceSquaredPointToSegmentXZ(point.x, point.z, startX, startZ, endX, endZ) <= halfWidthSq)
+            return true;
+    }
+
+    for (size_t edgeIndex = 0; edgeIndex < polygon.size(); ++edgeIndex)
+    {
+        const Point2DXZ& a = polygon[edgeIndex];
+        const Point2DXZ& b = polygon[(edgeIndex + 1) % polygon.size()];
+        if (SegmentsIntersectXZ(startX, startZ, endX, endZ, a.x, a.z, b.x, b.z))
+            return true;
+
+        if (DistanceSquaredPointToSegmentXZ(startX, startZ, a.x, a.z, b.x, b.z) <= halfWidthSq ||
+            DistanceSquaredPointToSegmentXZ(endX, endZ, a.x, a.z, b.x, b.z) <= halfWidthSq)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static bool TriangleOverlapsAxisAlignedRectXZ(
@@ -3459,6 +3604,209 @@ static int InjectAnchorSourceFootprintBridges(
                 sameDetailQualifiedLowerCandidates,
                 deepestSameDetailLowerY);
         }
+    }
+
+    return injectedTriangles;
+}
+
+// [WWoW-DIVERGENCE] 2026-05-29: some WoW WMO seams are traversable by the
+// real client as short step-up / shallow-ramp moves, but Recast can leave the
+// two source-backed supports in disconnected Detour components. This bridge is
+// a bake-side, physics-gated source ribbon: it only injects between configured
+// endpoint pairs that resolve to real support triangles, stay inside an
+// optional WMO bbox, and fit the configured climb/slope envelope.
+static int InjectPhysicsStepBridgeSegments(
+    MMAP::MeshData& meshData,
+    std::vector<unsigned char>& rasterAreas,
+    const std::vector<PhysicsStepBridgeSegment>& segments,
+    const std::vector<AnchorSourceSupportProbe>& startSupports,
+    const std::vector<AnchorSourceSupportProbe>& endSupports,
+    const float bridgeHalfWidth,
+    const float maxHorizontalDistance2D,
+    const float maxVerticalDelta,
+    const float maxSlopeDegrees,
+    const float maxSupportDistance2D,
+    const bool requireSameSource,
+    const bool requireSameDetail,
+    const WowBounds& bounds,
+    const bool logDiagnostics)
+{
+    if (segments.empty() || bridgeHalfWidth <= 0.0f ||
+        segments.size() != startSupports.size() ||
+        segments.size() != endSupports.size())
+    {
+        return 0;
+    }
+
+    int injectedTriangles = 0;
+    for (size_t segmentIndex = 0; segmentIndex < segments.size(); ++segmentIndex)
+    {
+        const PhysicsStepBridgeSegment& segment = segments[segmentIndex];
+        const AnchorSourceSupportProbe& start = startSupports[segmentIndex];
+        const AnchorSourceSupportProbe& end = endSupports[segmentIndex];
+
+        if (!IsInsideWowBounds(segment.start, bounds) || !IsInsideWowBounds(segment.end, bounds))
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-PHYSICS-STEP-BRIDGE] label=%s action=skip-outside-bounds\n",
+                    segment.label.c_str());
+            }
+            continue;
+        }
+
+        const bool startNearSupport = start.projectedInside || start.distance2D <= maxSupportDistance2D;
+        const bool endNearSupport = end.projectedInside || end.distance2D <= maxSupportDistance2D;
+        if (!start.found || !end.found || !startNearSupport || !endNearSupport)
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-PHYSICS-STEP-BRIDGE] label=%s action=skip-unresolved-support startFound=%d startDist=%.3f endFound=%d endDist=%.3f maxSupportDist=%.3f\n",
+                    segment.label.c_str(),
+                    start.found ? 1 : 0,
+                    start.distance2D,
+                    end.found ? 1 : 0,
+                    end.distance2D,
+                    maxSupportDistance2D);
+            }
+            continue;
+        }
+
+        if (start.triIndex < 0 || end.triIndex < 0 ||
+            start.triIndex >= static_cast<int>(rasterAreas.size()) ||
+            end.triIndex >= static_cast<int>(rasterAreas.size()))
+        {
+            continue;
+        }
+
+        if (requireSameSource && start.source != end.source)
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-PHYSICS-STEP-BRIDGE] label=%s action=skip-source-mismatch startSource=%d endSource=%d\n",
+                    segment.label.c_str(),
+                    static_cast<int>(start.source),
+                    static_cast<int>(end.source));
+            }
+            continue;
+        }
+
+        const char* startDetailLabelCStr = meshData.DetailLabelForTriangle(start.triIndex);
+        const char* endDetailLabelCStr = meshData.DetailLabelForTriangle(end.triIndex);
+        const std::string startDetailLabel =
+            (startDetailLabelCStr && startDetailLabelCStr[0]) ? std::string(startDetailLabelCStr) : std::string();
+        const std::string endDetailLabel =
+            (endDetailLabelCStr && endDetailLabelCStr[0]) ? std::string(endDetailLabelCStr) : std::string();
+        if (requireSameDetail && (startDetailLabel.empty() || startDetailLabel != endDetailLabel))
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-PHYSICS-STEP-BRIDGE] label=%s action=skip-detail-mismatch startDetail=%s endDetail=%s\n",
+                    segment.label.c_str(),
+                    startDetailLabel.c_str(),
+                    endDetailLabel.c_str());
+            }
+            continue;
+        }
+
+        const float startBridgeX = segment.start.wowY;
+        const float startBridgeZ = segment.start.wowX;
+        const float endBridgeX = segment.end.wowY;
+        const float endBridgeZ = segment.end.wowX;
+        const float deltaX = endBridgeX - startBridgeX;
+        const float deltaZ = endBridgeZ - startBridgeZ;
+        const float horizontalDistance = sqrtf(deltaX * deltaX + deltaZ * deltaZ);
+        if (horizontalDistance <= 1.0e-4f || horizontalDistance > maxHorizontalDistance2D)
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-PHYSICS-STEP-BRIDGE] label=%s action=skip-horizontal-distance distance=%.3f max=%.3f\n",
+                    segment.label.c_str(),
+                    horizontalDistance,
+                    maxHorizontalDistance2D);
+            }
+            continue;
+        }
+
+        const float verticalDelta = end.supportY - start.supportY;
+        const float absVerticalDelta = fabsf(verticalDelta);
+        const float slopeDegrees = atanf(absVerticalDelta / horizontalDistance) * (180.0f / RC_PI);
+        if (absVerticalDelta > maxVerticalDelta || slopeDegrees > maxSlopeDegrees)
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-PHYSICS-STEP-BRIDGE] label=%s action=skip-physics-envelope hDist=%.3f vDelta=%.3f slope=%.3f maxVD=%.3f maxSlope=%.3f\n",
+                    segment.label.c_str(),
+                    horizontalDistance,
+                    verticalDelta,
+                    slopeDegrees,
+                    maxVerticalDelta,
+                    maxSlopeDegrees);
+            }
+            continue;
+        }
+
+        const unsigned char startArea = rasterAreas[start.triIndex];
+        const unsigned char endArea = rasterAreas[end.triIndex];
+        if ((startArea != AREA_GROUND && startArea != AREA_GROUND_MODEL) ||
+            (endArea != AREA_GROUND && endArea != AREA_GROUND_MODEL))
+        {
+            if (logDiagnostics)
+            {
+                printf("[SRC-PHYSICS-STEP-BRIDGE] label=%s action=skip-non-ground-area startArea=%u endArea=%u\n",
+                    segment.label.c_str(),
+                    static_cast<unsigned int>(startArea),
+                    static_cast<unsigned int>(endArea));
+            }
+            continue;
+        }
+
+        const float invLength = 1.0f / horizontalDistance;
+        const float tangentX = deltaX * invLength;
+        const float tangentZ = deltaZ * invLength;
+        const float perpX = -tangentZ * bridgeHalfWidth;
+        const float perpZ = tangentX * bridgeHalfWidth;
+
+        const int firstTri = meshData.solidTris.size() / 3;
+        const int firstVert = meshData.solidVerts.size() / 3;
+
+        meshData.solidVerts.append(startBridgeX + perpX);
+        meshData.solidVerts.append(start.supportY);
+        meshData.solidVerts.append(startBridgeZ + perpZ);
+        meshData.solidVerts.append(endBridgeX + perpX);
+        meshData.solidVerts.append(end.supportY);
+        meshData.solidVerts.append(endBridgeZ + perpZ);
+        meshData.solidVerts.append(endBridgeX - perpX);
+        meshData.solidVerts.append(end.supportY);
+        meshData.solidVerts.append(endBridgeZ - perpZ);
+        meshData.solidVerts.append(startBridgeX - perpX);
+        meshData.solidVerts.append(start.supportY);
+        meshData.solidVerts.append(startBridgeZ - perpZ);
+
+        meshData.solidTris.append(firstVert + 0);
+        meshData.solidTris.append(firstVert + 1);
+        meshData.solidTris.append(firstVert + 2);
+        meshData.solidTris.append(firstVert + 0);
+        meshData.solidTris.append(firstVert + 2);
+        meshData.solidTris.append(firstVert + 3);
+
+        const int lastTri = meshData.solidTris.size() / 3;
+        meshData.AddSourceTriangleRange(firstTri, lastTri, start.source);
+        if (!startDetailLabel.empty())
+            meshData.AddDetailTriangleRange(firstTri, lastTri, start.source, startDetailLabel);
+
+        rasterAreas.push_back(startArea);
+        rasterAreas.push_back(startArea);
+        injectedTriangles += 2;
+
+        printf("[SRC-PHYSICS-STEP-BRIDGE] label=%s start=(%.3f,%.3f,%.3f) end=(%.3f,%.3f,%.3f) hDist=%.3f vDelta=%.3f slope=%.3f halfWidth=%.3f added=2\n",
+            segment.label.c_str(),
+            start.supportRecastZ, start.supportRecastX, start.supportY,
+            end.supportRecastZ, end.supportRecastX, end.supportY,
+            horizontalDistance,
+            verticalDelta,
+            slopeDegrees,
+            bridgeHalfWidth);
     }
 
     return injectedTriangles;
@@ -4881,6 +5229,144 @@ static void BuildPolyMeshExactAnchorPreserveMask(const rcPolyMesh& mesh,
             preserveMask[polyIndex] = 1;
         }
     }
+}
+
+static bool PhysicsStepBridgeHeightOverlaps(
+    const PhysicsStepBridgeSegment& segment,
+    const float minY,
+    const float maxY)
+{
+    constexpr float kBridgePreserveSlackBelow = 0.50f;
+    constexpr float kBridgePreserveSlackAbove = 0.90f;
+    const float bridgeMinY = std::min(segment.start.wowZ, segment.end.wowZ) - kBridgePreserveSlackBelow;
+    const float bridgeMaxY = std::max(segment.start.wowZ, segment.end.wowZ) + kBridgePreserveSlackAbove;
+    return maxY >= bridgeMinY && minY <= bridgeMaxY;
+}
+
+static bool PolygonOverlapsPhysicsStepBridge(
+    const std::vector<Point2DXZ>& polygon,
+    const float minY,
+    const float maxY,
+    const PhysicsStepBridgeSegment& segment,
+    const float bridgeHalfWidth)
+{
+    constexpr float kBridgePreserveHalfWidthSlack = 0.35f;
+    if (!PhysicsStepBridgeHeightOverlaps(segment, minY, maxY))
+        return false;
+
+    const float startX = segment.start.wowY;
+    const float startZ = segment.start.wowX;
+    const float endX = segment.end.wowY;
+    const float endZ = segment.end.wowX;
+    return PolygonOverlapsSegmentCorridorXZ(
+        polygon,
+        startX,
+        startZ,
+        endX,
+        endZ,
+        bridgeHalfWidth + kBridgePreserveHalfWidthSlack);
+}
+
+static int BuildPolyMeshPhysicsStepBridgePreserveMask(
+    const rcPolyMesh& mesh,
+    const std::vector<PhysicsStepBridgeSegment>& segments,
+    const float bridgeHalfWidth,
+    std::vector<unsigned char>& preserveMask)
+{
+    if (!mesh.polys || !mesh.verts || segments.empty() || bridgeHalfWidth <= 0.0f)
+        return 0;
+
+    int preserved = 0;
+    for (int polyIndex = 0; polyIndex < mesh.npolys; ++polyIndex)
+    {
+        if (mesh.areas[polyIndex] != AREA_GROUND)
+            continue;
+
+        const unsigned short* poly = &mesh.polys[polyIndex * mesh.nvp * 2];
+        std::vector<Point2DXZ> polygon;
+        polygon.reserve(mesh.nvp);
+        float minY = std::numeric_limits<float>::max();
+        float maxY = -std::numeric_limits<float>::max();
+
+        for (int vertIndex = 0; vertIndex < mesh.nvp; ++vertIndex)
+        {
+            const unsigned short vertex = poly[vertIndex];
+            if (vertex == RC_MESH_NULL_IDX)
+                break;
+
+            const unsigned short* v = &mesh.verts[vertex * 3];
+            const float recastX = mesh.bmin[0] + v[0] * mesh.cs;
+            const float recastY = mesh.bmin[1] + v[1] * mesh.ch;
+            const float recastZ = mesh.bmin[2] + v[2] * mesh.cs;
+            polygon.push_back({ recastX, recastZ });
+            minY = std::min(minY, recastY);
+            maxY = std::max(maxY, recastY);
+        }
+
+        if (polygon.size() < 3)
+            continue;
+
+        for (const PhysicsStepBridgeSegment& segment : segments)
+        {
+            if (!PolygonOverlapsPhysicsStepBridge(polygon, minY, maxY, segment, bridgeHalfWidth))
+                continue;
+
+            if (polyIndex < static_cast<int>(preserveMask.size()) && !preserveMask[polyIndex])
+            {
+                preserveMask[polyIndex] = 1;
+                ++preserved;
+            }
+            break;
+        }
+    }
+
+    return preserved;
+}
+
+static int BuildDetourPhysicsStepBridgePreserveMask(
+    const dtMeshTile& tile,
+    const std::vector<PhysicsStepBridgeSegment>& segments,
+    const float bridgeHalfWidth,
+    std::vector<unsigned char>& preserveMask)
+{
+    if (!tile.header || !tile.polys || !tile.verts || segments.empty() || bridgeHalfWidth <= 0.0f)
+        return 0;
+
+    int preserved = 0;
+    for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+    {
+        const dtPoly& poly = tile.polys[polyIndex];
+        if (!IsWalkableLandPoly(poly) || poly.vertCount < 3)
+            continue;
+
+        std::vector<Point2DXZ> polygon;
+        polygon.reserve(poly.vertCount);
+        float minY = std::numeric_limits<float>::max();
+        float maxY = -std::numeric_limits<float>::max();
+
+        for (int vertIndex = 0; vertIndex < poly.vertCount; ++vertIndex)
+        {
+            const float* v = &tile.verts[poly.verts[vertIndex] * 3];
+            polygon.push_back({ v[0], v[2] });
+            minY = std::min(minY, v[1]);
+            maxY = std::max(maxY, v[1]);
+        }
+
+        for (const PhysicsStepBridgeSegment& segment : segments)
+        {
+            if (!PolygonOverlapsPhysicsStepBridge(polygon, minY, maxY, segment, bridgeHalfWidth))
+                continue;
+
+            if (polyIndex < static_cast<int>(preserveMask.size()) && !preserveMask[polyIndex])
+            {
+                preserveMask[polyIndex] = 1;
+                ++preserved;
+            }
+            break;
+        }
+    }
+
+    return preserved;
 }
 
 // [WWoW-DIVERGENCE] 2026-05-24: support-backed OG hallway/city contours can
@@ -9333,6 +9819,8 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
     const bool trimGenericSteepMixedWalls,
     const bool trimShadowedLedges, const bool trimOffMeshAnchorSteepTrim, const bool trimShadowedPockets,
     const OffMeshAnchorSteepTrimSettings& offMeshAnchorSteepTrimSettings,
+    const std::vector<PhysicsStepBridgeSegment>& physicsStepBridgeSegments,
+    const float physicsStepBridgeHalfWidth,
     const bool trimAnchorPolyStacks, const float anchorPolyStackXyExtent, const float anchorPolyStackZExtent,
     const float anchorPolyStackSupportZTolerance, const float anchorPolyStackSupportGap2D,
     const std::vector<AnchorPolyStackCoord>& anchorPolyStackCoords,
@@ -9375,6 +9863,13 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
             printf("[DT-ANCHOR-PRESERVE] tile=%d,%d query init failed; continuing without exact-support preserve mask\n",
                 tile.header->x, tile.header->y);
         }
+    }
+    const int physicsStepBridgePreserved = BuildDetourPhysicsStepBridgePreserveMask(
+        tile, physicsStepBridgeSegments, physicsStepBridgeHalfWidth, exactAnchorSupportPreserveMask);
+    if (physicsStepBridgePreserved > 0)
+    {
+        printf("[DT-PHYSICS-STEP-BRIDGE-PRESERVE] tile=%d,%d preserved=%d\n",
+            tile.header->x, tile.header->y, physicsStepBridgePreserved);
     }
 
     int culled = 0;
@@ -10228,6 +10723,24 @@ namespace MMAP
             jsonTileConfig, "preRasterizeCreateAnchorSourceFootprintBridgeMinSameDetailLowerDrop", 1.25f);
         const bool preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop =
             jsonTileConfig.value("preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop", true);
+        const std::vector<PhysicsStepBridgeSegment> preRasterizeCreatePhysicsStepBridgeSegments =
+            ParsePhysicsStepBridgeSegments(jsonTileConfig);
+        const float preRasterizeCreatePhysicsStepBridgeHalfWidth = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeCreatePhysicsStepBridgeHalfWidth", 0.0f);
+        const float preRasterizeCreatePhysicsStepBridgeMaxHorizontalDistance2D = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeCreatePhysicsStepBridgeMaxHorizontalDistance2D", 3.0f);
+        const float preRasterizeCreatePhysicsStepBridgeMaxVerticalDelta = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeCreatePhysicsStepBridgeMaxVerticalDelta", agentMaxClimbTerrain);
+        const float preRasterizeCreatePhysicsStepBridgeMaxSlopeDegrees = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeCreatePhysicsStepBridgeMaxSlopeDegrees", 35.0f);
+        const float preRasterizeCreatePhysicsStepBridgeMaxSupportDistance2D = JsonFloatOrDefault(
+            jsonTileConfig, "preRasterizeCreatePhysicsStepBridgeMaxSupportDistance2D", 0.75f);
+        const bool preRasterizeCreatePhysicsStepBridgeRequireSameSource =
+            jsonTileConfig.value("preRasterizeCreatePhysicsStepBridgeRequireSameSource", true);
+        const bool preRasterizeCreatePhysicsStepBridgeRequireSameDetail =
+            jsonTileConfig.value("preRasterizeCreatePhysicsStepBridgeRequireSameDetail", true);
+        const WowBounds preRasterizeCreatePhysicsStepBridgeBounds =
+            ParseWowBounds(jsonTileConfig, "preRasterizeCreatePhysicsStepBridgeBoundsWow");
         const std::vector<AnchorSourceSupportProbe> preRasterizeCreateAnchorSourceFootprintCapProbes =
             (!preRasterizeCreateAnchorSourceFootprintCapCoords.empty() &&
                 preRasterizeCreateAnchorSourceFootprintCapHalfExtent > 0.0f)
@@ -10297,6 +10810,57 @@ namespace MMAP
                 tTriCount = meshData.solidTris.size() / 3;
                 printf("[SRC-FOOTPRINT-BRIDGE] map=%u tile=%u,%u: injected %d source-footprint bridge triangle(s)\n",
                     mapID, tileX, tileY, injectedSourceBridgeTriangles);
+            }
+        }
+        if (!preRasterizeCreatePhysicsStepBridgeSegments.empty() &&
+            preRasterizeCreatePhysicsStepBridgeHalfWidth > 0.0f)
+        {
+            std::vector<AnchorPolyStackCoord> startCoords;
+            std::vector<AnchorPolyStackCoord> endCoords;
+            startCoords.reserve(preRasterizeCreatePhysicsStepBridgeSegments.size());
+            endCoords.reserve(preRasterizeCreatePhysicsStepBridgeSegments.size());
+            for (const PhysicsStepBridgeSegment& segment : preRasterizeCreatePhysicsStepBridgeSegments)
+            {
+                startCoords.push_back(segment.start);
+                endCoords.push_back(segment.end);
+            }
+
+            const std::vector<AnchorSourceSupportProbe> startSupports =
+                ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, startCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
+                    logAnchorStageDiagnostics);
+            const std::vector<AnchorSourceSupportProbe> endSupports =
+                ResolveAnchorSourceSupportProbes(
+                    meshData, tVerts, tTris, rasterAreas.data(), tTriCount,
+                    anchorSourceSupportXyExtent, anchorSourceSupportZTolerance, endCoords,
+                    borrowMissingAnchorSourceSupportFromNeighbors,
+                    logAnchorStageDiagnostics);
+
+            const int injectedPhysicsStepBridgeTriangles = InjectPhysicsStepBridgeSegments(
+                meshData,
+                rasterAreas,
+                preRasterizeCreatePhysicsStepBridgeSegments,
+                startSupports,
+                endSupports,
+                preRasterizeCreatePhysicsStepBridgeHalfWidth,
+                preRasterizeCreatePhysicsStepBridgeMaxHorizontalDistance2D,
+                preRasterizeCreatePhysicsStepBridgeMaxVerticalDelta,
+                preRasterizeCreatePhysicsStepBridgeMaxSlopeDegrees,
+                preRasterizeCreatePhysicsStepBridgeMaxSupportDistance2D,
+                preRasterizeCreatePhysicsStepBridgeRequireSameSource,
+                preRasterizeCreatePhysicsStepBridgeRequireSameDetail,
+                preRasterizeCreatePhysicsStepBridgeBounds,
+                logAnchorStageDiagnostics);
+            if (injectedPhysicsStepBridgeTriangles > 0)
+            {
+                tVerts = meshData.solidVerts.getCArray();
+                tVertCount = meshData.solidVerts.size() / 3;
+                tTris = meshData.solidTris.getCArray();
+                tTriCount = meshData.solidTris.size() / 3;
+                printf("[SRC-PHYSICS-STEP-BRIDGE] map=%u tile=%u,%u: injected %d physics step bridge triangle(s)\n",
+                    mapID, tileX, tileY, injectedPhysicsStepBridgeTriangles);
             }
         }
         const std::vector<AnchorSourceSupportProbe> preRasterizePromoteAnchorSourceSupportProbes =
@@ -11140,6 +11704,16 @@ namespace MMAP
             anchorSupportBandTuning,
             anchorSourceSupports,
             polyMeshExactAnchorPreserveMask);
+        const int polyMeshPhysicsStepBridgePreserved = BuildPolyMeshPhysicsStepBridgePreserveMask(
+            *iv.polyMesh,
+            preRasterizeCreatePhysicsStepBridgeSegments,
+            preRasterizeCreatePhysicsStepBridgeHalfWidth,
+            polyMeshExactAnchorPreserveMask);
+        if (polyMeshPhysicsStepBridgePreserved > 0)
+        {
+            printf("[POLY-PHYSICS-STEP-BRIDGE-PRESERVE] map=%u tile=%u,%u: preserved %d source-ribbon polygon(s)\n",
+                mapID, tileX, tileY, polyMeshPhysicsStepBridgePreserved);
+        }
 
         const int culledSuspiciousPolys = CullSuspiciousMixedWallPolys(
             *iv.polyMesh,
@@ -11340,6 +11914,8 @@ namespace MMAP
                     trimGenericSteepMixedWalls,
                     trimShadowedLedges, trimOffMeshAnchorSteepTrim, trimShadowedPockets,
                     offMeshAnchorSteepTrimSettings,
+                    preRasterizeCreatePhysicsStepBridgeSegments,
+                    preRasterizeCreatePhysicsStepBridgeHalfWidth,
                     trimAnchorPolyStacks, anchorPolyStackXyExtent, anchorPolyStackZExtent,
                     anchorPolyStackSupportZTolerance, anchorPolyStackSupportGap2D,
                     anchorPolyStackCoords, anchorSourceSupports, anchorSupportBandTuning,
@@ -11544,6 +12120,15 @@ namespace MMAP
             { "preRasterizeCreateAnchorSourceFootprintBridgeMinTargetDistance2D", 1.0f },
             { "preRasterizeCreateAnchorSourceFootprintBridgeMinSameDetailLowerDrop", 1.25f },
             { "preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop", true },
+            { "preRasterizeCreatePhysicsStepBridgeSegmentsWow", json::array() },
+            { "preRasterizeCreatePhysicsStepBridgeHalfWidth", 0.0f },
+            { "preRasterizeCreatePhysicsStepBridgeMaxHorizontalDistance2D", 3.0f },
+            { "preRasterizeCreatePhysicsStepBridgeMaxVerticalDelta", 1.8f },
+            { "preRasterizeCreatePhysicsStepBridgeMaxSlopeDegrees", 35.0f },
+            { "preRasterizeCreatePhysicsStepBridgeMaxSupportDistance2D", 0.75f },
+            { "preRasterizeCreatePhysicsStepBridgeRequireSameSource", true },
+            { "preRasterizeCreatePhysicsStepBridgeRequireSameDetail", true },
+            { "preRasterizeCreatePhysicsStepBridgeBoundsWow", json::array() },
             { "traceSourceFootprintCandidateCoordsWow", json::array() },
             { "traceSourceFootprintCandidateLimit", 8 },
             { "contourBuildSeedAnchorSupportCoordsWow", json::array() },

@@ -60,6 +60,9 @@
     reaches the Orgrimmar zeppelin deck approach near
     `(1330.7,-4653.0,53.5)` without recurring stalls near `(1546,-4430)` or
     `(1508,-4420)`.
+  - [x] Focused Grunt-base -> Frezza deck climb now reaches the zeppelin
+    platform without leaving the tower route or falling into stalled
+    lower-layer replans.
   - [ ] Investigate the remaining Orgrimmar -> Undercity zeppelin
     boarding/transfer evidence gap. Screenshot evidence has moved the
     Orgrimmar/Undercity dock anchors to the gangplank/deck positions, but the
@@ -87,45 +90,44 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
-### 2026-05-29 (DeckLip tower support hold; live red narrowed to first support physics)
-- Pass result: deterministic navigation coverage is green, and focused live
-  evidence moved from "auto-advance into deeper wall support" to "hold the
-  first uphill support, then prove FG cannot physically climb it." The live
-  test is still red.
+### 2026-05-29 (DeckLip tower route green; dense deck breadcrumbs require surface commit)
+- Pass result: focused `DeckLipClimbFromGruntToFrezza` live validation is
+  green. The old exterior-hill route is gone, the old exhausted-prefix
+  `waypoint=null` gap remains fixed, and the final live run reached the
+  zeppelin platform without `stalled_near_waypoint` replans after the initial
+  path.
 - Last delta:
-  - `NavigationPath` now keeps early compact uphill support points active
-    after `path_exhausted_still_far` and `stalled_near_waypoint` replans while
-    the bot is still below the support point.
-  - Duplicate/current breadcrumbs still advance immediately, preserving the
-    earlier no-null-gap fix.
-  - Compact exact-arrival support holds were narrowed to body-sized support
-    stacks so ordinary uphill breadcrumbs inside agent commit radius still
-    advance.
+  - MmapGen tile `1:40,29` now preserves explicit physics-step bridge source
+    ribbons through mixed-wall/final Detour culls, so the lower tower entrance
+    route remains connected inside the `Orczeppelinhouse.wmo` bounds instead
+    of preferring the exterior hill.
+  - `NavigationPath` now requires close body-sized commit for dense long-travel
+    waypoints whenever the bot is vertically offset from that waypoint surface.
+    This covers both turning deck corners and straight deck breadcrumbs, giving
+    the Tauren capsule elbow room instead of auto-completing upper-deck points
+    while still below the platform.
+  - Added deterministic regressions for the live upper-deck edge and straight
+    breadcrumb skip shapes.
 - Validation/tests run:
-  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (133/140, 7 skipped)`.
-  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingFixtureConfigurationTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`.
-  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly` -> no repo-scoped processes to stop.
-  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='2'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=normal" -- RunConfiguration.TestSessionTimeout=1200000` -> failed live red after screenshot/log evidence.
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelDoesNotSkipUpperDeckEdgeWaypointFromLowerLayer|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelDoesNotSkipStraightUpperDeckBreadcrumbFromLowerLayer|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsDenseDetourCornerUntilActuallyClose|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelBodySizedAcceptanceAdvancesThroughExecutableDenseWiggles|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelSkipsCollinearDenseBreadcrumbsUntilNextCommitPoint|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelRequiresCommitBeforeDenseReversal|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsFirstCompactUphillLipSupportStepWhenPreviousContextComesFromPathStart|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelPathExhaustedWithinCooldown_RecalculatesImmediatelyAndAdvancesPastStartBreadcrumb|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledLongTravelPromotesAlongExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_ShortRoutePathExhaustedWithinCooldown_RecalculatesImmediately" --logger "console;verbosity=minimal"` -> `passed (12/12)`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests" --logger "console;verbosity=minimal" -- RunConfiguration.TestSessionTimeout=300000` -> `passed (4/4)`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests|FullyQualifiedName~IsOffMeshConnectionAtCoordTests|FullyQualifiedName~LongPathingRouteTests.OrgrimmarToUndercityZeppelin_BoardingIsOffMeshLink|FullyQualifiedName~LongPathingRouteTests.OrgrimmarDeckEdgeToBoardingPosition_PolygonListIncludesOffMeshConnection|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToBoardingPosition_IntraTilePolygonListIncludesOffMeshConnection" --logger "console;verbosity=minimal" -- RunConfiguration.TestSessionTimeout=300000` -> `passed (11/11)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly` -> no repo-scoped processes to stop before both live reruns.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='2'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=normal" -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (1/1)` twice; final clean run completed the live test in `54s`.
 - Evidence:
   - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
-  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\02-climb-poll-00100-LPATHFG1-20260529T051120Z.png`
-  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\02-climb-poll-00100-LPATHFG1-20260529T051120Z.json`
-- Practical read:
-  - The old `waypoint=null` gap remains fixed.
-  - The deeper wall-hugging targets are no longer selected immediately after
-    exhausted/stall replans. Live plan 3 now holds
-    `(1354.0,-4524.9,35.1)` at `idx=1`; later stall replans hold
-    `(1354.3,-4524.5,34.9)` and `(1354.4,-4524.3,34.8)`.
-  - The screenshot still shows the Tauren pressed into the tower wall. Next
-    work should reject that first support via local physics / geometry
-    validation instead of further waypoint-advance tuning.
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\02-climb-poll-00050-LPATHFG1-20260529T185315Z.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\02-climb-poll-00050-LPATHFG1-20260529T185315Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\03-final-LPATHFG1-20260529T185318Z.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\03-final-LPATHFG1-20260529T185318Z.json`
 - Files changed:
   - `Exports/BotRunner/Movement/NavigationPath.cs`
   - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
-  - `Tests/Tests.Infrastructure/BotServiceFixture.cs`
-  - `Tests/BotRunner.Tests/LiveValidation/PathfindingFixtureConfigurationTests.cs`
+  - `tools/MmapGen/config.json`
   - `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`
-- Next command: `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='2'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=normal" -- RunConfiguration.TestSessionTimeout=1200000`
+  - `tools/MmapGen/offmesh.txt`
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `git status --short`
 
 ### 2026-05-26 (same-map `TravelTo` now enters `TravelTask`; live red moved from spawn-startup to the later tower-approach stall)
 - Pass result: built on top of commit `b3c107ba` (`Block false same-map TravelTo arrival below Frezza`). Same-map `TravelTo` no longer routes the literal Frezza proof through `GoToTask`; the live run now enters `TravelTask`, emits `TRAVEL_*` diagnostics immediately, reaches many waypoints from the Grunt-base spawn, and fails later at the tower-approach wall/cliff stall.
