@@ -87,6 +87,46 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-05-29 (DeckLip tower support hold; live red narrowed to first support physics)
+- Pass result: deterministic navigation coverage is green, and focused live
+  evidence moved from "auto-advance into deeper wall support" to "hold the
+  first uphill support, then prove FG cannot physically climb it." The live
+  test is still red.
+- Last delta:
+  - `NavigationPath` now keeps early compact uphill support points active
+    after `path_exhausted_still_far` and `stalled_near_waypoint` replans while
+    the bot is still below the support point.
+  - Duplicate/current breadcrumbs still advance immediately, preserving the
+    earlier no-null-gap fix.
+  - Compact exact-arrival support holds were narrowed to body-sized support
+    stacks so ordinary uphill breadcrumbs inside agent commit radius still
+    advance.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (133/140, 7 skipped)`.
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~PathfindingFixtureConfigurationTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly` -> no repo-scoped processes to stop.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='2'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=normal" -- RunConfiguration.TestSessionTimeout=1200000` -> failed live red after screenshot/log evidence.
+- Evidence:
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\02-climb-poll-00100-LPATHFG1-20260529T051120Z.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\02-climb-poll-00100-LPATHFG1-20260529T051120Z.json`
+- Practical read:
+  - The old `waypoint=null` gap remains fixed.
+  - The deeper wall-hugging targets are no longer selected immediately after
+    exhausted/stall replans. Live plan 3 now holds
+    `(1354.0,-4524.9,35.1)` at `idx=1`; later stall replans hold
+    `(1354.3,-4524.5,34.9)` and `(1354.4,-4524.3,34.8)`.
+  - The screenshot still shows the Tauren pressed into the tower wall. Next
+    work should reject that first support via local physics / geometry
+    validation instead of further waypoint-advance tuning.
+- Files changed:
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `Tests/Tests.Infrastructure/BotServiceFixture.cs`
+  - `Tests/BotRunner.Tests/LiveValidation/PathfindingFixtureConfigurationTests.cs`
+  - `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`
+- Next command: `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='2'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=normal" -- RunConfiguration.TestSessionTimeout=1200000`
+
 ### 2026-05-26 (same-map `TravelTo` now enters `TravelTask`; live red moved from spawn-startup to the later tower-approach stall)
 - Pass result: built on top of commit `b3c107ba` (`Block false same-map TravelTo arrival below Frezza`). Same-map `TravelTo` no longer routes the literal Frezza proof through `GoToTask`; the live run now enters `TravelTask`, emits `TRAVEL_*` diagnostics immediately, reaches many waypoints from the Grunt-base spawn, and fails later at the tower-approach wall/cliff stall.
 - Last delta:

@@ -181,6 +181,30 @@ public class BotServiceFixture : IAsyncLifetime
     private static string? ResolveDockerParityDataDir()
         => SceneDataParityPaths.ResolveDockerHostDataRoot();
 
+    public static string? ResolveStateManagerDataDirectory()
+    {
+        foreach (var candidate in new[]
+        {
+            Environment.GetEnvironmentVariable("WWOW_TEST_DATA_DIR"),
+            Environment.GetEnvironmentVariable("WWOW_DATA_DIR"),
+            ResolveDockerParityDataDir()
+        })
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+                continue;
+
+            var resolved = Path.GetFullPath(candidate);
+            if (Directory.Exists(Path.Combine(resolved, "mmaps"))
+                && Directory.Exists(Path.Combine(resolved, "maps"))
+                && Directory.Exists(Path.Combine(resolved, "vmaps")))
+            {
+                return resolved;
+            }
+        }
+
+        return null;
+    }
+
     public static (string IpAddress, int Port) ResolveCurrentPathfindingEndpoint()
     {
         var config = IntegrationTestConfig.FromEnvironment();
@@ -1024,11 +1048,11 @@ public class BotServiceFixture : IAsyncLifetime
             // so test runners can observe bot output in real time.
             psi.Environment["WWOW_SHOW_WINDOWS"] = "1";
 
-            var parityDataDir = ResolveDockerParityDataDir();
-            if (!string.IsNullOrWhiteSpace(parityDataDir))
+            var stateManagerDataDir = ResolveStateManagerDataDirectory();
+            if (!string.IsNullOrWhiteSpace(stateManagerDataDir))
             {
-                psi.Environment["WWOW_DATA_DIR"] = parityDataDir;
-                Log($"  [StateManager] WWOW_DATA_DIR={parityDataDir}");
+                psi.Environment["WWOW_DATA_DIR"] = stateManagerDataDir;
+                Log($"  [StateManager] WWOW_DATA_DIR={stateManagerDataDir}");
             }
 
             if (!string.IsNullOrEmpty(envRecording))

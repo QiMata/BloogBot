@@ -69,6 +69,23 @@ Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
 3. **Pick up a Plan/13 (Phase 9) catalog-fill slot** in parallel with Phase 1; catalog rows are pure-data work that does not block on the substrate.
 4. **Extend `IFlightMasterNetworkClientComponent` with `GetNodeName(uint nodeId)`** so `NetworkTaxiFrame.Name` / `SelectNodeByName` work with human-readable names (S1.18 TODO).
 
+## Orgrimmar Zeppelin Tower Pathing Note (2026-05-29)
+
+- `DeckLipClimbFromGruntToFrezza` remains live red, but the failure surface
+  narrowed. `NavigationPath` no longer returns `null` during exhausted-prefix
+  recalc and no longer immediately auto-advances into deeper wall support
+  waypoints after `path_exhausted_still_far` / `stalled_near_waypoint` replans.
+- Latest deterministic gate:
+  `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests" --logger "console;verbosity=minimal"` -> `passed (133/140, 7 skipped)`.
+- Latest live red command:
+  `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='2'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=normal" -- RunConfiguration.TestSessionTimeout=1200000` -> failed.
+- Current evidence:
+  `tmp/test-runtime/screenshots/long-pathing/timeline/DeckLipClimbFromGruntToFrezza/02-climb-poll-00100-LPATHFG1-20260529T051120Z.{png,json}`;
+  `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`.
+- Next investigation: reject the first held uphill support itself (for example
+  `(1354.0,-4524.9,35.1)` / `(1354.4,-4524.3,34.8)`) through local
+  physics/geometry validation. Do not resume generic waypoint-skip tuning.
+
 ## Parallel tracks
 
 | Track | Active slot | Owner | Status | File |

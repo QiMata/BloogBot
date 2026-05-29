@@ -1180,12 +1180,16 @@ static bool ShouldCullSuspiciousPoly(const rcPolyMesh& mesh, const rcPolyMeshDet
 }
 
 static int CullSuspiciousMixedWallPolys(rcPolyMesh& mesh, const rcPolyMeshDetail& detailMesh,
-    const float maxSlopeDegrees, const float maxClimbWorld)
+    const float maxSlopeDegrees, const float maxClimbWorld,
+    const std::vector<unsigned char>* preserveMask)
 {
     int culled = 0;
     for (int polyIndex = 0; polyIndex < mesh.npolys; ++polyIndex)
     {
         if (mesh.areas[polyIndex] != AREA_GROUND)
+            continue;
+
+        if (preserveMask && polyIndex < static_cast<int>(preserveMask->size()) && (*preserveMask)[polyIndex])
             continue;
 
         if (!ShouldCullSuspiciousPoly(mesh, detailMesh, polyIndex, maxSlopeDegrees, maxClimbWorld))
@@ -4804,6 +4808,81 @@ static json BuildPolyMeshAnchorStageSummary(const rcPolyMesh& mesh,
     return stage;
 }
 
+static void BuildPolyMeshExactAnchorPreserveMask(const rcPolyMesh& mesh,
+    const float xyExtent,
+    const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
+    const std::vector<AnchorSourceSupportProbe>& supports,
+    std::vector<unsigned char>& preserveMask)
+{
+    if (!mesh.polys || !mesh.verts || supports.empty())
+        return;
+
+    for (const AnchorSourceSupportProbe& support : supports)
+    {
+        if (!support.found)
+            continue;
+
+        const float anchorRecastX = support.anchor.wowY;
+        const float anchorRecastZ = support.anchor.wowX;
+        const float supportFloorMinY = GetAnchorSupportFloorMinY(support, supportBandTuning);
+        const float supportFloorMaxY = GetAnchorSupportFloorMaxY(support, supportZTolerance, supportBandTuning);
+        const float lowerCompetitorMaxTopY = support.supportY - supportBandTuning.competingLowerFloorMinDrop;
+
+        for (int polyIndex = 0; polyIndex < mesh.npolys; ++polyIndex)
+        {
+            if (mesh.areas[polyIndex] != AREA_GROUND)
+                continue;
+
+            const unsigned short* poly = &mesh.polys[polyIndex * mesh.nvp * 2];
+            std::vector<Point2DXZ> polygon;
+            polygon.reserve(mesh.nvp);
+            float minX = std::numeric_limits<float>::max();
+            float maxX = -std::numeric_limits<float>::max();
+            float minY = std::numeric_limits<float>::max();
+            float maxY = -std::numeric_limits<float>::max();
+            float minZ = std::numeric_limits<float>::max();
+            float maxZ = -std::numeric_limits<float>::max();
+
+            for (int vertIndex = 0; vertIndex < mesh.nvp; ++vertIndex)
+            {
+                const unsigned short vertex = poly[vertIndex];
+                if (vertex == RC_MESH_NULL_IDX)
+                    break;
+
+                const unsigned short* v = &mesh.verts[vertex * 3];
+                const float recastX = mesh.bmin[0] + v[0] * mesh.cs;
+                const float recastY = mesh.bmin[1] + v[1] * mesh.ch;
+                const float recastZ = mesh.bmin[2] + v[2] * mesh.cs;
+                polygon.push_back({ recastX, recastZ });
+                minX = std::min(minX, recastX);
+                maxX = std::max(maxX, recastX);
+                minY = std::min(minY, recastY);
+                maxY = std::max(maxY, recastY);
+                minZ = std::min(minZ, recastZ);
+                maxZ = std::max(maxZ, recastZ);
+            }
+
+            if (polygon.size() < 3)
+                continue;
+
+            if (maxX < anchorRecastX - xyExtent || minX > anchorRecastX + xyExtent ||
+                maxZ < anchorRecastZ - xyExtent || minZ > anchorRecastZ + xyExtent)
+            {
+                continue;
+            }
+
+            const bool containsAnchorProjection = PointInPolygonXZ(polygon, anchorRecastX, anchorRecastZ);
+            const bool supportBand = maxY >= supportFloorMinY && minY <= supportFloorMaxY;
+            const bool competingLower = maxY <= lowerCompetitorMaxTopY;
+            if (!containsAnchorProjection || !supportBand || competingLower)
+                continue;
+
+            preserveMask[polyIndex] = 1;
+        }
+    }
+}
+
 // [WWoW-DIVERGENCE] 2026-05-24: support-backed OG hallway/city contours can
 // survive rcBuildContours() and then disappear when rcBuildPolyMesh() removes
 // border vertices. Preserve only the border vertices on support-band contours
@@ -6743,6 +6822,9 @@ struct FinalDetourGroundComponentInfo
     int componentId = -1;
     int polyCount = 0;
     float totalHorizontalArea2D = 0.0f;
+    float minY = std::numeric_limits<float>::max();
+    float maxY = -std::numeric_limits<float>::max();
+    std::vector<int> polyIndices;
 };
 
 struct AnchorRouteTargetResolution
@@ -6766,6 +6848,16 @@ struct FinalDetourComponentRouteability
     bool routeableToAnyTarget = false;
     int routeableTargetCount = 0;
     json routeTargets = json::array();
+};
+
+struct AnchorNearestTrapLadderSettings
+{
+    bool enabled = false;
+    float xyExtent = 0.0f;
+    float zExtent = 0.0f;
+    int maxIterations = 12;
+    int maxComponentPolys = 6;
+    float maxComponentArea2D = 24.0f;
 };
 
 static void BuildFinalDetourGroundComponents(dtNavMesh& navMesh, const dtMeshTile& tile,
@@ -6800,6 +6892,9 @@ static void BuildFinalDetourGroundComponents(dtNavMesh& navMesh, const dtMeshTil
             componentIds[currentPolyIndex] = component.componentId;
             ++component.polyCount;
             component.totalHorizontalArea2D += diagnostics[currentPolyIndex].horizontalArea2D;
+            component.minY = rcMin(component.minY, diagnostics[currentPolyIndex].minY);
+            component.maxY = rcMax(component.maxY, diagnostics[currentPolyIndex].maxY);
+            component.polyIndices.push_back(currentPolyIndex);
 
             const dtPoly& poly = tile.polys[currentPolyIndex];
             const dtPolyRef currentPolyRef = navMesh.getPolyRefBase(&tile) | static_cast<dtPolyRef>(currentPolyIndex);
@@ -6845,6 +6940,641 @@ static void BuildFinalDetourGroundComponents(dtNavMesh& navMesh, const dtMeshTil
 
         components.push_back(component);
     }
+}
+
+static int CullRouteShadowedLowerWinnerComponent(dtNavMesh& navMesh, const dtMeshTile& tile,
+    const AnchorPolyStackCoord& anchor,
+    const float supportReferenceY,
+    const float lowerCompetitorMaxTopY,
+    const float xyExtent,
+    const float zExtent,
+    const float supportGap2D,
+    const std::vector<DetourPolyDiagnostics>& diagnostics,
+    std::vector<unsigned char>& liveGroundMask,
+    const std::vector<unsigned char>& preserveMask,
+    dtNavMeshQuery& query,
+    const dtPolyRef tileRefBase,
+    const std::vector<int>& componentIds,
+    const std::vector<FinalDetourGroundComponentInfo>& components,
+    const std::unordered_map<int, FinalDetourComponentRouteability>& routeabilityByComponent,
+    const std::unordered_set<int>& routeableSupportComponentIds,
+    const std::vector<int>& routeableSupportPolyIndices)
+{
+    if (!tile.header || routeableSupportComponentIds.empty() || routeableSupportPolyIndices.empty())
+        return 0;
+
+    const float detourPos[3] = { anchor.wowY, anchor.wowZ, anchor.wowX };
+    const float nearestExtents[3] = { xyExtent, zExtent, xyExtent };
+    dtQueryFilter filter;
+    filter.setIncludeFlags(NAV_GROUND);
+    filter.setExcludeFlags(0);
+
+    dtPolyRef nearestRef = 0;
+    float nearestPoint[3] = { 0.0f, 0.0f, 0.0f };
+    if (dtStatusFailed(query.findNearestPoly(detourPos, nearestExtents, &filter, &nearestRef, nearestPoint)) || nearestRef == 0)
+        return 0;
+
+    const dtMeshTile* nearestTile = nullptr;
+    const dtPoly* nearestPoly = nullptr;
+    navMesh.getTileAndPolyByRefUnsafe(nearestRef, &nearestTile, &nearestPoly);
+    if (nearestTile != &tile || nearestPoly == nullptr)
+        return 0;
+
+    const int nearestPolyIndex = static_cast<int>(nearestPoly - tile.polys);
+    if (nearestPolyIndex < 0 || nearestPolyIndex >= static_cast<int>(componentIds.size()) || !liveGroundMask[nearestPolyIndex])
+        return 0;
+
+    const int componentId = componentIds[nearestPolyIndex];
+    if (componentId < 0 || componentId >= static_cast<int>(components.size()))
+        return 0;
+
+    const auto routeabilityIt = routeabilityByComponent.find(componentId);
+    if (routeabilityIt != routeabilityByComponent.end() && routeabilityIt->second.routeableToAnyTarget)
+        return 0;
+
+    const FinalDetourGroundComponentInfo& component = components[componentId];
+    if (component.polyIndices.empty())
+        return 0;
+    const AnchorPolyStackProbeResult nearestProbe = ProbeAnchorPolyAtCoord(query, nearestRef, detourPos);
+
+    int componentCulled = 0;
+    int localCandidateCount = 0;
+    int overlapCandidateCount = 0;
+    int loweredCandidateCount = 0;
+    for (const int memberIndex : component.polyIndices)
+    {
+        if (memberIndex < 0 || memberIndex >= static_cast<int>(liveGroundMask.size()) || !liveGroundMask[memberIndex])
+            continue;
+
+        if (memberIndex < static_cast<int>(preserveMask.size()) && preserveMask[memberIndex])
+            continue;
+
+        if (!IntersectsAnchorWindow(diagnostics[memberIndex], anchor.wowY, anchor.wowZ, anchor.wowX, xyExtent, zExtent))
+            continue;
+
+        ++localCandidateCount;
+
+        bool overlapsRouteableSupport = memberIndex == nearestPolyIndex;
+        const float minOverlapArea = rcMax(
+            STACKED_SLIVER_MIN_OVERLAP_AREA_2D,
+            rcMin(diagnostics[memberIndex].horizontalArea2D * STACKED_SLIVER_MIN_OVERLAP_RATIO, 4.0f));
+        for (const int supportIndex : routeableSupportPolyIndices)
+        {
+            if (supportIndex == memberIndex || supportIndex < 0 || supportIndex >= static_cast<int>(liveGroundMask.size()) || !liveGroundMask[supportIndex])
+                continue;
+
+            if (GetDetourBoundsOverlapArea2D(diagnostics[memberIndex], diagnostics[supportIndex]) >= minOverlapArea)
+            {
+                overlapsRouteableSupport = true;
+                break;
+            }
+
+            if (supportGap2D > 0.0f &&
+                GetDetourBoundsGap2D(diagnostics[memberIndex], diagnostics[supportIndex]) <= supportGap2D)
+            {
+                overlapsRouteableSupport = true;
+                break;
+            }
+        }
+
+        if (overlapsRouteableSupport)
+            ++overlapCandidateCount;
+        else
+            continue;
+
+        const dtPolyRef memberRef = tileRefBase | static_cast<dtPolyRef>(memberIndex);
+        const AnchorPolyStackProbeResult memberProbe = ProbeAnchorPolyAtCoord(query, memberRef, detourPos);
+        float memberSurfaceZ = 0.0f;
+        bool usedClosestFallback = false;
+        bool clearlyLower = diagnostics[memberIndex].maxY <= lowerCompetitorMaxTopY;
+        if (!clearlyLower &&
+            TryGetAnchorProbeSupportSurfaceZ(memberProbe, memberSurfaceZ, usedClosestFallback, true))
+        {
+            clearlyLower = memberSurfaceZ <= lowerCompetitorMaxTopY;
+        }
+
+        if (!clearlyLower)
+            continue;
+
+        ++loweredCandidateCount;
+
+        dtPoly& poly = tile.polys[memberIndex];
+        if (!IsWalkableLandPoly(poly))
+            continue;
+
+        poly.flags = 0;
+        poly.setArea(AREA_NONE);
+        liveGroundMask[memberIndex] = 0;
+        ++componentCulled;
+    }
+
+    if (componentCulled > 0)
+    {
+        printf("[DT-ANCHOR-LOWER-WINNER-CULL] tile=%d,%d anchor=(%.3f,%.3f,%.3f) ref=%s comp=%d polys=%d area=%.2f supportY=%.3f maxY=%.3f local=%d overlap=%d lowered=%d culled=%d\n",
+            tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+            FormatPolyRefHex(nearestRef).c_str(), componentId, component.polyCount,
+            component.totalHorizontalArea2D, supportReferenceY, component.maxY,
+            localCandidateCount, overlapCandidateCount, loweredCandidateCount, componentCulled);
+    }
+    else if (componentId >= 0)
+    {
+        float nearestSurfaceZ = 0.0f;
+        bool nearestFallback = false;
+        const bool nearestHasSurface = TryGetAnchorProbeSupportSurfaceZ(nearestProbe, nearestSurfaceZ, nearestFallback, true);
+        printf("[DT-ANCHOR-LOWER-WINNER-SKIP] tile=%d,%d anchor=(%.3f,%.3f,%.3f) ref=%s comp=%d polys=%d area=%.2f supportY=%.3f maxY=%.3f local=%d overlap=%d lowered=%d nearestSurface=%.3f nearestHasSurface=%d posOver=%d closest2D=%.3f\n",
+            tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+            FormatPolyRefHex(nearestRef).c_str(), componentId, component.polyCount,
+            component.totalHorizontalArea2D, supportReferenceY, component.maxY,
+            localCandidateCount, overlapCandidateCount, loweredCandidateCount,
+            nearestHasSurface ? nearestSurfaceZ : -1.0f, nearestHasSurface ? 1 : 0,
+            nearestProbe.posOverPoly ? 1 : 0,
+            nearestProbe.hasClosestPoint ? nearestProbe.closestDistance2D : -1.0f);
+    }
+
+    return componentCulled;
+}
+
+static void BuildAnchorDetourWindow(const dtMeshTile& tile,
+    const std::vector<DetourPolyDiagnostics>& diagnostics,
+    const std::vector<unsigned char>& liveGroundMask,
+    dtNavMeshQuery& query,
+    const dtPolyRef tileRefBase,
+    const AnchorPolyStackCoord& anchor,
+    const float xyExtent,
+    const float zExtent,
+    std::vector<int>& windowPolyIndices,
+    std::vector<AnchorPolyStackProbeResult>& probeResults)
+{
+    windowPolyIndices.clear();
+    probeResults.clear();
+
+    if (!tile.header)
+        return;
+
+    const float detourPos[3] = { anchor.wowY, anchor.wowZ, anchor.wowX };
+    for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+    {
+        if (!liveGroundMask[polyIndex])
+            continue;
+
+        const dtPoly& poly = tile.polys[polyIndex];
+        if (!IsWalkableLandPoly(poly))
+            continue;
+
+        if (!IntersectsAnchorWindow(diagnostics[polyIndex], anchor.wowY, anchor.wowZ, anchor.wowX, xyExtent, zExtent))
+            continue;
+
+        windowPolyIndices.push_back(polyIndex);
+        probeResults.push_back(ProbeAnchorPolyAtCoord(query, tileRefBase | static_cast<dtPolyRef>(polyIndex), detourPos));
+    }
+}
+
+static void PopulateAnchorSupportMasksForWindow(const dtMeshTile& tile,
+    const std::vector<DetourPolyDiagnostics>& diagnostics,
+    const std::vector<unsigned char>& liveGroundMask,
+    const std::vector<int>& windowPolyIndices,
+    const std::vector<AnchorPolyStackProbeResult>& probeResults,
+    const float supportBandMinY,
+    const float supportBandMaxY,
+    std::vector<unsigned char>& supportMask,
+    std::vector<unsigned char>* supportBandMask,
+    int* exactSupportCount,
+    int* closestFallbackSupportCount)
+{
+    if (!tile.header)
+        return;
+
+    if (exactSupportCount)
+        *exactSupportCount = 0;
+    if (closestFallbackSupportCount)
+        *closestFallbackSupportCount = 0;
+
+    for (size_t probeIndex = 0; probeIndex < windowPolyIndices.size() && probeIndex < probeResults.size(); ++probeIndex)
+    {
+        const int polyIndex = windowPolyIndices[probeIndex];
+        if (polyIndex < 0 || polyIndex >= tile.header->polyCount || !liveGroundMask[polyIndex])
+            continue;
+
+        const bool supportBandCandidate = IntersectsAnchorSupportBand(diagnostics[polyIndex], supportBandMinY, supportBandMaxY);
+        if (supportBandMask && supportBandCandidate)
+            (*supportBandMask)[polyIndex] = 1;
+
+        const AnchorPolyStackProbeResult& probe = probeResults[probeIndex];
+        float supportSurfaceZ = 0.0f;
+        bool usedClosestFallback = false;
+        if (!TryGetAnchorProbeSupportSurfaceZ(probe, supportSurfaceZ, usedClosestFallback))
+        {
+            if (probe.posOverPoly && supportBandCandidate)
+                supportMask[polyIndex] = 1;
+            continue;
+        }
+
+        const bool supportCandidate =
+            (supportSurfaceZ >= supportBandMinY && supportSurfaceZ <= supportBandMaxY) ||
+            (probe.posOverPoly && supportBandCandidate);
+        if (!supportCandidate)
+            continue;
+
+        supportMask[polyIndex] = 1;
+        if (usedClosestFallback)
+        {
+            if (closestFallbackSupportCount)
+                ++(*closestFallbackSupportCount);
+        }
+        else
+        {
+            if (exactSupportCount)
+                ++(*exactSupportCount);
+        }
+    }
+}
+
+static int SelectBestAnchorSupportPolyIndex(const dtMeshTile& tile,
+    const std::vector<unsigned char>& liveGroundMask,
+    const std::vector<unsigned char>& supportMask,
+    const std::vector<int>& windowPolyIndices,
+    const std::vector<AnchorPolyStackProbeResult>& probeResults,
+    const float supportReferenceY)
+{
+    if (!tile.header)
+        return -1;
+
+    int bestSupportPolyIndex = -1;
+    bool bestSupportPosOver = false;
+    float bestSupportClosestDistance2D = std::numeric_limits<float>::max();
+    float bestSupportSurfaceDelta = std::numeric_limits<float>::max();
+    for (size_t supportListIndex = 0; supportListIndex < windowPolyIndices.size() && supportListIndex < probeResults.size(); ++supportListIndex)
+    {
+        const int supportIndex = windowPolyIndices[supportListIndex];
+        if (supportIndex < 0 || supportIndex >= tile.header->polyCount || !liveGroundMask[supportIndex] || !supportMask[supportIndex])
+            continue;
+
+        const dtPoly& supportPoly = tile.polys[supportIndex];
+        if (!IsWalkableLandPoly(supportPoly))
+            continue;
+
+        const AnchorPolyStackProbeResult& supportProbe = probeResults[supportListIndex];
+        float supportSurfaceZ = 0.0f;
+        bool usedClosestFallback = false;
+        const bool hasSupportSurface = TryGetAnchorProbeSupportSurfaceZ(supportProbe, supportSurfaceZ, usedClosestFallback);
+        const float supportClosestDistance2D =
+            supportProbe.hasClosestPoint ? supportProbe.closestDistance2D : std::numeric_limits<float>::max();
+        const float supportSurfaceDelta =
+            hasSupportSurface ? fabsf(supportSurfaceZ - supportReferenceY) : std::numeric_limits<float>::max();
+
+        const bool preferSupport =
+            bestSupportPolyIndex < 0 ||
+            (supportProbe.posOverPoly && !bestSupportPosOver) ||
+            (supportProbe.posOverPoly == bestSupportPosOver &&
+                supportClosestDistance2D + 0.001f < bestSupportClosestDistance2D) ||
+            (supportProbe.posOverPoly == bestSupportPosOver &&
+                fabsf(supportClosestDistance2D - bestSupportClosestDistance2D) <= 0.001f &&
+                supportSurfaceDelta + 0.001f < bestSupportSurfaceDelta) ||
+            (supportProbe.posOverPoly == bestSupportPosOver &&
+                fabsf(supportClosestDistance2D - bestSupportClosestDistance2D) <= 0.001f &&
+                fabsf(supportSurfaceDelta - bestSupportSurfaceDelta) <= 0.001f &&
+                supportIndex < bestSupportPolyIndex);
+        if (!preferSupport)
+            continue;
+
+        bestSupportPolyIndex = supportIndex;
+        bestSupportPosOver = supportProbe.posOverPoly;
+        bestSupportClosestDistance2D = supportClosestDistance2D;
+        bestSupportSurfaceDelta = supportSurfaceDelta;
+    }
+
+    return bestSupportPolyIndex;
+}
+
+static void MarkComponentPreserveMask(const std::vector<int>& componentIds,
+    const std::vector<unsigned char>& liveGroundMask,
+    const std::unordered_set<int>& preserveComponentIds,
+    std::vector<unsigned char>& preserveMask)
+{
+    if (preserveComponentIds.empty())
+        return;
+
+    const size_t polyCount = rcMin(componentIds.size(), liveGroundMask.size());
+    for (size_t polyIndex = 0; polyIndex < polyCount; ++polyIndex)
+    {
+        if (!liveGroundMask[polyIndex])
+            continue;
+
+        const int componentId = componentIds[polyIndex];
+        if (componentId < 0 || preserveComponentIds.find(componentId) == preserveComponentIds.end())
+            continue;
+
+        if (polyIndex < preserveMask.size())
+            preserveMask[polyIndex] = 1;
+    }
+}
+
+static void MarkFutureAnchorSupportPreserveMask(const dtMeshTile& tile,
+    const std::vector<DetourPolyDiagnostics>& diagnostics,
+    const std::vector<unsigned char>& liveGroundMask,
+    dtNavMeshQuery& query,
+    const dtPolyRef tileRefBase,
+    const std::vector<AnchorPolyStackCoord>& anchorCoords,
+    const size_t firstFutureAnchorIndex,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const float xyExtent,
+    const float zExtent,
+    const float supportZTolerance,
+    const AnchorSupportBandTuning& supportBandTuning,
+    std::vector<unsigned char>& preserveMask)
+{
+    if (!tile.header || firstFutureAnchorIndex >= anchorCoords.size())
+        return;
+
+    for (size_t futureAnchorIndex = firstFutureAnchorIndex; futureAnchorIndex < anchorCoords.size(); ++futureAnchorIndex)
+    {
+        const AnchorPolyStackCoord& futureAnchor = anchorCoords[futureAnchorIndex];
+        const AnchorSourceSupportProbe* futureSourceSupport = FindAnchorSourceSupportProbe(sourceSupports, futureAnchor);
+        const bool futureHasSourceSupport = futureSourceSupport && futureSourceSupport->found;
+        const float futureSupportReferenceY = futureHasSourceSupport ? futureSourceSupport->supportY : futureAnchor.wowZ;
+        const float futureSupportBandMinY = futureSupportReferenceY - supportBandTuning.supportFloorSlackBelow;
+        const float futureSupportBandMaxY =
+            futureSupportReferenceY + std::max(supportBandTuning.supportFloorSlackAbove, supportZTolerance);
+
+        std::vector<int> futureWindowPolyIndices;
+        std::vector<AnchorPolyStackProbeResult> futureProbeResults;
+        BuildAnchorDetourWindow(
+            tile, diagnostics, liveGroundMask, query, tileRefBase, futureAnchor,
+            xyExtent, zExtent, futureWindowPolyIndices, futureProbeResults);
+
+        std::vector<unsigned char> futureSupportMask(tile.header->polyCount, 0);
+        PopulateAnchorSupportMasksForWindow(
+            tile, diagnostics, liveGroundMask, futureWindowPolyIndices, futureProbeResults,
+            futureSupportBandMinY, futureSupportBandMaxY,
+            futureSupportMask, nullptr, nullptr, nullptr);
+
+        for (size_t futureProbeIndex = 0;
+            futureProbeIndex < futureWindowPolyIndices.size() && futureProbeIndex < futureProbeResults.size();
+            ++futureProbeIndex)
+        {
+            const int futurePolyIndex = futureWindowPolyIndices[futureProbeIndex];
+            if (futurePolyIndex < 0 || futurePolyIndex >= tile.header->polyCount || !liveGroundMask[futurePolyIndex])
+                continue;
+
+            if (!futureSupportMask[futurePolyIndex] || !futureProbeResults[futureProbeIndex].posOverPoly)
+                continue;
+
+            preserveMask[futurePolyIndex] = 1;
+        }
+
+        const int futureBestSupportPolyIndex = SelectBestAnchorSupportPolyIndex(
+            tile, liveGroundMask, futureSupportMask, futureWindowPolyIndices, futureProbeResults, futureSupportReferenceY);
+        if (futureBestSupportPolyIndex >= 0)
+            preserveMask[futureBestSupportPolyIndex] = 1;
+    }
+}
+
+static void EvaluateFinalDetourAnchorComponentRouteability(dtNavMeshQuery& query,
+    const AnchorPolyStackCoord& anchor,
+    const std::vector<AnchorRouteTarget>& routeTargets,
+    const std::vector<int>& windowPolyIndices,
+    const std::vector<AnchorPolyStackProbeResult>& probeResults,
+    const std::vector<int>& componentIds,
+    const dtPolyRef tileRefBase,
+    std::unordered_map<int, FinalDetourComponentRouteability>& routeabilityByComponent,
+    std::vector<AnchorRouteTargetResolution>& resolvedTargets);
+
+static void BuildExactAnchorSupportPreserveMask(dtNavMesh& navMesh, const dtMeshTile& tile,
+    const std::vector<DetourPolyDiagnostics>& diagnostics,
+    const std::vector<unsigned char>& liveGroundMask,
+    dtNavMeshQuery& query,
+    const dtPolyRef tileRefBase,
+    const float xyExtent,
+    const float zExtent,
+    const float supportZTolerance,
+    const std::vector<AnchorPolyStackCoord>& anchorCoords,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const std::vector<AnchorRouteTarget>& routeTargets,
+    const AnchorSupportBandTuning& supportBandTuning,
+    std::vector<unsigned char>& preserveMask)
+{
+    if (!tile.header || anchorCoords.empty())
+        return;
+
+    std::vector<int> componentIds;
+    std::vector<FinalDetourGroundComponentInfo> components;
+    if (!routeTargets.empty())
+        BuildFinalDetourGroundComponents(navMesh, tile, diagnostics, liveGroundMask, componentIds, components);
+
+    for (const AnchorPolyStackCoord& anchor : anchorCoords)
+    {
+        const AnchorSourceSupportProbe* sourceSupport = FindAnchorSourceSupportProbe(sourceSupports, anchor);
+        const bool hasSourceSupport = sourceSupport && sourceSupport->found;
+        const float supportReferenceY = hasSourceSupport ? sourceSupport->supportY : anchor.wowZ;
+        const float supportBandMinY = supportReferenceY - supportBandTuning.supportFloorSlackBelow;
+        const float supportBandMaxY =
+            supportReferenceY + std::max(supportBandTuning.supportFloorSlackAbove, supportZTolerance);
+        const float lowerCompetitorMaxTopY =
+            supportReferenceY - supportBandTuning.competingLowerFloorMinDrop;
+
+        std::vector<int> windowPolyIndices;
+        std::vector<AnchorPolyStackProbeResult> probeResults;
+        BuildAnchorDetourWindow(
+            tile, diagnostics, liveGroundMask, query, tileRefBase, anchor,
+            xyExtent, zExtent, windowPolyIndices, probeResults);
+
+        for (size_t probeIndex = 0; probeIndex < windowPolyIndices.size() && probeIndex < probeResults.size(); ++probeIndex)
+        {
+            const int polyIndex = windowPolyIndices[probeIndex];
+            if (polyIndex < 0 || polyIndex >= tile.header->polyCount || !liveGroundMask[polyIndex])
+                continue;
+
+            const AnchorPolyStackProbeResult& probe = probeResults[probeIndex];
+            if (!probe.posOverPoly)
+                continue;
+
+            const bool supportBandCandidate =
+                IntersectsAnchorSupportBand(diagnostics[polyIndex], supportBandMinY, supportBandMaxY);
+            if (!supportBandCandidate)
+                continue;
+
+            float supportSurfaceZ = 0.0f;
+            bool usedClosestFallback = false;
+            const bool hasSupportSurface = TryGetAnchorProbeSupportSurfaceZ(probe, supportSurfaceZ, usedClosestFallback);
+            const bool preserveExactSupport =
+                (hasSupportSurface &&
+                    supportSurfaceZ >= supportBandMinY &&
+                    supportSurfaceZ <= supportBandMaxY &&
+                    supportSurfaceZ > lowerCompetitorMaxTopY) ||
+                (!hasSupportSurface && diagnostics[polyIndex].maxY > lowerCompetitorMaxTopY);
+            if (!preserveExactSupport)
+                continue;
+
+            preserveMask[polyIndex] = 1;
+        }
+
+        if (routeTargets.empty() || componentIds.empty())
+            continue;
+
+        std::unordered_map<int, FinalDetourComponentRouteability> routeabilityByComponent;
+        std::vector<AnchorRouteTargetResolution> resolvedTargets;
+        EvaluateFinalDetourAnchorComponentRouteability(
+            query, anchor, routeTargets, windowPolyIndices, probeResults, componentIds, tileRefBase,
+            routeabilityByComponent, resolvedTargets);
+        if (resolvedTargets.empty())
+            continue;
+
+        for (size_t probeIndex = 0; probeIndex < windowPolyIndices.size() && probeIndex < probeResults.size(); ++probeIndex)
+        {
+            const int polyIndex = windowPolyIndices[probeIndex];
+            if (polyIndex < 0 || polyIndex >= tile.header->polyCount || !liveGroundMask[polyIndex])
+                continue;
+
+            if (polyIndex >= static_cast<int>(componentIds.size()))
+                continue;
+
+            const int componentId = componentIds[polyIndex];
+            if (componentId < 0)
+                continue;
+
+            const auto routeabilityIt = routeabilityByComponent.find(componentId);
+            if (routeabilityIt == routeabilityByComponent.end() || !routeabilityIt->second.routeableToAnyTarget)
+                continue;
+
+            const AnchorPolyStackProbeResult& probe = probeResults[probeIndex];
+            const bool supportBandCandidate =
+                IntersectsAnchorSupportBand(diagnostics[polyIndex], supportBandMinY, supportBandMaxY);
+            float supportSurfaceZ = 0.0f;
+            bool usedClosestFallback = false;
+            const bool hasSupportSurface = TryGetAnchorProbeSupportSurfaceZ(probe, supportSurfaceZ, usedClosestFallback);
+            const bool routeableSupportCandidate =
+                (hasSupportSurface && supportSurfaceZ >= supportBandMinY && supportSurfaceZ <= supportBandMaxY) ||
+                (probe.posOverPoly && supportBandCandidate);
+            if (!routeableSupportCandidate)
+                continue;
+
+            preserveMask[polyIndex] = 1;
+        }
+    }
+}
+
+static bool ComponentContainsPreservedMember(const std::vector<int>& members,
+    const std::vector<unsigned char>& preserveMask)
+{
+    for (const int memberIndex : members)
+    {
+        if (memberIndex >= 0 && memberIndex < static_cast<int>(preserveMask.size()) && preserveMask[memberIndex])
+            return true;
+    }
+
+    return false;
+}
+
+static int CullLargeNearestAnchorTrapComponentMembers(const dtMeshTile& tile,
+    const AnchorPolyStackCoord& anchor,
+    const float supportReferenceY,
+    const float lowerCompetitorMaxTopY,
+    const float xyExtent,
+    const float zExtent,
+    const float supportGap2D,
+    const std::vector<DetourPolyDiagnostics>& diagnostics,
+    std::vector<unsigned char>& liveGroundMask,
+    const std::vector<unsigned char>& preserveMask,
+    dtNavMeshQuery& query,
+    const dtPolyRef tileRefBase,
+    const dtPolyRef nearestRef,
+    const int nearestPolyIndex,
+    const int componentId,
+    const FinalDetourGroundComponentInfo& component,
+    const std::vector<int>& routeableSupportPolyIndices)
+{
+    if (!tile.header || routeableSupportPolyIndices.empty() || component.polyIndices.empty())
+        return 0;
+
+    const float detourPos[3] = { anchor.wowY, anchor.wowZ, anchor.wowX };
+    int localCandidateCount = 0;
+    int overlapCandidateCount = 0;
+    int loweredCandidateCount = 0;
+    int culled = 0;
+    for (const int memberIndex : component.polyIndices)
+    {
+        if (memberIndex < 0 || memberIndex >= tile.header->polyCount || !liveGroundMask[memberIndex])
+            continue;
+
+        if (memberIndex < static_cast<int>(preserveMask.size()) && preserveMask[memberIndex])
+            continue;
+
+        dtPoly& poly = tile.polys[memberIndex];
+        if (!IsWalkableLandPoly(poly))
+            continue;
+
+        if (!IntersectsAnchorWindow(diagnostics[memberIndex], anchor.wowY, anchor.wowZ, anchor.wowX, xyExtent, zExtent))
+            continue;
+
+        ++localCandidateCount;
+
+        bool overlapsRouteableSupport = memberIndex == nearestPolyIndex;
+        const float minOverlapArea = rcMax(
+            STACKED_SLIVER_MIN_OVERLAP_AREA_2D,
+            rcMin(diagnostics[memberIndex].horizontalArea2D * STACKED_SLIVER_MIN_OVERLAP_RATIO, 4.0f));
+        for (const int supportIndex : routeableSupportPolyIndices)
+        {
+            if (supportIndex == memberIndex || supportIndex < 0 || supportIndex >= static_cast<int>(liveGroundMask.size()) || !liveGroundMask[supportIndex])
+                continue;
+
+            if (GetDetourBoundsOverlapArea2D(diagnostics[memberIndex], diagnostics[supportIndex]) >= minOverlapArea)
+            {
+                overlapsRouteableSupport = true;
+                break;
+            }
+
+            if (supportGap2D > 0.0f &&
+                GetDetourBoundsGap2D(diagnostics[memberIndex], diagnostics[supportIndex]) <= supportGap2D)
+            {
+                overlapsRouteableSupport = true;
+                break;
+            }
+        }
+
+        if (!overlapsRouteableSupport)
+            continue;
+
+        ++overlapCandidateCount;
+
+        const dtPolyRef memberRef = tileRefBase | static_cast<dtPolyRef>(memberIndex);
+        const AnchorPolyStackProbeResult memberProbe = ProbeAnchorPolyAtCoord(query, memberRef, detourPos);
+        float memberSurfaceZ = 0.0f;
+        bool usedClosestFallback = false;
+        bool clearlyLower = diagnostics[memberIndex].maxY <= lowerCompetitorMaxTopY;
+        if (!clearlyLower &&
+            TryGetAnchorProbeSupportSurfaceZ(memberProbe, memberSurfaceZ, usedClosestFallback, true))
+        {
+            clearlyLower = memberSurfaceZ <= lowerCompetitorMaxTopY;
+        }
+
+        if (!clearlyLower)
+            continue;
+
+        ++loweredCandidateCount;
+        poly.flags = 0;
+        poly.setArea(AREA_NONE);
+        liveGroundMask[memberIndex] = 0;
+        ++culled;
+    }
+
+    if (culled > 0)
+    {
+        printf("[DT-ANCHOR-TRAP-LOCAL-CULL] tile=%d,%d anchor=(%.3f,%.3f,%.3f) ref=%s comp=%d polys=%d area=%.2f supportY=%.3f maxY=%.3f local=%d overlap=%d lowered=%d culled=%d\n",
+            tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+            FormatPolyRefHex(nearestRef).c_str(), componentId, component.polyCount,
+            component.totalHorizontalArea2D, supportReferenceY, component.maxY,
+            localCandidateCount, overlapCandidateCount, loweredCandidateCount, culled);
+    }
+    else
+    {
+        printf("[DT-ANCHOR-TRAP-LOCAL-SKIP] tile=%d,%d anchor=(%.3f,%.3f,%.3f) ref=%s comp=%d polys=%d area=%.2f supportY=%.3f maxY=%.3f local=%d overlap=%d lowered=%d\n",
+            tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+            FormatPolyRefHex(nearestRef).c_str(), componentId, component.polyCount,
+            component.totalHorizontalArea2D, supportReferenceY, component.maxY,
+            localCandidateCount, overlapCandidateCount, loweredCandidateCount);
+    }
+
+    return culled;
 }
 
 static dtQueryFilter BuildGroundOnlyFilter()
@@ -6914,6 +7644,7 @@ static void EvaluateFinalDetourAnchorComponentRouteability(dtNavMeshQuery& query
     if (resolvedTargets.empty())
         return;
 
+    std::unordered_map<int, std::vector<size_t>> componentProbeIndices;
     for (size_t probeIndex = 0; probeIndex < windowPolyIndices.size() && probeIndex < probeResults.size(); ++probeIndex)
     {
         const int polyIndex = windowPolyIndices[probeIndex];
@@ -6927,6 +7658,7 @@ static void EvaluateFinalDetourAnchorComponentRouteability(dtNavMeshQuery& query
         FinalDetourComponentRouteability& routeability = routeabilityByComponent[componentId];
         if (routeability.componentId < 0)
             routeability.componentId = componentId;
+        componentProbeIndices[componentId].push_back(probeIndex);
 
         const AnchorPolyStackProbeResult& probe = probeResults[probeIndex];
         const float candidateDistance = probe.hasClosestPoint ? probe.closestDistance2D : std::numeric_limits<float>::max();
@@ -6980,26 +7712,67 @@ static void EvaluateFinalDetourAnchorComponentRouteability(dtNavMeshQuery& query
                 continue;
             }
 
-            int pathCount = 0;
-            const dtStatus pathStatus = query.findPath(
-                routeability.representativePolyRef,
-                target.polyRef,
-                routeability.representativePoint,
-                target.closestPoint,
-                &filter,
-                path.data(),
-                &pathCount,
-                ANCHOR_ROUTE_MAX_PATH_POLYS);
-            const bool reachesTarget = pathCount > 0 && path[pathCount - 1] == target.polyRef;
+            const auto componentProbeIt = componentProbeIndices.find(routeability.componentId);
+            const std::vector<size_t>* candidateProbeIndices =
+                componentProbeIt != componentProbeIndices.end() ? &componentProbeIt->second : nullptr;
+            dtStatus pathStatus = DT_FAILURE;
+            int bestPathCount = 0;
+            bool reachesTarget = false;
+            dtPolyRef successfulPolyRef = routeability.representativePolyRef;
+            float successfulPoint[3] = { 0.0f, 0.0f, 0.0f };
+
+            if (candidateProbeIndices)
+            {
+                for (const size_t candidateProbeIndex : *candidateProbeIndices)
+                {
+                    if (candidateProbeIndex >= windowPolyIndices.size() || candidateProbeIndex >= probeResults.size())
+                        continue;
+
+                    const int candidatePolyIndex = windowPolyIndices[candidateProbeIndex];
+                    if (candidatePolyIndex < 0)
+                        continue;
+
+                    const AnchorPolyStackProbeResult& candidateProbe = probeResults[candidateProbeIndex];
+                    if (!candidateProbe.hasClosestPoint)
+                        continue;
+
+                    const dtPolyRef candidatePolyRef = tileRefBase | static_cast<dtPolyRef>(candidatePolyIndex);
+                    int candidatePathCount = 0;
+                    std::fill(path.begin(), path.end(), 0);
+                    const dtStatus candidateStatus = query.findPath(
+                        candidatePolyRef,
+                        target.polyRef,
+                        candidateProbe.closestPoint,
+                        target.closestPoint,
+                        &filter,
+                        path.data(),
+                        &candidatePathCount,
+                        ANCHOR_ROUTE_MAX_PATH_POLYS);
+                    pathStatus = candidateStatus;
+                    if (candidatePathCount > bestPathCount)
+                        bestPathCount = candidatePathCount;
+
+                    if (candidatePathCount > 0 && path[candidatePathCount - 1] == target.polyRef)
+                    {
+                        reachesTarget = true;
+                        successfulPolyRef = candidatePolyRef;
+                        rcVcopy(successfulPoint, candidateProbe.closestPoint);
+                        break;
+                    }
+                }
+            }
 
             char statusHex[32];
             sprintf(statusHex, "0x%X", static_cast<unsigned int>(pathStatus));
-            targetJson["pathPolyCount"] = pathCount;
+            targetJson["pathPolyCount"] = bestPathCount;
             targetJson["reachesTarget"] = reachesTarget;
             targetJson["statusHex"] = statusHex;
 
             if (reachesTarget)
             {
+                routeability.representativePolyRef = successfulPolyRef;
+                rcVcopy(routeability.representativePoint, successfulPoint);
+                routeability.hasRepresentativePoint = true;
                 routeability.routeableToAnyTarget = true;
                 ++routeability.routeableTargetCount;
             }
@@ -7007,6 +7780,321 @@ static void EvaluateFinalDetourAnchorComponentRouteability(dtNavMeshQuery& query
             routeability.routeTargets.push_back(targetJson);
         }
     }
+}
+
+static int CullNearestAnchorTrapLadder(dtNavMesh& navMesh, const dtMeshTile& tile,
+    const AnchorPolyStackCoord& anchor,
+    const float supportReferenceY,
+    const float supportZTolerance,
+    const float supportGap2D,
+    const AnchorSupportBandTuning& supportBandTuning,
+    const std::vector<DetourPolyDiagnostics>& diagnostics,
+    std::vector<unsigned char>& liveGroundMask,
+    const std::vector<unsigned char>& preserveMask,
+    dtNavMeshQuery& query,
+    const dtPolyRef tileRefBase,
+    const std::vector<AnchorRouteTarget>& routeTargets,
+    const AnchorNearestTrapLadderSettings& settings)
+{
+    if (!settings.enabled || !tile.header || routeTargets.empty())
+        return 0;
+
+    const float detourPos[3] = { anchor.wowY, anchor.wowZ, anchor.wowX };
+    const float nearestExtents[3] = { settings.xyExtent, settings.zExtent, settings.xyExtent };
+    dtQueryFilter filter = BuildGroundOnlyFilter();
+    int culled = 0;
+
+    for (int iteration = 0; iteration < settings.maxIterations; ++iteration)
+    {
+        std::vector<int> componentIds;
+        std::vector<FinalDetourGroundComponentInfo> components;
+        BuildFinalDetourGroundComponents(navMesh, tile, diagnostics, liveGroundMask, componentIds, components);
+
+        std::vector<int> windowPolyIndices;
+        std::vector<AnchorPolyStackProbeResult> probeResults;
+        BuildAnchorDetourWindow(
+            tile, diagnostics, liveGroundMask, query, tileRefBase, anchor,
+            settings.xyExtent, settings.zExtent, windowPolyIndices, probeResults);
+        if (windowPolyIndices.empty())
+            break;
+
+        std::unordered_map<int, FinalDetourComponentRouteability> routeabilityByComponent;
+        std::vector<AnchorRouteTargetResolution> resolvedTargets;
+        EvaluateFinalDetourAnchorComponentRouteability(
+            query, anchor, routeTargets, windowPolyIndices, probeResults, componentIds, tileRefBase,
+            routeabilityByComponent, resolvedTargets);
+
+        const float supportBandMinY = supportReferenceY - supportBandTuning.supportFloorSlackBelow;
+        const float supportBandMaxY =
+            supportReferenceY + std::max(supportBandTuning.supportFloorSlackAbove, supportZTolerance);
+        const float lowerCompetitorMaxTopY =
+            supportReferenceY - supportBandTuning.competingLowerFloorMinDrop;
+        std::vector<int> routeableSupportPolyIndices;
+        for (size_t probeIndex = 0; probeIndex < windowPolyIndices.size() && probeIndex < probeResults.size(); ++probeIndex)
+        {
+            const int polyIndex = windowPolyIndices[probeIndex];
+            if (polyIndex < 0 || polyIndex >= static_cast<int>(componentIds.size()) || !liveGroundMask[polyIndex])
+                continue;
+
+            const int candidateComponentId = componentIds[polyIndex];
+            if (candidateComponentId < 0)
+                continue;
+
+            const auto candidateRouteabilityIt = routeabilityByComponent.find(candidateComponentId);
+            if (candidateRouteabilityIt == routeabilityByComponent.end() ||
+                !candidateRouteabilityIt->second.routeableToAnyTarget)
+            {
+                continue;
+            }
+
+            const AnchorPolyStackProbeResult& probe = probeResults[probeIndex];
+            const bool supportBandCandidate = IntersectsAnchorSupportBand(diagnostics[polyIndex], supportBandMinY, supportBandMaxY);
+            float supportSurfaceZ = 0.0f;
+            bool usedClosestFallback = false;
+            const bool hasSupportSurface = TryGetAnchorProbeSupportSurfaceZ(probe, supportSurfaceZ, usedClosestFallback);
+            const bool supportCandidate =
+                (hasSupportSurface && supportSurfaceZ >= supportBandMinY && supportSurfaceZ <= supportBandMaxY) ||
+                (probe.posOverPoly && supportBandCandidate);
+            if (supportCandidate)
+                routeableSupportPolyIndices.push_back(polyIndex);
+        }
+
+        dtPolyRef nearestRef = 0;
+        float nearestPoint[3] = { 0.0f, 0.0f, 0.0f };
+        if (dtStatusFailed(query.findNearestPoly(detourPos, nearestExtents, &filter, &nearestRef, nearestPoint)) || nearestRef == 0)
+            break;
+
+        const dtMeshTile* nearestTile = nullptr;
+        const dtPoly* nearestPoly = nullptr;
+        navMesh.getTileAndPolyByRefUnsafe(nearestRef, &nearestTile, &nearestPoly);
+        if (nearestTile != &tile || nearestPoly == nullptr)
+            break;
+
+        const int nearestPolyIndex = static_cast<int>(nearestPoly - tile.polys);
+        if (nearestPolyIndex < 0 || nearestPolyIndex >= static_cast<int>(componentIds.size()) || !liveGroundMask[nearestPolyIndex])
+            break;
+
+        const int componentId = componentIds[nearestPolyIndex];
+        if (componentId < 0 || componentId >= static_cast<int>(components.size()))
+            break;
+
+        const auto routeabilityIt = routeabilityByComponent.find(componentId);
+        const bool routeableToAnyTarget =
+            routeabilityIt != routeabilityByComponent.end() && routeabilityIt->second.routeableToAnyTarget;
+        if (routeableToAnyTarget)
+            break;
+
+        const AnchorPolyStackProbeResult nearestProbe = ProbeAnchorPolyAtCoord(query, nearestRef, detourPos);
+        const bool nearestSupportBandCandidate =
+            IntersectsAnchorSupportBand(diagnostics[nearestPolyIndex], supportBandMinY, supportBandMaxY);
+        float nearestSurfaceZ = 0.0f;
+        bool nearestUsedClosestFallback = false;
+        const bool nearestHasSupportSurface =
+            TryGetAnchorProbeSupportSurfaceZ(nearestProbe, nearestSurfaceZ, nearestUsedClosestFallback);
+        const bool nearestSupportCandidate =
+            (nearestHasSupportSurface && nearestSurfaceZ >= supportBandMinY && nearestSurfaceZ <= supportBandMaxY) ||
+            (nearestProbe.posOverPoly && nearestSupportBandCandidate);
+        if (nearestProbe.posOverPoly && nearestSupportCandidate)
+            break;
+
+        const FinalDetourGroundComponentInfo& component = components[componentId];
+        if (component.polyCount > settings.maxComponentPolys || component.totalHorizontalArea2D > settings.maxComponentArea2D)
+        {
+            const int localCulled = CullLargeNearestAnchorTrapComponentMembers(
+                tile, anchor, supportReferenceY, lowerCompetitorMaxTopY,
+                settings.xyExtent, settings.zExtent, supportGap2D, diagnostics, liveGroundMask, preserveMask,
+                query, tileRefBase, nearestRef, nearestPolyIndex, componentId, component, routeableSupportPolyIndices);
+            if (localCulled > 0)
+            {
+                culled += localCulled;
+                continue;
+            }
+
+            printf("[DT-ANCHOR-TRAP-SKIP] tile=%d,%d anchor=(%.3f,%.3f,%.3f) iter=%d ref=%s comp=%d polys=%d area=%.2f supportY=%.3f closest2D=%.3f reason=too-large\n",
+                tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+                iteration + 1, FormatPolyRefHex(nearestRef).c_str(), componentId,
+                component.polyCount, component.totalHorizontalArea2D, supportReferenceY,
+                nearestProbe.hasClosestPoint ? nearestProbe.closestDistance2D : -1.0f);
+            break;
+        }
+
+        int componentCulled = 0;
+        for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+        {
+            if (!liveGroundMask[polyIndex] || componentIds[polyIndex] != componentId)
+                continue;
+
+            if (polyIndex < static_cast<int>(preserveMask.size()) && preserveMask[polyIndex])
+                continue;
+
+            dtPoly& poly = tile.polys[polyIndex];
+            if (!IsWalkableLandPoly(poly))
+                continue;
+
+            poly.flags = 0;
+            poly.setArea(AREA_NONE);
+            liveGroundMask[polyIndex] = 0;
+            ++componentCulled;
+            ++culled;
+        }
+
+        if (componentCulled == 0)
+            break;
+
+        printf("[DT-ANCHOR-TRAP-CULL] tile=%d,%d anchor=(%.3f,%.3f,%.3f) iter=%d ref=%s comp=%d polys=%d area=%.2f supportY=%.3f closest2D=%.3f culled=%d\n",
+            tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
+            iteration + 1, FormatPolyRefHex(nearestRef).c_str(), componentId,
+            component.polyCount, component.totalHorizontalArea2D, supportReferenceY,
+            nearestProbe.hasClosestPoint ? nearestProbe.closestDistance2D : -1.0f, componentCulled);
+    }
+
+    return culled;
+}
+
+// [WWoW-DIVERGENCE] 2026-05-29: sequential anchor cleanup can make an earlier
+// verified anchor regress after later anchors remove nearby competing slabs.
+// Recheck the final live mask after the whole anchor pass and replay the local
+// lower-winner / trap-ladder repair against the *final* nearest winner so we do
+// not leave a one-poly lower basin behind just because it only became dominant
+// after subsequent anchor culls ran.
+static int RecheckAnchorRouteabilityAfterSequentialCulls(dtNavMesh& navMesh, const dtMeshTile& tile,
+    const std::vector<DetourPolyDiagnostics>& diagnostics,
+    std::vector<unsigned char>& liveGroundMask,
+    dtNavMeshQuery& query,
+    const dtPolyRef tileRefBase,
+    const float xyExtent,
+    const float zExtent,
+    const float supportZTolerance,
+    const float supportGap2D,
+    const std::vector<AnchorPolyStackCoord>& anchorCoords,
+    const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const AnchorSupportBandTuning& supportBandTuning,
+    const std::vector<AnchorRouteTarget>& routeTargets,
+    const AnchorNearestTrapLadderSettings& nearestTrapLadderSettings)
+{
+    if (!tile.header || anchorCoords.empty() || routeTargets.empty())
+        return 0;
+
+    const float routeSupportSearchXyExtent =
+        nearestTrapLadderSettings.enabled ? rcMax(xyExtent, nearestTrapLadderSettings.xyExtent) : xyExtent;
+    const float routeSupportSearchZExtent =
+        nearestTrapLadderSettings.enabled ? rcMax(zExtent, nearestTrapLadderSettings.zExtent) : zExtent;
+
+    int culled = 0;
+    const int maxRecheckPasses = 4;
+    for (int passIndex = 0; passIndex < maxRecheckPasses; ++passIndex)
+    {
+        bool changed = false;
+
+        std::vector<unsigned char> preserveMask(tile.header->polyCount, 0);
+        BuildExactAnchorSupportPreserveMask(
+            navMesh, tile, diagnostics, liveGroundMask, query, tileRefBase,
+            xyExtent, zExtent, supportZTolerance,
+            anchorCoords, sourceSupports, routeTargets, supportBandTuning,
+            preserveMask);
+
+        std::vector<int> componentIds;
+        std::vector<FinalDetourGroundComponentInfo> components;
+        BuildFinalDetourGroundComponents(navMesh, tile, diagnostics, liveGroundMask, componentIds, components);
+
+        for (const AnchorPolyStackCoord& anchor : anchorCoords)
+        {
+            const AnchorSourceSupportProbe* sourceSupport = FindAnchorSourceSupportProbe(sourceSupports, anchor);
+            const bool hasSourceSupport = sourceSupport && sourceSupport->found;
+            const float supportReferenceY = hasSourceSupport ? sourceSupport->supportY : anchor.wowZ;
+            const float supportBandMinY = supportReferenceY - supportBandTuning.supportFloorSlackBelow;
+            const float supportBandMaxY =
+                supportReferenceY + std::max(supportBandTuning.supportFloorSlackAbove, supportZTolerance);
+            const float lowerCompetitorMaxTopY =
+                supportReferenceY - supportBandTuning.competingLowerFloorMinDrop;
+
+            std::vector<int> routeWindowPolyIndices;
+            std::vector<AnchorPolyStackProbeResult> routeProbeResults;
+            BuildAnchorDetourWindow(
+                tile, diagnostics, liveGroundMask, query, tileRefBase, anchor,
+                routeSupportSearchXyExtent, routeSupportSearchZExtent,
+                routeWindowPolyIndices, routeProbeResults);
+            if (routeWindowPolyIndices.empty())
+                continue;
+
+            std::unordered_map<int, FinalDetourComponentRouteability> routeabilityByComponent;
+            std::vector<AnchorRouteTargetResolution> resolvedTargets;
+            EvaluateFinalDetourAnchorComponentRouteability(
+                query, anchor, routeTargets, routeWindowPolyIndices, routeProbeResults,
+                componentIds, tileRefBase, routeabilityByComponent, resolvedTargets);
+            if (resolvedTargets.empty())
+                continue;
+
+            std::unordered_set<int> routeableSupportComponentIds;
+            std::vector<int> routeableSupportPolyIndices;
+            for (size_t routeProbeIndex = 0;
+                routeProbeIndex < routeWindowPolyIndices.size() && routeProbeIndex < routeProbeResults.size();
+                ++routeProbeIndex)
+            {
+                const int polyIndex = routeWindowPolyIndices[routeProbeIndex];
+                if (polyIndex < 0 || polyIndex >= static_cast<int>(componentIds.size()) || !liveGroundMask[polyIndex])
+                    continue;
+
+                const int componentId = componentIds[polyIndex];
+                if (componentId < 0)
+                    continue;
+
+                const auto routeabilityIt = routeabilityByComponent.find(componentId);
+                if (routeabilityIt == routeabilityByComponent.end() || !routeabilityIt->second.routeableToAnyTarget)
+                    continue;
+
+                const AnchorPolyStackProbeResult& routeProbe = routeProbeResults[routeProbeIndex];
+                const bool supportBandCandidate =
+                    IntersectsAnchorSupportBand(diagnostics[polyIndex], supportBandMinY, supportBandMaxY);
+                float supportSurfaceZ = 0.0f;
+                bool usedClosestFallback = false;
+                const bool hasSupportSurface =
+                    TryGetAnchorProbeSupportSurfaceZ(routeProbe, supportSurfaceZ, usedClosestFallback);
+                const bool routeSupportCandidate =
+                    (hasSupportSurface && supportSurfaceZ >= supportBandMinY && supportSurfaceZ <= supportBandMaxY) ||
+                    (routeProbe.posOverPoly && supportBandCandidate);
+                if (!routeSupportCandidate)
+                    continue;
+
+                routeableSupportComponentIds.insert(componentId);
+                routeableSupportPolyIndices.push_back(polyIndex);
+            }
+
+            const int lowerWinnerCulled = CullRouteShadowedLowerWinnerComponent(
+                navMesh, tile, anchor, supportReferenceY, lowerCompetitorMaxTopY,
+                routeSupportSearchXyExtent, routeSupportSearchZExtent, supportGap2D,
+                diagnostics, liveGroundMask, preserveMask, query, tileRefBase,
+                componentIds, components, routeabilityByComponent,
+                routeableSupportComponentIds, routeableSupportPolyIndices);
+            if (lowerWinnerCulled > 0)
+            {
+                culled += lowerWinnerCulled;
+                changed = true;
+                continue;
+            }
+
+            const int trapCulled = CullNearestAnchorTrapLadder(
+                navMesh, tile, anchor, supportReferenceY, supportZTolerance, supportGap2D, supportBandTuning,
+                diagnostics, liveGroundMask, preserveMask,
+                query, tileRefBase, routeTargets, nearestTrapLadderSettings);
+            if (trapCulled > 0)
+            {
+                culled += trapCulled;
+                changed = true;
+            }
+        }
+
+        if (!changed)
+            break;
+    }
+
+    if (culled > 0)
+    {
+        printf("[DT-ANCHOR-RECHECK] tile=%d,%d culled=%d after sequential anchor verification\n",
+            tile.header->x, tile.header->y, culled);
+    }
+
+    return culled;
 }
 
 static json BuildFinalDetourAnchorStageSummary(dtNavMesh& navMesh, const dtMeshTile& tile,
@@ -7347,8 +8435,10 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
     const float supportGap2D,
     const std::vector<AnchorPolyStackCoord>& anchorCoords,
     const std::vector<AnchorSourceSupportProbe>& sourceSupports,
+    const AnchorSupportBandTuning& supportBandTuning,
     const bool trimAnchorTrappedComponents,
-    const std::vector<AnchorRouteTarget>& routeTargets)
+    const std::vector<AnchorRouteTarget>& routeTargets,
+    const AnchorNearestTrapLadderSettings& nearestTrapLadderSettings)
 {
     if (!tile.header || anchorCoords.empty())
         return 0;
@@ -7370,15 +8460,18 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
     const dtPolyRef tileRefBase = navMesh.getPolyRefBase(&tile);
     int culled = 0;
 
-    for (const AnchorPolyStackCoord& anchor : anchorCoords)
+    for (size_t anchorIndex = 0; anchorIndex < anchorCoords.size(); ++anchorIndex)
     {
+        const AnchorPolyStackCoord& anchor = anchorCoords[anchorIndex];
         const float detourPos[3] = { anchor.wowY, anchor.wowZ, anchor.wowX };
         const AnchorSourceSupportProbe* sourceSupport = FindAnchorSourceSupportProbe(sourceSupports, anchor);
         const bool hasSourceSupport = sourceSupport && sourceSupport->found;
         const float supportReferenceY = hasSourceSupport ? sourceSupport->supportY : anchor.wowZ;
-        const float supportBandMinY = supportReferenceY + ANCHOR_POLY_STACK_MIN_SUPPORT_DELTA - 0.35f;
-        const float supportBandMaxY = supportReferenceY + supportZTolerance + 0.75f;
-        const float lowerCompetitorMaxTopY = supportReferenceY - 0.25f;
+        const float supportBandMinY = supportReferenceY - supportBandTuning.supportFloorSlackBelow;
+        const float supportBandMaxY =
+            supportReferenceY + std::max(supportBandTuning.supportFloorSlackAbove, supportZTolerance);
+        const float lowerCompetitorMaxTopY =
+            supportReferenceY - supportBandTuning.competingLowerFloorMinDrop;
 
         std::vector<int> windowPolyIndices;
         std::vector<AnchorPolyStackProbeResult> probeResults;
@@ -7387,51 +8480,24 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
         int exactSupportCount = 0;
         int closestFallbackSupportCount = 0;
 
-        for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
-        {
-            if (!liveGroundMask[polyIndex])
-                continue;
-
-            const dtPoly& poly = tile.polys[polyIndex];
-            if (!IsWalkableLandPoly(poly))
-                continue;
-
-            if (!IntersectsAnchorWindow(diagnostics[polyIndex], anchor.wowY, anchor.wowZ, anchor.wowX, xyExtent, zExtent))
-                continue;
-
-            windowPolyIndices.push_back(polyIndex);
-            probeResults.push_back(ProbeAnchorPolyAtCoord(*query, tileRefBase | static_cast<dtPolyRef>(polyIndex), detourPos));
-
-            const AnchorPolyStackProbeResult& probe = probeResults.back();
-            const bool supportBandCandidate = IntersectsAnchorSupportBand(diagnostics[polyIndex], supportBandMinY, supportBandMaxY);
-            if (supportBandCandidate)
-                supportBandMask[polyIndex] = 1;
-
-            float supportSurfaceZ = 0.0f;
-            bool usedClosestFallback = false;
-            if (!TryGetAnchorProbeSupportSurfaceZ(probe, supportSurfaceZ, usedClosestFallback))
-            {
-                if (probe.posOverPoly && supportBandCandidate)
-                    supportMask[polyIndex] = 1;
-                continue;
-            }
-
-            const bool supportCandidate =
-                (supportSurfaceZ >= supportBandMinY && supportSurfaceZ <= supportBandMaxY) ||
-                (probe.posOverPoly && supportBandCandidate);
-            if (supportCandidate)
-            {
-                supportMask[polyIndex] = 1;
-                if (usedClosestFallback)
-                    ++closestFallbackSupportCount;
-                else
-                    ++exactSupportCount;
-            }
-        }
+        BuildAnchorDetourWindow(
+            tile, diagnostics, liveGroundMask, *query, tileRefBase, anchor,
+            xyExtent, zExtent, windowPolyIndices, probeResults);
+        PopulateAnchorSupportMasksForWindow(
+            tile, diagnostics, liveGroundMask, windowPolyIndices, probeResults,
+            supportBandMinY, supportBandMaxY,
+            supportMask, &supportBandMask, &exactSupportCount, &closestFallbackSupportCount);
 
         int supportCount = 0;
         for (const int polyIndex : windowPolyIndices)
             supportCount += supportMask[polyIndex] ? 1 : 0;
+
+        const int bestCurrentSupportPolyIndex = SelectBestAnchorSupportPolyIndex(
+            tile, liveGroundMask, supportMask, windowPolyIndices, probeResults, supportReferenceY);
+        std::vector<unsigned char> futureAnchorSupportPreserveMask(tile.header->polyCount, 0);
+        MarkFutureAnchorSupportPreserveMask(
+            tile, diagnostics, liveGroundMask, *query, tileRefBase, anchorCoords, anchorIndex + 1,
+            sourceSupports, xyExtent, zExtent, supportZTolerance, supportBandTuning, futureAnchorSupportPreserveMask);
 
         if (supportCount == 0)
         {
@@ -7584,6 +8650,13 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
             if (!liveGroundMask[candidateIndex] || supportMask[candidateIndex])
                 continue;
 
+            const bool preserveCurrentSupport = candidateIndex == bestCurrentSupportPolyIndex;
+            const bool preserveFutureSupport =
+                candidateIndex < static_cast<int>(futureAnchorSupportPreserveMask.size()) &&
+                futureAnchorSupportPreserveMask[candidateIndex];
+            if (preserveCurrentSupport || preserveFutureSupport)
+                continue;
+
             const dtPoly& candidatePoly = tile.polys[candidateIndex];
             if (!IsWalkableLandPoly(candidatePoly))
                 continue;
@@ -7631,6 +8704,7 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
         }
 
         int routeCulled = 0;
+        int trapCulled = 0;
         if (trimAnchorTrappedComponents && !routeTargets.empty())
         {
             std::vector<int> componentIds;
@@ -7658,24 +8732,42 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
                 continue;
             }
 
+            const float routeSupportSearchXyExtent =
+                nearestTrapLadderSettings.enabled ? rcMax(xyExtent, nearestTrapLadderSettings.xyExtent) : xyExtent;
+            const float routeSupportSearchZExtent =
+                nearestTrapLadderSettings.enabled ? rcMax(zExtent, nearestTrapLadderSettings.zExtent) : zExtent;
+            std::vector<int> routeWindowPolyIndices = windowPolyIndices;
+            std::vector<AnchorPolyStackProbeResult> routeProbeResults = probeResults;
+            if (routeSupportSearchXyExtent > xyExtent || routeSupportSearchZExtent > zExtent)
+            {
+                BuildAnchorDetourWindow(
+                    tile, diagnostics, liveGroundMask, *routeQuery, tileRefBase, anchor,
+                    routeSupportSearchXyExtent, routeSupportSearchZExtent,
+                    routeWindowPolyIndices, routeProbeResults);
+            }
+
             std::unordered_map<int, FinalDetourComponentRouteability> routeabilityByComponent;
             std::vector<AnchorRouteTargetResolution> resolvedTargets;
             EvaluateFinalDetourAnchorComponentRouteability(
-                *routeQuery, anchor, routeTargets, windowPolyIndices, probeResults, componentIds, tileRefBase,
+                *routeQuery, anchor, routeTargets, routeWindowPolyIndices, routeProbeResults, componentIds, tileRefBase,
                 routeabilityByComponent, resolvedTargets);
 
             int resolvedRouteTargetCount = 0;
             std::unordered_set<int> routeableSupportComponentIds;
             std::vector<int> routeableSupportPolyIndices;
+            std::unordered_set<int> exactRouteableSupportComponentIds;
             for (const AnchorRouteTargetResolution& target : resolvedTargets)
             {
                 if (target.resolved)
                     ++resolvedRouteTargetCount;
             }
 
-            for (const int polyIndex : windowPolyIndices)
+            for (size_t routeProbeIndex = 0;
+                routeProbeIndex < routeWindowPolyIndices.size() && routeProbeIndex < routeProbeResults.size();
+                ++routeProbeIndex)
             {
-                if (!liveGroundMask[polyIndex] || !supportMask[polyIndex])
+                const int polyIndex = routeWindowPolyIndices[routeProbeIndex];
+                if (!liveGroundMask[polyIndex])
                     continue;
 
                 if (polyIndex < 0 || polyIndex >= static_cast<int>(componentIds.size()))
@@ -7689,10 +8781,104 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
                 if (routeabilityIt == routeabilityByComponent.end() || !routeabilityIt->second.routeableToAnyTarget)
                     continue;
 
+                const AnchorPolyStackProbeResult& routeProbe = routeProbeResults[routeProbeIndex];
+                const bool supportBandCandidate =
+                    IntersectsAnchorSupportBand(diagnostics[polyIndex], supportBandMinY, supportBandMaxY);
+                float supportSurfaceZ = 0.0f;
+                bool usedClosestFallback = false;
+                const bool hasSupportSurface =
+                    TryGetAnchorProbeSupportSurfaceZ(routeProbe, supportSurfaceZ, usedClosestFallback);
+                const bool routeSupportCandidate =
+                    (hasSupportSurface && supportSurfaceZ >= supportBandMinY && supportSurfaceZ <= supportBandMaxY) ||
+                    (routeProbe.posOverPoly && supportBandCandidate);
+                if (!routeSupportCandidate)
+                    continue;
+
                 routeableSupportComponentIds.insert(componentId);
                 routeableSupportPolyIndices.push_back(polyIndex);
+                if (supportMask[polyIndex] && routeProbe.posOverPoly)
+                    exactRouteableSupportComponentIds.insert(componentId);
             }
 
+            int preservedRouteableSupportPolyIndex = -1;
+            bool preservedRouteableSupportPosOver = false;
+            float preservedRouteableSupportClosestDistance2D = std::numeric_limits<float>::max();
+            float preservedRouteableSupportSurfaceDelta = std::numeric_limits<float>::max();
+            for (size_t supportListIndex = 0; supportListIndex < windowPolyIndices.size() && supportListIndex < probeResults.size(); ++supportListIndex)
+            {
+                const int supportIndex = windowPolyIndices[supportListIndex];
+                if (supportIndex < 0 || supportIndex >= tile.header->polyCount || !liveGroundMask[supportIndex] || !supportMask[supportIndex])
+                    continue;
+
+                if (supportIndex >= static_cast<int>(componentIds.size()))
+                    continue;
+
+                const int supportComponentId = componentIds[supportIndex];
+                const auto supportRouteabilityIt = routeabilityByComponent.find(supportComponentId);
+                if (supportRouteabilityIt == routeabilityByComponent.end() || !supportRouteabilityIt->second.routeableToAnyTarget)
+                    continue;
+
+                const dtPoly& supportPoly = tile.polys[supportIndex];
+                if (!IsWalkableLandPoly(supportPoly))
+                    continue;
+
+                const AnchorPolyStackProbeResult& supportProbe = probeResults[supportListIndex];
+                float supportSurfaceZ = 0.0f;
+                bool usedClosestFallback = false;
+                const bool hasSupportSurface = TryGetAnchorProbeSupportSurfaceZ(supportProbe, supportSurfaceZ, usedClosestFallback);
+                const float supportClosestDistance2D =
+                    supportProbe.hasClosestPoint ? supportProbe.closestDistance2D : std::numeric_limits<float>::max();
+                const float supportSurfaceDelta =
+                    hasSupportSurface ? fabsf(supportSurfaceZ - supportReferenceY) : std::numeric_limits<float>::max();
+
+                const bool preferSupport =
+                    preservedRouteableSupportPolyIndex < 0 ||
+                    (supportProbe.posOverPoly && !preservedRouteableSupportPosOver) ||
+                    (supportProbe.posOverPoly == preservedRouteableSupportPosOver &&
+                        supportClosestDistance2D + 0.001f < preservedRouteableSupportClosestDistance2D) ||
+                    (supportProbe.posOverPoly == preservedRouteableSupportPosOver &&
+                        fabsf(supportClosestDistance2D - preservedRouteableSupportClosestDistance2D) <= 0.001f &&
+                        supportSurfaceDelta + 0.001f < preservedRouteableSupportSurfaceDelta) ||
+                    (supportProbe.posOverPoly == preservedRouteableSupportPosOver &&
+                        fabsf(supportClosestDistance2D - preservedRouteableSupportClosestDistance2D) <= 0.001f &&
+                        fabsf(supportSurfaceDelta - preservedRouteableSupportSurfaceDelta) <= 0.001f &&
+                        supportIndex < preservedRouteableSupportPolyIndex);
+                if (!preferSupport)
+                    continue;
+
+                preservedRouteableSupportPolyIndex = supportIndex;
+                preservedRouteableSupportPosOver = supportProbe.posOverPoly;
+                preservedRouteableSupportClosestDistance2D = supportClosestDistance2D;
+                preservedRouteableSupportSurfaceDelta = supportSurfaceDelta;
+            }
+
+            std::vector<unsigned char> routePhasePreserveMask = futureAnchorSupportPreserveMask;
+            if (bestCurrentSupportPolyIndex >= 0)
+                routePhasePreserveMask[bestCurrentSupportPolyIndex] = 1;
+            if (preservedRouteableSupportPolyIndex >= 0)
+                routePhasePreserveMask[preservedRouteableSupportPolyIndex] = 1;
+            MarkComponentPreserveMask(
+                componentIds, liveGroundMask, exactRouteableSupportComponentIds, routePhasePreserveMask);
+
+            std::vector<unsigned char> routeArbitrationPreserveMask = futureAnchorSupportPreserveMask;
+            if (preservedRouteableSupportPolyIndex >= 0)
+                routeArbitrationPreserveMask[preservedRouteableSupportPolyIndex] = 1;
+            MarkComponentPreserveMask(
+                componentIds, liveGroundMask, exactRouteableSupportComponentIds, routeArbitrationPreserveMask);
+
+            const float lowerWinnerSearchXyExtent =
+                nearestTrapLadderSettings.enabled ? rcMax(xyExtent, nearestTrapLadderSettings.xyExtent) : xyExtent;
+            const float lowerWinnerSearchZExtent =
+                nearestTrapLadderSettings.enabled ? rcMax(zExtent, nearestTrapLadderSettings.zExtent) : zExtent;
+            const int lowerWinnerCulled = CullRouteShadowedLowerWinnerComponent(
+                navMesh, tile, anchor, supportReferenceY, lowerCompetitorMaxTopY,
+                lowerWinnerSearchXyExtent, lowerWinnerSearchZExtent, supportGap2D, diagnostics, liveGroundMask,
+                routePhasePreserveMask, *routeQuery, tileRefBase, componentIds, components, routeabilityByComponent,
+                routeableSupportComponentIds, routeableSupportPolyIndices);
+            routeCulled += lowerWinnerCulled;
+            anchorCulled += lowerWinnerCulled;
+
+            int routeSupportOverlapCulled = 0;
             if (!routeableSupportComponentIds.empty())
             {
                 for (size_t candidateListIndex = 0; candidateListIndex < windowPolyIndices.size(); ++candidateListIndex)
@@ -7717,6 +8903,9 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
                         continue;
 
                     const bool candidateIsSupport = supportMask[candidateIndex] != 0;
+                    if (candidateIndex < static_cast<int>(routeArbitrationPreserveMask.size()) && routeArbitrationPreserveMask[candidateIndex])
+                        continue;
+
                     bool overlapsRouteableSupport = candidateIsSupport;
                     if (!overlapsRouteableSupport)
                     {
@@ -7745,20 +8934,113 @@ static int CullAnchorPolyStacks(dtNavMesh& navMesh, const dtMeshTile& tile,
                     ++culled;
                     ++anchorCulled;
                     ++routeCulled;
+                    ++routeSupportOverlapCulled;
                 }
+            }
+
+            if (routeSupportOverlapCulled > 0)
+            {
+                for (int postRouteLowerPass = 0; postRouteLowerPass < 4; ++postRouteLowerPass)
+                {
+                    std::vector<int> postRouteComponentIds;
+                    std::vector<FinalDetourGroundComponentInfo> postRouteComponents;
+                    BuildFinalDetourGroundComponents(
+                        navMesh, tile, diagnostics, liveGroundMask, postRouteComponentIds, postRouteComponents);
+
+                    std::vector<int> postRouteWindowPolyIndices;
+                    std::vector<AnchorPolyStackProbeResult> postRouteProbeResults;
+                    BuildAnchorDetourWindow(
+                        tile, diagnostics, liveGroundMask, *routeQuery, tileRefBase, anchor,
+                        routeSupportSearchXyExtent, routeSupportSearchZExtent,
+                        postRouteWindowPolyIndices, postRouteProbeResults);
+
+                    std::unordered_map<int, FinalDetourComponentRouteability> postRouteRouteabilityByComponent;
+                    std::vector<AnchorRouteTargetResolution> postRouteResolvedTargets;
+                    EvaluateFinalDetourAnchorComponentRouteability(
+                        *routeQuery, anchor, routeTargets, postRouteWindowPolyIndices, postRouteProbeResults,
+                        postRouteComponentIds, tileRefBase, postRouteRouteabilityByComponent, postRouteResolvedTargets);
+
+                    std::unordered_set<int> postRouteableSupportComponentIds;
+                    std::vector<int> postRouteableSupportPolyIndices;
+                    for (size_t postRouteProbeIndex = 0;
+                        postRouteProbeIndex < postRouteWindowPolyIndices.size() && postRouteProbeIndex < postRouteProbeResults.size();
+                        ++postRouteProbeIndex)
+                    {
+                        const int polyIndex = postRouteWindowPolyIndices[postRouteProbeIndex];
+                        if (!liveGroundMask[polyIndex])
+                            continue;
+
+                        if (polyIndex < 0 || polyIndex >= static_cast<int>(postRouteComponentIds.size()))
+                            continue;
+
+                        const int componentId = postRouteComponentIds[polyIndex];
+                        if (componentId < 0)
+                            continue;
+
+                        const auto routeabilityIt = postRouteRouteabilityByComponent.find(componentId);
+                        if (routeabilityIt == postRouteRouteabilityByComponent.end() || !routeabilityIt->second.routeableToAnyTarget)
+                            continue;
+
+                        const AnchorPolyStackProbeResult& routeProbe = postRouteProbeResults[postRouteProbeIndex];
+                        const bool supportBandCandidate =
+                            IntersectsAnchorSupportBand(diagnostics[polyIndex], supportBandMinY, supportBandMaxY);
+                        float supportSurfaceZ = 0.0f;
+                        bool usedClosestFallback = false;
+                        const bool hasSupportSurface =
+                            TryGetAnchorProbeSupportSurfaceZ(routeProbe, supportSurfaceZ, usedClosestFallback);
+                        const bool routeSupportCandidate =
+                            (hasSupportSurface && supportSurfaceZ >= supportBandMinY && supportSurfaceZ <= supportBandMaxY) ||
+                            (routeProbe.posOverPoly && supportBandCandidate);
+                        if (!routeSupportCandidate)
+                            continue;
+
+                        postRouteableSupportComponentIds.insert(componentId);
+                        postRouteableSupportPolyIndices.push_back(polyIndex);
+                    }
+
+                    const int postRouteLowerWinnerCulled = CullRouteShadowedLowerWinnerComponent(
+                        navMesh, tile, anchor, supportReferenceY, lowerCompetitorMaxTopY,
+                        lowerWinnerSearchXyExtent, lowerWinnerSearchZExtent, supportGap2D, diagnostics, liveGroundMask,
+                        routeArbitrationPreserveMask, *routeQuery, tileRefBase, postRouteComponentIds, postRouteComponents,
+                        postRouteRouteabilityByComponent, postRouteableSupportComponentIds, postRouteableSupportPolyIndices);
+                    if (postRouteLowerWinnerCulled <= 0)
+                        break;
+
+                    routeCulled += postRouteLowerWinnerCulled;
+                    anchorCulled += postRouteLowerWinnerCulled;
+                }
+            }
+            else
+            {
+                trapCulled = CullNearestAnchorTrapLadder(
+                    navMesh, tile, anchor, supportReferenceY, supportZTolerance, supportGap2D, supportBandTuning,
+                    diagnostics, liveGroundMask, routePhasePreserveMask,
+                    *routeQuery, tileRefBase, routeTargets, nearestTrapLadderSettings);
+                routeCulled += trapCulled;
+                anchorCulled += trapCulled;
             }
 
             if (!resolvedTargets.empty())
             {
-                printf("[DT-ANCHOR-ROUTE] tile=%d,%d anchor=(%.3f,%.3f,%.3f) targets=%zu resolved=%d routeableSupportComponents=%zu routeCulled=%d\n",
+                printf("[DT-ANCHOR-ROUTE] tile=%d,%d anchor=(%.3f,%.3f,%.3f) targets=%zu resolved=%d routeableSupportComponents=%zu exactRouteableSupportComponents=%zu routeCulled=%d trapCulled=%d\n",
                     tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
-                    resolvedTargets.size(), resolvedRouteTargetCount, routeableSupportComponentIds.size(), routeCulled);
+                    resolvedTargets.size(), resolvedRouteTargetCount, routeableSupportComponentIds.size(),
+                    exactRouteableSupportComponentIds.size(), routeCulled, trapCulled);
             }
         }
 
         printf("[DT-ANCHOR-CULL] tile=%d,%d anchor=(%.3f,%.3f,%.3f) window=%zu supports=%d exact=%d closest=%d culled=%d routeCulled=%d\n",
             tile.header->x, tile.header->y, anchor.wowX, anchor.wowY, anchor.wowZ,
             windowPolyIndices.size(), supportCount, exactSupportCount, closestFallbackSupportCount, anchorCulled, routeCulled);
+    }
+
+    if (trimAnchorTrappedComponents && !routeTargets.empty())
+    {
+        culled += RecheckAnchorRouteabilityAfterSequentialCulls(
+            navMesh, tile, diagnostics, liveGroundMask, *query, tileRefBase,
+            xyExtent, zExtent, supportZTolerance, supportGap2D,
+            anchorCoords, sourceSupports, supportBandTuning,
+            routeTargets, nearestTrapLadderSettings);
     }
 
     return culled;
@@ -8048,14 +9330,17 @@ static int FindOffMeshStartLandingPolyIndex(const dtNavMesh& navMesh, const dtMe
 }
 
 static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const float maxClimbWorld,
+    const bool trimGenericSteepMixedWalls,
     const bool trimShadowedLedges, const bool trimOffMeshAnchorSteepTrim, const bool trimShadowedPockets,
     const OffMeshAnchorSteepTrimSettings& offMeshAnchorSteepTrimSettings,
     const bool trimAnchorPolyStacks, const float anchorPolyStackXyExtent, const float anchorPolyStackZExtent,
     const float anchorPolyStackSupportZTolerance, const float anchorPolyStackSupportGap2D,
     const std::vector<AnchorPolyStackCoord>& anchorPolyStackCoords,
     const std::vector<AnchorSourceSupportProbe>& anchorSourceSupports,
+    const AnchorSupportBandTuning& anchorSupportBandTuning,
     const bool trimAnchorTrappedComponents,
-    const std::vector<AnchorRouteTarget>& anchorRouteTargets)
+    const std::vector<AnchorRouteTarget>& anchorRouteTargets,
+    const AnchorNearestTrapLadderSettings& nearestTrapLadderSettings)
 {
     if (!tile.header)
         return 0;
@@ -8073,20 +9358,45 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
             liveGroundMask[polyIndex] = 1;
     }
 
-    int culled = 0;
-    for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+    std::vector<unsigned char> exactAnchorSupportPreserveMask(tile.header->polyCount, 0);
+    if (!anchorPolyStackCoords.empty())
     {
-        dtPoly& poly = tile.polys[polyIndex];
-        if (!liveGroundMask[polyIndex] || !IsWalkableLandPoly(poly))
-            continue;
+        std::unique_ptr<dtNavMeshQuery, decltype(&dtFreeNavMeshQuery)> preserveQuery(dtAllocNavMeshQuery(), &dtFreeNavMeshQuery);
+        if (preserveQuery && dtStatusSucceed(preserveQuery->init(&navMesh, 4096)))
+        {
+            BuildExactAnchorSupportPreserveMask(
+                navMesh, tile, diagnostics, liveGroundMask, *preserveQuery, navMesh.getPolyRefBase(&tile),
+                anchorPolyStackXyExtent, anchorPolyStackZExtent, anchorPolyStackSupportZTolerance,
+                anchorPolyStackCoords, anchorSourceSupports, anchorRouteTargets, anchorSupportBandTuning,
+                exactAnchorSupportPreserveMask);
+        }
+        else
+        {
+            printf("[DT-ANCHOR-PRESERVE] tile=%d,%d query init failed; continuing without exact-support preserve mask\n",
+                tile.header->x, tile.header->y);
+        }
+    }
 
-        if (!ShouldCullDetourPoly(diagnostics[polyIndex], maxClimbWorld))
-            continue;
+    int culled = 0;
+    if (trimGenericSteepMixedWalls)
+    {
+        for (int polyIndex = 0; polyIndex < tile.header->polyCount; ++polyIndex)
+        {
+            dtPoly& poly = tile.polys[polyIndex];
+            if (!liveGroundMask[polyIndex] || !IsWalkableLandPoly(poly))
+                continue;
 
-        poly.flags = 0;
-        poly.setArea(AREA_NONE);
-        liveGroundMask[polyIndex] = 0;
-        ++culled;
+            if (exactAnchorSupportPreserveMask[polyIndex])
+                continue;
+
+            if (!ShouldCullDetourPoly(diagnostics[polyIndex], maxClimbWorld))
+                continue;
+
+            poly.flags = 0;
+            poly.setArea(AREA_NONE);
+            liveGroundMask[polyIndex] = 0;
+            ++culled;
+        }
     }
 
     if (trimOffMeshAnchorSteepTrim)
@@ -8107,6 +9417,8 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
 
             const OffMeshAnchorSteepTrimComponent component = CollectOffMeshAnchorSteepTrimComponent(
                 tile, landingPolyIndex, diagnostics, liveGroundMask, visitedMask, offMeshAnchorSteepTrimSettings);
+            if (ComponentContainsPreservedMember(component.members, exactAnchorSupportPreserveMask))
+                continue;
 
             const float componentHeightRange = component.maxHeight - component.minHeight;
             const bool componentTooLarge =
@@ -8157,6 +9469,8 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
 
             const ShadowedLedgeComponent component = CollectShadowedLedgeComponent(
                 tile, polyIndex, diagnostics, liveGroundMask, visitedMask);
+            if (ComponentContainsPreservedMember(component.members, exactAnchorSupportPreserveMask))
+                continue;
 
             const float componentHeightRange = component.maxHeight - component.minHeight;
             const bool componentTooWide = component.totalHorizontalArea2D > SHADOWED_LEDGE_COMPONENT_MAX_AREA_2D;
@@ -8268,6 +9582,8 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
 
             const ShadowedPocketComponent component = CollectShadowedPocketComponent(
                 tile, polyIndex, diagnostics, liveGroundMask, visitedMask);
+            if (ComponentContainsPreservedMember(component.members, exactAnchorSupportPreserveMask))
+                continue;
 
             const float componentHeightRange = component.maxHeight - component.minHeight;
             if (!component.hasShadowingUpperGround ||
@@ -8295,8 +9611,8 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
             navMesh, tile, diagnostics, liveGroundMask,
             anchorPolyStackXyExtent, anchorPolyStackZExtent, anchorPolyStackSupportZTolerance,
             anchorPolyStackSupportGap2D,
-            anchorPolyStackCoords, anchorSourceSupports,
-            trimAnchorTrappedComponents, anchorRouteTargets);
+            anchorPolyStackCoords, anchorSourceSupports, anchorSupportBandTuning,
+            trimAnchorTrappedComponents, anchorRouteTargets, nearestTrapLadderSettings);
     }
 
     return culled;
@@ -8754,6 +10070,16 @@ namespace MMAP
         AnchorSupportBandTuning anchorSupportBandTuning;
         anchorSupportBandTuning.supportFloorSlackBelow = JsonFloatOrDefault(
             jsonTileConfig, "anchorSourceSupportFloorSlackBelow", 0.20f);
+        AnchorNearestTrapLadderSettings nearestTrapLadderSettings;
+        nearestTrapLadderSettings.enabled = jsonTileConfig.value("postDetourCullAnchorNearestTrapLadders", false);
+        nearestTrapLadderSettings.xyExtent = JsonFloatOrDefault(
+            jsonTileConfig, "postDetourCullAnchorNearestTrapXyExtent", anchorSourceSupportXyExtent);
+        nearestTrapLadderSettings.zExtent = JsonFloatOrDefault(
+            jsonTileConfig, "postDetourCullAnchorNearestTrapZExtent", anchorSourceSupportZExtent);
+        nearestTrapLadderSettings.maxIterations = jsonTileConfig.value("postDetourCullAnchorNearestTrapMaxIterations", 12);
+        nearestTrapLadderSettings.maxComponentPolys = jsonTileConfig.value("postDetourCullAnchorNearestTrapMaxComponentPolys", 6);
+        nearestTrapLadderSettings.maxComponentArea2D = JsonFloatOrDefault(
+            jsonTileConfig, "postDetourCullAnchorNearestTrapMaxComponentArea2D", 24.0f);
         const bool trimAnchorUpperCompactSpans = jsonTileConfig["preRegionCullAnchorUpperCompactSpans"].get<bool>();
         const std::vector<AnchorPolyStackCoord> anchorCompactWorkCoords =
             (trimAnchorSourceSupportCompactSpans || trimAnchorSourceSupportCompactSpansBeforeMedian ||
@@ -9806,11 +11132,21 @@ namespace MMAP
         }
         rcMergePolyMeshDetails(m_rcContext, dmmerge, nmerge, *iv.polyMeshDetail);
 
+        std::vector<unsigned char> polyMeshExactAnchorPreserveMask(iv.polyMesh->npolys, 0);
+        BuildPolyMeshExactAnchorPreserveMask(
+            *iv.polyMesh,
+            anchorSourceSupportXyExtent,
+            anchorSourceSupportZTolerance,
+            anchorSupportBandTuning,
+            anchorSourceSupports,
+            polyMeshExactAnchorPreserveMask);
+
         const int culledSuspiciousPolys = CullSuspiciousMixedWallPolys(
             *iv.polyMesh,
             *iv.polyMeshDetail,
             config.walkableSlopeAngle,
-            agentMaxClimbTerrain);
+            agentMaxClimbTerrain,
+            &polyMeshExactAnchorPreserveMask);
         if (culledSuspiciousPolys > 0)
         {
             printf("[POLY-CULL] map=%u tile=%u,%u: disabled %d suspicious mixed-wall polygon(s)\n",
@@ -9955,6 +11291,7 @@ namespace MMAP
             if (addedTileConst)
             {
                 dtMeshTile* addedTile = const_cast<dtMeshTile*>(addedTileConst);
+                const bool trimGenericSteepMixedWalls = jsonTileConfig.value("postDetourCullGenericSteepMixedWalls", true);
                 const bool trimShadowedLedges = jsonTileConfig["postDetourCullShadowedLedges"].get<bool>();
                 const bool trimOffMeshAnchorSteepTrim = jsonTileConfig["postDetourCullOffMeshAnchorSteepTrim"].get<bool>();
                 const bool trimShadowedPockets = jsonTileConfig["postDetourCullShadowedPockets"].get<bool>();
@@ -9987,19 +11324,26 @@ namespace MMAP
                     jsonTileConfig, "postDetourCullAnchorPolyStacksSupportGap2D", 0.0f);
                 if (trimAnchorPolyStacks)
                 {
-                    printf("[DT-ANCHOR-CULL] map=%u tile=%u,%u config enabled coords=%zu xy=%.2f z=%.2f supportTol=%.2f supportGap=%.2f trapped=%d routeTargets=%zu\n",
+                    printf("[DT-ANCHOR-CULL] map=%u tile=%u,%u config enabled coords=%zu xy=%.2f z=%.2f supportTol=%.2f supportGap=%.2f trapped=%d routeTargets=%zu nearestTrap=%d nearestTrapXy=%.2f nearestTrapZ=%.2f nearestTrapIters=%d nearestTrapPolys=%d nearestTrapArea=%.2f\n",
                         mapID, tileX, tileY, anchorPolyStackCoords.size(), anchorPolyStackXyExtent,
                         anchorPolyStackZExtent, anchorPolyStackSupportZTolerance, anchorPolyStackSupportGap2D,
-                        trimAnchorTrappedComponents ? 1 : 0, anchorRouteTargets.size());
+                        trimAnchorTrappedComponents ? 1 : 0, anchorRouteTargets.size(),
+                        nearestTrapLadderSettings.enabled ? 1 : 0,
+                        nearestTrapLadderSettings.xyExtent,
+                        nearestTrapLadderSettings.zExtent,
+                        nearestTrapLadderSettings.maxIterations,
+                        nearestTrapLadderSettings.maxComponentPolys,
+                        nearestTrapLadderSettings.maxComponentArea2D);
                 }
                 const int culledDetourPolys = CullSuspiciousDetourPolys(
                     *navMesh, *addedTile, agentMaxClimbTerrain,
+                    trimGenericSteepMixedWalls,
                     trimShadowedLedges, trimOffMeshAnchorSteepTrim, trimShadowedPockets,
                     offMeshAnchorSteepTrimSettings,
                     trimAnchorPolyStacks, anchorPolyStackXyExtent, anchorPolyStackZExtent,
                     anchorPolyStackSupportZTolerance, anchorPolyStackSupportGap2D,
-                    anchorPolyStackCoords, anchorSourceSupports,
-                    trimAnchorTrappedComponents, anchorRouteTargets);
+                    anchorPolyStackCoords, anchorSourceSupports, anchorSupportBandTuning,
+                    trimAnchorTrappedComponents, anchorRouteTargets, nearestTrapLadderSettings);
                 if (culledDetourPolys > 0)
                 {
                     printf("[DT-POLY-CULL] map=%u tile=%u,%u: disabled %d final suspicious Detour polygon(s)\n",
@@ -10070,6 +11414,7 @@ namespace MMAP
                 anchorStageManifest["outputTileSize"] = navDataSize;
                 anchorStageManifest["postDetourCullSummary"] =
                 {
+                    { "genericSteepMixedWallsEnabled", jsonTileConfig.value("postDetourCullGenericSteepMixedWalls", true) },
                     { "shadowedLedgesEnabled", jsonTileConfig["postDetourCullShadowedLedges"].get<bool>() },
                     { "offMeshAnchorSteepTrimEnabled", jsonTileConfig["postDetourCullOffMeshAnchorSteepTrim"].get<bool>() },
                     { "shadowedPocketsEnabled", jsonTileConfig["postDetourCullShadowedPockets"].get<bool>() },
@@ -10144,6 +11489,7 @@ namespace MMAP
             // See filterLedgeSpans for what each flag controls.
             { "treatOobNeighborAsCliff",  true  },
             { "mixedAreaUsesTerrainClimb", false },
+            { "postDetourCullGenericSteepMixedWalls", true },
             { "postDetourCullShadowedLedges", false },
             { "postDetourCullOffMeshAnchorSteepTrim", false },
             { "postDetourCullOffMeshAnchorSteepTrimMinAverageSlopeDegrees", OFFMESH_ANCHOR_STEEP_TRIM_MIN_AVERAGE_SLOPE_DEGREES },
@@ -10176,6 +11522,12 @@ namespace MMAP
             { "postDetourCullAnchorPolyStacksXyExtent", 2.0f },
             { "postDetourCullAnchorPolyStacksZExtent", 10.0f },
             { "postDetourCullAnchorPolyStacksSupportZTolerance", 1.0f },
+            { "postDetourCullAnchorNearestTrapLadders", false },
+            { "postDetourCullAnchorNearestTrapXyExtent", 2.0f },
+            { "postDetourCullAnchorNearestTrapZExtent", 10.0f },
+            { "postDetourCullAnchorNearestTrapMaxIterations", 12 },
+            { "postDetourCullAnchorNearestTrapMaxComponentPolys", 6 },
+            { "postDetourCullAnchorNearestTrapMaxComponentArea2D", 24.0f },
             { "postDetourCullAnchorPolyStacksCoordsWow", json::array() },
             { "anchorStageManifestCoordsWow", json::array() },
             { "anchorRouteTargetsWow", json::array() },

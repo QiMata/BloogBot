@@ -552,6 +552,7 @@ public class NavigationPath(
     private const float WAYPOINT_VERTICAL_LAYER_PROMOTION_MIN_2D = 6.0f;
     private const float COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE = 2.75f;
     private const float COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA = 0.4f;
+    private const float COMPACT_UPHILL_EXACT_COMMIT_CAPSULE_MULTIPLIER = 1.05f;
     private const float TIGHT_DESCENDING_TRANSITION_MAX_SEGMENT_DISTANCE = 5.5f;
     private const float TIGHT_DESCENDING_TRANSITION_MIN_Z_DROP = 0.4f;
     private const float CORNER_COMMIT_DISTANCE = 1.25f;   // default fallback
@@ -820,7 +821,7 @@ public class NavigationPath(
             // If we're still not near the destination, recalculate path periodically.
             if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
             {
-                CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
+                RecalculateExhaustedPathAndAdvance(currentPosition, destination, mapId, minWaypointDistance);
             }
 
             if (_currentIndex >= _waypoints.Length)
@@ -860,7 +861,7 @@ public class NavigationPath(
         if (_currentIndex >= _waypoints.Length)
         {
             if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
-                CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
+                RecalculateExhaustedPathAndAdvance(currentPosition, destination, mapId, minWaypointDistance);
             if (_currentIndex >= _waypoints.Length)
             {
                 var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
@@ -1013,7 +1014,7 @@ public class NavigationPath(
                 if (_currentIndex >= _waypoints.Length)
                 {
                     if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
-                        CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
+                        RecalculateExhaustedPathAndAdvance(currentPosition, destination, mapId, minWaypointDistance);
                     if (_currentIndex >= _waypoints.Length)
                     {
                         var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
@@ -1084,6 +1085,16 @@ public class NavigationPath(
         => IsLongTravelStyleRoute() && _tightenDenseWaypointAcceptance
             ? MathF.Max(CORNER_COMMIT_DISTANCE, _capsuleRadius * LONG_TRAVEL_AGENT_CORNER_COMMIT_RADIUS_MULTIPLIER)
             : CORNER_COMMIT_DISTANCE;
+
+    private void RecalculateExhaustedPathAndAdvance(
+        Position currentPosition,
+        Position destination,
+        uint mapId,
+        float minWaypointDistance)
+    {
+        CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
+        AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+    }
 
     public bool RecalculateAfterMovementStall(
         Position currentPosition,
@@ -1509,6 +1520,13 @@ public class NavigationPath(
             if (distanceToCurrentWaypoint2D <= PATH_POINT_DEDUP_EPSILON)
                 return true;
 
+            if (ShouldHoldEarlyReplannedUphillSupport(
+                currentPosition,
+                _currentIndex))
+            {
+                return false;
+            }
+
             var requiresExactCompactUphillCommit =
                 RequiresExactCompactUphillSupportCommit(currentPosition, _currentIndex, distanceToCurrentWaypoint2D);
             if (distanceToCurrentWaypoint2D <= GetCornerCommitDistance()
@@ -1543,6 +1561,53 @@ public class NavigationPath(
 
         return TryGetLineOfSight(currentPosition, _waypoints[_currentIndex + 1], mapId, out var nextWaypointVisible)
             && nextWaypointVisible;
+    }
+
+    private bool ShouldHoldEarlyReplannedUphillSupport(
+        Position currentPosition,
+        int waypointIndex)
+    {
+        var earlySupportReplan =
+            _traceLastReplanReason == NavigationTraceReason.PathExhaustedStillFar
+            || _traceLastReplanReason == NavigationTraceReason.StalledNearWaypoint;
+
+        if (!_tightenDenseWaypointAcceptance
+            || !earlySupportReplan
+            || !IsLongTravelStyleRoute()
+            || waypointIndex < 0
+            || waypointIndex >= _waypoints.Length
+            || waypointIndex >= PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_WAYPOINTS)
+        {
+            return false;
+        }
+
+        var waypoint = _waypoints[waypointIndex];
+        if (waypoint.Z - currentPosition.Z <= MICRO_UPHILL_SUPPORT_REACH_MIN_VERTICAL_DELTA)
+            return false;
+
+        return IsCompactUphillSupportNeighborhood(waypointIndex);
+    }
+
+    private bool IsCompactUphillSupportNeighborhood(int waypointIndex)
+    {
+        var waypoint = _waypoints[waypointIndex];
+
+        var previousWaypoint = waypointIndex > 0
+            ? _waypoints[waypointIndex - 1]
+            : _pathStartPosition;
+        if (previousWaypoint is Position previous
+            && previous.DistanceTo2D(waypoint) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
+            && waypoint.Z - previous.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA)
+        {
+            return true;
+        }
+
+        if (waypointIndex + 1 >= _waypoints.Length)
+            return false;
+
+        var next = _waypoints[waypointIndex + 1];
+        return waypoint.DistanceTo2D(next) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
+            && next.Z - waypoint.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
     }
 
     private bool ShouldHoldNearWaypointBeforeUphillLayerProgression(
@@ -1614,11 +1679,14 @@ public class NavigationPath(
         var previousWaypoint = waypointIndex > 0
             ? _waypoints[waypointIndex - 1]
             : _pathStartPosition;
+        var exactSupportMaxDistance = MathF.Max(
+            MICRO_UPHILL_SUPPORT_SEGMENT_MAX_DISTANCE,
+            _capsuleRadius * COMPACT_UPHILL_EXACT_COMMIT_CAPSULE_MULTIPLIER);
         var incomingCompactUphill = previousWaypoint is Position previous
-            && previous.DistanceTo2D(waypoint) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
+            && previous.DistanceTo2D(waypoint) <= exactSupportMaxDistance
             && waypoint.Z - previous.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
         var outgoingCompactUphill = waypointIndex + 1 < _waypoints.Length
-            && waypoint.DistanceTo2D(_waypoints[waypointIndex + 1]) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
+            && waypoint.DistanceTo2D(_waypoints[waypointIndex + 1]) <= exactSupportMaxDistance
             && _waypoints[waypointIndex + 1].Z - waypoint.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
         return incomingCompactUphill || outgoingCompactUphill;
     }
@@ -4283,10 +4351,15 @@ public class NavigationPath(
             && start.DistanceTo(end) <= SHORT_ROUTE_TRACE_DISTANCE
             && (reason == NavigationTraceReason.PathExhaustedStillFar
                 || reason == NavigationTraceReason.PathUnavailable);
+        var urgentExhaustedRouteRecalc = !force
+            && reason == NavigationTraceReason.PathExhaustedStillFar
+            && _hasCalculatedPath
+            && _currentIndex >= _waypoints.Length;
         if (!force
             && _hasCalculatedPath
             && nowTick - _lastCalculationTick < RECALCULATE_COOLDOWN_MS
-            && !urgentShortRouteRecalc)
+            && !urgentShortRouteRecalc
+            && !urgentExhaustedRouteRecalc)
         {
             return;
         }

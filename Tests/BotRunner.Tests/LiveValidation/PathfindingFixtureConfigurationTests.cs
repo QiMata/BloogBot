@@ -30,6 +30,31 @@ public sealed class PathfindingFixtureConfigurationTests
         Assert.Equal(9002, endpoint.Port);
     }
 
+    [Fact]
+    public void ResolveStateManagerDataDirectory_PrefersExplicitTestDataRoot()
+    {
+        using var dataRoot = new NavDataRootScope();
+        using var otherRoot = new NavDataRootScope();
+        using var testDataScope = new EnvironmentVariableScope("WWOW_TEST_DATA_DIR", dataRoot.RootPath);
+        using var dataScope = new EnvironmentVariableScope("WWOW_DATA_DIR", otherRoot.RootPath);
+
+        var resolved = BotServiceFixture.ResolveStateManagerDataDirectory();
+
+        Assert.Equal(dataRoot.RootPath, resolved);
+    }
+
+    [Fact]
+    public void ResolveStateManagerDataDirectory_FallsBackToExistingWwowDataDirWhenTestRootUnset()
+    {
+        using var dataRoot = new NavDataRootScope();
+        using var testDataScope = new EnvironmentVariableScope("WWOW_TEST_DATA_DIR", null);
+        using var dataScope = new EnvironmentVariableScope("WWOW_DATA_DIR", dataRoot.RootPath);
+
+        var resolved = BotServiceFixture.ResolveStateManagerDataDirectory();
+
+        Assert.Equal(dataRoot.RootPath, resolved);
+    }
+
     private sealed class EnvironmentVariableScope : IDisposable
     {
         private readonly string _name;
@@ -44,5 +69,26 @@ public sealed class PathfindingFixtureConfigurationTests
 
         public void Dispose()
             => Environment.SetEnvironmentVariable(_name, _previousValue);
+    }
+
+    private sealed class NavDataRootScope : IDisposable
+    {
+        public string RootPath { get; }
+
+        public NavDataRootScope()
+        {
+            RootPath = Path.Combine(
+                Path.GetTempPath(),
+                "wwow-nav-root-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(RootPath, "mmaps"));
+            Directory.CreateDirectory(Path.Combine(RootPath, "maps"));
+            Directory.CreateDirectory(Path.Combine(RootPath, "vmaps"));
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(RootPath))
+                Directory.Delete(RootPath, recursive: true);
+        }
     }
 }

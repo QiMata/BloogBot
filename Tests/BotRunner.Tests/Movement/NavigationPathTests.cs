@@ -1999,6 +1999,214 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_LongTravelPathExhaustedWithinCooldown_RecalculatesImmediatelyAndAdvancesPastStartBreadcrumb()
+    {
+        long tick = 0;
+        var requestedStarts = new List<Position>();
+        var destination = new Position(100f, 0f, 10f);
+        var exhaustedPrefixEnd = new Position(8f, 0f, 0f);
+        var current = new Position(8.1f, 0f, 0f);
+        var currentBreadcrumb = new Position(8.1f, 0f, 0f);
+        var climbSupport = new Position(8.6f, 0f, 0.8f);
+        var climbFollowUp = new Position(12f, 0f, 2f);
+        var pathfindingCalls = 0;
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, _, _) =>
+            {
+                pathfindingCalls++;
+                requestedStarts.Add(start);
+                return pathfindingCalls == 1
+                    ? [exhaustedPrefixEnd]
+                    : [currentBreadcrumb, climbSupport, climbFollowUp];
+            },
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => tick,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            tightenDenseWaypointAcceptance: true);
+
+        var firstWaypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        tick = 500;
+
+        var replannedWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(firstWaypoint);
+        Assert.NotNull(replannedWaypoint);
+        Assert.Equal(2, pathfindingCalls);
+        Assert.Equal(2, requestedStarts.Count);
+        Assert.Equal(2, trace.PlanVersion);
+        Assert.Equal(NavigationTraceReason.PathExhaustedStillFar, trace.LastReplanReason);
+        Assert.Equal("waypoint", trace.LastResolution);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+        Assert.True(requestedStarts[1].DistanceTo2D(current) < 0.05f);
+        Assert.True(replannedWaypoint!.DistanceTo2D(climbSupport) < 0.05f);
+        Assert.True(MathF.Abs(replannedWaypoint.Z - climbSupport.Z) < 0.05f);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(climbSupport) < 0.05f);
+        Assert.True(MathF.Abs(trace.ActiveWaypoint.Z - climbSupport.Z) < 0.05f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelPathExhaustedTowerTrapReplanKeepsFirstUphillSupportUntilReached()
+    {
+        long tick = 0;
+        var requestedStarts = new List<Position>();
+        var destination = new Position(1320.1f, -4653.2f, 53.9f);
+        var exhaustedPrefixEnd = new Position(1353.1f, -4525.5f, 34.7f);
+        var current = new Position(1353.1f, -4525.5f, 34.7f);
+        var firstSupport = new Position(1352.2f, -4527.0f, 35.7f);
+        var deeperWallSupport = new Position(1350.3f, -4527.0f, 35.9f);
+        var followUp = new Position(1348.2f, -4526.7f, 35.8f);
+        var pathfindingCalls = 0;
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, _, _) =>
+            {
+                pathfindingCalls++;
+                requestedStarts.Add(start);
+                return pathfindingCalls == 1
+                    ? [exhaustedPrefixEnd]
+                    : [firstSupport, deeperWallSupport, followUp, destination];
+            },
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => tick,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var firstWaypoint = navPath.GetNextWaypoint(
+            new Position(1348f, -4521f, 33f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        tick = 500;
+
+        var replannedWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        tick = 550;
+
+        var stillHeldWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(firstWaypoint);
+        Assert.NotNull(replannedWaypoint);
+        Assert.NotNull(stillHeldWaypoint);
+        Assert.Equal(2, pathfindingCalls);
+        Assert.Equal(2, requestedStarts.Count);
+        Assert.True(requestedStarts[1].DistanceTo2D(current) < 0.05f);
+        Assert.Equal(2, trace.PlanVersion);
+        Assert.Equal(NavigationTraceReason.PathExhaustedStillFar, trace.LastReplanReason);
+        Assert.Equal("waypoint", trace.LastResolution);
+        Assert.Equal(0, trace.CurrentWaypointIndex);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(replannedWaypoint!.DistanceTo2D(firstSupport) < 0.05f);
+        Assert.True(stillHeldWaypoint!.DistanceTo2D(firstSupport) < 0.05f);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(firstSupport) < 0.05f);
+        Assert.True(MathF.Abs(trace.ActiveWaypoint.Z - firstSupport.Z) < 0.05f);
+        Assert.True(stillHeldWaypoint.DistanceTo2D(deeperWallSupport) > 0.5f);
+    }
+
+    [Fact]
+    public void RecalculateAfterMovementStall_LongTravelTowerTrapReplanKeepsFirstUphillSupportUntilReached()
+    {
+        var destination = new Position(1320.1f, -4653.2f, 53.9f);
+        var current = new Position(1353.8f, -4524.7f, 34.4f);
+        var currentBreadcrumb = new Position(1353.8f, -4524.7f, 34.4f);
+        var firstSupport = new Position(1354.2f, -4524.6f, 34.9f);
+        var deeperWallSupport = new Position(1354.6f, -4524.5f, 35.8f);
+        var followUp = new Position(1355.0f, -4524.4f, 36.1f);
+        var pathfindingCalls = 0;
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            {
+                pathfindingCalls++;
+                return pathfindingCalls == 1
+                    ? [new Position(100f, 100f, 0f)]
+                    : [currentBreadcrumb, firstSupport, deeperWallSupport, followUp, destination];
+            },
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            new Position(0f, 0f, 0f),
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.InitialPath);
+
+        var recalculated = navPath.RecalculateAfterMovementStall(
+            current,
+            destination,
+            mapId: 1);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.True(recalculated);
+        Assert.True(pathfindingCalls >= 2);
+        Assert.Equal(NavigationTraceReason.StalledNearWaypoint, trace.LastReplanReason);
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(firstSupport) < 0.05f);
+        Assert.True(MathF.Abs(trace.ActiveWaypoint.Z - firstSupport.Z) < 0.05f);
+        Assert.True(MathF.Abs(trace.ActiveWaypoint.Z - deeperWallSupport.Z) > 0.5f);
+    }
+
+    [Fact]
     public void GetNextWaypoint_TraceRecordsStallDrivenReplanReason()
     {
         var pathfindingCalls = 0;
