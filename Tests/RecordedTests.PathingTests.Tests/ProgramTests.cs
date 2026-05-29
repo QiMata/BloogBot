@@ -96,8 +96,11 @@ public class ProgramTests
         var act = () => Program.FilterTests(config, tests);
 
         // Assert
+        // Phase 1 added Status to the error message; available-tests listing now includes
+        // a (Status) suffix per row. Both pre-Phase-1 and post-Phase-1 essentials remain:
+        // the filter description and the available-tests are still listed.
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*name='North'*category='Road'*Available tests: Northshire, Barrens*");
+            .WithMessage("*name='North'*category='Road'*Available tests:*Northshire*Barrens*");
     }
 
     [Fact]

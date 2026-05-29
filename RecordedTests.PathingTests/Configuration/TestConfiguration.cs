@@ -152,6 +152,30 @@ public class TestConfiguration
     public string? CategoryFilter { get; set; }
 
     /// <summary>
+    /// Explicit Status whitelist (comma-separated, case-insensitive). When set, only tests whose
+    /// <c>Status</c> appears here are included; takes precedence over the boolean Include flags.
+    /// Valid values match <c>TestStatus</c>: Stable, Experimental, BakeBlocked, Skipped.
+    /// </summary>
+    public string? StatusFilter { get; set; }
+
+    /// <summary>
+    /// When true, include tests with <c>Status == Experimental</c> in addition to Stable.
+    /// Ignored when <see cref="StatusFilter"/> is set.
+    /// </summary>
+    public bool IncludeExperimental { get; set; } = false;
+
+    /// <summary>
+    /// When true, include tests with <c>Status == BakeBlocked</c> in addition to Stable.
+    /// Ignored when <see cref="StatusFilter"/> is set.
+    /// </summary>
+    public bool IncludeBakeBlocked { get; set; } = false;
+
+    /// <summary>
+    /// When true, print all non-Stable tests with their Status and reason, then exit without running.
+    /// </summary>
+    public bool ListSkipped { get; set; } = false;
+
+    /// <summary>
     /// Whether to stop execution after the first test failure.
     /// </summary>
     public bool StopOnFirstFailure { get; set; } = false;
