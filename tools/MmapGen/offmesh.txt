@@ -36,6 +36,25 @@
 // Current measured seam: both endpoints are inside Orczeppelinhouse.wmo's
 // measured bounds and sit on physics-clear walkable upper-deck support.
 1 40,29 (1329.877 -4653.495 53.609) (1320.143 -4653.159 53.892) 2.5 // WWoW: OG zeppelin deck edge -> BoardingPosition seam (physics-clear, inside tower bbox)
+
+// WWoW: Orgrimmar eastern approach steep-climb bypass (MmapGen tile 39,28; file 0012839.mmtile)
+// Loop-26 / NEXT_SESSION_LONGPATHING_HANDOFF: CrossroadsToUndercity_UsesFlightAndZeppelin
+// + OrgrimmarToUndercityZeppelin_BoardsAndDeplanes stall at (1627.6,-4151.8,36.9). FG physics
+// reports intent-flag=0x1 currentSpeed=0 for ~15s. PathPhysicsProbe --detour-resolve --smooth
+// shows segment 0 is a 64.9° SteepClimb (validation=Clear) from z=36.9 to z=38.02 — bake's
+// walkableClimb=1.8 accepts the 1.12y step, but the runtime physics correctly rejects 65°
+// slopes. Raw corner-to-corner segment 0 is BlockedGeometry over 32y/10.7y. Smooth densifier
+// produces 21 short StepUps (slopes 27-43°) before reaching Walk affordance at segment 22.
+// Start poly: 0x1000013D00286 (idx 646, area=1, surfaceZ=37.273, posOverPoly=1).
+// End poly:   0x1000013D0027D (idx 637, area=1, surfaceZ=45.635, posOverPoly=1).
+// Distance: 16.5y horizontal, 8.7y vertical — the natural Detour A* cost across the staircase
+// is ~20y so the off-mesh wins. Same pattern as the loop-24 close-out on tile (40,29).
+// Tile-coord note: MmapGen internal tileX corresponds to Recast X = WoW Y axis (per
+// TerrainBuilder::copyVertices swap), so this coord (WoW X=1627.6, WoW Y=-4151.8) lives in
+// MmapGen tileX=39 (WoW Y range -4266..-3733) and tileY=28 (WoW X range 1600..2133). The
+// filename `<mapID:3><tileY:2><tileX:2>.mmtile` produces 0012839.mmtile for that tile.
+1 39,28 (1627.600 -4151.800 37.273) (1622.160 -4163.970 45.635) 2.5 // WWoW: OG east-wall approach steep-climb bypass
+
 // ----------------------------------------------------------------------------
 // WWoW: Undercity zeppelin elevator (map 0, Tirisfal side)
 // TODO[overhaul]: replace placeholder coordinates with measured anchors. The
