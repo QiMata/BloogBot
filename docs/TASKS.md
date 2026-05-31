@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
+Last refresh: 2026-05-30 (Blazor Storyline Manager local authoring slice)
 
 ## Rules
 
@@ -69,6 +69,26 @@ Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
 3. **Pick up a Plan/13 (Phase 9) catalog-fill slot** in parallel with Phase 1; catalog rows are pure-data work that does not block on the substrate.
 4. **Extend `IFlightMasterNetworkClientComponent` with `GetNodeName(uint nodeId)`** so `NetworkTaxiFrame.Name` / `SelectNodeByName` work with human-readable names (S1.18 TODO).
 
+## Latest handoff
+
+- Last updated: 2026-05-30
+- Completed: added a separate local Blazor Storyline Manager authoring surface plus a localhost-only PromptHandlingService REST API under `/api/storylines/v1`.
+- Delivered: API endpoints for health, drafts, publish, personas, narrative graphs, gameplay arcs, character storyline bindings, memory review, ActivityCatalog lookup, and graph layout; draft/publish SQLite tables; gameplay arc and binding storage; graph snapshot replacement that deletes removed nodes/transitions; typed-client-only Blazor tabs for the authoring workflows; deterministic management tests.
+- Validation:
+  - `dotnet restore Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --verbosity minimal` -> passed.
+  - `dotnet restore UI\StorylineManager\StorylineManager.csproj --verbosity minimal` -> passed.
+  - `dotnet restore Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --verbosity minimal` -> passed.
+  - `dotnet build Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning.
+  - `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning.
+  - `dotnet build Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed.
+  - `dotnet build Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --configuration Release --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning.
+  - `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Release --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning.
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Debug --no-restore --filter "FullyQualifiedName~Storyline" --logger "console;verbosity=minimal"` -> passed (21 passed, 1 skipped).
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (36 passed, 3 skipped).
+  - `dotnet build WestworldOfWarcraft.sln --configuration Debug --no-restore -v:minimal -m:1` -> failed before a full solution verdict because existing native projects could not import `$(VCTargetsPath)\Microsoft.Cpp.Default.props` under `dotnet build`, and unrelated projects lacked restored `obj\project.assets.json`; the new API/UI projects built successfully in that run.
+- Files changed include `Services/PromptHandlingService/Storylines/*`, `Services/PromptHandlingService.Api/*`, `UI/StorylineManager/*`, `Tests/PromptHandlingService.Tests/StorylineManagementTests.cs`, `Tests/PromptHandlingService.Tests/StorylineRuntimeTests.cs`, `WestworldOfWarcraft.sln`, docs, and task trackers.
+- Next command: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`
+
 ## Parallel tracks
 
 | Track | Active slot | Owner | Status | File |
@@ -78,7 +98,6 @@ Last refresh: 2026-05-19 (loop 25 / Phase C1 falsified, B3 geometric dead-end)
 | Test isolation refactor | (slots) | `monorepo-worker` | open (post Phase-2 S2.0) | [`Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md`](Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md) |
 | **IGameDatabase migration** | `S-IGDB-1` — define `Exports/GameDatabase.Core/` interfaces | `monorepo-worker` or `codex:codex-rescue` | **new (2026-05-20)** — closes monorepo G4 | spec: [../../docs/specs/shared/services/game_database_interface.md](../../docs/specs/shared/services/game_database_interface.md) |
 | **Validation harness tools (Ch 9 §8)** | `S-VHT-1` — `MemScanner` standalone tool | `monorepo-worker` | **new (2026-05-20)** — methodology Ch 9 §8 alignment | spec: [../../docs/methodology/09_validation_harness.md](../../docs/methodology/09_validation_harness.md) |
-
 ## IGameDatabase migration — Slots (2026-05-20)
 
 > Substrate refactor that replaces the 6,952-line static `MangosRepository` ([Services/DecisionEngineService/](../Services/DecisionEngineService/)) with the portable `IGameDatabase` family ([spec](../../docs/specs/shared/services/game_database_interface.md)). Each slot is one PR; do not bundle. The DecisionEngine never breaks — the static class stays alongside the interfaces until S-IGDB-9.

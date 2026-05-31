@@ -1,0 +1,55 @@
+<div class="panel draft-editor">
+    <h2>@Title</h2>
+    <label>
+        Target
+        <input value="@TargetId" @oninput="OnTargetChanged" />
+    </label>
+    <label>
+        Payload JSON
+        <textarea value="@PayloadJson" @oninput="OnPayloadInput"></textarea>
+    </label>
+    <button @onclick="SaveAsync">Save Draft</button>
+</div>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "Draft";
+
+    [Parameter]
+    public string Kind { get; set; } = string.Empty;
+
+    [Parameter]
+    public string TargetId { get; set; } = string.Empty;
+
+    [Parameter]
+    public string PayloadJson { get; set; } = string.Empty;
+
+    [Parameter]
+    public EventCallback<string> OnTargetIdChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnPayloadChanged { get; set; }
+
+    [Parameter]
+    public Func<string, string, string, Task>? OnSave { get; set; }
+
+    private async Task OnTargetChanged(ChangeEventArgs args)
+    {
+        TargetId = args.Value?.ToString() ?? string.Empty;
+        await OnTargetIdChanged.InvokeAsync(TargetId).ConfigureAwait(false);
+    }
+
+    private async Task OnPayloadInput(ChangeEventArgs args)
+    {
+        PayloadJson = args.Value?.ToString() ?? string.Empty;
+        await OnPayloadChanged.InvokeAsync(PayloadJson).ConfigureAwait(false);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (OnSave is not null)
+        {
+            await OnSave.Invoke(Kind, TargetId, PayloadJson).ConfigureAwait(false);
+        }
+    }
+}

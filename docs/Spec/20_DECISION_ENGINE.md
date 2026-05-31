@@ -15,6 +15,13 @@ final decision; the caller may discard the advice without consequence.
 This separation keeps the deterministic Activity stack testable while
 the ML layer evolves.
 
+Foundry persona runtime integration is also **advisory, not
+authoritative**. `Services/PromptHandlingService` may call a Foundry
+direct model or prompt-agent version to draft persona/dialogue text, but
+that output cannot select game-state transitions, execute world
+actions, bypass `AdvisoryValidator`, or replace the deterministic
+DecisionEngine advisors defined in this spec.
+
 Five call sites consume DecisionEngine advice:
 
 1. **`IActivityComposer.Compose(...)`** — the planner's Objective

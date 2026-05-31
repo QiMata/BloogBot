@@ -20,10 +20,18 @@ Two execution paths live in the same codebase and must stay parity-equivalent:
 - **BackgroundBotRunner (BG)** — headless C# protocol emulation (no game
   client), validated against FG packet/event recordings. Scale path.
 
-A WPF operator console (`UI/WoWStateManagerUI/`) is the human surface for
-configuration, monitoring, and on-demand requests. There is **no HTTP API
-layer**; the UI talks directly to StateManager over the existing protobuf/TCP
-contracts.
+A WPF operator console (`UI/WoWStateManagerUI/`) is the default human
+surface for configuration, monitoring, tests, and on-demand requests. There is
+**no HTTP API layer for the StateManager/operator control path**; the WPF UI
+talks directly to StateManager over the existing protobuf/TCP contracts.
+
+Storyline authoring is a separate local admin surface: `UI/StorylineManager/`
+is a Blazor Server app that talks only to `Services/PromptHandlingService.Api`
+over localhost REST JSON under `/api/storylines/v1`. That API is owned by
+PromptHandlingService and is authoritative for persona storyline drafts,
+publish validation, graph snapshots, gameplay arcs, character storyline
+bindings, memory review, and read-only ActivityCatalog lookup. It does not
+replace the WPF operator console or the StateManager protobuf/TCP flow.
 
 ## How to read this spec
 
@@ -73,7 +81,7 @@ Companion top-level docs:
 | [`Spec/18_TERMINOLOGY.md`](Spec/18_TERMINOLOGY.md) | Activity/Objective/Task/Action four-layer hierarchy (canonical glossary; adopted from D2Bot) |
 | [`Spec/19_AOTA_RUNTIME.md`](Spec/19_AOTA_RUNTIME.md) | Runtime `IActivity` + `IObjective` contracts, `ObjectiveType` enum, composer entry point (Phase 2 S2.0) |
 | [`Spec/20_DECISION_ENGINE.md`](Spec/20_DECISION_ENGINE.md) | DecisionEngineService advisory contract — rotation / threat / reward / objective advice, fail-soft, three maturity phases |
-| [`Spec/21_SOCIAL_FABRIC.md`](Spec/21_SOCIAL_FABRIC.md) | Chat / mail / guild / AH chatter / whisper / city ambient — what makes the server *feel* alive |
+| [`Spec/21_SOCIAL_FABRIC.md`](Spec/21_SOCIAL_FABRIC.md) | Chat / mail / guild / AH chatter / whisper / city ambient; Foundry storyline graph dialogue boundary |
 | [`Spec/22_WORLD_CYCLES.md`](Spec/22_WORLD_CYCLES.md) | Calendar / weekly reset / holiday events / world-buff windows / world-boss respawn cadence |
 | [`Spec/23_ONDEMAND_API.md`](Spec/23_ONDEMAND_API.md) | OnDemand request DSL, response shapes, rejection codes, Shodan whisper parser |
 | [`Spec/24_BEHAVIORAL_VARIATION.md`](Spec/24_BEHAVIORAL_VARIATION.md) | `PersonalityProfile` per-bot knobs for indistinguishability (timing / route / economy / social) |
@@ -144,7 +152,9 @@ under load.
 4. **All On-Demand Activities are legal for any human caller.** The
    OnDemand launcher forms the group around the human, circumventing
    normal gameplay restrictions per the activity config.
-5. **WPF stays.** No HTTP API.
+5. **WPF stays.** No HTTP API for the StateManager/operator control path.
+   The sole v1 exception is the localhost-only PromptHandlingService
+   storyline authoring API used by the separate Blazor Storyline Manager.
 6. **Hot reload is required** for all reloadable sections.
 7. **Iterative scaling.** Start at 80-bot capacity (AV). Measure, optimize,
    buy hardware as the dust settles. No fixed 3000-bot deadline.

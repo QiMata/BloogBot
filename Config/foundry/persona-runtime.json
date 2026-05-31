@@ -1,0 +1,7 @@
+{
+  "projectEndpoint": "https://atlsqlsattest-resource.services.ai.azure.com/api/projects/atlsqlsattest",
+  "model": "gpt-5-mini",
+  "agentName": "wwow-persona-runtime-dev",
+  "timeoutMs": 30000,
+  "maxOutputTokens": 512
+}

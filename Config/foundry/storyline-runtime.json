@@ -1,0 +1,6 @@
+{
+  "databasePath": "storyline_runtime.sqlite",
+  "seedPath": "Config/foundry/storyline-seed.json",
+  "importSeedOnEmpty": true,
+  "maxMemorySummaryCharacters": 1200
+}

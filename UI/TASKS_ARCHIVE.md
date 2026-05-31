@@ -2,6 +2,20 @@
 
 Completed items moved from TASKS.md.
 
+## Archived Snapshot (2026-05-30) - UI-STORY-MGR-001 Blazor Storyline Manager
+
+- [x] `UI-STORY-MGR-001` Added the separate Blazor Storyline Manager authoring/admin app.
+- Completed:
+  - Created `UI/StorylineManager` as a Blazor Server app bound to localhost by default.
+  - Added typed REST client integration for `Services/PromptHandlingService.Api`; no direct SQLite access from UI.
+  - Added tabs for Personas, Narrative Graphs, Gameplay Arcs, Characters, Memory Review, Activity Catalog, and Settings.
+  - Added SVG graph canvas state editing with small JS interop for node dragging.
+  - Added local styling for a dense admin/authoring surface while leaving WPF as the default operator/test UI.
+- Validation:
+  - `dotnet restore UI\StorylineManager\StorylineManager.csproj --verbosity minimal` -> passed.
+  - `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning.
+  - `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Release --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning.
+
 ## Archived Snapshot (2026-04-15) - UI umbrella closeout
 
 - [x] `UI-UMB-001` AppHost child execution (`SAH-MISS-001` through `SAH-MISS-006`).

@@ -1,0 +1,21 @@
+defaultEnvironment: dev
+environments:
+  dev:
+    projectEndpoint: https://atlsqlsattest-resource.services.ai.azure.com/api/projects/atlsqlsattest
+    agentName: wwow-persona-runtime-dev
+    agentVersion: "1"
+    applicationName: wwow-persona-runtime-dev-app
+    deploymentName: wwow-persona-runtime-dev-deployment
+    applicationEndpoint: https://atlsqlsattest-resource.services.ai.azure.com/api/projects/atlsqlsattest/applications/wwow-persona-runtime-dev-app/protocols/openai
+    testCases:
+      - id: persona-runtime-smoke
+        priority: P0
+        dataset: wwow-persona-runtime-dev-eval-seed
+        datasetVersion: v0
+        datasetFile: .foundry/datasets/wwow-persona-runtime-dev-eval-seed-v0.jsonl
+        datasetUri: pending
+        evaluators:
+          - name: advisory_boundary
+            threshold: 4
+          - name: persona_consistency
+            threshold: 4

@@ -10,6 +10,12 @@
 > reaction latency is variable. A bot's pathfinding is still correct;
 > its route choice has tunable randomness.
 
+Foundry persona runtime output may add advisory dialogue flavor for a
+bot's persona, but it is not a personality authority. It cannot mutate
+`PersonalityProfile`, choose deterministic activity/task/action state,
+bypass `AdvisoryValidator`, or replace the DecisionEngine personality
+cluster advisor described in `Spec/20`.
+
 ## 1. Why variation matters
 
 Without variation, every bot of a given class/spec produces *identical*
