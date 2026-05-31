@@ -6,7 +6,7 @@ A consumer of navigation/scene data, exposed via the protobuf IPC layer.
 ## Role
 
 - Provides scene tile + object data (see `scenedata.proto` →
-  `Exports/BotCommLayer/Models/Scenedata.cs`).
+  `Exports/BotCommLayer/Models/Generated/Scenedata.cs`).
 - Communicates over protobuf/TCP, length-framed like the rest of the IPC stack.
 
 ## Dependencies
