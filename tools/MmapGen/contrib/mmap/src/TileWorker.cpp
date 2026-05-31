@@ -12041,35 +12041,24 @@ namespace MMAP
 
     json TileWorker::getDefaultConfig()
     {
-        // Phase 1 overhaul (Recast Physics-Validated Navmesh Overhaul, iter 17):
-        // Mononen-rule-compliant defaults. Five values updated from the old
-        // pre-Phase-1 baseline:
-        //   detailSampleDist        2.0   -> 1.6   (cs * 6 with cs=BASE_UNIT_DIM=0.2666; was cs*7.5)
-        //   maxSimplificationError  1.8   -> 1.3   (Mononen target; proposal rejects >= 1.5)
-        //   mergeRegionArea         10    -> 40    (TrinityCore default; old was too small)
-        //   minRegionArea           30    -> 20    (TrinityCore default; old was a bit too large)
-        //   walkableSlopeAngle      75.0  -> 60.0  (was accepting steeper than runtime physics walks)
-        // The remaining changes (cs, ch, walkableRadius/Height/Climb derivation) happen in
-        // from_json(rcConfig) in iter 18 when MakeBakeProfile() replaces the json-driven path.
-        // See tools/MmapGen/include/BakeProfile.h for the single-source-of-truth.
         return
         {
             { "borderSize",              0     }, // placeholder
-            { "detailSampleDist",        1.6f  }, // Phase 1: cs * 6 (cs=BASE_UNIT_DIM=0.2666)
+            { "detailSampleDist",        2.0f  },
             { "detailSampleMaxError",    0.5f  },
             { "maxEdgeLen",              0     }, // placeholder
             { "maxVertsPerPoly",         DT_VERTS_PER_POLYGON },
-            { "maxSimplificationError",  1.3f  }, // Phase 1: Mononen target (was 1.8)
+            { "maxSimplificationError",  1.8f  },
             { "partitionType",           "watershed" },
-            { "mergeRegionArea",         40    }, // Phase 1: TrinityCore default (was 10)
-            { "minRegionArea",           20    }, // Phase 1: TrinityCore default (was 30)
+            { "mergeRegionArea",         10    },
+            { "minRegionArea",           30    },
             { "walkableClimb",           0     }, // placeholder
             { "walkableHeight",          0     }, // placeholder
             { "walkableRadius",          0     }, // placeholder
             { "walkableErosionRadius",   -1.0f }, // world units; -1 uses walkableRadius
             { "walkableErosionRadiusCells", -1  }, // cells; overrides world-unit erosion radius when >= 0
-            { "walkableSlopeAngle",      60.0f }, // Phase 1: physics-engine MAX_SLOPE (was 75; accepted steeper than runtime walks)
-            { "walkableSlopeAngleVMaps", 60.0f }, // Phase 1: unified with terrain at MAX_SLOPE (was 61)
+            { "walkableSlopeAngle",      75.0f }, // slope terrain
+            { "walkableSlopeAngleVMaps", 61.0f }, // slope model (WMO...)
             { "quick",                   -1    }, // skip 'undermesh removal'
             // PFS-OVERHAUL-006 / Phase 6: per-tile filterLedgeSpans overrides.
             // Defaults preserve legacy behavior on every tile that does not opt in.
