@@ -121,11 +121,11 @@ benefit. The bare legacy product name `BloogBot` is a separate, ongoing phase-ou
 | Refactor | Why deferred |
 |----------|--------------|
 | ~~Move/split the 5 generated protobuf files into a `Generated/` subfolder~~ — **done 2026-05-31** | The 5 generated `*.cs` moved to `Models/Generated/`; `WoWActivitySnapshotExtensions.cs` stays in `Models/`. `BotCommLayer.csproj` is SDK-default-glob (no edit); `protocsharp.bat` default output + the `.editorconfig` `generated_code` glob retargeted to `Generated/`; `protocpp.bat` writes outside the repo so it was untouched. Plan: `.agent/plans/protobuf-generated-subfolder.md`. |
-| Split `Services/PathfindingService/Repository/Navigation.cs` (~7,600 lines) | Inside the active pathfinding freeze (`docs/physics/README.md`). |
-| Touch `Exports/Navigation/PhysicsEngine.cpp` and other native files | Freeze-adjacent **and** unbuildable/unverifiable without the native toolchain. |
+| Split `Services/PathfindingService/Repository/Navigation.cs` (~6,756 lines) | Inside the active pathfinding freeze (`docs/physics/README.md`). **Ready-to-run plan staged** (post-freeze): `.agent/plans/split-navigation-cs.md`. |
+| Touch `Exports/Navigation/PhysicsEngine.cpp` and other native files | Freeze-adjacent **and** unbuildable/unverifiable without the native toolchain. **Ready-to-run plan staged** (post-freeze + toolchain): `.agent/plans/physicsengine-cpp-modularization.md`. |
 | ~~Rename `WowSharpClient.NetworkTests` casing / `BloogBot.AI` prefix~~ — **done 2026-05-31** | Casing fixed (namespaces) and `BloogBot.AI` -> `WWoW.AI` (+ `WWoW.AI.Tests`, plan `.agent/plans/rename-bloogbot-ai.md`). Both self-contained. `BotRunner` (704 refs) / `BotCommLayer` (42 refs) **stay un-renamed** — risk still outweighs benefit. |
 | ~~Relocate `ActivityCatalogRows.Shard*.cs`~~ — **done 2026-05-31** | Moved to `Services/WoWStateManager/Activities/CatalogRows/`; one `<Compile>` glob in `PromptHandlingService.Api.csproj` + the skill doc updated. See P5 above. |
-| Extract helper functions from the 1,000–1,800-line service files | "Extract only when tests already protect behavior" — those tests can't be run on this box, so extraction is unverifiable here. |
+| Extract helper functions from the 1,000–1,800-line service files | Partial-class **pilot done 2026-05-31** on `SqliteStorylineRepository` (DTOs → `.Rows.cs`); behavior-preserving. Remaining candidates (`DungeoneeringCoordinator`, `ObjectManager.Interaction`, `MangosRepository.*`) gated on the pilot passing CI — their tests need the native/x86 toolchain or live services. Plan: `.agent/plans/service-file-partial-splits.md`. |
 
 ## Recommended future refactors (when the freezes lift / a toolchain is available)
 
@@ -138,10 +138,15 @@ benefit. The bare legacy product name `BloogBot` is a separate, ongoing phase-ou
    and `protobuf.instructions.md` updated together. `BotCommLayer.csproj` needed
    no change (SDK-default glob).
 3. **Split `Navigation.cs`** by responsibility (route-pack cache vs. query vs. repair)
-   once the pathfinding overhaul lands — the partial-class pattern already used
-   elsewhere makes this mechanical.
-4. **Resolve the P10 naming issues** in a single coordinated rename PR with a
-   find/replace sweep + full build, not piecemeal.
+   once the pathfinding overhaul lands — the partial-class pattern (proven on
+   `SqliteStorylineRepository`, 2026-05-31) makes this mechanical. Ready-to-run plan
+   staged: `.agent/plans/split-navigation-cs.md` (and
+   `.agent/plans/physicsengine-cpp-modularization.md` for the native side).
+4. ~~**Resolve the P10 naming issues**~~ — **partially done 2026-05-31**: the
+   self-contained ones (`WoWSharpClient.NetworkTests` casing, `BloogBot.AI` →
+   `WWoW.AI`, `pfprobe`/`wwow-path-probe`) are resolved. `BotRunner` (704 refs) /
+   `BotCommLayer` (42 refs) remain intentionally un-renamed, and the bare legacy
+   product name `BloogBot` is a separate, ongoing phase-out.
 5. **Generalize the file-only contract-test + PowerShell-mirror pattern** into a small
    shared helper so future drift tests (enum↔spec, catalog↔markdown, layering) share
    one repo-root-locator and one runner.
