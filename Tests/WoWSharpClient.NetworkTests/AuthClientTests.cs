@@ -9,7 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Diagnostics;
 
-namespace WowSharpClient.NetworkTests
+namespace WoWSharpClient.NetworkTests
 {
     public class AuthClientTests
     {

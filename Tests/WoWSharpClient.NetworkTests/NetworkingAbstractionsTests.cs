@@ -3,7 +3,7 @@ using GameData.Core.Enums;
 using System;
 using System.Threading.Tasks;
 
-namespace WowSharpClient.NetworkTests
+namespace WoWSharpClient.NetworkTests
 {
     public class NetworkingAbstractionsTests
     {

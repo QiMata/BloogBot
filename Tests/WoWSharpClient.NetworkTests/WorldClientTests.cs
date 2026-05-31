@@ -10,7 +10,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 
-namespace WowSharpClient.NetworkTests
+namespace WoWSharpClient.NetworkTests
 {
     public class WorldClientTests
     {

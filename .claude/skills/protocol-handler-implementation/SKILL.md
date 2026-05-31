@@ -79,7 +79,7 @@ by packet-capture tests. When the new data must also travel between WWoW service
   `dotnet test Tests/WoWSharpClient.Tests/WoWSharpClient.Tests.csproj -v n`
   — handler tests touching shared object state use
   `[Collection("Sequential ObjectManager tests")]`.
-- Network/socket behavior: `Tests/WowSharpClient.NetworkTests`.
+- Network/socket behavior: `Tests/WoWSharpClient.NetworkTests`.
 - IPC-contract shape: `Tests/PathfindingService.Tests` / `Tests/BotRunner.Tests/IPC`
   exercise the protobuf contract by design.
 - **Parity**: replay the captured FG recording and assert the BG parse matches the

@@ -314,8 +314,8 @@ lease return.
   `Exports/BotRunner/Tasks/Recovery/ReconnectTask.cs`. Current
   callers depend on the StateManager relaunch loop in
   `StateManagerWorker.BotManagement.cs` and on the
-  `WowSharpClient.NetworkTests` reconnect-policy assertions in
-  `Tests/WowSharpClient.NetworkTests`.
+  `WoWSharpClient.NetworkTests` reconnect-policy assertions in
+  `Tests/WoWSharpClient.NetworkTests`.
 - **Public surface — target (Phase 1, after S1.0):** Four-method async
   contract per [Spec/03_BOTRUNNER.md](../Spec/03_BOTRUNNER.md#target-contract-phase-1-target--to-be-implemented-under-slot-s10)
   (`TickAsync` / `OnPushedAsync` / `OnPoppedAsync` /
@@ -379,7 +379,7 @@ lease return.
 - **Test anchor:** **Planned anchor test:**
   `Tests/BotRunner.Tests/LiveValidation/ReconnectTests.cs::Reconnect_AfterMidActivityDisconnect_ResumesAssignedActivity`.
   No such class exists today. Current adjacent coverage:
-  reconnect-policy unit tests in `Tests/WowSharpClient.NetworkTests`
+  reconnect-policy unit tests in `Tests/WoWSharpClient.NetworkTests`
   (socket/reconnect policy at the transport layer only — does not
   exercise the task-push surface). Mark task tests `not-started`.
 - **Catalog `TaskFamily` claim:** `Recovery`. Pushed by every other

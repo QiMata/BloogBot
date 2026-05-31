@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using WoWSharpClient.Networking.Implementation;
 
-namespace WowSharpClient.NetworkTests
+namespace WoWSharpClient.NetworkTests
 {
     public class ConnectionManagerTests
     {
