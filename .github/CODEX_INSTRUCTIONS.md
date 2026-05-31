@@ -1,7 +1,7 @@
-# BloogBot Codex Instructions
+# WWoW Codex Instructions
 
 ## Mission Snapshot
-- BloogBot (WestworldOfWarcraft) automates legacy World of Warcraft clients (1.12.1, 2.4.3, 3.3.5a).
+- WWoW (Westworld of Warcraft) automates legacy World of Warcraft clients (1.12.1, 2.4.3, 3.3.5a).
 - Goal: human style characters driven by MEF bot profiles, distributed background services, and process injected foreground runners.
 - Stack: C#/.NET 8 workers, WPF UI, Blazor dashboards, native C++ loader components, Semantic Kernel activities, and custom TCP protocols.
 
@@ -9,7 +9,7 @@
 - Exports/: native and C# bridge for process injection, object manager access, and WoWSharp client interop.
 - Services/: .NET worker services (StateManager, PathfindingService, etc.) that coordinate via framed TCP messages.
 - BotProfiles/: MEF exported implementations of IBot; each profile owns combat, rest, travel, and utility task factories.
-- BloogBot.AI/: Semantic Kernel orchestration for intent based activity selection.
+- WWoW.AI/: Semantic Kernel orchestration for intent based activity selection.
 - UI/: WPF management client and related ViewModels; Blazor dashboards live here too.
 - Tests/: xUnit unit and integration coverage for pathfinding, networking, and behaviour validation.
 
@@ -49,4 +49,4 @@
 - Treat inbound socket payloads as untrusted; validate lengths, opcodes, and CRCs before applying them.
 - Document new ports, long running jobs, or external dependencies in README.md to keep operators informed.
 
-Help Codex stay within these guardrails so generated changes respect BloogBot architecture and operational constraints.
+Help Codex stay within these guardrails so generated changes respect WWoW architecture and operational constraints.

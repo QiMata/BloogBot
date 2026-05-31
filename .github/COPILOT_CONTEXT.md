@@ -4,7 +4,7 @@ This document provides quick context for GitHub Copilot to understand the codeba
 
 ## Solution Identity
 
-- **Name**: Westworld of Warcraft (WWoW) / BloogBot
+- **Name**: Westworld of Warcraft (WWoW)
 - **Purpose**: AI-driven WoW bot simulation platform
 - **Target**: .NET 8.0, C++20
 - **Supported WoW**: Vanilla (1.12.1), TBC (2.4.3), WotLK (3.3.5a)
@@ -56,7 +56,7 @@ var client = new ProtobufSocketClient<TRequest, TResponse>(host, port);
 var response = await client.SendAsync(request);
 ```
 
-### Semantic Kernel Pattern (BloogBot.AI)
+### Semantic Kernel Pattern (WWoW.AI)
 ```csharp
 // KernelCoordinator swaps plugins based on activity
 public void OnActivityChanged(BotActivity newActivity)
@@ -87,7 +87,7 @@ ForegroundBotRunner ? BotRunner, GameData.Core, FastCall (C++ DLL)
 BackgroundBotRunner ? BotRunner, WoWSharpClient, PromptHandlingService
 StateManager ? BotRunner, BotCommLayer
 PathfindingService ? Navigation (C++ DLL), GameData.Core
-BloogBot.AI ? GameData.Core (uses Stateless, SemanticKernel)
+WWoW.AI ? GameData.Core (uses Stateless, SemanticKernel)
 ```
 
 ## BotRunner Implementations
@@ -132,14 +132,14 @@ public class BackgroundBotWorker : BackgroundService
 | Add bot state | `Services/StateManager/` or bot-specific module |
 | Add packet handler | `Exports/WoWSharpClient/Handlers/` |
 | Add IPC message | `Exports/BotCommLayer/Models/` |
-| Add bot activity | `BloogBot.AI/States/BotActivity.cs` |
+| Add bot activity | `WWoW.AI/States/BotActivity.cs` |
 | Modify pathfinding | `Services/PathfindingService/` or `Exports/Navigation/` |
 | Add behavior tree action | `Exports/BotRunner/BotRunnerService.cs` |
 | Memory-based game access | `Services/ForegroundBotRunner/Mem/`, `Services/ForegroundBotRunner/Statics/` |
 | Packet-based game access | `Exports/WoWSharpClient/WoWSharpObjectManager.cs` |
 | Headless bot setup | `Services/BackgroundBotRunner/BackgroundBotWorker.cs` |
 
-## Bot Activities (BloogBot.AI)
+## Bot Activities (WWoW.AI)
 
 ```csharp
 public enum BotActivity
@@ -152,7 +152,7 @@ public enum BotActivity
 }
 ```
 
-## State Triggers (BloogBot.AI)
+## State Triggers (WWoW.AI)
 
 ```csharp
 public enum Trigger

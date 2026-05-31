@@ -61,7 +61,7 @@ Thank you for your interest in contributing to the WWoW project! This document p
    cd BloogBot
    ```
 
-2. Open `BloogBot.sln` in Visual Studio 2022
+2. Open `WestworldOfWarcraft.sln` in Visual Studio 2022
 
 3. Build the solution:
    ```bash
@@ -120,7 +120,7 @@ WWoW/
 ?   ??? StateManagerUI/         # WPF monitoring app
 ?   ??? WWoW.Systems/           # Aspire orchestration
 ??? Tests/                      # Unit/integration tests
-??? BloogBot.AI/                # Semantic Kernel integration
+??? WWoW.AI/                    # Semantic Kernel integration
 ??? ARCHITECTURE.md             # System architecture docs
 ```
 
