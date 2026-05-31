@@ -8,6 +8,7 @@
 - `UI/Systems/Systems.AppHost/TASKS.md` (`MASTER-SUB-036`)
 - `UI/Systems/Systems.ServiceDefaults/TASKS.md` (`MASTER-SUB-037`)
 - `UI/WoWStateManagerUI/TASKS.md` (`MASTER-SUB-038`)
+- `UI/StorylineManager/TASKS.md` (`UI-STORY-MGR`)
 
 ## Execution Rules
 1. Keep this file as routing-only; do not duplicate child implementation backlog here.
@@ -23,6 +24,7 @@
 - [x] `UI/Systems/Systems.AppHost/TASKS.md` is expanded with direct IDs `SAH-MISS-001..006`.
 - [x] `UI/Systems/Systems.ServiceDefaults/TASKS.md` is expanded with direct IDs `SSD-MISS-001..006`.
 - [x] `UI/WoWStateManagerUI/TASKS.md` is expanded with direct IDs `UI-MISS-001..004`.
+- [x] `UI/StorylineManager/TASKS.md` records the separate Blazor Storyline Manager authoring surface.
 - [x] `docs/TASKS.md` maps these child files under `MASTER-SUB-035..038` and currently points queue progression into this UI section.
 
 ## Evidence Snapshot (2026-02-25)
@@ -53,50 +55,31 @@
 - Child target: each completed child pass must update master queue status and handoff pointers.
 - Validation command: `rg -n "MASTER-SUB-03[6-8]|Current queue file|Next queue file" docs/TASKS.md`.
 
+5. [x] `UI-STORY-MGR-001` Add Blazor Storyline Manager as a separate local authoring/admin UI.
+- Child target: create `UI/StorylineManager` with typed REST client tabs for personas, narrative graphs, gameplay arcs, characters, memory review, ActivityCatalog, and settings.
+- Validation command: `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Release --no-restore -v:minimal -m:1`.
+
 ## Simple Command Set
 - `dotnet build UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release`
 - `dotnet build UI/Systems/Systems.ServiceDefaults/Systems.ServiceDefaults.csproj --configuration Release`
 - `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release`
+- `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Release --no-restore -v:minimal -m:1`
 - `rg -n "MASTER-SUB-03[6-8]|Current queue file|Next queue file" docs/TASKS.md`
 
 ## Session Handoff
-- Last updated: 2026-02-25
-- Active task: none. `UI-UMB-001` through `UI-UMB-004` are complete.
-- Last delta: synced UI parent/master status after AppHost, ServiceDefaults, and WPF UI child closeouts.
+- Last updated: 2026-05-30
+- Active task: none. `UI-STORY-MGR-001` is complete.
+- Last delta: added `UI/StorylineManager` as a local Blazor Server authoring app that uses a typed REST client only and leaves WPF as the default operator/test host.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet build UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release` -> `succeeded (0 warnings, 0 errors)`
-  - `dotnet run --project UI/Systems/Systems.AppHost/Systems.AppHost.csproj --configuration Release --no-build --launch-profile local` -> expected preflight failure listing missing `config`/`data` bind-mount sources in this workspace
-  - `dotnet test Tests/Systems.ServiceDefaults.Tests/Systems.ServiceDefaults.Tests.csproj --configuration Release --settings Tests/test.runsettings --logger "console;verbosity=minimal"` -> `passed (8/8)`
-  - `dotnet build UI/Systems/Systems.ServiceDefaults/Systems.ServiceDefaults.csproj --configuration Release` -> `succeeded (0 warnings, 0 errors)`
-  - `dotnet test Tests/WoWStateManagerUI.Tests/WoWStateManagerUI.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --logger "console;verbosity=minimal"` -> `passed (42/42)`
-  - `dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release --no-restore` -> `succeeded (0 warnings, 0 errors)`
-  - `rg -n "MASTER-SUB-03[6-8]|Current queue file|Next queue file" docs/TASKS.md` -> matched the current handoff command; the previous master queue fields are no longer present in the current docs structure.
+  - `dotnet restore UI\StorylineManager\StorylineManager.csproj --verbosity minimal` -> passed
+  - `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning
+  - `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Release --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning
 - Files changed:
-  - `UI/Systems/Systems.AppHost/Program.cs`
-  - `UI/Systems/Systems.AppHost/WowServerConfig.cs`
-  - `UI/Systems/Systems.AppHost/appsettings.json`
-  - `UI/Systems/Systems.AppHost/Properties/launchSettings.json`
-  - `UI/Systems/Systems.AppHost/README.md`
-  - `UI/Systems/Systems.AppHost/TASKS.md`
-  - `UI/Systems/Systems.AppHost/TASKS_ARCHIVE.md`
-  - `UI/Systems/Systems.ServiceDefaults/Extensions.cs`
-  - `UI/Systems/Systems.ServiceDefaults/Properties/AssemblyInfo.cs`
-  - `UI/Systems/Systems.ServiceDefaults/README.md`
-  - `Tests/Systems.ServiceDefaults.Tests/Systems.ServiceDefaults.Tests.csproj`
-  - `Tests/Systems.ServiceDefaults.Tests/ServiceDefaultsExtensionsTests.cs`
-  - `UI/Systems/Systems.ServiceDefaults/TASKS.md`
-  - `UI/Systems/Systems.ServiceDefaults/TASKS_ARCHIVE.md`
-  - `Tests/WoWStateManagerUI.Tests/Converters/NullToBoolConverterTests.cs`
-  - `Tests/WoWStateManagerUI.Tests/Converters/PathToFilenameConverterTests.cs`
-  - `Tests/WoWStateManagerUI.Tests/Converters/ServiceStatusToBrushConverterTests.cs`
-  - `UI/WoWStateManagerUI/README.md`
-  - `UI/WoWStateManagerUI/TASKS.md`
-  - `UI/WoWStateManagerUI/TASKS_ARCHIVE.md`
+  - `UI/StorylineManager/`
   - `UI/TASKS.md`
   - `UI/TASKS_ARCHIVE.md`
   - `docs/TASKS.md`
-  - `docs/TASKS_ARCHIVE.md`
 - Blockers: None.
 - Next task: none in this owner.
-- Next command: `rg -n "^- \[ \]|Known remaining work|Active task:" --glob TASKS.md`.
+- Next command: `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Release --no-restore -v:minimal -m:1`.

@@ -1,0 +1,263 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: #eef1f4;
+  color: #1d252c;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 1px solid #8a99a8;
+  background: #ffffff;
+  color: #17212b;
+  border-radius: 6px;
+  padding: 0.42rem 0.68rem;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: #47637c;
+  background: #f4f8fb;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+code {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.86rem;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.workspace {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 0;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 650;
+}
+
+.topbar p {
+  margin: 0.24rem 0 0;
+  color: #52606d;
+}
+
+.icon-button {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  font-size: 1.2rem;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  border-bottom: 1px solid #c5ccd3;
+  margin-bottom: 1rem;
+}
+
+.tab {
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  padding: 0.55rem 0.8rem;
+}
+
+.tab.active {
+  background: #ffffff;
+  border: 1px solid #c5ccd3;
+  border-bottom-color: #ffffff;
+  margin-bottom: -1px;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.grid.two {
+  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+}
+
+.graph-layout {
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.65fr);
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #d1d7dd;
+  border-radius: 8px;
+  padding: 1rem;
+  min-width: 0;
+}
+
+.panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.notice {
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+}
+
+.notice.error {
+  background: #fff1f0;
+  border: 1px solid #e1a8a1;
+  color: #7f1d1d;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+th,
+td {
+  border-bottom: 1px solid #e1e5e9;
+  padding: 0.55rem;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+th {
+  color: #52606d;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.full {
+  width: 100%;
+}
+
+.draft-editor label,
+.filters {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.filters {
+  grid-template-columns: minmax(240px, 380px) auto;
+  align-items: end;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid #aab4bd;
+  border-radius: 6px;
+  padding: 0.48rem 0.55rem;
+  background: #ffffff;
+  color: #17212b;
+}
+
+textarea {
+  min-height: 420px;
+  resize: vertical;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.graph-canvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid #c5ccd3;
+  border-radius: 8px;
+  background: #f8fafb;
+  touch-action: none;
+}
+
+.canvas-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.edge {
+  stroke: #78909c;
+  stroke-width: 2;
+}
+
+.graph-node rect {
+  fill: #ffffff;
+  stroke: #4f6f8f;
+  stroke-width: 1.5;
+}
+
+.graph-node text {
+  fill: #17212b;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.graph-node .node-id {
+  fill: #60707c;
+  font-size: 11px;
+}
+
+.row-actions {
+  white-space: nowrap;
+}
+
+.settings dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.5rem 1rem;
+}
+
+.settings dt {
+  color: #52606d;
+  font-weight: 650;
+}
+
+.settings dd {
+  margin: 0;
+  min-width: 0;
+  word-break: break-word;
+}
+
+@media (max-width: 920px) {
+  .grid.two,
+  .graph-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+}

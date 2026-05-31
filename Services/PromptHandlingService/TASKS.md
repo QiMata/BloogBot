@@ -57,6 +57,14 @@ Master tracker: `MASTER-SUB-019`
 4. [x] `PHS-MISS-004` Restore test discovery for existing PromptHandling test methods.
 - **Already addressed.** All test methods already have `[Fact(Skip = "Integration: requires local Ollama")]` attributes. Test discovery is correct — 2 non-skipped tests run, 12 integration tests are properly skipped.
 
+## Foundry Storyline Runtime
+
+Completed item details are archived in `Services/PromptHandlingService/TASKS_ARCHIVE.md`.
+
+## Storyline Manager API
+
+Completed item details are archived in `Services/PromptHandlingService/TASKS_ARCHIVE.md`.
+
 ## Simple Command Set
 1. Build service: `dotnet build Services/PromptHandlingService/PromptHandlingService.csproj --configuration Release --no-restore`
 2. Build tests: `dotnet build Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore`
@@ -64,14 +72,37 @@ Master tracker: `MASTER-SUB-019`
 4. Transfer-focused tests: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Transfer|FullyQualifiedName~PromptFunctionBase" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-02-28
-- Active task: all PromptHandlingService tasks complete (PHS-MISS-001..004)
-- Last delta: PHS-MISS-002/003 (14 transfer-contract + initialization tests in PromptFunctionBaseTransferTests.cs)
+- Last updated: 2026-05-30
+- Active task: none. `PHS-STORY-MGR-001` is complete.
+- Last delta: added PromptHandlingService-owned storyline management models, repository methods, draft/publish validation service, and the localhost REST API host used by the Blazor Storyline Manager.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet test Tests/PromptHandlingService.Tests -c Debug --filter PromptFunctionBaseTransferTests` — 14/14 pass
+  - `dotnet restore Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --verbosity minimal` -> passed
+  - `dotnet build Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning
+  - `dotnet build Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --configuration Release --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (36 passed, 3 skipped)
+- DB/config used:
+  - Default DB path: `storyline_runtime.sqlite` under content root.
+  - Runtime config: `Config/foundry/storyline-runtime.json`.
+  - Foundry persona runtime config: `Config/foundry/persona-runtime.json`.
+  - Agent metadata: `Services/PromptHandlingService/.foundry/agent-metadata.yaml`.
+  - Seed file: `Config/foundry/storyline-seed.json`.
+  - Tests used isolated temp SQLite DBs.
+- Deployment note: the `2026-01-15-preview` ARM API rejected deployment protocol `Agent`, so the running published application deployment uses protocol `Responses` version `1.0` for the OpenAI-compatible endpoint.
 - Files changed:
-  - `Tests/PromptHandlingService.Tests/PromptFunctionBaseTransferTests.cs` — new (14 tests)
+  - `Services/PromptHandlingService/Storylines/StorylineModels.cs`
+  - `Services/PromptHandlingService/Storylines/StorylineManagementDtos.cs`
+  - `Services/PromptHandlingService/Storylines/IStorylineActivityCatalog.cs`
+  - `Services/PromptHandlingService/Storylines/IStorylineManagementService.cs`
+  - `Services/PromptHandlingService/Storylines/StorylineManagementService.cs`
+  - `Services/PromptHandlingService/Storylines/IStorylineRepository.cs`
+  - `Services/PromptHandlingService/Storylines/SqliteStorylineRepository.cs`
+  - `Services/PromptHandlingService.Api/`
+  - `docs/TASKS.md`
   - `Services/PromptHandlingService/TASKS.md`
-- Next command: continue with next queue file
+  - `Services/PromptHandlingService/TASKS_ARCHIVE.md`
+  - `Tests/PromptHandlingService.Tests/StorylineRuntimeTests.cs`
+  - `Tests/PromptHandlingService.Tests/TASKS.md`
+  - `Tests/PromptHandlingService.Tests/TASKS_ARCHIVE.md`
+- Next command: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`
 - Blockers: none

@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-29 (DeckLip tower route green; dense deck commit + bridge preserve)
+Last refresh: 2026-05-30 (Blazor Storyline Manager local authoring slice)
 
 ## Rules
 
@@ -68,6 +68,26 @@ Last refresh: 2026-05-29 (DeckLip tower route green; dense deck commit + bridge 
 2. **Run S1.20 dry-run** to expose any cross-family interaction bugs before opening Phase 2 — all five Network*Frame BG packet paths (S1.15/16/17/18/19) have now landed.
 3. **Pick up a Plan/13 (Phase 9) catalog-fill slot** in parallel with Phase 1; catalog rows are pure-data work that does not block on the substrate.
 4. **Extend `IFlightMasterNetworkClientComponent` with `GetNodeName(uint nodeId)`** so `NetworkTaxiFrame.Name` / `SelectNodeByName` work with human-readable names (S1.18 TODO).
+
+## Latest handoff
+
+- Last updated: 2026-05-30
+- Completed: added a separate local Blazor Storyline Manager authoring surface plus a localhost-only PromptHandlingService REST API under `/api/storylines/v1`.
+- Delivered: API endpoints for health, drafts, publish, personas, narrative graphs, gameplay arcs, character storyline bindings, memory review, ActivityCatalog lookup, and graph layout; draft/publish SQLite tables; gameplay arc and binding storage; graph snapshot replacement that deletes removed nodes/transitions; typed-client-only Blazor tabs for the authoring workflows; deterministic management tests.
+- Validation:
+  - `dotnet restore Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --verbosity minimal` -> passed.
+  - `dotnet restore UI\StorylineManager\StorylineManager.csproj --verbosity minimal` -> passed.
+  - `dotnet restore Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --verbosity minimal` -> passed.
+  - `dotnet build Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning.
+  - `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning.
+  - `dotnet build Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed.
+  - `dotnet build Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --configuration Release --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning.
+  - `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Release --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning.
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Debug --no-restore --filter "FullyQualifiedName~Storyline" --logger "console;verbosity=minimal"` -> passed (21 passed, 1 skipped).
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (36 passed, 3 skipped).
+  - `dotnet build WestworldOfWarcraft.sln --configuration Debug --no-restore -v:minimal -m:1` -> failed before a full solution verdict because existing native projects could not import `$(VCTargetsPath)\Microsoft.Cpp.Default.props` under `dotnet build`, and unrelated projects lacked restored `obj\project.assets.json`; the new API/UI projects built successfully in that run.
+- Files changed include `Services/PromptHandlingService/Storylines/*`, `Services/PromptHandlingService.Api/*`, `UI/StorylineManager/*`, `Tests/PromptHandlingService.Tests/StorylineManagementTests.cs`, `Tests/PromptHandlingService.Tests/StorylineRuntimeTests.cs`, `WestworldOfWarcraft.sln`, docs, and task trackers.
+- Next command: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`
 
 ## Orgrimmar Zeppelin Tower Pathing Note (2026-05-29)
 
