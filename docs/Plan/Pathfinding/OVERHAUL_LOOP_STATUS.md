@@ -1413,4 +1413,100 @@ Possible directions:
   per PFS-OVERHAUL-006" and move to Phase 2 (Recast 1.6 vendor upgrade)
   which may resolve some of the contour density via upstream fixes.
 
+## Iter 23 — 2026-05-31 — Audit: vertex overflow root cause identified
+
+**Did:** Per user direction "Audit Detour vertex budget at T3 first",
+investigated the iter-21 "Too many vertices" failure path WITHOUT code
+changes. No bakes, no commits to code — pure investigation iter.
+
+**Findings:**
+
+1. **The 0xffff check at [`TileWorker.cpp:11817`](../../../tools/MmapGen/contrib/mmap/src/TileWorker.cpp#L11817).**
+   `dtCreateNavMeshData` requires `params.vertCount < 65,535` because
+   Detour's per-tile mesh structure uses 16-bit unsigned vertex indices.
+   On overflow, MmapGen calls `exit(0)` which terminates the entire
+   process. In iter-21 this was called from a worker thread; other
+   thread-local tile writes had already completed (675 tiles on disk)
+   but in-flight tiles like (42, 21) were killed mid-process.
+
+2. **Tile (40, 29) — the T3 OG zep fixture canary — has a per-tile
+   config.json override at config.json line 82** with:
+   ```json
+   "4029": {
+     "cs": 0.1,
+     "tileSize": 213,
+     ...(many cull-pipeline and anchor-stack settings)...
+   }
+   ```
+   The override sets `cs: 0.1` (finer than the default 0.2666) for the
+   "thin overhanging structures (the deck edge wall + railing)" per the
+   `_4029_README_cs` doc note. tileSize is bumped to 213 to compensate
+   (tileSize * cs covers same world-unit area).
+
+3. **The override does NOT specify `ch`.** It RELIES on the global
+   default. Pre-iter-20: line 10489's `config.ch = 0.1f;` unconditional
+   override gave tile (40, 29) cs=0.1 + ch=0.1 (ratio 1.0 — proven
+   working). Iter-20 removed line 10489 and set default ch=0.2562 via
+   MakeBakeProfile. So tile (40, 29) ended up cs=0.1 + ch=0.2562 (ratio
+   **2.56 — absurd, neither Mononen nor PFS-OVERHAUL-006**) and the
+   polymesh exploded to 101,599 verts.
+
+4. **The other 109 east-Kalimdor missing tiles (TileX 42-48, TileY 16-30)
+   failed for a different reason.** They have NO per-tile overrides
+   (only tiles 3928 + 4029 are in map 1's config). They ran with iter-20
+   defaults: cs=0.5124 + ch=0.2562. Under those params:
+   - walkableClimb = floor(1.2 / 0.2562) = 4 voxels = **1.025y world**
+     (was floor(1.2 / 0.1) = 12 voxels = 1.2y world pre-iter-20)
+   - 0.175y world-unit step-up budget LOST due to floor() quantization
+   - Hilly east-Kalimdor terrain (Felwood / Stonetalon / north Ashenvale)
+     has walkable area dependent on 1.0-1.2y step-up. The 0.175y loss
+     filters out narrow ledge strips → no walkable navmesh → silent skip
+     at TileWorker.cpp line 11823 (`!params.vertCount || !params.verts`)
+     or 11833 (`!params.polyCount || !params.polys`).
+
+5. **Deeper structural problem:** the per-tile override system was
+   designed assuming `ch` is GLOBALLY FIXED at 0.1 (PFS-OVERHAUL-006
+   invariant). Per-tile blocks override only `cs` and trust the global
+   `ch`. Iter-20 broke that invariant. Without compensating per-tile
+   `ch` updates OR auto-derivation logic, the global change cascaded
+   into mismatched cs/ch ratios for the one tile with cs override
+   (4029) AND quantization loss for all other tiles.
+
+6. **Found via log evidence:** Line 387776 of map-001.log says:
+   ```
+   [ERODE] map=1 tile=40,29: agentRadius=1.0247 walkableRadiusCells=11
+                              erosionRadiusCells=2 cs=0.1000
+   ```
+   The cs=0.1000 (not 0.5124!) confirmed the per-tile override was
+   applied. The walkableRadiusCells=11 = ceil(1.0247 / 0.1) confirms cs.
+   Combined with iter-20's global ch=0.2562 = the absurd 2.56 ratio.
+
+**Tests:** N/A — no code changes; pure investigation. Diagnostics dir
+preserved at `D:\MaNGOS\data\mmaps.iter21-failed\` for reference.
+
+**Iter 24 plan (queued):** Per user direction "Auto-derive ch=cs/2
+per-tile (Recommended)":
+1. Re-apply iter-20's changes (BakeProfile.h inline impls; CMakeLists
+   include; TileWorker.cpp `#include` + from_json cs/ch swap; line 10489
+   ch=0.1f removal)
+2. ADD new code: after per-tile JSON `"cs"` override applies, if no
+   per-tile `"ch"` override is present, auto-set `config.ch = config.cs *
+   0.5f` (Mononen rule applied per-tile).
+3. Effect on tile (40, 29): cs=0.1 (override) + ch=0.05 (auto-derived) =
+   Mononen ratio 0.5, FINER vertical than ever before. Should keep
+   polymesh under 65,535 verts.
+4. Build + single-tile bakes: T3 (40, 29), reference (32, 28), and ONE
+   of the missing-from-iter-21 east-Kalimdor tiles (e.g., (43, 25)).
+5. Bake-fixture pair (T3 + T4).
+6. If T3 passes (no vertex overflow + fixture pair green), iter 25
+   attempts full map-1 re-bake again.
+
+**Caveat:** Option A as user-picked addresses the tile (40, 29) overflow
+but does NOT directly address the 109 east-Kalimdor silent-fail
+walkableClimb quantization issue. That may need a SEPARATE iter
+(walkableClimb world-unit clamping or `round()` instead of `floor()`)
+once tile (40, 29) is fixed.
+
+**Commit:** [pending] (audit-only iter; status doc entry only)
+
 
