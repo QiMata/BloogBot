@@ -120,7 +120,7 @@ dotnet_naming_style.underscore_camel_case.capitalization = camel_case
 # ----------------------------------------------------------------------------
 # Generated code — never format / never flag.
 # ----------------------------------------------------------------------------
-[Exports/BotCommLayer/Models/**.cs]
+[Exports/BotCommLayer/Models/Generated/**.cs]
 generated_code = true
 
 [**/{obj,bin}/**.cs]

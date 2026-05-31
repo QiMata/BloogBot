@@ -35,7 +35,10 @@ into the repo, in the **same folder** as one hand-written file:
 
 Risk: an agent that opens `Models/` directly (not via the `applyTo` glob) can't
 tell the generated files from the editable one, and any hand edit is silently lost
-on regen. There was no in-folder marker.
+on regen. There was no in-folder marker. **Resolved 2026-05-31:** the five
+generated files now live in `Models/Generated/`, physically separated from the
+hand-written `WoWActivitySnapshotExtensions.cs` in `Models/` (see the deferred-
+refactor table below).
 
 ### P2 — Documented layering was not mechanically enforced
 `CLAUDE.md` documents a strict top-to-bottom dependency flow
@@ -114,7 +117,7 @@ issues that are **not worth the rename risk** (`BotRunner` alone has 704 referen
 
 | Refactor | Why deferred |
 |----------|--------------|
-| Move/split the 5 generated protobuf files into a `Generated/` subfolder | `.csproj` globbing, namespaces, and `protocsharp.bat`/`protocpp.bat` output paths all assume the current location; a move is a wire-contract-adjacent change. The marker README is the safe equivalent. |
+| ~~Move/split the 5 generated protobuf files into a `Generated/` subfolder~~ — **done 2026-05-31** | The 5 generated `*.cs` moved to `Models/Generated/`; `WoWActivitySnapshotExtensions.cs` stays in `Models/`. `BotCommLayer.csproj` is SDK-default-glob (no edit); `protocsharp.bat` default output + the `.editorconfig` `generated_code` glob retargeted to `Generated/`; `protocpp.bat` writes outside the repo so it was untouched. Plan: `.agent/plans/protobuf-generated-subfolder.md`. |
 | Split `Services/PathfindingService/Repository/Navigation.cs` (~7,600 lines) | Inside the active pathfinding freeze (`docs/physics/README.md`). |
 | Touch `Exports/Navigation/PhysicsEngine.cpp` and other native files | Freeze-adjacent **and** unbuildable/unverifiable without the native toolchain. |
 | Rename `WowSharpClient.NetworkTests` casing / `BloogBot.AI` prefix / `BotRunner` | Tracked P10 cosmetic issues; `CLAUDE.md` says the rename risk outweighs the benefit. |
@@ -126,9 +129,11 @@ issues that are **not worth the rename risk** (`BotRunner` alone has 704 referen
 1. **Run `ProjectLayeringTests` in CI** and extend it as the architecture grows
    (e.g. assert `UI/*` is referenced by nothing below it; add a `tools/` rule once the
    `RecordingMaintenance` → test-project edge is removed).
-2. **Move generated protobuf into `Exports/BotCommLayer/Models/Generated/`** as a
-   deliberate, plan-gated change (`.agent/PLANS.md`): update `protoc` `--csharp_out`,
-   the `.csproj`, and `protobuf.instructions.md` together in one commit.
+2. ~~**Move generated protobuf into `Exports/BotCommLayer/Models/Generated/`**~~ —
+   **done 2026-05-31** (plan `.agent/plans/protobuf-generated-subfolder.md`):
+   `protocsharp.bat` default output, the `.editorconfig` `generated_code` glob,
+   and `protobuf.instructions.md` updated together. `BotCommLayer.csproj` needed
+   no change (SDK-default glob).
 3. **Split `Navigation.cs`** by responsibility (route-pack cache vs. query vs. repair)
    once the pathfinding overhaul lands — the partial-class pattern already used
    elsewhere makes this mechanical.
