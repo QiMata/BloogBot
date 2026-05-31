@@ -106,7 +106,7 @@ data; StateManager publishes `ActivitySnapshot` deltas. Framing details:
 | Add a behavior (Task) | `Exports/BotRunner/` | Compose existing Actions; `GoToTask` is the universal child |
 | Add/parse a packet or opcode | `Exports/WoWSharpClient/` (`Client/`, `Networking/`) | Add background↔foreground parity tests |
 | Add/change an IPC message | `Exports/BotCommLayer/Models/ProtoDef/*.proto` | Regenerate (below) and update both ends in one commit |
-| Change pathfinding/physics | **Read [`physics/PATHFINDING_OVERHAUL.md`](physics/PATHFINDING_OVERHAUL.md) first** — stack is frozen | Mesh fixes go in `tools/MmapGen/`, not new managed repair |
+| Change pathfinding/physics | **Read [`physics/README.md`](physics/README.md) first** — stack is frozen | Mesh fixes go in `tools/MmapGen/`, not new managed repair |
 | Add a new activity family | `docs/Plan/Activities/` then `Exports/BotRunner` | Follow the slot in [`Plan/`](Plan/) |
 | Add a test | see [`testing.md`](testing.md) | Mirror the source project name |
 

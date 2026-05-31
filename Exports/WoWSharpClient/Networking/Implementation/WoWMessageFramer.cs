@@ -43,10 +43,10 @@ namespace WoWSharpClient.Networking.Implementation
                 return false;
 
             var bufferData = _buffer.ToArray();
-            
+
             // WoW header format: 2 bytes size (big-endian) + 2 bytes opcode (little-endian)
             ushort size = (ushort)((bufferData[0] << 8) | bufferData[1]);
-            
+
             // Size includes the opcode but not the size field itself
             var totalMessageSize = size + 2; // +2 for the size field
 
@@ -59,7 +59,7 @@ namespace WoWSharpClient.Networking.Implementation
             // Remove the processed message from buffer
             var remainingData = new byte[_buffer.Length - totalMessageSize];
             Array.Copy(bufferData, (int)totalMessageSize, remainingData, 0, remainingData.Length);
-            
+
             _buffer.SetLength(0);
             if (remainingData.Length > 0)
                 _buffer.Write(remainingData);

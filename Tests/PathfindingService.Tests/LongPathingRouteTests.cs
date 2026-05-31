@@ -1404,7 +1404,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         // PROOF B — a Detour path query across that boarding edge does not
         //   trip any of the six managed repair-phase counters in
         //   NavigationPerformanceMetrics. The freeze contract in
-        //   docs/physics/PATHFINDING_OVERHAUL.md says the mesh is
+        //   docs/Archive/PATHFINDING_OVERHAUL.md says the mesh is
         //   authoritative; this gates that claim.
         var dataDir = Environment.GetEnvironmentVariable("WWOW_DATA_DIR")
             ?? throw new InvalidOperationException(
@@ -1489,12 +1489,12 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
             agentHeight: TaurenMaleCapsule.Height);
         var after = NavigationPerformanceMetrics.Snapshot;
 
-        var dLongLOS  = after.LongLineOfSightRepairCount   - before.LongLineOfSightRepairCount;
-        var dStaticW  = after.StaticWallRepairCount        - before.StaticWallRepairCount;
-        var dSteepAff = after.SteepAffordanceRepairCount   - before.SteepAffordanceRepairCount;
-        var dLocalPL  = after.LocalPhysicsLayerRepairCount - before.LocalPhysicsLayerRepairCount;
-        var dSegVal   = after.SegmentValidationRepairCount - before.SegmentValidationRepairCount;
-        var dDynOver  = after.DynamicOverlayRepairCount    - before.DynamicOverlayRepairCount;
+        var dLongLOS = after.LongLineOfSightRepairCount - before.LongLineOfSightRepairCount;
+        var dStaticW = after.StaticWallRepairCount - before.StaticWallRepairCount;
+        var dSteepAff = after.SteepAffordanceRepairCount - before.SteepAffordanceRepairCount;
+        var dLocalPL = after.LocalPhysicsLayerRepairCount - before.LocalPhysicsLayerRepairCount;
+        var dSegVal = after.SegmentValidationRepairCount - before.SegmentValidationRepairCount;
+        var dDynOver = after.DynamicOverlayRepairCount - before.DynamicOverlayRepairCount;
 
         _output.WriteLine(
             $"PathResult: result={pathResult.Result} len={pathResult.Path.Length} "
@@ -2126,7 +2126,7 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         float[] Pos, float Rad, ushort Poly, byte Flags, byte Side, uint UserId);
 
     private static bool NearOnDisk(float[] pos, int offset, (float A, float B, float C) target, float tolerance)
-        => Math.Abs(pos[offset]     - target.A) <= tolerance
+        => Math.Abs(pos[offset] - target.A) <= tolerance
            && Math.Abs(pos[offset + 1] - target.B) <= tolerance
            && Math.Abs(pos[offset + 2] - target.C) <= tolerance;
 
@@ -2167,13 +2167,13 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
 
         const int WrapperSize = 20;
         var p = WrapperSize;
-        var polyCount       = BitConverter.ToInt32(span.Slice(p + 24, 4));
-        var vertCount       = BitConverter.ToInt32(span.Slice(p + 28, 4));
-        var maxLinkCount    = BitConverter.ToInt32(span.Slice(p + 32, 4));
+        var polyCount = BitConverter.ToInt32(span.Slice(p + 24, 4));
+        var vertCount = BitConverter.ToInt32(span.Slice(p + 28, 4));
+        var maxLinkCount = BitConverter.ToInt32(span.Slice(p + 32, 4));
         var detailMeshCount = BitConverter.ToInt32(span.Slice(p + 36, 4));
         var detailVertCount = BitConverter.ToInt32(span.Slice(p + 40, 4));
-        var detailTriCount  = BitConverter.ToInt32(span.Slice(p + 44, 4));
-        var bvNodeCount     = BitConverter.ToInt32(span.Slice(p + 48, 4));
+        var detailTriCount = BitConverter.ToInt32(span.Slice(p + 44, 4));
+        var bvNodeCount = BitConverter.ToInt32(span.Slice(p + 48, 4));
         var offMeshConCount = BitConverter.ToInt32(span.Slice(p + 52, 4));
 
         static int Align4(int n) => (n + 3) & ~3;
@@ -2184,13 +2184,13 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         const int BvNodeSize = 16;
         const int OffMeshSize = 36;
 
-        var vertsSize        = Align4(12 * vertCount);
-        var polysSize        = Align4(PolySize * polyCount);
-        var linksSize        = Align4(LinkSize * maxLinkCount);
+        var vertsSize = Align4(12 * vertCount);
+        var polysSize = Align4(PolySize * polyCount);
+        var linksSize = Align4(LinkSize * maxLinkCount);
         var detailMeshesSize = Align4(DetailMeshSize * detailMeshCount);
-        var detailVertsSize  = Align4(12 * detailVertCount);
-        var detailTrisSize   = Align4(4 * detailTriCount);
-        var bvTreeSize       = Align4(BvNodeSize * bvNodeCount);
+        var detailVertsSize = Align4(12 * detailVertCount);
+        var detailTrisSize = Align4(4 * detailTriCount);
+        var bvTreeSize = Align4(BvNodeSize * bvNodeCount);
 
         var offMeshOffset = p + HeaderSize + vertsSize + polysSize + linksSize
                             + detailMeshesSize + detailVertsSize + detailTrisSize + bvTreeSize;
@@ -2209,10 +2209,10 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
             var pos = new float[6];
             for (var j = 0; j < 6; j++)
                 pos[j] = BitConverter.ToSingle(span.Slice(b + j * 4, 4));
-            var rad    = BitConverter.ToSingle(span.Slice(b + 24, 4));
-            var poly   = BitConverter.ToUInt16(span.Slice(b + 28, 2));
-            var flags  = span[b + 30];
-            var side   = span[b + 31];
+            var rad = BitConverter.ToSingle(span.Slice(b + 24, 4));
+            var poly = BitConverter.ToUInt16(span.Slice(b + 28, 2));
+            var flags = span[b + 30];
+            var side = span[b + 31];
             var userId = BitConverter.ToUInt32(span.Slice(b + 32, 4));
             conns.Add(new OffMeshConnectionRecord(pos, rad, poly, flags, side, userId));
         }

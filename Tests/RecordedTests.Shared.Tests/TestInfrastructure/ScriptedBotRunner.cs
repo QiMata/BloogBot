@@ -82,9 +82,9 @@ internal sealed class ScriptedBotRunner(string role, BotScript script, ScenarioL
         _log.Info($"[{_role}] GM Command: {command}");
         _gmCommands.Add(command);
         return Task.FromResult(GmCommandExecutionResult.Succeeded);
-        }
+    }
 
-        public ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _disposed = true;
         return ValueTask.CompletedTask;

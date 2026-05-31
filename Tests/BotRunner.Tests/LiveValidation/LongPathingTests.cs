@@ -938,10 +938,10 @@ public class LongPathingTests
     /// </summary>
     [SkippableTheory]
     [Trait("Category", "RequiresInfrastructure")]
-    [InlineData("BRD",  BrdEntranceX,  BrdEntranceY,  BrdEntranceZ)]
+    [InlineData("BRD", BrdEntranceX, BrdEntranceY, BrdEntranceZ)]
     [InlineData("LBRS", LbrsEntranceX, LbrsEntranceY, LbrsEntranceZ)]
     [InlineData("UBRS", UbrsEntranceX, UbrsEntranceY, UbrsEntranceZ)]
-    [InlineData("BWL",  BwlEntranceX,  BwlEntranceY,  BwlEntranceZ)]
+    [InlineData("BWL", BwlEntranceX, BwlEntranceY, BwlEntranceZ)]
     public async Task FlameCrestToBrmDungeonEntrance(string dungeon, float targetX, float targetY, float targetZ)
     {
         global::Tests.Infrastructure.Skip.IfNot(
@@ -2026,7 +2026,7 @@ public class LongPathingTests
             MapId: 0,
             Endpoints: new Harness.BakeFixtureEndpoints(
                 Start: new[] { -7518.7f, -2159.9f, 131.9f },
-                Dest:  new[] { -7524.0f, -1233.0f, 287.0f }),
+                Dest: new[] { -7524.0f, -1233.0f, 287.0f }),
             Description: "Recorded by BrmDungeon_RecordFixture; review screenshots for WMO-interior trap.",
             Agent: new Harness.BakeFixtureAgent("TaurenMale", 1.0247f, 2.625f),
             Candidates: new[]

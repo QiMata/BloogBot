@@ -5,13 +5,13 @@
 
 Require-Command -Name 'dotnet' -InstallHint 'Run scripts/bootstrap first (needs the .NET 8 SDK).'
 
-Write-Step 'Linting WestworldOfWarcraft.sln (dotnet format --verify-no-changes)'
-Write-Note 'No .editorconfig baseline yet: this reports default-rule deltas. Treated as advisory in scripts/check.'
+Write-Step 'Linting WestworldOfWarcraft.sln (dotnet format whitespace --verify-no-changes)'
+Write-Note 'Enforces the root .editorconfig whitespace/formatting baseline. Hard gate in scripts/check.'
 
-& dotnet format $Solution --verify-no-changes --severity warn
+& dotnet format whitespace $Solution --verify-no-changes
 $code = $LASTEXITCODE
 if ($code -ne 0) {
-    Write-Note "Formatting differences found (exit $code). Run 'scripts/format' to apply, or adopt an .editorconfig baseline."
+    Write-Note "Formatting differences found (exit $code). Run 'scripts/format' to apply."
     exit $code
 }
 Write-Ok 'No formatting differences.'

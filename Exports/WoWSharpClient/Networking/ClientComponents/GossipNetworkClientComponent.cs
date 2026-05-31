@@ -109,7 +109,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             // Open / close filtered streams
             _gossipMenuOpened = _gossipMenus.Where(_ => _isGossipWindowOpen);
-            _gossipMenuClosed = completion.Select(_ => _currentMenu ?? new GossipMenuData(0,0,0));
+            _gossipMenuClosed = completion.Select(_ => _currentMenu ?? new GossipMenuData(0, 0, 0));
 
             // Selected options (not observable from server directly without extra tracking) => Never
             _selectedOptions = Observable.Never<GossipOptionData>();

@@ -250,7 +250,7 @@ namespace WoWSharpClient.Handlers
                     objectUpdate.Guid, blockCount, updateMaskBits.Length, totalSet, maxSet, packSlotSet, skillFieldSet, skillInfoStart, skillInfoEnd);
             }
 
-            for (int i = 0; i < updateMaskBits.Length; )
+            for (int i = 0; i < updateMaskBits.Length;)
             {
                 if (!updateMaskBits[i])
                 {

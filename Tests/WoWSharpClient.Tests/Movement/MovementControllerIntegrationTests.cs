@@ -50,13 +50,17 @@ public class MovementControllerIntegrationTests
         // Update to run physics. Provide a step override to avoid native DLL load.
         NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
         {
-            X = input.X, Y = input.Y, Z = input.Z,
+            X = input.X,
+            Y = input.Y,
+            Z = input.Z,
             Orientation = input.Orientation,
             MoveFlags = input.MoveFlags,
             GroundZ = input.Z,
-            GroundNx = 0f, GroundNy = 0f, GroundNz = 1f,
+            GroundNx = 0f,
+            GroundNy = 0f,
+            GroundNz = 1f,
         };
-                try
+        try
         {
             var mc = Create(out _);
             mc.SetTargetWaypoint(new Position(1639f, -4373f, 34f));
@@ -66,7 +70,7 @@ public class MovementControllerIntegrationTests
         finally
         {
             NativeLocalPhysics.TestStepOverride = null;
-                    }
+        }
     }
 
     [Fact]

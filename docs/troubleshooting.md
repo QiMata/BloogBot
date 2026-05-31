@@ -28,7 +28,7 @@
 | Symptom | Where to look |
 |---|---|
 | Bot not moving / pathing failure | `Services/PathfindingService` → `Exports/Navigation/PathFinder.cpp` |
-| Physics glitch (falling, clipping, sliding) | `Exports/Navigation/PhysicsEngine.cpp`, `PhysicsCollideSlide.cpp` — but **read [`physics/PATHFINDING_OVERHAUL.md`](physics/PATHFINDING_OVERHAUL.md) first** (frozen stack) |
+| Physics glitch (falling, clipping, sliding) | `Exports/Navigation/PhysicsEngine.cpp`, `PhysicsCollideSlide.cpp` — but **read [`physics/README.md`](physics/README.md) first** (frozen stack) |
 | Wrong spell / combat rotation | `BotProfiles/<ClassSpec>/` |
 | Login / connection failure | `Exports/WoWSharpClient/Client`, `Exports/WoWSharpClient/Networking` |
 | State machine stuck | `Services/WoWStateManager/StateManagerWorker.cs` |

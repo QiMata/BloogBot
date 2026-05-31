@@ -13,13 +13,13 @@ namespace PaladinRetribution.Tasks
                 BotTasks.Pop();
                 return;
             }
-            
+
             if (ObjectManager.IsSpellReady(BlessingOfMight) && !ObjectManager.IsSpellReady(BlessingOfKings) && !ObjectManager.IsSpellReady(BlessingOfSanctuary))
                 TryCastSpell(BlessingOfMight);
 
             if (ObjectManager.IsSpellReady(BlessingOfKings) && !ObjectManager.IsSpellReady(BlessingOfSanctuary))
                 TryCastSpell(BlessingOfKings);
-            
+
             if (ObjectManager.IsSpellReady(BlessingOfSanctuary))
                 TryCastSpell(BlessingOfSanctuary);
         }

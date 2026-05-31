@@ -101,10 +101,10 @@ public sealed class DockerLiveValidationTests
     }
 
     [SkippableTheory]
-    [InlineData("tower_underpass",            1357.20f, -4516.20f, 32.00f)]
-    [InlineData("bridge_side",                1337.20f, -4654.80f, 49.80f)]
-    [InlineData("tower_base_live_vertical",   1342.40f, -4652.10f, 24.60f)]
-    [InlineData("exterior_steep_incline",     1381.00f, -4380.90f, 26.00f)]
+    [InlineData("tower_underpass", 1357.20f, -4516.20f, 32.00f)]
+    [InlineData("bridge_side", 1337.20f, -4654.80f, 49.80f)]
+    [InlineData("tower_base_live_vertical", 1342.40f, -4652.10f, 24.60f)]
+    [InlineData("exterior_steep_incline", 1381.00f, -4380.90f, 26.00f)]
     public async Task DockerPathfinding_OgZepClosureRoute_TraversesOffMesh(
         string label, float startX, float startY, float startZ)
     {
@@ -122,7 +122,7 @@ public sealed class DockerLiveValidationTests
             {
                 MapId = 1,
                 Start = new Game.Position { X = startX, Y = startY, Z = startZ },
-                End   = new Game.Position { X = 1320.14f, Y = -4653.16f, Z = 53.89f },
+                End = new Game.Position { X = 1320.14f, Y = -4653.16f, Z = 53.89f },
                 Straight = false,
             }
         };

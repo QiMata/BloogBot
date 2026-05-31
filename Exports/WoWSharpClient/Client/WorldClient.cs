@@ -71,7 +71,7 @@ namespace WoWSharpClient.Client
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             _encryptor = encryptor ?? throw new ArgumentNullException(nameof(encryptor));
-            
+
             _pipeline = new PacketPipeline<Opcode>(connection, encryptor, framer, codec, router);
             _pipeline.PacketSending += (opcode, size) => PacketSent?.Invoke(opcode, size);
             _pipeline.PacketRouted += (opcode, size) => PacketReceived?.Invoke(opcode, size);
@@ -132,7 +132,7 @@ namespace WoWSharpClient.Client
             _isAuthenticated = false;
             _username = string.Empty;
             _sessionKey = [];
-            
+
             Console.WriteLine("[NewWorldClient] Disconnecting from world server");
             return _pipeline.DisconnectAsync(cancellationToken);
         }
@@ -176,7 +176,7 @@ namespace WoWSharpClient.Client
         {
             using var ms = new MemoryStream();
             using var writer = new BinaryWriter(ms, Encoding.UTF8, true);
-            
+
             writer.Write((uint)type);
             writer.Write((uint)language);
 

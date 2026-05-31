@@ -31,20 +31,20 @@ public class MockMangosServer
         _gameState["PlayerCount"] = 0;
 
         // Add some basic NPCs and objects for testing
-        _gameObjects.Add(new MockGameObject 
-        { 
-            Id = 1, 
-            Name = "Training Dummy", 
+        _gameObjects.Add(new MockGameObject
+        {
+            Id = 1,
+            Name = "Training Dummy",
             Type = GameObjectType.Unit,
             Position = new Position3D(100, 100, 0),
             Health = 1000,
             MaxHealth = 1000
         });
 
-        _gameObjects.Add(new MockGameObject 
-        { 
-            Id = 2, 
-            Name = "Herb Node", 
+        _gameObjects.Add(new MockGameObject
+        {
+            Id = 2,
+            Name = "Herb Node",
             Type = GameObjectType.GameObject,
             Position = new Position3D(150, 150, 0),
             IsInteractable = true
@@ -101,19 +101,19 @@ public class MockMangosServer
         // Simulate movement over time
         var currentPos = player.Position;
         var distance = CalculateDistance(currentPos, targetPosition);
-        
+
         // Simple linear interpolation for movement simulation
         var moveTime = distance / 7.0; // Assume 7 units per second movement speed
-        
+
         player.Position = targetPosition;
-        
+
         // Trigger movement event
         var moveEvent = new SimulationEvent
         {
             Type = EventType.PlayerMoved,
             Data = new { From = currentPos, To = targetPosition, Duration = moveTime }
         };
-        
+
         _eventQueue.Add(moveEvent);
         EventOccurred?.Invoke(this, moveEvent);
 

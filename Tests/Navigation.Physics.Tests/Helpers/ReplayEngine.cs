@@ -378,7 +378,9 @@ public static class ReplayEngine
                     Z = currentFrame.Position.Z,
                     Orientation = currentFrame.Facing,
                     Pitch = currentFrame.SwimPitch,
-                    Vx = 0, Vy = 0, Vz = 0,
+                    Vx = 0,
+                    Vy = 0,
+                    Vz = 0,
                     WalkSpeed = currentFrame.WalkSpeed,
                     RunSpeed = currentFrame.RunSpeed,
                     RunBackSpeed = currentFrame.RunBackSpeed,
@@ -388,7 +390,10 @@ public static class ReplayEngine
                     TurnSpeed = currentFrame.TurnRate,
                     // Set transport GUID so the engine can transform coords internally
                     TransportGuid = currentFrame.TransportGuid,
-                    TransportX = 0, TransportY = 0, TransportZ = 0, TransportO = 0,
+                    TransportX = 0,
+                    TransportY = 0,
+                    TransportZ = 0,
+                    TransportO = 0,
                     FallTime = fallTimeMs,
                     Height = capsuleHeight,
                     Radius = capsuleRadius,
@@ -546,8 +551,12 @@ public static class ReplayEngine
                     PosError = posError,
                     HorizError = horizError,
                     VertError = vertError,
-                    SimX = output.X, SimY = output.Y, SimZ = output.Z,
-                    RecX = nextWorldX, RecY = nextWorldY, RecZ = nextWorldZ,
+                    SimX = output.X,
+                    SimY = output.Y,
+                    SimZ = output.Z,
+                    RecX = nextWorldX,
+                    RecY = nextWorldY,
+                    RecZ = nextWorldZ,
                     MoveFlags = cleanedMoveFlags,
                     NextMoveFlags = nextCleanFlags,
                     RawMoveFlags = currentFrame.MovementFlags,
@@ -556,13 +565,17 @@ public static class ReplayEngine
                     Orientation = currentFrame.Facing,
                     RecordedSpeed = currentFrame.CurrentSpeed,
                     EngineGroundZ = output.GroundZ,
-                    EngineVx = output.Vx, EngineVy = output.Vy, EngineVz = output.Vz,
+                    EngineVx = output.Vx,
+                    EngineVy = output.Vy,
+                    EngineVz = output.Vz,
                     EngineStandingOnInstanceId = output.StandingOnInstanceId,
                     EngineStandingOnLocalX = output.StandingOnLocalX,
                     EngineStandingOnLocalY = output.StandingOnLocalY,
                     EngineStandingOnLocalZ = output.StandingOnLocalZ,
                     EngineGroundedWallState = output.GroundedWallState,
-                    InputVx = input.Vx, InputVy = input.Vy, InputVz = input.Vz,
+                    InputVx = input.Vx,
+                    InputVy = input.Vy,
+                    InputVz = input.Vz,
                     IsSwimming = isSwimming,
                     IsAirborne = isAirborne,
                     IsFlagTransition = flagsChanged,
@@ -584,7 +597,7 @@ public static class ReplayEngine
     // Movement flag constants for transition classification
     private const uint MASK_AIRBORNE = 0x6000;       // JUMPING | FALLING_FAR
     private const uint MASK_SWIMMING = 0x00200000;
-    private const uint MASK_WALKING  = 0x00000100;
+    private const uint MASK_WALKING = 0x00000100;
     private const uint MASK_DIRECTION = 0x000000FF;   // Forward, Backward, Strafe, Turn, Pitch
 
     /// <summary>

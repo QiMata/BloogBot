@@ -802,7 +802,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             ArgumentNullException.ThrowIfNull(lootingAgent);
             ArgumentNullException.ThrowIfNull(gameObjectAgent);
             ArgumentNullException.ThrowIfNull(logger);
-            
+
             return new NetworkClientComponentFactory(targetingAgent, attackAgent, questAgent, lootingAgent, gameObjectAgent, logger);
         }
 

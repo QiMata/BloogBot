@@ -62,7 +62,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             ulong targetGuid = 0x12345678;
-            
+
             _mockWorldClient
                 .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
@@ -86,7 +86,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             ulong targetGuid = 0x12345678;
-            
+
             _mockWorldClient
                 .Setup(x => x.SendOpcodeAsync(It.IsAny<Opcode>(), It.IsAny<byte[]>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
@@ -279,7 +279,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             var receivedData = new List<TargetingData>();
-            
+
             // Subscribe to the observable
             _targetingAgent.TargetChanges.Subscribe(data => receivedData.Add(data));
 
@@ -290,7 +290,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             Assert.Equal(3, receivedData.Count);
-            
+
             // First target change
             Assert.Null(receivedData[0].PreviousTarget);
             Assert.Equal((ulong)0x12345678, receivedData[0].CurrentTarget);

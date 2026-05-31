@@ -29,7 +29,7 @@ public sealed class IsOffMeshConnectionAtCoordTests
 
     private const uint Map1Kalimdor = 1;
     private const float DefaultXyExtent = 2.0f;
-    private const float DefaultZExtent  = 4.0f;
+    private const float DefaultZExtent = 4.0f;
 
     [Fact]
     public void Coord1_OgZeppelinAirTrap_DetectedAsOffMesh()

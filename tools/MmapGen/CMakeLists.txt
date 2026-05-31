@@ -1,6 +1,6 @@
 # MmapGen - In-tree mmap/navmesh generator (vmangos lineage, owned in repo)
 # ----------------------------------------------------------------------------
-# Phase 2 build wiring (per docs/physics/PATHFINDING_OVERHAUL.md). Builds
+# Phase 2 build wiring (per docs/physics/README.md). Builds
 # `MmapGen.exe` (the executable upstream calls `MoveMapGenerator`) plus the
 # minimal set of static libs it actually needs from the staged vmangos tree.
 #
@@ -8,7 +8,7 @@
 #   cmake -B build -S . -G "Visual Studio 17 2022" -A x64
 #   cmake --build build --config Release --target MmapGen
 #
-# DESIGN NOTES (see docs/physics/PATHFINDING_OVERHAUL.md and tools/MmapGen/AGENTS.md):
+# DESIGN NOTES (see docs/physics/README.md and tools/MmapGen/AGENTS.md):
 #
 # * The nested `CMakeLists.txt` files at `dep/`, `dep/src/zlib/`, `dep/loadlib/`,
 #   `src/`, `src/game/`, `src/shared/`, `contrib/mmap/` are vmangos-monorepo

@@ -70,7 +70,7 @@ add_subdirectory(Exports/FastCall)
 add_subdirectory(Exports/Navigation)
 
 # In-tree mmap/navmesh generator (vmangos lineage, owned in repo).
-# See tools/MmapGen/NOTICE.md and docs/physics/PATHFINDING_OVERHAUL.md.
+# See tools/MmapGen/NOTICE.md and docs/physics/README.md.
 # Currently a scaffold target; full bring-up is Phase 2 of the overhaul.
 add_subdirectory(tools/MmapGen)
 

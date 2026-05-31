@@ -27,10 +27,10 @@ namespace ForegroundBotRunner
             {
                 // Write a tiny breadcrumb file so native side can see we executed
                 TryWrite("testentry_stdcall.txt", "Entered stdcall TestEntry\n");
-                
+
                 // Start the actual bot functionality using existing BotRunnerService
                 StartBotLogic();
-                
+
                 // Sleep a little to keep thread alive momentarily
                 Thread.Sleep(50);
                 return 42; // distinct code
@@ -49,10 +49,10 @@ namespace ForegroundBotRunner
             try
             {
                 TryWrite("testentry_cdecl.txt", "Entered cdecl TestEntryCdecl\n");
-                
+
                 // Start the actual bot functionality using existing BotRunnerService
                 StartBotLogic();
-                
+
                 Thread.Sleep(50);
                 return 43; // distinct code
             }
@@ -100,7 +100,7 @@ namespace ForegroundBotRunner
             {
                 // Set up dependency injection container with real services
                 var services = new ServiceCollection();
-                
+
                 // Add logging
                 services.AddLogging(builder =>
                 {
@@ -109,7 +109,7 @@ namespace ForegroundBotRunner
                 });
 
                 // Add real WoW ObjectManager
-                services.AddSingleton<IObjectManager>(provider => 
+                services.AddSingleton<IObjectManager>(provider =>
                 {
                     TryWrite("objectmanager_init.txt", "Initializing WoWSharpObjectManager...\n");
 #pragma warning disable CS0618 // ForegroundBotRunner bootstrap — singleton needed for DI registration
@@ -143,26 +143,26 @@ namespace ForegroundBotRunner
                 // IMPLEMENTATION FROM MEMORY 88b52498-c116-4608-bb87-72628725859b:
                 // Use UI automation to interact with WoW process like a real user
                 TryWrite("ui_automation.txt", "Starting UI automation for character creation...\n");
-                
+
                 // Focus the WoW window first
                 if (WoWUIAutomation.FocusWoWWindow())
                 {
                     TryWrite("ui_automation.txt", "WoW window focused successfully\n");
-                    
+
                     // Give WoW time to be ready for input
                     await Task.Delay(2000);
-                    
+
                     // Try to handle character creation screen if we're there
                     TryWrite("ui_automation.txt", "Attempting character creation via UI automation...\n");
                     WoWUIAutomation.BotUIActions.ClickCharacterCreation();
                     await Task.Delay(1000);
-                    
+
                     WoWUIAutomation.BotUIActions.CreateRandomCharacter();
                     await Task.Delay(3000);
-                    
+
                     WoWUIAutomation.BotUIActions.EnterWorld();
                     await Task.Delay(5000);
-                    
+
                     TryWrite("ui_automation.txt", "Character creation sequence completed\n");
                 }
                 else
@@ -177,21 +177,21 @@ namespace ForegroundBotRunner
                 // Wait for ObjectManager to initialize
                 var objectManager = _serviceProvider.GetRequiredService<IObjectManager>();
                 TryWrite("wow_init.txt", "Waiting for WoW ObjectManager to initialize...\n");
-                
+
                 // Give WoW time to fully load before starting bot logic
                 await Task.Delay(10000);
-                
+
                 TryWrite("wow_init.txt", "Starting BotRunnerService...\n");
-                
+
                 // Start the real bot service
                 _botRunnerService.Start();
                 TryWrite("bot_service_running.txt", "BotRunnerService started successfully!\n");
-                
+
                 // Keep the service running and implement basic bot behavior
                 while (!_shouldExit)
                 {
                     await Task.Delay(1000);
-                    
+
                     // Log status periodically and implement simple movement
                     if (objectManager.HasEnteredWorld && objectManager.Player != null)
                     {
@@ -199,7 +199,7 @@ namespace ForegroundBotRunner
                                                $"Player: {objectManager.Player.Name ?? "Unknown"}\n" +
                                                $"Position: {objectManager.Player.Position.X:F2}, {objectManager.Player.Position.Y:F2}, {objectManager.Player.Position.Z:F2}\n" +
                                                $"Time: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\n");
-                        
+
                         // Implement simple movement for integration test
                         await PerformTestMovement(objectManager);
                     }
@@ -242,18 +242,18 @@ namespace ForegroundBotRunner
                 );
 
                 TryWrite("movement_test.txt", $"Moving from {currentPos} to {targetPos}\n");
-                
+
                 // Use both UI automation and ObjectManager for reliable movement
                 WoWUIAutomation.BotUIActions.MoveTowardsDirection(2.0f, forward: true);
-                
+
                 // Also use ObjectManager for precise control
                 objectManager.MoveToward(targetPos, 0.0f);
-                
+
                 await Task.Delay(3000); // Allow movement to complete
-                
+
                 var newPos = objectManager.Player.Position;
                 var distanceMoved = currentPos.DistanceTo(newPos);
-                
+
                 TryWrite("movement_test.txt", $"Movement completed. New position: {newPos}, Distance moved: {distanceMoved:F2}\n");
             }
             catch (Exception ex)

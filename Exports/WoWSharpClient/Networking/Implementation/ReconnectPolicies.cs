@@ -41,7 +41,7 @@ namespace WoWSharpClient.Networking.Implementation
                 return null; // Stop reconnecting
 
             var delay = TimeSpan.FromTicks((long)(_initialDelay.Ticks * Math.Pow(_backoffMultiplier, attempt - 1)));
-            
+
             if (delay > _maxDelay)
                 delay = _maxDelay;
 

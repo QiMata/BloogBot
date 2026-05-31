@@ -141,7 +141,7 @@ public class MapDataFixture : IDisposable
             Environment.GetEnvironmentVariable("WWOW_MAP_PATH") ?? ""
         };
 
-        DataPath = possiblePaths.FirstOrDefault(p => 
+        DataPath = possiblePaths.FirstOrDefault(p =>
             !string.IsNullOrEmpty(p) && Directory.Exists(p)) ?? "maps/";
 
         try
@@ -157,7 +157,7 @@ public class MapDataFixture : IDisposable
     public bool LoadTile(uint mapId, uint tileX, uint tileY)
     {
         if (!IsInitialized) return false;
-        
+
         try
         {
             return LoadMapTile(mapId, tileX, tileY);

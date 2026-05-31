@@ -571,7 +571,7 @@ namespace ForegroundBotRunner.Statics
                     if (buttonCheck.Length > 0 && buttonCheck[0] == "1")
                     {
                         buttonVisible = true;
-                        DiagLog($"EnterWorld: Button visible after {(i+1)*500}ms");
+                        DiagLog($"EnterWorld: Button visible after {(i + 1) * 500}ms");
                         break;
                     }
                 }

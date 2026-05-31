@@ -43,13 +43,13 @@ public class WoWProcessManager(WoWProcessConfig config, ILogger<WoWProcessManage
 {
     private readonly ILogger<WoWProcessManager>? _logger = logger;
     private readonly WoWProcessConfig _config = config ?? throw new ArgumentNullException(nameof(config));
-    
+
     private Process? _wowProcess;
     private IntPtr _processHandle;
     private IntPtr _threadHandle;
     private IntPtr _allocatedMemory;
     private InjectionState _state = InjectionState.NotStarted;
-    
+
     private bool _disposed;
 
     /// <summary>

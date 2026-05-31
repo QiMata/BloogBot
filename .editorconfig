@@ -1,0 +1,127 @@
+# EditorConfig for WestworldOfWarcraft — https://editorconfig.org
+#
+# Scope of enforcement:
+#   - `scripts/lint.ps1` runs `dotnet format whitespace --verify-no-changes` as a
+#     HARD pre-PR gate (see scripts/check.ps1). Only the *formatting/whitespace*
+#     rules below are enforced — they are deterministic across machines/SDKs.
+#   - Line endings and charset are intentionally NOT set: `.cs` files are LF in
+#     git's index but CRLF in the working tree (autocrlf). Enforcing either here
+#     would rewrite every file. Leave EOL to git/.gitattributes.
+#   - Opinionated C#/.NET *style* and *naming* preferences are set to `suggestion`
+#     or `silent` so they guide IDEs without failing the gate or forcing churn
+#     (the tree mixes file-scoped and legacy block namespaces).
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# Markdown: trailing whitespace is significant (two spaces = hard line break).
+[*.md]
+trim_trailing_whitespace = false
+indent_size = 2
+
+# Web/data/markup-family files (informational only — dotnet format does not touch these).
+[*.{json,json5,yml,yaml,xml,proto}]
+indent_size = 2
+
+[*.{csproj,props,targets,vbproj,vcxproj,vcxproj.filters}]
+indent_size = 2
+
+# Native C/C++ (informational only — no clang-format gate is wired).
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx}]
+indent_size = 4
+
+[*.{ps1,psm1,psd1}]
+indent_size = 4
+
+# ----------------------------------------------------------------------------
+# C# — ENFORCED formatting (applied by `dotnet format whitespace`)
+# ----------------------------------------------------------------------------
+[*.cs]
+indent_size = 4
+tab_width = 4
+
+# Newlines (Allman braces — the .NET default the tree already uses).
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+
+# Indentation.
+csharp_indent_case_contents = true
+csharp_indent_case_contents_when_block = true
+csharp_indent_switch_labels = true
+csharp_indent_labels = one_less_than_current
+
+# Spacing.
+csharp_space_after_cast = false
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_between_method_declaration_parameter_list_parentheses = false
+csharp_space_between_method_call_parameter_list_parentheses = false
+csharp_space_before_colon_in_inheritance_clause = true
+csharp_space_after_colon_in_inheritance_clause = true
+csharp_space_around_binary_operators = before_and_after
+
+# Wrapping — keep what the author wrote on one line.
+csharp_preserve_single_line_statements = true
+csharp_preserve_single_line_blocks = true
+
+# Using directives: System first, no group separation, placed outside namespace
+# (matches the tree). The placement/sort preferences are advisory (style pass),
+# not enforced by the whitespace gate.
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:silent
+
+# ----------------------------------------------------------------------------
+# C# — ADVISORY style/naming (suggestion/silent; not gated, no forced churn)
+# ----------------------------------------------------------------------------
+
+# Namespaces: file-scoped is preferred for new code, but legacy .NET Framework
+# files still use block namespaces — keep this silent so neither is rewritten.
+csharp_style_namespace_declarations = file_scoped:silent
+
+# `this.` qualification — the tree uses `_camelCase` fields, no `this.`.
+dotnet_style_qualification_for_field = false:silent
+dotnet_style_qualification_for_property = false:silent
+dotnet_style_qualification_for_method = false:silent
+dotnet_style_qualification_for_event = false:silent
+
+# `var` / type preferences — advisory only.
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# Modern C# idioms the tree leans on — advisory.
+csharp_style_expression_bodied_methods = when_on_single_line:silent
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_accessors = true:suggestion
+csharp_prefer_braces = true:suggestion
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_prefer_conditional_expression_over_assignment = true:silent
+dotnet_style_prefer_conditional_expression_over_return = true:silent
+
+# Naming: private instance fields are `_camelCase` (advisory — IDE1006).
+dotnet_naming_rule.private_fields_underscore.severity = suggestion
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel_case
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+
+# ----------------------------------------------------------------------------
+# Generated code — never format / never flag.
+# ----------------------------------------------------------------------------
+[Exports/BotCommLayer/Models/**.cs]
+generated_code = true
+
+[**/{obj,bin}/**.cs]
+generated_code = true

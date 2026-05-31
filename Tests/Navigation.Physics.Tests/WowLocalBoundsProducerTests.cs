@@ -82,8 +82,10 @@ public class WowLocalBoundsProducerTests
     private static Vector3[] BuildPointGrid()
     {
         Vector3[] pointGrid = new Vector3[17 * 17];
-        for (int row = 0; row < 17; ++row) {
-            for (int column = 0; column < 17; ++column) {
+        for (int row = 0; row < 17; ++row)
+        {
+            for (int column = 0; column < 17; ++column)
+            {
                 int index = (row * 17) + column;
                 pointGrid[index] = new Vector3(
                     (column * 0.5f) + (row * 0.03125f),

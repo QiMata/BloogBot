@@ -40,7 +40,7 @@ public static class WoWWorldCoordinates
             // On the abbey steps (for step-up testing)
             public static readonly WorldPosition AbbeyStepsBottom = new(
                 MapId, -8915.0f, -135.0f, 82.0f);
-            
+
             public static readonly WorldPosition AbbeyStepsTop = new(
                 MapId, -8910.0f, -135.0f, 84.0f);
 

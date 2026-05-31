@@ -4,9 +4,9 @@
 
 Require-Command -Name 'dotnet' -InstallHint 'Run scripts/bootstrap first (needs the .NET 8 SDK).'
 
-Write-Note "No .editorconfig baseline exists yet, so 'dotnet format' applies default .NET rules."
-Write-Note 'This rewrites source files in place and may produce a large diff. Review before committing.'
+Write-Note 'Applies the root .editorconfig whitespace/formatting baseline (symmetric with scripts/lint).'
+Write-Note 'Rewrites source files in place. To also apply style/analyzer fixes, run: dotnet format <sln>.'
 
-Invoke-Checked -Exe 'dotnet' -Arguments @('format', $Solution) -What 'Formatting WestworldOfWarcraft.sln (dotnet format)'
+Invoke-Checked -Exe 'dotnet' -Arguments @('format', 'whitespace', $Solution) -What 'Formatting WestworldOfWarcraft.sln (dotnet format whitespace)'
 
 Write-Step 'Format complete.'

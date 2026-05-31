@@ -34,10 +34,10 @@ public class BrmDungeonRouteDiagnostic : IClassFixture<PathfindingValidationFixt
     // on isolated polygons disconnected from the BRM exterior corridor —
     // a bake hole in BRM tiles (45,33) and (46,34). See LongPathingTests.cs
     // for the rationale.
-    private static readonly XYZ BrdEntrance  = new(-7187f,  -958f, 254f); // approach
+    private static readonly XYZ BrdEntrance = new(-7187f, -958f, 254f); // approach
     private static readonly XYZ LbrsEntrance = new(-7531f, -1226f, 286f); // literal
     private static readonly XYZ UbrsEntrance = new(-7524f, -1233f, 287f); // literal
-    private static readonly XYZ BwlEntrance  = new(-7659f, -1214f, 291f); // approach
+    private static readonly XYZ BwlEntrance = new(-7659f, -1214f, 291f); // approach
 
     public BrmDungeonRouteDiagnostic(PathfindingValidationFixture fixture, ITestOutputHelper output)
     {
@@ -107,8 +107,8 @@ public class BrmDungeonRouteDiagnostic : IClassFixture<PathfindingValidationFixt
             var endProbe = NavigationInterop.QueryPolyAtCoord(MapId, b, 10f, 300f);
             bool endsAtTarget = n > 0 && endProbe.HasPoly && endProbe.PolyRef == chain.PolyRefs[n - 1];
             string first = n > 0 ? $"0x{chain.PolyRefs[0]:X16}" : "-";
-            string last  = n > 0 ? $"0x{chain.PolyRefs[n - 1]:X16}" : "-";
-            _output.WriteLine($"#   {label,-35}|  {n,4} | {(endsAtTarget ? "YES" : "NO ") ,12} | {first} | {last}");
+            string last = n > 0 ? $"0x{chain.PolyRefs[n - 1]:X16}" : "-";
+            _output.WriteLine($"#   {label,-35}|  {n,4} | {(endsAtTarget ? "YES" : "NO "),12} | {first} | {last}");
         }
         _output.WriteLine("");
 

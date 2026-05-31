@@ -44,7 +44,7 @@ The decisions of record from the 2026-05-11 design session are in
   (process-safety + SOAP-only guardrails), and [docs/troubleshooting.md](docs/troubleshooting.md).
   These link to the canonical `docs/Spec/` contracts.
 - Read [docs/TASKS.md](docs/TASKS.md) before starting implementation work that is task-tracked.
-- **If the work touches pathfinding** (`Services/PathfindingService`, `Exports/Navigation`, `Exports/BotRunner` movement/transport code, `Tests/PathfindingService.Tests`, `tools/NavDataAudit`): read [docs/physics/PATHFINDING_OVERHAUL.md](docs/physics/PATHFINDING_OVERHAUL.md) **before editing**. The stack is in a 2026-05-06 architectural freeze; mesh fixes go in [tools/MmapGen/](tools/MmapGen/) instead of new managed repair logic.
+- **If the work touches pathfinding** (`Services/PathfindingService`, `Exports/Navigation`, `Exports/BotRunner` movement/transport code, `Tests/PathfindingService.Tests`, `tools/NavDataAudit`): read [docs/physics/README.md](docs/physics/README.md) **before editing**. The stack is in a 2026-05-06 architectural freeze; mesh fixes go in [tools/MmapGen/](tools/MmapGen/) instead of new managed repair logic.
 - Identify the relevant local `TASKS.md` and `TASKS_ARCHIVE.md` in the subsystem you touch.
 - Preserve existing uncommitted work; do not revert unrelated changes.
 - Choose smallest-scope validation commands that prove your change.
@@ -83,6 +83,23 @@ Core areas:
 - `UI/Systems/*`: Aspire/service defaults orchestration.
 - `Tests/*`: unit/integration/regression suites.
 - `BotProfiles/*`: class/spec behavior profiles.
+
+### Path-specific instructions
+
+Targeted, area-scoped rules live in `.github/instructions/*.instructions.md`,
+each applied by an `applyTo:` glob when you edit a matching file (and surfaced to
+`applyTo`-aware agents such as GitHub Copilot). They hold conventions +
+validation commands + do-not-edit rules per area without bloating this file. See
+[`.github/instructions/README.md`](.github/instructions/README.md):
+
+- `shared-libraries` (`Exports/*` C# libs) · `services` (`Services/**`) ·
+  `native` (C++ + `*.vcxproj`) · `bot-profiles` (`BotProfiles/**`) ·
+  `tests` (`Tests/**`) · `ui` (`UI/**`) · `protobuf` (`.proto` + generated
+  `*.cs`) · `config` (`Config/**/*.json`) · `docs` (`docs/**/*.md`, task trackers).
+
+Per-directory `CLAUDE.md` files cover component context (what each project is and
+depends on); the instruction files cover rules-by-file-type. Neither restates
+this playbook.
 
 ## 5. Canonical Build and Test Commands
 

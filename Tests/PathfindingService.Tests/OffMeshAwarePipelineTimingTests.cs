@@ -102,7 +102,7 @@ public sealed class OffMeshAwarePipelineTimingTests
             var from = result.Path[i];
             var to = result.Path[i + 1];
             if (NavigationInterop.IsOffMeshConnectionAtCoord(Kalimdor, from, xyExtent: 2.0f, zExtent: 4.0f) ||
-                NavigationInterop.IsOffMeshConnectionAtCoord(Kalimdor, to,   xyExtent: 2.0f, zExtent: 4.0f))
+                NavigationInterop.IsOffMeshConnectionAtCoord(Kalimdor, to, xyExtent: 2.0f, zExtent: 4.0f))
             {
                 offMeshPairCount++;
             }

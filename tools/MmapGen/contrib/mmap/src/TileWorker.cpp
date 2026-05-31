@@ -4657,7 +4657,7 @@ namespace MMAP
         // default (0.2 / 1.5). The existing baked tiles in D:/MaNGOS/data/
         // were produced by an externally-patched MoveMapGenerator that did
         // the same thing; this brings our in-tree generator to parity.
-        // See `docs/physics/PATHFINDING_OVERHAUL.md` and `tools/MmapGen/AGENTS.md`.
+        // See `docs/Archive/PATHFINDING_OVERHAUL.md` and `tools/MmapGen/AGENTS.md`.
         if (jsonTileConfig.contains("agentRadius"))
             agentRadius = jsonTileConfig["agentRadius"].get<float>();
         if (jsonTileConfig.contains("agentHeight"))

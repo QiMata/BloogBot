@@ -101,7 +101,7 @@ public class WaypointGenerationTests : IClassFixture<PathfindingValidationFixtur
             ?? throw new InvalidOperationException($"Route '{routeName}' not found in manifest.");
 
         var start = new XYZ(route.Start[0], route.Start[1], route.Start[2]);
-        var end   = new XYZ(route.End[0],   route.End[1],   route.End[2]);
+        var end = new XYZ(route.End[0], route.End[1], route.End[2]);
 
         var path = NavigationInterop.QuerySmoothPath(
             route.Map, start, end, _manifest.Agent.Radius, _manifest.Agent.Height);
@@ -232,7 +232,7 @@ public class WaypointGenerationTests : IClassFixture<PathfindingValidationFixtur
     private (XYZ[] Corners, NavigationInterop.PolyAtCoordResult[] Polys) QueryAndAnalyze(RouteEntry route)
     {
         var start = new XYZ(route.Start[0], route.Start[1], route.Start[2]);
-        var end   = new XYZ(route.End[0],   route.End[1],   route.End[2]);
+        var end = new XYZ(route.End[0], route.End[1], route.End[2]);
 
         var cornerResult = NavigationInterop.QueryPathCorners(
             route.Map,

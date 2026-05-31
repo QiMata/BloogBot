@@ -17,7 +17,7 @@ public class IntegrationTestConfig
     /// WoW Auth server IP address.
     /// Override: WWOW_TEST_AUTH_IP
     /// </summary>
-    public string AuthServerIp { get; init; } = 
+    public string AuthServerIp { get; init; } =
         Environment.GetEnvironmentVariable("WWOW_TEST_AUTH_IP") ?? "127.0.0.1";
 
     /// <summary>
@@ -42,7 +42,7 @@ public class IntegrationTestConfig
     /// PathfindingService IP address.
     /// Override: WWOW_TEST_PATHFINDING_IP
     /// </summary>
-    public string PathfindingServiceIp { get; init; } = 
+    public string PathfindingServiceIp { get; init; } =
         Environment.GetEnvironmentVariable("WWOW_TEST_PATHFINDING_IP") ?? "127.0.0.1";
 
     /// <summary>
@@ -113,14 +113,14 @@ public class IntegrationTestConfig
     /// Test account username. Should have GM level 3.
     /// Override: WWOW_TEST_USERNAME
     /// </summary>
-    public string TestUsername { get; init; } = 
+    public string TestUsername { get; init; } =
         Environment.GetEnvironmentVariable("WWOW_TEST_USERNAME") ?? "TESTBOT1";
 
     /// <summary>
     /// Test account password.
     /// Override: WWOW_TEST_PASSWORD
     /// </summary>
-    public string TestPassword { get; init; } = 
+    public string TestPassword { get; init; } =
         Environment.GetEnvironmentVariable("WWOW_TEST_PASSWORD") ?? "PASSWORD";
 
     #endregion

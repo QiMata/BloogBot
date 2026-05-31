@@ -1,7 +1,7 @@
 # PathfindingService Tasks
 
 > **FREEZE NOTICE — 2026-05-06.** This service is in an architectural freeze
-> while the [pathfinding overhaul](../../docs/physics/PATHFINDING_OVERHAUL.md)
+> while the [pathfinding overhaul](../../docs/physics/README.md)
 > moves authority for routes from the managed repair pipeline to the in-tree
 > [tools/MmapGen](../../tools/MmapGen/) navmesh generator.
 >
@@ -39,7 +39,7 @@
 ## Pathfinding Overhaul (active)
 
 10. `PFS-OVERHAUL-001` Phase 1 - Freeze + MmapGen scaffold
-- [x] Architectural decision documented in `docs/physics/PATHFINDING_OVERHAUL.md`.
+- [x] Architectural decision documented in `docs/Archive/PATHFINDING_OVERHAUL.md`.
 - [x] `tools/MmapGen/` staged with vmangos sources, unlinked from upstream Github.
 - [x] Top-level `tools/MmapGen/CMakeLists.txt` + scaffold target wired into root `CMakeLists.txt`.
 - [x] `tools/MmapGen/AGENTS.md`, `CLAUDE.md`, `README.md`, `NOTICE.md`, `offmesh.txt`, `config.json`, `build-mmapgen.ps1` written.

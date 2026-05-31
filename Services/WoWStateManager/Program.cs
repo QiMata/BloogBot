@@ -326,7 +326,7 @@ namespace WoWStateManager
         public static bool CheckPathfindingServiceHealth()
         {
             bool isRunning = IsPathfindingServiceRunning();
-            
+
             if (!isRunning && _serviceState == PathfindingServiceState.Connected)
             {
                 _serviceState = PathfindingServiceState.ConnectionLost;

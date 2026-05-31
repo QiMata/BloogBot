@@ -27,13 +27,13 @@ of managed query-time repair logic to compensate for tiles that don't bake
 static GameObjects, transports, or capsule-correct walkable rules. The
 overhaul direction is: **fix the mesh, not the query**. MmapGen is the lever.
 
-See [docs/physics/PATHFINDING_OVERHAUL.md](../../docs/physics/PATHFINDING_OVERHAUL.md)
+See [docs/Archive/PATHFINDING_OVERHAUL.md](../../docs/Archive/PATHFINDING_OVERHAUL.md)
 for the master plan, freeze contract, sequencing, and exit criteria.
 
 ## Read before editing
 
 1. [NOTICE.md](NOTICE.md) — provenance + license.
-2. [docs/physics/PATHFINDING_OVERHAUL.md](../../docs/physics/PATHFINDING_OVERHAUL.md)
+2. [docs/Archive/PATHFINDING_OVERHAUL.md](../../docs/Archive/PATHFINDING_OVERHAUL.md)
    — the why and the sequence.
 3. [docs/physics/MMAP_FORMAT.md](../../docs/physics/MMAP_FORMAT.md) — the
    tile/wrapper format the loader expects. Output drift breaks the runtime.

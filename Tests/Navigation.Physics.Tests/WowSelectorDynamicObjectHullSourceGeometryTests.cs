@@ -91,12 +91,14 @@ public class WowSelectorDynamicObjectHullSourceGeometryTests
             out Vector3 actualAnchorPoint1));
 
         Assert.Equal(expectedPoints.Length, actualPoints.Length);
-        for (int i = 0; i < expectedPoints.Length; ++i) {
+        for (int i = 0; i < expectedPoints.Length; ++i)
+        {
             AssertVectorEqual(expectedPoints[i], actualPoints[i]);
         }
 
         Assert.Equal(expectedPlanes.Length, actualPlanes.Length);
-        for (int i = 0; i < expectedPlanes.Length; ++i) {
+        for (int i = 0; i < expectedPlanes.Length; ++i)
+        {
             AssertVectorEqual(expectedPlanes[i].Normal, actualPlanes[i].Normal);
             Assert.Equal(expectedPlanes[i].PlaneDistance, actualPlanes[i].PlaneDistance, 6);
         }

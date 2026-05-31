@@ -835,24 +835,24 @@ public partial class LiveBotFixture : IAsyncLifetime
                     everSeenInWorld[snap.AccountName] = snap;
             }
 
-                if (everSeenInWorld.Count >= 1)
+            if (everSeenInWorld.Count >= 1)
+            {
+                AllBots = everSeenInWorld.Values.ToList();
+                IdentifyBots(AllBots);
+
+                // EnsureSettingsAsync callers use category configs that may add
+                // director/admin bots (for example SHODAN). Do not let old FG/BG
+                // snapshots satisfy readiness before the full configured roster
+                // has entered world.
+                if (everSeenInWorld.Count >= ExpectedBotCount && HasRequiredRoleCoverage(everSeenInWorld))
+                    break;
+
+                if ((int)sw.Elapsed.TotalSeconds % 15 == 0 && sw.Elapsed.TotalSeconds > 0)
                 {
-                    AllBots = everSeenInWorld.Values.ToList();
-                    IdentifyBots(AllBots);
-
-                    // EnsureSettingsAsync callers use category configs that may add
-                    // director/admin bots (for example SHODAN). Do not let old FG/BG
-                    // snapshots satisfy readiness before the full configured roster
-                    // has entered world.
-                    if (everSeenInWorld.Count >= ExpectedBotCount && HasRequiredRoleCoverage(everSeenInWorld))
-                        break;
-
-                    if ((int)sw.Elapsed.TotalSeconds % 15 == 0 && sw.Elapsed.TotalSeconds > 0)
-                    {
-                        _logger.LogInformation("[FIXTURE] {Count}/{Expected} bots in-world after restart so far... ({Elapsed:F0}s)",
-                            everSeenInWorld.Count, ExpectedBotCount, sw.Elapsed.TotalSeconds);
-                    }
+                    _logger.LogInformation("[FIXTURE] {Count}/{Expected} bots in-world after restart so far... ({Elapsed:F0}s)",
+                        everSeenInWorld.Count, ExpectedBotCount, sw.Elapsed.TotalSeconds);
                 }
+            }
 
             await Task.Delay(500);
         }

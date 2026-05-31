@@ -5,6 +5,9 @@
 - **Solution:** `WestworldOfWarcraft.sln` (.NET 8.0 + C++20)
 - **Modes:** ForegroundBotRunner (DLL injection into WoW.exe) and BackgroundBotRunner (headless protocol emulation)
 - **WoW versions:** 1.12.1, 2.4.3, 3.3.5a
+- **Path-specific rules:** [`instructions/`](instructions/) holds
+  `*.instructions.md` files with `applyTo:` globs — Copilot auto-applies the
+  matching one when you edit a file (see [`instructions/README.md`](instructions/README.md)).
 
 ## Build Commands
 

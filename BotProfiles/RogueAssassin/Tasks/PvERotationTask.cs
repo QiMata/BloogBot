@@ -34,32 +34,32 @@ namespace RogueAssassin.Tasks
                 return;
 
             // Ensure Sword/Mace/1H is equipped (not dagger)
-            
-                IWoWItem MainHand = ObjectManager.GetEquippedItem(EquipSlot.MainHand);
-                IWoWItem OffHand = ObjectManager.GetEquippedItem(EquipSlot.OffHand);
-                IWoWItem SwapSlotWeap = ObjectManager.GetItem(4, 1);
 
-                //Log.InformationVerbose("Mainhand Item Type:  " + MainHand.Info.ItemSubclass);
-                //Log.InformationVerbose("Offhand Item Type:  " + OffHand.Info.ItemSubclass);
-                //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.ItemSubclass);
-                //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.Name);
+            IWoWItem MainHand = ObjectManager.GetEquippedItem(EquipSlot.MainHand);
+            IWoWItem OffHand = ObjectManager.GetEquippedItem(EquipSlot.OffHand);
+            IWoWItem SwapSlotWeap = ObjectManager.GetItem(4, 1);
 
-                // Check to see if a Sword, 1H Mace, or fist weapon is ready in the swap slot
+            //Log.InformationVerbose("Mainhand Item Type:  " + MainHand.Info.ItemSubclass);
+            //Log.InformationVerbose("Offhand Item Type:  " + OffHand.Info.ItemSubclass);
+            //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.ItemSubclass);
+            //Log.InformationVerbose("Swap Weapon Item Type:  " + SwapSlotWeap.Info.Name);
 
-                // if (SwapSlotWeap.Info.ItemSubclass == ItemSubclass.OneHandedMace || ItemSubclass.OneHandedSword || ItemSubclass.OneHandedExotic)
-                if (SwapSlotWeap.Info.ItemClass == ItemClass.SwordOneHand)
+            // Check to see if a Sword, 1H Mace, or fist weapon is ready in the swap slot
 
-                    SwapMaceOrSwordReady = true;
+            // if (SwapSlotWeap.Info.ItemSubclass == ItemSubclass.OneHandedMace || ItemSubclass.OneHandedSword || ItemSubclass.OneHandedExotic)
+            if (SwapSlotWeap.Info.ItemClass == ItemClass.SwordOneHand)
 
-                else SwapMaceOrSwordReady = false;
+                SwapMaceOrSwordReady = true;
 
-                // If there is a mace or swap in the swap slot, the player swap back to the 1H sword or mace.
+            else SwapMaceOrSwordReady = false;
 
-                if (SwapMaceOrSwordReady == true)
-                {
-                    ObjectManager.UseContainerItem(4, 21);
-                    Log.Information(MainHand.Info.Name + "Swapped Into Mainhand!");
-                }
+            // If there is a mace or swap in the swap slot, the player swap back to the 1H sword or mace.
+
+            if (SwapMaceOrSwordReady == true)
+            {
+                ObjectManager.UseContainerItem(4, 21);
+                Log.Information(MainHand.Info.Name + "Swapped Into Mainhand!");
+            }
 
             // set secondaryTarget
             // if (ObjectManager.Aggressors.Count() == 2 && secondaryTarget == null)
@@ -78,7 +78,7 @@ namespace RogueAssassin.Tasks
                 || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 30 && ObjectManager.Player.ComboPoints >= 3
                 || ObjectManager.GetTarget(ObjectManager.Player).HealthPercent <= 40 && ObjectManager.Player.ComboPoints >= 4
                 || ObjectManager.Player.ComboPoints == 5;
-            
+
             TryUseAbility(Eviscerate, 35, readyToEviscerate);
 
             TryUseAbility(SliceAndDice, 25, !ObjectManager.Player.HasBuff(SliceAndDice) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 40 && ObjectManager.Player.ComboPoints <= 3 && ObjectManager.Player.ComboPoints >= 2);
@@ -86,7 +86,7 @@ namespace RogueAssassin.Tasks
             // TryUseAbility(ExposeArmor, 25, ObjectManager.Player.HasBuff(SliceAndDice) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 50 && ObjectManager.Player.ComboPoints <= 2 && ObjectManager.Player.ComboPoints >= 1);
 
             TryUseAbility(SinisterStrike, 45, !ObjectManager.IsSpellReady(GhostlyStrike) && !ReadyToInterrupt() && ObjectManager.Player.ComboPoints < 5 && !readyToEviscerate);
-        
+
             TryUseAbility(GhostlyStrike, 40, ObjectManager.IsSpellReady(GhostlyStrike) && ObjectManager.IsSpellReady(GhostlyStrike) && !ReadyToInterrupt() && ObjectManager.Player.ComboPoints < 5 && !readyToEviscerate);
 
             TryUseAbilityById(BloodFury, 3, 0, ObjectManager.IsSpellReady(BloodFury) && ObjectManager.GetTarget(ObjectManager.Player).HealthPercent > 80);
@@ -102,9 +102,9 @@ namespace RogueAssassin.Tasks
             TryUseAbility(Kick, 25, ReadyToInterrupt());
 
             // we use Kidneyshot (with 1 or 2 combo points only) before Gouge as Gouge has a longer cooldown and requires more energy, so sometimes gouge doesn't fire before casting is done.
-            
-            TryUseAbility(KidneyShot, 25, ReadyToInterrupt() && !ObjectManager.IsSpellReady(Kick) && ObjectManager.Player.ComboPoints >= 1 && ObjectManager.Player.ComboPoints <=2);
-                        
+
+            TryUseAbility(KidneyShot, 25, ReadyToInterrupt() && !ObjectManager.IsSpellReady(Kick) && ObjectManager.Player.ComboPoints >= 1 && ObjectManager.Player.ComboPoints <= 2);
+
             TryUseAbility(Gouge, 45, ReadyToInterrupt() && !ObjectManager.IsSpellReady(Kick));
         }
 
