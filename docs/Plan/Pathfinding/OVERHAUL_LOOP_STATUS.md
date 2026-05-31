@@ -516,4 +516,59 @@ regression tests; cheap +1 stall-coord data point for D4). Iter 11 picks
 - Sweep continues to drift on dense tiles. Conservative estimate is
   iter 13-14 for completion.
 
+**Commit:** `996257ac` `phase(0) iter(10): D4 go/no-go findings DRAFT — synthesis of 5 phase preps`
+
+---
+
+## Iter 11 — 2026-05-31 — Phase 0
+
+**Did:** Investigated sweep hang on tile (30,30) — old parent pid 29900
+was actually progressing (it completed tile (31,30) right before I
+investigated) but flushed log lazily. Killed parent + relaunched (pid
+41492) with a sentinel JSON for tile (30,30) so it's permanently skipped
+(likely native AccessViolation per the iter-1 audit memo's
+SafeGetPolyAtCoord notes). New sweep resumed at 350 skipped.
+
+Wrote [`tools/scripts/phase0-aggregate-sweep.ps1`](../../../tools/scripts/phase0-aggregate-sweep.ps1)
+— aggregates per-tile JSON into global affordance histogram + top-N worst
+tiles by Unrecoverable %. Ran on partial sweep (349 tiles aggregated).
+
+**REAL D4 NUMBERS (partial, 44% sweep coverage):**
+- Global Unrecoverable: **13.28%** (Blocked + UnsafeDrop + Cliff) —
+  **BELOW the proposal's expected 20-30% baseline** (positive correction
+  for D4).
+- Global affordance: Walk 17.48%, SafeDrop 22.38%, Vertical 20.10%,
+  Blocked 11.40%, SteepClimb 10.32%, JumpGap 8.31%, StepUp 8.13%,
+  UnsafeDrop 1.87%.
+- Top tile by Unrecoverable %: (27, 28) at 31.16% — Mulgore region.
+- Stall tiles NOT in top-20 yet: (39,28) iter-1 + loop-25, (40,28) iter-2 —
+  confirms iter-1 audit's finding that path-sampling doesn't reliably
+  hit specific stall coords (the localized 7-poly stall is too small to
+  push tile-wide ratio over ~17%).
+
+**Phase exit criteria progress:**
+- D2 sweep: ~44% (350/785 in this aggregation; new sweep resumes from
+  there).
+- D4 partial aggregation done — final numbers iter 13-14.
+
+**Tests:** No bake, no production code touched.
+
+**Files changed:** tools/scripts/phase0-aggregate-sweep.ps1 (new, 95 LOC);
+docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 11 entry).
+Sentinel: tmp/iter-overhaul-phase0/sweep-map1/tile-30-30.json (gitignored).
+
+**Next iter:** Iter 12 wakes in ~30 min. Sweep should be 380-400/785.
+Bounded work: **update D4 with the partial aggregation numbers** —
+replace §3 (global histogram) and §4 (>50% tiles) placeholders, draft
+the Phase 1 starting tile recommendation in §8. Also pick a candidate
+Phase 1 starting tile from the top-20 worst list.
+
+**Blockers/risks:**
+- Tile (30,30) may indicate other hang-prone tiles ahead. Watch for
+  similar long-running tiles (>10 min); manual sentinel-skip if needed.
+- The 13.28% global unrecoverable rate is lower than expected — Phase 1
+  Mononen-rule retightening expected ≥30% drop in Blocked count may be
+  harder to achieve as a relative percentage (less to drop from). The
+  absolute reduction matters more than the relative.
+
 **Commit:** _filled by commit step below_
