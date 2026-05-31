@@ -257,7 +257,10 @@ GUARDRAILS — DO NOT VIOLATE
 
 6. Per R15: commit AND push when done, even if Phase 0 surfaces
    findings that suggest changing the overall plan. Negative results
-   commit too. Use a clear message:
+   commit too. **Commit/push to the `develop` branch — NEVER
+   `main`** (create off up-to-date `origin/main` if missing); land on `main`
+   per phase-exit via an auto-merging PR so CI/linters gate the merge (see
+   `e:/repos/docs/BRANCHING_WORKFLOW.md`). Use a clear message:
      "perf(pathfinding): phase 0 baseline — PhysicsValidationProbe + reports"
 
 7. If the PhysicsEngine link into the new probe surfaces include

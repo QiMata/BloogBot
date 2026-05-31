@@ -79,13 +79,24 @@ PER-ITER CADENCE
    (`pwsh run-tests.ps1 -Layer 3 -SkipBuild` for unit, or a targeted
    --filter). Do not regress the green slot baselines (NavigationPathTests,
    RecordedTests.Pathing, OgZeppelin — see the tracker snapshot).
-8. Stage SPECIFIC files only (NEVER `git add -A` — the tree has untracked
-   logs + *_wpftmp.csproj + tmp/test-runtime/):
+8. Ensure you are on the loop's working branch `develop` (NEVER commit to
+   `main` — CI/linters gate `main`). Create it off up-to-date main if missing:
+   `git -C "E:\repos\Westworld of Warcraft" fetch origin main` then
+   `git -C "E:\repos\Westworld of Warcraft" checkout develop` (or
+   `checkout -B develop origin/main`). Stage SPECIFIC files only (NEVER
+   `git add -A` — the tree has untracked logs + *_wpftmp.csproj +
+   tmp/test-runtime/):
    `git -C "E:\repos\Westworld of Warcraft" add <path1> <path2> ...`
 9. Commit: short title + WHY paragraph + the tracker row ID + the Accept
    gate you ran + the result + any autonomous-default decisions. Hooks
    mandatory (never --no-verify / --no-gpg-sign).
-10. Push: `git -C "E:\repos\Westworld of Warcraft" push origin main`.
+10. Push the branch: `git -C "E:\repos\Westworld of Warcraft" push -u origin develop`.
+    Per milestone/gate (not every iter), land it on `main` via an auto-merging
+    PR so CI/linters gate the merge:
+    `gh pr create --base main --head develop --fill` (if none open) then
+    `gh pr merge develop --auto --squash`; after it merges, resync the branch
+    (`git fetch origin main && git reset --hard origin/main && git push --force-with-lease`).
+    See [`../../../../docs/BRANCHING_WORKFLOW.md`](../../../../docs/BRANCHING_WORKFLOW.md).
 11. Append a one-line iteration record to
     `E:\repos\Westworld of Warcraft\docs\TASKS.md` (per the repo's
     TASKS.md maintenance protocol in CLAUDE.md).

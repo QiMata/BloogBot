@@ -6,9 +6,7 @@ param(
     [int]$MaxIterations = 20,
     # Long-lived working branch for this loop (R15 / docs/BRANCHING_WORKFLOW.md).
     # Auto-commits land here, NEVER on main; CI/linters gate the merge via PR.
-    # This checkout already works on the pre-existing 'wwow-pathfinding-loop'
-    # branch (base origin/main). Keep auto-commits there, never on main.
-    [string]$Branch = "wwow-pathfinding-loop",
+    [string]$Branch = "develop",
     [string]$InitialPrompt = "Read docs/TASKS.md plus relevant directory TASKS.md files and continue the highest-priority incomplete task. Do not ask for approval. Update TASKS.md files before ending the session. Per R15 / docs/BRANCHING_WORKFLOW.md: commit and push every iteration to the '$Branch' branch (NEVER main); open an auto-merging PR per milestone so CI/linters gate the merge to main."
 )
 
