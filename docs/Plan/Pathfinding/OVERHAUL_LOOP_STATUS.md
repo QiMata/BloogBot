@@ -664,4 +664,50 @@ holds the top recommendation under updated data.
 
 **Blockers/risks:** none new.
 
+**Commit:** `f59b3045` `phase(0) iter(13): D4 4th stall-coord data point — OG zep deck-edge 27/14 polys`
+
+---
+
+## Iter 14 — 2026-05-31 — Phase 0
+
+**Did:** Sweep hung AGAIN — second occurrence in 7 hours. Parent
+powershell pid 41492 alive but blocked, CPU stalled at 1.78s for 60+
+minutes, no child validator running, no log progress since 07:30:14
+tile (32,31). Tile (33, 31) was the hung target. Applied iter-11
+recovery pattern: kill parent + create sentinel JSON marking (33,31)
+skip + relaunch script (pid 37264). Sweep resumed.
+
+Re-aggregated sweep at 374 tiles. Top-20 stable: new entry rank 9
+(28,31) at 22.07%, rest unchanged. **Phase 1 starting tile (32, 28)
+recommendation HOLDS** — still rank 2 at 26.21%, all selection criteria
+unchanged (signal, real bot terrain, well-sampled, distance ≥5 tiles
+from T3 fixture).
+
+**Phase exit criteria progress:** No changes — D4 narrative unchanged,
+sweep continuing.
+
+**Tests:** No bake.
+
+**Files changed:** docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 14
+entry only). Sentinel JSON at tmp/iter-overhaul-phase0/sweep-map1/tile-33-31.json
+(gitignored).
+
+**Next iter:** Iter 15 wakes in ~30 min. Sweep should be ~390/785 if
+healthy. If hung again, that's THREE hangs and pattern needs
+investigation — likely native AV in dense WMO tile regions. Iter 15
+also begins final D4 wrap-up draft (§5 bake-time budget + §11 what's
+deferred sections need refinement before Phase 0 close).
+
+**Blockers/risks:**
+- **Two sweep hangs in 7 hours** suggests systemic issue with dense
+  WMO tiles triggering native AV inside the validator. Sentinel-skip
+  pattern works but loses signal on those specific tiles. If pattern
+  continues at iter 15+, may need to investigate the validator's
+  native side for the actual AV cause OR use `--no-load-adt` for the
+  rest of the sweep (gives less data but avoids the hang trigger).
+- Currently-affected tiles: (30,30) iter 11; (33,31) iter 14. Both
+  in dense Mulgore/Thunder Bluff region. Pattern: validator's
+  `MaybeLoadAdt` loads the 3×3 tile grid, ADT loading dense WMO data
+  triggers something — possibly a Mulgore-specific WMO bug.
+
 **Commit:** _filled by commit step below_
