@@ -108,4 +108,56 @@ monitors / starts a parallel map-0 sweep depending on progress.
   internally consistent — does not affect cull-coord results; flagged
   in [`OVERHAUL_PHASE0_D1_AUDIT.md`](OVERHAUL_PHASE0_D1_AUDIT.md) §axis-convention.
 
+**Commit:** `dce88162` `phase(0) iter(2): targeted-probe 3 known stall coords (D2 sub-deliverable)`
+
+---
+
+## Iter 3 — 2026-05-31 — Phase 0
+
+**Did:** Wrote `tools/scripts/phase0-sweep-map.ps1`, an idempotent launcher
+that enumerates `.mmtile` files for a map and invokes
+`NavMeshPhysicsValidator --samples 5 --silent` on each, writing one JSON
+per tile to `tmp/iter-overhaul-phase0/sweep-map<M>/`. Skipping rule: if
+the per-tile JSON already exists, the tile is skipped — so the script
+can be Ctrl-C'd and resumed without losing work. Two PS-5.1 footguns
+fixed during iter 3: (a) the spaced repo path `e:\repos\Westworld of
+Warcraft\...` must be inner-quoted when passed via Start-Process
+`-ArgumentList ... -File`; (b) native command `2>&1` capture wraps stderr
+as ErrorRecord under `$ErrorActionPreference=Stop` — replaced with
+`2>$null` and per-iteration EAP scoping.
+
+Launched the full map-1 sweep as a detached `powershell.exe` process
+(`pid=29900`, recorded in `tmp/iter-overhaul-phase0/sweep-map1.pid`).
+First-tile timing on full-sweep run: 27.4s/tile (mid-density tile 1,1);
+empty/ocean tiles at 14-15s. ETA reported by the launcher itself:
+~357 min = **~6 hours wall-clock** for 785 tiles — half the original
+13-hr estimate.
+
+**Phase exit criteria progress:**
+- D2 (baseline reports): in flight — map-1 all-tiles sweep running.
+  Will produce 785 per-tile JSON for aggregation in iter 5+. Map-0 sweep
+  not started yet (sequential to keep native-side state simple).
+- D3 / D4: ❌ not started.
+
+**Tests:** No bake performed; read-only against existing prod-data mmap.
+
+**Files changed:** tools/scripts/phase0-sweep-map.ps1 (new, 70 LOC);
+docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter-3 entry + iter-2
+commit-hash back-fill).
+
+**Next iter:** Iter 4 wakes in ~30 min for the first progress check.
+At ~120s/tile (worst-case estimate including OG/UC density),
+~15 tiles done in 30 min. Iter 4 reads the log tail, confirms forward
+progress, computes refined ETA. If the process died, restart it
+(script is idempotent). If healthy, ScheduleWakeup 1800s for next check.
+
+**Blockers/risks:**
+- Background detached process risk: if the host machine reboots or PS
+  process is killed externally, the sweep stops. Recovery is `Start-Process`
+  on the same script (idempotent). Iter 4+ checks pid liveness via
+  `Get-Process -Id <pid>` against `sweep-map1.pid`.
+- ETA accuracy depends on whether dense Kalimdor tiles (Durotar, Mulgore,
+  Orgrimmar interior, Thunder Bluff WMOs) take 60-120s each. Iter 4
+  can tighten the estimate.
+
 **Commit:** _filled by commit step below_
