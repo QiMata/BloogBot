@@ -763,4 +763,67 @@ completion + final D4 aggregation.
 - Mixed-methodology aggregate is documented but reduces D4's signal
   precision slightly.
 
+**Commit:** `f8663a33` `phase(0) iter(15): switch sweep to --no-load-adt after 3rd hang (5-15x speedup)`
+
+---
+
+## Iter 16 — 2026-05-31 — Phase 0 → Phase 1 (transition)
+
+**Did:** Re-aggregated sweep at 404 tiles (51.5% coverage). Global
+Unrecoverable rate now **13.18%** (vs 13.47% at iter 12) — slight drop
+as predicted in D4 §2b methodology bias note. Top-20 stable; Phase 1
+starting tile (32, 28) still rank 2 with 26.21% Unrecoverable. Per-tile
+times in current Thousand Needles region 110-340s even with --no-load-adt
+(vmap WMO context still loaded, just ADT skipped).
+
+**Pivoted iter 16 to start Phase 1 work** (proposal's "Phase 1 first"
+recommendation). Created [`tools/MmapGen/include/BakeProfile.h`](../../../tools/MmapGen/include/BakeProfile.h)
+— the Phase 1 single-source-of-truth header that derives all Recast bake
+parameters from an `AgentProfile` (Mononen rules). The header is
+self-contained, doesn't `#include` anything from the existing TileWorker.cpp
+or MapBuilder.cpp, and doesn't change any existing builds. This is the
+Phase 1 skeleton; iter 17+ wires it into the live build path.
+
+Header contents: `AgentProfile` struct (race-keyed physics constants),
+`kTaurenM` default profile (radius 1.0247, height 2.625, maxSlope 60°
+fixing the proposal's identified slope violation), `BakeProfile` struct
+(14 Recast/Detour parameters), `MakeBakeProfile(agent, indoor=false)`
+constructor (per Mononen rules: cs=r/2 outdoor or r/3 indoor; ch=cs/2;
+tileSize derived for the 25-voxel/side per 533.33y WoW grid), and
+`BakeProfileIsValid()` sanity checks (proposal's "reject if mse > 1.5"
+guard).
+
+**Phase exit criteria progress:**
+- D2 sweep: 51.5% (sweep continues in background, no further action
+  needed until completion).
+- D4: §3 numbers slightly drifted (13.47% → 13.18%) but recommendation
+  unchanged.
+- **Phase 1 work BEGUN.** BakeProfile.h is the first concrete code
+  artifact toward Phase 1's "single AgentProfile struct drives all
+  bake params" exit criterion.
+
+**Tests:** No bake. The new header doesn't change any compile units.
+Build verification: `dotnet build` would only matter if I'd touched
+managed code; I haven't.
+
+**Files changed:** tools/MmapGen/include/BakeProfile.h (new, 150 LOC);
+docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 16 entry).
+
+**Next iter:** Iter 17 wakes in ~30 min. Sweep continues in background.
+Bounded Phase 1 work: **wire `BakeProfile.h` into TileWorker.cpp's
+`getDefaultConfig` and `from_json(rcConfig)`** — replace the hardcoded
+60-key json dict with `MakeBakeProfile(kTaurenM)` serialization, OR
+bypass json entirely and assign BakeProfile fields directly to rcConfig.
+This is the actual integration commit; iter 18 then re-bakes tile (32, 28)
+to verify Phase 1's ≥30% Blocked-drop on that tile.
+
+**Blockers/risks:**
+- Phase 1 integration into TileWorker.cpp must NOT change vmangos's
+  CMaNGOS-derived code beyond minimal need — the MmapGen build
+  links the CMaNGOS subset, so structural changes risk breaking the
+  build (see [`tools/MmapGen/CMakeLists.txt`](../../../tools/MmapGen/CMakeLists.txt)
+  notes on library minimization).
+- Sweep is in-flight; if it finishes during Phase 1 iters, iter X+
+  re-aggregates for the final D4 §3+§4 numbers.
+
 **Commit:** _filled by commit step below_
