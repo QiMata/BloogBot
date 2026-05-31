@@ -1231,3 +1231,5 @@ before any global re-bake. Recommendations queued for user input:
   so over-permissive bake should be caught by runtime. Worth probing
   T1 stall coords (1608.1,-4382.3,10.0) directly.
 
+**Commit:** `0743d391` `phase(1) iter(20): wire BakeProfile.h cs/ch + remove ch=0.1f override`
+
