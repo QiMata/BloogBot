@@ -5,7 +5,7 @@
 > lives in [`ARCHIVE.md`](ARCHIVE.md). Read [`SPEC.md`](SPEC.md) first if
 > you have not.
 
-Last refresh: 2026-05-30 (Blazor Storyline Manager local authoring slice)
+Last refresh: 2026-05-31 (Blazor Storyline Manager local authoring slice; name phase-out slot)
 
 ## Rules
 
@@ -123,6 +123,7 @@ Last refresh: 2026-05-30 (Blazor Storyline Manager local authoring slice)
 | Test isolation refactor | (slots) | `monorepo-worker` | open (post Phase-2 S2.0) | [`Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md`](Plan/12_PARALLEL_TEST_ISOLATION_REFACTOR.md) |
 | **IGameDatabase migration** | `S-IGDB-1` — define `Exports/GameDatabase.Core/` interfaces | `monorepo-worker` or `codex:codex-rescue` | **new (2026-05-20)** — closes monorepo G4 | spec: [../../docs/specs/shared/services/game_database_interface.md](../../docs/specs/shared/services/game_database_interface.md) |
 | **Validation harness tools (Ch 9 §8)** | `S-VHT-1` — `MemScanner` standalone tool | `monorepo-worker` | **new (2026-05-20)** — methodology Ch 9 §8 alignment | spec: [../../docs/methodology/09_validation_harness.md](../../docs/methodology/09_validation_harness.md) |
+| **`BloogBot`→WWoW name phase-out** | `S-NAME-1` — `Documents/BloogBot/` runtime data-path contract (R1) | unassigned | **new (2026-05-31)** — low-priority; `.github`+README done, R1 needs a data-migration design | [`naming-phaseout.md`](naming-phaseout.md) |
 
 ## IGameDatabase migration — Slots (2026-05-20)
 

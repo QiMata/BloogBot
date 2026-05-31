@@ -66,7 +66,7 @@ Follow these steps to get started with WWoW on your own machine:
    * **.NET Framework 4.6.1** targeting pack (Visual Studio should have this by default, as that’s the target framework for the C# projects).
    * (Optional) **Azure SQL or Local SQL Server** if you plan to use a cloud or external database for data logging. This is optional – by default WWoW can run with a local embedded database.
 
-2. **Clone the Repository:** Download or clone the `WWoW` project (currently in the `QiMata/BloogBot` repo, will be renamed to WWoW). Open the solution file `BloogBot.sln` in Visual Studio.
+2. **Clone the Repository:** Download or clone the `WWoW` project (currently in the `QiMata/BloogBot` repo, will be renamed to WWoW). Open the solution file `WestworldOfWarcraft.sln` in Visual Studio.
 
 3. **Build the Solution:** Restore any NuGet packages if prompted, then build the solution (set configuration to Debug or Release as desired). If the build fails, read the errors – you might be missing some components. For example, install any C++ platform SDKs or .NET targeting packs that Visual Studio suggests. A successful build will produce several binaries, including the injector executable and the bot DLL.
 
@@ -122,7 +122,7 @@ Contributions to WWoW (Westworld of Warcraft) are welcome! This project is at th
 
 * **Project Structure:** Begin by familiarizing yourself with the code layout. Key components include:
 
-  * `BloogBot` (core bot logic library in C#) – contains game object models, state machines, navigation, combat logic, etc.
+  * `BotRunner` (core bot logic library in C#) – contains game object models, state machines, navigation, combat logic, etc.
   * `Bootstrapper` (C# injector exe) – launches the game and injects the bot.
   * `Loader` (C++ DLL) – responsible for starting the .NET runtime inside WoW’s process.
   * Profile projects (e.g. `FrostMageBot`, `HolyPriestBot`, etc.) – each is a DLL implementing a specific class rotation/behavior.
