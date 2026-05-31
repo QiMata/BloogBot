@@ -571,4 +571,55 @@ Phase 1 starting tile from the top-20 worst list.
   harder to achieve as a relative percentage (less to drop from). The
   absolute reduction matters more than the relative.
 
+**Commit:** `38af42e5` `phase(0) iter(11): sweep-aggregator script + partial D2 numbers`
+
+---
+
+## Iter 12 — 2026-05-31 — Phase 0
+
+**Did:** Re-ran aggregator after sweep resumed (367 tiles aggregated;
+sweep at 367/785 = 46.8% post-recovery). Updated D4 §3 (global histogram)
+and §4 (top-20-worst-tiles) with partial sweep aggregation. Locked **Phase
+1 starting tile recommendation: tile (32, 28)** — 26.21% Unrecoverable
+(rank 2), real bot-traffic terrain in N Durotar/S Barrens, well-sampled
+(412 segs / 5 paths), distance ≥5 tiles from T3 fixture (40,29) so no
+cull-blast risk. Alternate: (39, 28) as second target (iter-1+loop-25
+stall tile, DIAGONAL to T3, less Unrecoverable signal but direct T1
+test relevance). Added §8b iter-by-iter Phase 1 starting plan.
+
+**Important D4 update:** Unrecoverable rate 13.47% globally is BELOW the
+proposal's expected 20-30% baseline. Walk is only 17.22% — proposal's
+"Walk ≥60% post-Phase-4" target is dramatic (would require reclassifying
+~42% of segments). D4 §3 recommends either revising target downward OR
+keeping as stretch goal with "Walk + recoverable ≥80%" as practical
+benchmark. No tile breaches 50% Unrecoverable; **Phase 1 (Recast params)
+is the dominant lever, NOT Phase 3 (vmap extraction).**
+
+**Phase exit criteria progress:**
+- D2 sweep: 46.8% coverage. New sweep instance (started iter 11
+  06:30:52 after hang recovery) processing 17 new tiles in 43 min.
+  ETA wildly inflated (1054 min) but reality is the dense
+  Mulgore/Thunder Bluff/Thousand Needles region; eastern Barrens and
+  later tiles will be faster.
+- D4: §3, §4, §8 populated from partial data. §3+§4 re-run at sweep
+  finish; §8 locked.
+
+**Tests:** No bake, no live tests.
+
+**Files changed:** docs/Plan/Pathfinding/OVERHAUL_PHASE0_D4_FINDINGS.md
+(updated §3/§4/§8 + header); docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md
+(iter 12 entry).
+
+**Next iter:** Iter 13 wakes in ~30 min. With D4 substantially complete,
+remaining sweep iters are progress monitoring + final aggregation.
+Iter 13 bounded work: **probe candidate Phase 1 starting tile (32, 28)
+with `--samples 20`** to get a high-precision before-snapshot. Phase 1
+will compare against this snapshot post-tighten.
+
+**Blockers/risks:**
+- The proposal's "Walk ≥60%" Phase 4 target is dramatic given 17.22%
+  baseline — may need acceptance criteria revision. D4 flags this.
+- New sweep instance's ETA calculation is misleading; true ETA depends
+  on whether remaining tiles are dense interior or sparse edge.
+
 **Commit:** _filled by commit step below_

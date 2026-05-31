@@ -1,15 +1,16 @@
-# Phase 0 D4 — Go / No-Go Findings (DRAFT — awaiting sweep aggregation)
+# Phase 0 D4 — Go / No-Go Findings (DRAFT — 47% sweep coverage)
 
-> **Iter 10+ of the Recast Physics-Validated Overhaul loop.**
+> **Iters 10-12 of the Recast Physics-Validated Overhaul loop.**
 > Synthesizes [`OVERHAUL_PHASE0_D1_AUDIT.md`](OVERHAUL_PHASE0_D1_AUDIT.md),
 > [`OVERHAUL_PHASE0_STALL_COORDS.md`](OVERHAUL_PHASE0_STALL_COORDS.md),
 > [`OVERHAUL_PHASE0_TEST_BASELINE.md`](OVERHAUL_PHASE0_TEST_BASELINE.md),
 > and the five Phase-1-through-5 prep docs into a single go/no-go
-> recommendation. Final aggregation of map-1 sweep + top-20-worst tiles
-> lands in the SAME doc once the in-flight sweep completes (~iter 13-14).
+> recommendation. Final aggregation re-runs once the in-flight sweep
+> completes (~iter 14-15) to update §3 + §4 with full coverage.
 >
-> Status: **DRAFT, all narrative sections complete; numeric placeholders
-> for global histogram and top-20-worst-tiles section.**
+> Status: **DRAFT @ 47% sweep coverage; all narrative sections complete,
+> §3 (histogram) + §4 (top-20-worst) populated from partial aggregation,
+> §8 (Phase 1 starting tile) recommendation locked.**
 
 ## Bottom line
 
@@ -64,34 +65,91 @@ within the proposal §3 Phase 0 expected 20-30% baseline.
 > Kickoff: "What's the global Blocked-poly ratio? Is it within the
 > design's expected 20-30% baseline?"
 
-**🟨 PLACEHOLDER — fills in when sweep completes.**
+**Partial sweep aggregation (iter 12 update, 367/785 = 46.8% coverage):**
 
-Current sweep status (iter 10): 345/785 tiles done (43.9%). The global
-histogram aggregation script and top-20-worst-tile section will land
-in this doc as an "Iter 13-14 update" once the sweep finishes
-(~334 min from iter 10).
+| Affordance | Count | % of segments |
+|---|---|---|
+| SafeDrop | 6,475 | 22.37% |
+| Vertical | 6,050 | 20.90% |
+| Walk | 4,983 | **17.22%** |
+| Blocked | 3,334 | 11.52% |
+| SteepClimb | 2,895 | 10.00% |
+| JumpGap | 2,403 | 8.30% |
+| StepUp | 2,237 | 7.73% |
+| UnsafeDrop | 564 | 1.95% |
 
-Forecast from partial data: the stall tiles show 12-16% unrecoverable,
-matching the proposal estimate. Global will probably be lower (5-12%)
-because most tiles are open terrain without OG/UC dense interior
-geometry.
+**Totals:**
+- Non-Walk: 23,958 / 28,941 = **82.78%**
+- Unrecoverable (Blocked + UnsafeDrop): 3,898 / 28,941 = **13.47%**
 
-## 4. Tiles with >50% Blocked polys
+**The 13.47% Unrecoverable rate is BELOW the proposal's expected 20-30%
+baseline.** Positive correction: the bake-vs-physics gap is smaller
+than the proposal feared overall. Phase 1's expected ≥30% relative
+Blocked-drop will produce less absolute reduction than the proposal
+estimated, but absolute reduction is what matters for test outcomes.
+
+**Walk is only 17.22%** — the bot relies HEAVILY on recoverable
+affordances (SafeDrop 22% + Vertical 21% + SteepClimb 10% + StepUp 8%
++ JumpGap 8% = ~69%) to traverse paths. This has implications for Phase 4:
+the proposal targets "Walk ≥60%, StepUp 20-30%, Repaired ≤5%, Unreachable
+≤5%" after Phase 4. Hitting Walk ≥60% from a 17% baseline requires
+reclassifying ~42% of segments — a dramatic shift. Either the proposal's
+target needs revision OR Phase 4 produces a dramatic reclassification
+(which IS the point of bake-time physics validation).
+
+**Phase 4 acceptance criteria note for D4:** revise "Walk ≥60%" downward
+to a realistic threshold, OR keep it as a stretch goal and accept that
+"Walk + Walk-equivalent recoverable affordances ≥80%" is the practical
+benchmark.
+
+## 4. Tiles with >50% Blocked polys (top-20 worst from partial sweep)
 
 > Kickoff: "Are there entire tiles where >50% of polys are Blocked?
 > (That would suggest Layer-2 vmap extraction fixes are the dominant
 > lever for those tiles.)"
 
-**🟨 PLACEHOLDER — Iter 13-14 update.**
+**Partial sweep aggregation (iter 12 update, 367/785 = 46.8% coverage):**
 
-Iter-1's --samples 20 sweep on (40,28) showed 14.7% UnrecoverableNonWalk
-— not >50%, but the densely-bad path-segment classes (SafeDrop 467 +
-Vertical 213 + SteepClimb 144) dominate. Whether any individual tile
-crosses 50% requires the full sweep.
+Top 20 worst tiles by Unrecoverable %:
 
-If any tile breaches 50% UnrecoverableNonWalk, Phase 3 (vmap extractor
-fixes) should be sequenced FIRST for those tiles — they're broken at
-the source-geometry layer, not the Recast parameter layer.
+| Rank | Tile (X,Y) | Segs | Unrecov | Unrecov % | Paths | Notes |
+|---|---|---|---|---|---|---|
+| 1 | (27, 28) | 353 | 110 | **31.16%** | 5 | NW Mulgore area; high signal |
+| 2 | (32, 28) | 412 | 108 | **26.21%** | 5 | N Durotar/S Barrens; real bot traffic |
+| 3 | (36, 26) | 263 | 68 | 25.86% | 5 | NE Barrens |
+| 4 | (29, 29) | 399 | 101 | 25.31% | 5 | N Barrens |
+| 5 | (29, 27) | 101 | 24 | 23.76% | 1 | undersampled (1 path) |
+| 6 | (28, 29) | 378 | 88 | 23.28% | 5 | N Barrens |
+| 7 | (35, 30) | 269 | 62 | 23.05% | 5 | Thousand Needles N |
+| 8 | (26, 28) | 415 | 94 | 22.65% | 5 | NW Mulgore |
+| 9 | (27, 26) | 110 | 24 | 21.82% | 2 | undersampled |
+| 10 | (36, 30) | 320 | 66 | 20.62% | 4 | Thousand Needles N |
+| 11 | (29, 28) | 424 | 87 | 20.52% | 5 | Mulgore/Barrens transition |
+| 12 | (26, 26) | 147 | 29 | 19.73% | 2 | undersampled |
+| 13 | (27, 30) | 408 | 79 | 19.36% | 5 | Thousand Needles W |
+| 14 | (34, 30) | 327 | 63 | 19.27% | 5 | Thousand Needles |
+| 15 | (43, 29) | 292 | 55 | 18.84% | 5 | OG approach corridor |
+| 16 | **(39, 29)** | 177 | 33 | 18.64% | 4 | ⚠ ORTHO to T3 fixture tile (40,29) |
+| 17 | (43, 25) | 333 | 62 | 18.62% | 5 | Tarren Mill area |
+| 18 | (43, 30) | 312 | 57 | 18.27% | 5 | South Barrens |
+| 19 | (42, 28) | 375 | 68 | 18.13% | 5 | 2× ortho from T3 fixture |
+| 20 | (38, 26) | 414 | 75 | 18.12% | 5 | NE Barrens |
+
+**No tile breaches 50% Unrecoverable.** The maximum is 31.16% at
+(27, 28). This suggests **Phase 1 (Recast parameter retightening) is
+the dominant lever**, NOT Phase 3 (vmap extraction fixes). Phase 3
+remains valuable for specific known-bad WMOs (per TC #23972) but the
+all-tiles distribution doesn't show source-geometry corruption at
+scale.
+
+**Stall-tile reality check:** iter-1/iter-2 stall tiles (39,28) and
+(40,28) are NOT in the top-20. This **confirms iter-1 audit's finding**
+that NavMeshPhysicsValidator's path-sampling doesn't reliably hit
+specific stall coords. The 7-poly Z-stack at (1608.1,-4382.3,10.0)
+is real but too localized to push tile (40,28)'s wide-area ratio over
+~17%. **For per-stall regression detection, targeted `--cull-coord`
+probes remain essential — the all-tiles sweep is for global signal,
+not stall hunting.**
 
 ## 5. Bake-time budget validation
 
@@ -195,23 +253,52 @@ deletion commit on regression rather than patching over.
 > tile with clear before/after signal where Layer-1 parameter changes
 > should show measurable improvement)."
 
-**🟨 PLACEHOLDER — final pick lands in iter 13-14 update.**
+**Iter 12 recommendation: tile (32, 28).**
 
-Provisional recommendation based on iter-1/iter-2 evidence:
+| Criterion | Tile (32, 28) | Why |
+|---|---|---|
+| High Unrecoverable %, clear signal | ✅ 26.21% (rank 2) | enough delta to detect Mononen-tweak improvement |
+| Real bot-traffic terrain | ✅ N Durotar/S Barrens transition | known travel corridor; not a mountain-wall outlier |
+| Sample density | ✅ 412 segments / 5 paths | well-sampled (not under-sampled like ranks 5,9,12) |
+| Fixture-neighbor safety | ✅ Distance ≥5 tiles from T3 (40,29) | no cull blast risk per iter-2 evidence |
+| Geographically central | ✅ representative of mid-traffic region | results generalize across the map |
 
-- **Tile (40, 28)** (iter-2 OG-interior stall) — strong before/after
-  signal but ADJACENT to T3 fixture tile (40, 29). Risk of cull blast
-  regression. **NOT recommended** as starter.
-- **Tile (39, 28)** (iter-1 east-wall + loop-25 doodad-wall) — strong
-  signal, DIAGONALLY adjacent to T3 (safer per loop-26 iter-2 evidence).
-  **CANDIDATE.**
-- **A clean Mulgore interior tile** with known dense WMO geometry but
-  no test fixture neighbors — TBD from sweep aggregation.
+**Why not the worst tile (27, 28) at 31.16%?**
 
-The Phase 0 sweep's top-20-worst-tiles output narrows the candidate
-pool to tiles where the proposal's Mononen-rule retightening should
-produce ≥30% Blocked-drop without crossing any cross-tile-seam
-fixture risk.
+Tile (27, 28) is in WoW.Y range [2133.4, 2666.7] (north of OG) — this
+region may be heavy mountain/cliff wall geometry that produces
+inflated Unrecoverable rates from random sampling but isn't
+representative of real bot routes. Worth probing for verification but
+not the first Phase 1 target.
+
+**Why not the iter-2 stall tile (40, 28)?**
+
+ORTHO-adjacent to T3 fixture tile (40, 29) — per [loop-26 iter-2
+evidence](OVERHAUL_PHASE0_TEST_BASELINE.md), cull-blast on tile (40,28)
+regresses T3. Phase 1's global parameter retightening + per-tile
+re-bake would test this directly, but starting Phase 1 ON the riskiest
+tile is the wrong order. Phase 1 starts on a SAFE tile; the risky tiles
+get re-baked AFTER the Phase-1 parameter retighten is proven safe on
+representative tiles.
+
+**Alternate: tile (39, 28)** — iter-1 east-wall + loop-25 doodad-wall
+tile. NOT in the top-20 (its 11-poly doodad cluster is too localized
+to push tile-wide ratio over ~17%). DIAGONAL adjacency to T3 (safer
+than (40,28)). Less Unrecoverable signal but more direct relevance
+to T1 test. Use as **second target** after (32, 28) verifies Phase 1
+parameters produce measurable improvement.
+
+## 8b. Phase 1 iter-by-iter starting plan (preview)
+
+1. **Phase 1 iter 1:** Implement AgentProfile + BakeProfile, build
+   MmapGen, re-bake tile (32, 28) ONLY. Run Phase-0 probe on (32, 28)
+   before/after. Verify Blocked-poly count drops ≥30% on that tile.
+2. **Phase 1 iter 2:** Re-bake tiles (39, 28) and (40, 28) (the
+   stall-tile pair). Run probe + bake-fixture pair. Verify no
+   regression on T3 (40, 29).
+3. **Phase 1 iter 3+:** Global re-bake of all 41 maps (background batch).
+4. **Phase 1 close:** Phase-0 probe global re-aggregate; verify ≥30%
+   Blocked-drop globally per proposal §3 Phase 1 exit.
 
 ## 9. Acceptance for advancing to Phase 1
 
