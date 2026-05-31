@@ -73,8 +73,18 @@ one-line comment — trivial, optional.
 
 ## Deferred from the 2026-05-31 guidance-doc pass
 
-`README.md` Installation/Usage (`:57-117`) describes a **stale architecture**
-(.NET 4.6.1, `Bootstrapper`, `BloogBot/botSettings.json` `:76`, `BloogBot.exe`
-`:88`). A name-swap there yields "correct names on wrong instructions" — these
-two artifact-name tokens were intentionally left for a separate doc-accuracy
-pass that updates the section to the current .NET 8 / Aspire design.
+`README.md` Installation/Usage (`:57-117`) described a **stale architecture**
+(.NET 4.6.1, `Bootstrapper`, `BloogBot/botSettings.json`, `BloogBot.exe`).
+
+**Resolved 2026-05-31.** The README's Installation/Setup, Usage, Technical
+Highlights, and Project Structure sections — plus the stale Feature bullets
+(Discord, Azure-SQL/SQLite-`db.db`, "in-process only") — were rewritten to the
+current **.NET 8 / Aspire** design: Docker-hosted MaNGOS stack,
+`scripts/bootstrap.ps1` → `scripts/build.ps1 -Native` →
+`dotnet run --project UI/Systems/Systems.AppHost`, config in
+`Services/WoWStateManager/appsettings.json`, and the two execution modes
+(foreground injection via `Loader.dll` under `WoWStateManager`; headless
+`BackgroundBotRunner`). The `Bootstrapper` / `bootstrapperSettings.json` /
+`botSettings.json` / `BloogBot.exe` tokens are gone, and the Discord
+"integration" prose was removed entirely (no Discord code exists in the repo).
+The bare-`BloogBot` product-name phase-out (Tiers R1–R5 above) remains open.
