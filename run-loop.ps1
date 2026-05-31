@@ -4,12 +4,30 @@
 
 param(
     [int]$MaxIterations = 20,
-    [string]$InitialPrompt = "Read docs/TASKS.md plus relevant directory TASKS.md files and continue the highest-priority incomplete task. Do not ask for approval. Update TASKS.md files before ending the session."
+    # Long-lived working branch for this loop (R15 / docs/BRANCHING_WORKFLOW.md).
+    # Auto-commits land here, NEVER on main; CI/linters gate the merge via PR.
+    [string]$Branch = "develop",
+    [string]$InitialPrompt = "Read docs/TASKS.md plus relevant directory TASKS.md files and continue the highest-priority incomplete task. Do not ask for approval. Update TASKS.md files before ending the session. Per R15 / docs/BRANCHING_WORKFLOW.md: commit and push every iteration to the '$Branch' branch (NEVER main); open an auto-merging PR per milestone so CI/linters gate the merge to main."
 )
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = $PSScriptRoot
 $MasterTasksFile = Join-Path $ProjectRoot "docs/TASKS.md"
+
+# Ensure the long-lived working branch exists and is checked out off up-to-date
+# main before any iteration commits. NEVER auto-commit on main (R15).
+Push-Location $ProjectRoot
+git fetch origin main *> $null
+git rev-parse --verify $Branch *> $null
+if ($LASTEXITCODE -eq 0) { git checkout $Branch | Out-Null }
+else { git checkout -B $Branch origin/main | Out-Null }
+$current = (git rev-parse --abbrev-ref HEAD).Trim()
+Pop-Location
+if ($current -ne $Branch) {
+    Write-Host "  [ERROR] Could not switch to working branch '$Branch' (on '$current'). Stopping." -ForegroundColor Red
+    exit 1
+}
+Write-Host " Working branch: $Branch (auto-commits land here, not main)" -ForegroundColor Cyan
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " Codex Session Loop" -ForegroundColor Cyan
