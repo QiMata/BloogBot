@@ -307,4 +307,53 @@ TrinityCore #23972 backport.
   D2 may push to 6-7 hr (vs first estimate 6 hr). Acceptable per
   proposal's "we can take our time".
 
+**Commit:** `b623209a` `phase(0) iter(6): Phase 2 prep — recastnavigation vendor inventory`
+
+---
+
+## Iter 7 — 2026-05-31 — Phase 0
+
+**Did:** Sweep progress-checked at 301/785 (38.3%, ETA 246 min — denser
+Mulgore interior tiles dropped per-tile rate to ~0.7 tiles/min). pid 29900
+healthy, zero errors. Wrote [`OVERHAUL_PHASE3_PREP.md`](OVERHAUL_PHASE3_PREP.md).
+
+**MAJOR Phase 3 finding:** Repo-wide grep for `MOPY`/`MOBN`/`MOBR`/
+`material_id`/`extractWmo`/`vmap_extractor` matched **zero C++ source**.
+The repo consumes pre-extracted `.vmtile`/`.vmtree` files from
+`D:/MaNGOS/data/vmaps/` (produced by an external tool — likely CMaNGOS/
+vmangos `vmap_extractor`). What IS in-tree is `tools/MmapGen/src/game/vmap/`
+(5,141 LOC) — the **consumer side**, CMaNGOS-derived vmap library that
+reads vmaps for MmapGen's bake rasterization. The proposal §3 Phase 3
+step 1 anticipated this: "If we're reusing CMaNGOS's `vmap_extractor`,
+fork it into `tools/VmapExtract/` for in-tree control." Phase 3 must
+fork the upstream extractor BEFORE the AzerothCore PR #20822 (WMO
+material_id=0xFF + MOBN/MOBR BSP) backport can apply.
+
+**Phase exit criteria progress:**
+- D2 (baseline reports): in flight, 38.3%, ETA 246 min.
+- D4: not started. With all 3 prep docs landed (Phase 1+2+3), D4 only
+  needs the global histogram from the sweep aggregation. Expected
+  iter 9-10 after sweep done.
+
+**Tests:** No bake, no live tests, no code modified — read-only.
+
+**Files changed:** docs/Plan/Pathfinding/OVERHAUL_PHASE3_PREP.md (new);
+docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 7 entry).
+
+**Next iter:** Iter 8 wakes in ~30 min for next sweep check
+(should be ~340-355/785, ETA ~3.5 hr remaining). With Phase 1+2+3
+prep docs all landed, iter 8's bounded work options: (a) Phase 4 prep
+— inventory `PhysicsCollideSlide`/`PhysicsGroundSnap`/`PhysicsMovement`
+modules to scope the PhysicsEngine→MmapGen link work (proposal's "engineering
+crux"); (b) Phase 5 prep — inventory Navigation.cs's 5,600 LOC repair
+pipeline deletion scope. Both feed D4. Iter 8 picks Phase 4 prep first
+(it's the headline + higher-risk; pre-flighting the link work is high-value).
+
+**Blockers/risks:**
+- The vmap extractor source URL isn't identified yet (web fetch
+  not available during loop iters). Phase 3 starts with that as the
+  first task — TBD identification step.
+- Sweep ETA continues drifting upward as denser tiles hit; total
+  wall-clock now ~6.7 hr. Still within Phase 0 budget.
+
 **Commit:** _filled by commit step below_
