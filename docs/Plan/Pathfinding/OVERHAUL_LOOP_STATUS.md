@@ -160,4 +160,53 @@ progress, computes refined ETA. If the process died, restart it
   Orgrimmar interior, Thunder Bluff WMOs) take 60-120s each. Iter 4
   can tighten the estimate.
 
+**Commit:** `394ad87f` `phase(0) iter(3): launch map-1 all-tiles rough sweep (D2 in-flight)`
+
+---
+
+## Iter 4 — 2026-05-31 — Phase 0
+
+**Did:** Progress-checked the map-1 sweep: pid 29900 alive (low CPU,
+mostly I/O wait), 127/785 tiles done in 35.8 min, 3.5 tiles/min steady
+state, ETA 184 min remaining. Per-tile timing 13-21s/tile — all map-1
+edge tiles processed first (ocean/empty), denser interior tiles
+upcoming. Zero errors. With the sweep self-managing, iter 4 took up
+**Phase 0 D3** (test-failure baseline manifest) from existing loop-25/26
+memory evidence (kickoff explicitly allows this rather than re-running
+the 5-8 min/test live runs).
+
+Wrote [`OVERHAUL_PHASE0_TEST_BASELINE.md`](OVERHAUL_PHASE0_TEST_BASELINE.md):
+4 tests captured — T1 CrossroadsToUndercity (FAIL, pathfinding-class,
+linked to iter-2 OG-interior 7-poly Z-stack); T2 OrgrimmarToUndercityZep
+(FAIL, NON-pathfinding-class per guardrail 10 — vmangos transport
+schedule); T3 OgZeppelin_BakeFixtureValidation (PASS post-iter-2 revert,
+pathfinding-class canary); T4 BrmDungeon_BakeFixtureValidation (PASS,
+canary). Baseline frozen at commit `7ca9f84c`. Includes cross-tile
+adjacency map highlighting (40,28)↔(40,29) as HIGH-risk neighbor pair.
+
+**Phase exit criteria progress:**
+- D2 (baseline reports): in flight, ~16% done by tile count.
+- **D3 (test-failure manifest): ✅ done.** Frozen baseline captures all
+  4 tests' current state, failure mode, classification, polyref linkage.
+- D4 (go/no-go findings): ❌ not started; iter 6-7 work after D2 done.
+
+**Tests:** No bake, no live tests run — manifest built from prior
+evidence. No production code touched.
+
+**Files changed:** docs/Plan/Pathfinding/OVERHAUL_PHASE0_TEST_BASELINE.md
+(new); docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 4 entry).
+
+**Next iter:** Iter 5 wakes in ~30 min for second sweep progress check
+(should be ~245/785 ≈ 31% done). If sweep healthy, iter 5 also adds
+per-edge classification for T1's 7 stall polys via PathPhysicsProbe
+(small scoped work, ~30 min). If sweep dead, restart it and skip the
+per-edge work.
+
+**Blockers/risks:**
+- None new. T2's guardrail-10 fix is queued for Phase 5 wrap-up.
+- T3's adjacency to iter-1/2 stall tiles means Phase 1 global parameter
+  changes will need cross-tile-seam validation before promotion. Iter 4's
+  manifest documents this; Phase 1's actual mitigation is the bake-fixture
+  pair pre-commit gate (guardrail 3).
+
 **Commit:** _filled by commit step below_
