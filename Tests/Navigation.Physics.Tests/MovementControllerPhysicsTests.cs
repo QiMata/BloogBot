@@ -998,7 +998,7 @@ public class MovementControllerPhysicsTests
         int oscillations = 0;
         for (int i = 1; i < frames.Count; i++)
         {
-            bool prevFalling = frames[i-1].Flags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR);
+            bool prevFalling = frames[i - 1].Flags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR);
             bool currGrounded = !frames[i].Flags.HasFlag(MovementFlags.MOVEFLAG_FALLINGFAR);
             if (prevFalling && currGrounded) oscillations++;
         }

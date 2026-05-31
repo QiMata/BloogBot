@@ -56,7 +56,7 @@ namespace WoWSharpClient.Networking.Implementation
             }
 
             opcode = (Opcode)opcodeValue;
-            
+
             // Payload starts after the header (skip size + opcode = 4 bytes)
             payload = message.Slice(4);
 

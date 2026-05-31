@@ -74,7 +74,7 @@ namespace WoWSharpClient.Tests.Agent
                     It.Is<byte[]>(b => b.Length == 8),
                     It.IsAny<CancellationToken>()),
                 Times.Once);
-            
+
             Assert.NotNull(_vendorAgent.LastOperationTime);
         }
 
@@ -290,7 +290,7 @@ namespace WoWSharpClient.Tests.Agent
             SetupVendorWithoutRepair(vendorGuid);
 
             // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => 
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 _vendorAgent.RepairAllItemsAsync(vendorGuid));
         }
 
@@ -340,7 +340,7 @@ namespace WoWSharpClient.Tests.Agent
             SetupVendorWithoutItem(vendorGuid);
 
             // Act & Assert
-            await Assert.ThrowsAsync<InvalidOperationException>(() => 
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 _vendorAgent.BuyItemBulkAsync(vendorGuid, itemId, totalQuantity));
         }
 

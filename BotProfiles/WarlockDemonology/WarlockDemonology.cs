@@ -3,7 +3,8 @@ using WarlockDemonology.Tasks;
 
 using BotProfiles.Common;
 namespace WarlockDemonology
-{    public class WarlockDemonology : BotBase
+{
+    public class WarlockDemonology : BotBase
     {
         public override string Name => "Demonology Warlock";
 

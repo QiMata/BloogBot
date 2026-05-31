@@ -70,7 +70,7 @@ public class MovementControllerRecordedFrameTests
         };
 
         // Prevent native DLL initialization in test environment
-                NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
+        NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
 
         var controller = new MovementController(mockClient.Object, player);
         return (controller, player);
@@ -596,34 +596,34 @@ public class MovementControllerRecordedFrameTests
 
         try
         {
-        for (int i = start; i < end; i++)
-        {
-            currentFrameIdx = i;
-            var frame = frames[i];
-            var nextFrame = frames[i + 1];
-            float dt = (nextFrame.FrameTimestamp - frame.FrameTimestamp) / 1000f;
-            if (dt <= 0 || dt > 1.0f) dt = 0.033f;
-
-            player.MovementFlags = (MovementFlags)frame.MovementFlags;
-            player.Facing = frame.Facing;
-
-            uint gameTimeMs = (uint)(frame.FrameTimestamp & 0xFFFFFFFF);
-            controller.Update(dt, gameTimeMs);
-
-            // After Update, FORWARD flag should be preserved (not stripped by stuck recovery)
-            bool inputHadForward = (frame.MovementFlags & MOVEFLAG_FORWARD) != 0;
-            bool outputHasForward = player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD);
-            if (inputHadForward && !outputHasForward)
+            for (int i = start; i < end; i++)
             {
-                forwardLostCount++;
-                _output.WriteLine($"Frame {i - start}: FORWARD flag stripped! " +
-                    $"Input=0x{frame.MovementFlags:X} Output=0x{(uint)player.MovementFlags:X}");
-            }
-        }
+                currentFrameIdx = i;
+                var frame = frames[i];
+                var nextFrame = frames[i + 1];
+                float dt = (nextFrame.FrameTimestamp - frame.FrameTimestamp) / 1000f;
+                if (dt <= 0 || dt > 1.0f) dt = 0.033f;
 
-        _output.WriteLine($"FORWARD flag stripped on {forwardLostCount}/{end - start} frames");
-        Assert.True(forwardLostCount == 0,
-            $"FORWARD flag was stripped on {forwardLostCount} frames — stuck recovery fired erroneously with perfect physics");
+                player.MovementFlags = (MovementFlags)frame.MovementFlags;
+                player.Facing = frame.Facing;
+
+                uint gameTimeMs = (uint)(frame.FrameTimestamp & 0xFFFFFFFF);
+                controller.Update(dt, gameTimeMs);
+
+                // After Update, FORWARD flag should be preserved (not stripped by stuck recovery)
+                bool inputHadForward = (frame.MovementFlags & MOVEFLAG_FORWARD) != 0;
+                bool outputHasForward = player.MovementFlags.HasFlag(MovementFlags.MOVEFLAG_FORWARD);
+                if (inputHadForward && !outputHasForward)
+                {
+                    forwardLostCount++;
+                    _output.WriteLine($"Frame {i - start}: FORWARD flag stripped! " +
+                        $"Input=0x{frame.MovementFlags:X} Output=0x{(uint)player.MovementFlags:X}");
+                }
+            }
+
+            _output.WriteLine($"FORWARD flag stripped on {forwardLostCount}/{end - start} frames");
+            Assert.True(forwardLostCount == 0,
+                $"FORWARD flag was stripped on {forwardLostCount} frames — stuck recovery fired erroneously with perfect physics");
         }
         finally
         {
@@ -821,7 +821,7 @@ public class MovementControllerRecordedFrameTests
             MaxHealth = 100,
         };
 
-                NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
+        NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
         var controller = new MovementController(mockClient.Object, player);
 
         // Set target 50y north
@@ -843,7 +843,9 @@ public class MovementControllerRecordedFrameTests
                 Y = input.Y + moveY,
                 Z = 12f, // Flat ground
                 GroundZ = 12f,
-                GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                GroundNx = 0,
+                GroundNy = 0,
+                GroundNz = 1,
                 MoveFlags = input.MoveFlags,
                 FallTime = 0,
             };
@@ -923,7 +925,7 @@ public class MovementControllerRecordedFrameTests
             MaxHealth = 100,
         };
 
-                NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
+        NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
         var controller = new MovementController(mockClient.Object, player);
         // No SetTargetWaypoint / SetPath call
 
@@ -937,7 +939,9 @@ public class MovementControllerRecordedFrameTests
                 Y = input.Y,
                 Z = 50f,
                 GroundZ = 50f,
-                GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                GroundNx = 0,
+                GroundNy = 0,
+                GroundNz = 1,
                 MoveFlags = input.MoveFlags,
                 FallTime = 0,
             };
@@ -987,13 +991,19 @@ public class MovementControllerRecordedFrameTests
             Position = new Position(285f, -4740f, 12f),
             Facing = MathF.PI / 2f,
             MovementFlags = MovementFlags.MOVEFLAG_NONE,
-            WalkSpeed = 2.5f, RunSpeed = 7.0f, RunBackSpeed = 4.5f,
-            SwimSpeed = 4.722f, SwimBackSpeed = 2.5f,
-            Race = Race.Orc, Gender = Gender.Male, MapId = 1,
-            Health = 100, MaxHealth = 100,
+            WalkSpeed = 2.5f,
+            RunSpeed = 7.0f,
+            RunBackSpeed = 4.5f,
+            SwimSpeed = 4.722f,
+            SwimBackSpeed = 2.5f,
+            Race = Race.Orc,
+            Gender = Gender.Male,
+            MapId = 1,
+            Health = 100,
+            MaxHealth = 100,
         };
 
-                NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
+        NativeLocalPhysics.TestClearSceneCacheOverride ??= _ => { };
         var controller = new MovementController(mockClient.Object, player);
         controller.SetTargetWaypoint(new Position(285f, -4690f, 12f));
 
@@ -1010,7 +1020,9 @@ public class MovementControllerRecordedFrameTests
                 Y = input.Y + (fwd ? dirY * step : 0f),
                 Z = 12f,
                 GroundZ = 12f,
-                GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                GroundNx = 0,
+                GroundNy = 0,
+                GroundNz = 1,
                 MoveFlags = input.MoveFlags,
                 FallTime = 0,
             };
@@ -1168,97 +1180,97 @@ public class MovementControllerRecordedFrameTests
 
         try
         {
-        // Run through the walking segment plus one post-roll frame so stop transitions
-        // in the recording can produce a matching BG MSG_MOVE_STOP.
-        for (int i = start; i <= executionEnd; i++)
-        {
-            frameIdx = i;
-            var frame = frames[i];
-            var nextFrame = i < frames.Count - 1 ? frames[i + 1] : frame;
-            float dt = i < frames.Count - 1
-                ? (nextFrame.FrameTimestamp - frame.FrameTimestamp) / 1000f
-                : EstimateFrameIntervalMs(frames, i) / 1000f;
-            if (dt <= 0 || dt > 1.0f) dt = 0.033f;
+            // Run through the walking segment plus one post-roll frame so stop transitions
+            // in the recording can produce a matching BG MSG_MOVE_STOP.
+            for (int i = start; i <= executionEnd; i++)
+            {
+                frameIdx = i;
+                var frame = frames[i];
+                var nextFrame = i < frames.Count - 1 ? frames[i + 1] : frame;
+                float dt = i < frames.Count - 1
+                    ? (nextFrame.FrameTimestamp - frame.FrameTimestamp) / 1000f
+                    : EstimateFrameIntervalMs(frames, i) / 1000f;
+                if (dt <= 0 || dt > 1.0f) dt = 0.033f;
 
-            player.MovementFlags = (MovementFlags)frame.MovementFlags;
-            player.Facing = frame.Facing;
-            player.Position = new Position(frame.Position.X, frame.Position.Y, frame.Position.Z);
+                player.MovementFlags = (MovementFlags)frame.MovementFlags;
+                player.Facing = frame.Facing;
+                player.Position = new Position(frame.Position.X, frame.Position.Y, frame.Position.Z);
 
-            uint gameTimeMs = (uint)(frame.FrameTimestamp & 0xFFFFFFFF);
-            capturingController.Update(dt, gameTimeMs);
-        }
+                uint gameTimeMs = (uint)(frame.FrameTimestamp & 0xFFFFFFFF);
+                capturingController.Update(dt, gameTimeMs);
+            }
 
-        // Report BG opcodes
-        _output.WriteLine($"\nBG MovementController sent {bgOpcodes.Count} packets:");
-        var bgMovementOpcodes = bgOpcodes
-            .Where(o => IsMovementOpcode((ushort)o.opcode))
-            .ToList();
-        foreach (var (_, op) in bgMovementOpcodes)
-            _output.WriteLine($"  {op} (0x{(ushort)op:X4})");
-
-        // Check if recording has FG packet data for parity comparison
-        bool hasPackets = recording.Packets.Count > 0;
-        if (hasPackets)
-        {
-            // Filter FG packets to movement-related outbound opcodes in the segment's time range
-            var (segmentStartMs, segmentEndMs) = GetSegmentPacketWindow(recording, start, end);
-            var fgMovementPackets = recording.Packets
-                .Where(p => p.IsOutbound
-                    && IsMovementOpcode(p.Opcode)
-                    && p.TimestampMs >= segmentStartMs
-                    && p.TimestampMs <= segmentEndMs)
+            // Report BG opcodes
+            _output.WriteLine($"\nBG MovementController sent {bgOpcodes.Count} packets:");
+            var bgMovementOpcodes = bgOpcodes
+                .Where(o => IsMovementOpcode((ushort)o.opcode))
                 .ToList();
+            foreach (var (_, op) in bgMovementOpcodes)
+                _output.WriteLine($"  {op} (0x{(ushort)op:X4})");
 
-            _output.WriteLine($"\nFG recorded {fgMovementPackets.Count} movement packets in segment:");
-            foreach (var p in fgMovementPackets)
-                _output.WriteLine($"  0x{p.Opcode:X4} @ {p.TimestampMs}ms (outbound={p.IsOutbound})");
-
-            // Parity: compare opcode type distribution (not exact timing)
-            var bgOpcodeCounts = bgMovementOpcodes
-                .GroupBy(o => o.opcode)
-                .ToDictionary(g => g.Key, g => g.Count());
-            var fgOpcodeCounts = fgMovementPackets
-                .GroupBy(p => (Opcode)p.Opcode)
-                .ToDictionary(g => g.Key, g => g.Count());
-
-            _output.WriteLine("\n=== Opcode Distribution Parity ===");
-            var allOpcodes = bgOpcodeCounts.Keys.Union(fgOpcodeCounts.Keys).OrderBy(o => (ushort)o);
-            foreach (var op in allOpcodes)
+            // Check if recording has FG packet data for parity comparison
+            bool hasPackets = recording.Packets.Count > 0;
+            if (hasPackets)
             {
-                int bgCount = bgOpcodeCounts.GetValueOrDefault(op, 0);
-                int fgCount = fgOpcodeCounts.GetValueOrDefault(op, 0);
-                string match = bgCount == fgCount ? "MATCH" : (MathF.Abs(bgCount - fgCount) <= 2 ? "CLOSE" : "DIFFER");
-                _output.WriteLine($"  {op,-35} BG={bgCount,3}  FG={fgCount,3}  [{match}]");
+                // Filter FG packets to movement-related outbound opcodes in the segment's time range
+                var (segmentStartMs, segmentEndMs) = GetSegmentPacketWindow(recording, start, end);
+                var fgMovementPackets = recording.Packets
+                    .Where(p => p.IsOutbound
+                        && IsMovementOpcode(p.Opcode)
+                        && p.TimestampMs >= segmentStartMs
+                        && p.TimestampMs <= segmentEndMs)
+                    .ToList();
+
+                _output.WriteLine($"\nFG recorded {fgMovementPackets.Count} movement packets in segment:");
+                foreach (var p in fgMovementPackets)
+                    _output.WriteLine($"  0x{p.Opcode:X4} @ {p.TimestampMs}ms (outbound={p.IsOutbound})");
+
+                // Parity: compare opcode type distribution (not exact timing)
+                var bgOpcodeCounts = bgMovementOpcodes
+                    .GroupBy(o => o.opcode)
+                    .ToDictionary(g => g.Key, g => g.Count());
+                var fgOpcodeCounts = fgMovementPackets
+                    .GroupBy(p => (Opcode)p.Opcode)
+                    .ToDictionary(g => g.Key, g => g.Count());
+
+                _output.WriteLine("\n=== Opcode Distribution Parity ===");
+                var allOpcodes = bgOpcodeCounts.Keys.Union(fgOpcodeCounts.Keys).OrderBy(o => (ushort)o);
+                foreach (var op in allOpcodes)
+                {
+                    int bgCount = bgOpcodeCounts.GetValueOrDefault(op, 0);
+                    int fgCount = fgOpcodeCounts.GetValueOrDefault(op, 0);
+                    string match = bgCount == fgCount ? "MATCH" : (MathF.Abs(bgCount - fgCount) <= 2 ? "CLOSE" : "DIFFER");
+                    _output.WriteLine($"  {op,-35} BG={bgCount,3}  FG={fgCount,3}  [{match}]");
+                }
+
+                // Assert: BG should send START_FORWARD if FG did
+                bool fgHasStartForward = fgMovementPackets.Any(p => p.Opcode == (ushort)Opcode.MSG_MOVE_START_FORWARD);
+                bool bgHasStartForward = bgMovementOpcodes.Any(o => o.opcode == Opcode.MSG_MOVE_START_FORWARD);
+                if (fgHasStartForward)
+                {
+                    Assert.True(bgHasStartForward,
+                        "FG sent MSG_MOVE_START_FORWARD but BG didn't — BG failed to start movement");
+                }
+
+                // Assert: heartbeat counts should be within 50% of each other
+                int fgHeartbeats = fgOpcodeCounts.GetValueOrDefault(Opcode.MSG_MOVE_HEARTBEAT, 0);
+                int bgHeartbeats = bgOpcodeCounts.GetValueOrDefault(Opcode.MSG_MOVE_HEARTBEAT, 0);
+                if (fgHeartbeats > 0 && bgHeartbeats > 0)
+                {
+                    float ratio = (float)bgHeartbeats / fgHeartbeats;
+                    Assert.True(ratio > 0.5f && ratio < 2.0f,
+                        $"Heartbeat count mismatch: BG={bgHeartbeats} FG={fgHeartbeats} ratio={ratio:F2} — timing divergence");
+                }
+            }
+            else
+            {
+                _output.WriteLine("\nNo FG packet data in recording — parity comparison deferred.");
+                _output.WriteLine("Record with FG PacketLogger enabled to populate packets for parity testing.");
             }
 
-            // Assert: BG should send START_FORWARD if FG did
-            bool fgHasStartForward = fgMovementPackets.Any(p => p.Opcode == (ushort)Opcode.MSG_MOVE_START_FORWARD);
-            bool bgHasStartForward = bgMovementOpcodes.Any(o => o.opcode == Opcode.MSG_MOVE_START_FORWARD);
-            if (fgHasStartForward)
-            {
-                Assert.True(bgHasStartForward,
-                    "FG sent MSG_MOVE_START_FORWARD but BG didn't — BG failed to start movement");
-            }
-
-            // Assert: heartbeat counts should be within 50% of each other
-            int fgHeartbeats = fgOpcodeCounts.GetValueOrDefault(Opcode.MSG_MOVE_HEARTBEAT, 0);
-            int bgHeartbeats = bgOpcodeCounts.GetValueOrDefault(Opcode.MSG_MOVE_HEARTBEAT, 0);
-            if (fgHeartbeats > 0 && bgHeartbeats > 0)
-            {
-                float ratio = (float)bgHeartbeats / fgHeartbeats;
-                Assert.True(ratio > 0.5f && ratio < 2.0f,
-                    $"Heartbeat count mismatch: BG={bgHeartbeats} FG={fgHeartbeats} ratio={ratio:F2} — timing divergence");
-            }
-        }
-        else
-        {
-            _output.WriteLine("\nNo FG packet data in recording — parity comparison deferred.");
-            _output.WriteLine("Record with FG PacketLogger enabled to populate packets for parity testing.");
-        }
-
-        // Regardless of FG data, verify BG sent reasonable packets
-        Assert.True(bgMovementOpcodes.Count > 0,
-            "BG controller sent no movement opcodes for a walking segment");
+            // Regardless of FG data, verify BG sent reasonable packets
+            Assert.True(bgMovementOpcodes.Count > 0,
+                "BG controller sent no movement opcodes for a walking segment");
         }
         finally
         {

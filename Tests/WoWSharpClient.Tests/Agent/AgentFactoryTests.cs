@@ -767,7 +767,7 @@ namespace WoWSharpClient.Tests.Agent
             mockLootingAgent.Setup(x => x.LootWindowOpened).Returns(mockLootWindowOpenedObservable.Object);
             mockLootingAgent.Setup(x => x.LootWindowClosed).Returns(mockLootWindowClosedObservable.Object);
             mockLootingAgent.Setup(x => x.ItemLoot).Returns(mockItemLootObservable.Object);
-            mockLootingAgent.Setup(x => x.MoneyLoot). Returns(mockMoneyLootObservable.Object);
+            mockLootingAgent.Setup(x => x.MoneyLoot).Returns(mockMoneyLootObservable.Object);
             mockLootingAgent.Setup(x => x.LootErrors).Returns(mockLootErrorObservable.Object);
 
             // Setup mock Subscribe methods to return disposables (to prevent null reference)

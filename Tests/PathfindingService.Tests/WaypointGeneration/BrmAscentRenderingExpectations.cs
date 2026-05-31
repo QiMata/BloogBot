@@ -48,17 +48,17 @@ public class BrmAscentRenderingExpectations : IClassFixture<PathfindingValidatio
     private const float WalkableClimb = 1.8f;
 
     // Recon coords (must match BrmAscentReconTests.Coords + BrmAscentReconPolyrefDump).
-    private static readonly XYZ FlameCrest      = new(-7518.7f, -2159.9f, 131.9f);
-    private static readonly XYZ FcStall         = new(-7519.0f, -2100.4f, 130.3f);
-    private static readonly XYZ RuinsWall       = new(-7665.0f, -1808.0f, 137.0f);
-    private static readonly XYZ BrmSouthLo      = new(-7949.7f, -1162.8f, 170.8f);
-    private static readonly XYZ BrmSouthNew     = new(-7825.4f, -1129.2f, 133.8f);
-    private static readonly XYZ BrmMidLbrs      = new(-7647.1f, -1197.1f, 225.2f);
-    private static readonly XYZ BrmMidBwl       = new(-7640.0f, -1213.4f, 228.4f);
-    private static readonly XYZ UbrsPortal      = new(-7524.0f, -1233.0f, 287.0f);
-    private static readonly XYZ LbrsPortal      = new(-7531.0f, -1226.0f, 286.0f);
-    private static readonly XYZ BwlPortal       = new(-7659.0f, -1214.0f, 291.0f);
-    private static readonly XYZ BrdPortal       = new(-7187.0f,  -958.0f, 254.0f);
+    private static readonly XYZ FlameCrest = new(-7518.7f, -2159.9f, 131.9f);
+    private static readonly XYZ FcStall = new(-7519.0f, -2100.4f, 130.3f);
+    private static readonly XYZ RuinsWall = new(-7665.0f, -1808.0f, 137.0f);
+    private static readonly XYZ BrmSouthLo = new(-7949.7f, -1162.8f, 170.8f);
+    private static readonly XYZ BrmSouthNew = new(-7825.4f, -1129.2f, 133.8f);
+    private static readonly XYZ BrmMidLbrs = new(-7647.1f, -1197.1f, 225.2f);
+    private static readonly XYZ BrmMidBwl = new(-7640.0f, -1213.4f, 228.4f);
+    private static readonly XYZ UbrsPortal = new(-7524.0f, -1233.0f, 287.0f);
+    private static readonly XYZ LbrsPortal = new(-7531.0f, -1226.0f, 286.0f);
+    private static readonly XYZ BwlPortal = new(-7659.0f, -1214.0f, 291.0f);
+    private static readonly XYZ BrdPortal = new(-7187.0f, -958.0f, 254.0f);
 
     // fc_stall polyRef is captured DYNAMICALLY at each test's setup against
     // the currently-loaded bake, because the same XY resolves to different
@@ -119,8 +119,8 @@ public class BrmAscentRenderingExpectations : IClassFixture<PathfindingValidatio
     {
         AssertWalkablePolyAtCoord("ubrs_portal", UbrsPortal);
         AssertWalkablePolyAtCoord("lbrs_portal", LbrsPortal);
-        AssertWalkablePolyAtCoord("bwl_portal",  BwlPortal);
-        AssertWalkablePolyAtCoord("brd_portal",  BrdPortal);
+        AssertWalkablePolyAtCoord("bwl_portal", BwlPortal);
+        AssertWalkablePolyAtCoord("brd_portal", BrdPortal);
     }
 
     // ---------------------------------------------------------------------

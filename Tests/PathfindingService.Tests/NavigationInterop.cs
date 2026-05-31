@@ -322,11 +322,11 @@ internal static class NavigationInterop
     {
         // Bits from MoveMapSharedDefines.h (kept inline so test code stays
         // self-contained — the C++ enum is not visible to managed code).
-        public const ushort NavGround       = 0x01;
-        public const ushort NavMagma        = 0x02;
-        public const ushort NavSlime        = 0x04;
-        public const ushort NavWater        = 0x08;
-        public const ushort NavSteepSlopes  = 0x10;
+        public const ushort NavGround = 0x01;
+        public const ushort NavMagma = 0x02;
+        public const ushort NavSlime = 0x04;
+        public const ushort NavWater = 0x08;
+        public const ushort NavSteepSlopes = 0x10;
 
         public bool HasSteepSlopes => Success && (Flags & NavSteepSlopes) != 0;
     }

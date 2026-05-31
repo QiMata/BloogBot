@@ -65,9 +65,13 @@ namespace WoWSharpClient.Tests.Movement
                     Z = input.Z,
                     Orientation = input.Orientation,
                     Pitch = input.Pitch,
-                    Vx = 0, Vy = 0, Vz = 0,
+                    Vx = 0,
+                    Vy = 0,
+                    Vz = 0,
                     GroundZ = input.Z,
-                    GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                    GroundNx = 0,
+                    GroundNy = 0,
+                    GroundNz = 1,
                     MoveFlags = input.MoveFlags,
                     FallTime = 0,
                 };
@@ -1457,7 +1461,9 @@ namespace WoWSharpClient.Tests.Movement
             // Physics reports that player is now in water
             NativeLocalPhysics.TestStepOverride = _ => new NativePhysics.PhysicsOutput
             {
-                X = 100f, Y = 200f, Z = 50f,
+                X = 100f,
+                Y = 200f,
+                Z = 50f,
                 GroundNz = 1,
                 MoveFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_SWIMMING),
             };
@@ -2391,7 +2397,9 @@ namespace WoWSharpClient.Tests.Movement
                 Y = input.Y + MathF.Sin(input.Orientation) * input.RunSpeed * input.DeltaTime,
                 Z = 45f, // Ground is below starting Z
                 GroundZ = 45f,
-                GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                GroundNx = 0,
+                GroundNy = 0,
+                GroundNz = 1,
                 MoveFlags = input.MoveFlags,
                 FallTime = 0,
             };
@@ -2414,7 +2422,9 @@ namespace WoWSharpClient.Tests.Movement
                 Y = input.Y,
                 Z = 55f, // Ground is above starting Z (step-up)
                 GroundZ = 55f,
-                GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                GroundNx = 0,
+                GroundNy = 0,
+                GroundNz = 1,
                 MoveFlags = input.MoveFlags,
                 FallTime = 0,
             };
@@ -2442,7 +2452,9 @@ namespace WoWSharpClient.Tests.Movement
                     Y = input.Y + MathF.Sin(input.Orientation) * step,
                     Z = input.Z,
                     GroundZ = input.Z,
-                    GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                    GroundNx = 0,
+                    GroundNy = 0,
+                    GroundNz = 1,
                     MoveFlags = input.MoveFlags,
                     FallTime = 0,
                 };
@@ -2495,10 +2507,16 @@ namespace WoWSharpClient.Tests.Movement
                     Y = input.Y,
                     Z = 47f,
                     GroundZ = 46.5f,
-                    GroundNx = 0.1f, GroundNy = 0.0f, GroundNz = 0.995f,
-                    PendingDepenX = 0.01f, PendingDepenY = 0.02f, PendingDepenZ = 0.03f,
+                    GroundNx = 0.1f,
+                    GroundNy = 0.0f,
+                    GroundNz = 0.995f,
+                    PendingDepenX = 0.01f,
+                    PendingDepenY = 0.02f,
+                    PendingDepenZ = 0.03f,
                     StandingOnInstanceId = 42,
-                    StandingOnLocalX = 1f, StandingOnLocalY = 2f, StandingOnLocalZ = 3f,
+                    StandingOnLocalX = 1f,
+                    StandingOnLocalY = 2f,
+                    StandingOnLocalZ = 3f,
                     MoveFlags = input.MoveFlags,
                     FallTime = 0,
                 };
@@ -2530,7 +2548,9 @@ namespace WoWSharpClient.Tests.Movement
                 Y = input.Y + 0.5f,
                 Z = 48f, // Ground snapped Z
                 GroundZ = 48f,
-                GroundNx = 0, GroundNy = 0, GroundNz = 1,
+                GroundNx = 0,
+                GroundNy = 0,
+                GroundNz = 1,
                 MoveFlags = input.MoveFlags,
                 FallTime = 0,
             };
@@ -2566,7 +2586,9 @@ namespace WoWSharpClient.Tests.Movement
                     X = input.X,
                     Y = input.Y,
                     Z = input.Z - 0.5f, // Falling
-                    Vx = 0, Vy = 0, Vz = -5.0f, // Falling velocity
+                    Vx = 0,
+                    Vy = 0,
+                    Vz = -5.0f, // Falling velocity
                     GroundZ = 49.5f, // Ground nearby but not under feet
                     GroundNz = 1,
                     MoveFlags = (uint)(MovementFlags.MOVEFLAG_FORWARD | MovementFlags.MOVEFLAG_FALLINGFAR),

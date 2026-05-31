@@ -268,4 +268,4 @@ no per-spot gates.
 - `tools/MmapGen/contrib/mmap/src/MapBuilder.cpp` — generator entry point.
 - `tools/MmapGen/contrib/mmap/src/IntermediateValues.cpp` — wrapper write code (this is where the 20-byte header is emitted).
 - `docs/physics/DETOUR_UPGRADE_BASELINE.md` — Detour version + ABI baseline.
-- `docs/physics/PATHFINDING_OVERHAUL.md` — master overhaul plan.
+- `docs/Archive/PATHFINDING_OVERHAUL.md` — master overhaul plan.

@@ -90,92 +90,92 @@ namespace BotRunner
                         builder.Splice(BuildWaitSequence((float)actionEntry.Item2[0]));
                         break;
                     case CharacterAction.GoTo:
-                    {
-                        // Upsert a persistent GoToTask instead of pushing a new one every
-                        // poll cycle. Repeated Goto dispatches can otherwise reset the task's
-                        // cached NavigationPath and stall long routes.
-                        var gotoX = (float)actionEntry.Item2[0];
-                        var gotoY = (float)actionEntry.Item2[1];
-                        var gotoZ = (float)actionEntry.Item2[2];
-                        var gotoTolerance = (float)actionEntry.Item2[3];
-                        builder.Do("Upsert GoTo Task", time =>
                         {
-                            var result = UpsertGoToTask(_botTasks, context, gotoX, gotoY, gotoZ, gotoTolerance);
-                            if (result != GoToTaskUpsertResult.Duplicate)
+                            // Upsert a persistent GoToTask instead of pushing a new one every
+                            // poll cycle. Repeated Goto dispatches can otherwise reset the task's
+                            // cached NavigationPath and stall long routes.
+                            var gotoX = (float)actionEntry.Item2[0];
+                            var gotoY = (float)actionEntry.Item2[1];
+                            var gotoZ = (float)actionEntry.Item2[2];
+                            var gotoTolerance = (float)actionEntry.Item2[3];
+                            builder.Do("Upsert GoTo Task", time =>
                             {
-                                Log.Information("[BOT RUNNER] GoTo upsert: {Result} target=({X:F1},{Y:F1},{Z:F1}) tolerance={Tolerance:F1}",
-                                    result, gotoX, gotoY, gotoZ, gotoTolerance);
-                            }
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
-                    case CharacterAction.Jump:
-                    {
-                        builder.Do("Jump", time =>
-                        {
-                            _objectManager.Jump();
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
-                    case CharacterAction.InteractWith:
-                    {
-                        if (actionEntry.Item2.Count == 0)
-                        {
-                            builder.Do("Reject InteractWith missing guid", time =>
-                            {
-                                Log.Warning("[BOT RUNNER] InteractWith action ignored because no GUID parameter was provided.");
-                                return BehaviourTreeStatus.Failure;
+                                var result = UpsertGoToTask(_botTasks, context, gotoX, gotoY, gotoZ, gotoTolerance);
+                                if (result != GoToTaskUpsertResult.Duplicate)
+                                {
+                                    Log.Information("[BOT RUNNER] GoTo upsert: {Result} target=({X:F1},{Y:F1},{Z:F1}) tolerance={Tolerance:F1}",
+                                        result, gotoX, gotoY, gotoZ, gotoTolerance);
+                                }
+                                return BehaviourTreeStatus.Success;
                             });
                             break;
                         }
-
-                        var interactGuid = UnboxGuid(actionEntry.Item2[0]);
-                        // Ghosts interact with spirit healers through a dedicated packet path.
-                        // Check this before GameObjects because runtime object collections can
-                        // include the target GUID outside the typed Units view.
-                        var isGameObject = _objectManager.GameObjects.Any(x => x.Guid == interactGuid);
-                        if (ShouldUseSpiritHealerActivationPath(_objectManager, interactGuid))
+                    case CharacterAction.Jump:
                         {
-                            builder.Do($"Activate Spirit Healer {interactGuid:X}", time =>
+                            builder.Do("Jump", time =>
                             {
-                                var factory = _agentFactoryAccessor?.Invoke();
-                                if (factory == null)
+                                _objectManager.Jump();
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
+                    case CharacterAction.InteractWith:
+                        {
+                            if (actionEntry.Item2.Count == 0)
+                            {
+                                builder.Do("Reject InteractWith missing guid", time =>
                                 {
-                                    Log.Warning("[BOT RUNNER] AgentFactory unavailable for spirit healer activation");
+                                    Log.Warning("[BOT RUNNER] InteractWith action ignored because no GUID parameter was provided.");
                                     return BehaviourTreeStatus.Failure;
-                                }
+                                });
+                                break;
+                            }
 
-                                DiagLog($"[SPIRIT_HEALER] activating guid=0x{interactGuid:X}");
-                                Log.Information("[BOT RUNNER] Greeting spirit healer {Guid:X} before activation.", interactGuid);
-                                _objectManager.InteractWithNpcAsync(interactGuid, CancellationToken.None)
-                                    .GetAwaiter()
-                                    .GetResult();
-                                Thread.Sleep(500);
-
-                                Log.Information("[BOT RUNNER] Activating spirit healer {Guid:X}.", interactGuid);
-                                factory.DeadActorAgent.ResurrectWithSpiritHealerAsync(interactGuid, CancellationToken.None)
-                                    .GetAwaiter()
-                                    .GetResult();
-                                return BehaviourTreeStatus.Success;
-                            });
-                        }
-                        else if (isGameObject)
-                        {
-                            builder.Splice(BuildInteractWithSequence(interactGuid));
-                        }
-                        else
-                        {
-                            builder.Do($"Interact With NPC {interactGuid:X}", time =>
+                            var interactGuid = UnboxGuid(actionEntry.Item2[0]);
+                            // Ghosts interact with spirit healers through a dedicated packet path.
+                            // Check this before GameObjects because runtime object collections can
+                            // include the target GUID outside the typed Units view.
+                            var isGameObject = _objectManager.GameObjects.Any(x => x.Guid == interactGuid);
+                            if (ShouldUseSpiritHealerActivationPath(_objectManager, interactGuid))
                             {
-                                _objectManager.InteractWithNpcAsync(interactGuid, CancellationToken.None)
-                                    .GetAwaiter().GetResult();
-                                return BehaviourTreeStatus.Success;
-                            });
+                                builder.Do($"Activate Spirit Healer {interactGuid:X}", time =>
+                                {
+                                    var factory = _agentFactoryAccessor?.Invoke();
+                                    if (factory == null)
+                                    {
+                                        Log.Warning("[BOT RUNNER] AgentFactory unavailable for spirit healer activation");
+                                        return BehaviourTreeStatus.Failure;
+                                    }
+
+                                    DiagLog($"[SPIRIT_HEALER] activating guid=0x{interactGuid:X}");
+                                    Log.Information("[BOT RUNNER] Greeting spirit healer {Guid:X} before activation.", interactGuid);
+                                    _objectManager.InteractWithNpcAsync(interactGuid, CancellationToken.None)
+                                        .GetAwaiter()
+                                        .GetResult();
+                                    Thread.Sleep(500);
+
+                                    Log.Information("[BOT RUNNER] Activating spirit healer {Guid:X}.", interactGuid);
+                                    factory.DeadActorAgent.ResurrectWithSpiritHealerAsync(interactGuid, CancellationToken.None)
+                                        .GetAwaiter()
+                                        .GetResult();
+                                    return BehaviourTreeStatus.Success;
+                                });
+                            }
+                            else if (isGameObject)
+                            {
+                                builder.Splice(BuildInteractWithSequence(interactGuid));
+                            }
+                            else
+                            {
+                                builder.Do($"Interact With NPC {interactGuid:X}", time =>
+                                {
+                                    _objectManager.InteractWithNpcAsync(interactGuid, CancellationToken.None)
+                                        .GetAwaiter().GetResult();
+                                    return BehaviourTreeStatus.Success;
+                                });
+                            }
+                            break;
                         }
-                        break;
-                    }
 
                     case CharacterAction.SelectGossip:
                         // With npcGuid + optionIndex: packet-based via GossipAgent (BG compatible)
@@ -541,84 +541,84 @@ namespace BotRunner
                         builder.Splice(BuildCastSpellSequence((int)actionEntry.Item2[0], castTargetGuid));
                         break;
                     case CharacterAction.StartFishing:
-                    {
-                        string? fishingLocation = null;
-                        var useGmCommands = false;
-                        uint? masterPoolId = null;
-                        var waypointStartIndex = 0;
-
-                        // Backward-compatible schema:
-                        //   legacy: [x, y, z, ...]
-                        //   current: [location?, useGmCommands?, masterPoolId?, x, y, z, ...]
-                        if (actionEntry.Item2.Count > 0 && actionEntry.Item2[0] is string locationParam)
                         {
-                            fishingLocation = string.IsNullOrWhiteSpace(locationParam)
-                                ? null
-                                : locationParam.Trim();
-                            waypointStartIndex = 1;
+                            string? fishingLocation = null;
+                            var useGmCommands = false;
+                            uint? masterPoolId = null;
+                            var waypointStartIndex = 0;
 
-                            if (actionEntry.Item2.Count > waypointStartIndex
-                                && TryParseIntParameter(actionEntry.Item2[waypointStartIndex], out var useGmParam))
+                            // Backward-compatible schema:
+                            //   legacy: [x, y, z, ...]
+                            //   current: [location?, useGmCommands?, masterPoolId?, x, y, z, ...]
+                            if (actionEntry.Item2.Count > 0 && actionEntry.Item2[0] is string locationParam)
                             {
-                                useGmCommands = useGmParam != 0;
-                                waypointStartIndex++;
+                                fishingLocation = string.IsNullOrWhiteSpace(locationParam)
+                                    ? null
+                                    : locationParam.Trim();
+                                waypointStartIndex = 1;
+
+                                if (actionEntry.Item2.Count > waypointStartIndex
+                                    && TryParseIntParameter(actionEntry.Item2[waypointStartIndex], out var useGmParam))
+                                {
+                                    useGmCommands = useGmParam != 0;
+                                    waypointStartIndex++;
+                                }
+
+                                if (actionEntry.Item2.Count > waypointStartIndex
+                                    && TryParseIntParameter(actionEntry.Item2[waypointStartIndex], out var masterPoolParam))
+                                {
+                                    masterPoolId = masterPoolParam > 0
+                                        ? (uint)masterPoolParam
+                                        : null;
+                                    waypointStartIndex++;
+                                }
                             }
 
-                            if (actionEntry.Item2.Count > waypointStartIndex
-                                && TryParseIntParameter(actionEntry.Item2[waypointStartIndex], out var masterPoolParam))
+                            var fishingSearchWaypoints = ParseGatheringRoutePositions(actionEntry.Item2.Skip(waypointStartIndex));
+                            builder.Do("Queue Fishing Task", time =>
                             {
-                                masterPoolId = masterPoolParam > 0
-                                    ? (uint)masterPoolParam
-                                    : null;
-                                waypointStartIndex++;
-                            }
-                        }
-
-                        var fishingSearchWaypoints = ParseGatheringRoutePositions(actionEntry.Item2.Skip(waypointStartIndex));
-                        builder.Do("Queue Fishing Task", time =>
-                        {
-                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.FishingTask)
-                            {
-                                _botTasks.Push(new Tasks.FishingTask(
-                                    context,
-                                    fishingSearchWaypoints.Count > 0 ? fishingSearchWaypoints : null,
-                                    location: fishingLocation,
-                                    useGmCommands: useGmCommands,
-                                    masterPoolId: masterPoolId));
-                            }
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
-                    case CharacterAction.StartGatheringRoute:
-                    {
-                        int gatheringRouteSpellId = (int)actionEntry.Item2[0];
-                        var allowedEntries = ParseGatheringEntries((string)actionEntry.Item2[1]);
-                        // Optional [2] = maxRouteLoops (int), then [3+] = float positions.
-                        // If [2] is an int (not a float), treat it as maxRouteLoops; otherwise positions start at [2].
-                        int routeLoops = 1;
-                        int positionStartIndex = 2;
-                        if (actionEntry.Item2.Count > 2 && actionEntry.Item2[2] is int loopParam)
-                        {
-                            routeLoops = Math.Max(1, loopParam);
-                            positionStartIndex = 3;
-                        }
-                        var routePositions = ParseGatheringRoutePositions(actionEntry.Item2.Skip(positionStartIndex));
-                        builder.Do("Queue Gathering Route Task", time =>
-                        {
-                            if (routePositions.Count == 0 || allowedEntries.Count == 0)
-                            {
-                                Log.Warning("[BOT RUNNER] Ignoring StartGatheringRoute with invalid parameters. positions={Count} entries={EntryCount}",
-                                    routePositions.Count, allowedEntries.Count);
+                                if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.FishingTask)
+                                {
+                                    _botTasks.Push(new Tasks.FishingTask(
+                                        context,
+                                        fishingSearchWaypoints.Count > 0 ? fishingSearchWaypoints : null,
+                                        location: fishingLocation,
+                                        useGmCommands: useGmCommands,
+                                        masterPoolId: masterPoolId));
+                                }
                                 return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
+                    case CharacterAction.StartGatheringRoute:
+                        {
+                            int gatheringRouteSpellId = (int)actionEntry.Item2[0];
+                            var allowedEntries = ParseGatheringEntries((string)actionEntry.Item2[1]);
+                            // Optional [2] = maxRouteLoops (int), then [3+] = float positions.
+                            // If [2] is an int (not a float), treat it as maxRouteLoops; otherwise positions start at [2].
+                            int routeLoops = 1;
+                            int positionStartIndex = 2;
+                            if (actionEntry.Item2.Count > 2 && actionEntry.Item2[2] is int loopParam)
+                            {
+                                routeLoops = Math.Max(1, loopParam);
+                                positionStartIndex = 3;
                             }
+                            var routePositions = ParseGatheringRoutePositions(actionEntry.Item2.Skip(positionStartIndex));
+                            builder.Do("Queue Gathering Route Task", time =>
+                            {
+                                if (routePositions.Count == 0 || allowedEntries.Count == 0)
+                                {
+                                    Log.Warning("[BOT RUNNER] Ignoring StartGatheringRoute with invalid parameters. positions={Count} entries={EntryCount}",
+                                        routePositions.Count, allowedEntries.Count);
+                                    return BehaviourTreeStatus.Success;
+                                }
 
-                            if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.GatheringRouteTask)
-                                _botTasks.Push(new Tasks.GatheringRouteTask(context, routePositions, allowedEntries, gatheringRouteSpellId, maxRouteLoops: routeLoops));
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
+                                if (_botTasks.Count == 0 || _botTasks.Peek() is not Tasks.GatheringRouteTask)
+                                    _botTasks.Push(new Tasks.GatheringRouteTask(context, routePositions, allowedEntries, gatheringRouteSpellId, maxRouteLoops: routeLoops));
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
                     case CharacterAction.StopCast:
                         builder.Splice(StopCastSequence);
                         break;
@@ -904,28 +904,28 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.StartMovement:
-                    {
-                        var movementBits = (ControlBits)(int)actionEntry.Item2[0];
-                        builder.Do($"Start Movement: {movementBits}", time =>
                         {
-                            Log.Information("[BOT RUNNER] Starting movement bits {Bits}", movementBits);
-                            _objectManager.StartMovement(movementBits);
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
+                            var movementBits = (ControlBits)(int)actionEntry.Item2[0];
+                            builder.Do($"Start Movement: {movementBits}", time =>
+                            {
+                                Log.Information("[BOT RUNNER] Starting movement bits {Bits}", movementBits);
+                                _objectManager.StartMovement(movementBits);
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
 
                     case CharacterAction.StopMovement:
-                    {
-                        var movementBits = (ControlBits)(int)actionEntry.Item2[0];
-                        builder.Do($"Stop Movement: {movementBits}", time =>
                         {
-                            Log.Information("[BOT RUNNER] Stopping movement bits {Bits}", movementBits);
-                            _objectManager.StopMovement(movementBits);
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
+                            var movementBits = (ControlBits)(int)actionEntry.Item2[0];
+                            builder.Do($"Stop Movement: {movementBits}", time =>
+                            {
+                                Log.Information("[BOT RUNNER] Stopping movement bits {Bits}", movementBits);
+                                _objectManager.StopMovement(movementBits);
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
 
                     case CharacterAction.ReleaseCorpse:
                         builder.Do("Release Spirit", time =>
@@ -1021,58 +1021,58 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.LootCorpse:
-                    {
-                        var lootGuid = UnboxGuid(actionEntry.Item2[0]);
-                        builder.Do($"Loot Corpse {lootGuid:X}", time =>
                         {
-                            Log.Information("[BOT RUNNER] Looting corpse {Guid:X}", lootGuid);
-                            _objectManager.LootTargetAsync(lootGuid, CancellationToken.None)
-                                .GetAwaiter().GetResult();
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
-
-                    case CharacterAction.SkinCorpse:
-                    {
-                        var skinGuid = UnboxGuid(actionEntry.Item2[0]);
-                        builder.Do($"Skin Corpse {skinGuid:X}", time =>
-                        {
-                            Log.Information("[BOT RUNNER] Skinning corpse {Guid:X}", skinGuid);
-                            _objectManager.LootTargetAsync(skinGuid, CancellationToken.None)
-                                .GetAwaiter().GetResult();
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
-
-                    case CharacterAction.CheckMail:
-                    {
-                        if (actionEntry.Item2.Count == 0)
-                        {
-                            builder.Do("Reject CheckMail missing guid", time =>
+                            var lootGuid = UnboxGuid(actionEntry.Item2[0]);
+                            builder.Do($"Loot Corpse {lootGuid:X}", time =>
                             {
-                                Log.Warning("[BOT RUNNER] CheckMail action ignored because no mailbox GUID parameter was provided.");
-                                return BehaviourTreeStatus.Failure;
+                                Log.Information("[BOT RUNNER] Looting corpse {Guid:X}", lootGuid);
+                                _objectManager.LootTargetAsync(lootGuid, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
                             });
                             break;
                         }
 
-                        var mailboxGuid = UnboxGuid(actionEntry.Item2[0]);
-                        builder.Do($"Check Mail at mailbox {mailboxGuid:X}", time =>
+                    case CharacterAction.SkinCorpse:
                         {
-                            Log.Information("[BOT RUNNER] Collecting mail from mailbox {Guid:X}", mailboxGuid);
-                            var result = _objectManager.CollectAllMailWithResultAsync(mailboxGuid, CancellationToken.None)
-                                .GetAwaiter().GetResult();
-                            EnqueueDiagnosticMessage(
-                                $"[MAIL-COLLECT] mailbox=0x{mailboxGuid:X} opened={result.MailboxOpened} " +
-                                $"inbox={result.InboxCount} collected={result.CollectedCount} money={result.MoneyRequestedCopper} " +
-                                $"deleted={result.DeletedEmptyMessages} coinageObserved={result.CoinageIncreaseObserved} " +
-                                $"subjects={result.CollectedSubjects} deletedSubjects={result.DeletedSubjects}");
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
+                            var skinGuid = UnboxGuid(actionEntry.Item2[0]);
+                            builder.Do($"Skin Corpse {skinGuid:X}", time =>
+                            {
+                                Log.Information("[BOT RUNNER] Skinning corpse {Guid:X}", skinGuid);
+                                _objectManager.LootTargetAsync(skinGuid, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
+
+                    case CharacterAction.CheckMail:
+                        {
+                            if (actionEntry.Item2.Count == 0)
+                            {
+                                builder.Do("Reject CheckMail missing guid", time =>
+                                {
+                                    Log.Warning("[BOT RUNNER] CheckMail action ignored because no mailbox GUID parameter was provided.");
+                                    return BehaviourTreeStatus.Failure;
+                                });
+                                break;
+                            }
+
+                            var mailboxGuid = UnboxGuid(actionEntry.Item2[0]);
+                            builder.Do($"Check Mail at mailbox {mailboxGuid:X}", time =>
+                            {
+                                Log.Information("[BOT RUNNER] Collecting mail from mailbox {Guid:X}", mailboxGuid);
+                                var result = _objectManager.CollectAllMailWithResultAsync(mailboxGuid, CancellationToken.None)
+                                    .GetAwaiter().GetResult();
+                                EnqueueDiagnosticMessage(
+                                    $"[MAIL-COLLECT] mailbox=0x{mailboxGuid:X} opened={result.MailboxOpened} " +
+                                    $"inbox={result.InboxCount} collected={result.CollectedCount} money={result.MoneyRequestedCopper} " +
+                                    $"deleted={result.DeletedEmptyMessages} coinageObserved={result.CoinageIncreaseObserved} " +
+                                    $"subjects={result.CollectedSubjects} deletedSubjects={result.DeletedSubjects}");
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
 
                     case CharacterAction.ConvertToRaid:
                         builder.Do("Convert Party to Raid", time =>
@@ -1083,180 +1083,216 @@ namespace BotRunner
                         break;
 
                     case CharacterAction.ChangeRaidSubgroup:
-                    {
-                        // Params: [0] = string playerName, [1] = int subGroup (0-7)
-                        var rsgName = actionEntry.Item2.Count > 0 ? (string)actionEntry.Item2[0] : "";
-                        var rsgGroup = actionEntry.Item2.Count > 1 ? (byte)(int)actionEntry.Item2[1] : (byte)0;
-                        builder.Do($"Change Raid Subgroup: {rsgName} → group {rsgGroup}", time =>
                         {
-                            _objectManager.ChangeRaidSubgroup(rsgName, rsgGroup);
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
+                            // Params: [0] = string playerName, [1] = int subGroup (0-7)
+                            var rsgName = actionEntry.Item2.Count > 0 ? (string)actionEntry.Item2[0] : "";
+                            var rsgGroup = actionEntry.Item2.Count > 1 ? (byte)(int)actionEntry.Item2[1] : (byte)0;
+                            builder.Do($"Change Raid Subgroup: {rsgName} → group {rsgGroup}", time =>
+                            {
+                                _objectManager.ChangeRaidSubgroup(rsgName, rsgGroup);
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
 
                     case CharacterAction.StartDungeoneering:
-                    {
-                        // Params: [0] = isLeader (int, 1=leader 0=follower)
-                        //         [1] = target map ID (int, e.g. 389 for RFC)
-                        // Optional: [2..N] = float waypoints (x,y,z triples)
-                        // If no waypoints provided, uses map-based defaults from DungeonWaypoints.
-                        bool isLeader = actionEntry.Item2.Count > 0 && (int)actionEntry.Item2[0] == 1;
-                        uint targetMapId = actionEntry.Item2.Count > 1 ? (uint)(int)actionEntry.Item2[1] : 0;
-                        var waypointPositions = actionEntry.Item2.Count > 2
-                            ? ParseGatheringRoutePositions(actionEntry.Item2.Skip(2))
-                            : null;
-
-                        builder.Do("Queue Dungeoneering Task", time =>
                         {
-                            var existingTask = _botTasks.OfType<Tasks.Dungeoneering.DungeoneeringTask>().FirstOrDefault();
-                            Log.Information("[BOT RUNNER] StartDungeoneering: isLeader={IsLeader}, existing={Existing}, existingIsLeader={ExLeader}",
-                                isLeader, existingTask != null, existingTask?.IsLeader);
-                            if (existingTask != null && existingTask.IsLeader == isLeader)
-                            {
-                                // Same role task already running — skip duplicate dispatch
-                            }
-                            else
-                            {
-                                // Use target map ID from coordinator (reliable), falling back to
-                                // player's current MapId (may be stale during instance loading).
-                                uint mapId = targetMapId != 0
-                                    ? targetMapId
-                                    : (_objectManager.Player?.MapId ?? 0);
-                                var mapWaypoints = Tasks.Dungeoneering.DungeonWaypoints.GetWaypointsForMap(mapId);
-                                IReadOnlyList<GameData.Core.Models.Position>? waypoints = waypointPositions?.Count > 0
-                                    ? waypointPositions
-                                    : mapWaypoints;
+                            // Params: [0] = isLeader (int, 1=leader 0=follower)
+                            //         [1] = target map ID (int, e.g. 389 for RFC)
+                            // Optional: [2..N] = float waypoints (x,y,z triples)
+                            // If no waypoints provided, uses map-based defaults from DungeonWaypoints.
+                            bool isLeader = actionEntry.Item2.Count > 0 && (int)actionEntry.Item2[0] == 1;
+                            uint targetMapId = actionEntry.Item2.Count > 1 ? (uint)(int)actionEntry.Item2[1] : 0;
+                            var waypointPositions = actionEntry.Item2.Count > 2
+                                ? ParseGatheringRoutePositions(actionEntry.Item2.Skip(2))
+                                : null;
 
-                                _botTasks.Push(new Tasks.Dungeoneering.DungeoneeringTask(context, isLeader, waypoints, mapId));
-                            }
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
+                            builder.Do("Queue Dungeoneering Task", time =>
+                            {
+                                var existingTask = _botTasks.OfType<Tasks.Dungeoneering.DungeoneeringTask>().FirstOrDefault();
+                                Log.Information("[BOT RUNNER] StartDungeoneering: isLeader={IsLeader}, existing={Existing}, existingIsLeader={ExLeader}",
+                                    isLeader, existingTask != null, existingTask?.IsLeader);
+                                if (existingTask != null && existingTask.IsLeader == isLeader)
+                                {
+                                    // Same role task already running — skip duplicate dispatch
+                                }
+                                else
+                                {
+                                    // Use target map ID from coordinator (reliable), falling back to
+                                    // player's current MapId (may be stale during instance loading).
+                                    uint mapId = targetMapId != 0
+                                        ? targetMapId
+                                        : (_objectManager.Player?.MapId ?? 0);
+                                    var mapWaypoints = Tasks.Dungeoneering.DungeonWaypoints.GetWaypointsForMap(mapId);
+                                    IReadOnlyList<GameData.Core.Models.Position>? waypoints = waypointPositions?.Count > 0
+                                        ? waypointPositions
+                                        : mapWaypoints;
+
+                                    _botTasks.Push(new Tasks.Dungeoneering.DungeoneeringTask(context, isLeader, waypoints, mapId));
+                                }
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
 
                     case CharacterAction.FollowTarget:
-                    {
-                        // Params: [0] = targetGuid (long)
-                        // [1] = followDistance (float, optional, default 5.0)
-                        var followGuid = UnboxGuid(actionEntry.Item2[0]);
-                        var followDistance = actionEntry.Item2.Count > 1 ? (float)actionEntry.Item2[1] : 5.0f;
-                        builder.Splice(BuildFollowTargetSequence(followGuid, followDistance));
-                        break;
-                    }
+                        {
+                            // Params: [0] = targetGuid (long)
+                            // [1] = followDistance (float, optional, default 5.0)
+                            var followGuid = UnboxGuid(actionEntry.Item2[0]);
+                            var followDistance = actionEntry.Item2.Count > 1 ? (float)actionEntry.Item2[1] : 5.0f;
+                            builder.Splice(BuildFollowTargetSequence(followGuid, followDistance));
+                            break;
+                        }
 
                     case CharacterAction.JoinBattleground:
-                    {
-                        // Params: [0] = bgTypeId (int), [1] = expectedMapId (int)
-                        var bgTypeId = (int)actionEntry.Item2[0];
-                        var expectedMapId = actionEntry.Item2.Count > 1 ? (uint)(int)actionEntry.Item2[1] : 0u;
-
-                        builder.Do("Queue BG Join Task", time =>
                         {
-                            // Get BG network client from agent factory
-                            WoWSharpClient.Networking.ClientComponents.BattlegroundNetworkClientComponent? bgClient = null;
-                            var factory = _agentFactoryAccessor?.Invoke();
-                            if (factory != null)
+                            // Params: [0] = bgTypeId (int), [1] = expectedMapId (int)
+                            var bgTypeId = (int)actionEntry.Item2[0];
+                            var expectedMapId = actionEntry.Item2.Count > 1 ? (uint)(int)actionEntry.Item2[1] : 0u;
+
+                            builder.Do("Queue BG Join Task", time =>
                             {
-                                bgClient = factory.BattlegroundAgent;
-                            }
+                                // Get BG network client from agent factory
+                                WoWSharpClient.Networking.ClientComponents.BattlegroundNetworkClientComponent? bgClient = null;
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                if (factory != null)
+                                {
+                                    bgClient = factory.BattlegroundAgent;
+                                }
 
-                            var result = UpsertBattlegroundQueueTask(
-                                _botTasks,
-                                context,
-                                (BotRunner.Travel.BattlemasterData.BattlegroundType)bgTypeId,
-                                expectedMapId,
-                                bgClient);
+                                var result = UpsertBattlegroundQueueTask(
+                                    _botTasks,
+                                    context,
+                                    (BotRunner.Travel.BattlemasterData.BattlegroundType)bgTypeId,
+                                    expectedMapId,
+                                    bgClient);
 
-                            if (result != BattlegroundQueueTaskUpsertResult.Duplicate)
-                            {
-                                Log.Information("[BOT RUNNER] BG queue upsert: {Result} bgType={BgTypeId} expectedMap={ExpectedMapId}",
-                                    result,
-                                    bgTypeId,
-                                    expectedMapId);
-                            }
+                                if (result != BattlegroundQueueTaskUpsertResult.Duplicate)
+                                {
+                                    Log.Information("[BOT RUNNER] BG queue upsert: {Result} bgType={BgTypeId} expectedMap={ExpectedMapId}",
+                                        result,
+                                        bgTypeId,
+                                        expectedMapId);
+                                }
 
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
 
                     case CharacterAction.AcceptBattleground:
-                    {
-                        builder.Do("Accept BG Invite", time =>
                         {
-                            var factory = _agentFactoryAccessor?.Invoke();
-                            var bgClient = factory?.BattlegroundAgent;
-                            if (bgClient != null)
+                            builder.Do("Accept BG Invite", time =>
                             {
-                                bgClient.AcceptInviteAsync().GetAwaiter().GetResult();
-                                Log.Information("[BOT RUNNER] BG invite accepted");
-                            }
-                            else
-                            {
-                                _objectManager.AcceptBattlegroundInvite();
-                                Log.Information("[BOT RUNNER] BG invite accepted via ObjectManager");
-                            }
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                var bgClient = factory?.BattlegroundAgent;
+                                if (bgClient != null)
+                                {
+                                    bgClient.AcceptInviteAsync().GetAwaiter().GetResult();
+                                    Log.Information("[BOT RUNNER] BG invite accepted");
+                                }
+                                else
+                                {
+                                    _objectManager.AcceptBattlegroundInvite();
+                                    Log.Information("[BOT RUNNER] BG invite accepted via ObjectManager");
+                                }
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
 
                     case CharacterAction.LeaveBattleground:
-                    {
-                        builder.Do("Leave BG", time =>
                         {
-                            var factory = _agentFactoryAccessor?.Invoke();
-                            var bgClient = factory?.BattlegroundAgent;
-                            if (bgClient != null)
+                            builder.Do("Leave BG", time =>
                             {
-                                bgClient.LeaveAsync().GetAwaiter().GetResult();
-                                Log.Information("[BOT RUNNER] Left battleground");
-                            }
-                            else
-                            {
-                                _objectManager.LeaveBattleground();
-                                Log.Information("[BOT RUNNER] Cleared battleground queue via ObjectManager");
-                            }
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
+                                var factory = _agentFactoryAccessor?.Invoke();
+                                var bgClient = factory?.BattlegroundAgent;
+                                if (bgClient != null)
+                                {
+                                    bgClient.LeaveAsync().GetAwaiter().GetResult();
+                                    Log.Information("[BOT RUNNER] Left battleground");
+                                }
+                                else
+                                {
+                                    _objectManager.LeaveBattleground();
+                                    Log.Information("[BOT RUNNER] Cleared battleground queue via ObjectManager");
+                                }
+                                return BehaviourTreeStatus.Success;
+                            });
+                            break;
+                        }
 
                     case CharacterAction.TravelTo:
-                    {
-                        const float sameMapTravelArrivalTolerance = 15f;
-                        const float sameMapTravelVerticalArrivalTolerance = 4f;
-
-                        // Params: [0]=mapId, [1]=x (float), [2]=y (float), [3]=z (float)
-                        var targetMapId = (uint)Convert.ToInt32(actionEntry.Item2[0]);
-                        var targetX = Convert.ToSingle(actionEntry.Item2[1]);
-                        var targetY = Convert.ToSingle(actionEntry.Item2[2]);
-                        var targetZ = Convert.ToSingle(actionEntry.Item2[3]);
-                        builder.Do($"TravelTo map={targetMapId} ({targetX:F0},{targetY:F0},{targetZ:F0})", time =>
                         {
-                            var target = new Position(targetX, targetY, targetZ);
-                            var options = new TravelOptions
-                            {
-                                PlayerFaction = TravelFaction.Horde,
-                                DiscoveredFlightNodes = FlightPathData
-                                    .GetNodesForFaction((int)_objectManager.Player.MapId, FlightPathData.Faction.Horde)
-                                    .Select(n => n.NodeId)
-                                    .ToArray()
-                            };
+                            const float sameMapTravelArrivalTolerance = 15f;
+                            const float sameMapTravelVerticalArrivalTolerance = 4f;
 
-                            if (_objectManager.Player.MapId != targetMapId)
+                            // Params: [0]=mapId, [1]=x (float), [2]=y (float), [3]=z (float)
+                            var targetMapId = (uint)Convert.ToInt32(actionEntry.Item2[0]);
+                            var targetX = Convert.ToSingle(actionEntry.Item2[1]);
+                            var targetY = Convert.ToSingle(actionEntry.Item2[2]);
+                            var targetZ = Convert.ToSingle(actionEntry.Item2[3]);
+                            builder.Do($"TravelTo map={targetMapId} ({targetX:F0},{targetY:F0},{targetZ:F0})", time =>
                             {
+                                var target = new Position(targetX, targetY, targetZ);
+                                var options = new TravelOptions
+                                {
+                                    PlayerFaction = TravelFaction.Horde,
+                                    DiscoveredFlightNodes = FlightPathData
+                                        .GetNodesForFaction((int)_objectManager.Player.MapId, FlightPathData.Faction.Horde)
+                                        .Select(n => n.NodeId)
+                                        .ToArray()
+                                };
+
+                                if (_objectManager.Player.MapId != targetMapId)
+                                {
+                                    context.AddImmediateDiagnostic(
+                                        $"[TRAVEL_DISPATCH] cross-map stage playerMap={_objectManager.Player.MapId} " +
+                                        $"targetMap={targetMapId} target=({targetX:F1},{targetY:F1},{targetZ:F1}) stack={_botTasks.Count}");
+
+                                    var crossMapTravelResult = UpsertTravelTask(_botTasks, context, targetMapId, target, options, arrivalRadius: sameMapTravelArrivalTolerance);
+                                    if (crossMapTravelResult != TravelTaskUpsertResult.Duplicate)
+                                    {
+                                        Log.Information(
+                                            "[BOT RUNNER] TravelTo staged upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1})",
+                                            crossMapTravelResult,
+                                            targetMapId,
+                                            targetX,
+                                            targetY,
+                                            targetZ);
+                                    }
+
+                                    context.AddImmediateDiagnostic(
+                                        $"[TRAVEL_DISPATCH] cross-map upsert={crossMapTravelResult} stack={_botTasks.Count}");
+
+                                    return BehaviourTreeStatus.Success;
+                                }
+
+                                var finalDist = _objectManager.Player.Position.DistanceTo2D(target);
+                                var finalDz = Math.Abs(_objectManager.Player.Position.Z - target.Z);
+                                if (finalDist <= sameMapTravelArrivalTolerance
+                                    && finalDz <= sameMapTravelVerticalArrivalTolerance)
+                                {
+                                    _objectManager.StopAllMovement();
+                                    return BehaviourTreeStatus.Success;
+                                }
+
                                 context.AddImmediateDiagnostic(
-                                    $"[TRAVEL_DISPATCH] cross-map stage playerMap={_objectManager.Player.MapId} " +
+                                    $"[TRAVEL_DISPATCH] same-map stage playerMap={_objectManager.Player.MapId} " +
                                     $"targetMap={targetMapId} target=({targetX:F1},{targetY:F1},{targetZ:F1}) stack={_botTasks.Count}");
-
-                                var crossMapTravelResult = UpsertTravelTask(_botTasks, context, targetMapId, target, options, arrivalRadius: sameMapTravelArrivalTolerance);
-                                if (crossMapTravelResult != TravelTaskUpsertResult.Duplicate)
+                                var sameMapTravelResult = UpsertTravelTask(
+                                    _botTasks,
+                                    context,
+                                    targetMapId,
+                                    target,
+                                    options,
+                                    arrivalRadius: sameMapTravelArrivalTolerance);
+                                if (sameMapTravelResult != TravelTaskUpsertResult.Duplicate)
                                 {
                                     Log.Information(
-                                        "[BOT RUNNER] TravelTo staged upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1})",
-                                        crossMapTravelResult,
+                                        "[BOT RUNNER] TravelTo same-map upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1}) arrivalRadius=15.0",
+                                        sameMapTravelResult,
                                         targetMapId,
                                         targetX,
                                         targetY,
@@ -1264,48 +1300,12 @@ namespace BotRunner
                                 }
 
                                 context.AddImmediateDiagnostic(
-                                    $"[TRAVEL_DISPATCH] cross-map upsert={crossMapTravelResult} stack={_botTasks.Count}");
+                                    $"[TRAVEL_DISPATCH] same-map upsert={sameMapTravelResult} stack={_botTasks.Count}");
 
                                 return BehaviourTreeStatus.Success;
-                            }
-
-                            var finalDist = _objectManager.Player.Position.DistanceTo2D(target);
-                            var finalDz = Math.Abs(_objectManager.Player.Position.Z - target.Z);
-                            if (finalDist <= sameMapTravelArrivalTolerance
-                                && finalDz <= sameMapTravelVerticalArrivalTolerance)
-                            {
-                                _objectManager.StopAllMovement();
-                                return BehaviourTreeStatus.Success;
-                            }
-
-                            context.AddImmediateDiagnostic(
-                                $"[TRAVEL_DISPATCH] same-map stage playerMap={_objectManager.Player.MapId} " +
-                                $"targetMap={targetMapId} target=({targetX:F1},{targetY:F1},{targetZ:F1}) stack={_botTasks.Count}");
-                            var sameMapTravelResult = UpsertTravelTask(
-                                _botTasks,
-                                context,
-                                targetMapId,
-                                target,
-                                options,
-                                arrivalRadius: sameMapTravelArrivalTolerance);
-                            if (sameMapTravelResult != TravelTaskUpsertResult.Duplicate)
-                            {
-                                Log.Information(
-                                    "[BOT RUNNER] TravelTo same-map upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1}) arrivalRadius=15.0",
-                                    sameMapTravelResult,
-                                    targetMapId,
-                                    targetX,
-                                    targetY,
-                                    targetZ);
-                            }
-
-                            context.AddImmediateDiagnostic(
-                                $"[TRAVEL_DISPATCH] same-map upsert={sameMapTravelResult} stack={_botTasks.Count}");
-
-                            return BehaviourTreeStatus.Success;
-                        });
-                        break;
-                    }
+                            });
+                            break;
+                        }
 
                     default:
                         break;

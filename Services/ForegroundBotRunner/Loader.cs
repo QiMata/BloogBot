@@ -115,7 +115,7 @@ namespace ForegroundBotRunner
                     return 0;
                 }
                 _isInitialized = true;
-                
+
                 // Start the main application thread
                 // We use STA apartment state for WPF/WinForms compatibility if needed
                 _mainThread = new Thread(() =>
@@ -131,12 +131,12 @@ namespace ForegroundBotRunner
                         try { if (!string.IsNullOrWhiteSpace(InjectionLog)) File.AppendAllText(InjectionLog, $"[Loader] Exception in main thread: {ex}\n"); } catch { }
                     }
                 });
-                
+
                 _mainThread.SetApartmentState(ApartmentState.STA);
                 _mainThread.IsBackground = false; // Keep process alive
                 _mainThread.Name = "ForegroundBotRunner.Main";
                 _mainThread.Start();
-                
+
                 Console.WriteLine("[Loader] Main thread started successfully");
                 if (!string.IsNullOrWhiteSpace(InjectionLog))
                 {

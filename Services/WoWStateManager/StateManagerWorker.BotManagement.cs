@@ -436,7 +436,7 @@ namespace WoWStateManager
             // Verify ForegroundBotRunner.dll exists
             var loaderDir = Path.GetDirectoryName(loaderPath);
             var foregroundBotPath = Path.Combine(loaderDir ?? "", "ForegroundBotRunner.dll");
-            
+
             if (!File.Exists(foregroundBotPath))
             {
                 _logger.LogError($"[FAIL] ForegroundBotRunner.dll not found at: {foregroundBotPath}");
@@ -472,7 +472,7 @@ namespace WoWStateManager
                 {
                     var output = dotnetProcess.StandardOutput.ReadToEnd();
                     dotnetProcess.WaitForExit();
-                    
+
                     if (output.Contains(".NET 8.0"))
                     {
                         _logger.LogInformation("[OK] .NET 8.0 runtime detected on system");
@@ -759,218 +759,218 @@ namespace WoWStateManager
 
             try
             {
-            // allocate enough memory to hold the full file path to Loader.dll within the WoW process
-            var loaderPathPtr = VirtualAllocEx(
-                processHandle,
-                (IntPtr)0,
-                loaderPath.Length * 2, // Unicode characters are 2 bytes each
-                MemoryAllocationType.MEM_COMMIT,
-                MemoryProtectionType.PAGE_EXECUTE_READWRITE);
+                // allocate enough memory to hold the full file path to Loader.dll within the WoW process
+                var loaderPathPtr = VirtualAllocEx(
+                    processHandle,
+                    (IntPtr)0,
+                    loaderPath.Length * 2, // Unicode characters are 2 bytes each
+                    MemoryAllocationType.MEM_COMMIT,
+                    MemoryProtectionType.PAGE_EXECUTE_READWRITE);
 
-            if (loaderPathPtr == IntPtr.Zero)
-            {
-                var lastError = Marshal.GetLastWin32Error();
-                _logger.LogError($"[FAIL] Failed to allocate memory in target process. Error Code: {lastError} (0x{lastError:X})");
-                _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
-                
-                // Check if target process is still alive using the CreateProcess handle
-                if (WaitForSingleObject(processHandle, 0) == WAIT_OBJECT_0)
+                if (loaderPathPtr == IntPtr.Zero)
                 {
-                    _logger.LogError($"[FAIL] Target WoW process (PID {processId}) has already exited");
-                }
-                
-                return;
-            }
-            _logger.LogInformation($"[OK] Memory allocated at address: 0x{loaderPathPtr:X}");
+                    var lastError = Marshal.GetLastWin32Error();
+                    _logger.LogError($"[FAIL] Failed to allocate memory in target process. Error Code: {lastError} (0x{lastError:X})");
+                    _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
 
-            // Give some time for memory allocation to settle
-            Thread.Sleep(500);
-
-            // write the file path to Loader.dll to the WoW process's memory
-            var bytes = Encoding.Unicode.GetBytes(loaderPath);
-            var bytesWritten = 0;
-            var writeResult = WriteProcessMemory(processHandle, loaderPathPtr, bytes, bytes.Length, ref bytesWritten);
-
-            if (!writeResult || bytesWritten != bytes.Length)
-            {
-                var lastError = Marshal.GetLastWin32Error();
-                _logger.LogError($"[FAIL] Failed to write DLL path to target process");
-                _logger.LogError($"Bytes written: {bytesWritten}/{bytes.Length}");
-                _logger.LogError($"Error Code: {lastError} (0x{lastError:X})");
-                _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
-                VirtualFreeEx(processHandle, loaderPathPtr, 0, MemoryFreeType.MEM_RELEASE);
-                return;
-            }
-            _logger.LogInformation($"[OK] DLL path written to target process: {bytesWritten} bytes");
-
-            // search current process for the memory address of the LoadLibraryW function within the kernel32.dll module
-            var moduleHandle = GetModuleHandle("kernel32.dll");
-            var loaderDllPointer = GetProcAddress(moduleHandle, "LoadLibraryW");
-
-            if (loaderDllPointer == IntPtr.Zero)
-            {
-                var lastError = Marshal.GetLastWin32Error();
-                _logger.LogError($"[FAIL] Failed to get LoadLibraryW function address");
-                _logger.LogError($"Error Code: {lastError} (0x{lastError:X})");
-                _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
-                VirtualFreeEx(processHandle, loaderPathPtr, 0, MemoryFreeType.MEM_RELEASE);
-                return;
-            }
-            _logger.LogInformation($"[OK] LoadLibraryW address: 0x{loaderDllPointer:X}");
-
-            // Give some time before remote thread creation
-            Thread.Sleep(500);
-
-            _logger.LogInformation("Creating remote thread for DLL injection...");
-
-            // create a new thread with the execution starting at the LoadLibraryW function, 
-            // with the path to our Loader.dll passed as a parameter
-            var threadHandle = CreateRemoteThread(processHandle, (IntPtr)null, (IntPtr)0, loaderDllPointer, loaderPathPtr, 0, (IntPtr)null);
-
-            if (threadHandle == IntPtr.Zero)
-            {
-                var lastError = Marshal.GetLastWin32Error();
-                _logger.LogError($"[FAIL] Failed to create remote thread for DLL injection");
-                _logger.LogError($"Error Code: {lastError} (0x{lastError:X})");
-                _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
-
-                // Common reasons for remote thread creation failure
-                if (lastError == 5) // ACCESS_DENIED
-                {
-                    _logger.LogError("ACCESS_DENIED - Target process may have higher privileges or be protected");
-                    _logger.LogError("Try running StateManager as Administrator");
-                }
-                else if (lastError == 8) // NOT_ENOUGH_MEMORY
-                {
-                    _logger.LogError("NOT_ENOUGH_MEMORY - Insufficient memory in target process");
-                }
-
-                VirtualFreeEx(processHandle, loaderPathPtr, 0, MemoryFreeType.MEM_RELEASE);
-                return;
-            }
-
-            _logger.LogWarning($"[OK] Remote thread created successfully (Handle: 0x{threadHandle:X})");
-            _logger.LogWarning("Waiting for injection to complete...");
-
-            // Wait for the injection thread to complete (with timeout)
-            var waitResult = WaitForSingleObject(threadHandle, 30000); // 30 second timeout for injection
-
-            if (waitResult == 0) // WAIT_OBJECT_0
-            {
-                // Get the thread exit code (LoadLibrary return value)
-                if (GetExitCodeThread(threadHandle, out var exitCode))
-                {
-                    if (exitCode != 0)
+                    // Check if target process is still alive using the CreateProcess handle
+                    if (WaitForSingleObject(processHandle, 0) == WAIT_OBJECT_0)
                     {
-                        _logger.LogWarning($"SUCCESS: DLL injection completed successfully!");
-                        _logger.LogWarning($"[OK] LoadLibrary returned: 0x{exitCode:X} (Module handle)");
-                        
-                        // Give the injected DLL time to initialize
-                        Thread.Sleep(2000);
-                        
-                        // Check for loader breadcrumb files to verify execution
-                        var baseDir = loaderDir;
-                        var stdcallBreadcrumb = Path.Combine(baseDir ?? "", "testentry_stdcall.txt");
-                        var cdeclBreadcrumb = Path.Combine(baseDir ?? "", "testentry_cdecl.txt");
-                        
-                        if (File.Exists(stdcallBreadcrumb))
+                        _logger.LogError($"[FAIL] Target WoW process (PID {processId}) has already exited");
+                    }
+
+                    return;
+                }
+                _logger.LogInformation($"[OK] Memory allocated at address: 0x{loaderPathPtr:X}");
+
+                // Give some time for memory allocation to settle
+                Thread.Sleep(500);
+
+                // write the file path to Loader.dll to the WoW process's memory
+                var bytes = Encoding.Unicode.GetBytes(loaderPath);
+                var bytesWritten = 0;
+                var writeResult = WriteProcessMemory(processHandle, loaderPathPtr, bytes, bytes.Length, ref bytesWritten);
+
+                if (!writeResult || bytesWritten != bytes.Length)
+                {
+                    var lastError = Marshal.GetLastWin32Error();
+                    _logger.LogError($"[FAIL] Failed to write DLL path to target process");
+                    _logger.LogError($"Bytes written: {bytesWritten}/{bytes.Length}");
+                    _logger.LogError($"Error Code: {lastError} (0x{lastError:X})");
+                    _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
+                    VirtualFreeEx(processHandle, loaderPathPtr, 0, MemoryFreeType.MEM_RELEASE);
+                    return;
+                }
+                _logger.LogInformation($"[OK] DLL path written to target process: {bytesWritten} bytes");
+
+                // search current process for the memory address of the LoadLibraryW function within the kernel32.dll module
+                var moduleHandle = GetModuleHandle("kernel32.dll");
+                var loaderDllPointer = GetProcAddress(moduleHandle, "LoadLibraryW");
+
+                if (loaderDllPointer == IntPtr.Zero)
+                {
+                    var lastError = Marshal.GetLastWin32Error();
+                    _logger.LogError($"[FAIL] Failed to get LoadLibraryW function address");
+                    _logger.LogError($"Error Code: {lastError} (0x{lastError:X})");
+                    _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
+                    VirtualFreeEx(processHandle, loaderPathPtr, 0, MemoryFreeType.MEM_RELEASE);
+                    return;
+                }
+                _logger.LogInformation($"[OK] LoadLibraryW address: 0x{loaderDllPointer:X}");
+
+                // Give some time before remote thread creation
+                Thread.Sleep(500);
+
+                _logger.LogInformation("Creating remote thread for DLL injection...");
+
+                // create a new thread with the execution starting at the LoadLibraryW function, 
+                // with the path to our Loader.dll passed as a parameter
+                var threadHandle = CreateRemoteThread(processHandle, (IntPtr)null, (IntPtr)0, loaderDllPointer, loaderPathPtr, 0, (IntPtr)null);
+
+                if (threadHandle == IntPtr.Zero)
+                {
+                    var lastError = Marshal.GetLastWin32Error();
+                    _logger.LogError($"[FAIL] Failed to create remote thread for DLL injection");
+                    _logger.LogError($"Error Code: {lastError} (0x{lastError:X})");
+                    _logger.LogError($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
+
+                    // Common reasons for remote thread creation failure
+                    if (lastError == 5) // ACCESS_DENIED
+                    {
+                        _logger.LogError("ACCESS_DENIED - Target process may have higher privileges or be protected");
+                        _logger.LogError("Try running StateManager as Administrator");
+                    }
+                    else if (lastError == 8) // NOT_ENOUGH_MEMORY
+                    {
+                        _logger.LogError("NOT_ENOUGH_MEMORY - Insufficient memory in target process");
+                    }
+
+                    VirtualFreeEx(processHandle, loaderPathPtr, 0, MemoryFreeType.MEM_RELEASE);
+                    return;
+                }
+
+                _logger.LogWarning($"[OK] Remote thread created successfully (Handle: 0x{threadHandle:X})");
+                _logger.LogWarning("Waiting for injection to complete...");
+
+                // Wait for the injection thread to complete (with timeout)
+                var waitResult = WaitForSingleObject(threadHandle, 30000); // 30 second timeout for injection
+
+                if (waitResult == 0) // WAIT_OBJECT_0
+                {
+                    // Get the thread exit code (LoadLibrary return value)
+                    if (GetExitCodeThread(threadHandle, out var exitCode))
+                    {
+                        if (exitCode != 0)
                         {
-                            _logger.LogInformation($"[OK] Managed code execution confirmed (stdcall breadcrumb found)");
-                            try
+                            _logger.LogWarning($"SUCCESS: DLL injection completed successfully!");
+                            _logger.LogWarning($"[OK] LoadLibrary returned: 0x{exitCode:X} (Module handle)");
+
+                            // Give the injected DLL time to initialize
+                            Thread.Sleep(2000);
+
+                            // Check for loader breadcrumb files to verify execution
+                            var baseDir = loaderDir;
+                            var stdcallBreadcrumb = Path.Combine(baseDir ?? "", "testentry_stdcall.txt");
+                            var cdeclBreadcrumb = Path.Combine(baseDir ?? "", "testentry_cdecl.txt");
+
+                            if (File.Exists(stdcallBreadcrumb))
                             {
-                                var content = File.ReadAllText(stdcallBreadcrumb);
-                                _logger.LogInformation($"[OK] Breadcrumb content: {content.Trim()}");
+                                _logger.LogInformation($"[OK] Managed code execution confirmed (stdcall breadcrumb found)");
+                                try
+                                {
+                                    var content = File.ReadAllText(stdcallBreadcrumb);
+                                    _logger.LogInformation($"[OK] Breadcrumb content: {content.Trim()}");
+                                }
+                                catch { }
                             }
-                            catch { }
-                        }
-                        else if (File.Exists(cdeclBreadcrumb))
-                        {
-                            _logger.LogInformation($"[OK] Managed code execution confirmed (cdecl breadcrumb found)");
+                            else if (File.Exists(cdeclBreadcrumb))
+                            {
+                                _logger.LogInformation($"[OK] Managed code execution confirmed (cdecl breadcrumb found)");
+                            }
+                            else
+                            {
+                                _logger.LogWarning($"[WARN] No execution breadcrumbs found. Managed code may not have executed properly.");
+                                _logger.LogWarning($"Expected files: {stdcallBreadcrumb} or {cdeclBreadcrumb}");
+                            }
                         }
                         else
                         {
-                            _logger.LogWarning($"[WARN] No execution breadcrumbs found. Managed code may not have executed properly.");
-                            _logger.LogWarning($"Expected files: {stdcallBreadcrumb} or {cdeclBreadcrumb}");
+                            _logger.LogError($"[FAIL] DLL injection failed. LoadLibrary returned 0 (failed to load)");
+
+                            // Enhanced error analysis for LoadLibrary failure
+                            _logger.LogError("POSSIBLE CAUSES FOR LOADLIBRARY FAILURE:");
+                            _logger.LogError("   - DLL architecture mismatch (32-bit vs 64-bit)");
+                            _logger.LogError("   - Missing dependencies (.NET runtime, Visual C++ redistributables)");
+                            _logger.LogError("   - DLL file is corrupted or invalid");
+                            _logger.LogError("   - Insufficient permissions");
+                            _logger.LogError("   - DLL path contains invalid characters");
+                            _logger.LogError("   - Target process doesn't support .NET CLR hosting");
+                            _logger.LogError("   - WoW.exe may have anti-debugging/injection protection");
                         }
                     }
                     else
                     {
-                        _logger.LogError($"[FAIL] DLL injection failed. LoadLibrary returned 0 (failed to load)");
-
-                        // Enhanced error analysis for LoadLibrary failure
-                        _logger.LogError("POSSIBLE CAUSES FOR LOADLIBRARY FAILURE:");
-                        _logger.LogError("   - DLL architecture mismatch (32-bit vs 64-bit)");
-                        _logger.LogError("   - Missing dependencies (.NET runtime, Visual C++ redistributables)");
-                        _logger.LogError("   - DLL file is corrupted or invalid");
-                        _logger.LogError("   - Insufficient permissions");
-                        _logger.LogError("   - DLL path contains invalid characters");
-                        _logger.LogError("   - Target process doesn't support .NET CLR hosting");
-                        _logger.LogError("   - WoW.exe may have anti-debugging/injection protection");
+                        var lastError = Marshal.GetLastWin32Error();
+                        _logger.LogWarning($"WARNING: Could not retrieve thread exit code");
+                        _logger.LogWarning($"Error Code: {lastError} (0x{lastError:X})");
+                        _logger.LogWarning($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
                     }
                 }
                 else
                 {
-                    var lastError = Marshal.GetLastWin32Error();
-                    _logger.LogWarning($"WARNING: Could not retrieve thread exit code");
-                    _logger.LogWarning($"Error Code: {lastError} (0x{lastError:X})");
-                    _logger.LogWarning($"Error Description: {new System.ComponentModel.Win32Exception(lastError).Message}");
-                }
-            }
-            else
-            {
-                _logger.LogWarning($"WARNING: Thread wait timed out or failed. Wait result: {waitResult}");
-                if (waitResult == 258) // WAIT_TIMEOUT
-                {
-                    _logger.LogWarning("Thread execution timed out after 30 seconds");
-                    _logger.LogWarning("This may indicate the DLL is loading but taking a long time to initialize");
-                }
-                else if (waitResult == 0xFFFFFFFF) // WAIT_FAILED
-                {
-                    var lastError = Marshal.GetLastWin32Error();
-                    _logger.LogWarning($"Wait failed with error: {lastError} (0x{lastError:X})");
-                }
-            }
-
-            CloseHandle(threadHandle);
-
-            // Give some time before cleanup
-            Thread.Sleep(500);
-
-            // free the memory that was allocated by VirtualAllocEx
-            VirtualFreeEx(processHandle, loaderPathPtr, 0, MemoryFreeType.MEM_RELEASE);
-
-            // Update the injection timestamp so the orphan reaper uses the real time
-            injectionTimestampHolder.Value = DateTime.UtcNow;
-
-            // 62b: Wait for bot phone-home after injection (poll CurrentActivityMemberList, 30s timeout)
-            {
-                var phoneHomeTimeout = TimeSpan.FromSeconds(30);
-                var phoneHomeSw = Stopwatch.StartNew();
-                bool phoneHomeReceived = false;
-
-                while (phoneHomeSw.Elapsed < phoneHomeTimeout)
-                {
-                    if (_activityMemberSocketListener.CurrentActivityMemberList.TryGetValue(accountName, out var snapshot)
-                        && snapshot != null
-                        && !string.IsNullOrEmpty(snapshot.AccountName)
-                        && snapshot.AccountName != "?")
+                    _logger.LogWarning($"WARNING: Thread wait timed out or failed. Wait result: {waitResult}");
+                    if (waitResult == 258) // WAIT_TIMEOUT
                     {
-                        phoneHomeReceived = true;
-                        _logger.LogWarning($"Bot phone-home received for {accountName} after {phoneHomeSw.Elapsed.TotalSeconds:F1}s");
-                        break;
+                        _logger.LogWarning("Thread execution timed out after 30 seconds");
+                        _logger.LogWarning("This may indicate the DLL is loading but taking a long time to initialize");
+                    }
+                    else if (waitResult == 0xFFFFFFFF) // WAIT_FAILED
+                    {
+                        var lastError = Marshal.GetLastWin32Error();
+                        _logger.LogWarning($"Wait failed with error: {lastError} (0x{lastError:X})");
+                    }
+                }
+
+                CloseHandle(threadHandle);
+
+                // Give some time before cleanup
+                Thread.Sleep(500);
+
+                // free the memory that was allocated by VirtualAllocEx
+                VirtualFreeEx(processHandle, loaderPathPtr, 0, MemoryFreeType.MEM_RELEASE);
+
+                // Update the injection timestamp so the orphan reaper uses the real time
+                injectionTimestampHolder.Value = DateTime.UtcNow;
+
+                // 62b: Wait for bot phone-home after injection (poll CurrentActivityMemberList, 30s timeout)
+                {
+                    var phoneHomeTimeout = TimeSpan.FromSeconds(30);
+                    var phoneHomeSw = Stopwatch.StartNew();
+                    bool phoneHomeReceived = false;
+
+                    while (phoneHomeSw.Elapsed < phoneHomeTimeout)
+                    {
+                        if (_activityMemberSocketListener.CurrentActivityMemberList.TryGetValue(accountName, out var snapshot)
+                            && snapshot != null
+                            && !string.IsNullOrEmpty(snapshot.AccountName)
+                            && snapshot.AccountName != "?")
+                        {
+                            phoneHomeReceived = true;
+                            _logger.LogWarning($"Bot phone-home received for {accountName} after {phoneHomeSw.Elapsed.TotalSeconds:F1}s");
+                            break;
+                        }
+
+                        Thread.Sleep(500);
                     }
 
-                    Thread.Sleep(500);
+                    if (!phoneHomeReceived)
+                    {
+                        _logger.LogWarning($"No phone-home snapshot from {accountName} within {phoneHomeTimeout.TotalSeconds}s of injection. Bot may be unresponsive (PID {processId}).");
+                    }
                 }
 
-                if (!phoneHomeReceived)
-                {
-                    _logger.LogWarning($"No phone-home snapshot from {accountName} within {phoneHomeTimeout.TotalSeconds}s of injection. Bot may be unresponsive (PID {processId}).");
-                }
-            }
-
-            _logger.LogWarning($"Foreground Bot Runner setup completed for account {accountName} (Process ID: {processId})");
-            _logger.LogWarning("=== DLL INJECTION DIAGNOSTICS END ===");
+                _logger.LogWarning($"Foreground Bot Runner setup completed for account {accountName} (Process ID: {processId})");
+                _logger.LogWarning("=== DLL INJECTION DIAGNOSTICS END ===");
             }
             finally
             {

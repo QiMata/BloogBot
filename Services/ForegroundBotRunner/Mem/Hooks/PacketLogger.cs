@@ -598,7 +598,7 @@ namespace ForegroundBotRunner.Mem.Hooks
                 case 2:
                     extra += 4; // disp32
                     break;
-                // case 3: register-register, no displacement
+                    // case 3: register-register, no displacement
             }
 
             return extra;
@@ -828,7 +828,7 @@ namespace ForegroundBotRunner.Mem.Hooks
                 or 0x0160 // SMSG_LOOT_RESPONSE
                 or 0x01EE // SMSG_AUTH_RESPONSE
                 or 0x0236 // SMSG_LOGIN_VERIFY_WORLD
-                // Combat opcodes — always log
+                          // Combat opcodes — always log
                 or 0x0141 // CMSG_ATTACKSWING
                 or 0x0143 // SMSG_ATTACKSTART
                 or 0x0144 // SMSG_ATTACKSTOP

@@ -124,7 +124,7 @@ namespace WoWSharpClient.Networking.Implementation
             // Remove the processed message from buffer
             var remainingData = new byte[_buffer.Length - totalMessageSize];
             Array.Copy(bufferData, (int)totalMessageSize, remainingData, 0, remainingData.Length);
-            
+
             _buffer.SetLength(0);
             if (remainingData.Length > 0)
                 _buffer.Write(remainingData);

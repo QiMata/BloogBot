@@ -216,54 +216,54 @@ public class FgCharacterSelectScreen(
                 break;
 
             case 2:
-            {
-                if (state != WoWScreenState.CharacterCreate)
                 {
-                    if (HasCurrentStepTimedOut(CharacterCreateTransitionTimeout))
+                    if (state != WoWScreenState.CharacterCreate)
                     {
-                        Log.Warning(
-                            "[FG-CHARSEL] Step 2 timed out waiting for CharacterCreate (state={State}) - retrying step 1",
-                            state);
-                        AdvanceCreateStep(1);
+                        if (HasCurrentStepTimedOut(CharacterCreateTransitionTimeout))
+                        {
+                            Log.Warning(
+                                "[FG-CHARSEL] Step 2 timed out waiting for CharacterCreate (state={State}) - retrying step 1",
+                                state);
+                            AdvanceCreateStep(1);
+                            break;
+                        }
+
+                        Log.Warning("[FG-CHARSEL] Step 2: Not on CharacterCreate screen (state={State}), waiting", state);
                         break;
                     }
-
-                    Log.Warning("[FG-CHARSEL] Step 2: Not on CharacterCreate screen (state={State}), waiting", state);
+                    var raceIndex = GetCharCreateRaceIndex(race);
+                    Log.Information("[FG-CHARSEL] Step 2: Set race={Race} (index {Index})", race, raceIndex);
+                    ExecuteLua(
+                        $"if SetSelectedRace then SetSelectedRace({raceIndex}); " +
+                        $"elseif CharacterCreateRaceButton{raceIndex} then CharacterCreateRaceButton{raceIndex}:Click(); end",
+                        "charselect.create.step2.select-race");
+                    AdvanceCreateStep(3);
                     break;
                 }
-                var raceIndex = GetCharCreateRaceIndex(race);
-                Log.Information("[FG-CHARSEL] Step 2: Set race={Race} (index {Index})", race, raceIndex);
-                ExecuteLua(
-                    $"if SetSelectedRace then SetSelectedRace({raceIndex}); " +
-                    $"elseif CharacterCreateRaceButton{raceIndex} then CharacterCreateRaceButton{raceIndex}:Click(); end",
-                    "charselect.create.step2.select-race");
-                AdvanceCreateStep(3);
-                break;
-            }
 
             case 3:
-            {
-                if (state != WoWScreenState.CharacterCreate)
                 {
-                    if (HasCurrentStepTimedOut(CharacterCreateTransitionTimeout))
+                    if (state != WoWScreenState.CharacterCreate)
                     {
-                        Log.Warning(
-                            "[FG-CHARSEL] Step 3 timed out waiting for CharacterCreate (state={State}) - retrying step 1",
-                            state);
-                        AdvanceCreateStep(1);
+                        if (HasCurrentStepTimedOut(CharacterCreateTransitionTimeout))
+                        {
+                            Log.Warning(
+                                "[FG-CHARSEL] Step 3 timed out waiting for CharacterCreate (state={State}) - retrying step 1",
+                                state);
+                            AdvanceCreateStep(1);
+                            break;
+                        }
+
+                        Log.Warning("[FG-CHARSEL] Step 3: Not on CharacterCreate screen (state={State}), waiting", state);
                         break;
                     }
-
-                    Log.Warning("[FG-CHARSEL] Step 3: Not on CharacterCreate screen (state={State}), waiting", state);
+                    var classId = GetCharCreateClassId(@class);
+                    Log.Information("[FG-CHARSEL] Step 3: Set class={Class} (id {Id})", @class, classId);
+                    ExecuteLua(BuildClassSelectionLua(race, @class),
+                        "charselect.create.step3.select-class");
+                    AdvanceCreateStep(4);
                     break;
                 }
-                var classId = GetCharCreateClassId(@class);
-                Log.Information("[FG-CHARSEL] Step 3: Set class={Class} (id {Id})", @class, classId);
-                ExecuteLua(BuildClassSelectionLua(race, @class),
-                    "charselect.create.step3.select-class");
-                AdvanceCreateStep(4);
-                break;
-            }
 
             case 4:
                 // Step 4: Set gender + name + create

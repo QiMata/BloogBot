@@ -48,7 +48,7 @@ namespace RogueCombat.Tasks
                     ObjectManager.CastSpell(CheapShot);
                     return;
                 }
-            } 
+            }
 
             if (distanceToTarget < 3)
             {

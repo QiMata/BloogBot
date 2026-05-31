@@ -125,14 +125,14 @@ namespace WoWSharpClient.Client
         {
             if (_authClient == null)
                 throw new InvalidOperationException("Not connected to auth server");
-            
+
             return await _authClient.GetRealmListAsync(cancellationToken);
         }
 
         public async Task SelectRealmAsync(Realm realm, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(realm);
-            
+
             if (_authClient == null)
                 throw new InvalidOperationException("Not connected to auth server");
 
@@ -152,7 +152,7 @@ namespace WoWSharpClient.Client
 
             var sessionKey = _authClient.SessionKey;
             var username = _authClient.Username;
-            
+
             await _worldClient.ConnectAsync(username, _ipAddress, sessionKey, realm.AddressPort, cancellationToken);
         }
 
@@ -160,7 +160,7 @@ namespace WoWSharpClient.Client
         {
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
-                
+
             await _worldClient.SendCharEnumAsync(cancellationToken);
         }
 
@@ -168,7 +168,7 @@ namespace WoWSharpClient.Client
         {
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
-                
+
             await _worldClient.SendPlayerLoginAsync(guid, cancellationToken);
         }
 
@@ -176,10 +176,10 @@ namespace WoWSharpClient.Client
         {
             ArgumentNullException.ThrowIfNull(destination);
             ArgumentException.ThrowIfNullOrWhiteSpace(text);
-            
+
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
-                
+
             await _worldClient.SendChatMessageAsync(chatMsgType, language, destination, text, cancellationToken);
         }
 
@@ -187,7 +187,7 @@ namespace WoWSharpClient.Client
         {
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
-                
+
             await _worldClient.SendNameQueryAsync(guid, cancellationToken);
         }
 
@@ -195,7 +195,7 @@ namespace WoWSharpClient.Client
         {
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
-                
+
             await _worldClient.SendMoveWorldPortAckAsync(cancellationToken);
         }
 
@@ -203,7 +203,7 @@ namespace WoWSharpClient.Client
         {
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
-                
+
             await _worldClient.SendSetActiveMoverAsync(guid, cancellationToken);
         }
 
@@ -219,10 +219,10 @@ namespace WoWSharpClient.Client
         public virtual async Task SendMovementOpcodeAsync(Opcode opcode, byte[] movementInfo, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(movementInfo);
-            
+
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
-                
+
             await _worldClient.SendOpcodeAsync(opcode, movementInfo, cancellationToken);
             MovementOpcodeSent?.Invoke(opcode, movementInfo.Length);
         }
@@ -230,23 +230,23 @@ namespace WoWSharpClient.Client
         public async Task SendMSGPackedAsync(Opcode opcode, byte[] payload, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(payload);
-            
+
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
-                
+
             await _worldClient.SendOpcodeAsync(opcode, payload, cancellationToken);
         }
 
         public async Task SendCharacterCreateAsync(string name, Race race, Class clazz, Gender gender, byte skin, byte face, byte hairStyle, byte hairColor, byte facialHair, byte outfitId, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(name);
-            
+
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
 
             using var ms = new MemoryStream();
             using var writer = new BinaryWriter(ms, Encoding.UTF8, true);
-            
+
             writer.Write(Encoding.UTF8.GetBytes(name));
             writer.Write((byte)0); // null terminator
             writer.Write((byte)race);
@@ -276,7 +276,7 @@ namespace WoWSharpClient.Client
         {
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
-                
+
             await _worldClient.SendPingAsync(_pingCounter++, cancellationToken);
         }
 
@@ -284,14 +284,14 @@ namespace WoWSharpClient.Client
         {
             if (_worldClient == null)
                 throw new InvalidOperationException("Not connected to world server");
-                
+
             await _worldClient.SendQueryTimeAsync(cancellationToken);
         }
 
         public void SetIpAddress(string ipAddress)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(ipAddress);
-            
+
             _ipAddress = ipAddress;
         }
 
@@ -302,12 +302,12 @@ namespace WoWSharpClient.Client
         public async Task DisconnectAsync(CancellationToken cancellationToken = default)
         {
             var tasks = new List<Task>();
-            
+
             if (_worldClient != null)
             {
                 tasks.Add(_worldClient.DisconnectAsync(cancellationToken));
             }
-            
+
             if (_authClient != null)
             {
                 tasks.Add(_authClient.DisconnectAsync(cancellationToken));

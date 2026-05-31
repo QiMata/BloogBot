@@ -93,9 +93,14 @@ public sealed class MovementControllerIpcParityTests : IDisposable
         var player = new WoWLocalPlayer(new HighGuid(42))
         {
             Position = new Position(-224, -4310, teleportZ),  // 3y above terrain
-            MapId = 1, Race = Race.Orc, Gender = Gender.Male,
-            WalkSpeed = 2.5f, RunSpeed = 7.0f, RunBackSpeed = 4.5f,
-            SwimSpeed = 4.722f, SwimBackSpeed = 2.5f,
+            MapId = 1,
+            Race = Race.Orc,
+            Gender = Gender.Male,
+            WalkSpeed = 2.5f,
+            RunSpeed = 7.0f,
+            RunBackSpeed = 4.5f,
+            SwimSpeed = 4.722f,
+            SwimBackSpeed = 2.5f,
         };
 
         var controller = new MovementController(mockClient.Object, player);
@@ -175,9 +180,14 @@ public sealed class MovementControllerIpcParityTests : IDisposable
         {
             Position = new Position(sx, sy, sz),
             Facing = MathF.Atan2(ty - sy, tx - sx),
-            MapId = 1, Race = Race.Orc, Gender = Gender.Male,
-            WalkSpeed = 2.5f, RunSpeed = 7.0f, RunBackSpeed = 4.5f,
-            SwimSpeed = 4.722f, SwimBackSpeed = 2.5f,
+            MapId = 1,
+            Race = Race.Orc,
+            Gender = Gender.Male,
+            WalkSpeed = 2.5f,
+            RunSpeed = 7.0f,
+            RunBackSpeed = 4.5f,
+            SwimSpeed = 4.722f,
+            SwimBackSpeed = 2.5f,
         };
 
         // PathfindingService no longer handles PhysicsStep; it's path-only.

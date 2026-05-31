@@ -3,7 +3,8 @@ using BotRunner.Interfaces;
 
 using BotProfiles.Common;
 namespace WarlockAffliction
-{    public class WarlockAffliction : BotBase
+{
+    public class WarlockAffliction : BotBase
     {
         public override string Name => "Warlock Affliction";
 

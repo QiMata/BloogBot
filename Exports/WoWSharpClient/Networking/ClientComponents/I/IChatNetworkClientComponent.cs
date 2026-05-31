@@ -312,7 +312,7 @@ namespace WoWSharpClient.Networking.ClientComponents.I
         /// <param name="playerRank">The player's rank.</param>
         /// <param name="text">The message text.</param>
         /// <param name="playerChatTag">The player's chat tag.</param>
-        void HandleIncomingMessage(ChatMsg chatType, Language language, ulong senderGuid, ulong targetGuid, 
+        void HandleIncomingMessage(ChatMsg chatType, Language language, ulong senderGuid, ulong targetGuid,
             string senderName, string channelName, byte playerRank, string text, PlayerChatTag playerChatTag);
 
         #endregion

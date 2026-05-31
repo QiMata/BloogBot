@@ -188,7 +188,9 @@ public class NavigationDllSmokeTests
 
         var input = new PhysicsInputRaw
         {
-            PosX = 1629f, PosY = -4373f, PosZ = 34f,
+            PosX = 1629f,
+            PosY = -4373f,
+            PosZ = 34f,
             Facing = 0f,
             MoveFlags = 0x00000001, // MOVEFLAG_FORWARD
             ForwardSpeed = 7.0f,

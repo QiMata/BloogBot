@@ -305,12 +305,12 @@ namespace WoWSharpClient.Networking.ClientComponents
                 var payload = new byte[4];
                 BitConverter.GetBytes(_currentSpellId ?? 0u).CopyTo(payload, 0);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_CAST, payload, cancellationToken);
-                
+
                 _isCasting = false;
                 _currentSpellId = null;
                 _currentSpellTarget = null;
                 _remainingCastTime = 0;
-                
+
                 _logger.LogInformation("Spell cast interrupted successfully");
             }
             catch (Exception ex)
@@ -331,11 +331,11 @@ namespace WoWSharpClient.Networking.ClientComponents
                 var payload = new byte[4];
                 BitConverter.GetBytes(_currentSpellId ?? 0u).CopyTo(payload, 0);
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_CHANNELLING, payload, cancellationToken);
-                
+
                 _isChanneling = false;
                 _currentSpellId = null;
                 _currentSpellTarget = null;
-                
+
                 _logger.LogInformation("Channeled spell stopped successfully");
             }
             catch (Exception ex)
@@ -384,7 +384,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 // CMSG_CANCEL_AUTO_REPEAT_SPELL: empty packet (handler reads nothing)
                 await _worldClient.SendOpcodeAsync(Opcode.CMSG_CANCEL_AUTO_REPEAT_SPELL, [], cancellationToken);
-                
+
                 _logger.LogInformation("Auto-repeat spell stopped successfully");
             }
             catch (Exception ex)
@@ -466,7 +466,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     await CastSpellAsync(spellId, cancellationToken);
                 }
-                
+
                 _logger.LogInformation("Smart spell cast completed");
             }
             catch (Exception ex)
@@ -481,12 +481,12 @@ namespace WoWSharpClient.Networking.ClientComponents
         public bool CanCastSpell(uint spellId)
         {
             _logger.LogDebug("Checking if spell {SpellId} can be cast", spellId);
-            
+
             if (_isCasting || _isChanneling)
             {
                 return false;
             }
-            
+
             if (_spellCooldowns.TryGetValue(spellId, out uint cooldownEnd))
             {
                 uint currentTime = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();

@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 public static class WinProcessImports
 {
-    public const uint TH32CS_SNAPMODULE   = 0x00000008;
+    public const uint TH32CS_SNAPMODULE = 0x00000008;
     public const uint TH32CS_SNAPMODULE32 = 0x00000010;
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -15,7 +15,7 @@ public static class WinProcessImports
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetDllDirectory(string lpPathName);
-    
+
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool AllocConsole();

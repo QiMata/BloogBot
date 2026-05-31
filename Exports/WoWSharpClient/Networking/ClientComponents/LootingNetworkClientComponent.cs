@@ -130,24 +130,24 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IObservable<LootWindowData> _lootWindowChanges;
         private IObservable<LootWindowData> _lootWindowOpened;
         private IObservable<LootWindowData> _lootWindowClosed;
-         private readonly IObservable<LootData> _itemLoot;
-         private readonly IObservable<MoneyLootData> _moneyLoot;
-         private readonly IObservable<LootRollData> _lootRolls;
-         private readonly IObservable<LootErrorData> _lootErrors;
-         private readonly IObservable<BindOnPickupData> _bindOnPickupConfirmations;
-         private readonly IObservable<GroupLootNotificationData> _groupLootNotifications;
-         private readonly IObservable<MasterLootData> _masterLootAssignments;
+        private readonly IObservable<LootData> _itemLoot;
+        private readonly IObservable<MoneyLootData> _moneyLoot;
+        private readonly IObservable<LootRollData> _lootRolls;
+        private readonly IObservable<LootErrorData> _lootErrors;
+        private readonly IObservable<BindOnPickupData> _bindOnPickupConfirmations;
+        private readonly IObservable<GroupLootNotificationData> _groupLootNotifications;
+        private readonly IObservable<MasterLootData> _masterLootAssignments;
 
-         public IObservable<LootWindowData> LootWindowChanges => _lootWindowChanges;
-         public IObservable<LootData> ItemLoot => _itemLoot;
-         public IObservable<MoneyLootData> MoneyLoot => _moneyLoot;
-         public IObservable<LootRollData> LootRolls => _lootRolls;
-         public IObservable<LootErrorData> LootErrors => _lootErrors;
-         public IObservable<LootWindowData> LootWindowOpened => _lootWindowOpened;
-         public IObservable<LootWindowData> LootWindowClosed => _lootWindowClosed;
-         public IObservable<BindOnPickupData> BindOnPickupConfirmations => _bindOnPickupConfirmations;
-         public IObservable<GroupLootNotificationData> GroupLootNotifications => _groupLootNotifications;
-         public IObservable<MasterLootData> MasterLootAssignments => _masterLootAssignments;
+        public IObservable<LootWindowData> LootWindowChanges => _lootWindowChanges;
+        public IObservable<LootData> ItemLoot => _itemLoot;
+        public IObservable<MoneyLootData> MoneyLoot => _moneyLoot;
+        public IObservable<LootRollData> LootRolls => _lootRolls;
+        public IObservable<LootErrorData> LootErrors => _lootErrors;
+        public IObservable<LootWindowData> LootWindowOpened => _lootWindowOpened;
+        public IObservable<LootWindowData> LootWindowClosed => _lootWindowClosed;
+        public IObservable<BindOnPickupData> BindOnPickupConfirmations => _bindOnPickupConfirmations;
+        public IObservable<GroupLootNotificationData> GroupLootNotifications => _groupLootNotifications;
+        public IObservable<MasterLootData> MasterLootAssignments => _masterLootAssignments;
         #endregion
 
         #region Operations

@@ -408,8 +408,8 @@ public partial class LiveBotFixture
                 var transitionState = snap == null
                     ? "snapshot=null"
                     : $"screen={snap.ScreenState}, conn={snap.ConnectionState}, transition={snap.IsMapTransition}";
-                  _testOutput?.WriteLine($"  [{progressLabel}] Waiting for teleport to ({expectedX:F0},{expectedY:F0}) tol={xyToleranceYards:F0}y... current={posStr} consecutive={consecutiveNear} {transitionState} {sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
-              }
+                _testOutput?.WriteLine($"  [{progressLabel}] Waiting for teleport to ({expectedX:F0},{expectedY:F0}) tol={xyToleranceYards:F0}y... current={posStr} consecutive={consecutiveNear} {transitionState} {sw.ElapsedMilliseconds / 1000}s / {timeoutMs / 1000}s");
+            }
 
             await Task.Delay(500);
         }

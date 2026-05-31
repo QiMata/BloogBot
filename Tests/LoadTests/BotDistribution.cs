@@ -21,15 +21,27 @@ public static class BotDistribution
     // 2-letter race codes
     private static readonly Dictionary<string, string> RaceCodes = new()
     {
-        ["Orc"] = "OR", ["Troll"] = "TR", ["Tauren"] = "TA", ["Undead"] = "UD",
-        ["Human"] = "HU", ["Dwarf"] = "DW", ["NightElf"] = "NE", ["Gnome"] = "GN"
+        ["Orc"] = "OR",
+        ["Troll"] = "TR",
+        ["Tauren"] = "TA",
+        ["Undead"] = "UD",
+        ["Human"] = "HU",
+        ["Dwarf"] = "DW",
+        ["NightElf"] = "NE",
+        ["Gnome"] = "GN"
     };
 
     // 2-letter class codes
     private static readonly Dictionary<string, string> ClassCodes = new()
     {
-        ["Warrior"] = "WA", ["Hunter"] = "HU", ["Rogue"] = "RO", ["Priest"] = "PR",
-        ["Shaman"] = "SH", ["Mage"] = "MA", ["Warlock"] = "WL", ["Druid"] = "DR",
+        ["Warrior"] = "WA",
+        ["Hunter"] = "HU",
+        ["Rogue"] = "RO",
+        ["Priest"] = "PR",
+        ["Shaman"] = "SH",
+        ["Mage"] = "MA",
+        ["Warlock"] = "WL",
+        ["Druid"] = "DR",
         ["Paladin"] = "PA"
     };
 

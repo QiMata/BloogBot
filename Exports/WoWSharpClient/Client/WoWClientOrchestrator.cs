@@ -149,7 +149,7 @@ namespace WoWSharpClient.Client
         }
 
         // Proxy methods for world client operations
-        
+
         /// <summary>
         /// Sends a character enumeration request.
         /// </summary>

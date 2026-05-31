@@ -127,7 +127,9 @@ public sealed class AirborneOverheadLandingGuardTests : IDisposable
             X = 1337.3f,
             Y = -4645.1f,
             Z = 51.7f,                  // teleport target — between deck and ADT
-            Vx = 0f, Vy = 0f, Vz = 0f,  // post-teleport: no velocity
+            Vx = 0f,
+            Vy = 0f,
+            Vz = 0f,  // post-teleport: no velocity
             MoveFlags = MOVEFLAG_FALLINGFAR,
             Height = 2.625f,
             Radius = 1.025f,
@@ -137,7 +139,9 @@ public sealed class AirborneOverheadLandingGuardTests : IDisposable
             // _prevGroundZ primed BELOW the teleport (Prime's "below-overhead"
             // branch — see MovementController.cs:551). Use 42.29 to mirror live.
             PrevGroundZ = 42.29f,
-            PrevGroundNx = 0f, PrevGroundNy = 0f, PrevGroundNz = 1f,
+            PrevGroundNx = 0f,
+            PrevGroundNy = 0f,
+            PrevGroundNz = 1f,
             WasGrounded = 0u,
         };
 
@@ -207,7 +211,9 @@ public sealed class AirborneOverheadLandingGuardTests : IDisposable
             X = 1337.3f,
             Y = -4645.1f,
             Z = 55.0f,
-            Vx = 0f, Vy = 0f, Vz = -3.0f,
+            Vx = 0f,
+            Vy = 0f,
+            Vz = -3.0f,
             MoveFlags = MOVEFLAG_FALLINGFAR,
             Height = 2.625f,
             Radius = 1.025f,
@@ -215,7 +221,9 @@ public sealed class AirborneOverheadLandingGuardTests : IDisposable
             FallTime = 0u,
             FallStartZ = 55.0f,
             PrevGroundZ = 53.5f,
-            PrevGroundNx = 0f, PrevGroundNy = 0f, PrevGroundNz = 1f,
+            PrevGroundNx = 0f,
+            PrevGroundNy = 0f,
+            PrevGroundNz = 1f,
             WasGrounded = 0u,
         };
 
@@ -310,7 +318,9 @@ public sealed class AirborneOverheadLandingGuardTests : IDisposable
             X = 1337.3f,
             Y = -4645.1f,
             Z = 51.7f,
-            Vx = 0f, Vy = 0f, Vz = 0f,
+            Vx = 0f,
+            Vy = 0f,
+            Vz = 0f,
             MoveFlags = MOVEFLAG_FALLINGFAR,
             Height = 2.625f,
             Radius = 1.025f,
@@ -319,7 +329,9 @@ public sealed class AirborneOverheadLandingGuardTests : IDisposable
             FallStartZ = 51.7f,
             // INVALID sentinel — Prime hit the no-support-found branch.
             PrevGroundZ = -200000f,
-            PrevGroundNx = 0f, PrevGroundNy = 0f, PrevGroundNz = 1f,
+            PrevGroundNx = 0f,
+            PrevGroundNy = 0f,
+            PrevGroundNz = 1f,
             WasGrounded = 0u,
         };
 

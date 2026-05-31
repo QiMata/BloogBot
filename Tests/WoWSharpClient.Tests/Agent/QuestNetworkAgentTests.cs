@@ -107,8 +107,8 @@ namespace WoWSharpClient.Tests.Agent
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_QUESTGIVER_QUERY_QUEST,
-                    It.Is<byte[]>(payload => 
-                        payload.Length == 12 && 
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 12 &&
                         BitConverter.ToUInt64(payload, 0) == questGiverGuid &&
                         BitConverter.ToUInt32(payload, 8) == questId),
                     It.IsAny<CancellationToken>()
@@ -131,8 +131,8 @@ namespace WoWSharpClient.Tests.Agent
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_QUESTGIVER_ACCEPT_QUEST,
-                    It.Is<byte[]>(payload => 
-                        payload.Length == 12 && 
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 12 &&
                         BitConverter.ToUInt64(payload, 0) == questGiverGuid &&
                         BitConverter.ToUInt32(payload, 8) == questId),
                     It.IsAny<CancellationToken>()
@@ -155,8 +155,8 @@ namespace WoWSharpClient.Tests.Agent
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_QUESTGIVER_COMPLETE_QUEST,
-                    It.Is<byte[]>(payload => 
-                        payload.Length == 12 && 
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 12 &&
                         BitConverter.ToUInt64(payload, 0) == questGiverGuid &&
                         BitConverter.ToUInt32(payload, 8) == questId),
                     It.IsAny<CancellationToken>()
@@ -179,8 +179,8 @@ namespace WoWSharpClient.Tests.Agent
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_QUESTGIVER_REQUEST_REWARD,
-                    It.Is<byte[]>(payload => 
-                        payload.Length == 12 && 
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 12 &&
                         BitConverter.ToUInt64(payload, 0) == questGiverGuid &&
                         BitConverter.ToUInt32(payload, 8) == questId),
                     It.IsAny<CancellationToken>()
@@ -204,8 +204,8 @@ namespace WoWSharpClient.Tests.Agent
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_QUESTGIVER_CHOOSE_REWARD,
-                    It.Is<byte[]>(payload => 
-                        payload.Length == 16 && 
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 16 &&
                         BitConverter.ToUInt64(payload, 0) == questGiverGuid &&
                         BitConverter.ToUInt32(payload, 8) == questId &&
                         BitConverter.ToUInt32(payload, 12) == rewardIndex),
@@ -300,7 +300,7 @@ namespace WoWSharpClient.Tests.Agent
             Assert.NotNull(questData);
             Assert.Equal(questId, questData!.QuestId);
             Assert.Equal(QuestOperationType.Offered, questData.OperationType);
-            
+
             subscription.Dispose();
         }
 
@@ -326,7 +326,7 @@ namespace WoWSharpClient.Tests.Agent
             Assert.NotNull(questData);
             Assert.Equal(questId, questData!.QuestId);
             Assert.Equal(QuestOperationType.Accepted, questData.OperationType);
-            
+
             subscription.Dispose();
         }
 
@@ -352,7 +352,7 @@ namespace WoWSharpClient.Tests.Agent
             Assert.NotNull(questData);
             Assert.Equal(questId, questData!.QuestId);
             Assert.Equal(QuestOperationType.Completed, questData.OperationType);
-            
+
             subscription.Dispose();
         }
 
@@ -377,7 +377,7 @@ namespace WoWSharpClient.Tests.Agent
             Assert.True(eventFired);
             Assert.NotNull(errorData);
             Assert.Equal(questId, errorData!.QuestId);
-            
+
             subscription.Dispose();
         }
 

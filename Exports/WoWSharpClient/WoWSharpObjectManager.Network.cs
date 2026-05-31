@@ -256,225 +256,225 @@ namespace WoWSharpClient
                             switch (update.Operation)
                             {
                                 case ObjectUpdateOperation.Add:
-                                {
-                                    WoWObject? existingObject;
-                                    int existingIndex;
-                                    var isLocalPlayer = update.Guid == PlayerGuid.FullGuid;
-                                    lock (_objectsLock)
                                     {
-                                        if (isLocalPlayer)
+                                        WoWObject? existingObject;
+                                        int existingIndex;
+                                        var isLocalPlayer = update.Guid == PlayerGuid.FullGuid;
+                                        lock (_objectsLock)
                                         {
-                                            existingIndex = -1;
-                                            existingObject = Player as WoWObject;
+                                            if (isLocalPlayer)
+                                            {
+                                                existingIndex = -1;
+                                                existingObject = Player as WoWObject;
+                                            }
+                                            else
+                                            {
+                                                existingIndex = _objects.FindIndex(o => o.Guid == update.Guid);
+                                                existingObject = existingIndex >= 0 ? _objects[existingIndex] : null;
+                                            }
                                         }
-                                        else
-                                        {
-                                            existingIndex = _objects.FindIndex(o => o.Guid == update.Guid);
-                                            existingObject = existingIndex >= 0 ? _objects[existingIndex] : null;
-                                        }
-                                    }
 
-                                    var effectiveUpdateType = ResolveEffectiveCreateObjectType(update.ObjectType, update.Guid);
-                                    if (existingObject != null
-                                        && effectiveUpdateType != WoWObjectType.None
-                                        && existingObject.ObjectType == effectiveUpdateType)
-                                    {
-                                        // WoW.exe `0x4660A0` looks up the object first (`0x464530`) and,
-                                        // on a cache hit, routes the block to `0x466350` instead of the
-                                        // new-object path (`0x466E00`/`0x466C70`). That cached-object
-                                        // branch runs its movement prepass (`0x5FF070`) before the
-                                        // descriptor walker (`0x466590`), so duplicate CREATE blocks
-                                        // mutate the existing object in place instead of replacing it.
-                                        ApplyMovementUpdateToExistingObject(
-                                            existingObject,
-                                            update.Guid,
-                                            update.MovementData,
-                                            isLocalPlayer,
-                                            "[Movement-CreateExisting]");
-                                        if (update.MovementData != null)
+                                        var effectiveUpdateType = ResolveEffectiveCreateObjectType(update.ObjectType, update.Guid);
+                                        if (existingObject != null
+                                            && effectiveUpdateType != WoWObjectType.None
+                                            && existingObject.ObjectType == effectiveUpdateType)
                                         {
-                                            ReportTestMutation(
+                                            // WoW.exe `0x4660A0` looks up the object first (`0x464530`) and,
+                                            // on a cache hit, routes the block to `0x466350` instead of the
+                                            // new-object path (`0x466E00`/`0x466C70`). That cached-object
+                                            // branch runs its movement prepass (`0x5FF070`) before the
+                                            // descriptor walker (`0x466590`), so duplicate CREATE blocks
+                                            // mutate the existing object in place instead of replacing it.
+                                            ApplyMovementUpdateToExistingObject(
+                                                existingObject,
                                                 update.Guid,
-                                                update.Operation,
-                                                TestMutationStage.MovementApplied,
-                                                existingObject.ObjectType,
-                                                "cached-create");
+                                                update.MovementData,
+                                                isLocalPlayer,
+                                                "[Movement-CreateExisting]");
+                                            if (update.MovementData != null)
+                                            {
+                                                ReportTestMutation(
+                                                    update.Guid,
+                                                    update.Operation,
+                                                    TestMutationStage.MovementApplied,
+                                                    existingObject.ObjectType,
+                                                    "cached-create");
+                                            }
+                                            ApplyFieldDiffs(existingObject, update.UpdatedFields, suppressSkillUpdateEvents: true);
+                                            if (update.UpdatedFields.Count > 0)
+                                            {
+                                                ReportTestMutation(
+                                                    update.Guid,
+                                                    update.Operation,
+                                                    TestMutationStage.FieldsApplied,
+                                                    existingObject.ObjectType,
+                                                    "cached-create");
+                                            }
+                                            FinalizeUpdatedObject(existingObject, existingIndex, update.Guid);
+                                            break;
                                         }
-                                        ApplyFieldDiffs(existingObject, update.UpdatedFields, suppressSkillUpdateEvents: true);
+
+                                        var newObject = CreateObjectFromType(
+                                            update.ObjectType,
+                                            update.Guid
+                                        );
+                                        ApplyFieldDiffs(newObject, update.UpdatedFields, suppressSkillUpdateEvents: true);
                                         if (update.UpdatedFields.Count > 0)
                                         {
                                             ReportTestMutation(
                                                 update.Guid,
                                                 update.Operation,
                                                 TestMutationStage.FieldsApplied,
-                                                existingObject.ObjectType,
-                                                "cached-create");
+                                                newObject.ObjectType,
+                                                "create");
                                         }
-                                        FinalizeUpdatedObject(existingObject, existingIndex, update.Guid);
-                                        break;
-                                    }
-
-                                    var newObject = CreateObjectFromType(
-                                        update.ObjectType,
-                                        update.Guid
-                                    );
-                                    ApplyFieldDiffs(newObject, update.UpdatedFields, suppressSkillUpdateEvents: true);
-                                    if (update.UpdatedFields.Count > 0)
-                                    {
-                                        ReportTestMutation(
-                                            update.Guid,
-                                            update.Operation,
-                                            TestMutationStage.FieldsApplied,
-                                            newObject.ObjectType,
-                                            "create");
-                                    }
-                                    lock (_objectsLock)
-                                    {
-                                        _objects.RemoveAll(existing => existing.Guid == newObject.Guid);
-                                        _objects.Add(newObject);
-                                    }
-
-                                    if (newObject is WoWItem item)
-                                        Log.Information("[ProcessUpdates] ITEM CREATED: Guid={Guid:X} ItemId={ItemId} Fields={FieldCount}",
-                                            update.Guid, item.ItemId, update.UpdatedFields.Count);
-
-                                    if (newObject is WoWGameObject go)
-                                        Log.Information("[ProcessUpdates] GAMEOBJ CREATED: Guid=0x{Guid:X} DisplayId={DisplayId} TypeId={TypeId} CreatedBy=0x{CreatedBy:X} Pos=({X:F1},{Y:F1},{Z:F1})",
-                                            update.Guid, go.DisplayId, go.TypeId, go.CreatedBy.FullGuid, go.Position.X, go.Position.Y, go.Position.Z);
-
-                                    ApplyMovementUpdateToExistingObject(
-                                        newObject,
-                                        update.Guid,
-                                        update.MovementData,
-                                        newObject is WoWLocalPlayer,
-                                        "[Movement-Add]");
-                                    if (update.MovementData != null)
-                                    {
-                                        ReportTestMutation(
-                                            update.Guid,
-                                            update.Operation,
-                                            TestMutationStage.MovementApplied,
-                                            newObject.ObjectType,
-                                            "create");
-                                    }
-
-                                    if (newObject is WoWPlayer)
-                                    {
-                                        _ = _woWClient.SendNameQueryAsync(update.Guid);
-
-                                        if (newObject is WoWLocalPlayer)
-                                        {
-                                            Log.Information("[LocalPlayer-Add] Taking control");
-                                            _ = _woWClient.SendSetActiveMoverAsync(PlayerGuid.FullGuid);
-                                            _isInControl = true;
-                                            _hasExplicitClientControlLockout = false;
-                                            _isBeingTeleported = false;
-
-                                            // Re-create MovementController after cross-map transfer.
-                                            // ResetWorldSessionState nulls _movementController, but
-                                            // InitializeMovementController is only called from EnterWorld()
-                                            // (initial login). Without this, physics never runs after
-                                            // teleporting to a different map (e.g. Kalimdor → RFC).
-                                            if (_movementController == null)
-                                                InitializeMovementController();
-                                        }
-                                    }
-
-                                    // Pet discovery: promote unit to WoWLocalPet if summoned by player
-                                    if (newObject is WoWUnit addedUnit && addedUnit is not WoWLocalPet
-                                        && addedUnit.SummonedBy.FullGuid == PlayerGuid.FullGuid
-                                        && PlayerGuid.FullGuid != 0)
-                                    {
-                                        var pet = new WoWLocalPet(addedUnit.HighGuid, addedUnit.ObjectType);
-                                        pet.ObjectManager = this;
-                                        pet.CopyFrom(addedUnit);
                                         lock (_objectsLock)
                                         {
-                                            var petIdx = _objects.FindIndex(o => o.Guid == pet.Guid);
-                                            if (petIdx >= 0) _objects[petIdx] = pet;
+                                            _objects.RemoveAll(existing => existing.Guid == newObject.Guid);
+                                            _objects.Add(newObject);
                                         }
-                                        _activePet = pet;
-                                        Log.Information("[PET] Discovered pet Guid=0x{Guid:X} (summoned by player 0x{PlayerGuid:X})",
-                                            pet.Guid, PlayerGuid.FullGuid);
-                                    }
 
-                                    break;
-                                }
+                                        if (newObject is WoWItem item)
+                                            Log.Information("[ProcessUpdates] ITEM CREATED: Guid={Guid:X} ItemId={ItemId} Fields={FieldCount}",
+                                                update.Guid, item.ItemId, update.UpdatedFields.Count);
 
-                                case ObjectUpdateOperation.Update:
-                                {
-                                    WoWObject? obj;
-                                    int index;
-                                    var isLocalPlayer = update.Guid == PlayerGuid.FullGuid;
-                                    lock (_objectsLock)
-                                    {
-                                        if (isLocalPlayer)
+                                        if (newObject is WoWGameObject go)
+                                            Log.Information("[ProcessUpdates] GAMEOBJ CREATED: Guid=0x{Guid:X} DisplayId={DisplayId} TypeId={TypeId} CreatedBy=0x{CreatedBy:X} Pos=({X:F1},{Y:F1},{Z:F1})",
+                                                update.Guid, go.DisplayId, go.TypeId, go.CreatedBy.FullGuid, go.Position.X, go.Position.Y, go.Position.Z);
+
+                                        ApplyMovementUpdateToExistingObject(
+                                            newObject,
+                                            update.Guid,
+                                            update.MovementData,
+                                            newObject is WoWLocalPlayer,
+                                            "[Movement-Add]");
+                                        if (update.MovementData != null)
                                         {
-                                            index = -1;
-                                            obj = Player as WoWObject;
+                                            ReportTestMutation(
+                                                update.Guid,
+                                                update.Operation,
+                                                TestMutationStage.MovementApplied,
+                                                newObject.ObjectType,
+                                                "create");
                                         }
-                                        else
-                                        {
-                                            index = _objects.FindIndex(o => o.Guid == update.Guid);
-                                            obj = index >= 0 ? _objects[index] : null;
-                                        }
-                                    }
 
-                                    if (obj == null)
-                                    {
-                                        Log.Warning("[ProcessUpdates] Update for unknown object {Guid:X}", update.Guid);
+                                        if (newObject is WoWPlayer)
+                                        {
+                                            _ = _woWClient.SendNameQueryAsync(update.Guid);
+
+                                            if (newObject is WoWLocalPlayer)
+                                            {
+                                                Log.Information("[LocalPlayer-Add] Taking control");
+                                                _ = _woWClient.SendSetActiveMoverAsync(PlayerGuid.FullGuid);
+                                                _isInControl = true;
+                                                _hasExplicitClientControlLockout = false;
+                                                _isBeingTeleported = false;
+
+                                                // Re-create MovementController after cross-map transfer.
+                                                // ResetWorldSessionState nulls _movementController, but
+                                                // InitializeMovementController is only called from EnterWorld()
+                                                // (initial login). Without this, physics never runs after
+                                                // teleporting to a different map (e.g. Kalimdor → RFC).
+                                                if (_movementController == null)
+                                                    InitializeMovementController();
+                                            }
+                                        }
+
+                                        // Pet discovery: promote unit to WoWLocalPet if summoned by player
+                                        if (newObject is WoWUnit addedUnit && addedUnit is not WoWLocalPet
+                                            && addedUnit.SummonedBy.FullGuid == PlayerGuid.FullGuid
+                                            && PlayerGuid.FullGuid != 0)
+                                        {
+                                            var pet = new WoWLocalPet(addedUnit.HighGuid, addedUnit.ObjectType);
+                                            pet.ObjectManager = this;
+                                            pet.CopyFrom(addedUnit);
+                                            lock (_objectsLock)
+                                            {
+                                                var petIdx = _objects.FindIndex(o => o.Guid == pet.Guid);
+                                                if (petIdx >= 0) _objects[petIdx] = pet;
+                                            }
+                                            _activePet = pet;
+                                            Log.Information("[PET] Discovered pet Guid=0x{Guid:X} (summoned by player 0x{PlayerGuid:X})",
+                                                pet.Guid, PlayerGuid.FullGuid);
+                                        }
+
                                         break;
                                     }
 
-                                    ApplyFieldDiffs(obj, update.UpdatedFields);
-                                    if (update.UpdatedFields.Count > 0)
+                                case ObjectUpdateOperation.Update:
                                     {
-                                        ReportTestMutation(
-                                            update.Guid,
-                                            update.Operation,
-                                            TestMutationStage.FieldsApplied,
-                                            obj.ObjectType,
-                                            "update");
-                                    }
+                                        WoWObject? obj;
+                                        int index;
+                                        var isLocalPlayer = update.Guid == PlayerGuid.FullGuid;
+                                        lock (_objectsLock)
+                                        {
+                                            if (isLocalPlayer)
+                                            {
+                                                index = -1;
+                                                obj = Player as WoWObject;
+                                            }
+                                            else
+                                            {
+                                                index = _objects.FindIndex(o => o.Guid == update.Guid);
+                                                obj = index >= 0 ? _objects[index] : null;
+                                            }
+                                        }
 
-                                    ApplyMovementUpdateToExistingObject(
-                                        obj,
-                                        update.Guid,
-                                        update.MovementData,
-                                        isLocalPlayer,
-                                        "[Movement-Update]");
-                                    if (update.MovementData != null)
-                                    {
-                                        ReportTestMutation(
-                                            update.Guid,
-                                            update.Operation,
-                                            TestMutationStage.MovementApplied,
-                                            obj.ObjectType,
-                                            "update");
-                                    }
-                                    if (isLocalPlayer)
-                                    {
-                                        RestoreLocalPlayerControlFromHydratedUpdate();
-                                    }
-                                    FinalizeUpdatedObject(obj, index, update.Guid);
+                                        if (obj == null)
+                                        {
+                                            Log.Warning("[ProcessUpdates] Update for unknown object {Guid:X}", update.Guid);
+                                            break;
+                                        }
 
-                                    break;
-                                }
+                                        ApplyFieldDiffs(obj, update.UpdatedFields);
+                                        if (update.UpdatedFields.Count > 0)
+                                        {
+                                            ReportTestMutation(
+                                                update.Guid,
+                                                update.Operation,
+                                                TestMutationStage.FieldsApplied,
+                                                obj.ObjectType,
+                                                "update");
+                                        }
+
+                                        ApplyMovementUpdateToExistingObject(
+                                            obj,
+                                            update.Guid,
+                                            update.MovementData,
+                                            isLocalPlayer,
+                                            "[Movement-Update]");
+                                        if (update.MovementData != null)
+                                        {
+                                            ReportTestMutation(
+                                                update.Guid,
+                                                update.Operation,
+                                                TestMutationStage.MovementApplied,
+                                                obj.ObjectType,
+                                                "update");
+                                        }
+                                        if (isLocalPlayer)
+                                        {
+                                            RestoreLocalPlayerControlFromHydratedUpdate();
+                                        }
+                                        FinalizeUpdatedObject(obj, index, update.Guid);
+
+                                        break;
+                                    }
 
                                 case ObjectUpdateOperation.Remove:
-                                {
-                                    int removed;
-                                    lock (_objectsLock) removed = _objects.RemoveAll(x => x.Guid == update.Guid);
-                                    Log.Verbose("[Remove] Guid={Guid:X} (removed {Count})", update.Guid, removed);
-
-                                    // Clear pet reference when pet is removed from world
-                                    if (_activePet != null && update.Guid == _activePet.Guid)
                                     {
-                                        Log.Information("[PET] Pet 0x{Guid:X} removed from world", update.Guid);
-                                        _activePet = null;
+                                        int removed;
+                                        lock (_objectsLock) removed = _objects.RemoveAll(x => x.Guid == update.Guid);
+                                        Log.Verbose("[Remove] Guid={Guid:X} (removed {Count})", update.Guid, removed);
+
+                                        // Clear pet reference when pet is removed from world
+                                        if (_activePet != null && update.Guid == _activePet.Guid)
+                                        {
+                                            Log.Information("[PET] Pet 0x{Guid:X} removed from world", update.Guid);
+                                            _activePet = null;
+                                        }
+                                        break;
                                     }
-                                    break;
-                                }
                             }
                         }
                         catch (Exception ex)

@@ -31,12 +31,12 @@ public class WaypointDumpDiagnostic : IClassFixture<PathfindingValidationFixture
     // Verified-from-MaNGOS-DB / FG-screenshot-confirmed reference points.
     // See memory project_pfs_overhaul_006_intra_tile_disconnect.md and
     // reference_og_zeppelin_layout.md for sourcing.
-    private static readonly XYZ FmTowerTop      = new(1677f, -4315f, 61.4f);          // Doras the Wind Rider Master tower
-    private static readonly XYZ Grunt1          = new(1332.76f, -4633.40f, 24.0783f); // creature.guid=3462 entry 3296 lower platform
-    private static readonly XYZ Grunt2          = new(1340.71f, -4631.52f, 24.1187f); // creature.guid=3465 entry 3296 lower platform
-    private static readonly XYZ Frezza          = new(1331.11f, -4649.45f, 53.6269f); // creature.guid=3464 entry 9564 upper deck
-    private static readonly XYZ Snurk           = new(1353.97f, -4642.56f, 53.63f);   // creature.guid=3463 entry 12136 upper deck
-    private static readonly XYZ DeckLipFoot     = new(1338.13f, -4645.96f, 51.60f);   // FG-verified lower-deck wooden platform
+    private static readonly XYZ FmTowerTop = new(1677f, -4315f, 61.4f);          // Doras the Wind Rider Master tower
+    private static readonly XYZ Grunt1 = new(1332.76f, -4633.40f, 24.0783f); // creature.guid=3462 entry 3296 lower platform
+    private static readonly XYZ Grunt2 = new(1340.71f, -4631.52f, 24.1187f); // creature.guid=3465 entry 3296 lower platform
+    private static readonly XYZ Frezza = new(1331.11f, -4649.45f, 53.6269f); // creature.guid=3464 entry 9564 upper deck
+    private static readonly XYZ Snurk = new(1353.97f, -4642.56f, 53.63f);   // creature.guid=3463 entry 12136 upper deck
+    private static readonly XYZ DeckLipFoot = new(1338.13f, -4645.96f, 51.60f);   // FG-verified lower-deck wooden platform
     private static readonly XYZ BoardingPosition = new(1320.142944f, -4653.158691f, 53.891945f); // gangplank attach
 
     public WaypointDumpDiagnostic(PathfindingValidationFixture fixture, ITestOutputHelper output)

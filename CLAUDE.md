@@ -66,13 +66,23 @@ cross-game portability template) read
 - Live tests must poll StateManager APIs, fail fast on disconnect/crash, and capture latest screenshots/state dumps.
 - See [../docs/TEST_PATTERNS.md](../docs/TEST_PATTERNS.md), [../docs/TEST_SCREENSHOTS.md](../docs/TEST_SCREENSHOTS.md), and [../docs/SKILL_DEVELOPMENT_PLAN.md](../docs/SKILL_DEVELOPMENT_PLAN.md).
 
+## Path-Specific Instructions
+
+Area-scoped rules live in `.github/instructions/*.instructions.md`, each applied
+by an `applyTo:` glob when editing a matching file (`shared-libraries`,
+`services`, `native`, `bot-profiles`, `tests`, `ui`, `protobuf`, `config`,
+`docs`). They hold conventions + validation commands + do-not-edit rules per
+area; per-directory `CLAUDE.md` files cover component context. See
+[`.github/instructions/README.md`](.github/instructions/README.md). Neither
+restates this file.
+
 ## Architecture Overview
 
 > **Pathfinding Overhaul Active (2026-05-06).** The pathfinding stack is in an
 > architectural freeze while we move authority for routes from the
 > ~5,600-line managed repair pipeline (`Services/PathfindingService/Repository/Navigation.cs`)
 > to the in-tree [tools/MmapGen](tools/MmapGen/) navmesh generator. Read
-> [docs/physics/PATHFINDING_OVERHAUL.md](docs/physics/PATHFINDING_OVERHAUL.md)
+> [docs/physics/README.md](docs/physics/README.md)
 > before editing anything in `Services/PathfindingService`, `Exports/Navigation`,
 > the BotRunner movement/transport code, or the pathfinding tests. Mesh fixes
 > belong in `tools/MmapGen/`; new managed repair logic does not.

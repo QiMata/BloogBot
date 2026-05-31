@@ -24,15 +24,15 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IAttackNetworkClientComponent _attackAgent;
         private readonly ISpellCastingNetworkClientComponent _spellCastingAgent;
         private readonly IItemUseNetworkClientComponent _itemUseAgent;
-        
+
         // Pet control state
         private ulong? _currentPetGuid;
         private readonly Dictionary<ulong, PetState> _petStates = new();
-        
+
         // Aura/Buff tracking
         private readonly Dictionary<uint, AuraData> _activeAuras = new();
         private readonly Dictionary<uint, BuffData> _activeBuffs = new();
-        
+
         // Combat state
         private bool _isInCombat;
         private ulong? _currentCombatTarget;
@@ -214,7 +214,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 // Set target first
                 await _targetingAgent.SetTargetAsync(targetGuid, cancellationToken);
-                
+
                 // Update combat state locally (server will confirm via streams)
                 _isInCombat = true;
                 _currentCombatTarget = targetGuid;
@@ -256,10 +256,10 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 // Stop auto-attack
                 await _attackAgent.StopAttackAsync(cancellationToken);
-                
+
                 // Clear target
                 await _targetingAgent.ClearTargetAsync(cancellationToken);
-                
+
                 // Update local combat state (server will confirm via streams)
                 _isInCombat = false;
                 _currentCombatTarget = null;
@@ -330,7 +330,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _logger.LogDebug("Casting spell '{SpellName}' on target {TargetGuid:X}", spellName, targetGuid);
 
                 var spellId = GetSpellIdFromName(spellName); // Placeholder mapping
-                
+
                 if (targetGuid.HasValue && forceTarget)
                 {
                     await _targetingAgent.SetTargetAsync(targetGuid.Value, cancellationToken);
@@ -415,7 +415,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
             try
             {
-                _logger.LogDebug("Commanding pet {PetGuid:X} to use ability {AbilityId} on target {TargetGuid:X}", 
+                _logger.LogDebug("Commanding pet {PetGuid:X} to use ability {AbilityId} on target {TargetGuid:X}",
                     _currentPetGuid.Value, abilityId, targetGuid);
 
                 var payload = CreatePetAbilityPayload(_currentPetGuid.Value, abilityId, targetGuid ?? 0);
@@ -492,7 +492,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                         AppliedTime: DateTime.UtcNow,
                         IsActive: true
                     );
-                    
+
                     _activeAuras[auraId] = auraData;
                     _logger.LogDebug("Aura applied: {AuraId} from caster {CasterGuid:X}", auraId, casterGuid);
                 }
@@ -579,7 +579,7 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 // Find a health potion in inventory (placeholder)
                 var healthPotionLocation = FindHealthPotionInInventory();
-                
+
                 if (healthPotionLocation.HasValue)
                 {
                     await _itemUseAgent.UseConsumableAsync(healthPotionLocation.Value.BagId, healthPotionLocation.Value.SlotId, cancellationToken);
@@ -740,7 +740,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         public void UpdateCombatState(bool inCombat, ulong? targetGuid = null)
         {
             _isInCombat = inCombat;
-            
+
             if (targetGuid.HasValue)
             {
                 _currentCombatTarget = targetGuid;
@@ -750,7 +750,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 _currentCombatTarget = null;
             }
 
-            _logger.LogInformation("Combat state changed: {InCombat}, Target: {TargetGuid:X}", 
+            _logger.LogInformation("Combat state changed: {InCombat}, Target: {TargetGuid:X}",
                 inCombat, _currentCombatTarget);
         }
 

@@ -493,15 +493,15 @@ namespace WoWSharpClient.Networking.ClientComponents
 
                 await OpenTrainerAsync(trainerGuid, cancellationToken);
                 await RequestTrainerServicesAsync(trainerGuid, cancellationToken);
-                
+
                 // Small delay to allow trainer window to open and services to load
                 await Task.Delay(200, cancellationToken);
-                
+
                 await LearnSpellAsync(spellId, cancellationToken);
-                
+
                 // Small delay to allow learning to complete
                 await Task.Delay(100, cancellationToken);
-                
+
                 await CloseTrainerAsync(cancellationToken);
 
                 _logger.LogInformation("Quick learn completed for spell {SpellId} from trainer: {TrainerGuid:X}", spellId, trainerGuid);
@@ -524,12 +524,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetOperationInProgress(true);
-                _logger.LogDebug("Learning multiple spells from trainer: {TrainerGuid:X}. Spells: [{SpellIds}]", 
+                _logger.LogDebug("Learning multiple spells from trainer: {TrainerGuid:X}. Spells: [{SpellIds}]",
                     trainerGuid, string.Join(", ", spellIds));
 
                 await OpenTrainerAsync(trainerGuid, cancellationToken);
                 await RequestTrainerServicesAsync(trainerGuid, cancellationToken);
-                
+
                 // Small delay to allow trainer window to open and services to load
                 await Task.Delay(200, cancellationToken);
 
@@ -538,7 +538,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                     try
                     {
                         await LearnSpellAsync(spellId, cancellationToken);
-                        
+
                         // Small delay between spell learning attempts
                         await Task.Delay(100, cancellationToken);
                     }
@@ -548,7 +548,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                         // Continue with other spells even if one fails
                     }
                 }
-                
+
                 await CloseTrainerAsync(cancellationToken);
 
                 _logger.LogInformation("Multiple spell learning completed from trainer: {TrainerGuid:X}", trainerGuid);
@@ -590,11 +590,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             _currentTrainerGuid = trainerGuid;
             _availableServices.Clear();
             _availableServices.AddRange(services);
-            
+
             TrainerWindowOpened?.Invoke(trainerGuid);
             TrainerServicesReceived?.Invoke(services);
-            
-            _logger.LogDebug("Trainer window opened for: {TrainerGuid:X} with {ServiceCount} services", 
+
+            _logger.LogDebug("Trainer window opened for: {TrainerGuid:X} with {ServiceCount} services",
                 trainerGuid, services.Length);
         }
 

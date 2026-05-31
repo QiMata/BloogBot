@@ -110,9 +110,9 @@ public sealed class GmCommandServerDesiredState : IServerDesiredState
         public string? Description { get; } = description;
 
         public string Resolve(IRecordedTestContext context)
-                {
-                    ArgumentNullException.ThrowIfNull(context);
-                    return _commandFactory(context);
-                }
-            }
+        {
+            ArgumentNullException.ThrowIfNull(context);
+            return _commandFactory(context);
         }
+    }
+}

@@ -281,7 +281,7 @@ namespace BotRunner.Tests.Helpers
                 case BotTaskMode.Idle:
                     psi.Environment["BLOOGBOT_IDLE_MODE"] = "1";
                     break;
-                // ManualRecording and Default don't need special env vars
+                    // ManualRecording and Default don't need special env vars
             }
 
             var inheritedRecordingArtifacts = Environment.GetEnvironmentVariable("WWOW_ENABLE_RECORDING_ARTIFACTS");

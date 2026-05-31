@@ -74,7 +74,7 @@ public class StateManagerLoadTests
                     Health = 180,
                     MaxHealth = 213,
                     TargetGuid = 0xF130002C38009499,
-                                        MovementFlags = 0,
+                    MovementFlags = 0,
                     GameObject = new WoWGameObject
                     {
                         Name = accountName,
@@ -104,7 +104,7 @@ public class StateManagerLoadTests
                 Health = (uint)rng.Next(0, 5000),
                 MaxHealth = 5000,
                 TargetGuid = (ulong)rng.Next(1, 100),
-                                GameObject = new WoWGameObject
+                GameObject = new WoWGameObject
                 {
                     Name = $"Ragefire Trogg",
                     Base = new WoWObject
