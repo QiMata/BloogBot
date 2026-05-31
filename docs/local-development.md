@@ -5,7 +5,9 @@ Warcraft) locally. **For everyday build/test/lint, use the stable `scripts/`
 interface — do not guess `dotnet`/`MSBuild`/`run-tests.ps1` invocations.** Agents:
 prefer these scripts; they are the contract.
 
-See [`scripts/README.md`](../scripts/README.md) for the full reference.
+See [`scripts/README.md`](../scripts/README.md) for the full reference. For *where
+code lives and how the flows work*, start at [`architecture.md`](architecture.md);
+for tests see [`testing.md`](testing.md).
 
 ## Prerequisites
 
