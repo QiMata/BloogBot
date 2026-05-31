@@ -3,6 +3,22 @@
 > **Start at [`SPEC.md`](SPEC.md).** This README is for orientation only.
 > Everything an autonomous agent needs is reachable from `SPEC.md`.
 
+## Practical guides (start here for code changes)
+
+Concise hubs for "where does code live, how do the flows work, where do I make
+this change." They link to the canonical detail in `Spec/` rather than restating it.
+
+| File | What it answers |
+|---|---|
+| [`architecture.md`](architecture.md) | Folders/projects, dependency direction, runtime flow, where to add features. |
+| [`local-development.md`](local-development.md) | Setup, the `scripts/` build/test interface, local ports & Docker. |
+| [`testing.md`](testing.md) | xUnit, the L1–L4 layers, LiveValidation, where to add tests. |
+| [`troubleshooting.md`](troubleshooting.md) | Symptom → fix for build, test, and runtime failures. |
+| [`security.md`](security.md) | Operational guardrails: process safety, SOAP-only DB writes, trust model. |
+| [`api-contracts.md`](api-contracts.md) | Service ports, Protobuf `.proto` locations, wire contracts. |
+| [`data-model.md`](data-model.md) | Activity/Objective/Task/Action hierarchy, accounts, persistent stores. |
+| [`deployment.md`](deployment.md) · [`observability.md`](observability.md) | Running the stack; logging & metrics. |
+
 ## Top-level entry points
 
 | File | What it is |

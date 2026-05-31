@@ -38,6 +38,11 @@ The decisions of record from the 2026-05-11 design session are in
 
 ## 2. First-Minute Checklist
 
+- **Before any broad or cross-layer change**, read the practical hubs:
+  [docs/architecture.md](docs/architecture.md) (where code lives + dependency
+  rules), [docs/testing.md](docs/testing.md), [docs/security.md](docs/security.md)
+  (process-safety + SOAP-only guardrails), and [docs/troubleshooting.md](docs/troubleshooting.md).
+  These link to the canonical `docs/Spec/` contracts.
 - Read [docs/TASKS.md](docs/TASKS.md) before starting implementation work that is task-tracked.
 - **If the work touches pathfinding** (`Services/PathfindingService`, `Exports/Navigation`, `Exports/BotRunner` movement/transport code, `Tests/PathfindingService.Tests`, `tools/NavDataAudit`): read [docs/physics/PATHFINDING_OVERHAUL.md](docs/physics/PATHFINDING_OVERHAUL.md) **before editing**. The stack is in a 2026-05-06 architectural freeze; mesh fixes go in [tools/MmapGen/](tools/MmapGen/) instead of new managed repair logic.
 - Identify the relevant local `TASKS.md` and `TASKS_ARCHIVE.md` in the subsystem you touch.
@@ -237,10 +242,11 @@ Update docs when you add or change:
 
 High-value references:
 
-- `docs/ARCHITECTURE.md`
-- `docs/IPC_COMMUNICATION.md`
+- `docs/architecture.md` (practical orientation) and `docs/Spec/01_ARCHITECTURE.md` (formal contract)
+- `docs/IPC_COMMUNICATION.md` / `docs/api-contracts.md`
 - `docs/TECHNICAL_NOTES.md`
-- `docs/DEVELOPMENT_GUIDE.md`
+- `docs/DEVELOPMENT_GUIDE.md` / `docs/local-development.md`
+- `docs/testing.md`, `docs/security.md`, `docs/troubleshooting.md`
 - `docs/physics/README.md`
 - `docs/server-protocol/*`
 

@@ -103,7 +103,7 @@ taskkill //F //PID <pid>
 # .NET build (primary)
 dotnet build WestworldOfWarcraft.sln
 
-# .NET tests (MSTest + Moq, 11 test projects)
+# .NET tests (xUnit + Moq)
 dotnet test WestworldOfWarcraft.sln --configuration Release
 
 # C++ native components via MSBuild (VS 2025 Community)
