@@ -1233,3 +1233,184 @@ before any global re-bake. Recommendations queued for user input:
 
 **Commit:** `0743d391` `phase(1) iter(20): wire BakeProfile.h cs/ch + remove ch=0.1f override`
 
+## Iter 21 — 2026-05-31 — Phase 1 (full map-1 re-bake — REGRESSION, reverted iter 22)
+
+**Did (and what broke):** Per user direction after iter 20's per-tile probe
+blindspot, attempted the proposal §3 Phase 1 EXIT measurement directly:
+re-bake all 785 map-1 tiles to `D:\MaNGOS\data` and re-aggregate the D2
+sweep against D4's 13.18% Unrecoverable baseline.
+
+**Setup:**
+1. Backed up `D:\MaNGOS\data\mmaps\001*.{mmtile,bak}` + `001.mmap` →
+   `D:\MaNGOS\data\mmaps.preiter21\` (844 files, 977 MB) for safe rollback.
+2. Moved the D4-era sweep outputs aside: `sweep-map1/` (409 tile JSONs) →
+   `sweep-map1.preiter21/`; snapshotted `sweep-map1-{aggregate.json,summary.md}`
+   → `.preiter21.*`.
+
+**First bake attempt (3.8 s — false-OK):** `bake-all-maps.ps1 -Maps 1
+-DataDir D:\MaNGOS\data -Threads 8` ran in 3.8 seconds and reported
+"786 tiles" but only 1 new tile was actually written (0015142.mmtile,
+4792 bytes). Root cause: `TileWorker::shouldSkipTile` (see TileWorker.cpp
+:10323) skips any tile whose existing .mmtile has matching MMAP_MAGIC +
+DT_NAVMESH_VERSION + MMAP_VERSION headers. Full-map bake without explicit
+`--tile` arguments is INCREMENTAL (only bakes missing or version-bumped
+tiles). The `bake-tile.ps1` single-tile path forces rebuild via the
+`m_forceRebuild=true` set in MapBuilder.cpp:282; the no-tile-arg path
+inherits the false default.
+
+**Second bake attempt — force rebuild by deletion (11.9 min — REGRESSION):**
+Deleted all 786 existing map-1 `001*.mmtile` files from the live dir
+(.preiter21 backup retained the originals), then re-ran `bake-all-maps.ps1
+-Maps 1`. MmapGen.exe iterated 853 "Building tile" attempts, wrote 675
+tiles, lost **110 tiles** vs the backup. Timing: 712 s total wall-clock,
+~58 tiles/min effective throughput at 8 threads.
+
+**Critical failure:** Tile (40, 29) — **the T3 OG zep fixture canary tile**
+— hit Detour's per-tile max vertex limit: `[Map 001] [40,29]: Too many
+vertices! (0x18cdf = 101,599 verts)`. Tile not written. The other 109
+missing tiles cluster in a contiguous east-Kalimdor region (TileX 42-48,
+TileY 16-30) — dense WMO / mountain transition geometry.
+
+**Diagnosis:** The iter-20 ch=cs/2 change (ch=0.2562 vs old PFS-OVERHAUL-006
+ch=0.1) is 2.5× COARSER vertically. Side effects on dense WMO tiles:
+- walkableClimb voxelization drops from 12→4 voxels (world-unit allowed
+  step-up: 1.2y → 1.025y, a 14.6% loss to floor() quantization)
+- Multi-floor WMO contours emerge with vertex counts that exceed Detour's
+  per-tile 2^17 limit — Recast/Detour can't represent the result in a
+  single mmtile binary
+- Some tiles produce no walkable navmesh at all (silently skipped on write,
+  no log entry) — most likely the ch=0.2562 vertical filter cuts narrow
+  ledges in mountain tiles that ch=0.1 previously accepted
+
+This **empirically validates** iter-19's pre-flight concern noted in
+iter 20 status doc: "ch coarsening might INCREASE multi-Z stacking
+locally before cs change recovers via wider horizontal voxels." The
+recovery never came because Detour ran out of vertex budget first.
+
+**Bake-fixture pair NOT RUN.** Pre-flight inspection confirmed T3 tile
+absent from output dir; the runtime would have FATAL'd at navmesh load.
+No point spending 6 min to confirm the obvious.
+
+**Files / state preserved for diagnostics:**
+- `D:\MaNGOS\data\mmaps.iter21-failed\` — the 675-tile broken bake
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\iter21-full-map1\
+  {map-001.log, bake-all.log, bake-summary.json}` — bake logs incl
+  the "Too many vertices" line at tile (40,29)
+- `D:\MaNGOS\data\mmaps.preiter21\` — May-1 production backup (785 tiles)
+  — preserved as rollback source
+
+**Tests:** N/A — no commit at this iter; rolling forward to iter 22 revert.
+
+## Iter 22 — 2026-05-31 — REVERT iter 20 (Mononen ch=cs/2 was over-aggressive)
+
+**Did:** Per guardrail 4 ("when tests regress, REVERT — don't patch over")
+and user direction "Full revert (Recommended)", fully reverted iter 20:
+
+1. **Data restoration:**
+   - `D:\MaNGOS\data\mmaps` (broken iter-21 bake) → renamed to
+     `mmaps.iter21-failed\` (kept for diagnostics)
+   - `D:\MaNGOS\data\mmaps.preiter21\` (May-1 production backup) →
+     renamed back to live `mmaps\`
+   - Verified: live dir has 785 map-1 tiles incl T3 tile (40, 29) at
+     3,421,332 bytes from May 11 2026.
+
+2. **Code revert** (manual `git checkout 9140ea44 -- <files>`):
+   - [`tools/MmapGen/include/BakeProfile.h`](../../../tools/MmapGen/include/BakeProfile.h)
+     — back to iter-19 skeleton (declarations only; no inline
+     MakeBakeProfile body)
+   - [`tools/MmapGen/CMakeLists.txt`](../../../tools/MmapGen/CMakeLists.txt)
+     — removed MMAPGEN_INC_LOCAL
+   - [`tools/MmapGen/contrib/mmap/src/TileWorker.cpp`](../../../tools/MmapGen/contrib/mmap/src/TileWorker.cpp)
+     — removed `#include "BakeProfile.h"`; restored
+     `config.cs = MMAP::BASE_UNIT_DIM; config.ch = MMAP::BASE_UNIT_DIM;`
+     hardcode in `from_json`; restored the unconditional
+     `config.ch = 0.1f;` override at the PFS-OVERHAUL-006 site in
+     `buildTile`.
+   - Iter 19's 5 Mononen value updates in `getDefaultConfig` REMAIN
+     (detailSampleDist=1.6, maxSimplificationError=1.3, mergeRegionArea=40,
+     minRegionArea=20, walkableSlopeAngle=60 terrain+vmaps). Those values
+     compiled, baked, and were verified at iter 19 + iter 20 with zero
+     regression — keeping them is conservative.
+   - Status doc entries for iter 20 + iter 21 + this iter 22 preserved
+     as history per iter-18 pattern.
+
+3. **Build verification:** `build-mmapgen.ps1 -Configuration Release`:
+   exit 0; MmapGen.exe + SceneCacheBuilder + NavMeshTileEditor +
+   NavMeshPhysicsValidator all built clean.
+
+4. **Bake-fixture pair after revert** (guardrail 3 mandatory):
+   - `WWOW_OG_ZEP_BAKE_FIXTURE=1` + `WWOW_BRM_BAKE_FIXTURE=1` →
+     `OgZeppelin_BakeFixtureValidation` ✅ PASS (2m54s)
+     `BrmDungeon_BakeFixtureValidation` ✅ PASS
+   - **Total: 2/2 PASS in 6.14 min.** Confirmed: restored baseline is
+     functional, no regression on canaries.
+
+**Phase 1 status after revert:**
+- 5 of 6 Mononen value updates still in code (detailSampleDist,
+  maxSimplificationError, mergeRegionArea, minRegionArea, walkableSlopeAngle
+  terrain+vmaps). These compiled + baked + tested with zero observable
+  regression at iter 19.
+- The 6th violation (cs/ch hardcoded in from_json + line 10489 ch=0.1f
+  override) is REVERTED back to pre-Mononen state for safety. The "ch=cs/2"
+  rule is empirically incompatible with the existing dense WMO tiles
+  under the current Recast tuning.
+- Per-tile probes on tile (32, 28) at samples=20 cannot detect changes
+  to non-cs/ch Mononen values (iter 19 + iter 20 finding).
+- Global sweep aggregation methodology was never reached — the bake
+  attempt blew up first.
+
+**Tests:** Build PASS. Bake-fixture pair PASS 2/2. Restoration verified.
+
+**Files changed by iter 22:**
+- tools/MmapGen/include/BakeProfile.h (reverted to iter-19 skeleton)
+- tools/MmapGen/CMakeLists.txt (removed MMAPGEN_INC_LOCAL)
+- tools/MmapGen/contrib/mmap/src/TileWorker.cpp (reverted from_json
+  cs/ch + restored line 10489 ch=0.1f override)
+- docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 21 + 22 entries)
+
+**Files preserved (NOT committed; in D: drive or tmp/):**
+- D:\MaNGOS\data\mmaps.iter21-failed\ (broken 675-tile bake for diagnosis)
+- D:\MaNGOS\data\mmaps\ (restored 785-tile May-1 production bake — IS live)
+- tmp/bake-sweeps/iter21-full-map1\* (bake logs including "Too many vertices")
+
+**Lessons banked for Phase 1 recalibration:**
+1. **Mononen ch=cs/2 with cs=r/2 is empirically too coarse vertically**
+   for the existing dense WMO geometry in this codebase. Whether the right
+   answer is (a) different cs+ch values that satisfy the rule with FINER
+   absolute ch, (b) a hybrid (keep ch=0.1, change only cs), (c) per-tile
+   indoor/outdoor profiles, or (d) something else, is open.
+2. **Detour's per-tile vertex limit (2^17 = 131,072) is real and tile
+   (40, 29) is the canary** for that ceiling. The iter-13 finding (T3
+   has 27+14 polyrefs at its stall coords) was an early warning — that
+   tile's geometry density was always close to the limit.
+3. **Full-map bake "OK" status from bake-all-maps.ps1 doesn't mean every
+   tile succeeded.** The script reports OK if MmapGen.exe returns 0;
+   individual tiles can silently fail (Too many vertices, empty navmesh,
+   etc.) without affecting the exit code. Need: tile-count-vs-expected
+   check, or per-tile error scanning.
+4. **`MmapGen.exe <mapId>` without `--tile X,Y` is INCREMENTAL.** It uses
+   `shouldSkipTile` (TileWorker.cpp:10323) which skips any tile whose
+   header version matches. To force a full re-bake, either delete the
+   existing tile files OR add a `--force` flag (Phase 1 follow-up).
+5. **Methodology blindspots compound.** Iter 19 + 20 per-tile probes
+   missed signal because path corridors are stable. Iter 21 global re-bake
+   would have surfaced signal but went FATAL before measurement could
+   even begin. The next attempt needs a smaller cs/ch step — maybe
+   `cs=0.34` (r/3 indoor) keeping `ch=0.1`, or `cs=0.40 ch=0.13` (closer
+   to ch=cs/3) — to stay inside Detour's per-tile vertex budget.
+
+**Next iter — iter 23 recalibration:** Open question for user input.
+Possible directions:
+- **A.** Per-tile bake with cs=0.34 (indoor Mononen r/3), ch=0.1
+  (PFS-OVERHAUL-006 retained). Test on T3 tile (40, 29) and tile (32, 28)
+  via bake-tile.ps1 single-tile bakes (force-rebuild). If T3 stays within
+  Detour vertex limit AND bake-fixture pair stays green, scale.
+- **B.** Investigate Detour's per-tile vertex limit / Recast contour
+  parameters. Maybe maxVertsPerPoly bump 6→DT_VERTS_PER_POLYGON, or
+  smaller borderSize, or maxEdgeLen tuning, gives more headroom under
+  Mononen cs/ch=0.5124/0.2562 without overflow.
+- **C.** Accept Phase 1 as "5 of 6 Mononen values applied; cs/ch left
+  per PFS-OVERHAUL-006" and move to Phase 2 (Recast 1.6 vendor upgrade)
+  which may resolve some of the contour density via upstream fixes.
+
+

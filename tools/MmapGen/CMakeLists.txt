@@ -139,10 +139,6 @@ set(MMAPGEN_INC_ZLIB        "${CMAKE_CURRENT_SOURCE_DIR}/dep/windows/include/zli
 set(MMAPGEN_INC_RECAST_PARENT "${CMAKE_CURRENT_SOURCE_DIR}/dep")
 set(MMAPGEN_INC_RECAST      "${CMAKE_CURRENT_SOURCE_DIR}/dep/recastnavigation/Recast/Include")
 set(MMAPGEN_INC_DETOUR      "${CMAKE_CURRENT_SOURCE_DIR}/dep/recastnavigation/Detour/Include")
-# Phase 1: in-tree single-source-of-truth bake-parameter header
-# (tools/MmapGen/include/BakeProfile.h). TileWorker.cpp consumes it for the
-# Mononen-rule cs/ch derivation.
-set(MMAPGEN_INC_LOCAL       "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 # ----------------------------------------------------------------------------
 # Recast (static lib).
@@ -365,7 +361,6 @@ target_include_directories(MmapGen PRIVATE
     ${MMAPGEN_INC_RECAST_PARENT}
     ${MMAPGEN_INC_RECAST}
     ${MMAPGEN_INC_DETOUR}
-    ${MMAPGEN_INC_LOCAL}
 )
 target_link_libraries(MmapGen PRIVATE
     vmap
