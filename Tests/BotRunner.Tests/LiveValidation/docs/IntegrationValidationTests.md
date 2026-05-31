@@ -14,7 +14,7 @@ resolved as an action target.
 ## Test Methods
 
 - `V3_1_EncounterMechanics_StartDungeoneering_SnapshotsUpdate`: stages `ECONBG1`
-  at the Ragefire Chasm entrance and dispatches `ActionType.StartDungeoneering`.
+  at the Ragefire Chasm entrance and dispatches `ObjectiveType.StartDungeoneering`.
 - `V3_2_PvPEngagement_TwoBotsAttack_CombatStateReflected`: tracked skip because
   the economy roster is same-faction and the lane also needs fixture-owned PvP
   flag staging before a clean action dispatch is possible.
@@ -28,12 +28,12 @@ resolved as an action target.
   behind the existing live trainer funding/staging gap documented by
   `NpcInteractionTests`.
 - `V3_6_AuctionPostingService_BuySell_InventoryChanges`: stages Linen Cloth and
-  the Razor Hill vendor, then dispatches `ActionType.SellItem`.
+  the Razor Hill vendor, then dispatches `ObjectiveType.SellItem`.
 - `V3_7_BgRewardCollection_HonorMarks_VisibleInSnapshot`: stages Orgrimmar and
   Warsong mark inventory through fixture helpers, then asserts bag snapshot
   projection.
 - `V3_8_MasterLootDistribution_AssignLoot_ActionDispatches`: stages RFC and
-  dispatches `ActionType.AssignLoot` to prove action routing.
+  dispatches `ObjectiveType.AssignLoot` to prove action routing.
 
 ## Shodan Staging
 

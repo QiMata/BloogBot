@@ -27,76 +27,76 @@ namespace WoWSharpClient.Tests.Agent
 
         #endregion
 
-        #region PetActionType Packing Tests
+        #region PetObjectiveType Packing Tests
 
         [Fact]
-        public void PetActionType_Pack_CommandAttack_CorrectPacking()
+        public void PetObjectiveType_Pack_CommandAttack_CorrectPacking()
         {
             // MAKE_UNIT_ACTION_BUTTON(COMMAND_ATTACK=2, ACT_COMMAND=0x07) = 0x07000002
-            uint packed = PetActionType.Pack((uint)PetCommand.Attack, PetActionType.ACT_COMMAND);
+            uint packed = PetObjectiveType.Pack((uint)PetCommand.Attack, PetObjectiveType.ACT_COMMAND);
             Assert.Equal(0x07000002u, packed);
         }
 
         [Fact]
-        public void PetActionType_Pack_CommandFollow_CorrectPacking()
+        public void PetObjectiveType_Pack_CommandFollow_CorrectPacking()
         {
-            uint packed = PetActionType.Pack((uint)PetCommand.Follow, PetActionType.ACT_COMMAND);
+            uint packed = PetObjectiveType.Pack((uint)PetCommand.Follow, PetObjectiveType.ACT_COMMAND);
             Assert.Equal(0x07000001u, packed);
         }
 
         [Fact]
-        public void PetActionType_Pack_CommandStay_CorrectPacking()
+        public void PetObjectiveType_Pack_CommandStay_CorrectPacking()
         {
-            uint packed = PetActionType.Pack((uint)PetCommand.Stay, PetActionType.ACT_COMMAND);
+            uint packed = PetObjectiveType.Pack((uint)PetCommand.Stay, PetObjectiveType.ACT_COMMAND);
             Assert.Equal(0x07000000u, packed);
         }
 
         [Fact]
-        public void PetActionType_Pack_CommandDismiss_CorrectPacking()
+        public void PetObjectiveType_Pack_CommandDismiss_CorrectPacking()
         {
-            uint packed = PetActionType.Pack((uint)PetCommand.Dismiss, PetActionType.ACT_COMMAND);
+            uint packed = PetObjectiveType.Pack((uint)PetCommand.Dismiss, PetObjectiveType.ACT_COMMAND);
             Assert.Equal(0x07000003u, packed);
         }
 
         [Fact]
-        public void PetActionType_Pack_AbilityEnabled_CorrectPacking()
+        public void PetObjectiveType_Pack_AbilityEnabled_CorrectPacking()
         {
             // MAKE_UNIT_ACTION_BUTTON(spellId=100, ACT_ENABLED=0xC1) = 0xC1000064
-            uint packed = PetActionType.Pack(100, PetActionType.ACT_ENABLED);
+            uint packed = PetObjectiveType.Pack(100, PetObjectiveType.ACT_ENABLED);
             Assert.Equal(0xC1000064u, packed);
         }
 
         [Fact]
-        public void PetActionType_Pack_LargeSpellId_Uses24Bits()
+        public void PetObjectiveType_Pack_LargeSpellId_Uses24Bits()
         {
             // 24-bit max = 0x00FFFFFF = 16777215
-            uint packed = PetActionType.Pack(0x00FFFFFF, PetActionType.ACT_ENABLED);
+            uint packed = PetObjectiveType.Pack(0x00FFFFFF, PetObjectiveType.ACT_ENABLED);
             Assert.Equal(0xC1FFFFFFu, packed);
         }
 
         [Fact]
-        public void PetActionType_Pack_Roundtrip_UnpacksCorrectly()
+        public void PetObjectiveType_Pack_Roundtrip_UnpacksCorrectly()
         {
             uint actionId = 12345;
-            byte actionType = PetActionType.ACT_COMMAND;
-            uint packed = PetActionType.Pack(actionId, actionType);
+            byte objectiveType = PetObjectiveType.ACT_COMMAND;
+            uint packed = PetObjectiveType.Pack(actionId, objectiveType);
 
             // Unpack per MaNGOS macros
             uint unpackedAction = packed & 0x00FFFFFF;
             byte unpackedType = (byte)((packed >> 24) & 0xFF);
 
             Assert.Equal(actionId, unpackedAction);
-            Assert.Equal(actionType, unpackedType);
+            Assert.Equal(objectiveType, unpackedType);
         }
 
         [Fact]
-        public void PetActionType_Constants_MatchMaNGOS()
+        public void PetObjectiveType_Constants_MatchMaNGOS()
         {
-            Assert.Equal(0x01, PetActionType.ACT_PASSIVE);
-            Assert.Equal(0x81, PetActionType.ACT_DISABLED);
-            Assert.Equal(0xC1, PetActionType.ACT_ENABLED);
-            Assert.Equal(0x07, PetActionType.ACT_COMMAND);
-            Assert.Equal(0x06, PetActionType.ACT_REACTION);
+            Assert.Equal(0x01, PetObjectiveType.ACT_PASSIVE);
+            Assert.Equal(0x81, PetObjectiveType.ACT_DISABLED);
+            Assert.Equal(0xC1, PetObjectiveType.ACT_ENABLED);
+            Assert.Equal(0x07, PetObjectiveType.ACT_COMMAND);
+            Assert.Equal(0x06, PetObjectiveType.ACT_REACTION);
         }
 
         #endregion

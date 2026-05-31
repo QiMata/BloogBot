@@ -197,7 +197,7 @@ namespace WoWStateManagerUI.ViewModels
             MapId = snapshot.CurrentMapId;
             Health = (int)(unit?.Health ?? 0);
             ConnectionState = snapshot.ConnectionState.ToString();
-            CurrentAction = snapshot.CurrentAction?.ActionType.ToString() ?? "";
+            CurrentAction = snapshot.CurrentAction?.ObjectiveType.ToString() ?? "";
             Position = baseObj?.Position != null
                 ? $"({baseObj.Position.X:F0}, {baseObj.Position.Y:F0}, {baseObj.Position.Z:F0})"
                 : "";

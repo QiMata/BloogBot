@@ -190,7 +190,7 @@ snapshot reads/writes, BG opcodes, FG calls, test anchor, catalog claim.
 7. **Test anchor** —
    `Tests/BotRunner.Tests/LiveValidation/CraftingProfessionTests.cs::CraftingProfessionTests.FirstAid_LearnAndCraft_ProducesLinenBandage`
    (Shodan-directed First Aid skill stage + reagent stage; BG
-   dispatches `ActionType.CastSpell` for `Linen Bandage`, recipe spell
+   dispatches `ObjectiveType.CastSpell` for `Linen Bandage`, recipe spell
    `3275`, and asserts `Linen Cloth` 1 → `Linen Bandage` 1 within
    8 s). Filter:
    `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --filter "FullyQualifiedName~CraftingProfessionTests.FirstAid_LearnAndCraft_ProducesLinenBandage"`.

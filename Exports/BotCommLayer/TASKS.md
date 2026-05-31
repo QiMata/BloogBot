@@ -132,7 +132,7 @@
 
 ### 2026-04-28 (Jump action contract)
 - Last delta:
-  - Added protobuf `ActionType.JUMP = 81` and regenerated
+  - Added protobuf `ObjectiveType.JUMP = 81` and regenerated
     `Exports/BotCommLayer/Models/Communication.cs`.
   - This supports direct FG/BG running-jump movement parity without routing
     through ad hoc chat/script actions.
@@ -148,9 +148,9 @@
 - Next command: `git status --short --branch`
 
 ### 2026-04-21 (P4.4)
-- Pass result: `ActionMessage correlation ids and CommandAckEvent are part of the canonical contract`
+- Pass result: `ObjectiveMessage correlation ids and CommandAckEvent are part of the canonical contract`
 - Last delta:
-  - `communication.proto` now adds `ActionMessage.correlation_id`, new `CommandAckEvent`, and `WoWActivitySnapshot.recent_command_acks` with the cap-10 ring documented next to the field.
+  - `communication.proto` now adds `ObjectiveMessage.correlation_id`, new `CommandAckEvent`, and `WoWActivitySnapshot.recent_command_acks` with the cap-10 ring documented next to the field.
   - Regenerated `Exports/BotCommLayer/Models/Communication.cs` with `protocsharp.bat` so the new contract ships without any compatibility shim or feature flag.
 - Validation/tests run:
   - `& .\protocsharp.bat "." ".."` (from `Exports/BotCommLayer/Models/ProtoDef`) -> `succeeded`

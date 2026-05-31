@@ -57,8 +57,8 @@ StateManager configs (`.config.json` files) define which bots to run and **what 
 
   // ── Decision Restrictions ──────────────────────────────────────
   // When null/omitted: ALL decisions enabled.
-  // When set: ONLY listed ActionTypes are dispatchable by DecisionEngine/Coordinator.
-  "AllowedActions": null,             // string[] | null — whitelist of ActionType names
+  // When set: ONLY listed ObjectiveTypes are dispatchable by DecisionEngine/Coordinator.
+  "AllowedActions": null,             // string[] | null — whitelist of ObjectiveType names
   // Examples:
   //   null                     → all 80 action types
   //   ["Goto","Wait"]          → movement-only bot
@@ -105,7 +105,7 @@ StateManager configs (`.config.json` files) define which bots to run and **what 
 
 ### Feature Toggle → Task Mapping
 
-| Feature | Tasks Enabled | ActionTypes Enabled |
+| Feature | Tasks Enabled | ObjectiveTypes Enabled |
 |---------|--------------|---------------------|
 | `Combat` | StartAttackTask, PullTargetTask, PvERotationTask, PvPRotationTask, PvPEngagementTask, StopAttackTask | StartMeleeAttack, StartRangedAttack, StartWandAttack, StopAttack, CastSpell |
 | `Questing` | QuestingTask, AcceptQuestTask, CompleteQuestTask, EscortQuestTask, SelectGossipTask | AcceptQuest, DeclineQuest, SelectReward, CompleteQuest, SelectGossip |

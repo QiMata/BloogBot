@@ -32,14 +32,14 @@
 ## Category A — direct `SendActionAsync` in test body
 
 The 97 sites cluster in `Tests/BotRunner.Tests/LiveValidation/`. Each
-test dispatches a raw `ActionMessage` to a test bot account
+test dispatches a raw `ObjectiveMessage` to a test bot account
 (TESTBOT1/TESTBOT2/etc.) inside a `[Fact]` / `[Theory]` body or a
 test-class-local helper, bypassing `DecisionEngine`. Full file list
 preserved in the appendix; spot examples by family:
 
 | Family | Representative file | Sites | Notes |
 |---|---|---:|---|
-| Long pathing | `LiveValidation/LongPathingTests.cs:189,297,683,836,995` | 5 | `ActionType.TravelTo` dispatch — high visibility because pathfinding is active |
+| Long pathing | `LiveValidation/LongPathingTests.cs:189,297,683,836,995` | 5 | `ObjectiveType.TravelTo` dispatch — high visibility because pathfinding is active |
 | Movement parity | `LiveValidation/MovementParityTests.cs:266,272,624,626,655,814,823,824,831,832` | 10 | `StartMovement`/`StopMovement`/`SetFacing`/`Goto` paired to FG+BG — class-local helpers (`DispatchBothAsync`, `DispatchPairAsync`) live in the test file, not fixture |
 | Taxi parity | `LiveValidation/TaxiTransportParityTests.cs` (12 sites) | 12 | Recording + flightmaster + taxi-node dispatch paired FG+BG |
 | Combat | `LiveValidation/CombatLoopTests.cs:85,86` + `WandAttackTests.cs:98,150,176` + `CombatBgTests.cs:69` + `CombatFgTests.cs:69` | 6 | Direct `Attack`/`StopAttack` |
@@ -53,8 +53,8 @@ preserved in the appendix; spot examples by family:
 | Other / direct dispatch | `AckCaptureTests.cs` (2) + `DeathCorpseRunTests.cs` (4) + `Dungeons/SummoningStoneTests.cs` (2) + `EconomyInteractionTests.cs` (2) + `GroupFormationTests.cs` (2) + `MageTeleportTests.cs` (2) + `MapTransitionTests.cs` + `PetManagementTests.cs` (2) + `Scenarios/TestScenarioRunner.cs` + `SpellCastOnTargetTests.cs` + `SpiritHealerTests.cs` + `TaxiTests.cs` (5) + `TradeTestSupport.cs` + `ChannelTests.cs` + `LootCorpseTests.cs` (3) | ~30 | |
 
 `SendActionAndWaitAsync` (used at `CraftingProfessionTests.cs:146`) is
-the same dispatcher family — same violation. ActionMessage construction
-in test bodies: **122 occurrences of `new ActionMessage` across 58
+the same dispatcher family — same violation. ObjectiveMessage construction
+in test bodies: **122 occurrences of `new ObjectiveMessage` across 58
 files** under `LiveValidation/`.
 
 ## Category B — direct service construction
@@ -127,7 +127,7 @@ slot S2.0), because:
 Refactoring the 97 LiveValidation sites is **not** Phase 1 scope:
 
 - **Phase 1 (today, in flight)** closes the IBotTask substrate and the
-  ActionType dispatch surface. Today's remote-control tests verify that
+  ObjectiveType dispatch surface. Today's remote-control tests verify that
   every Action dispatches correctly — that is *exactly* the contract
   Phase 1 needs to verify, even if the test shape inverts the layer
   ordering.
@@ -142,7 +142,7 @@ This audit is the input for that Phase 5.x slot. The rule itself
 ([WWoW CLAUDE.md → Test Isolation Rules](../../CLAUDE.md#test-isolation-rules))
 applies immediately to **new** tests: new LiveValidation tests must
 declare an Activity and assert against Task / snapshot state, not raw
-ActionMessage dispatch.
+ObjectiveMessage dispatch.
 
 ## Appendix — full per-file list
 

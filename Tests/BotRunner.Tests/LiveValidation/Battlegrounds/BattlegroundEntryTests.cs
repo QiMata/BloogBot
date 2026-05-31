@@ -178,10 +178,10 @@ public class AlteracValleyTests
 /// <summary>Shared BG test helper methods.</summary>
 internal static class BgTestHelper
 {
-    public static ActionMessage MakeGoto(float x, float y, float z, float stopDistance = 3f)
+    public static ObjectiveMessage MakeGoto(float x, float y, float z, float stopDistance = 3f)
         => new()
         {
-            ActionType = ActionType.Goto,
+            ObjectiveType = ObjectiveType.Goto,
             Parameters =
             {
                 new RequestParameter { FloatParam = x },

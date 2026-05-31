@@ -246,8 +246,8 @@ public class RagefireChasmTests
                 // Include HP totals (changes during level resets), equipped items, and action types
                 var totalHp = snapshots.Sum(s => s.Player?.Unit?.MaxHealth ?? 0);
                 var totalLevel = snapshots.Sum(s => (int)(s.Player?.Unit?.GameObject?.Level ?? 0));
-                var actionTypes = string.Join(",", snapshots
-                    .Select(s => s.CurrentAction?.ActionType.ToString() ?? "-")
+                var objectiveTypes = string.Join(",", snapshots
+                    .Select(s => s.CurrentAction?.ObjectiveType.ToString() ?? "-")
                     .OrderBy(a => a));
 
                 // Position hash — round to integers to avoid noise from micro-movement
@@ -259,7 +259,7 @@ public class RagefireChasmTests
                 }));
 
                 var fingerprint = $"grp={grouped},rfc={onRfc},spells={totalSpells},items={totalItems}," +
-                    $"hp={totalHp},lvl={totalLevel},act={actionTypes.GetHashCode():X8},pos={posHash.GetHashCode():X8}";
+                    $"hp={totalHp},lvl={totalLevel},act={objectiveTypes.GetHashCode():X8},pos={posHash.GetHashCode():X8}";
                 return (onRfc == ExpectedBotCount && grouped == ExpectedBotCount, onRfc, fingerprint);
             });
 

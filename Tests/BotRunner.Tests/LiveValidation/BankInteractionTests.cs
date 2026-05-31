@@ -69,9 +69,9 @@ public class BankInteractionTests
             Assert.True(itemCount > 0, $"{target.RoleLabel}: Linen Cloth should be staged before bank interaction.");
 
             var bankerGuid = await AssertBankerNearbyAsync(target, $"{target.RoleLabel} banker-deposit");
-            var interactResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+            var interactResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
             {
-                ActionType = ActionType.InteractWith,
+                ObjectiveType = ObjectiveType.InteractWith,
                 Parameters = { new RequestParameter { LongParam = (long)bankerGuid } }
             });
             _output.WriteLine($"[BANK] {target.RoleLabel} InteractWith banker result: {interactResult}");
@@ -80,7 +80,7 @@ public class BankInteractionTests
 
         global::Tests.Infrastructure.Skip.If(
             true,
-            "Bank deposit/withdraw ActionType surface is not implemented yet; Shodan item/location staging and banker InteractWith are migrated.");
+            "Bank deposit/withdraw ObjectiveType surface is not implemented yet; Shodan item/location staging and banker InteractWith are migrated.");
     }
 
     private async Task EnsureEconomySettingsAsync()

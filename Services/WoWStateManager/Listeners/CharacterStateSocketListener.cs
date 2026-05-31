@@ -215,7 +215,7 @@ namespace WoWStateManager.Listeners
                     // Drop stale actions that have exceeded TTL
                     if (DateTime.UtcNow - timestampedAction.EnqueuedAt > PendingActionTtl)
                     {
-                        _logger.LogWarning($"DROPPING STALE ACTION for '{accountName}': {timestampedAction.Action.ActionType} (age={DateTime.UtcNow - timestampedAction.EnqueuedAt:mm\\:ss})");
+                        _logger.LogWarning($"DROPPING STALE ACTION for '{accountName}': {timestampedAction.Action.ObjectiveType} (age={DateTime.UtcNow - timestampedAction.EnqueuedAt:mm\\:ss})");
                         continue;
                     }
 
@@ -223,7 +223,7 @@ namespace WoWStateManager.Listeners
 
                     // Drop stale chat actions if the sender is dead/ghost.
                     // Action forwarding can be delayed by coordinator suppression; by delivery time the bot may have died.
-                    if (pendingAction.ActionType == ActionType.SendChat && IsDeadOrGhostState(response, out var deadReason))
+                    if (pendingAction.ObjectiveType == ObjectiveType.SendChat && IsDeadOrGhostState(response, out var deadReason))
                     {
                         _logger.LogInformation($"DROPPING PENDING ACTION for '{accountName}': SendChat blocked while dead/ghost ({deadReason})");
                         continue;
@@ -233,8 +233,8 @@ namespace WoWStateManager.Listeners
                     // Suppress CombatCoordinator so multi-second forwarded actions
                     // are not overwritten on the next poll cycle.
                     _coordinatorSuppressedUntil[accountName] = DateTime.UtcNow.AddSeconds(_coordinatorSuppressionSeconds);
-                    Console.WriteLine($"[ACTION-DIAG] INJECTING PENDING ACTION to '{accountName}': {pendingAction.ActionType}");
-                    _logger.LogInformation($"INJECTING PENDING ACTION to '{accountName}': {pendingAction.ActionType} (coordinator suppressed {_coordinatorSuppressionSeconds}s)");
+                    Console.WriteLine($"[ACTION-DIAG] INJECTING PENDING ACTION to '{accountName}': {pendingAction.ObjectiveType}");
+                    _logger.LogInformation($"INJECTING PENDING ACTION to '{accountName}': {pendingAction.ObjectiveType} (coordinator suppressed {_coordinatorSuppressionSeconds}s)");
                     break;
                 }
 
@@ -259,9 +259,9 @@ namespace WoWStateManager.Listeners
                 response.CurrentAction = StampDispatchCorrelationId(accountName, response.CurrentAction);
             }
 
-            if (response.CurrentAction != null && response.CurrentAction.ActionType != ActionType.Wait)
+            if (response.CurrentAction != null && response.CurrentAction.ObjectiveType != ObjectiveType.Wait)
             {
-                _logger.LogInformation($"DELIVERING ACTION to '{accountName}': {response.CurrentAction.ActionType}");
+                _logger.LogInformation($"DELIVERING ACTION to '{accountName}': {response.CurrentAction.ObjectiveType}");
             }
 
             return response;
@@ -330,13 +330,13 @@ namespace WoWStateManager.Listeners
                 || request.IsMapTransition;
         }
 
-        private bool ShouldPrioritizeCoordinatorAction(ActionMessage? currentAction)
+        private bool ShouldPrioritizeCoordinatorAction(ObjectiveMessage? currentAction)
         {
             if (currentAction == null || _battlegroundCoordinator == null)
                 return false;
 
-            if (currentAction.ActionType != ActionType.JoinBattleground
-                && currentAction.ActionType != ActionType.AcceptBattleground)
+            if (currentAction.ObjectiveType != ObjectiveType.JoinBattleground
+                && currentAction.ObjectiveType != ObjectiveType.AcceptBattleground)
             {
                 return false;
             }
@@ -354,9 +354,9 @@ namespace WoWStateManager.Listeners
         /// <summary>
         /// Returns true if the action was successfully enqueued, false if it was dropped (e.g. dead/ghost state).
         /// </summary>
-        public bool EnqueueAction(string accountName, ActionMessage action)
+        public bool EnqueueAction(string accountName, ObjectiveMessage action)
         {
-            if (action.ActionType == ActionType.SendChat
+            if (action.ObjectiveType == ObjectiveType.SendChat
                 && CurrentActivityMemberList.TryGetValue(accountName, out var current)
                 && IsDeadOrGhostState(current, out var deadReason))
             {
@@ -369,12 +369,12 @@ namespace WoWStateManager.Listeners
             // Enforce depth cap — drop oldest if at capacity
             while (queue.Count >= MaxPendingActionsPerAccount && queue.TryDequeue(out var dropped))
             {
-                _logger.LogWarning($"DROPPING OLDEST ACTION for '{accountName}': {dropped.Action.ActionType} (queue at capacity {MaxPendingActionsPerAccount})");
+                _logger.LogWarning($"DROPPING OLDEST ACTION for '{accountName}': {dropped.Action.ObjectiveType} (queue at capacity {MaxPendingActionsPerAccount})");
             }
 
             queue.Enqueue(new TimestampedAction(action));
-            Console.WriteLine($"[ACTION-DIAG] QUEUED ACTION for '{accountName}': {action.ActionType} (pending={queue.Count})");
-            _logger.LogInformation($"QUEUED ACTION for '{accountName}': {action.ActionType} (pending={queue.Count})");
+            Console.WriteLine($"[ACTION-DIAG] QUEUED ACTION for '{accountName}': {action.ObjectiveType} (pending={queue.Count})");
+            _logger.LogInformation($"QUEUED ACTION for '{accountName}': {action.ObjectiveType} (pending={queue.Count})");
             return true;
         }
 
@@ -452,14 +452,14 @@ namespace WoWStateManager.Listeners
         }
 
         /// <summary>
-        /// Wraps an ActionMessage with an enqueue timestamp for TTL expiry.
+        /// Wraps an ObjectiveMessage with an enqueue timestamp for TTL expiry.
         /// </summary>
-        private sealed record TimestampedAction(ActionMessage Action)
+        private sealed record TimestampedAction(ObjectiveMessage Action)
         {
             public DateTime EnqueuedAt { get; } = DateTime.UtcNow;
         }
 
-        private ActionMessage StampDispatchCorrelationId(string accountName, ActionMessage action)
+        private ObjectiveMessage StampDispatchCorrelationId(string accountName, ObjectiveMessage action)
         {
             var stamped = action.Clone();
             if (string.IsNullOrWhiteSpace(stamped.CorrelationId))
@@ -556,8 +556,8 @@ namespace WoWStateManager.Listeners
                 if (progressionAction != null)
                 {
                     response.CurrentAction = progressionAction;
-                    _logger.LogInformation("PROGRESSION: Injecting {ActionType} for '{Account}'",
-                        progressionAction.ActionType, accountName);
+                    _logger.LogInformation("PROGRESSION: Injecting {ObjectiveType} for '{Account}'",
+                        progressionAction.ObjectiveType, accountName);
                 }
             }
         }

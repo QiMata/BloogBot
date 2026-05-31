@@ -7,7 +7,7 @@ namespace BotRunner.Tasks;
 
 /// <summary>
 /// Atomic task: loot a corpse by GUID using ObjectManager.LootTargetAsync.
-/// Maps to ActionType.LOOT_CORPSE from StateManager.
+/// Maps to ObjectiveType.LOOT_CORPSE from StateManager.
 /// </summary>
 public class LootCorpseTask(IBotContext botContext, ulong corpseGuid) : BotTask(botContext), IBotTask
 {

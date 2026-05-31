@@ -10,7 +10,7 @@ This is the first migrated slice of the Shodan test-director overhaul (see
 [SHODAN_MIGRATION_INVENTORY.md](SHODAN_MIGRATION_INVENTORY.md)). The test
 launches `Equipment.config.json` (`EQUIPFG1` + `EQUIPBG1` + SHODAN), stages
 the BotRunner under test through `StageBotRunnerLoadoutAsync`, and then
-dispatches only `ActionType.EquipItem` and `ActionType.UnequipItem`.
+dispatches only `ObjectiveType.EquipItem` and `ObjectiveType.UnequipItem`.
 The test body issues no GM commands.
 
 ## Test Methods (1)
@@ -27,9 +27,9 @@ The test body issues no GM commands.
 |------|--------|---------|
 | 0 | Stage loadout | `StageBotRunnerLoadoutAsync(account, label, spells=[198], skills=[(54,1,300)], items=[(36,1)])` — clean slate, clear bag 0, learn mace proficiency, set Maces skill, add Worn Mace. |
 | 1 | Wait for bag | Poll 5s for Worn Mace appearance in bags. |
-| 2 | Equip weapon | **Dispatch `ActionType.EquipItem`** with `IntParam = 36`. Assert Success. Poll 5s for mainhand equipped. |
+| 2 | Equip weapon | **Dispatch `ObjectiveType.EquipItem`** with `IntParam = 36`. Assert Success. Poll 5s for mainhand equipped. |
 | 3 | Record state | Snapshot: `mainhandGuidBefore` (slot 15), `maceCountBefore` (item 36 in bags) |
-| 4 | Unequip | **Dispatch `ActionType.UnequipItem`** with `IntParam = 16` (MainhandEquipSlot enum) |
+| 4 | Unequip | **Dispatch `ObjectiveType.UnequipItem`** with `IntParam = 16` (MainhandEquipSlot enum) |
 | 5 | Verify | Poll 5s (200ms interval): check mainhand GUID changed or empty, mace count increased in bags |
 
 **StateManager/BotRunner Action Flow:**

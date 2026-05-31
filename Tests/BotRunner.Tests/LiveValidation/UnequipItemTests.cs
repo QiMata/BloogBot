@@ -11,7 +11,7 @@ using Xunit.Abstractions;
 namespace BotRunner.Tests.LiveValidation;
 
 /// <summary>
-/// Unequip item integration test — validates ActionType.UnequipItem.
+/// Unequip item integration test — validates ObjectiveType.UnequipItem.
 ///
 /// First migrated slice of the Shodan test-director overhaul
 /// (see LiveValidation/docs/SHODAN_MIGRATION_INVENTORY.md).
@@ -22,8 +22,8 @@ namespace BotRunner.Tests.LiveValidation;
 ///   2) <see cref="LiveBotFixture.StageBotRunnerLoadoutAsync"/> stages the
 ///      target with mace proficiency, Maces skill, and a Worn Mace in bags.
 ///      The test body issues no GM commands of its own.
-///   3) The test dispatches <c>ActionType.EquipItem</c> then
-///      <c>ActionType.UnequipItem</c> against each role and asserts on
+///   3) The test dispatches <c>ObjectiveType.EquipItem</c> then
+///      <c>ObjectiveType.UnequipItem</c> against each role and asserts on
 ///      snapshot changes.
 ///
 /// EquipSlot 16 = MainHand. The dispatch maps to EquipmentAgent.UnequipItemAsync
@@ -178,9 +178,9 @@ public class UnequipItemTests
         {
             // Mace is in bags (fresh session) — equip it as the precondition.
             _output.WriteLine($"  [{label}] Mainhand empty post-loadout; dispatching EquipItem({WornMace}) precondition.");
-            var equipResult = await _bot.SendActionAsync(account, new ActionMessage
+            var equipResult = await _bot.SendActionAsync(account, new ObjectiveMessage
             {
-                ActionType = ActionType.EquipItem,
+                ObjectiveType = ObjectiveType.EquipItem,
                 Parameters = { new RequestParameter { IntParam = (int)WornMace } }
             });
             Assert.Equal(ResponseResult.Success, equipResult);
@@ -219,9 +219,9 @@ public class UnequipItemTests
 
         // EquipItem is part of the precondition for the UnequipItem test, but
         // it is still a real BotRunner action — not a GM command.
-        var equipResult = await _bot.SendActionAsync(account, new ActionMessage
+        var equipResult = await _bot.SendActionAsync(account, new ObjectiveMessage
         {
-            ActionType = ActionType.EquipItem,
+            ObjectiveType = ObjectiveType.EquipItem,
             Parameters = { new RequestParameter { IntParam = (int)WornMace } }
         });
         Assert.Equal(ResponseResult.Success, equipResult);
@@ -246,9 +246,9 @@ public class UnequipItemTests
 
         // UnequipItem is the action under test.
         _output.WriteLine($"  [{label}] Dispatching UnequipItem (EquipSlot={MainhandEquipSlot}).");
-        var unequipResult = await _bot.SendActionAsync(account, new ActionMessage
+        var unequipResult = await _bot.SendActionAsync(account, new ObjectiveMessage
         {
-            ActionType = ActionType.UnequipItem,
+            ObjectiveType = ObjectiveType.UnequipItem,
             Parameters = { new RequestParameter { IntParam = MainhandEquipSlot } }
         });
         _output.WriteLine($"  [{label}] UnequipItem dispatch result: {unequipResult}");

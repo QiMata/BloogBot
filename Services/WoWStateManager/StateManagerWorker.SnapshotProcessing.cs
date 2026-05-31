@@ -201,8 +201,8 @@ namespace WoWStateManager
 
             var enqueued = _activityMemberSocketListener.EnqueueAction(forward.AccountName, forward.Action);
             response.Response = enqueued ? ResponseResult.Success : ResponseResult.Failure;
-            Console.WriteLine($"[ACTION-DIAG] Action forward: {(enqueued ? "queued" : "DROPPED")} {forward.Action.ActionType} for '{forward.AccountName}'");
-            _logger.LogInformation($"Action forward: {(enqueued ? "queued" : "DROPPED")} {forward.Action.ActionType} for '{forward.AccountName}'"  );
+            Console.WriteLine($"[ACTION-DIAG] Action forward: {(enqueued ? "queued" : "DROPPED")} {forward.Action.ObjectiveType} for '{forward.AccountName}'");
+            _logger.LogInformation($"Action forward: {(enqueued ? "queued" : "DROPPED")} {forward.Action.ObjectiveType} for '{forward.AccountName}'"  );
         }
 
         /// <summary>

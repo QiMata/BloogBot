@@ -15,7 +15,7 @@ namespace BotRunner.Tests.LiveValidation;
 ///
 /// The fixture uses a single FG+BG+Shodan roster launch. Shodan stages a
 /// pier-reachable Ratchet pool, then FG and BG stay idle until the test
-/// explicitly dispatches <c>ActionType.StartFishing</c> for each phase. Once
+/// explicitly dispatches <c>ObjectiveType.StartFishing</c> for each phase. Once
 /// dispatched, everything from <c>FishingTask activity_start</c> to
 /// <c>FishingTask fishing_loot_success</c> remains owned by
 /// <see cref="BotRunner.Tasks.FishingTask"/>.
@@ -126,7 +126,7 @@ public class FishingProfessionTests
     /// <c>CharacterSettings.Loadout</c> (Skills=[356/75/75], SupplementalItems=[6256])
     /// is dispatched as <c>APPLY_LOADOUT</c> by <c>AutomatedModeHandler.OnWorldEntryAsync</c>
     /// at first <c>IsObjectManagerValid</c>. Once the loadout lands the test stages
-    /// a Ratchet pool via Shodan, dispatches <c>ActionType.StartFishing</c>, and
+    /// a Ratchet pool via Shodan, dispatches <c>ObjectiveType.StartFishing</c>, and
     /// asserts the BG <c>FishingTask</c> reaches <c>fishing_loot_success</c>.
     ///
     /// BG-only — loadout side now works on FG since cb4fd977 (LearnSpellStep
@@ -322,11 +322,11 @@ public class FishingProfessionTests
         return "recentChat=[" + string.Join(" || ", tail) + "]";
     }
 
-    private static ActionMessage CreateStartFishingAction()
+    private static ObjectiveMessage CreateStartFishingAction()
     {
-        return new ActionMessage
+        return new ObjectiveMessage
         {
-            ActionType = ActionType.StartFishing,
+            ObjectiveType = ObjectiveType.StartFishing,
             Parameters =
             {
                 new RequestParameter { StringParam = RatchetLocation },

@@ -3,7 +3,7 @@
 `TradingTests` now uses the Shodan test-director topology for baseline trade
 validation. The test body issues no GM setup commands; SHODAN stages both
 BotRunner participants at the Orgrimmar trade spot and the executable case
-dispatches only trade `ActionType` messages.
+dispatches only trade `ObjectiveType` messages.
 
 ## Shodan Shape
 
@@ -26,8 +26,8 @@ dispatches only trade `ActionType` messages.
 
 - BotRunner action target: `ECONBG1`.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.OfferTrade`, then
-  `ActionType.DeclineTrade`.
+- Under-test action dispatch: `ObjectiveType.OfferTrade`, then
+  `ObjectiveType.DeclineTrade`.
 - Result: passed. The test asserts both participants still produce snapshots
   and no trade-related runtime errors are reported after cancel.
 

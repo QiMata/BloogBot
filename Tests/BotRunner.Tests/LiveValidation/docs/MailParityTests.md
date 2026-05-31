@@ -2,7 +2,7 @@
 
 `MailParityTests` uses the Shodan test-director topology with both foreground
 and background mail behavior active. SHODAN stages mailbox location and mail
-payloads, and the test body dispatches only `ActionType.CheckMail` to the FG/BG
+payloads, and the test body dispatches only `ObjectiveType.CheckMail` to the FG/BG
 BotRunner targets.
 
 ## Shodan Shape
@@ -17,7 +17,7 @@ BotRunner targets.
 4. `StageBotRunnerMailboxMoneyAsync(...)` sends the parity gold mail via SOAP.
 5. `StageBotRunnerMailboxItemAsync(...)` sends the parity Linen Cloth mail via
    SOAP.
-6. The test body dispatches only `ActionType.CheckMail` with the detected
+6. The test body dispatches only `ObjectiveType.CheckMail` with the detected
    mailbox GUID.
 
 ## Test Methods
@@ -26,7 +26,7 @@ BotRunner targets.
 
 - BotRunner action targets: `ECONBG1`, `ECONFG1`.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.CheckMail`.
+- Under-test action dispatch: `ObjectiveType.CheckMail`.
 - Result: passed. The test asserts BG coinage increases and foreground either
   reports a coinage increase or emits a fresh `[MAIL-COLLECT]` marker for the
   staged gold mail.
@@ -35,7 +35,7 @@ BotRunner targets.
 
 - BotRunner action targets: `ECONBG1`, `ECONFG1`.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.CheckMail`.
+- Under-test action dispatch: `ObjectiveType.CheckMail`.
 - Result: passed. The test asserts Linen Cloth `2589` appears in bags, or for
   foreground that a fresh `[MAIL-COLLECT]` marker confirms collection of the
   staged item mail.

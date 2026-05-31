@@ -24,7 +24,7 @@ namespace WoWStateManager.Settings
     public enum StateManagerMode
     {
         /// <summary>
-        /// StateManager waits for ActionMessage dispatch from a test fixture.
+        /// StateManager waits for ObjectiveMessage dispatch from a test fixture.
         /// This is the default for legacy bare-array configs and for every
         /// per-category live-validation config that drives an xUnit test.
         /// </summary>

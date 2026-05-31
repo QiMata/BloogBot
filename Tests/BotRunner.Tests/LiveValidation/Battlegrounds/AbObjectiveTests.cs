@@ -186,9 +186,9 @@ public class AbObjectiveTests
 
         var interactResult = await _bot.SendActionAsync(
             assault.Account,
-            new ActionMessage
+            new ObjectiveMessage
             {
-                ActionType = ActionType.InteractWith,
+                ObjectiveType = ObjectiveType.InteractWith,
                 Parameters = { new RequestParameter { LongParam = (long)banner.Guid } }
             });
         Assert.Equal(ResponseResult.Success, interactResult);
@@ -362,7 +362,7 @@ public class AbObjectiveTests
 
         var startRecordingResult = await _bot.SendActionAsync(
             account,
-            new ActionMessage { ActionType = ActionType.StartPhysicsRecording });
+            new ObjectiveMessage { ObjectiveType = ObjectiveType.StartPhysicsRecording });
         Assert.Equal(ResponseResult.Success, startRecordingResult);
 
         try
@@ -373,7 +373,7 @@ public class AbObjectiveTests
         {
             var stopRecordingResult = await _bot.SendActionAsync(
                 account,
-                new ActionMessage { ActionType = ActionType.StopPhysicsRecording });
+                new ObjectiveMessage { ObjectiveType = ObjectiveType.StopPhysicsRecording });
             Assert.Equal(ResponseResult.Success, stopRecordingResult);
         }
 

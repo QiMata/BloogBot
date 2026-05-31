@@ -253,9 +253,9 @@ public class MountEnvironmentTests
 
     private async Task CastMountSpellAsync(string account)
     {
-        var result = await _bot.SendActionAsync(account, new ActionMessage
+        var result = await _bot.SendActionAsync(account, new ObjectiveMessage
         {
-            ActionType = ActionType.CastSpell,
+            ObjectiveType = ObjectiveType.CastSpell,
             Parameters =
             {
                 new RequestParameter { IntParam = (int)TestMountSpellId }

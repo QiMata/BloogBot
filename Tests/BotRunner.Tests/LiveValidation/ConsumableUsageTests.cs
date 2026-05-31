@@ -69,9 +69,9 @@ public class ConsumableUsageTests
         Assert.False(hadBuff, $"[{target.RoleLabel}] Lion's Strength should be absent before UseItem.");
 
         _output.WriteLine($"  [{target.RoleLabel}] Dispatch UseItem({ElixirOfLionsStrength})");
-        var useResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var useResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.UseItem,
+            ObjectiveType = ObjectiveType.UseItem,
             Parameters = { new RequestParameter { IntParam = (int)ElixirOfLionsStrength } }
         });
         Assert.Equal(ResponseResult.Success, useResult);

@@ -43,7 +43,7 @@ namespace WoWStateManager.Modes
         /// </param>
         Task OnWorldEntryAsync(
             CharacterSettings character,
-            Func<string, ActionMessage, bool> enqueueAction,
+            Func<string, ObjectiveMessage, bool> enqueueAction,
             CancellationToken cancellationToken);
 
         /// <summary>
@@ -56,7 +56,7 @@ namespace WoWStateManager.Modes
         Task OnSnapshotAsync(
             CharacterSettings character,
             WoWActivitySnapshot snapshot,
-            Func<string, ActionMessage, bool> enqueueAction,
+            Func<string, ObjectiveMessage, bool> enqueueAction,
             CancellationToken cancellationToken);
 
         /// <summary>
@@ -67,7 +67,7 @@ namespace WoWStateManager.Modes
         Task OnExternalActivityRequestAsync(
             string requestingPlayer,
             string activityDescriptor,
-            Func<string, ActionMessage, bool> enqueueAction,
+            Func<string, ObjectiveMessage, bool> enqueueAction,
             CancellationToken cancellationToken);
     }
 }

@@ -42,7 +42,7 @@
 
 | Path | Captured |
 |---|---|
-| [`Audits/CAPABILITY_AUDIT.md`](Audits/CAPABILITY_AUDIT.md) | 2026-03-07 ActionType implementation status |
+| [`Audits/CAPABILITY_AUDIT.md`](Audits/CAPABILITY_AUDIT.md) | 2026-03-07 ObjectiveType implementation status |
 | [`Audits/LIVEVALIDATION_AUDIT.md`](Audits/LIVEVALIDATION_AUDIT.md) | LiveValidation suite snapshot |
 | [`Audits/INTEGRATION_FINDINGS.md`](Audits/INTEGRATION_FINDINGS.md) | Bad-behavior findings (formerly BAD_BEHAVIORS.md) |
 | [`Audits/LIVEVALIDATION_FINDINGS.md`](Audits/LIVEVALIDATION_FINDINGS.md) | Test anti-pattern findings (formerly BAD_TEST_BEHAVIORS.md) |

@@ -71,9 +71,9 @@ public class BuffAndConsumableTests
         _output.WriteLine(
             $"  [{target.RoleLabel}] Before use: auraCount={auraCountBefore}, elixirSlots={itemSlotsBefore}");
 
-        var useResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var useResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.UseItem,
+            ObjectiveType = ObjectiveType.UseItem,
             Parameters = { new RequestParameter { IntParam = (int)ElixirOfLionsStrength } }
         });
         Assert.Equal(ResponseResult.Success, useResult);
@@ -110,9 +110,9 @@ public class BuffAndConsumableTests
         var beforeDismiss = (await _bot.GetSnapshotAsync(target.AccountName))?.Player;
         Assert.True(HasLionsStrengthAura(beforeDismiss), $"[{target.RoleLabel}] Lion's Strength should be present before dismissal.");
 
-        var dismissResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var dismissResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.DismissBuff,
+            ObjectiveType = ObjectiveType.DismissBuff,
             Parameters = { new RequestParameter { StringParam = LionsStrengthBuffName } }
         });
         _output.WriteLine($"  [{target.RoleLabel}] DismissBuff result: {dismissResult}");

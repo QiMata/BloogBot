@@ -31,6 +31,6 @@
     "logIntervalSeconds": 15
   },
   "assertions": {
-    "actionTypeSeen": "StartGatheringRoute"
+    "objectiveTypeSeen": "StartGatheringRoute"
   }
 }

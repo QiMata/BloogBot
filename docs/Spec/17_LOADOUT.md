@@ -5,7 +5,7 @@
 `LoadoutSpec` is the single-message description of everything a character
 needs to become raid-ready (or activity-ready) before the activity starts.
 It is the contract handed from **StateManager** (writer) to **BotRunner**
-(reader) exactly once per bot via `ActionType.APPLY_LOADOUT`. The bot owns
+(reader) exactly once per bot via `ObjectiveType.APPLY_LOADOUT`. The bot owns
 execution pacing and reports progress through
 `WoWActivitySnapshot.LoadoutStatus` (`LOADOUT_NOT_STARTED →
 LOADOUT_IN_PROGRESS → LOADOUT_READY | LOADOUT_FAILED`). Empty/zero-valued
@@ -97,8 +97,8 @@ defaults (zero = absent).
 | `Loadout.TalentTemplate` | `LoadoutSpecSettings.TalentTemplate` | `LoadoutSpec.talent_template` (`communication.proto:290`, tag 13) | `string`; null POCO → empty string (`LoadoutSpecConverter.cs:28`) |
 
 The full `LoadoutSpec` rides on
-`ActionMessage.loadout_spec` (`communication.proto:35`, tag 4) and is
-populated **only** when `ActionMessage.action_type ==
+`ObjectiveMessage.loadout_spec` (`communication.proto:35`, tag 4) and is
+populated **only** when `ObjectiveMessage.objective_type ==
 APPLY_LOADOUT`. Progress reports back via `WoWActivitySnapshot`:
 
 - `WoWActivitySnapshot.loadout_status: LoadoutStatus` (`communication.proto:239`, tag 29) — enum `LOADOUT_NOT_STARTED|LOADOUT_IN_PROGRESS|LOADOUT_READY|LOADOUT_FAILED` (`communication.proto:246`).
@@ -373,7 +373,7 @@ for every step that goes through the chat sink, and reports
 | One-shot dispatch on world-entry (Automated mode) | `Services/WoWStateManager/Modes/AutomatedModeHandler.cs:39` |
 | Proto `message LoadoutSpec` | `Exports/BotCommLayer/Models/ProtoDef/communication.proto:277` |
 | Proto `enum LoadoutStatus` | `Exports/BotCommLayer/Models/ProtoDef/communication.proto:246` |
-| Proto `ActionType.APPLY_LOADOUT = 80` | `Exports/BotCommLayer/Models/ProtoDef/communication.proto:135` |
+| Proto `ObjectiveType.APPLY_LOADOUT = 80` | `Exports/BotCommLayer/Models/ProtoDef/communication.proto:135` |
 | Online executor | `Exports/BotRunner/Tasks/LoadoutTask.cs:33` |
 | Plan builder | `Exports/BotRunner/Tasks/LoadoutTask.cs:240` |
 | Riding skill id | `Exports/BotRunner/Tasks/LoadoutTask.cs:299` |

@@ -17,7 +17,7 @@ the BotRunner action, and `ECONFG1` stays idle for topology parity.
 2. Remove any stale quest `790`, then add quest `790` through the
    fixture-contained quest-state helper.
 3. Resolve a nearby attackable unit from the live snapshot.
-4. Dispatch `ActionType.StartMeleeAttack` to BG with the target GUID.
+4. Dispatch `ObjectiveType.StartMeleeAttack` to BG with the target GUID.
 5. Log the post-combat quest entries and remove quest `790` in cleanup.
 
 ## Runtime Linkage

@@ -70,7 +70,7 @@ public class AuctionHouseParityTests
 
         global::Tests.Infrastructure.Skip.If(
             true,
-            "Auction post/buy ActionType surface is not implemented yet; Shodan loadout/location staging is migrated.");
+            "Auction post/buy ObjectiveType surface is not implemented yet; Shodan loadout/location staging is migrated.");
     }
 
     [SkippableFact]
@@ -93,7 +93,7 @@ public class AuctionHouseParityTests
 
         global::Tests.Infrastructure.Skip.If(
             true,
-            "Auction cancel ActionType surface is not implemented yet; Shodan location staging is migrated.");
+            "Auction cancel ObjectiveType surface is not implemented yet; Shodan location staging is migrated.");
     }
 
     private async Task EnsureEconomySettingsAsync()

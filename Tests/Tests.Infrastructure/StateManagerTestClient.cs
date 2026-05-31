@@ -86,7 +86,7 @@ public class StateManagerTestClient : IDisposable
     /// Forward an action to a specific bot via StateManager.
     /// The action is queued and delivered on the bot's next poll to port 5002.
     /// </summary>
-    public async Task<ResponseResult> ForwardActionAsync(string accountName, ActionMessage action, CancellationToken ct = default)
+    public async Task<ResponseResult> ForwardActionAsync(string accountName, ObjectiveMessage action, CancellationToken ct = default)
     {
         var request = new AsyncRequest
         {

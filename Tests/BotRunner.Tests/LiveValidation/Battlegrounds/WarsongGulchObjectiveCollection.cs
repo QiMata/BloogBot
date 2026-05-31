@@ -11,7 +11,7 @@ public class WarsongGulchObjectiveFixture : WarsongGulchFixture
 
     // Objective fixtures drive prep end-to-end during fixture init; the
     // BattlegroundCoordinator now hands off per-bot loadouts via
-    // ActionType.ApplyLoadout (P3.4) so tests just wait on coordinator state.
+    // ObjectiveType.ApplyLoadout (P3.4) so tests just wait on coordinator state.
     protected override bool PrepareDuringInitialization => true;
 }
 

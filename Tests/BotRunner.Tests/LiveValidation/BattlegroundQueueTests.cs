@@ -69,9 +69,9 @@ public class BattlegroundQueueTests
             $"entry={battlemaster.GameObject?.Entry} flags=0x{battlemaster.NpcFlags:X}");
 
         var correlationId = $"bg-queue:{target.AccountName}:{Interlocked.Increment(ref s_correlationSequence)}";
-        var joinResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var joinResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.JoinBattleground,
+            ObjectiveType = ObjectiveType.JoinBattleground,
             CorrelationId = correlationId,
             Parameters =
             {
@@ -109,9 +109,9 @@ public class BattlegroundQueueTests
         }
         finally
         {
-            await _bot.SendActionAsync(target.AccountName, new ActionMessage
+            await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
             {
-                ActionType = ActionType.LeaveBattleground,
+                ObjectiveType = ObjectiveType.LeaveBattleground,
             });
         }
     }
@@ -150,7 +150,7 @@ public class BattlegroundQueueTests
             return;
 
         _output.WriteLine(
-            $"[BG-QUEUE] Current={snapshot.CurrentAction?.ActionType} Previous={snapshot.PreviousAction?.ActionType} " +
+            $"[BG-QUEUE] Current={snapshot.CurrentAction?.ObjectiveType} Previous={snapshot.PreviousAction?.ObjectiveType} " +
             $"MapId={snapshot.CurrentMapId} Screen={snapshot.ScreenState}");
 
         foreach (var msg in snapshot.RecentChatMessages.Where(IsBattlegroundMessage))
@@ -162,8 +162,8 @@ public class BattlegroundQueueTests
 
     private static bool HasQueueDispatchEvidence(WoWActivitySnapshot snapshot, string correlationId)
     {
-        if (snapshot.CurrentAction?.ActionType == ActionType.JoinBattleground
-            || snapshot.PreviousAction?.ActionType == ActionType.JoinBattleground)
+        if (snapshot.CurrentAction?.ObjectiveType == ObjectiveType.JoinBattleground
+            || snapshot.PreviousAction?.ObjectiveType == ObjectiveType.JoinBattleground)
         {
             return true;
         }

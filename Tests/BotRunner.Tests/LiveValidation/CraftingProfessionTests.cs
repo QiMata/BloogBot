@@ -14,7 +14,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// <summary>
 /// Shodan-directed First Aid crafting baseline.
 ///
-/// FG is launched for topology parity, but ActionType.CastSpell-by-id is the
+/// FG is launched for topology parity, but ObjectiveType.CastSpell-by-id is the
 /// BG-compatible behavior surface for this suite. SHODAN stages recipe, skill,
 /// and reagent setup; only BG receives the crafting action dispatch.
 /// </summary>
@@ -141,11 +141,11 @@ public class CraftingProfessionTests
         var bandageSlotsBefore = CountItemSlots(before, LinenBandageItem);
         var bagItemCountBefore = before?.Player?.BagContents?.Count ?? 0;
 
-        _output.WriteLine($"[{label}] Casting Linen Bandage recipe via ActionType.CastSpell.");
+        _output.WriteLine($"[{label}] Casting Linen Bandage recipe via ObjectiveType.CastSpell.");
         var craftTimer = Stopwatch.StartNew();
-        await _bot.SendActionAndWaitAsync(account, new ActionMessage
+        await _bot.SendActionAndWaitAsync(account, new ObjectiveMessage
         {
-            ActionType = ActionType.CastSpell,
+            ObjectiveType = ObjectiveType.CastSpell,
             Parameters = { new RequestParameter { IntParam = (int)LinenBandageRecipe } }
         }, delayMs: 500);
 

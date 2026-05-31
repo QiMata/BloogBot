@@ -19,8 +19,8 @@ Flow:
 1. `StageBotRunnerLoadoutAsync(...)` revives/repairs the BG target and clears bags.
 2. `StageBotRunnerAtDurotarMobAreaAsync(...)` stages the BG target near low-level Durotar mobs.
 3. The test finds a living boar/scorpid/familiar in snapshot data.
-4. The BG target receives `ActionType.StartMeleeAttack` and the test waits for the mob to die or disappear from snapshots.
-5. The BG target receives `ActionType.StopAttack`, then `ActionType.LootCorpse`.
+4. The BG target receives `ObjectiveType.StartMeleeAttack` and the test waits for the mob to die or disappear from snapshots.
+5. The BG target receives `ObjectiveType.StopAttack`, then `ObjectiveType.LootCorpse`.
 6. The test asserts the loot dispatch succeeds and logs whether bag contents increased.
 
 No-loot corpses remain non-fatal because the dispatch path is the behavior under

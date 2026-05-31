@@ -149,7 +149,7 @@ namespace WoWStateManager.Settings
         /// <summary>
         /// P3: Full per-character "become raid-ready" specification. When present,
         /// StateManager hands this off to BotRunner exactly once via
-        /// <c>ActionType.APPLY_LOADOUT</c>. BotRunner then executes the plan at
+        /// <c>ObjectiveType.APPLY_LOADOUT</c>. BotRunner then executes the plan at
         /// its own pace and reports completion through
         /// <c>WoWActivitySnapshot.LoadoutStatus</c>. Null means "no loadout hand-off
         /// is configured for this bot"; fixtures may still drive prep manually

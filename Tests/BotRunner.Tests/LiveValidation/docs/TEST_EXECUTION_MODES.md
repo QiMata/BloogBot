@@ -14,7 +14,7 @@ themselves to interact with. The same character is reused by the
 LiveValidation suite for setup tasks that require GM targeting — and
 *only* for setup. Shodan is not a behavior-test subject. Every Shodan
 mode below uses Shodan to stage world/loadout state, then dispatches the
-behavior `ActionType.*` against a dedicated test account (TESTBOT1/TESTBOT2
+behavior `ObjectiveType.*` against a dedicated test account (TESTBOT1/TESTBOT2
 or a category-specific sibling). Behavior assertions read snapshots from
 those accounts — never from Shodan. The fixture layer enforces this:
 `ResolveBotRunnerActionTargets()` throws if Shodan ever resolves as an

@@ -126,9 +126,9 @@ public class EconomyInteractionTests
         _output.WriteLine(
             $"  [{target.RoleLabel}] Mailbox found: type={mailbox.GameObjectType} name='{mailbox.Name}' GUID={guid:X}");
 
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.CheckMail,
+            ObjectiveType = ObjectiveType.CheckMail,
             Parameters = { new RequestParameter { LongParam = (long)guid } }
         });
         _output.WriteLine($"  [{target.RoleLabel}] CheckMail sent (result={result})");
@@ -192,9 +192,9 @@ public class EconomyInteractionTests
         var npcGuid = npc.GameObject?.Base?.Guid ?? 0;
         _output.WriteLine($"  [{target.RoleLabel}] Found {npcType}: {npc.GameObject?.Name} GUID={npcGuid:X}");
 
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.InteractWith,
+            ObjectiveType = ObjectiveType.InteractWith,
             Parameters = { new RequestParameter { LongParam = (long)npcGuid } }
         });
         _output.WriteLine($"  [{target.RoleLabel}] Interaction sent (result={result})");

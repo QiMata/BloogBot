@@ -65,7 +65,7 @@ public partial class LiveBotFixture : IAsyncLifetime
     private readonly Dictionary<string, int> _soapCommandCounts = new(StringComparer.OrdinalIgnoreCase);
 
     // P4.5.2: monotonic counter feeding per-dispatch correlation ids stamped on
-    // ActionMessages. StateManager's StampDispatchCorrelationId only stamps
+    // ObjectiveMessages. StateManager's StampDispatchCorrelationId only stamps
     // when the field is empty, so a test-owned id survives end-to-end and can
     // be used to look up the CommandAckEvent in RecentCommandAcks.
     private long _testCorrelationSequence;
@@ -347,9 +347,9 @@ public partial class LiveBotFixture : IAsyncLifetime
         }
 
         // Probe with a harmless self-target command
-        var result = await SendActionAsync(FgAccountName, new ActionMessage
+        var result = await SendActionAsync(FgAccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.SendChat,
+            ObjectiveType = ObjectiveType.SendChat,
             Parameters = { new RequestParameter { StringParam = ".targetself" } }
         });
 
@@ -1487,11 +1487,11 @@ public partial class LiveBotFixture : IAsyncLifetime
 
             var selfGuid = snapshot.Player?.Unit?.GameObject?.Base?.Guid ?? 0;
             var isLeader = selfGuid != 0 && snapshot.PartyLeaderGuid == selfGuid;
-            var actionType = isLeader ? ActionType.DisbandGroup : ActionType.LeaveGroup;
+            var objectiveType = isLeader ? ObjectiveType.DisbandGroup : ObjectiveType.LeaveGroup;
 
             _logger.LogInformation("[FIXTURE] {Label} '{Account}' grouped (leader=0x{Leader:X}). Sending {Action} (attempt {Attempt}/3)",
-                label, accountName, snapshot.PartyLeaderGuid, actionType, attempt);
-            await SendActionAsync(accountName, new ActionMessage { ActionType = actionType });
+                label, accountName, snapshot.PartyLeaderGuid, objectiveType, attempt);
+            await SendActionAsync(accountName, new ObjectiveMessage { ObjectiveType = objectiveType });
             await Task.Delay(1200);
         }
 
@@ -1523,13 +1523,13 @@ public partial class LiveBotFixture : IAsyncLifetime
 
 
     /// <summary>Forward an action to a specific bot.</summary>
-    public Task<ResponseResult> SendActionAsync(string accountName, ActionMessage action)
+    public Task<ResponseResult> SendActionAsync(string accountName, ObjectiveMessage action)
         => SendActionAsync(accountName, action, emitOutput: true);
 
-    protected Task<ResponseResult> SendSilentActionAsync(string accountName, ActionMessage action)
+    protected Task<ResponseResult> SendSilentActionAsync(string accountName, ObjectiveMessage action)
         => SendActionAsync(accountName, action, emitOutput: false);
 
-    protected async Task<ResponseResult> SendActionAsync(string accountName, ActionMessage action, bool emitOutput)
+    protected async Task<ResponseResult> SendActionAsync(string accountName, ObjectiveMessage action, bool emitOutput)
     {
         if (_stateManagerClient == null)
             return ResponseResult.Failure;
@@ -1537,7 +1537,7 @@ public partial class LiveBotFixture : IAsyncLifetime
         var result = await _stateManagerClient.ForwardActionAsync(accountName, action);
         if (emitOutput)
         {
-            var actionLog = $"[ACTION-FWD] [{accountName}] {action.ActionType} => {result}";
+            var actionLog = $"[ACTION-FWD] [{accountName}] {action.ObjectiveType} => {result}";
             _logger.LogInformation("{Message}", actionLog);
             _testOutput?.WriteLine(actionLog);
         }
@@ -1586,9 +1586,9 @@ public partial class LiveBotFixture : IAsyncLifetime
         }
 
         _testOutput?.WriteLine($"[FOLLOW] {followerAccount} following {targetAccount} (GUID=0x{targetGuid:X}, distance={followDistance:F1}y)");
-        return await SendActionAsync(followerAccount, new ActionMessage
+        return await SendActionAsync(followerAccount, new ObjectiveMessage
         {
-            ActionType = ActionType.FollowTarget,
+            ObjectiveType = ObjectiveType.FollowTarget,
             Parameters =
             {
                 new RequestParameter { LongParam = (long)targetGuid },

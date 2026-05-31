@@ -61,7 +61,7 @@ public class BgInteractionTests
 
         global::Tests.Infrastructure.Skip.If(
             true,
-            "Bank deposit ActionType surface is not implemented yet; Shodan item/location staging and banker InteractWith are migrated.");
+            "Bank deposit ObjectiveType surface is not implemented yet; Shodan item/location staging and banker InteractWith are migrated.");
     }
 
     [SkippableFact]
@@ -107,9 +107,9 @@ public class BgInteractionTests
         _output.WriteLine(
             $"[{target.RoleLabel}] Found mailbox: type={mailbox.GameObjectType} name='{mailbox.Name}' GUID=0x{guid:X}");
 
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.CheckMail,
+            ObjectiveType = ObjectiveType.CheckMail,
             Parameters = { new RequestParameter { LongParam = (long)guid } }
         });
         _output.WriteLine($"[{target.RoleLabel}] CheckMail dispatched (result={result})");
@@ -147,7 +147,7 @@ public class BgInteractionTests
             "flight master");
         Assert.NotEqual(0UL, fmGuid);
 
-        await SendActionAndAssertCompletedAsync(target, ActionType.VisitFlightMaster, "VisitFlightMaster");
+        await SendActionAndAssertCompletedAsync(target, ObjectiveType.VisitFlightMaster, "VisitFlightMaster");
         _output.WriteLine($"[{target.RoleLabel}] Flight master visit completed.");
     }
 
@@ -215,9 +215,9 @@ public class BgInteractionTests
         ulong guid,
         string targetLabel)
     {
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.InteractWith,
+            ObjectiveType = ObjectiveType.InteractWith,
             Parameters = { new RequestParameter { LongParam = (long)guid } }
         });
         _output.WriteLine($"[{target.RoleLabel}] InteractWith {targetLabel} dispatched (result={result})");
@@ -256,14 +256,14 @@ public class BgInteractionTests
 
     private async Task SendActionAndAssertCompletedAsync(
         LiveBotFixture.BotRunnerActionTarget target,
-        ActionType actionType,
+        ObjectiveType objectiveType,
         string stepName,
         int timeoutSeconds = 12)
     {
         var correlationId = $"bg-interaction:{target.AccountName}:{Interlocked.Increment(ref s_correlationSequence)}";
-        var action = new ActionMessage
+        var action = new ObjectiveMessage
         {
-            ActionType = actionType,
+            ObjectiveType = objectiveType,
             CorrelationId = correlationId,
         };
 

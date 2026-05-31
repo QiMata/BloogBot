@@ -13,10 +13,10 @@ stages world/loadout state; SHODAN is never resolved as an action target.
 ## Test Methods
 
 - `Vendor_VisitTask_FindsAndInteracts`: stages FG/BG at the Razor Hill vendor
-  location, detects a vendor-flagged NPC, and dispatches `ActionType.VisitVendor`.
+  location, detects a vendor-flagged NPC, and dispatches `ObjectiveType.VisitVendor`.
 - `FlightMaster_VisitTask_DiscoversPaths`: stages FG/BG at the Orgrimmar flight
   master, detects the flight-master flag, and dispatches
-  `ActionType.VisitFlightMaster`.
+  `ObjectiveType.VisitFlightMaster`.
 - `ObjectManager_DetectsNpcFlags`: stages FG/BG near Razor Hill NPCs and asserts
   snapshot `NearbyUnits` include non-zero `NpcFlags`.
 - `Trainer_LearnAvailableSpells`: Shodan-shaped hunter trainer path, currently
@@ -39,9 +39,9 @@ fixture owns:
 
 ## Runtime Linkage
 
-- `ActionType.VisitVendor` -> `CharacterAction.VisitVendor` -> `VendorVisitTask`
-- `ActionType.VisitTrainer` -> `CharacterAction.VisitTrainer` -> `TrainerVisitTask`
-- `ActionType.VisitFlightMaster` -> `CharacterAction.VisitFlightMaster` ->
+- `ObjectiveType.VisitVendor` -> `CharacterAction.VisitVendor` -> `VendorVisitTask`
+- `ObjectiveType.VisitTrainer` -> `CharacterAction.VisitTrainer` -> `TrainerVisitTask`
+- `ObjectiveType.VisitFlightMaster` -> `CharacterAction.VisitFlightMaster` ->
   `FlightMasterVisitTask`
 - NPC visibility flows through `BotRunnerService.Snapshot` via `NearbyUnits` and
   `NpcFlags`.

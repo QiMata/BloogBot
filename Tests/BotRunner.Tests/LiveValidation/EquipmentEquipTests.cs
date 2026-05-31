@@ -21,7 +21,7 @@ namespace BotRunner.Tests.LiveValidation;
 ///     F-1 Automated-mode shape (load Equipment.Automated.config.json; the
 ///     bot's CharacterSettings.Loadout block is dispatched as APPLY_LOADOUT
 ///     by AutomatedModeHandler.OnWorldEntryAsync at first IsObjectManagerValid;
-///     the test body dispatches only ActionType.EquipItem and asserts).
+///     the test body dispatches only ObjectiveType.EquipItem and asserts).
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class EquipmentEquipTests
@@ -204,9 +204,9 @@ public class EquipmentEquipTests
             $"  [{label}] Before equip: mainhand=0x{mainhandBeforeGuid:X}, maces in bags={maceCountBeforeEquip}");
 
         _output.WriteLine($"  [{label}] Dispatching EquipItem for Worn Mace ({WornMace}).");
-        var equipResult = await _bot.SendActionAsync(account, new ActionMessage
+        var equipResult = await _bot.SendActionAsync(account, new ObjectiveMessage
         {
-            ActionType = ActionType.EquipItem,
+            ObjectiveType = ObjectiveType.EquipItem,
             Parameters = { new RequestParameter { IntParam = (int)WornMace } }
         });
         Assert.Equal(ResponseResult.Success, equipResult);

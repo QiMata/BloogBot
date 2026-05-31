@@ -277,7 +277,7 @@ public class BotRunnerServiceSnapshotTests
         InvokeEnqueueCommandAckEvent(service, new CommandAckEvent
         {
             CorrelationId = "corr-1",
-            ActionType = ActionType.SendChat,
+            ObjectiveType = ObjectiveType.SendChat,
             Status = CommandAckEvent.Types.AckStatus.Pending,
             RelatedId = 12345u,
         });
@@ -293,7 +293,7 @@ public class BotRunnerServiceSnapshotTests
             Assert.False(ackSend.IsHeartbeatOnly);
             var ack = Assert.Single(ackSend.RecentCommandAcks);
             Assert.Equal("corr-1", ack.CorrelationId);
-            Assert.Equal(ActionType.SendChat, ack.ActionType);
+            Assert.Equal(ObjectiveType.SendChat, ack.ObjectiveType);
             Assert.Equal(CommandAckEvent.Types.AckStatus.Pending, ack.Status);
             Assert.Equal(12345u, ack.RelatedId);
         }

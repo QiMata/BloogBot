@@ -9,7 +9,7 @@ namespace BotRunner.Tasks;
 /// <summary>
 /// Atomic task: navigate to a resource node (herb/ore) and gather it.
 /// Moves within interact range, sets target, then pops.
-/// Maps to ActionType.GATHER_NODE from StateManager.
+/// Maps to ObjectiveType.GATHER_NODE from StateManager.
 /// </summary>
 public class GatherNodeTask(IBotContext botContext, ulong nodeGuid) : BotTask(botContext), IBotTask
 {

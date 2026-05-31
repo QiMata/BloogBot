@@ -26,7 +26,7 @@ namespace WoWStateManager.Progression
         ///   7. Profession — train if at tier boundary
         ///   8. Default — null (bot self-directs: grind/quest)
         /// </summary>
-        public ActionMessage? GetNextAction(WoWActivitySnapshot snapshot, CharacterBuildConfig? config)
+        public ObjectiveMessage? GetNextAction(WoWActivitySnapshot snapshot, CharacterBuildConfig? config)
         {
             if (config == null) return null;
             if (snapshot.ConnectionState != BotConnectionState.BotInWorld) return null;
@@ -165,22 +165,22 @@ namespace WoWStateManager.Progression
                 || player.Inventory.Values.Any(guid => guid != 0); // Placeholder — needs item ID comparison
         }
 
-        private static ActionMessage? ResolveGearSource(string source, WoWActivitySnapshot snapshot)
+        private static ObjectiveMessage? ResolveGearSource(string source, WoWActivitySnapshot snapshot)
         {
             // Source format: "Dungeon:StratholmeBaron", "Quest:InMyHour", "Vendor:X", "Craft:X", "AH"
             if (string.IsNullOrEmpty(source)) return null;
 
-            // TODO: Map source to ActionMessage for DungeoneeringTask, QuestingTask, etc.
+            // TODO: Map source to ObjectiveMessage for DungeoneeringTask, QuestingTask, etc.
             // For now, return null (bot self-directs to grind)
             return null;
         }
 
-        private static ActionMessage? ResolveRepSource(string grindMethod, WoWActivitySnapshot snapshot)
+        private static ObjectiveMessage? ResolveRepSource(string grindMethod, WoWActivitySnapshot snapshot)
         {
             // GrindMethod: "Quests", "Dungeon:Stratholme", "Turnin:RuneclothBandage", "Mob:TimbermawFurbolg"
             if (string.IsNullOrEmpty(grindMethod)) return null;
 
-            // TODO: Map grind method to ActionMessage
+            // TODO: Map grind method to ObjectiveMessage
             return null;
         }
 

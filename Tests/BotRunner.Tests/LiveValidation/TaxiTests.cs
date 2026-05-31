@@ -58,9 +58,9 @@ public class TaxiTests
         _output.WriteLine($"[TEST] Found flight master guid=0x{fmGuid:X}");
 
         // Visit flight master to discover nodes
-        var visitResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var visitResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.VisitFlightMaster
+            ObjectiveType = ObjectiveType.VisitFlightMaster
         });
         _output.WriteLine($"[TEST] VISIT_FLIGHT_MASTER result: {visitResult}");
         Assert.Equal(ResponseResult.Success, visitResult);
@@ -87,9 +87,9 @@ public class TaxiTests
             target.RoleLabel);
 
         // Visit flight master first to open taxi map
-        var visitResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var visitResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.VisitFlightMaster
+            ObjectiveType = ObjectiveType.VisitFlightMaster
         });
         Assert.Equal(ResponseResult.Success, visitResult);
         await Task.Delay(2000);
@@ -102,9 +102,9 @@ public class TaxiTests
         _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1})");
 
         // Select Crossroads taxi node (node index varies; use SELECT_TAXI_NODE)
-        var selectResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var selectResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.SelectTaxiNode,
+            ObjectiveType = ObjectiveType.SelectTaxiNode,
             Parameters =
             {
                 new RequestParameter { LongParam = unchecked((long)fmGuid) },
@@ -196,9 +196,9 @@ public class TaxiTests
             target.RoleLabel);
 
         // Visit flight master
-        var visitResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var visitResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.VisitFlightMaster
+            ObjectiveType = ObjectiveType.VisitFlightMaster
         });
         Assert.Equal(ResponseResult.Success, visitResult);
         await Task.Delay(2000);
@@ -211,9 +211,9 @@ public class TaxiTests
         _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1})");
 
         // Select Gadgetzan taxi node
-        var selectResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var selectResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.SelectTaxiNode,
+            ObjectiveType = ObjectiveType.SelectTaxiNode,
             Parameters =
             {
                 new RequestParameter { LongParam = unchecked((long)fmGuid) },

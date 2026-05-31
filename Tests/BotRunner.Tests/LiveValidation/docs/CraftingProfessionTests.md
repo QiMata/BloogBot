@@ -17,7 +17,7 @@ topology parity, and SHODAN stages recipe, skill, and reagent setup.
    - Linen Bandage recipe spell `3275`.
    - First Aid skill `129` at `1/75`.
    - Exactly one Linen Cloth `2589`.
-4. The test dispatches `ActionType.CastSpell` with spell `3275` only to BG.
+4. The test dispatches `ObjectiveType.CastSpell` with spell `3275` only to BG.
 5. Assertions come from snapshots: linen cloth is consumed, one Linen Bandage
    `1251` appears, and occupied bag-slot count stays stable.
 
@@ -40,7 +40,7 @@ Final slice validation artifact:
 
 - `FirstAid_LearnAndCraft_ProducesLinenBandage`: passed in `2m29s`.
 - The TRX shows `CRAFTBG1` loadout staging through `StageBotRunnerLoadoutAsync`
-  and the only under-test action dispatch as `ActionType.CastSpell`.
+  and the only under-test action dispatch as `ObjectiveType.CastSpell`.
 
 ## Validation
 

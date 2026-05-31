@@ -23,7 +23,7 @@ Completed items moved from TASKS.md.
 - Completion notes:
   - Foreground mailbox collection now waits through the delayed client mailbox refresh window instead of ending after visible stale inbox rows expose no ready money/items.
   - Unread empty-looking rows are not deleted, SOAP money/item mail staging has a delivery-settle delay, and BotRunner emits `[MAIL-COLLECT]` diagnostic markers backed by `MailCollectionResult`.
-  - `MailSystemTests` and `MailParityTests` now dispatch `ActionType.CheckMail` to both FG and BG in the Shodan topology and passed the full mail suite.
+  - `MailSystemTests` and `MailParityTests` now dispatch `ObjectiveType.CheckMail` to both FG and BG in the Shodan topology and passed the full mail suite.
 - Validation:
   - `dotnet test Tests/ForegroundBotRunner.Tests/ForegroundBotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~ForegroundInteractionFrameTests.CollectInboxAttachmentsLua|FullyQualifiedName~ForegroundInteractionFrameTests.DeleteEmptyInboxItemsLua|FullyQualifiedName~ForegroundInteractionFrameTests.WaitForInboxPendingAttachmentsAsync" --logger "console;verbosity=minimal"` -> `passed (3/3)`
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false -v:minimal` -> `passed (0 errors; existing warnings)`

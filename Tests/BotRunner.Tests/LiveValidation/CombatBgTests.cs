@@ -66,9 +66,9 @@ public class CombatBgTests
 
         foreach (var account in new[] { _bot.PrimaryBgAccount, _bot.SecondaryBgAccount })
         {
-            var result = await _bot.SendActionAsync(account, new ActionMessage
+            var result = await _bot.SendActionAsync(account, new ObjectiveMessage
             {
-                ActionType = ActionType.StartMeleeAttack,
+                ObjectiveType = ObjectiveType.StartMeleeAttack,
                 Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
             });
             Assert.Equal(ResponseResult.Success, result);

@@ -213,9 +213,9 @@ public abstract class WsgObjectiveTestBase
 
         var interactResult = await _bot.SendActionAsync(
             HordeCarrierAccount,
-            new ActionMessage
+            new ObjectiveMessage
             {
-                ActionType = ActionType.InteractWith,
+                ObjectiveType = ObjectiveType.InteractWith,
                 Parameters = { new RequestParameter { LongParam = (long)allianceFlag.Guid } }
             });
         Assert.Equal(ResponseResult.Success, interactResult);
@@ -334,9 +334,9 @@ public abstract class WsgObjectiveTestBase
 
             interactResult = await _bot.SendActionAsync(
                 HordeCarrierAccount,
-                new ActionMessage
+                new ObjectiveMessage
                 {
-                    ActionType = ActionType.InteractWith,
+                    ObjectiveType = ObjectiveType.InteractWith,
                     Parameters = { new RequestParameter { LongParam = (long)hordeFlag.Guid } }
                 });
             Assert.Equal(ResponseResult.Success, interactResult);
@@ -501,8 +501,8 @@ public abstract class WsgObjectiveTestBase
         var position = snapshot?.Player?.Unit?.GameObject?.Base?.Position;
         var auras = snapshot?.Player?.Unit?.Auras?.Take(12).ToArray() ?? Array.Empty<uint>();
         var chats = snapshot?.RecentChatMessages?.TakeLast(4).ToArray() ?? Array.Empty<string>();
-        var currentAction = snapshot?.CurrentAction?.ActionType.ToString() ?? "none";
-        var previousAction = snapshot?.PreviousAction?.ActionType.ToString() ?? "none";
+        var currentAction = snapshot?.CurrentAction?.ObjectiveType.ToString() ?? "none";
+        var previousAction = snapshot?.PreviousAction?.ObjectiveType.ToString() ?? "none";
         _output.WriteLine(
             $"[{phaseName}] pos=({position?.X:F1},{position?.Y:F1},{position?.Z:F1}) action={currentAction}/{previousAction} auras=[{string.Join(",", auras)}] chats={(chats.Length == 0 ? "(none)" : string.Join(" || ", chats))}");
     }

@@ -2,7 +2,7 @@
 
 Shodan-directed travel planner coverage. SHODAN stages the BG action target on
 a street-level Orgrimmar approach point and the BotRunner target receives only
-`ActionType.TravelTo` actions.
+`ObjectiveType.TravelTo` actions.
 
 ## Bot Execution Mode
 
@@ -14,7 +14,7 @@ director.
 ## Test Methods
 
 - `TravelTo_ShortWalk_WithinOrgrimmar`: fixture-stages `ECONBG1` at the
-  Orgrimmar street-level start, dispatches BG `ActionType.TravelTo` toward the
+  Orgrimmar street-level start, dispatches BG `ObjectiveType.TravelTo` toward the
   auction-house service location, and asserts the snapshot position changes.
 - `TravelTo_Crossroads_BotStartsMoving`: tracked skip after Shodan launch due
   the current long-route no-movement gap.
@@ -38,7 +38,7 @@ The test body does not issue GM commands. The fixture owns:
 
 ## Runtime Linkage
 
-- `ActionType.TravelTo` carries map id `1` plus destination coordinates to the
+- `ObjectiveType.TravelTo` carries map id `1` plus destination coordinates to the
   BG BotRunner action target.
 - The short Orgrimmar route proves dispatch delivery and movement start from a
   Shodan-staged position.

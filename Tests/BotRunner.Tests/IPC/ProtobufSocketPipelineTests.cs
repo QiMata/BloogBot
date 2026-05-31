@@ -51,7 +51,7 @@ public class ProtobufSocketPipelineTests : IDisposable
     private sealed class TestSocketServer : ProtobufSocketServer<WoWActivitySnapshot, WoWActivitySnapshot>
     {
         public int RequestCount;
-        public ActionMessage? InjectedAction { get; set; }
+        public ObjectiveMessage? InjectedAction { get; set; }
         public ConcurrentBag<string> ReceivedAccounts { get; } = new();
 
         public TestSocketServer(string ip, int port)
@@ -80,9 +80,9 @@ public class ProtobufSocketPipelineTests : IDisposable
     {
         var port = GetFreePort();
         using var server = new TestSocketServer("127.0.0.1", port);
-        server.InjectedAction = new ActionMessage
+        server.InjectedAction = new ObjectiveMessage
         {
-            ActionType = ActionType.Goto,
+            ObjectiveType = ObjectiveType.Goto,
             Parameters = { new RequestParameter { FloatParam = 100f } }
         };
 
@@ -101,7 +101,7 @@ public class ProtobufSocketPipelineTests : IDisposable
 
         Assert.Equal("TESTBOT1", response.AccountName);
         Assert.NotNull(response.CurrentAction);
-        Assert.Equal(ActionType.Goto, response.CurrentAction.ActionType);
+        Assert.Equal(ObjectiveType.Goto, response.CurrentAction.ObjectiveType);
         Assert.Single(response.CurrentAction.Parameters);
         Assert.Equal(100f, response.CurrentAction.Parameters[0].FloatParam);
         Assert.Equal(1, server.RequestCount);
@@ -166,7 +166,7 @@ public class ProtobufSocketPipelineTests : IDisposable
     {
         var port = GetFreePort();
         using var server = new TestSocketServer("127.0.0.1", port);
-        server.InjectedAction = new ActionMessage { ActionType = ActionType.Wait };
+        server.InjectedAction = new ObjectiveMessage { ObjectiveType = ObjectiveType.Wait };
         Thread.Sleep(100);
 
         const int clientCount = 10;
@@ -193,7 +193,7 @@ public class ProtobufSocketPipelineTests : IDisposable
                         var response = client.SendMessage(snapshot);
                         if (response.AccountName != $"BOT{clientId}")
                             errors.Add($"Client {clientId} msg {j}: expected BOT{clientId}, got {response.AccountName}");
-                        if (response.CurrentAction?.ActionType != ActionType.Wait)
+                        if (response.CurrentAction?.ObjectiveType != ObjectiveType.Wait)
                             errors.Add($"Client {clientId} msg {j}: missing injected action");
                     }
                 }
@@ -421,9 +421,9 @@ public class ProtobufSocketPipelineTests : IDisposable
     {
         var port = GetFreePort();
         using var server = new TestSocketServer("127.0.0.1", port);
-        server.InjectedAction = new ActionMessage
+        server.InjectedAction = new ObjectiveMessage
         {
-            ActionType = ActionType.StartDungeoneering,
+            ObjectiveType = ObjectiveType.StartDungeoneering,
             Parameters =
             {
                 new RequestParameter { IntParam = 1 },         // isLeader
@@ -441,7 +441,7 @@ public class ProtobufSocketPipelineTests : IDisposable
         var response = client.SendMessage(new WoWActivitySnapshot { AccountName = "TEST" });
 
         Assert.NotNull(response.CurrentAction);
-        Assert.Equal(ActionType.StartDungeoneering, response.CurrentAction.ActionType);
+        Assert.Equal(ObjectiveType.StartDungeoneering, response.CurrentAction.ObjectiveType);
         Assert.Equal(5, response.CurrentAction.Parameters.Count);
         Assert.Equal(1, response.CurrentAction.Parameters[0].IntParam);
         Assert.Equal(389, response.CurrentAction.Parameters[1].IntParam);

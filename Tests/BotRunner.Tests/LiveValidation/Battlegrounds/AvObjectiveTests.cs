@@ -213,9 +213,9 @@ public class AvObjectiveTests
 
         var interactResult = await _bot.SendActionAsync(
             objective.Account,
-            new ActionMessage
+            new ObjectiveMessage
             {
-                ActionType = ActionType.InteractWith,
+                ObjectiveType = ObjectiveType.InteractWith,
                 Parameters = { new RequestParameter { LongParam = (long)banner.Guid } }
             });
         Assert.Equal(ResponseResult.Success, interactResult);
@@ -328,9 +328,9 @@ public class AvObjectiveTests
         {
             var dispatchResult = await _bot.SendActionAsync(
                 account,
-                new ActionMessage
+                new ObjectiveMessage
                 {
-                    ActionType = ActionType.StartMeleeAttack,
+                    ObjectiveType = ObjectiveType.StartMeleeAttack,
                     Parameters = { new RequestParameter { LongParam = (long)vanndarGuid } }
                 });
             Assert.Equal(ResponseResult.Success, dispatchResult);

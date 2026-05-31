@@ -276,9 +276,9 @@ public class NavigationTests
 
     private async Task<ResponseResult> SendGotoAsync(string account, float x, float y, float z, float tolerance)
     {
-        return await _bot.SendActionAsync(account, new ActionMessage
+        return await _bot.SendActionAsync(account, new ObjectiveMessage
         {
-            ActionType = ActionType.Goto,
+            ObjectiveType = ObjectiveType.Goto,
             Parameters =
             {
                 new RequestParameter { FloatParam = x },

@@ -158,7 +158,7 @@ Plus secondary Fishing.
 - **Catalog `TaskFamily` claim:** `Gathering`. Underlies catalog
   rows `prof.mining-route`, `prof.herbalism-route` from
   `Plan/Activities/00_INDEX.md`. Activated by
-  `ActionType.StartGatheringRoute` (= `CharacterAction.StartGatheringRoute`,
+  `ObjectiveType.StartGatheringRoute` (= `CharacterAction.StartGatheringRoute`,
   `Exports/BotRunner/BotRunnerService.ActionMapping.cs:89`).
   Dispatch metadata is the candidate position list +
   `nodeEntries` allow-set + gather spell id (mining=2575,
@@ -183,7 +183,7 @@ Plus secondary Fishing.
     `CastSpellOnGameObject` or open the loot frame. That work is
     done by `GatheringRouteTask` when the action is
     `StartGatheringRoute`; an atomic
-    `ActionType.GatherNode` dispatch alone is therefore a
+    `ObjectiveType.GatherNode` dispatch alone is therefore a
     half-step (sets the target so the caller can finish the
     interact + loot loop). This is a known atomic-task gap.
 - **Snapshot contract:**
@@ -221,14 +221,14 @@ Plus secondary Fishing.
   - No `LuaCall`. No `InteractWithGameObject` today.
 - **Test anchor:** **Planned anchor:**
   `Tests/BotRunner.Tests/LiveValidation/GatheringProfessionTests.cs::GatherNode_AtomicDispatch_AtRangeAndTargets`.
-  No existing test exercises `ActionType.GatherNode` in
+  No existing test exercises `ObjectiveType.GatherNode` in
   isolation; the end-to-end flow is covered by
   `GatheringProfessionTests.Mining_*` /
   `Herbalism_*` which dispatch `StartGatheringRoute`. Mark
   `tests` row `not-started` for the atomic case.
 - **Catalog `TaskFamily` claim:** `Gathering`. Atomic substep used
   by `prof.mining-route`, `prof.herbalism-route`. Activated by
-  `ActionType.GatherNode` (= `CharacterAction.GatherNode`,
+  `ObjectiveType.GatherNode` (= `CharacterAction.GatherNode`,
   `BotRunnerService.ActionMapping.cs:82`).
 
 ### FishingTask
@@ -338,7 +338,7 @@ Plus secondary Fishing.
   `FishingPoolActivationAnalyzerTests`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --filter "FullyQualifiedName~FishingProfessionTests.Fishing_CatchFish_BgAndFg_RatchetStagedPool"`
 - **Catalog `TaskFamily` claim:** `Gathering`. Activated by
-  `ActionType.StartFishing` (= `CharacterAction.StartFishing`,
+  `ObjectiveType.StartFishing` (= `CharacterAction.StartFishing`,
   `BotRunnerService.ActionMapping.cs:88`); metadata shape is
   `[location, useGmCommands, masterPoolId, waypoint floats...]`
   (`Exports/BotRunner/ActionDispatcher.cs:543`). Backs the
@@ -435,18 +435,18 @@ Plus secondary Fishing.
   `Tests/BotRunner.Tests/LiveValidation/SkinningProfessionTests.cs::Skinning_BG_SkinCorpseOnRoute`.
   No existing `Tests/BotRunner.Tests/LiveValidation/*Skin*.cs`
   file exists today; the closest exercised path is the atomic
-  `ActionType.SkinCorpse` dispatch covered indirectly by combat /
+  `ObjectiveType.SkinCorpse` dispatch covered indirectly by combat /
   loot tests that route through `LootTargetAsync`. Mark `tests`
   row `not-started`.
 - **Catalog `TaskFamily` claim:** `Gathering`. Backs catalog row
   `prof.skinning-route` from `Plan/Activities/00_INDEX.md`.
-  Activation today: `ActionType.SkinCorpse` (=
+  Activation today: `ObjectiveType.SkinCorpse` (=
   `CharacterAction.SkinCorpse`,
   `BotRunnerService.ActionMapping.cs:81`) for the atomic step.
   Planned activation for the routed variant:
-  `ActionType.StartGatheringRoute` with a
+  `ObjectiveType.StartGatheringRoute` with a
   `SkinnableUnits` metadata flag, or a new
-  `ActionType.StartSkinningRoute` (the latter requires a proto
+  `ObjectiveType.StartSkinningRoute` (the latter requires a proto
   change per the action-extension recipe in
   `Spec/03_BOTRUNNER.md#actionmessage-dispatch`).
 

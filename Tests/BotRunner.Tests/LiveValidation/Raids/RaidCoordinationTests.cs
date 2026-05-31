@@ -79,9 +79,9 @@ public class RaidCoordinationTests
 
         // Assign BG to subgroup 3
         _output.WriteLine($"[RAID] Assigning {bgName} to subgroup 3");
-        var result = await _bot.SendActionAsync(fgAccount!, new ActionMessage
+        var result = await _bot.SendActionAsync(fgAccount!, new ObjectiveMessage
         {
-            ActionType = ActionType.ChangeRaidSubgroup,
+            ObjectiveType = ObjectiveType.ChangeRaidSubgroup,
             Parameters =
             {
                 new RequestParameter { StringParam = bgName },
@@ -150,9 +150,9 @@ public class RaidCoordinationTests
 
         // Set loot rules via ASSIGN_LOOT
         _output.WriteLine("[RAID] Setting loot rules via ASSIGN_LOOT");
-        var lootResult = await _bot.SendActionAsync(fgAccount!, new ActionMessage
+        var lootResult = await _bot.SendActionAsync(fgAccount!, new ObjectiveMessage
         {
-            ActionType = ActionType.AssignLoot,
+            ObjectiveType = ObjectiveType.AssignLoot,
             Parameters = { new RequestParameter { IntParam = 2 } } // Group Loot
         });
         _output.WriteLine($"[RAID] ASSIGN_LOOT result: {lootResult}");
@@ -181,9 +181,9 @@ public class RaidCoordinationTests
         // FG invites BG. Phase B v8: poll for the BG-side
         // HasPendingGroupInvite snapshot field instead of blind-sleeping
         // 1500ms (saves ~1s per raid form on the happy path).
-        await _bot.SendActionAsync(fgAccount, new ActionMessage
+        await _bot.SendActionAsync(fgAccount, new ObjectiveMessage
         {
-            ActionType = ActionType.SendGroupInvite,
+            ObjectiveType = ObjectiveType.SendGroupInvite,
             Parameters = { new RequestParameter { StringParam = bgName } }
         });
         var inviteDelivered = await _bot.WaitForSnapshotConditionAsync(
@@ -198,9 +198,9 @@ public class RaidCoordinationTests
         // BG accepts. Wait for both sides to see FG as the party leader
         // (i.e. PartyLeaderGuid == fgGuid on both snapshots) instead of
         // blind-sleeping 2000ms. Saves ~1.5s per raid form on a happy path.
-        await _bot.SendActionAsync(bgAccount, new ActionMessage
+        await _bot.SendActionAsync(bgAccount, new ObjectiveMessage
         {
-            ActionType = ActionType.AcceptGroupInvite
+            ObjectiveType = ObjectiveType.AcceptGroupInvite
         });
         var partyFormed = await WaitForPartyMembershipAsync(fgAccount, bgAccount, fgGuid, TimeSpan.FromSeconds(20));
         _output.WriteLine($"[RAID] Party formed (predicate): {partyFormed}");
@@ -210,9 +210,9 @@ public class RaidCoordinationTests
         // dispatching the action — converting to raid does NOT clear leader,
         // and a successful Send + non-zero leader on both bots means the
         // raid wrapper landed.
-        var raidResult = await _bot.SendActionAsync(fgAccount, new ActionMessage
+        var raidResult = await _bot.SendActionAsync(fgAccount, new ObjectiveMessage
         {
-            ActionType = ActionType.ConvertToRaid
+            ObjectiveType = ObjectiveType.ConvertToRaid
         });
         _output.WriteLine($"[RAID] Group formed and converted to raid: {raidResult}");
         var raidPersisted = await WaitForPartyMembershipAsync(fgAccount, bgAccount, fgGuid, TimeSpan.FromSeconds(10));
@@ -238,7 +238,7 @@ public class RaidCoordinationTests
 
     private async Task CleanupRaidAsync(string leaderAccount)
     {
-        await _bot.SendActionAsync(leaderAccount, new ActionMessage { ActionType = ActionType.DisbandGroup });
+        await _bot.SendActionAsync(leaderAccount, new ObjectiveMessage { ObjectiveType = ObjectiveType.DisbandGroup });
         await Task.Delay(1000);
     }
 }

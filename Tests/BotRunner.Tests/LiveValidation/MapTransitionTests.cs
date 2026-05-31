@@ -88,9 +88,9 @@ public class MapTransitionTests
 
             await SendMapTransitionActionAsync(
                 target,
-                new ActionMessage
+                new ObjectiveMessage
                 {
-                    ActionType = ActionType.Goto,
+                    ObjectiveType = ObjectiveType.Goto,
                     Parameters =
                     {
                         new RequestParameter { FloatParam = bouncePosition.X },
@@ -142,7 +142,7 @@ public class MapTransitionTests
 
     private async Task<ResponseResult> SendMapTransitionActionAsync(
         LiveBotFixture.BotRunnerActionTarget target,
-        ActionMessage action,
+        ObjectiveMessage action,
         string stepName,
         int timeoutSeconds)
     {

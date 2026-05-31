@@ -195,9 +195,9 @@ The ML model considers multiple factors for action prediction:
 if (snapshot.Player.Unit.Health < snapshot.Player.Unit.MaxHealth * 0.5)
 {
     // Recommend healing action
-    actions.Add(new ActionMessage
+    actions.Add(new ObjectiveMessage
     {
-        ActionType = ActionType.CastSpell,
+        ObjectiveType = ObjectiveType.CastSpell,
         Parameters = { new RequestParameter { IntParam = HEALING_SPELL_ID } }
     });
 }
@@ -206,9 +206,9 @@ if (snapshot.Player.Unit.Health < snapshot.Player.Unit.MaxHealth * 0.5)
 if (nearbyHostileUnits.Count > 2)
 {
     // Recommend AoE attack
-    actions.Add(new ActionMessage
+    actions.Add(new ObjectiveMessage
     {
-        ActionType = ActionType.CastSpell,
+        ObjectiveType = ObjectiveType.CastSpell,
         Parameters = { new RequestParameter { IntParam = AOE_SPELL_ID } }
     });
 }
@@ -270,7 +270,7 @@ var snapshot = new ActivitySnapshot
         }
     },
     NearbyUnits = { /* hostile units */ },
-    CurrentAction = new ActionMessage { /* current action */ }
+    CurrentAction = new ObjectiveMessage { /* current action */ }
 };
 
 // Get recommended actions
@@ -280,7 +280,7 @@ foreach (var actionMap in actions)
 {
     foreach (var action in actionMap.Actions)
     {
-        Console.WriteLine($"Recommended: {action.ActionType}");
+        Console.WriteLine($"Recommended: {action.ObjectiveType}");
     }
 }
 ```
@@ -317,7 +317,7 @@ CREATE TABLE TrainedModel (
 
 ## Action Types
 
-The service can recommend various actions defined in `ActionType` enum (from BotCommLayer):
+The service can recommend various actions defined in `ObjectiveType` enum (from BotCommLayer):
 
 | Action | Description |
 |--------|-------------|
@@ -361,9 +361,9 @@ if (snapshot.Player.Unit.Class == Class.Warrior &&
     actionMaps.Add(new ActionMap
     {
         Actions = {
-            new ActionMessage
+            new ObjectiveMessage
             {
-                ActionType = ActionType.CastSpell,
+                ObjectiveType = ObjectiveType.CastSpell,
                 Parameters = { new RequestParameter { IntParam = HEROIC_STRIKE_ID } }
             }
         }

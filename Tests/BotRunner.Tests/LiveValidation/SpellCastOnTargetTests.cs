@@ -92,9 +92,9 @@ public class SpellCastOnTargetTests
                 }
 
                 var correlationId = $"spell-battle-shout:{target.AccountName}:{Interlocked.Increment(ref s_correlationSequence)}";
-                var castResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+                var castResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
                 {
-                    ActionType = ActionType.CastSpell,
+                    ObjectiveType = ObjectiveType.CastSpell,
                     CorrelationId = correlationId,
                     Parameters =
                     {
@@ -155,7 +155,7 @@ public class SpellCastOnTargetTests
             $"BG Battle Shout CastSpell action target.");
         _output.WriteLine(
             $"[ACTION-PLAN] FG {_bot.FgAccountName}/{_bot.FgCharacterName}: " +
-            "launched idle for topology parity; FG ActionType.CastSpell-by-id is tracked separately.");
+            "launched idle for topology parity; FG ObjectiveType.CastSpell-by-id is tracked separately.");
         _output.WriteLine(
             $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: " +
             "director only, no CastSpell dispatch.");

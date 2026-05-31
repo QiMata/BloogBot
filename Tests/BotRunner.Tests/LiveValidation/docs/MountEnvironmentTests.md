@@ -17,10 +17,10 @@ Warrior topology participant, and SHODAN as the Background Gnome Mage director.
 - `Snapshot_IndoorLocation_ReportsIsIndoors`: fixture-stages `ECONBG1` inside
   Ragefire Chasm, clears mount state, and asserts `IsIndoors=true`.
 - `MountSpell_OutdoorLocation_Mounts`: fixture-stages riding skill and mount
-  spell `23509`, stages the outdoor location, dispatches `ActionType.CastSpell`,
+  spell `23509`, stages the outdoor location, dispatches `ObjectiveType.CastSpell`,
   and waits for non-zero `MountDisplayId`.
 - `MountSpell_IndoorLocation_DoesNotMount`: fixture-stages the same loadout and
-  indoor location, dispatches `ActionType.CastSpell`, and asserts recent
+  indoor location, dispatches `ObjectiveType.CastSpell`, and asserts recent
   `[MOUNT-BLOCK]` / `ONLY_OUTDOORS` evidence plus zero `MountDisplayId`.
 
 ## Shodan Staging
@@ -38,7 +38,7 @@ The test body does not issue GM commands. The fixture owns:
 
 ## Runtime Linkage
 
-- `ActionType.CastSpell` carries spell id `23509` to the BG BotRunner action
+- `ObjectiveType.CastSpell` carries spell id `23509` to the BG BotRunner action
   target.
 - Outdoor success is observed via snapshot `MountDisplayId`.
 - Indoor rejection is observed via snapshot chat/error rings after the cast.
@@ -46,7 +46,7 @@ The test body does not issue GM commands. The fixture owns:
 ## Notes
 
 This slice is intentionally BG-action-only because foreground spell-id casting
-is still documented as a runtime gap for `ActionType.CastSpell`; FG launches for
+is still documented as a runtime gap for `ObjectiveType.CastSpell`; FG launches for
 Shodan topology parity and stays idle.
 
 ## Validation

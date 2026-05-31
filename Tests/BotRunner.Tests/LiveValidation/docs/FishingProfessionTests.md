@@ -12,7 +12,7 @@ This suite proves that both BG and FG run the same high-level fishing contract f
 
 1. launch `Fishing.config.json` once with FG, BG, and Shodan all online
 2. have Shodan stage a close Ratchet pool
-3. dispatch `ActionType.StartFishing` to FG with parameters:
+3. dispatch `ObjectiveType.StartFishing` to FG with parameters:
    `["Ratchet", 1, 2628]`
 4. let `FishingTask` own gear/spell setup, `.tele name <char> Ratchet`, `.pool update 2628`, pool acquisition, cast positioning, cast/loot, and completion
 5. re-stage with Shodan, then dispatch the same `StartFishing` action to BG
@@ -39,7 +39,7 @@ This suite proves that both BG and FG run the same high-level fishing contract f
 
 1. `EnsureSettingsAsync(Fishing.config.json)` launches FG + BG + Shodan once. TESTBOT1 and TESTBOT2 stay idle because `AssignedActivity` is absent from the roster.
 2. Shodan equips the dedicated admin mage loadout and stages a close Ratchet pool via `EnsureCloseFishingPoolActiveNearAsync(...)`.
-3. The test dispatches `ActionType.StartFishing` to FG with:
+3. The test dispatches `ObjectiveType.StartFishing` to FG with:
    - `location = "Ratchet"`
    - `useGmCommands = 1`
    - `masterPoolId = 2628`

@@ -730,13 +730,13 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             foreach (var (account, snapshot) in groupedSnapshots)
             {
                 var selfGuid = GetSelfGuid(snapshot);
-                var actionType = selfGuid != 0 && snapshot!.PartyLeaderGuid == selfGuid
-                    ? Communication.ActionType.DisbandGroup
-                    : Communication.ActionType.LeaveGroup;
+                var objectiveType = selfGuid != 0 && snapshot!.PartyLeaderGuid == selfGuid
+                    ? Communication.ObjectiveType.DisbandGroup
+                    : Communication.ObjectiveType.LeaveGroup;
 
                 Console.WriteLine(
-                    $"[{FixtureLabel}:{label}] clearing stale group for {account} via {actionType} (attempt {attempt}/5)");
-                var result = await SendActionAsync(account, new Communication.ActionMessage { ActionType = actionType });
+                    $"[{FixtureLabel}:{label}] clearing stale group for {account} via {objectiveType} (attempt {attempt}/5)");
+                var result = await SendActionAsync(account, new Communication.ObjectiveMessage { ObjectiveType = objectiveType });
                 if (result != Communication.ResponseResult.Success)
                     throw new XunitException($"[{FixtureLabel}:{label}] Failed to clear stale group for {account}: {result}");
 
@@ -810,9 +810,9 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
                 $"[{FixtureLabel}:{label}] {leaderAccount} inviting {memberAccount} ({memberName}) (attempt {attempt}/{MaxGroupFormationAttempts})");
             var inviteResult = await SendActionAsync(
                 leaderAccount,
-                new Communication.ActionMessage
+                new Communication.ObjectiveMessage
                 {
-                    ActionType = Communication.ActionType.SendGroupInvite,
+                    ObjectiveType = Communication.ObjectiveType.SendGroupInvite,
                     Parameters = { new Communication.RequestParameter { StringParam = memberName } }
                 });
             if (inviteResult != Communication.ResponseResult.Success)
@@ -841,7 +841,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
 
             var acceptResult = await SendActionAsync(
                 memberAccount,
-                new Communication.ActionMessage { ActionType = Communication.ActionType.AcceptGroupInvite });
+                new Communication.ObjectiveMessage { ObjectiveType = Communication.ObjectiveType.AcceptGroupInvite });
             if (acceptResult != Communication.ResponseResult.Success)
             {
                 await Task.Delay(750);
@@ -874,7 +874,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
                 $"[{FixtureLabel}:{label}] converting {leaderAccount} party to raid (attempt {attempt}/{MaxGroupFormationAttempts})");
             var result = await SendActionAsync(
                 leaderAccount,
-                new Communication.ActionMessage { ActionType = Communication.ActionType.ConvertToRaid });
+                new Communication.ObjectiveMessage { ObjectiveType = Communication.ObjectiveType.ConvertToRaid });
             if (result != Communication.ResponseResult.Success)
             {
                 await Task.Delay(1000);
@@ -955,7 +955,7 @@ public abstract class CoordinatorFixtureBase : LiveBotFixture, IAsyncLifetime
             {
                 var result = await SendActionAsync(
                     account,
-                    new Communication.ActionMessage { ActionType = Communication.ActionType.LeaveBattleground });
+                    new Communication.ObjectiveMessage { ObjectiveType = Communication.ObjectiveType.LeaveBattleground });
                 if (result != Communication.ResponseResult.Success)
                 {
                     throw new XunitException(

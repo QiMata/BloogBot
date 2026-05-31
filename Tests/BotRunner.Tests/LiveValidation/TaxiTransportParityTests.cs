@@ -69,12 +69,12 @@ public class TaxiTransportParityTests
         RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, fgAccount, "packets", "transform");
 
         await Task.WhenAll(
-            _bot.SendActionAsync(bgAccount, MakeRecordingAction(ActionType.StartPhysicsRecording)),
-            _bot.SendActionAsync(fgAccount, MakeRecordingAction(ActionType.StartPhysicsRecording)));
+            _bot.SendActionAsync(bgAccount, MakeRecordingAction(ObjectiveType.StartPhysicsRecording)),
+            _bot.SendActionAsync(fgAccount, MakeRecordingAction(ObjectiveType.StartPhysicsRecording)));
 
         var visitResults = await Task.WhenAll(
-            _bot.SendActionAsync(bgAccount, new ActionMessage { ActionType = ActionType.VisitFlightMaster }),
-            _bot.SendActionAsync(fgAccount, new ActionMessage { ActionType = ActionType.VisitFlightMaster }));
+            _bot.SendActionAsync(bgAccount, new ObjectiveMessage { ObjectiveType = ObjectiveType.VisitFlightMaster }),
+            _bot.SendActionAsync(fgAccount, new ObjectiveMessage { ObjectiveType = ObjectiveType.VisitFlightMaster }));
         Assert.All(visitResults, result => Assert.Equal(ResponseResult.Success, result));
 
         await Task.Delay(2000);
@@ -137,8 +137,8 @@ public class TaxiTransportParityTests
         RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, fgAccount, "packets", "transform");
 
         await Task.WhenAll(
-            _bot.SendActionAsync(bgAccount, MakeRecordingAction(ActionType.StartPhysicsRecording)),
-            _bot.SendActionAsync(fgAccount, MakeRecordingAction(ActionType.StartPhysicsRecording)));
+            _bot.SendActionAsync(bgAccount, MakeRecordingAction(ObjectiveType.StartPhysicsRecording)),
+            _bot.SendActionAsync(fgAccount, MakeRecordingAction(ObjectiveType.StartPhysicsRecording)));
 
         var gotoResults = await Task.WhenAll(
             _bot.SendActionAsync(bgAccount, MakeGoto(UndercityElevatorWestX, UndercityElevatorWestY, UndercityElevatorLowerZ)),
@@ -254,8 +254,8 @@ public class TaxiTransportParityTests
     private async Task StopDualRecordingAsync(string bgAccount, string fgAccount)
     {
         await Task.WhenAll(
-            _bot.SendActionAsync(bgAccount, MakeRecordingAction(ActionType.StopPhysicsRecording)),
-            _bot.SendActionAsync(fgAccount, MakeRecordingAction(ActionType.StopPhysicsRecording)));
+            _bot.SendActionAsync(bgAccount, MakeRecordingAction(ObjectiveType.StopPhysicsRecording)),
+            _bot.SendActionAsync(fgAccount, MakeRecordingAction(ObjectiveType.StopPhysicsRecording)));
         await Task.Delay(500);
     }
 
@@ -312,10 +312,10 @@ public class TaxiTransportParityTests
             progressLabel: progressLabel);
     }
 
-    private static ActionMessage MakeGoto(float x, float y, float z)
+    private static ObjectiveMessage MakeGoto(float x, float y, float z)
         => new()
         {
-            ActionType = ActionType.Goto,
+            ObjectiveType = ObjectiveType.Goto,
             Parameters =
             {
                 new RequestParameter { FloatParam = x },
@@ -325,10 +325,10 @@ public class TaxiTransportParityTests
             }
         };
 
-    private static ActionMessage MakeSelectTaxiNode(ulong flightMasterGuid, int sourceNodeId, int destinationNodeId)
+    private static ObjectiveMessage MakeSelectTaxiNode(ulong flightMasterGuid, int sourceNodeId, int destinationNodeId)
         => new()
         {
-            ActionType = ActionType.SelectTaxiNode,
+            ObjectiveType = ObjectiveType.SelectTaxiNode,
             Parameters =
             {
                 new RequestParameter { LongParam = unchecked((long)flightMasterGuid) },
@@ -337,10 +337,10 @@ public class TaxiTransportParityTests
             }
         };
 
-    private static ActionMessage MakeSelectTaxiNode(ulong flightMasterGuid, int destinationNodeId)
+    private static ObjectiveMessage MakeSelectTaxiNode(ulong flightMasterGuid, int destinationNodeId)
         => new()
         {
-            ActionType = ActionType.SelectTaxiNode,
+            ObjectiveType = ObjectiveType.SelectTaxiNode,
             Parameters =
             {
                 new RequestParameter { LongParam = unchecked((long)flightMasterGuid) },
@@ -348,10 +348,10 @@ public class TaxiTransportParityTests
             }
         };
 
-    private static ActionMessage MakeRecordingAction(ActionType actionType)
+    private static ObjectiveMessage MakeRecordingAction(ObjectiveType objectiveType)
         => new()
         {
-            ActionType = actionType
+            ObjectiveType = objectiveType
         };
 
     private static string ResolveRepoPath(params string[] segments)

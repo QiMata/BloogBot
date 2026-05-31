@@ -80,9 +80,9 @@ public class LootCorpseTests
             $"at ({mobPos?.X:F1}, {mobPos?.Y:F1}, {mobPos?.Z:F1}) HP={mob.Health}/{mob.MaxHealth}");
 
         _output.WriteLine($"  [{label}] Step 3: Kill mob with StartMeleeAttack");
-        var attackResult = await _bot.SendActionAsync(account, new ActionMessage
+        var attackResult = await _bot.SendActionAsync(account, new ObjectiveMessage
         {
-            ActionType = ActionType.StartMeleeAttack,
+            ObjectiveType = ObjectiveType.StartMeleeAttack,
             Parameters = { new RequestParameter { LongParam = (long)mobGuid } }
         });
         _output.WriteLine($"  [{label}] StartMeleeAttack result: {attackResult}");
@@ -108,7 +108,7 @@ public class LootCorpseTests
             await Task.Delay(1000);
         }
 
-        await _bot.SendActionAsync(account, new ActionMessage { ActionType = ActionType.StopAttack });
+        await _bot.SendActionAsync(account, new ObjectiveMessage { ObjectiveType = ObjectiveType.StopAttack });
 
         if (!mobDead)
         {
@@ -116,10 +116,10 @@ public class LootCorpseTests
             return false;
         }
 
-        _output.WriteLine($"  [{label}] Step 4: Loot corpse via ActionType.LootCorpse");
-        var lootResult = await _bot.SendActionAsync(account, new ActionMessage
+        _output.WriteLine($"  [{label}] Step 4: Loot corpse via ObjectiveType.LootCorpse");
+        var lootResult = await _bot.SendActionAsync(account, new ObjectiveMessage
         {
-            ActionType = ActionType.LootCorpse,
+            ObjectiveType = ObjectiveType.LootCorpse,
             Parameters = { new RequestParameter { LongParam = (long)mobGuid } }
         });
         _output.WriteLine($"  [{label}] LootCorpse dispatch result: {lootResult}");

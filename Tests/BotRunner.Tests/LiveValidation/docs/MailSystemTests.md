@@ -3,7 +3,7 @@
 `MailSystemTests` uses the Shodan test-director topology for the baseline mail
 receive flows. The test body issues no GM setup commands; SHODAN stages the
 mailbox location and SOAP mail payloads through fixture helpers, while the FG
-and BG BotRunner targets receive only `ActionType.CheckMail`.
+and BG BotRunner targets receive only `ObjectiveType.CheckMail`.
 
 ## Shodan Shape
 
@@ -17,7 +17,7 @@ and BG BotRunner targets receive only `ActionType.CheckMail`.
 4. `StageBotRunnerMailboxMoneyAsync(...)` sends the gold-mail payload via SOAP.
 5. `StageBotRunnerMailboxItemAsync(...)` sends the Linen Cloth payload via
    SOAP.
-6. The test body dispatches only `ActionType.CheckMail` with the detected
+6. The test body dispatches only `ObjectiveType.CheckMail` with the detected
    mailbox GUID.
 
 ## Test Methods
@@ -26,7 +26,7 @@ and BG BotRunner targets receive only `ActionType.CheckMail`.
 
 - BotRunner action targets: `ECONBG1`, `ECONFG1`.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.CheckMail`.
+- Under-test action dispatch: `ObjectiveType.CheckMail`.
 - Result: passed. The test asserts BG coinage increases and foreground either
   reports a coinage increase or emits a fresh `[MAIL-COLLECT]` marker for the
   staged money mail.
@@ -35,7 +35,7 @@ and BG BotRunner targets receive only `ActionType.CheckMail`.
 
 - BotRunner action targets: `ECONBG1`, `ECONFG1`.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.CheckMail`.
+- Under-test action dispatch: `ObjectiveType.CheckMail`.
 - Result: passed. The test asserts Linen Cloth `2589` appears in bags, or for
   foreground that a fresh `[MAIL-COLLECT]` marker confirms collection of the
   staged item mail.

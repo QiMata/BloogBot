@@ -164,12 +164,12 @@ namespace Communication {
             "VF9SRUFEWRACEhIKDkxPQURPVVRfRkFJTEVEEANiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
           new pbr::FileDescriptor[] { global::Game.GameReflection.Descriptor, },
-          new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ActionType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), typeof(global::Communication.LoadoutStatus), }, null, new pbr::GeneratedClrTypeInfo[] {
+          new pbr::GeneratedClrTypeInfo(new[] {typeof(global::Communication.ObjectiveType), typeof(global::Communication.BotRunnerType), typeof(global::Communication.StateChangeType), typeof(global::Communication.ResponseResult), typeof(global::Communication.BotConnectionState), typeof(global::Communication.LoadoutStatus), }, null, new pbr::GeneratedClrTypeInfo[] {
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.AsyncRequest), global::Communication.AsyncRequest.Parser, new[]{ "Id", "ActivitySnapshot", "StateChange", "SnapshotQuery", "ActionForward" }, new[]{ "Parameter" }, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.SnapshotQueryRequest), global::Communication.SnapshotQueryRequest.Parser, new[]{ "AccountName" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActionForwardRequest), global::Communication.ActionForwardRequest.Parser, new[]{ "AccountName", "Action" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActionMessage), global::Communication.ActionMessage.Parser, new[]{ "ActionType", "Parameters", "ActionResult", "LoadoutSpec", "CorrelationId" }, null, null, null, null),
-            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CommandAckEvent), global::Communication.CommandAckEvent.Parser, new[]{ "CorrelationId", "ActionType", "Status", "FailureReason", "RelatedId" }, null, new[]{ typeof(global::Communication.CommandAckEvent.Types.AckStatus) }, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ObjectiveMessage), global::Communication.ObjectiveMessage.Parser, new[]{ "ObjectiveType", "Parameters", "ActionResult", "LoadoutSpec", "CorrelationId" }, null, null, null, null),
+            new pbr::GeneratedClrTypeInfo(typeof(global::Communication.CommandAckEvent), global::Communication.CommandAckEvent.Parser, new[]{ "CorrelationId", "ObjectiveType", "Status", "FailureReason", "RelatedId" }, null, new[]{ typeof(global::Communication.CommandAckEvent.Types.AckStatus) }, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.ActionMap), global::Communication.ActionMap.Parser, new[]{ "Actions" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeRequest), global::Communication.StateChangeRequest.Parser, new[]{ "ChangeType", "RequestParameter" }, null, null, null, null),
             new pbr::GeneratedClrTypeInfo(typeof(global::Communication.StateChangeResponse), global::Communication.StateChangeResponse.Parser, new[]{ "Response", "Snapshots" }, null, null, null, null),
@@ -190,7 +190,7 @@ namespace Communication {
 
   }
   #region Enums
-  public enum ActionType {
+  public enum ObjectiveType {
     [pbr::OriginalName("WAIT")] Wait = 0,
     [pbr::OriginalName("GOTO")] Goto = 1,
     [pbr::OriginalName("INTERACT_WITH")] InteractWith = 2,
@@ -1000,7 +1000,7 @@ namespace Communication {
   }
 
   /// <summary>
-  /// Forward an ActionMessage to a specific bot via StateManager.
+  /// Forward an ObjectiveMessage to a specific bot via StateManager.
   /// StateManager routes the action to the bot identified by account_name.
   /// </summary>
   [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
@@ -1063,10 +1063,10 @@ namespace Communication {
 
     /// <summary>Field number for the "action" field.</summary>
     public const int ActionFieldNumber = 2;
-    private global::Communication.ActionMessage action_;
+    private global::Communication.ObjectiveMessage action_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public global::Communication.ActionMessage Action {
+    public global::Communication.ObjectiveMessage Action {
       get { return action_; }
       set {
         action_ = value;
@@ -1176,7 +1176,7 @@ namespace Communication {
       }
       if (other.action_ != null) {
         if (action_ == null) {
-          Action = new global::Communication.ActionMessage();
+          Action = new global::Communication.ObjectiveMessage();
         }
         Action.MergeFrom(other.Action);
       }
@@ -1205,7 +1205,7 @@ namespace Communication {
           }
           case 18: {
             if (action_ == null) {
-              Action = new global::Communication.ActionMessage();
+              Action = new global::Communication.ObjectiveMessage();
             }
             input.ReadMessage(Action);
             break;
@@ -1235,7 +1235,7 @@ namespace Communication {
           }
           case 18: {
             if (action_ == null) {
-              Action = new global::Communication.ActionMessage();
+              Action = new global::Communication.ObjectiveMessage();
             }
             input.ReadMessage(Action);
             break;
@@ -1248,16 +1248,16 @@ namespace Communication {
   }
 
   [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
-  public sealed partial class ActionMessage : pb::IMessage<ActionMessage>
+  public sealed partial class ObjectiveMessage : pb::IMessage<ObjectiveMessage>
   #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
       , pb::IBufferMessage
   #endif
   {
-    private static readonly pb::MessageParser<ActionMessage> _parser = new pb::MessageParser<ActionMessage>(() => new ActionMessage());
+    private static readonly pb::MessageParser<ObjectiveMessage> _parser = new pb::MessageParser<ObjectiveMessage>(() => new ObjectiveMessage());
     private pb::UnknownFieldSet _unknownFields;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public static pb::MessageParser<ActionMessage> Parser { get { return _parser; } }
+    public static pb::MessageParser<ObjectiveMessage> Parser { get { return _parser; } }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -1273,7 +1273,7 @@ namespace Communication {
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public ActionMessage() {
+    public ObjectiveMessage() {
       OnConstruction();
     }
 
@@ -1281,8 +1281,8 @@ namespace Communication {
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public ActionMessage(ActionMessage other) : this() {
-      actionType_ = other.actionType_;
+    public ObjectiveMessage(ObjectiveMessage other) : this() {
+      objectiveType_ = other.objectiveType_;
       parameters_ = other.parameters_.Clone();
       actionResult_ = other.actionResult_;
       loadoutSpec_ = other.loadoutSpec_ != null ? other.loadoutSpec_.Clone() : null;
@@ -1292,19 +1292,19 @@ namespace Communication {
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public ActionMessage Clone() {
-      return new ActionMessage(this);
+    public ObjectiveMessage Clone() {
+      return new ObjectiveMessage(this);
     }
 
-    /// <summary>Field number for the "action_type" field.</summary>
-    public const int ActionTypeFieldNumber = 1;
-    private global::Communication.ActionType actionType_ = global::Communication.ActionType.Wait;
+    /// <summary>Field number for the "objective_type" field.</summary>
+    public const int ObjectiveTypeFieldNumber = 1;
+    private global::Communication.ObjectiveType objectiveType_ = global::Communication.ObjectiveType.Wait;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public global::Communication.ActionType ActionType {
-      get { return actionType_; }
+    public global::Communication.ObjectiveType ObjectiveType {
+      get { return objectiveType_; }
       set {
-        actionType_ = value;
+        objectiveType_ = value;
       }
     }
 
@@ -1335,7 +1335,7 @@ namespace Communication {
     public const int LoadoutSpecFieldNumber = 4;
     private global::Communication.LoadoutSpec loadoutSpec_;
     /// <summary>
-    /// Populated only when action_type=APPLY_LOADOUT; full per-bot prep spec handed off once so BotRunner owns execution pacing.
+    /// Populated only when objective_type=APPLY_LOADOUT; full per-bot prep spec handed off once so BotRunner owns execution pacing.
     /// </summary>
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
@@ -1364,19 +1364,19 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override bool Equals(object other) {
-      return Equals(other as ActionMessage);
+      return Equals(other as ObjectiveMessage);
     }
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public bool Equals(ActionMessage other) {
+    public bool Equals(ObjectiveMessage other) {
       if (ReferenceEquals(other, null)) {
         return false;
       }
       if (ReferenceEquals(other, this)) {
         return true;
       }
-      if (ActionType != other.ActionType) return false;
+      if (ObjectiveType != other.ObjectiveType) return false;
       if(!parameters_.Equals(other.parameters_)) return false;
       if (ActionResult != other.ActionResult) return false;
       if (!object.Equals(LoadoutSpec, other.LoadoutSpec)) return false;
@@ -1388,7 +1388,7 @@ namespace Communication {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public override int GetHashCode() {
       int hash = 1;
-      if (ActionType != global::Communication.ActionType.Wait) hash ^= ActionType.GetHashCode();
+      if (ObjectiveType != global::Communication.ObjectiveType.Wait) hash ^= ObjectiveType.GetHashCode();
       hash ^= parameters_.GetHashCode();
       if (ActionResult != global::Communication.ResponseResult.Success) hash ^= ActionResult.GetHashCode();
       if (loadoutSpec_ != null) hash ^= LoadoutSpec.GetHashCode();
@@ -1411,9 +1411,9 @@ namespace Communication {
     #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
       output.WriteRawMessage(this);
     #else
-      if (ActionType != global::Communication.ActionType.Wait) {
+      if (ObjectiveType != global::Communication.ObjectiveType.Wait) {
         output.WriteRawTag(8);
-        output.WriteEnum((int) ActionType);
+        output.WriteEnum((int) ObjectiveType);
       }
       parameters_.WriteTo(output, _repeated_parameters_codec);
       if (ActionResult != global::Communication.ResponseResult.Success) {
@@ -1438,9 +1438,9 @@ namespace Communication {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
-      if (ActionType != global::Communication.ActionType.Wait) {
+      if (ObjectiveType != global::Communication.ObjectiveType.Wait) {
         output.WriteRawTag(8);
-        output.WriteEnum((int) ActionType);
+        output.WriteEnum((int) ObjectiveType);
       }
       parameters_.WriteTo(ref output, _repeated_parameters_codec);
       if (ActionResult != global::Communication.ResponseResult.Success) {
@@ -1465,8 +1465,8 @@ namespace Communication {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public int CalculateSize() {
       int size = 0;
-      if (ActionType != global::Communication.ActionType.Wait) {
-        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) ActionType);
+      if (ObjectiveType != global::Communication.ObjectiveType.Wait) {
+        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) ObjectiveType);
       }
       size += parameters_.CalculateSize(_repeated_parameters_codec);
       if (ActionResult != global::Communication.ResponseResult.Success) {
@@ -1486,12 +1486,12 @@ namespace Communication {
 
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public void MergeFrom(ActionMessage other) {
+    public void MergeFrom(ObjectiveMessage other) {
       if (other == null) {
         return;
       }
-      if (other.ActionType != global::Communication.ActionType.Wait) {
-        ActionType = other.ActionType;
+      if (other.ObjectiveType != global::Communication.ObjectiveType.Wait) {
+        ObjectiveType = other.ObjectiveType;
       }
       parameters_.Add(other.parameters_);
       if (other.ActionResult != global::Communication.ResponseResult.Success) {
@@ -1526,7 +1526,7 @@ namespace Communication {
             _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
             break;
           case 8: {
-            ActionType = (global::Communication.ActionType) input.ReadEnum();
+            ObjectiveType = (global::Communication.ObjectiveType) input.ReadEnum();
             break;
           }
           case 18: {
@@ -1568,7 +1568,7 @@ namespace Communication {
             _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
             break;
           case 8: {
-            ActionType = (global::Communication.ActionType) input.ReadEnum();
+            ObjectiveType = (global::Communication.ObjectiveType) input.ReadEnum();
             break;
           }
           case 18: {
@@ -1633,7 +1633,7 @@ namespace Communication {
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
     public CommandAckEvent(CommandAckEvent other) : this() {
       correlationId_ = other.correlationId_;
-      actionType_ = other.actionType_;
+      objectiveType_ = other.objectiveType_;
       status_ = other.status_;
       failureReason_ = other.failureReason_;
       relatedId_ = other.relatedId_;
@@ -1658,15 +1658,15 @@ namespace Communication {
       }
     }
 
-    /// <summary>Field number for the "action_type" field.</summary>
-    public const int ActionTypeFieldNumber = 2;
-    private global::Communication.ActionType actionType_ = global::Communication.ActionType.Wait;
+    /// <summary>Field number for the "objective_type" field.</summary>
+    public const int ObjectiveTypeFieldNumber = 2;
+    private global::Communication.ObjectiveType objectiveType_ = global::Communication.ObjectiveType.Wait;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public global::Communication.ActionType ActionType {
-      get { return actionType_; }
+    public global::Communication.ObjectiveType ObjectiveType {
+      get { return objectiveType_; }
       set {
-        actionType_ = value;
+        objectiveType_ = value;
       }
     }
 
@@ -1722,7 +1722,7 @@ namespace Communication {
         return true;
       }
       if (CorrelationId != other.CorrelationId) return false;
-      if (ActionType != other.ActionType) return false;
+      if (ObjectiveType != other.ObjectiveType) return false;
       if (Status != other.Status) return false;
       if (FailureReason != other.FailureReason) return false;
       if (RelatedId != other.RelatedId) return false;
@@ -1734,7 +1734,7 @@ namespace Communication {
     public override int GetHashCode() {
       int hash = 1;
       if (CorrelationId.Length != 0) hash ^= CorrelationId.GetHashCode();
-      if (ActionType != global::Communication.ActionType.Wait) hash ^= ActionType.GetHashCode();
+      if (ObjectiveType != global::Communication.ObjectiveType.Wait) hash ^= ObjectiveType.GetHashCode();
       if (Status != global::Communication.CommandAckEvent.Types.AckStatus.Pending) hash ^= Status.GetHashCode();
       if (FailureReason.Length != 0) hash ^= FailureReason.GetHashCode();
       if (RelatedId != 0) hash ^= RelatedId.GetHashCode();
@@ -1760,9 +1760,9 @@ namespace Communication {
         output.WriteRawTag(10);
         output.WriteString(CorrelationId);
       }
-      if (ActionType != global::Communication.ActionType.Wait) {
+      if (ObjectiveType != global::Communication.ObjectiveType.Wait) {
         output.WriteRawTag(16);
-        output.WriteEnum((int) ActionType);
+        output.WriteEnum((int) ObjectiveType);
       }
       if (Status != global::Communication.CommandAckEvent.Types.AckStatus.Pending) {
         output.WriteRawTag(24);
@@ -1790,9 +1790,9 @@ namespace Communication {
         output.WriteRawTag(10);
         output.WriteString(CorrelationId);
       }
-      if (ActionType != global::Communication.ActionType.Wait) {
+      if (ObjectiveType != global::Communication.ObjectiveType.Wait) {
         output.WriteRawTag(16);
-        output.WriteEnum((int) ActionType);
+        output.WriteEnum((int) ObjectiveType);
       }
       if (Status != global::Communication.CommandAckEvent.Types.AckStatus.Pending) {
         output.WriteRawTag(24);
@@ -1819,8 +1819,8 @@ namespace Communication {
       if (CorrelationId.Length != 0) {
         size += 1 + pb::CodedOutputStream.ComputeStringSize(CorrelationId);
       }
-      if (ActionType != global::Communication.ActionType.Wait) {
-        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) ActionType);
+      if (ObjectiveType != global::Communication.ObjectiveType.Wait) {
+        size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) ObjectiveType);
       }
       if (Status != global::Communication.CommandAckEvent.Types.AckStatus.Pending) {
         size += 1 + pb::CodedOutputStream.ComputeEnumSize((int) Status);
@@ -1846,8 +1846,8 @@ namespace Communication {
       if (other.CorrelationId.Length != 0) {
         CorrelationId = other.CorrelationId;
       }
-      if (other.ActionType != global::Communication.ActionType.Wait) {
-        ActionType = other.ActionType;
+      if (other.ObjectiveType != global::Communication.ObjectiveType.Wait) {
+        ObjectiveType = other.ObjectiveType;
       }
       if (other.Status != global::Communication.CommandAckEvent.Types.AckStatus.Pending) {
         Status = other.Status;
@@ -1882,7 +1882,7 @@ namespace Communication {
             break;
           }
           case 16: {
-            ActionType = (global::Communication.ActionType) input.ReadEnum();
+            ObjectiveType = (global::Communication.ObjectiveType) input.ReadEnum();
             break;
           }
           case 24: {
@@ -1921,7 +1921,7 @@ namespace Communication {
             break;
           }
           case 16: {
-            ActionType = (global::Communication.ActionType) input.ReadEnum();
+            ObjectiveType = (global::Communication.ObjectiveType) input.ReadEnum();
             break;
           }
           case 24: {
@@ -2005,12 +2005,12 @@ namespace Communication {
 
     /// <summary>Field number for the "actions" field.</summary>
     public const int ActionsFieldNumber = 1;
-    private static readonly pb::FieldCodec<global::Communication.ActionMessage> _repeated_actions_codec
-        = pb::FieldCodec.ForMessage(10, global::Communication.ActionMessage.Parser);
-    private readonly pbc::RepeatedField<global::Communication.ActionMessage> actions_ = new pbc::RepeatedField<global::Communication.ActionMessage>();
+    private static readonly pb::FieldCodec<global::Communication.ObjectiveMessage> _repeated_actions_codec
+        = pb::FieldCodec.ForMessage(10, global::Communication.ObjectiveMessage.Parser);
+    private readonly pbc::RepeatedField<global::Communication.ObjectiveMessage> actions_ = new pbc::RepeatedField<global::Communication.ObjectiveMessage>();
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public pbc::RepeatedField<global::Communication.ActionMessage> Actions {
+    public pbc::RepeatedField<global::Communication.ObjectiveMessage> Actions {
       get { return actions_; }
     }
 
@@ -3634,10 +3634,10 @@ namespace Communication {
 
     /// <summary>Field number for the "previousAction" field.</summary>
     public const int PreviousActionFieldNumber = 4;
-    private global::Communication.ActionMessage previousAction_;
+    private global::Communication.ObjectiveMessage previousAction_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public global::Communication.ActionMessage PreviousAction {
+    public global::Communication.ObjectiveMessage PreviousAction {
       get { return previousAction_; }
       set {
         previousAction_ = value;
@@ -3646,10 +3646,10 @@ namespace Communication {
 
     /// <summary>Field number for the "currentAction" field.</summary>
     public const int CurrentActionFieldNumber = 5;
-    private global::Communication.ActionMessage currentAction_;
+    private global::Communication.ObjectiveMessage currentAction_;
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
     [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
-    public global::Communication.ActionMessage CurrentAction {
+    public global::Communication.ObjectiveMessage CurrentAction {
       get { return currentAction_; }
       set {
         currentAction_ = value;
@@ -4503,13 +4503,13 @@ namespace Communication {
       }
       if (other.previousAction_ != null) {
         if (previousAction_ == null) {
-          PreviousAction = new global::Communication.ActionMessage();
+          PreviousAction = new global::Communication.ObjectiveMessage();
         }
         PreviousAction.MergeFrom(other.PreviousAction);
       }
       if (other.currentAction_ != null) {
         if (currentAction_ == null) {
-          CurrentAction = new global::Communication.ActionMessage();
+          CurrentAction = new global::Communication.ObjectiveMessage();
         }
         CurrentAction.MergeFrom(other.CurrentAction);
       }
@@ -4630,14 +4630,14 @@ namespace Communication {
           }
           case 34: {
             if (previousAction_ == null) {
-              PreviousAction = new global::Communication.ActionMessage();
+              PreviousAction = new global::Communication.ObjectiveMessage();
             }
             input.ReadMessage(PreviousAction);
             break;
           }
           case 42: {
             if (currentAction_ == null) {
-              CurrentAction = new global::Communication.ActionMessage();
+              CurrentAction = new global::Communication.ObjectiveMessage();
             }
             input.ReadMessage(CurrentAction);
             break;
@@ -4798,14 +4798,14 @@ namespace Communication {
           }
           case 34: {
             if (previousAction_ == null) {
-              PreviousAction = new global::Communication.ActionMessage();
+              PreviousAction = new global::Communication.ObjectiveMessage();
             }
             input.ReadMessage(PreviousAction);
             break;
           }
           case 42: {
             if (currentAction_ == null) {
-              CurrentAction = new global::Communication.ActionMessage();
+              CurrentAction = new global::Communication.ObjectiveMessage();
             }
             input.ReadMessage(CurrentAction);
             break;
@@ -5691,7 +5691,7 @@ namespace Communication {
   /// <summary>
   /// P3: single-message description of everything a character needs to become
   /// raid-ready for its configured activity. StateManager hands this off once
-  /// per bot via ActionType.APPLY_LOADOUT; BotRunner executes it at its own
+  /// per bot via ObjectiveType.APPLY_LOADOUT; BotRunner executes it at its own
   /// pace and reports completion via WoWActivitySnapshot.loadout_status. Empty
   /// / zero-valued fields mean "don't change" so the spec is additive.
   /// </summary>

@@ -172,9 +172,9 @@ namespace WoWSharpClient.Networking.ClientComponents
             }
         }
 
-        public bool CanInteractWith(ulong gameObjectGuid, GameObjectInteractionType interactionType)
+        public bool CanInteractWith(ulong gameObjectGuid, GameObjectInterobjectiveType interobjectiveType)
         {
-            _logger.LogDebug("Checking interaction capability for {GameObjectGuid:X} with type {InteractionType}", gameObjectGuid, interactionType);
+            _logger.LogDebug("Checking interaction capability for {GameObjectGuid:X} with type {InterobjectiveType}", gameObjectGuid, interobjectiveType);
             return true; // Placeholder logic
         }
 

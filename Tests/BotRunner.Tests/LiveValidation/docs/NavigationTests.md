@@ -6,7 +6,7 @@
 - `ECONBG1` is the only BotRunner action target for navigation actions.
 - `ECONFG1` launches idle for topology parity.
 - SHODAN is director-only and owns route-start staging through `StageBotRunnerAtNavigationPointAsync(...)`.
-- Test bodies dispatch only `ActionType.Goto` and assert snapshots / task outcome.
+- Test bodies dispatch only `ObjectiveType.Goto` and assert snapshots / task outcome.
 
 ## Coverage
 

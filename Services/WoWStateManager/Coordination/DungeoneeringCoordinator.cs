@@ -209,7 +209,7 @@ public class DungeoneeringCoordinator
         return DefaultDungeonTarget;
     }
 
-    public ActionMessage? GetAction(
+    public ObjectiveMessage? GetAction(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
@@ -338,7 +338,7 @@ public class DungeoneeringCoordinator
 
     // ===== State Handlers =====
 
-    private ActionMessage? HandleWaitingForBots(string requestingAccount,
+    private ObjectiveMessage? HandleWaitingForBots(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         if (!snapshots.TryGetValue(_leaderAccount, out var leaderSnap) || !leaderSnap.IsObjectManagerValid)
@@ -368,7 +368,7 @@ public class DungeoneeringCoordinator
         return null;
     }
 
-    private ActionMessage? HandlePrepareCharacters(string requestingAccount,
+    private ObjectiveMessage? HandlePrepareCharacters(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         if (_soapClient == null)
@@ -703,7 +703,7 @@ public class DungeoneeringCoordinator
         return commands;
     }
 
-    private ActionMessage? HandleLearnSpellsViaChat(string requestingAccount,
+    private ObjectiveMessage? HandleLearnSpellsViaChat(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         // Each bot gets one SEND_CHAT action per tick: .targetself, .learn all_myclass, .learn <id>...
@@ -745,7 +745,7 @@ public class DungeoneeringCoordinator
         return null;
     }
 
-    private ActionMessage? HandleAddItemsViaChat(string requestingAccount,
+    private ObjectiveMessage? HandleAddItemsViaChat(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         // Each bot gets one SEND_CHAT action per tick: .additem <id> for each gear piece
@@ -785,7 +785,7 @@ public class DungeoneeringCoordinator
         return null;
     }
 
-    private ActionMessage? HandleEquipGear(string requestingAccount,
+    private ObjectiveMessage? HandleEquipGear(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         // Each bot gets one EquipItem action per tick for each gear piece.
@@ -813,7 +813,7 @@ public class DungeoneeringCoordinator
                 _logger.LogInformation("DUNGEON_COORD: {Account} equipping {Item} ({ItemId}) [{Idx}/{Total}]",
                     requestingAccount, name, itemId, idx + 1, gearList.Length);
 
-                var action = new ActionMessage { ActionType = ActionType.EquipItem };
+                var action = new ObjectiveMessage { ObjectiveType = ObjectiveType.EquipItem };
                 action.Parameters.Add(new RequestParameter { IntParam = (int)itemId });
                 return action;
             }
@@ -843,7 +843,7 @@ public class DungeoneeringCoordinator
         return null;
     }
 
-    private ActionMessage? HandleTeleportToOrgrimmar(string requestingAccount,
+    private ObjectiveMessage? HandleTeleportToOrgrimmar(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         // Each bot types .go xyz to teleport to Orgrimmar
@@ -867,7 +867,7 @@ public class DungeoneeringCoordinator
         return null;
     }
 
-    private ActionMessage? HandleWaitForSettle(string requestingAccount,
+    private ObjectiveMessage? HandleWaitForSettle(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots,
         CoordState nextState, int expectedMapId)
     {
@@ -921,7 +921,7 @@ public class DungeoneeringCoordinator
         return null;
     }
 
-    private ActionMessage? HandleDisbandAndReset(string requestingAccount,
+    private ObjectiveMessage? HandleDisbandAndReset(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         // Each bot leaves any stale group/raid and declines pending invites
@@ -929,7 +929,7 @@ public class DungeoneeringCoordinator
         {
             _logger.LogInformation("DUNGEON_COORD: {Account} leaving old group/raid + declining pending invites", requestingAccount);
             // LeaveGroup is a no-op if not in a group; DeclineGroupInvite is a no-op if no pending invite
-            return MakeAction(ActionType.LeaveGroup);
+            return MakeAction(ObjectiveType.LeaveGroup);
         }
 
         // Check if all bots have left
@@ -977,7 +977,7 @@ public class DungeoneeringCoordinator
         set => _currentInvitePhaseInt = (int)value;
     }
 
-    private ActionMessage? HandleInviting(string requestingAccount,
+    private ObjectiveMessage? HandleInviting(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         var inviteLimit = Math.Min(PARTY_SIZE_LIMIT, _memberAccounts.Count);
@@ -1016,7 +1016,7 @@ public class DungeoneeringCoordinator
                         charName, memberAccount, _inviteIndex + 1, inviteLimit);
                     CurrentInvitePhase = InvitePhase.SendAccept;
                     _phaseStartedAt = DateTime.UtcNow;
-                    return MakeAction(ActionType.SendGroupInvite, charName);
+                    return MakeAction(ObjectiveType.SendGroupInvite, charName);
                 }
                 return null;
 
@@ -1032,7 +1032,7 @@ public class DungeoneeringCoordinator
                 _logger.LogInformation("DUNGEON_COORD: '{Account}' accepting invite.", memberAccount);
                 CurrentInvitePhase = InvitePhase.WaitForGrouped;
                 _phaseStartedAt = DateTime.UtcNow;
-                return MakeAction(ActionType.AcceptGroupInvite);
+                return MakeAction(ObjectiveType.AcceptGroupInvite);
 
             case InvitePhase.WaitForGrouped:
                 // Atomic transition: only ONE thread advances the invite index
@@ -1071,14 +1071,14 @@ public class DungeoneeringCoordinator
     /// HandleAccepting is no longer used — invite+accept is merged into HandleInviting.
     /// Kept as a no-op redirect to FormGroup_Verify for safety.
     /// </summary>
-    private ActionMessage? HandleAccepting(string requestingAccount,
+    private ObjectiveMessage? HandleAccepting(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         TransitionTo(CoordState.FormGroup_Verify);
         return null;
     }
 
-    private ActionMessage? HandleConvertToRaid(string requestingAccount,
+    private ObjectiveMessage? HandleConvertToRaid(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         // Only leader can convert to raid
@@ -1090,7 +1090,7 @@ public class DungeoneeringCoordinator
             _raidConvertSent = true;
             _phaseStartedAt = DateTime.UtcNow;
             _logger.LogInformation("DUNGEON_COORD: Leader converting party to raid.");
-            return MakeAction(ActionType.ConvertToRaid);
+            return MakeAction(ObjectiveType.ConvertToRaid);
         }
 
         // Wait for the conversion to take effect. Live snapshots can lag one member
@@ -1137,7 +1137,7 @@ public class DungeoneeringCoordinator
     /// Invite+Accept remaining members (after raid conversion), one at a time.
     /// Same serialized pattern as HandleInviting.
     /// </summary>
-    private ActionMessage? HandleInvitingRest(string requestingAccount,
+    private ObjectiveMessage? HandleInvitingRest(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         if (_inviteIndex >= _memberAccounts.Count)
@@ -1162,7 +1162,7 @@ public class DungeoneeringCoordinator
                         charName, memberAccount, _inviteIndex - PARTY_SIZE_LIMIT + 1, _memberAccounts.Count - PARTY_SIZE_LIMIT);
                     CurrentInvitePhase = InvitePhase.SendAccept;
                     _phaseStartedAt = DateTime.UtcNow;
-                    return MakeAction(ActionType.SendGroupInvite, charName);
+                    return MakeAction(ObjectiveType.SendGroupInvite, charName);
                 }
                 return null;
 
@@ -1176,7 +1176,7 @@ public class DungeoneeringCoordinator
                 _logger.LogInformation("DUNGEON_COORD: '{Account}' accepting invite [batch 2].", memberAccount);
                 CurrentInvitePhase = InvitePhase.WaitForGrouped;
                 _phaseStartedAt = DateTime.UtcNow;
-                return MakeAction(ActionType.AcceptGroupInvite);
+                return MakeAction(ObjectiveType.AcceptGroupInvite);
 
             case InvitePhase.WaitForGrouped:
                 // Atomic transition: only ONE thread advances the invite index
@@ -1213,14 +1213,14 @@ public class DungeoneeringCoordinator
     /// <summary>
     /// HandleAcceptingRest is no longer used — merged into HandleInvitingRest.
     /// </summary>
-    private ActionMessage? HandleAcceptingRest(string requestingAccount,
+    private ObjectiveMessage? HandleAcceptingRest(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         TransitionTo(CoordState.FormGroup_Verify);
         return null;
     }
 
-    private ActionMessage? HandleVerify(string requestingAccount,
+    private ObjectiveMessage? HandleVerify(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         _tickCount++;
@@ -1260,7 +1260,7 @@ public class DungeoneeringCoordinator
     /// Algorithm: round-robin classes across subgroups — each instance of a class goes to the next subgroup.
     /// NOTE: Currently bypassed — subgroup changes can desync raid membership in Vanilla 1.12.1.
     /// </summary>
-    private ActionMessage? HandleOrganizeRaidSubgroups(string requestingAccount,
+    private ObjectiveMessage? HandleOrganizeRaidSubgroups(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         // Only the leader sends subgroup change commands
@@ -1293,7 +1293,7 @@ public class DungeoneeringCoordinator
         _logger.LogInformation("DUNGEON_COORD: Moving '{CharName}' to subgroup {SubGroup} [{Idx}/{Total}]",
             charName, subgroup, _subgroupAssignIndex, assignments.Length);
 
-        var action = new ActionMessage { ActionType = ActionType.ChangeRaidSubgroup };
+        var action = new ObjectiveMessage { ObjectiveType = ObjectiveType.ChangeRaidSubgroup };
         action.Parameters.Add(new RequestParameter { StringParam = charName });
         action.Parameters.Add(new RequestParameter { IntParam = subgroup });
         return action;
@@ -1387,7 +1387,7 @@ public class DungeoneeringCoordinator
     /// Prevents the FG WoW.exe crash caused by a flood of SMSG_DESTROY_OBJECT
     /// packets when 9 bots teleport away simultaneously.
     /// </summary>
-    private ActionMessage? HandleTeleportToRFC(string requestingAccount,
+    private ObjectiveMessage? HandleTeleportToRFC(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         // Build teleport order: LEADER FIRST (creates the instance), then members.
@@ -1441,7 +1441,7 @@ public class DungeoneeringCoordinator
         return MakeSendChatAction(BuildDungeonTeleportCommand());
     }
 
-    private ActionMessage? HandleDispatchDungeoneering(string requestingAccount,
+    private ObjectiveMessage? HandleDispatchDungeoneering(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         _tickCount++;
@@ -1487,7 +1487,7 @@ public class DungeoneeringCoordinator
         _logger.LogWarning("DUNGEON_COORD: Dispatching START_DUNGEONEERING to '{Account}' (leader={IsLeader}) [{Dispatched}/{Total}]",
             requestingAccount, isLeader, _dungeoneeringDispatched.Count, snapshots.Count);
 
-        var action = new ActionMessage { ActionType = ActionType.StartDungeoneering };
+        var action = new ObjectiveMessage { ObjectiveType = ObjectiveType.StartDungeoneering };
         action.Parameters.Add(new RequestParameter { IntParam = isLeader ? 1 : 0 });
         action.Parameters.Add(new RequestParameter { IntParam = checked((int)_dungeonTarget.MapId) }); // target dungeon map ID
 
@@ -1508,7 +1508,7 @@ public class DungeoneeringCoordinator
         return action;
     }
 
-    private ActionMessage? HandleDungeonInProgress(string requestingAccount,
+    private ObjectiveMessage? HandleDungeonInProgress(string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         WoWActivitySnapshot? leaderSnap = null;
@@ -1544,7 +1544,7 @@ public class DungeoneeringCoordinator
             if (CanAct(requestingAccount, 3.0))
             {
                 _lastActionSent[requestingAccount] = DateTime.UtcNow;
-                var leaderAction = new ActionMessage { ActionType = ActionType.StartDungeoneering };
+                var leaderAction = new ObjectiveMessage { ObjectiveType = ObjectiveType.StartDungeoneering };
                 leaderAction.Parameters.Add(new RequestParameter { IntParam = 1 }); // isLeader = true
                 leaderAction.Parameters.Add(new RequestParameter { IntParam = checked((int)_dungeonTarget.MapId) });
                 return leaderAction;
@@ -1623,7 +1623,7 @@ public class DungeoneeringCoordinator
     /// CRITICAL: Spamming .go xyz to an FG bot mid-loading causes WoW.exe to crash.
     /// One teleport command is enough — the bot needs 10-20s to complete cross-map loading.
     /// </summary>
-    private ActionMessage? TrySendThrottledTeleport(string account, string teleportCommand)
+    private ObjectiveMessage? TrySendThrottledTeleport(string account, string teleportCommand)
     {
         if (_lastTeleportSent.TryGetValue(account, out var lastSent)
             && (DateTime.UtcNow - lastSent).TotalSeconds < TELEPORT_COOLDOWN_SEC)
@@ -1736,24 +1736,24 @@ public class DungeoneeringCoordinator
         return maxHealth > 0 ? (float)health / maxHealth : 1f;
     }
 
-    private static ActionMessage MakeAction(ActionType actionType, string? stringParam = null)
+    private static ObjectiveMessage MakeAction(ObjectiveType objectiveType, string? stringParam = null)
     {
-        var action = new ActionMessage { ActionType = actionType };
+        var action = new ObjectiveMessage { ObjectiveType = objectiveType };
         if (stringParam != null)
             action.Parameters.Add(new RequestParameter { StringParam = stringParam });
         return action;
     }
 
-    private static ActionMessage MakeSendChatAction(string chatMessage)
+    private static ObjectiveMessage MakeSendChatAction(string chatMessage)
     {
-        var action = new ActionMessage { ActionType = ActionType.SendChat };
+        var action = new ObjectiveMessage { ObjectiveType = ObjectiveType.SendChat };
         action.Parameters.Add(new RequestParameter { StringParam = chatMessage });
         return action;
     }
 
-    private static ActionMessage MakeCastSpellAction(int spellId, long targetGuid)
+    private static ObjectiveMessage MakeCastSpellAction(int spellId, long targetGuid)
     {
-        var action = new ActionMessage { ActionType = ActionType.CastSpell };
+        var action = new ObjectiveMessage { ObjectiveType = ObjectiveType.CastSpell };
         action.Parameters.Add(new RequestParameter { IntParam = spellId });
         action.Parameters.Add(new RequestParameter { LongParam = targetGuid });
         return action;

@@ -20,7 +20,7 @@
 | PathfindingService |  <---------------------------- |  - metrics/log out   |
 |   (port 5001)      |                                +-----+----------------+
 +--------------------+                                      |
-+--------------------+                                      | ActionMessages
++--------------------+                                      | ObjectiveMessages
 |  SceneDataService  |                                      v
 |   (port 5003)      |   <--- bot local queries --- +----------------------+
 +--------------------+                              |  BotRunner (FG/BG)    |
@@ -76,7 +76,7 @@ Human (UI or in-game whisper) --> StateManager.RequestActivity
   → BotSelector.Score(candidates) → top-N picks
   → LeaseLedger.Reserve(picks, ActivityInstance)
   → Coordinator (Dungeon/BG/Raid/...).Launch(picks, instance)
-  → Coordinator dispatches ActionMessages → bots execute
+  → Coordinator dispatches ObjectiveMessages → bots execute
   → On completion → LeaseLedger.Release → bots resume progression
 ```
 

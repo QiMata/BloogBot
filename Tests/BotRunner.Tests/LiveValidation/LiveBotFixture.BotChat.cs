@@ -99,7 +99,7 @@ public partial class LiveBotFixture
     private static bool MatchesExecutedSendChatCommand(WoWActivitySnapshot? snapshot, string command)
     {
         var previousAction = snapshot?.PreviousAction;
-        if (previousAction?.ActionType != ActionType.SendChat || previousAction.Parameters.Count == 0)
+        if (previousAction?.ObjectiveType != ObjectiveType.SendChat || previousAction.Parameters.Count == 0)
             return false;
 
         var sentCommand = previousAction.Parameters[0].StringParam;
@@ -276,9 +276,9 @@ public partial class LiveBotFixture
         // Backpack: bag=0, slots 0-15
         for (int slot = 0; slot < 16; slot++)
         {
-            await SendActionAsync(accountName, new ActionMessage
+            await SendActionAsync(accountName, new ObjectiveMessage
             {
-                ActionType = ActionType.DestroyItem,
+                ObjectiveType = ObjectiveType.DestroyItem,
                 Parameters =
                 {
                     new RequestParameter { IntParam = 0 },     // bagId = 0 (backpack)
@@ -297,9 +297,9 @@ public partial class LiveBotFixture
             {
                 for (int slot = 0; slot < 16; slot++)
                 {
-                    await SendActionAsync(accountName, new ActionMessage
+                    await SendActionAsync(accountName, new ObjectiveMessage
                     {
-                        ActionType = ActionType.DestroyItem,
+                        ObjectiveType = ObjectiveType.DestroyItem,
                         Parameters =
                         {
                             new RequestParameter { IntParam = bag },
@@ -343,9 +343,9 @@ public partial class LiveBotFixture
         if (_stateManagerClient == null)
             return;
 
-        var action = new ActionMessage
+        var action = new ObjectiveMessage
         {
-            ActionType = ActionType.SendChat,
+            ObjectiveType = ObjectiveType.SendChat,
             Parameters = { new RequestParameter { StringParam = command } }
         };
 
@@ -435,15 +435,15 @@ public partial class LiveBotFixture
         // P4.5.2: stamp a test-owned correlation id so we can correlate the
         // CommandAckEvent in RecentCommandAcks back to this exact dispatch.
         var correlationId = $"test:{accountName}:{Interlocked.Increment(ref _testCorrelationSequence).ToString(CultureInfo.InvariantCulture)}";
-        var action = new ActionMessage
+        var action = new ObjectiveMessage
         {
-            ActionType = ActionType.SendChat,
+            ObjectiveType = ObjectiveType.SendChat,
             CorrelationId = correlationId,
             Parameters = { new RequestParameter { StringParam = command } }
         };
 
         var dispatchResult = await SendActionAsync(accountName, action, emitOutput);
-        _logger.LogInformation("[ACTION] Sent {Type} to {Account} → {Result} [{Corr}]", action.ActionType, accountName, dispatchResult, correlationId);
+        _logger.LogInformation("[ACTION] Sent {Type} to {Account} → {Result} [{Corr}]", action.ObjectiveType, accountName, dispatchResult, correlationId);
         var chats = new List<string>();
         var errors = new List<string>();
         CommandAckEvent.Types.AckStatus? ackStatus = null;
@@ -520,7 +520,7 @@ public partial class LiveBotFixture
 
     /// <summary>
     /// Send a chat command and block until the server actually executes it (not just
-    /// queues it). Stamps a unique correlation id on the ActionMessage and polls the
+    /// queues it). Stamps a unique correlation id on the ObjectiveMessage and polls the
     /// account's snapshot until either the <c>previousAction</c> echoes that correlation,
     /// or a <see cref="CommandAckEvent"/> with that correlation appears in
     /// <c>recent_command_acks</c>. Exits as soon as either signal fires.
@@ -545,9 +545,9 @@ public partial class LiveBotFixture
             return false;
 
         var correlationId = $"shodan-sync:{accountName}:{Interlocked.Increment(ref _testCorrelationSequence).ToString(CultureInfo.InvariantCulture)}";
-        var action = new ActionMessage
+        var action = new ObjectiveMessage
         {
-            ActionType = ActionType.SendChat,
+            ObjectiveType = ObjectiveType.SendChat,
             CorrelationId = correlationId,
             Parameters = { new RequestParameter { StringParam = command } }
         };
@@ -797,10 +797,10 @@ public partial class LiveBotFixture
 
 
     /// <summary>Send an action to a bot and wait for a brief processing delay.</summary>
-    public async Task SendActionAndWaitAsync(string accountName, ActionMessage action, int delayMs = 500)
+    public async Task SendActionAndWaitAsync(string accountName, ObjectiveMessage action, int delayMs = 500)
     {
         var result = await SendActionAsync(accountName, action);
-        _logger.LogInformation("[ACTION] Sent {Type} to {Account} → {Result}", action.ActionType, accountName, result);
+        _logger.LogInformation("[ACTION] Sent {Type} to {Account} → {Result}", action.ObjectiveType, accountName, result);
         await Task.Delay(delayMs);
     }
 

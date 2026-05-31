@@ -16,7 +16,7 @@ parity with what a human player would experience.
 
 **Shodan is never the subject of a behavior test.** It is a director: it
 stages world/loadout state, then steps back. Behavior tests dispatch
-`ActionType.*` against the dedicated test accounts (TESTBOT1 / TESTBOT2 and
+`ObjectiveType.*` against the dedicated test accounts (TESTBOT1 / TESTBOT2 and
 their per-category siblings: GATHFG1/BG1, EQUIPFG1/BG1, TRMAF5/B5, ECONFG1/BG1,
 LOOTFG1/BG1, NPCFG1/BG1, PETFG1/BG1, CRAFTFG1/BG1, NAVBG1, COMBATTEST, etc.)
 and assert against those accounts' snapshots — never Shodan's.
@@ -38,7 +38,7 @@ This separation is enforced at the fixture layer:
 Scope: top-level `Tests/BotRunner.Tests/LiveValidation/*.cs` test classes.
 Goal: move per-test GM setup out of FG/BG bot bodies and onto the Shodan
 test-director role. FG (TESTBOT1) and BG (TESTBOT2) stay idle until the test
-explicitly dispatches a BotRunner action (e.g. `ActionType.StartFishing`).
+explicitly dispatches a BotRunner action (e.g. `ObjectiveType.StartFishing`).
 Shodan is responsible for world/loadout staging and state repair.
 
 Reference implementation: [FishingProfessionTests.cs](../FishingProfessionTests.cs)
@@ -65,7 +65,7 @@ Counts reflect the first-pass audit of 70 top-level files under
 
 | File | Notes |
 |------|-------|
-| `FishingProfessionTests.cs` | Single-launch FG+BG+Shodan; Shodan stages pool; FG/BG dispatch `ActionType.StartFishing` only. |
+| `FishingProfessionTests.cs` | Single-launch FG+BG+Shodan; Shodan stages pool; FG/BG dispatch `ObjectiveType.StartFishing` only. |
 | `UnequipItemTests.cs` | Migrated pilot: shared `Equipment.config.json`; `StageBotRunnerLoadoutAsync`; test body dispatches `EquipItem` / `UnequipItem` only. |
 | `EquipmentEquipTests.cs` | Migrated: `Equipment.config.json` launches `EQUIPFG1`/`EQUIPBG1` warriors + SHODAN; `StageBotRunnerLoadoutAsync`; test body dispatches `EquipItem` only. |
 | `WandAttackTests.cs` | Migrated: `Wand.config.json` launches `TRMAF5`/`TRMAB5` mages + SHODAN; `StageBotRunnerLoadoutAsync` for wand loadout; fixture-contained Durotar mob staging; test body dispatches `EquipItem` / `StartWandAttack` / `StopAttack` only. |
@@ -211,7 +211,7 @@ a standalone slice.
 2. Pre-test body: `EnsureSettingsAsync(...)`, then one shared Shodan-director
    helper call (e.g. `await _bot.StageTargetLoadoutAsync(...)`). No
    `.learn` / `.additem` / `.setskill` / `.tele` in the test body.
-3. Action: dispatch the `ActionType.*` under test against FG (then BG).
+3. Action: dispatch the `ObjectiveType.*` under test against FG (then BG).
 4. Assert: observe via snapshot / task markers. No side-channel GM reads.
 5. Restage with Shodan between roles if the action mutates world state
    (as Ratchet does between FG and BG fishing).
@@ -225,7 +225,7 @@ a standalone slice.
 
 `EquipmentEquipTests.cs` now uses `Equipment.config.json`: SHODAN is the
 director, while `EQUIPFG1` and `EQUIPBG1` are the only BotRunner action
-targets. Both targets receive Worn Mace staging and only `ActionType.EquipItem`
+targets. Both targets receive Worn Mace staging and only `ObjectiveType.EquipItem`
 dispatches from the test body.
 
 `WandAttackTests.cs` uses the separate `Wand.config.json` because wand actions
@@ -238,7 +238,7 @@ target-bot `.go xyz` constraint; the test body remains GM-free.
 `TRMAF5`/`TRMAB5` mage roster as `Wand.config.json`, but kept as a
 distinct file so each Shodan slice is independently revertable). SHODAN
 is the director. `TRMAB5` is the only BotRunner action target for
-spell-casting tests because `ActionType.CastSpell` resolves to
+spell-casting tests because `ObjectiveType.CastSpell` resolves to
 `_objectManager.CastSpell(int)`, which is a documented no-op on the
 Foreground runner (only the `CastSpellByName(string)` Lua overload casts
 there). FG is launched for Shodan-topology parity but stays idle in
@@ -247,7 +247,7 @@ this slice. The slice adds a fixture-contained
 constraint as the wand staging helper, and an optional `levelTo`
 parameter on `StageBotRunnerLoadoutAsync` so spell-casting tests can
 seed a sufficient level via SOAP `.character level`. The test body
-dispatches only `ActionType.CastSpell`.
+dispatches only `ObjectiveType.CastSpell`.
 
 Migration result on this slice: `MagePortal_PartyTeleported` and
 `MageAllCityTeleports` pass. `MageTeleport_Alliance_StormwindArrival`
@@ -266,7 +266,7 @@ staging into `StageBotRunnerLoadoutAsync`, route staging into
 `StageBotRunnerAtValleyCopperRouteStartAsync` /
 `StageBotRunnerAtDurotarHerbRouteStartAsync`, and pool refresh/selection
 into `RefreshAndPrioritizeGatheringPoolsWithShodanAsync`. The test body
-dispatches only `ActionType.StartGatheringRoute`.
+dispatches only `ObjectiveType.StartGatheringRoute`.
 
 Migration result on this slice: `Mining_BG_GatherCopperVein` and
 `Herbalism_BG_GatherHerb` pass. `Herbalism_FG_GatherHerb` skipped because
@@ -284,7 +284,7 @@ the old point sits on a high terrain layer.
 director. The slice moves First Aid Apprentice (`3273`), Linen Bandage recipe
 (`3275`), First Aid skill `129=1/75`, and Linen Cloth (`2589`) setup into
 `StageBotRunnerLoadoutAsync`. The test body dispatches only
-`ActionType.CastSpell` to `CRAFTBG1`; `CRAFTFG1` stays idle because
+`ObjectiveType.CastSpell` to `CRAFTBG1`; `CRAFTFG1` stays idle because
 foreground spell-id casting is not the validated crafting path.
 
 Migration result on this slice: `FirstAid_LearnAndCraft_ProducesLinenBandage`
@@ -299,7 +299,7 @@ character because this slice validates BG spell-id pet management; the action
 requirement is carried by the BG hunter. The slice moves hunter level `10`,
 Call Pet (`883`), Dismiss Pet (`2641`), and Tame Animal (`1515`) setup into
 `StageBotRunnerLoadoutAsync`. The test body dispatches only
-`ActionType.CastSpell` to `PETBG1` for Call Pet and Dismiss Pet.
+`ObjectiveType.CastSpell` to `PETBG1` for Call Pet and Dismiss Pet.
 
 Migration result on this slice: `Pet_SummonAndManage_StanceFeedAbility`
 passes. The live artifact `pet_management_shodan.trx` shows Shodan topology,
@@ -309,10 +309,10 @@ BG hunter staging, and the two BG pet-management casts returning success.
 `Economy.config.json` with `ECONFG1` / `ECONBG1` Orc Warrior action targets
 and SHODAN as the Background Gnome Mage director. The slice adds
 `StageBotRunnerAtOrgrimmarAuctionHouseAsync` so AH coordinate staging lives in
-the fixture. `AuctionHouseTests` dispatches only `ActionType.InteractWith`
+the fixture. `AuctionHouseTests` dispatches only `ObjectiveType.InteractWith`
 against detected auctioneer GUIDs. `AuctionHouseParityTests` verifies FG/BG
 auctioneer staging/detection; post/buy and cancel remain explicit skips after
-Shodan setup because no auction post/buy/cancel `ActionType` surface exists
+Shodan setup because no auction post/buy/cancel `ObjectiveType` surface exists
 yet.
 
 Migration result on this slice: live artifact `auction_house_shodan.trx`
@@ -323,14 +323,14 @@ passed `3` tests and skipped `2` with tracked missing-action reasons.
 and SHODAN as the Background Gnome Mage director. The slice adds
 `StageBotRunnerAtOrgrimmarBankAsync` so bank coordinate staging lives in the
 fixture. `BankInteractionTests` now validates FG/BG banker detection and
-dispatches only `ActionType.InteractWith` against detected banker GUIDs.
+dispatches only `ObjectiveType.InteractWith` against detected banker GUIDs.
 `BankParityTests` stages Linen Cloth through `StageBotRunnerLoadoutAsync` and
 verifies FG/BG bank/item setup before skipping the unimplemented action
 surfaces.
 
 Migration result on this slice: live artifact `bank_shodan.trx` passed `1`
 test and skipped `3` with tracked missing-action reasons. Deposit/withdraw
-and bank-slot purchase still need BotRunner `ActionType` support before those
+and bank-slot purchase still need BotRunner `ObjectiveType` support before those
 assertions can become behavioral proofs.
 
 `VendorBuySellTests.cs` reuses `Economy.config.json` with `ECONBG1` as the BG
@@ -338,8 +338,8 @@ packet action target, `ECONFG1` launched idle for Shodan topology parity, and
 SHODAN as the Background Gnome Mage director. The slice adds
 `StageBotRunnerAtRazorHillVendorAsync` and `StageBotRunnerCoinageAsync` so
 vendor location, item, and money setup live behind fixture helpers. The test
-body dispatches only `ActionType.BuyItem`, `ActionType.SellItem`, and the
-post-buy cleanup `ActionType.DestroyItem`.
+body dispatches only `ObjectiveType.BuyItem`, `ObjectiveType.SellItem`, and the
+post-buy cleanup `ObjectiveType.DestroyItem`.
 
 Migration result on this slice: live artifact `vendor_buy_sell_shodan.trx`
 passed `2/2`. This remains a BG packet baseline by design; FG vendor buy/sell
@@ -352,7 +352,7 @@ mailbox, and SOAP mail-money setup into fixture helpers
 `StageBotRunnerAtOrgrimmarAuctionHouseAsync`,
 `StageBotRunnerAtOrgrimmarMailboxAsync`, and
 `StageBotRunnerMailboxMoneyAsync`). The test body dispatches only
-`ActionType.InteractWith` for banker/auctioneer and `ActionType.CheckMail` for
+`ObjectiveType.InteractWith` for banker/auctioneer and `ObjectiveType.CheckMail` for
 mailbox collection.
 
 Migration result on this slice: live artifact `economy_interaction_shodan.trx`
@@ -363,7 +363,7 @@ passed `3/3` across FG and BG.
 slice moves mailbox positioning and SOAP mail-money/item staging into
 `StageBotRunnerAtOrgrimmarMailboxAsync`, `StageBotRunnerMailboxMoneyAsync`, and
 `StageBotRunnerMailboxItemAsync`. Test bodies dispatch only
-`ActionType.CheckMail` to FG/BG targets.
+`ObjectiveType.CheckMail` to FG/BG targets.
 
 Migration result on this slice: live artifact
 `mail_fg_shodan_director_extendedpoll.trx` passed `4/4`. The foreground
@@ -377,7 +377,7 @@ director. The slice adds `StageBotRunnerAtOrgrimmarTradeSpotAsync` plus shared
 `TradeTestSupport` so loadout, coinage, partner positioning, visible-partner
 resolution, and action ACK checks live outside the test body. The test body no
 longer issues GM setup commands; executable paths dispatch only
-`ActionType.OfferTrade` / `DeclineTrade` and the staged but skipped transfer
+`ObjectiveType.OfferTrade` / `DeclineTrade` and the staged but skipped transfer
 paths stay behind explicit skip reasons.
 
 Migration result on the original slice: live artifact `trading_shodan_final.trx`
@@ -402,7 +402,7 @@ quest/gossip action target, `ECONFG1` launched idle for Shodan topology parity,
 and SHODAN as director. The slice adds shared `QuestTestSupport` plus
 fixture-contained quest location and quest-state staging helpers so the test
 bodies no longer issue GM setup commands. Executable paths dispatch only
-`ActionType.InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or
+`ObjectiveType.InteractWith`, `StartMeleeAttack`, `AcceptQuest`, or
 `CompleteQuest` to BG; snapshot-plumbing paths assert staged quest-log state
 without direct GM calls in the test body.
 
@@ -420,7 +420,7 @@ fixture-contained Razor Hill hunter trainer and Orgrimmar flight-master staging
 helpers, moves NPC setup out of the test body, and resolves action recipients
 through `ResolveBotRunnerActionTargets(...)` so SHODAN is never an action
 target. Vendor, flight-master, and object-manager checks dispatch only
-`ActionType.VisitVendor` / `VisitFlightMaster` or inspect snapshots after
+`ObjectiveType.VisitVendor` / `VisitFlightMaster` or inspect snapshots after
 Shodan staging.
 
 Migration result on this slice: live artifact `npc_interaction_shodan.trx`
@@ -436,8 +436,8 @@ failed` after strict mailbox staging could not enable GM mode.
 death/recovery action target, `ECONFG1` launched idle for Shodan topology
 parity, and SHODAN as director. The slice adds fixture-contained Valley spirit
 healer staging and cleanup helpers; the test body no longer issues `.go`,
-`.tele`, or `.die` setup commands and dispatches only `ActionType.ReleaseCorpse`,
-`ActionType.Goto`, and `ActionType.InteractWith` to the BG target.
+`.tele`, or `.die` setup commands and dispatches only `ObjectiveType.ReleaseCorpse`,
+`ObjectiveType.Goto`, and `ObjectiveType.InteractWith` to the BG target.
 
 Migration result on this slice: live artifact
 `spirit_healer_shodan_deadactor_order.trx` passed `1/1`. The slice also fixes
@@ -453,12 +453,12 @@ map-transition action target, `ECONFG1` launched idle for Shodan topology
 parity, and SHODAN as director. The slice adds fixture-contained Ironforge tram
 staging and rejected Deeprun Tram transition helpers; the test body no longer
 issues `.go xyz` commands and dispatches only a correlated post-bounce
-`ActionType.Goto` at the current snapshot position to prove BotRunner remains
+`ObjectiveType.Goto` at the current snapshot position to prove BotRunner remains
 action-responsive after the map transition settles.
 
 Migration result on this slice: live artifact `map_transition_shodan.trx`
 passed `1/1`. The cross-map `.go xyz` command remains fixture-owned because
-there is no production BotRunner ActionType for forcing a server-rejected
+there is no production BotRunner ObjectiveType for forcing a server-rejected
 instance teleport; the behavior assertion stays snapshot-based and the only
 BotRunner action is the post-bounce liveness command.
 
@@ -467,7 +467,7 @@ BG mount action target, `ECONFG1` launched idle for Shodan topology parity, and
 SHODAN as director. The slice adds fixture-contained riding-skill/mount-spell
 loadout, unmount cleanup, and indoor/outdoor coordinate staging helpers. The
 test body no longer issues `.learn`, `.setskill`, `.dismount`, `.unaura`, or
-`.go xyz` setup commands and dispatches only `ActionType.CastSpell` for the
+`.go xyz` setup commands and dispatches only `ObjectiveType.CastSpell` for the
 mount behavior checks.
 
 Migration result on this slice: live artifact `mount_environment_shodan.trx`
@@ -480,7 +480,7 @@ SHODAN as director. The slice adds fixture-contained street-level Orgrimmar
 staging through `StageBotRunnerAtTravelPlannerStartAsync(...)` plus a targeted
 quiesce after staging so leftover setup actions do not poison the first
 `TravelTo` dispatch. The test body no longer issues `.tele` setup commands and
-dispatches only `ActionType.TravelTo` to the BG target.
+dispatches only `ObjectiveType.TravelTo` to the BG target.
 
 Migration result on this slice: live artifact `travel_planner_shodan.trx`
 passed overall with `1/1` executable short-walk case and `3` tracked skips for
@@ -498,7 +498,7 @@ migration-shape failure.
 slice adds the fixture-contained `StageBotRunnerAtNavigationPointAsync(...)`
 helper for arbitrary navigation probe coordinates plus post-stage target
 quiesce. Test bodies no longer issue direct `BotTeleportAsync(...)` setup calls
-and dispatch only `ActionType.TravelTo` for movement route checks.
+and dispatch only `ObjectiveType.TravelTo` for movement route checks.
 
 Migration result on this slice: live artifact
 `corner_tile_navigation_shodan.trx` passed `6/6`, covering Orgrimmar
@@ -512,7 +512,7 @@ parity, and SHODAN as director. The slice removes the old observational FG
 shadow teleports, stages the Durotar winding-path start through
 `StageBotRunnerAtNavigationPointAsync(...)`, and quiesces the BG target before
 dispatch. The test body no longer issues direct `BotTeleportAsync(...)` setup
-calls and dispatches only `ActionType.Goto`.
+calls and dispatches only `ObjectiveType.Goto`.
 
 Migration result on this slice: live artifact `movement_speed_shodan.trx`
 passed `1/1`, covering the Durotar 141-yard winding path speed, Z-stability,
@@ -523,7 +523,7 @@ navigation action target, `ECONFG1` launched idle for Shodan topology parity,
 and SHODAN as director. The slice moves Durotar road and winding-road start
 staging into `StageBotRunnerAtNavigationPointAsync(...)`; the test body no
 longer issues direct `BotTeleportAsync(...)` setup calls and dispatches only
-BG `ActionType.Goto` for the executable route probes. The short Durotar road
+BG `ObjectiveType.Goto` for the executable route probes. The short Durotar road
 route stages at z=`42` so the setup command stays distinct from the preceding
 trace route while the server still ground-snaps to the same road surface.
 
@@ -551,8 +551,8 @@ as director. The slice moves clean-slate / bag cleanup into
 `StageBotRunnerLoadoutAsync(...)` and Valley of Trials creature-cluster staging
 into `StageBotRunnerAtDurotarMobAreaAsync(...)`. The test body no longer uses
 the dedicated `CombatBgArenaFixture`, no longer issues setup GM commands
-inline, and dispatches only `ActionType.StartMeleeAttack`,
-`ActionType.StopAttack`, and `ActionType.LootCorpse` to the BG target.
+inline, and dispatches only `ObjectiveType.StartMeleeAttack`,
+`ObjectiveType.StopAttack`, and `ObjectiveType.LootCorpse` to the BG target.
 
 Migration result on this slice: live artifact `loot_corpse_shodan.trx` passed
 `1/1`. The BG target killed a Shodan-staged low-level Durotar mob through
@@ -565,7 +565,7 @@ corpse-run action target, `LOOTFG1` launched for Shodan topology parity, and
 SHODAN as director. The slice adds fixture-contained Razor Hill corpse staging
 and cleanup helpers so clean-slate, coordinate staging, death induction, revive,
 and restore movement live outside the test body. The executable path dispatches
-only `ActionType.ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and
+only `ObjectiveType.ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and
 `StopPhysicsRecording` to the resolved BotRunner target.
 
 Migration result on this slice: live artifact `death_corpse_run_shodan.trx`
@@ -582,7 +582,7 @@ same Loot/SHODAN topology before skipping by default.
 The slice adds fixture-contained consumable staging helpers so clean slate,
 inventory clear, Elixir of Lion's Strength staging, and Lion's Strength aura
 cleanup live outside the test body. The executable paths dispatch only
-`ActionType.UseItem` and `ActionType.DismissBuff` to the resolved BG target.
+`ObjectiveType.UseItem` and `ObjectiveType.DismissBuff` to the resolved BG target.
 
 Migration result on this slice: live artifact `buff_consumable_shodan.trx`
 passed overall with `1` pass and `2` tracked skips. The legacy
@@ -596,15 +596,15 @@ removal (`BB-BUFF-001`).
 economy/NPC smoke action target, `ECONFG1` launched idle for Shodan topology
 parity, and SHODAN as director. The slice moves item, bank, auction-house,
 mailbox, mail-money, coinage, and flight-master setup behind fixture helpers.
-The test body dispatches only `ActionType.InteractWith`,
-`ActionType.CheckMail`, and `ActionType.VisitFlightMaster` to the BG target.
+The test body dispatches only `ObjectiveType.InteractWith`,
+`ObjectiveType.CheckMail`, and `ObjectiveType.VisitFlightMaster` to the BG target.
 
 Migration result on this slice: live artifact `bg_interaction_shodan.trx`
 passed overall with `3` passed and `2` tracked skips.
 `AuctionHouse_InteractWithAuctioneer`, `Mail_SendGoldAndCollect_CoinageChanges`,
 and `FlightMaster_DiscoverAndTakeFlight` passed.
 `Bank_DepositItem_MovesToBankSlot` is Shodan-staged and proves banker
-`InteractWith`, then skips because no bank deposit `ActionType` surface exists
+`InteractWith`, then skips because no bank deposit `ObjectiveType` surface exists
 yet. `DeeprunTram_RideTransport_ArrivesAtDestination` skips because this smoke
 suite uses the Horde economy roster; the dedicated transport slice owns
 Deeprun Tram validation.
@@ -614,8 +614,8 @@ BG queue action target, `ECONFG1` launched idle for Shodan topology parity, and
 SHODAN as director. The slice adds fixture-contained Orgrimmar Warsong Gulch
 battlemaster staging plus WSG minimum-level setup through
 `StageBotRunnerLoadoutAsync(...)`. The test body dispatches only
-`ActionType.JoinBattleground` with Warsong Gulch type/map parameters and a
-cleanup `ActionType.LeaveBattleground`.
+`ObjectiveType.JoinBattleground` with Warsong Gulch type/map parameters and a
+cleanup `ObjectiveType.LeaveBattleground`.
 
 Migration result on this slice: live artifact `battleground_queue_shodan.trx`
 passed `1/1`. The test staged `ECONBG1` at Brakgul Deathbringer, proved the
@@ -628,13 +628,13 @@ BG Battle Shout action target, `ECONFG1` launched idle for Shodan topology
 parity, and SHODAN as director. The slice adds fixture-contained rage staging
 through `StageBotRunnerRageAsync(...)` and uses existing loadout/aura helpers
 for Battle Shout spell and cleanup setup. The test body dispatches only
-correlated `ActionType.CastSpell` with spell id `6673`.
+correlated `ObjectiveType.CastSpell` with spell id `6673`.
 
 Migration result on this slice: live artifact
 `spell_cast_on_target_shodan.trx` passed `1/1`. The BG target learned Battle
 Shout, received staged rage, had stale auras cleared, dispatched `CastSpell`,
 observed aura `6673`, and removed the aura in fixture cleanup. FG remains idle
-because prior Shodan spell-id slices documented foreground `ActionType.CastSpell`
+because prior Shodan spell-id slices documented foreground `ObjectiveType.CastSpell`
 by-id behavior separately.
 
 `TaxiTests.cs`, `TaxiTransportParityTests.cs`, and `TransportTests.cs` reuse
@@ -648,8 +648,8 @@ coordinate staging helpers:
 `StageBotRunnerAtUndercityElevatorUpperAsync(...)`, and
 `StageBotRunnerAtThunderBluffElevatorAsync(...)`. Test bodies no longer issue
 direct `.tele`, `.modify money`, or taxi-node setup calls; executable paths
-dispatch only `ActionType.VisitFlightMaster`, `ActionType.SelectTaxiNode`,
-recording actions, or tracked placeholder `ActionType.Goto` calls to resolved
+dispatch only `ObjectiveType.VisitFlightMaster`, `ObjectiveType.SelectTaxiNode`,
+recording actions, or tracked placeholder `ObjectiveType.Goto` calls to resolved
 BotRunner action targets.
 
 Migration result on this slice: live artifact

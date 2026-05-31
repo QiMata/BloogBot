@@ -18,7 +18,7 @@ WWoW uses a four-layer behavior hierarchy adopted from D2Bot:
 adding new "behavior tree", "task family", or "action mapping" terms —
 those map onto these four layers and using them as synonyms drifts the
 spec. Worked example: `dungeon.ubrs` Activity → `reach-flame-crest`
-Objective → `TravelToTask(coord)` Task → `ActionMessage{ActionType=TravelTo,...}` Action.
+Objective → `TravelToTask(coord)` Task → `ObjectiveMessage{ObjectiveType=TravelTo,...}` Action.
 
 ## Monorepo Shared Contract
 
@@ -245,7 +245,7 @@ character with account-level GM access in normal operation.
 The LiveValidation suite reuses Shodan as a **test director** for setup
 operations that need GM targeting (`.gobject respawn`, `.tele`, `.additem`,
 `.learn`, `.setskill`). It is *never* the subject of a behavior test.
-Behavior tests dispatch `ActionType.*` against dedicated test accounts
+Behavior tests dispatch `ObjectiveType.*` against dedicated test accounts
 (TESTBOT1/TESTBOT2 for the default roster, plus category-specific siblings
 like GATHFG1/BG1, EQUIPFG1/BG1, TRMAF5/B5, ECONFG1/BG1, LOOTFG1/BG1, etc.)
 and assert against those accounts' snapshots — never Shodan's.
@@ -283,10 +283,10 @@ exercises bot behavior by:
    family naturally.
 4. Asserting on the BOT'S BEHAVIOR — `WoWActivitySnapshot` fields,
    Task-stack progression, `current_activity_id` (Phase 2+),
-   `current_objective_id` (Phase 2+), or the resulting `ActionMessage`
+   `current_objective_id` (Phase 2+), or the resulting `ObjectiveMessage`
    stream as captured by `AckCaptureTests`-style harnesses.
 
-A test that constructs `new ActionMessage { ActionType = ... }` and
+A test that constructs `new ObjectiveMessage { ObjectiveType = ... }` and
 dispatches it via `_bot.SendActionAsync(...)` (or `SendActionAndWaitAsync`)
 in the test body is **REMOTE-CONTROLLING THE BOT**, not testing its
 behavior. That pattern bypasses DecisionEngine, ActivityResolver, and
@@ -325,7 +325,7 @@ applies to **NEW tests only**.
 
 - New LiveValidation tests must declare an Activity (today: via the
   `AssignedActivity` string + `StageBotRunner*Async` fixture helpers)
-  and assert on snapshot state, NOT construct raw `ActionMessage`
+  and assert on snapshot state, NOT construct raw `ObjectiveMessage`
   objects in the test body.
 - New tests that legitimately need to verify a single Action shape in
   isolation should go in `Tests/BotRunner.Tests/ActionDispatch/`

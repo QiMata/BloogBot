@@ -247,7 +247,7 @@ public sealed class MovementParityTests
             Assert.True(facingReady, "Both bots should face east from the lower Undercity board-start point before boarding.");
 
             PairTrace? trace = null;
-            await DispatchBothAsync(accounts, () => MakeMovement(ActionType.StartMovement, ControlBits.Front));
+            await DispatchBothAsync(accounts, () => MakeMovement(ObjectiveType.StartMovement, ControlBits.Front));
 
             try
             {
@@ -263,19 +263,19 @@ public sealed class MovementParityTests
                         if (!bgReachedUpperExit && IsAtUpperElevatorExit(sample.Bg))
                         {
                             bgReachedUpperExit = true;
-                            await _bot.SendActionAsync(accounts.Bg, MakeMovement(ActionType.StopMovement, ControlBits.Front));
+                            await _bot.SendActionAsync(accounts.Bg, MakeMovement(ObjectiveType.StopMovement, ControlBits.Front));
                         }
 
                         if (!fgReachedUpperExit && IsAtUpperElevatorExit(sample.Fg))
                         {
                             fgReachedUpperExit = true;
-                            await _bot.SendActionAsync(accounts.Fg, MakeMovement(ActionType.StopMovement, ControlBits.Front));
+                            await _bot.SendActionAsync(accounts.Fg, MakeMovement(ObjectiveType.StopMovement, ControlBits.Front));
                         }
                     });
             }
             finally
             {
-                await DispatchBothAsync(accounts, () => MakeMovement(ActionType.StopMovement, ControlBits.Front));
+                await DispatchBothAsync(accounts, () => MakeMovement(ObjectiveType.StopMovement, ControlBits.Front));
             }
 
             var completedTrace = trace ?? throw new InvalidOperationException("Elevator ride trace was not captured.");
@@ -623,7 +623,7 @@ public sealed class MovementParityTests
         var facing = FacingTo(start, point);
         var facingResult = await _bot.SendActionAsync(account, MakeSetFacing(facing));
         Assert.Equal(ResponseResult.Success, facingResult);
-        var startResult = await _bot.SendActionAsync(account, MakeMovement(ActionType.StartMovement, ControlBits.Front));
+        var startResult = await _bot.SendActionAsync(account, MakeMovement(ObjectiveType.StartMovement, ControlBits.Front));
         Assert.Equal(ResponseResult.Success, startResult);
         var pulseCutoff = RouteMovementPulseCutoff(start, point, xyToleranceYards);
         var pulseTimer = new Stopwatch();
@@ -652,7 +652,7 @@ public sealed class MovementParityTests
         {
             if (stopAfterReach || !reached)
             {
-                var stopResult = await _bot.SendActionAsync(account, MakeMovement(ActionType.StopMovement, ControlBits.Front));
+                var stopResult = await _bot.SendActionAsync(account, MakeMovement(ObjectiveType.StopMovement, ControlBits.Front));
                 Assert.Equal(ResponseResult.Success, stopResult);
             }
         }
@@ -766,14 +766,14 @@ public sealed class MovementParityTests
         RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, accounts.Bg, "packets", "transform", "physics");
         RecordingArtifactHelper.DeleteRecordingArtifacts(recordingDir, accounts.Fg, "packets", "transform");
 
-        await DispatchBothAsync(accounts, () => new ActionMessage { ActionType = ActionType.StartPhysicsRecording });
+        await DispatchBothAsync(accounts, () => new ObjectiveMessage { ObjectiveType = ObjectiveType.StartPhysicsRecording });
         _output.WriteLine($"[RECORDING] Started FG/BG movement recordings in {recordingDir}");
         return recordingDir;
     }
 
     private async Task StopPairRecordingAsync(PairAccounts accounts)
     {
-        await DispatchBothAsync(accounts, () => new ActionMessage { ActionType = ActionType.StopPhysicsRecording });
+        await DispatchBothAsync(accounts, () => new ObjectiveMessage { ObjectiveType = ObjectiveType.StopPhysicsRecording });
         await Task.Delay(500);
         _output.WriteLine("[RECORDING] Stopped FG/BG movement recordings");
     }
@@ -817,7 +817,7 @@ public sealed class MovementParityTests
         _output.WriteLine($"[CLEANUP] {role} {label}: stop residual movement via arrived Goto => {result}");
     }
 
-    private async Task DispatchBothAsync(PairAccounts accounts, Func<ActionMessage> actionFactory)
+    private async Task DispatchBothAsync(PairAccounts accounts, Func<ObjectiveMessage> actionFactory)
     {
         var results = await Task.WhenAll(
             _bot.SendActionAsync(accounts.Bg, actionFactory()),
@@ -825,7 +825,7 @@ public sealed class MovementParityTests
         Assert.All(results, result => Assert.Equal(ResponseResult.Success, result));
     }
 
-    private async Task DispatchPairAsync(PairAccounts accounts, ActionMessage bgAction, ActionMessage fgAction)
+    private async Task DispatchPairAsync(PairAccounts accounts, ObjectiveMessage bgAction, ObjectiveMessage fgAction)
     {
         var results = await Task.WhenAll(
             _bot.SendActionAsync(accounts.Bg, bgAction),
@@ -959,13 +959,13 @@ public sealed class MovementParityTests
         var facingText = snapshot.MovementData == null
             ? "?"
             : NormalizeFacing(snapshot.MovementData.Facing).ToString("F3");
-        return $"pos=({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F2}) facing={facingText} map={snapshot.CurrentMapId} screen={snapshot.ScreenState} conn={snapshot.ConnectionState} transition={snapshot.IsMapTransition} flags=0x{(uint)flags:X} transport=0x{transportGuid:X} entry={transportEntryText} current={snapshot.CurrentAction?.ActionType.ToString() ?? "null"} previous={snapshot.PreviousAction?.ActionType.ToString() ?? "null"}";
+        return $"pos=({pos?.X:F1},{pos?.Y:F1},{pos?.Z:F2}) facing={facingText} map={snapshot.CurrentMapId} screen={snapshot.ScreenState} conn={snapshot.ConnectionState} transition={snapshot.IsMapTransition} flags=0x{(uint)flags:X} transport=0x{transportGuid:X} entry={transportEntryText} current={snapshot.CurrentAction?.ObjectiveType.ToString() ?? "null"} previous={snapshot.PreviousAction?.ObjectiveType.ToString() ?? "null"}";
     }
 
-    private static ActionMessage MakeGoto(float x, float y, float z, float stopDistance = 3f)
+    private static ObjectiveMessage MakeGoto(float x, float y, float z, float stopDistance = 3f)
         => new()
         {
-            ActionType = ActionType.Goto,
+            ObjectiveType = ObjectiveType.Goto,
             Parameters =
             {
                 new RequestParameter { FloatParam = x },
@@ -975,28 +975,28 @@ public sealed class MovementParityTests
             }
         };
 
-    private static ActionMessage MakeSetFacing(float facing)
+    private static ObjectiveMessage MakeSetFacing(float facing)
         => new()
         {
-            ActionType = ActionType.SetFacing,
+            ObjectiveType = ObjectiveType.SetFacing,
             Parameters =
             {
                 new RequestParameter { FloatParam = NormalizeFacing(facing) }
             }
         };
 
-    private static ActionMessage MakeMovement(ActionType actionType, ControlBits bits)
+    private static ObjectiveMessage MakeMovement(ObjectiveType objectiveType, ControlBits bits)
         => new()
         {
-            ActionType = actionType,
+            ObjectiveType = objectiveType,
             Parameters =
             {
                 new RequestParameter { IntParam = (int)bits }
             }
         };
 
-    private static ActionMessage MakeJump()
-        => new() { ActionType = ActionType.Jump };
+    private static ObjectiveMessage MakeJump()
+        => new() { ObjectiveType = ObjectiveType.Jump };
 
     private static Game.Position? PositionOf(WoWActivitySnapshot? snapshot)
         => snapshot?.MovementData?.Position

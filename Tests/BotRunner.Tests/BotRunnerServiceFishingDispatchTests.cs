@@ -15,12 +15,12 @@ namespace BotRunner.Tests;
 public class BotRunnerServiceFishingDispatchTests
 {
     [Fact]
-    public void BuildBehaviorTreeFromActionMessage_StartFishing_ForwardsLocationFlagsAndWaypoints()
+    public void BuildBehaviorTreeFromObjectiveMessage_StartFishing_ForwardsLocationFlagsAndWaypoints()
     {
         var service = CreateService(out _);
-        var node = BuildActionTree(service, new ActionMessage
+        var node = BuildActionTree(service, new ObjectiveMessage
         {
-            ActionType = ActionType.StartFishing,
+            ObjectiveType = ObjectiveType.StartFishing,
             Parameters =
             {
                 new RequestParameter { StringParam = "Ratchet" },
@@ -53,12 +53,12 @@ public class BotRunnerServiceFishingDispatchTests
     }
 
     [Fact]
-    public void BuildBehaviorTreeFromActionMessage_StartFishing_LegacyWaypointOnlyShapeRemainsSupported()
+    public void BuildBehaviorTreeFromObjectiveMessage_StartFishing_LegacyWaypointOnlyShapeRemainsSupported()
     {
         var service = CreateService(out _);
-        var node = BuildActionTree(service, new ActionMessage
+        var node = BuildActionTree(service, new ObjectiveMessage
         {
-            ActionType = ActionType.StartFishing,
+            ObjectiveType = ObjectiveType.StartFishing,
             Parameters =
             {
                 new RequestParameter { FloatParam = 1f },
@@ -94,12 +94,12 @@ public class BotRunnerServiceFishingDispatchTests
         return new BotRunnerService(objectManager.Object, updateClient, dependencies.Object);
     }
 
-    private static IBehaviourTreeNode BuildActionTree(BotRunnerService service, ActionMessage action)
+    private static IBehaviourTreeNode BuildActionTree(BotRunnerService service, ObjectiveMessage action)
     {
         var method = typeof(BotRunnerService).GetMethod("BuildBehaviorTreeFromActions", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(method);
 
-        var actionMap = BotRunnerService.ConvertActionMessageToCharacterActions(action);
+        var actionMap = BotRunnerService.ConvertObjectiveMessageToCharacterActions(action);
         return Assert.IsAssignableFrom<IBehaviourTreeNode>(method!.Invoke(service, [actionMap])!);
     }
 

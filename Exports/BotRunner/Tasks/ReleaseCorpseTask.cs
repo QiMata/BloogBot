@@ -6,7 +6,7 @@ namespace BotRunner.Tasks;
 /// <summary>
 /// Atomic task: release spirit (ghost form) after dying.
 /// Calls ObjectManager.ReleaseSpirit() and pops immediately.
-/// Maps to ActionType.RELEASE_CORPSE from StateManager.
+/// Maps to ObjectiveType.RELEASE_CORPSE from StateManager.
 /// </summary>
 public class ReleaseCorpseTask(IBotContext botContext) : BotTask(botContext), IBotTask
 {

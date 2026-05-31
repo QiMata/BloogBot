@@ -4,7 +4,7 @@ namespace BotRunner.Tasks;
 
 /// <summary>
 /// Pure idle task — sits at the bottom of the task stack and does nothing.
-/// All behavior is directed by StateManager via ActionMessage IPC.
+/// All behavior is directed by StateManager via ObjectiveMessage IPC.
 /// When StateManager sends an action, BotRunnerService builds a behavior tree
 /// that preempts this task. When the behavior tree completes, we return to idle.
 /// </summary>

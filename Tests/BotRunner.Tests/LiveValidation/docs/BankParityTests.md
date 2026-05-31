@@ -22,10 +22,10 @@ exposes those action surfaces.
 
 - BotRunner action targets: `ECONBG1` and `ECONFG1`.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.InteractWith` with the detected
+- Under-test action dispatch: `ObjectiveType.InteractWith` with the detected
   banker GUID.
 - Result: skipped after successful staging and banker interaction because bank
-  deposit/withdraw has no BotRunner `ActionType` surface yet.
+  deposit/withdraw has no BotRunner `ObjectiveType` surface yet.
 
 ### Bank_PurchaseSlot_FgBgParity
 
@@ -33,7 +33,7 @@ exposes those action surfaces.
 - Director: `SHODAN`.
 - Under-test action dispatch: none yet; staging and banker detection are
   migrated.
-- Result: skipped because bank-slot purchase has no BotRunner `ActionType`
+- Result: skipped because bank-slot purchase has no BotRunner `ObjectiveType`
   surface yet.
 
 ## Current Status

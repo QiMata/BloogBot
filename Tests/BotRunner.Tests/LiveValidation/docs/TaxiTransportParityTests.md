@@ -44,8 +44,8 @@ Grom'Gol/Undercity and should not be used for this cross-continent probe.
 
 ## Runtime Linkage
 
-- Taxi parity dispatches `ActionType.VisitFlightMaster` and
-  `ActionType.SelectTaxiNode` to both FG and BG. This is spline movement, not
+- Taxi parity dispatches `ObjectiveType.VisitFlightMaster` and
+  `ObjectiveType.SelectTaxiNode` to both FG and BG. This is spline movement, not
   transport riding.
 - Elevator and zeppelin entries remain documented placeholders here; the direct
   live gameobject-transport ride check now lives in `MovementParityTests`.

@@ -8,7 +8,7 @@ travel mode.
 **Shodan-directed FG action** - `LongPathing.config.json` launches `LPATHFG1`
 as a Tauren Male foreground Warrior action target, `LPATHBG1` idle for
 topology parity, and SHODAN as director. The test body dispatches only
-`ActionType.TravelTo` to the Tauren foreground target after fixture-owned
+`ObjectiveType.TravelTo` to the Tauren foreground target after fixture-owned
 Crossroads staging and taxi readiness.
 
 The test scopes `Injection__DisablePacketHooks=true` and

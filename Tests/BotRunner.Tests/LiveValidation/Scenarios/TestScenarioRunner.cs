@@ -126,7 +126,7 @@ public class TestScenarioRunner
                 var actionAccount = ResolveAccount(scenario.Action.Account);
                 if (actionAccount != null)
                 {
-                    var action = BuildActionMessage(scenario.Action);
+                    var action = BuildObjectiveMessage(scenario.Action);
                     _output.WriteLine($"  Dispatching {scenario.Action.Type} to {actionAccount}");
                     await _bot.SendActionAsync(actionAccount, action);
                 }
@@ -255,9 +255,9 @@ public class TestScenarioRunner
                     result.CombatSeen = true;
 
                 if (snap.CurrentAction != null)
-                    result.ActionTypesSeen.Add(snap.CurrentAction.ActionType.ToString());
+                    result.ObjectiveTypesSeen.Add(snap.CurrentAction.ObjectiveType.ToString());
                 if (snap.PreviousAction != null)
-                    result.ActionTypesSeen.Add(snap.PreviousAction.ActionType.ToString());
+                    result.ObjectiveTypesSeen.Add(snap.PreviousAction.ObjectiveType.ToString());
 
                 cycleMapCounts[mapId] = cycleMapCounts.GetValueOrDefault(mapId, 0) + 1;
 
@@ -274,13 +274,13 @@ public class TestScenarioRunner
             {
                 lastLogTime = sw.Elapsed;
                 _output.WriteLine($"  [{sw.Elapsed.TotalSeconds:F0}s] group={result.GroupFormed}, " +
-                    $"combat={result.CombatSeen}, actions=[{string.Join(",", result.ActionTypesSeen)}]");
+                    $"combat={result.CombatSeen}, actions=[{string.Join(",", result.ObjectiveTypesSeen)}]");
 
                 foreach (var snap in _bot.AllBots)
                 {
                     var pos = snap.Player?.Unit?.GameObject?.Base?.Position;
                     var mapId = snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0;
-                    var action = snap.CurrentAction?.ActionType.ToString() ?? "none";
+                    var action = snap.CurrentAction?.ObjectiveType.ToString() ?? "none";
                     _output.WriteLine($"    {snap.AccountName}: map={mapId}, " +
                         $"pos=({pos?.X:F0},{pos?.Y:F0},{pos?.Z:F0}), action={action}");
                 }
@@ -298,7 +298,7 @@ public class TestScenarioRunner
         // Write observation summary
         Logs?.WriteSummary($"Observation complete: {pollIndex} polls over {sw.Elapsed.TotalSeconds:F0}s");
         Logs?.WriteSummary($"  group={result.GroupFormed}, combat={result.CombatSeen}");
-        Logs?.WriteSummary($"  actions=[{string.Join(",", result.ActionTypesSeen)}]");
+        Logs?.WriteSummary($"  actions=[{string.Join(",", result.ObjectiveTypesSeen)}]");
     }
 
     private void ValidateAssertions(TestScenario scenario, ScenarioResult result)
@@ -312,7 +312,7 @@ public class TestScenarioRunner
         if (a.GroupFormed == true && !result.GroupFormed)
             result.Failures.Add("Expected group to be formed, but no bots reported PartyLeaderGuid != 0");
 
-        if (a.DungeoneeringDispatched == true && !result.ActionTypesSeen.Contains("StartDungeoneering"))
+        if (a.DungeoneeringDispatched == true && !result.ObjectiveTypesSeen.Contains("StartDungeoneering"))
             result.Failures.Add("Expected StartDungeoneering action, but it was never seen");
 
         if (a.CombatSeen == true && !result.CombatSeen)
@@ -325,8 +325,8 @@ public class TestScenarioRunner
                 result.Failures.Add($"Expected {a.MinBotsOnMap.Count}+ bots on map {a.MinBotsOnMap.MapId}, got {onMap}");
         }
 
-        if (a.ActionTypeSeen != null && !result.ActionTypesSeen.Contains(a.ActionTypeSeen))
-            result.Failures.Add($"Expected action type '{a.ActionTypeSeen}' never observed");
+        if (a.ObjectiveTypeSeen != null && !result.ObjectiveTypesSeen.Contains(a.ObjectiveTypeSeen))
+            result.Failures.Add($"Expected action type '{a.ObjectiveTypeSeen}' never observed");
 
         // Snapshot-level conditions
         foreach (var cond in a.SnapshotConditions)
@@ -361,10 +361,10 @@ public class TestScenarioRunner
         var a = scenario.Assertions;
 
         if (a.GroupFormed == true && !result.GroupFormed) return false;
-        if (a.DungeoneeringDispatched == true && !result.ActionTypesSeen.Contains("StartDungeoneering")) return false;
+        if (a.DungeoneeringDispatched == true && !result.ObjectiveTypesSeen.Contains("StartDungeoneering")) return false;
         if (a.CombatSeen == true && !result.CombatSeen) return false;
         if (a.MinBotsOnMap != null && result.GetMapCount(a.MinBotsOnMap.MapId) < a.MinBotsOnMap.Count) return false;
-        if (a.ActionTypeSeen != null && !result.ActionTypesSeen.Contains(a.ActionTypeSeen)) return false;
+        if (a.ObjectiveTypeSeen != null && !result.ObjectiveTypesSeen.Contains(a.ObjectiveTypeSeen)) return false;
 
         return true;
     }
@@ -380,11 +380,11 @@ public class TestScenarioRunner
         };
     }
 
-    private static ActionMessage BuildActionMessage(ScenarioAction action)
+    private static ObjectiveMessage BuildObjectiveMessage(ScenarioAction action)
     {
-        var msg = new ActionMessage
+        var msg = new ObjectiveMessage
         {
-            ActionType = Enum.Parse<ActionType>(action.Type)
+            ObjectiveType = Enum.Parse<ObjectiveType>(action.Type)
         };
 
         foreach (var p in action.Parameters)
@@ -412,8 +412,8 @@ public class TestScenarioRunner
             "Player.Unit.MaxHealth" => (snap.Player?.Unit?.MaxHealth ?? 0).ToString(),
             "Player.Unit.UnitFlags" => (snap.Player?.Unit?.UnitFlags ?? 0).ToString(),
             "Player.Unit.GameObject.Base.MapId" => (snap.Player?.Unit?.GameObject?.Base?.MapId ?? 0).ToString(),
-            "CurrentAction.ActionType" => snap.CurrentAction?.ActionType.ToString(),
-            "PreviousAction.ActionType" => snap.PreviousAction?.ActionType.ToString(),
+            "CurrentAction.ObjectiveType" => snap.CurrentAction?.ObjectiveType.ToString(),
+            "PreviousAction.ObjectiveType" => snap.PreviousAction?.ObjectiveType.ToString(),
             _ => null
         };
     }
@@ -479,7 +479,7 @@ public class ScenarioResult
     public string? FailureReason { get; set; }
     public bool GroupFormed { get; set; }
     public bool CombatSeen { get; set; }
-    public HashSet<string> ActionTypesSeen { get; } = new();
+    public HashSet<string> ObjectiveTypesSeen { get; } = new();
     public List<string> Failures { get; } = new();
 
     // Peak concurrent bots observed on each map in any single poll cycle

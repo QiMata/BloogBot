@@ -124,7 +124,7 @@ public class BattlegroundCoordinator
     public bool RequiresFactionGroupQueue => _bgTypeId != (uint)BattlemasterData.BattlegroundType.AlteracValley
         && _desiredPartyLeaderAccounts.Count > 0;
 
-    public ActionMessage? GetAction(
+    public ObjectiveMessage? GetAction(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
@@ -137,7 +137,7 @@ public class BattlegroundCoordinator
         // an externally-observable state (e.g. QueueForBattleground) — that
         // preserves the one-null-call-per-external-transition test contract.
         const int MaxChainedTransitions = 4;
-        ActionMessage? action = null;
+        ObjectiveMessage? action = null;
         for (int hop = 0; hop < MaxChainedTransitions; hop++)
         {
             var before = _state;
@@ -183,7 +183,7 @@ public class BattlegroundCoordinator
         }
     }
 
-    private ActionMessage? HandleWaitingForBots(
+    private ObjectiveMessage? HandleWaitingForBots(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
@@ -270,20 +270,20 @@ public class BattlegroundCoordinator
     }
 
     /// <summary>
-    /// P3.4: per-bot single-shot dispatch of <see cref="ActionType.ApplyLoadout"/>.
+    /// P3.4: per-bot single-shot dispatch of <see cref="ObjectiveType.ApplyLoadout"/>.
     /// Each bot gets exactly one ApplyLoadout action (or zero if no spec is
     /// configured for its account), then the coordinator waits until every
     /// bot's snapshot reports <c>LoadoutReady</c> or <c>LoadoutFailed</c>
     /// before advancing. LoadoutFailed accounts go on <see cref="ExcludedAccounts"/>
     /// so one broken bot doesn't block the rest.
     /// </summary>
-    private ActionMessage? HandleApplyingLoadouts(
+    private ObjectiveMessage? HandleApplyingLoadouts(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
         RecordLoadoutProgressFromSnapshots(snapshots);
 
-        ActionMessage? action = null;
+        ObjectiveMessage? action = null;
         if (!_loadoutSent.ContainsKey(requestingAccount)
             && !_loadoutReady.ContainsKey(requestingAccount)
             && !_loadoutFailed.ContainsKey(requestingAccount))
@@ -349,7 +349,7 @@ public class BattlegroundCoordinator
     /// circuit immediately. Reuses <see cref="DescribeFactionGroupIssues"/>
     /// so the predicate matches WaitingForBots exactly.
     /// </summary>
-    private ActionMessage? HandleWaitingForRaidFormation(
+    private ObjectiveMessage? HandleWaitingForRaidFormation(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
@@ -512,11 +512,11 @@ public class BattlegroundCoordinator
         IReadOnlyDictionary<string, WoWActivitySnapshot> snapshots)
         => LastAck(correlationId, snapshots)?.Status;
 
-    private ActionMessage? HandleQueueForBattleground(
+    private ObjectiveMessage? HandleQueueForBattleground(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
-        ActionMessage? action = null;
+        ObjectiveMessage? action = null;
 
         if (!_queueSent.ContainsKey(requestingAccount)
             && snapshots.TryGetValue(requestingAccount, out var snapshot)
@@ -538,7 +538,7 @@ public class BattlegroundCoordinator
                     requestingAccount,
                     _bgTypeId);
 
-                action = new ActionMessage { ActionType = ActionType.JoinBattleground };
+                action = new ObjectiveMessage { ObjectiveType = ObjectiveType.JoinBattleground };
                 action.Parameters.Add(new RequestParameter { IntParam = (int)_bgTypeId });
                 action.Parameters.Add(new RequestParameter { IntParam = (int)_bgMapId });
             }
@@ -565,7 +565,7 @@ public class BattlegroundCoordinator
         return action;
     }
 
-    private ActionMessage? HandleWaitForInvite(
+    private ObjectiveMessage? HandleWaitForInvite(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
@@ -613,7 +613,7 @@ public class BattlegroundCoordinator
                 elapsed,
                 mapId);
 
-            var joinAction = new ActionMessage { ActionType = ActionType.JoinBattleground };
+            var joinAction = new ObjectiveMessage { ObjectiveType = ObjectiveType.JoinBattleground };
             joinAction.Parameters.Add(new RequestParameter { IntParam = (int)_bgTypeId });
             joinAction.Parameters.Add(new RequestParameter { IntParam = (int)_bgMapId });
             return joinAction;
@@ -631,10 +631,10 @@ public class BattlegroundCoordinator
             requestingAccount,
             elapsed,
             mapId);
-        return new ActionMessage { ActionType = ActionType.AcceptBattleground };
+        return new ObjectiveMessage { ObjectiveType = ObjectiveType.AcceptBattleground };
     }
 
-    private ActionMessage? TryBuildRestageGotoAction(
+    private ObjectiveMessage? TryBuildRestageGotoAction(
         string accountName,
         WoWActivitySnapshot snapshot,
         string phaseName,
@@ -668,7 +668,7 @@ public class BattlegroundCoordinator
             mapId,
             float.IsNaN(distance) ? "?" : distance.ToString("F0"));
 
-        var action = new ActionMessage { ActionType = ActionType.Goto };
+        var action = new ObjectiveMessage { ObjectiveType = ObjectiveType.Goto };
         action.Parameters.Add(new RequestParameter { FloatParam = target.X });
         action.Parameters.Add(new RequestParameter { FloatParam = target.Y });
         action.Parameters.Add(new RequestParameter { FloatParam = target.Z });
@@ -676,7 +676,7 @@ public class BattlegroundCoordinator
         return action;
     }
 
-    private ActionMessage? HandleAcceptInvite(
+    private ObjectiveMessage? HandleAcceptInvite(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
@@ -684,10 +684,10 @@ public class BattlegroundCoordinator
             return null;
 
         _logger.LogInformation("BG_COORD: Sending ACCEPT_BATTLEGROUND to '{Account}'", requestingAccount);
-        return new ActionMessage { ActionType = ActionType.AcceptBattleground };
+        return new ObjectiveMessage { ObjectiveType = ObjectiveType.AcceptBattleground };
     }
 
-    private ActionMessage? HandleWaitForEntry(
+    private ObjectiveMessage? HandleWaitForEntry(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {

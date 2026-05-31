@@ -11,7 +11,7 @@ namespace BotRunner.Tasks;
 
 /// <summary>
 /// P3.3: executes a <see cref="Communication.LoadoutSpec"/> received via
-/// <c>ActionType.ApplyLoadout</c>. One task per bot, created exactly once
+/// <c>ObjectiveType.ApplyLoadout</c>. One task per bot, created exactly once
 /// per loadout hand-off from StateManager; reports progress through the
 /// shared <c>WoWActivitySnapshot.LoadoutStatus</c> field so the coordinator
 /// can gate raid-formation / queue kick-off on every bot reaching
@@ -398,7 +398,7 @@ public class LoadoutTask : BotTask, IBotTask
         protected void MarkAckFired() => _ackFired = true;
         internal void MarkPendingAckReported() => _pendingAckReported = true;
         internal void MarkTerminalAckReported() => _terminalAckReported = true;
-        internal virtual ActionType AckActionType => ActionType.SendChat;
+        internal virtual ObjectiveType AckObjectiveType => ObjectiveType.SendChat;
         internal virtual uint RelatedId => 0;
 
         internal void InitializeCommandAck(string correlationId)
@@ -412,7 +412,7 @@ public class LoadoutTask : BotTask, IBotTask
             return new CommandAckEvent
             {
                 CorrelationId = _correlationId,
-                ActionType = AckActionType,
+                ObjectiveType = AckObjectiveType,
                 Status = status,
                 FailureReason = failureReason ?? string.Empty,
                 RelatedId = RelatedId,
@@ -622,7 +622,7 @@ public class LoadoutTask : BotTask, IBotTask
         private ulong _equippedGuid;
         public EquipItemStep(uint itemId) { _itemId = itemId; }
         public uint ItemId => _itemId;
-        internal override ActionType AckActionType => ActionType.EquipItem;
+        internal override ObjectiveType AckObjectiveType => ObjectiveType.EquipItem;
         internal override uint RelatedId => _itemId;
         public override string Description => $"equip item {_itemId}";
 
@@ -674,7 +674,7 @@ public class LoadoutTask : BotTask, IBotTask
         private readonly uint _itemId;
         public UseItemStep(uint itemId) { _itemId = itemId; }
         public uint ItemId => _itemId;
-        internal override ActionType AckActionType => ActionType.UseItem;
+        internal override ObjectiveType AckObjectiveType => ObjectiveType.UseItem;
         internal override uint RelatedId => _itemId;
         public override string Description => $"use item {_itemId}";
 

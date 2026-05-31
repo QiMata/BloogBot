@@ -12,7 +12,7 @@ namespace BotRunner.Tasks;
 /// Moves within interact range, sets target, then pops.
 /// The caller (StateManager) is responsible for follow-up actions
 /// (e.g., SelectGossip, AcceptQuest) once the NPC dialog opens.
-/// Maps to ActionType.INTERACT_WITH from StateManager.
+/// Maps to ObjectiveType.INTERACT_WITH from StateManager.
 /// </summary>
 public class InteractWithUnitTask(IBotContext botContext, ulong targetGuid) : BotTask(botContext), IBotTask
 {

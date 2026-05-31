@@ -186,9 +186,9 @@ public class LongPathingTests
             return;
         }
 
-        var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.TravelTo,
+            ObjectiveType = ObjectiveType.TravelTo,
             Parameters =
             {
                 new RequestParameter { IntParam = UndercityMapId },
@@ -294,9 +294,9 @@ public class LongPathingTests
         _output.WriteLine(
             $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no TravelTo dispatch.");
 
-        var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.TravelTo,
+            ObjectiveType = ObjectiveType.TravelTo,
             Parameters =
             {
                 new RequestParameter { IntParam = UndercityMapId },
@@ -680,9 +680,9 @@ public class LongPathingTests
 
         // Dispatch TravelTo Undercity destination — same as the full test, so
         // the route planner emits the same Walk-leg-to-Frezza we're isolating.
-        var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.TravelTo,
+            ObjectiveType = ObjectiveType.TravelTo,
             Parameters =
             {
                 new RequestParameter { IntParam = UndercityMapId },
@@ -833,9 +833,9 @@ public class LongPathingTests
 
         // Same TravelTo Undercity dispatch as the full climb test — exercises
         // the same Walk-leg-to-Frezza decision in the route planner.
-        var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.TravelTo,
+            ObjectiveType = ObjectiveType.TravelTo,
             Parameters =
             {
                 new RequestParameter { IntParam = UndercityMapId },
@@ -992,9 +992,9 @@ public class LongPathingTests
 
         var diagnosticBaseline = startSnapshot?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
 
-        var dispatch = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var dispatch = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.TravelTo,
+            ObjectiveType = ObjectiveType.TravelTo,
             Parameters =
             {
                 new RequestParameter { IntParam = FlameCrestMapId },
@@ -1727,7 +1727,7 @@ public class LongPathingTests
         return $"{label}: map={snapshot.CurrentMapId} pos=({position?.X:F1},{position?.Y:F1},{position?.Z:F1}) " +
             $"distToUndercity={distance:F1} transport=0x{snapshot.MovementData?.TransportGuid ?? 0:X} " +
             $"offset=({snapshot.MovementData?.TransportOffsetX:F1},{snapshot.MovementData?.TransportOffsetY:F1},{snapshot.MovementData?.TransportOffsetZ:F1}) " +
-            $"current={snapshot.CurrentAction?.ActionType.ToString() ?? "null"}";
+            $"current={snapshot.CurrentAction?.ObjectiveType.ToString() ?? "null"}";
     }
 
     private static string SanitizeScreenshotLabel(string label)
@@ -1868,7 +1868,7 @@ public class LongPathingTests
                     },
                     fallTime = movement?.FallTime,
                     splineFlags = movement?.SplineFlags,
-                    currentAction = snapshot.CurrentAction?.ActionType.ToString(),
+                    currentAction = snapshot.CurrentAction?.ObjectiveType.ToString(),
                     recentChat,
                 },
             };

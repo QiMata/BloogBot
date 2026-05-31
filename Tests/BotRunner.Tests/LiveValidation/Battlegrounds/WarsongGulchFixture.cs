@@ -113,9 +113,9 @@ public class WarsongGulchFixture : BattlegroundCoordinatorFixtureBase
             .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var mountSpellId = HordeAccountsOrdered.Contains(accountName, StringComparer.OrdinalIgnoreCase) ? 23509 : 23510;
-            var result = await SendSilentActionAsync(accountName, new ActionMessage
+            var result = await SendSilentActionAsync(accountName, new ObjectiveMessage
             {
-                ActionType = ActionType.CastSpell,
+                ObjectiveType = ObjectiveType.CastSpell,
                 Parameters = { new RequestParameter { IntParam = mountSpellId } }
             });
             if (result != ResponseResult.Success)

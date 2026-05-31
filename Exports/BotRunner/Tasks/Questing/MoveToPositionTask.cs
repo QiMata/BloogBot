@@ -6,7 +6,7 @@ namespace BotRunner.Tasks;
 /// <summary>
 /// Atomic task: move the player to a specific (x,y,z) position using pathfinding.
 /// Pops itself when within tolerance distance or if combat interrupts.
-/// Maps to ActionType.GOTO from StateManager.
+/// Maps to ObjectiveType.GOTO from StateManager.
 /// </summary>
 public class MoveToPositionTask(IBotContext botContext, Position targetPosition, float tolerance = 3.0f) : BotTask(botContext), IBotTask
 {

@@ -1,6 +1,6 @@
 # WandAttackTests
 
-Tests equipping a wand and dispatching `ActionType.StartWandAttack` against a
+Tests equipping a wand and dispatching `ObjectiveType.StartWandAttack` against a
 natural Durotar creature target.
 
 ## Bot Execution Mode
@@ -28,16 +28,16 @@ encapsulated in `StageBotRunnerAtDurotarMobAreaAsync`.
 | Step | Action | Details |
 |------|--------|---------|
 | 0 | Stage loadout | `StageBotRunnerLoadoutAsync(account, label, spells=[5009,5019], skills=[(228,1,300)], items=[(5240,1)])` - clean slate, clear bag 0, learn Wands + Shoot, set Wands skill, add Torchlight Wand. |
-| 1 | Equip wand | Dispatch `ActionType.EquipItem` with `IntParam = 5240`; poll ranged slot `17`. |
+| 1 | Equip wand | Dispatch `ObjectiveType.EquipItem` with `IntParam = 5240`; poll ranged slot `17`. |
 | 2 | Stage mob area | `StageBotRunnerAtDurotarMobAreaAsync(account, label)` teleports the target to the Valley of Trials creature cluster and waits for nearby units. |
 | 3 | Select target | Pick the nearest living low-level creature within wand range from `NearbyUnits`. |
-| 4 | Start wand attack | Dispatch `ActionType.StartWandAttack` with the target GUID as `LongParam`. |
+| 4 | Start wand attack | Dispatch `ObjectiveType.StartWandAttack` with the target GUID as `LongParam`. |
 | 5 | Verify engagement | Poll for player combat state or target health drop/gone. |
-| 6 | Cleanup action | Dispatch `ActionType.StopAttack`. |
+| 6 | Cleanup action | Dispatch `ObjectiveType.StopAttack`. |
 
 **StateManager/BotRunner Action Flow:**
 
-`ActionType.StartWandAttack` -> `BuildStartWandAttackSequence(targetGuid)` ->
+`ObjectiveType.StartWandAttack` -> `BuildStartWandAttackSequence(targetGuid)` ->
 set target -> stop movement -> face target -> `_objectManager.StartWandAttack()`.
 
 FG path: Lua `CastSpellByName('Shoot')`.

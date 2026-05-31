@@ -1,7 +1,7 @@
 # AuctionHouseTests
 
 `AuctionHouseTests` validates Orgrimmar auctioneer detection and
-`ActionType.InteractWith` dispatch through the Shodan test-director pattern.
+`ObjectiveType.InteractWith` dispatch through the Shodan test-director pattern.
 The test body issues no GM setup commands.
 
 ## Shodan Shape
@@ -13,7 +13,7 @@ The test body issues no GM setup commands.
 2. `AssertConfiguredCharactersMatchAsync(...)` verifies the live roster.
 3. `StageBotRunnerAtOrgrimmarAuctionHouseAsync(...)` stages each BotRunner
    target at the Orgrimmar auction house.
-4. The interaction test dispatches `ActionType.InteractWith` only to FG/BG,
+4. The interaction test dispatches `ObjectiveType.InteractWith` only to FG/BG,
    using the detected auctioneer GUID.
 5. Assertions come from snapshots and nearby-unit markers.
 
@@ -30,7 +30,7 @@ The test body issues no GM setup commands.
 
 - BotRunner action targets: `ECONBG1`, then `ECONFG1` when actionable.
 - Director: `SHODAN`.
-- Under-test action dispatch: `ActionType.InteractWith` with the detected
+- Under-test action dispatch: `ObjectiveType.InteractWith` with the detected
   auctioneer GUID.
 
 ## Current Status

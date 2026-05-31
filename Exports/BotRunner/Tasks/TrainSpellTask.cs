@@ -6,7 +6,7 @@ namespace BotRunner.Tasks;
 /// <summary>
 /// Atomic task: train a specific spell/skill from an open trainer window.
 /// The trainer dialog must already be open.
-/// Maps to ActionType.TRAIN_SKILL from StateManager.
+/// Maps to ObjectiveType.TRAIN_SKILL from StateManager.
 /// </summary>
 public class TrainSpellTask(IBotContext botContext, int spellIndex) : BotTask(botContext), IBotTask
 {

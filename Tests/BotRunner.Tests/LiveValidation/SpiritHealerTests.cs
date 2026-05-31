@@ -13,7 +13,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// <summary>
 /// Shodan-directed spirit-healer coverage. SHODAN stages the target at a
 /// graveyard and induces corpse state; the BotRunner target receives only
-/// death/recovery ActionType dispatches.
+/// death/recovery ObjectiveType dispatches.
 /// </summary>
 [Collection(LiveValidationCollection.Name)]
 public class SpiritHealerTests
@@ -55,7 +55,7 @@ public class SpiritHealerTests
             Assert.NotNull(corpseSnapshot);
             Assert.False(LiveBotFixture.IsStrictAlive(corpseSnapshot), $"{target.RoleLabel}: target should be dead before release.");
 
-            await SendSpiritHealerActionAsync(target, ActionType.ReleaseCorpse, "ReleaseCorpse");
+            await SendSpiritHealerActionAsync(target, ObjectiveType.ReleaseCorpse, "ReleaseCorpse");
 
             var ghostConfirmed = await _bot.WaitForSnapshotConditionAsync(
                 target.AccountName,
@@ -83,9 +83,9 @@ public class SpiritHealerTests
 
             await SendSpiritHealerActionAsync(
                 target,
-                new ActionMessage
+                new ObjectiveMessage
                 {
-                    ActionType = ActionType.Goto,
+                    ObjectiveType = ObjectiveType.Goto,
                     Parameters =
                     {
                         new RequestParameter { FloatParam = spiritHealerPosition.X },
@@ -107,9 +107,9 @@ public class SpiritHealerTests
 
             await SendSpiritHealerActionAsync(
                 target,
-                new ActionMessage
+                new ObjectiveMessage
                 {
-                    ActionType = ActionType.InteractWith,
+                    ObjectiveType = ObjectiveType.InteractWith,
                     Parameters = { new RequestParameter { LongParam = unchecked((long)spiritHealerGuid) } }
                 },
                 "InteractWithSpiritHealer",
@@ -169,18 +169,18 @@ public class SpiritHealerTests
 
     private Task<ResponseResult> SendSpiritHealerActionAsync(
         LiveBotFixture.BotRunnerActionTarget target,
-        ActionType actionType,
+        ObjectiveType objectiveType,
         string stepName,
         int timeoutSeconds = 12)
         => SendSpiritHealerActionAsync(
             target,
-            new ActionMessage { ActionType = actionType },
+            new ObjectiveMessage { ObjectiveType = objectiveType },
             stepName,
             timeoutSeconds);
 
     private async Task<ResponseResult> SendSpiritHealerActionAsync(
         LiveBotFixture.BotRunnerActionTarget target,
-        ActionMessage action,
+        ObjectiveMessage action,
         string stepName,
         int timeoutSeconds = 12)
     {

@@ -69,9 +69,9 @@ public class CombatCoordinator
 
     /// <summary>
     /// Called each tick from CharacterStateSocketListener.HandleRequest.
-    /// Returns an ActionMessage to inject into the response for the given account, or null.
+    /// Returns an ObjectiveMessage to inject into the response for the given account, or null.
     /// </summary>
-    public ActionMessage? GetAction(
+    public ObjectiveMessage? GetAction(
         string requestingAccount,
         ConcurrentDictionary<string, WoWActivitySnapshot> snapshots)
     {
@@ -124,7 +124,7 @@ public class CombatCoordinator
 
     // ===== State Handlers =====
 
-    private ActionMessage? HandleWaitingForBots(string requestingAccount,
+    private ObjectiveMessage? HandleWaitingForBots(string requestingAccount,
         WoWActivitySnapshot fgSnapshot, WoWActivitySnapshot bgSnapshot)
     {
         // Check if bots are already in a group — skip formation if so
@@ -140,7 +140,7 @@ public class CombatCoordinator
         return null;
     }
 
-    private ActionMessage? HandleFormGroupSendInvite(string requestingAccount,
+    private ObjectiveMessage? HandleFormGroupSendInvite(string requestingAccount,
         WoWActivitySnapshot fgSnapshot, WoWActivitySnapshot bgSnapshot)
     {
         // Double-check: if already grouped (race condition), skip to GroupFormed
@@ -156,24 +156,24 @@ public class CombatCoordinator
         {
             _logger.LogInformation($"COMBAT_COORD: Sending group invite from '{_foregroundAccount}' to '{_backgroundCharName}'");
             TransitionTo(CoordinatorState.FormGroup_WaitForAccept);
-            return MakeAction(ActionType.SendGroupInvite, _backgroundCharName);
+            return MakeAction(ObjectiveType.SendGroupInvite, _backgroundCharName);
         }
         return null;
     }
 
-    private ActionMessage? HandleFormGroupWaitForAccept(string requestingAccount)
+    private ObjectiveMessage? HandleFormGroupWaitForAccept(string requestingAccount)
     {
         _tickCount++;
         if (_tickCount >= 5 && requestingAccount == _backgroundAccount)
         {
             _logger.LogInformation($"COMBAT_COORD: Background bot accepting group invite");
             TransitionTo(CoordinatorState.FormGroup_VerifyGroup);
-            return MakeAction(ActionType.AcceptGroupInvite);
+            return MakeAction(ObjectiveType.AcceptGroupInvite);
         }
         return null;
     }
 
-    private ActionMessage? HandleFormGroupVerify(string requestingAccount,
+    private ObjectiveMessage? HandleFormGroupVerify(string requestingAccount,
         WoWActivitySnapshot fgSnapshot, WoWActivitySnapshot bgSnapshot)
     {
         _tickCount++;
@@ -193,7 +193,7 @@ public class CombatCoordinator
         return null;
     }
 
-    private ActionMessage? HandleGroupFormed(string requestingAccount,
+    private ObjectiveMessage? HandleGroupFormed(string requestingAccount,
         WoWActivitySnapshot fgSnapshot, WoWActivitySnapshot bgSnapshot)
     {
         // Only send actions to background bot
@@ -228,7 +228,7 @@ public class CombatCoordinator
         return TryFollowWarrior(fgSnapshot, bgSnapshot);
     }
 
-    private ActionMessage? HandleCombatSupport(string requestingAccount,
+    private ObjectiveMessage? HandleCombatSupport(string requestingAccount,
         WoWActivitySnapshot fgSnapshot, WoWActivitySnapshot bgSnapshot)
     {
         // Only send actions to background bot
@@ -295,7 +295,7 @@ public class CombatCoordinator
         return null;
     }
 
-    private ActionMessage? HandleShamanResting(string requestingAccount,
+    private ObjectiveMessage? HandleShamanResting(string requestingAccount,
         WoWActivitySnapshot fgSnapshot, WoWActivitySnapshot bgSnapshot)
     {
         if (requestingAccount != _backgroundAccount)
@@ -340,7 +340,7 @@ public class CombatCoordinator
         _spellsResolved = true;
     }
 
-    private ActionMessage? TryFollowWarrior(WoWActivitySnapshot fgSnapshot, WoWActivitySnapshot bgSnapshot)
+    private ObjectiveMessage? TryFollowWarrior(WoWActivitySnapshot fgSnapshot, WoWActivitySnapshot bgSnapshot)
     {
         if ((DateTime.UtcNow - _lastFollowSentAt).TotalSeconds < FOLLOW_COOLDOWN_SEC)
             return null;
@@ -407,25 +407,25 @@ public class CombatCoordinator
         return (pos.X, pos.Y, pos.Z);
     }
 
-    private static ActionMessage MakeAction(ActionType actionType, string? stringParam = null)
+    private static ObjectiveMessage MakeAction(ObjectiveType objectiveType, string? stringParam = null)
     {
-        var action = new ActionMessage { ActionType = actionType };
+        var action = new ObjectiveMessage { ObjectiveType = objectiveType };
         if (stringParam != null)
             action.Parameters.Add(new RequestParameter { StringParam = stringParam });
         return action;
     }
 
-    private static ActionMessage MakeCastSpellAction(int spellId, long targetGuid)
+    private static ObjectiveMessage MakeCastSpellAction(int spellId, long targetGuid)
     {
-        var action = new ActionMessage { ActionType = ActionType.CastSpell };
+        var action = new ObjectiveMessage { ObjectiveType = ObjectiveType.CastSpell };
         action.Parameters.Add(new RequestParameter { IntParam = spellId });
         action.Parameters.Add(new RequestParameter { LongParam = targetGuid });
         return action;
     }
 
-    private static ActionMessage MakeGoToAction(float x, float y, float z)
+    private static ObjectiveMessage MakeGoToAction(float x, float y, float z)
     {
-        var action = new ActionMessage { ActionType = ActionType.Goto };
+        var action = new ObjectiveMessage { ObjectiveType = ObjectiveType.Goto };
         action.Parameters.Add(new RequestParameter { FloatParam = x });
         action.Parameters.Add(new RequestParameter { FloatParam = y });
         action.Parameters.Add(new RequestParameter { FloatParam = z });

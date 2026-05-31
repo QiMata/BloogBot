@@ -12,7 +12,7 @@
 Activity     ← top-level goal:        "Run Wailing Caverns", "Fish at Ratchet"
   └─ Objective  ← sub-goal:           "Reach the instance portal", "Kill the next boss"
        └─ Task     ← behavior tree node: "Travel to (x,y,z)", "Cast Holy Light on tank"
-            └─ Action  ← single wire message: ActionMessage{ActionType=TravelTo, ...}
+            └─ Action  ← single wire message: ObjectiveMessage{ObjectiveType=TravelTo, ...}
 ```
 
 | Layer | Plural noun | Granularity | Lives where today |
@@ -20,7 +20,7 @@ Activity     ← top-level goal:        "Run Wailing Caverns", "Fish at Ratchet"
 | **Activity** | "the bot's current Activity" | Multi-minute. One assigned at a time per bot. Catalog-row driven. | [`Exports/GameData.Core/Models/Activities/ActivityDefinition.cs`](../../Exports/GameData.Core/Models/Activities/ActivityDefinition.cs) catalog. **No runtime `IActivity` interface yet** — slated for Phase 2 (see [`Plan/03_PHASE2_ONDEMAND_ENGINE.md`](../Plan/03_PHASE2_ONDEMAND_ENGINE.md)). |
 | **Objective** | "the bot's current Objective" | Tens of seconds to single-minute. Multiple per Activity, sequenced. | **Not yet abstracted.** Today's `WoWActivitySnapshot.travel_objective` and `progression_status.current_objective` are the only Objective-shaped fields on the wire; a general `IObjective` is slated for Phase 2. |
 | **Task** | "the task stack" (LIFO) | Single-second to tens-of-seconds. Behavior-tree node. | [`Exports/BotRunner/Interfaces/IBotTask.cs`](../../Exports/BotRunner/Interfaces/IBotTask.cs) — Phase-1 target contract. Concrete tasks live under `Exports/BotRunner/Tasks/` and `BotProfiles/<ClassSpec>/Tasks/`. |
-| **Action** | "an action sent over the wire" | Single tick / packet. | `ActionType` enum in [`Exports/BotCommLayer/Models/ProtoDef/communication.proto`](../../Exports/BotCommLayer/Models/ProtoDef/communication.proto) (~85 values). Carried by `ActionMessage`. |
+| **Action** | "an action sent over the wire" | Single tick / packet. | `ObjectiveType` enum in [`Exports/BotCommLayer/Models/ProtoDef/communication.proto`](../../Exports/BotCommLayer/Models/ProtoDef/communication.proto) (~85 values). Carried by `ObjectiveMessage`. |
 
 ## Worked example — "Run UBRS"
 
@@ -29,7 +29,7 @@ Activity     ← top-level goal:        "Run Wailing Caverns", "Fish at Ratchet"
 | Activity | `dungeon.ubrs` (ActivityDefinition row in the hard-coded catalog) |
 | Objective | `reach-flame-crest` → `enter-instance-portal` → `clear-trash-to-rend` → `kill-rend-blackhand` → `loot-rend` → `exit-instance` |
 | Task (one Objective unfolds into many tasks; sample for `reach-flame-crest`) | `TravelToTask(coord)` → pushes `BoardTransportTask(zeppelin_og)` → pushes `WalkToCoordTask(deck_anchor)` → pushes `WaitForLandingTask` |
-| Action (one Task unfolds into a stream of actions) | `ActionMessage{ActionType=TravelTo, x,y,z}` then `ActionMessage{ActionType=Interact, target=zeppelin}` then a stream of `ActionMessage{ActionType=StartMovement}` / `StopMovement` over many ticks |
+| Action (one Task unfolds into a stream of actions) | `ObjectiveMessage{ObjectiveType=TravelTo, x,y,z}` then `ObjectiveMessage{ObjectiveType=Interact, target=zeppelin}` then a stream of `ObjectiveMessage{ObjectiveType=StartMovement}` / `StopMovement` over many ticks |
 
 ## Layer ownership rules
 
@@ -40,8 +40,8 @@ Activity     ← top-level goal:        "Run Wailing Caverns", "Fish at Ratchet"
 - An **Objective** can only push existing **Tasks**. Adding a new
   Objective shape that requires a wholly new behavior-tree node is a
   spec change.
-- A **Task** can only emit existing **Actions** (`ActionType` enum
-  values). Adding a new ActionType is a protobuf change requiring all
+- A **Task** can only emit existing **Actions** (`ObjectiveType` enum
+  values). Adding a new ObjectiveType is a protobuf change requiring all
   clients to be regenerated (rule R10).
 - **Actions are the only thing that crosses the StateManager↔BotRunner
   TCP boundary.** Activities and Objectives are runtime state derived
@@ -56,7 +56,7 @@ Activity     ← top-level goal:        "Run Wailing Caverns", "Fish at Ratchet"
 | Activity | `ActivityDefinition` catalog row + `AssignedActivity` string (`"Fishing[Ratchet]"`) parsed by [`ActivityResolver`](../../Exports/BotRunner/Activities/ActivityResolver.cs). Returns an `IBotTask` directly — no `IActivity` object. | (no change) | New `IActivity` runtime contract modeled on D2's [`IActivity.cs`](../../../../D2Bot/D2Orchestrator/Orchestration/Activities/IActivity.cs). Instantiated *from* an `ActivityDefinition`. |
 | Objective | Snapshot-only: `WoWActivitySnapshot.travel_objective` (travel-specific) + `progression_status.current_objective` (free-form string). No `IObjective` interface. | (no change) | New `IObjective` runtime contract modeled on D2's [`BotObjectiveContract`](../../../../D2Bot/D2Orchestrator/Orchestration/ObjectiveRuntimeContracts.cs). New `ObjectiveType` enum on the proto. |
 | Task | [`IBotTask`](../../Exports/BotRunner/Interfaces/IBotTask.cs) + `BotTaskStatus` enum. Stack-based. | Phase-1 closes the IBotTask substrate per [`Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md`](../Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md). | (no change) |
-| Action | `ActionType` enum (~85 values) + `ActionMessage` over protobuf. | (no change) | (no change — closed set) |
+| Action | `ObjectiveType` enum (~85 values) + `ObjectiveMessage` over protobuf. | (no change) | (no change — closed set) |
 
 ## Test-naming convention
 
@@ -72,7 +72,7 @@ Tests/BotRunner.Tests/LiveValidation/
 ```
 
 Tests **assert against the bot's Activity + Objective + Task state** as
-observed in `WoWActivitySnapshot`. Tests must not drive `ActionMessage`
+observed in `WoWActivitySnapshot`. Tests must not drive `ObjectiveMessage`
 dispatch directly — see [WWoW CLAUDE.md → Test Isolation
 Rules](../../CLAUDE.md#test-isolation-rules) for the enforcement contract.
 

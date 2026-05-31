@@ -17,7 +17,7 @@ namespace BotRunner.Tests.LiveValidation;
 /// - The fixture logs fresh characters in (cinematic auto-dismisses), teleports
 ///   both to the Valley of Trials boar cluster, and hands off control here.
 /// - No <c>.damage</c>, no runtime GM-mode toggling, no <c>.respawn</c>.
-///   Damage comes from the bot's own auto-attack via <see cref="ActionType.StartMeleeAttack"/>;
+///   Damage comes from the bot's own auto-attack via <see cref="ObjectiveType.StartMeleeAttack"/>;
 ///   BotRunner's behavior tree owns chase, facing, and attack toggle.
 /// - The test acts as StateManager's consumer: it asks the fixture for a mob
 ///   GUID, dispatches one StartMeleeAttack to the BG bot, and waits for the
@@ -77,15 +77,15 @@ public class CombatLoopTests
             "A Mottled Boar must be visible in both BG and FG NearbyUnits within 20s of staging.");
 
         _output.WriteLine($"[ARENA] Both bots auto-attacking boar 0x{targetGuid:X}");
-        var attack = new ActionMessage
+        var attack = new ObjectiveMessage
         {
-            ActionType = ActionType.StartMeleeAttack,
+            ObjectiveType = ObjectiveType.StartMeleeAttack,
             Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
         };
         var bgDispatch = await _bot.SendActionAsync(_bot.BgAccount, attack);
-        var fgDispatch = await _bot.SendActionAsync(_bot.FgAccount, new ActionMessage
+        var fgDispatch = await _bot.SendActionAsync(_bot.FgAccount, new ObjectiveMessage
         {
-            ActionType = ActionType.StartMeleeAttack,
+            ObjectiveType = ObjectiveType.StartMeleeAttack,
             Parameters = { new RequestParameter { LongParam = (long)targetGuid } }
         });
         Assert.Equal(ResponseResult.Success, bgDispatch);

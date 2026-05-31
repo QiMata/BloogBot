@@ -20,7 +20,7 @@ namespace BotRunner.Tests.LiveValidation;
 ///   2) stage each BotRunner target through StageBotRunnerLoadoutAsync
 ///      (teach city-teleport spell + add Rune of Teleportation reagents)
 ///      and StageBotRunnerAtRazorHillAsync,
-///   3) dispatch only ActionType.CastSpell from the test body,
+///   3) dispatch only ObjectiveType.CastSpell from the test body,
 ///   4) assert on snapshot position arrival.
 ///
 /// SHODAN remains director-only.
@@ -72,7 +72,7 @@ public class MageTeleportTests
     /// <summary>
     /// Horde mage at Razor Hill casts Teleport: Orgrimmar (3567).
     ///
-    /// BG-only by design: <c>ActionType.CastSpell</c> dispatches via
+    /// BG-only by design: <c>ObjectiveType.CastSpell</c> dispatches via
     /// <c>_objectManager.CastSpell(int spellId)</c>, which is a documented
     /// no-op on the Foreground runner (only the <c>CastSpellByName(string)</c>
     /// Lua overload casts there). The launch roster still includes the FG
@@ -88,13 +88,13 @@ public class MageTeleportTests
         var bgTarget = targets.FirstOrDefault(t => !t.IsForeground);
         global::Tests.Infrastructure.Skip.If(
             string.IsNullOrWhiteSpace(bgTarget.AccountName),
-            "Horde Orgrimmar teleport requires a BG bot (FG ActionType.CastSpell-by-id is a no-op).");
+            "Horde Orgrimmar teleport requires a BG bot (FG ObjectiveType.CastSpell-by-id is a no-op).");
 
         _output.WriteLine(
             $"[ACTION-PLAN] SHODAN {_bot.ShodanAccountName}/{_bot.ShodanCharacterName}: director only, no CastSpell dispatch.");
         foreach (var target in targets)
         {
-            var willDispatch = target.IsForeground ? "idle (FG ActionType.CastSpell-by-id is a no-op)" : "dispatch CastSpell";
+            var willDispatch = target.IsForeground ? "idle (FG ObjectiveType.CastSpell-by-id is a no-op)" : "dispatch CastSpell";
             _output.WriteLine(
                 $"[ACTION-PLAN] {target.RoleLabel} {target.AccountName}/{target.CharacterName}: " +
                 $"stage Razor Hill + Teleport: Orgrimmar ({TeleportOrgrimmar}), {willDispatch}.");
@@ -150,9 +150,9 @@ public class MageTeleportTests
         Assert.NotNull(startPos);
         _output.WriteLine($"[TEST] Start position: ({startPos!.X:F1}, {startPos.Y:F1}, {startPos.Z:F1})");
 
-        var castResult = await _bot.SendActionAsync(bgTarget.AccountName, new ActionMessage
+        var castResult = await _bot.SendActionAsync(bgTarget.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.CastSpell,
+            ObjectiveType = ObjectiveType.CastSpell,
             Parameters = { new RequestParameter { IntParam = (int)TeleportStormwind } }
         });
         _output.WriteLine($"[TEST] CAST_SPELL result: {castResult}");
@@ -295,9 +295,9 @@ public class MageTeleportTests
         }
         _output.WriteLine($"  [{label}] Start position: ({startPos.X:F1}, {startPos.Y:F1}, {startPos.Z:F1})");
 
-        var castResult = await _bot.SendActionAsync(account, new ActionMessage
+        var castResult = await _bot.SendActionAsync(account, new ObjectiveMessage
         {
-            ActionType = ActionType.CastSpell,
+            ObjectiveType = ObjectiveType.CastSpell,
             Parameters = { new RequestParameter { IntParam = (int)TeleportOrgrimmar } }
         });
         _output.WriteLine($"  [{label}] CAST_SPELL result: {castResult}");

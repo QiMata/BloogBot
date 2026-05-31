@@ -40,7 +40,7 @@ public partial class LiveBotFixture
     /// GM-admin liaison (it lets human players on the live server request
     /// on-demand activities from the WoWStateManager), and the LiveValidation
     /// suite reuses it for setup tasks that require GM targeting — *only* for
-    /// setup. ActionType.* dispatches must go to a dedicated test account
+    /// setup. ObjectiveType.* dispatches must go to a dedicated test account
     /// (TESTBOT1/TESTBOT2 or a category-specific sibling), never to Shodan.
     /// <see cref="ResolveBotRunnerActionTargets"/> enforces that invariant.
     /// </summary>
@@ -238,7 +238,7 @@ public partial class LiveBotFixture
     /// throughout the test.
     ///
     /// After this helper returns, the test body should only dispatch the
-    /// <c>ActionType</c> under test and assert on snapshot / task markers. It
+    /// <c>ObjectiveType</c> under test and assert on snapshot / task markers. It
     /// should not issue further GM commands.
     ///
     /// Internally the helper uses Shodan as the command sender for
@@ -262,7 +262,7 @@ public partial class LiveBotFixture
     /// GM mode before staging.
     /// </param>
     /// <param name="clearInventoryFirst">
-    /// When true, dispatch <c>ActionType.DestroyItem</c> across bag 0 so the
+    /// When true, dispatch <c>ObjectiveType.DestroyItem</c> across bag 0 so the
     /// target has deterministic bag contents before items are added.
     /// </param>
     public async Task StageBotRunnerLoadoutAsync(

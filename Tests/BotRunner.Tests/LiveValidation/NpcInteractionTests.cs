@@ -188,7 +188,7 @@ public class NpcInteractionTests
             $"name={vendorUnit?.GameObject?.Name}, flags={vendorUnit?.NpcFlags}, distance={vendorDistance:F1}y");
 
         var coinageBefore = before?.Player?.Coinage ?? 0;
-        await SendNpcActionAsync(target, ActionType.VisitVendor, "VisitVendor");
+        await SendNpcActionAsync(target, ObjectiveType.VisitVendor, "VisitVendor");
         await _bot.WaitForSnapshotConditionAsync(
             target.AccountName,
             snapshot => (snapshot.Player?.Coinage ?? coinageBefore) != coinageBefore
@@ -253,7 +253,7 @@ public class NpcInteractionTests
             $"has{AspectOfTheHawkSpellId}={hadSpellBefore}, coinageBefore={coinageBefore}");
 
         var timer = Stopwatch.StartNew();
-        await SendNpcActionAsync(target, ActionType.VisitTrainer, "VisitTrainer", timeoutSeconds: 45);
+        await SendNpcActionAsync(target, ObjectiveType.VisitTrainer, "VisitTrainer", timeoutSeconds: 45);
 
         var learnedSpell = await _bot.WaitForSnapshotConditionAsync(
             target.AccountName,
@@ -319,7 +319,7 @@ public class NpcInteractionTests
 
         var preFmSnap = await _bot.GetSnapshotAsync(target.AccountName);
         var preChatCount = preFmSnap?.RecentChatMessages?.Count ?? 0;
-        await SendNpcActionAsync(target, ActionType.VisitFlightMaster, "VisitFlightMaster");
+        await SendNpcActionAsync(target, ObjectiveType.VisitFlightMaster, "VisitFlightMaster");
         await _bot.WaitForSnapshotConditionAsync(
             target.AccountName,
             snapshot => snapshot.RecentChatMessages.Count > preChatCount,
@@ -332,15 +332,15 @@ public class NpcInteractionTests
 
     private async Task<ResponseResult> SendNpcActionAsync(
         LiveBotFixture.BotRunnerActionTarget target,
-        ActionType actionType,
+        ObjectiveType objectiveType,
         string stepName,
         int timeoutSeconds = 12)
     {
         var correlationId =
             $"npc:{target.AccountName}:{Interlocked.Increment(ref s_npcCorrelationSequence)}";
-        var action = new ActionMessage
+        var action = new ObjectiveMessage
         {
-            ActionType = actionType,
+            ObjectiveType = objectiveType,
             CorrelationId = correlationId,
         };
 

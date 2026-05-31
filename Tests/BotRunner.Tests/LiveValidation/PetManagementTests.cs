@@ -40,9 +40,9 @@ public class PetManagementTests
         await StageHunterPetLoadoutAsync(target);
 
         _output.WriteLine("[TEST] Casting Call Pet via BG CastSpell dispatch.");
-        var callResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var callResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.CastSpell,
+            ObjectiveType = ObjectiveType.CastSpell,
             Parameters = { new RequestParameter { IntParam = (int)CallPetSpellId } }
         });
         _output.WriteLine($"[TEST] CAST_SPELL (Call Pet) result: {callResult}");
@@ -60,9 +60,9 @@ public class PetManagementTests
         _output.WriteLine($"[TEST] Player GUID: 0x{playerGuid:X}");
 
         _output.WriteLine("[TEST] Casting Dismiss Pet via BG CastSpell dispatch.");
-        var dismissResult = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var dismissResult = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.CastSpell,
+            ObjectiveType = ObjectiveType.CastSpell,
             Parameters = { new RequestParameter { IntParam = (int)DismissPetSpellId } }
         });
         _output.WriteLine($"[TEST] CAST_SPELL (Dismiss Pet) result: {dismissResult}");

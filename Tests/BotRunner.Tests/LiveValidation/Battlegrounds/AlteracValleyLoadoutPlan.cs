@@ -66,7 +66,7 @@ internal static class AlteracValleyLoadoutPlan
     /// battleground fixtures can stamp the full per-bot loadout onto
     /// <c>CharacterSettings.Loadout</c> before StateManager reads the config.
     /// From there, the <see cref="WoWStateManager.Coordination.BattlegroundCoordinator"/>
-    /// hands it off to BotRunner once per bot via <c>ActionType.ApplyLoadout</c>.
+    /// hands it off to BotRunner once per bot via <c>ObjectiveType.ApplyLoadout</c>.
     /// Kept here (rather than on the fixture) because the class/faction →
     /// item/spell mapping already lives in this file.
     /// </summary>

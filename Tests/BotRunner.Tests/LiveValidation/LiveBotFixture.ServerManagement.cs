@@ -1111,9 +1111,9 @@ public partial class LiveBotFixture
         var baselineErrorCount = baseline?.RecentErrors.Count ?? 0;
 
         var correlationId = $"shodan-collect:{accountName}:{Interlocked.Increment(ref _testCorrelationSequence).ToString(CultureInfo.InvariantCulture)}";
-        var action = new ActionMessage
+        var action = new ObjectiveMessage
         {
-            ActionType = ActionType.SendChat,
+            ObjectiveType = ObjectiveType.SendChat,
             CorrelationId = correlationId,
             Parameters = { new RequestParameter { StringParam = command } }
         };

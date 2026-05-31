@@ -136,7 +136,7 @@ namespace BotRunner
 
         private readonly record struct PendingCommandAckState(
             string CorrelationId,
-            Communication.ActionType ActionType,
+            Communication.ObjectiveType ObjectiveType,
             uint RelatedId);
 
         // Extracted components
@@ -396,13 +396,13 @@ namespace BotRunner
                     if (_tickCount % 100 == 1)
                     {
                         var action = incomingActivityMemberState?.CurrentAction;
-                        var actionType = action?.ActionType.ToString() ?? "null";
+                        var objectiveType = action?.ObjectiveType.ToString() ?? "null";
                         var taskTop = _botTasks.Count > 0 ? _botTasks.Peek().GetType().Name : "empty";
                         var screenState = _activitySnapshot?.ScreenState ?? "?";
                         var mapId = (_objectManager.Player as GameData.Core.Interfaces.IWoWPlayer)?.MapId ?? 0;
                         var position = _objectManager.Player?.Position;
                         DiagLog(
-                            $"[TICK#{_tickCount}] ready={playerWorldReady} action={actionType} tree={_behaviorTreeStatus} " +
+                            $"[TICK#{_tickCount}] ready={playerWorldReady} action={objectiveType} tree={_behaviorTreeStatus} " +
                             $"tasks={_botTasks.Count}({taskTop}) screen={screenState} map={mapId} char={_activitySnapshot?.CharacterName ?? "?"} " +
                             $"snapIndoors={_activitySnapshot?.IsIndoors} physIndoors={_objectManager.PhysicsIsIndoors} " +
                             $"env=0x{(uint)_objectManager.PhysicsEnvironmentFlags:X} pos=({position?.X:F1},{position?.Y:F1},{position?.Z:F1})");
@@ -527,7 +527,7 @@ namespace BotRunner
 
         private void EnqueueCommandAckEvent(
             string? correlationId,
-            Communication.ActionType actionType,
+            Communication.ObjectiveType objectiveType,
             CommandAckEvent.Types.AckStatus status,
             string? failureReason = null,
             uint relatedId = 0)
@@ -540,7 +540,7 @@ namespace BotRunner
                 _recentCommandAckEvents.Enqueue(new CommandAckEvent
                 {
                     CorrelationId = correlationId,
-                    ActionType = actionType,
+                    ObjectiveType = objectiveType,
                     Status = status,
                     FailureReason = failureReason ?? string.Empty,
                     RelatedId = relatedId,
@@ -553,7 +553,7 @@ namespace BotRunner
             ArgumentNullException.ThrowIfNull(ackEvent);
             EnqueueCommandAckEvent(
                 ackEvent.CorrelationId,
-                ackEvent.ActionType,
+                ackEvent.ObjectiveType,
                 ackEvent.Status,
                 ackEvent.FailureReason,
                 ackEvent.RelatedId);
@@ -577,7 +577,7 @@ namespace BotRunner
             }
         }
 
-        private PendingCommandAckState BeginTrackedCommandAck(ActionMessage action)
+        private PendingCommandAckState BeginTrackedCommandAck(ObjectiveMessage action)
         {
             ArgumentNullException.ThrowIfNull(action);
 
@@ -585,13 +585,13 @@ namespace BotRunner
                 ? $"act-{Interlocked.Increment(ref _actionSequenceNumber)}"
                 : action.CorrelationId;
             var relatedId = GetRelatedId(action);
-            var tracked = new PendingCommandAckState(correlationId, action.ActionType, relatedId);
+            var tracked = new PendingCommandAckState(correlationId, action.ObjectiveType, relatedId);
             var currentAction = action.Clone();
             currentAction.CorrelationId = correlationId;
 
             _currentActionCorrelationId = correlationId;
             _activitySnapshot.CurrentAction = currentAction;
-            EnqueueCommandAckEvent(correlationId, action.ActionType, CommandAckEvent.Types.AckStatus.Pending, relatedId: relatedId);
+            EnqueueCommandAckEvent(correlationId, action.ObjectiveType, CommandAckEvent.Types.AckStatus.Pending, relatedId: relatedId);
 
             return tracked;
         }
@@ -604,15 +604,15 @@ namespace BotRunner
             if (trackedAck is not PendingCommandAckState ack)
                 return;
 
-            EnqueueCommandAckEvent(ack.CorrelationId, ack.ActionType, status, failureReason, ack.RelatedId);
+            EnqueueCommandAckEvent(ack.CorrelationId, ack.ObjectiveType, status, failureReason, ack.RelatedId);
             trackedAck = null;
         }
 
-        private static uint GetRelatedId(ActionMessage action)
+        private static uint GetRelatedId(ObjectiveMessage action)
         {
             ArgumentNullException.ThrowIfNull(action);
 
-            if (action.ActionType == Communication.ActionType.SendChat
+            if (action.ObjectiveType == Communication.ObjectiveType.SendChat
                 && action.Parameters.Count > 0
                 && action.Parameters[0].ParameterCase == RequestParameter.ParameterOneofCase.StringParam)
             {
@@ -698,14 +698,14 @@ namespace BotRunner
         }
 
         /// <summary>
-        /// P3.3: handle an incoming <see cref="Communication.ActionType.ApplyLoadout"/>
+        /// P3.3: handle an incoming <see cref="Communication.ObjectiveType.ApplyLoadout"/>
         /// action by pushing a single <see cref="Tasks.LoadoutTask"/> onto the
         /// bot-task stack. Action dispatch skips the normal behavior-tree path
         /// because ApplyLoadout has no CharacterAction mapping — the whole
         /// execution lives in <see cref="Tasks.LoadoutTask"/> so BotRunner owns
         /// pacing and idempotency.
         /// </summary>
-        internal void HandleApplyLoadoutAction(Communication.ActionMessage action)
+        internal void HandleApplyLoadoutAction(Communication.ObjectiveMessage action)
         {
             if (_botTasks.Count > 0 && _botTasks.Peek() is Tasks.LoadoutTask)
             {
@@ -780,30 +780,30 @@ namespace BotRunner
                 && WorldEntryHydration.IsReadyForWorldInteraction(_objectManager.Player);
 
             if (incomingActivityMemberState?.CurrentAction != null
-                && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait
+                && incomingActivityMemberState.CurrentAction.ObjectiveType != Communication.ObjectiveType.Wait
                 && !playerWorldReady)
             {
                 var p = _objectManager.Player;
                 Log.Warning($"[BOT RUNNER] ACTION DROPPED: playerWorldReady=false " +
                     $"(HasEnteredWorld={_objectManager.HasEnteredWorld}, " +
                     $"Player={p != null}, Guid={p?.Guid ?? 0}, Pos={p?.Position != null}, MaxHP={p?.MaxHealth ?? 0}) " +
-                    $"action={incomingActivityMemberState.CurrentAction.ActionType}");
+                    $"action={incomingActivityMemberState.CurrentAction.ObjectiveType}");
             }
 
             if (incomingActivityMemberState?.CurrentAction != null
-                && incomingActivityMemberState.CurrentAction.ActionType == Communication.ActionType.RetrieveCorpse)
+                && incomingActivityMemberState.CurrentAction.ObjectiveType == Communication.ObjectiveType.RetrieveCorpse)
             {
                 DiagLog($"[TICK-DIAG] RetrieveCorpse action received. playerWorldReady={playerWorldReady} taskCount={_botTasks.Count} treeStatus={_behaviorTreeStatus}");
             }
 
             if (playerWorldReady
                 && incomingActivityMemberState?.CurrentAction != null
-                && incomingActivityMemberState.CurrentAction.ActionType != Communication.ActionType.Wait)
+                && incomingActivityMemberState.CurrentAction.ObjectiveType != Communication.ObjectiveType.Wait)
             {
                 var action = incomingActivityMemberState.CurrentAction;
-                DiagLog($"[ACTION-RECV] type={action.ActionType} params={action.Parameters.Count} ready={playerWorldReady}");
+                DiagLog($"[ACTION-RECV] type={action.ObjectiveType} params={action.Parameters.Count} ready={playerWorldReady}");
 
-                if (action.ActionType == Communication.ActionType.Goto
+                if (action.ObjectiveType == Communication.ObjectiveType.Goto
                     && DateTime.UtcNow < _spellCastLockoutUntil)
                 {
                     return;
@@ -812,7 +812,7 @@ namespace BotRunner
                 _currentActionCorrelationId = string.IsNullOrWhiteSpace(action.CorrelationId)
                     ? $"act-{Interlocked.Increment(ref _actionSequenceNumber)}"
                     : action.CorrelationId;
-                Log.Information($"[BOT RUNNER] Received action from StateManager: {action.ActionType} ({(int)action.ActionType}) [{_currentActionCorrelationId}]");
+                Log.Information($"[BOT RUNNER] Received action from StateManager: {action.ObjectiveType} ({(int)action.ObjectiveType}) [{_currentActionCorrelationId}]");
 
                 if (_diagnosticsRecorder.HandleDiagnosticAction(action))
                 {
@@ -821,7 +821,7 @@ namespace BotRunner
                     return;
                 }
 
-                if (action.ActionType == Communication.ActionType.ApplyLoadout)
+                if (action.ObjectiveType == Communication.ObjectiveType.ApplyLoadout)
                 {
                     if (_botTasks.Count > 0 && _botTasks.Peek() is Tasks.LoadoutTask)
                     {
@@ -842,13 +842,13 @@ namespace BotRunner
                     return;
                 }
 
-                var actionList = ConvertActionMessageToCharacterActions(action);
+                var actionList = ConvertObjectiveMessageToCharacterActions(action);
                 if (actionList.Count > 0)
                 {
                     _activeBehaviorTreeAck = BeginTrackedCommandAck(action);
 
-                    if (action.ActionType == Communication.ActionType.CastSpell
-                        || action.ActionType == Communication.ActionType.GatherNode)
+                    if (action.ObjectiveType == Communication.ObjectiveType.CastSpell
+                        || action.ObjectiveType == Communication.ObjectiveType.GatherNode)
                     {
                         _spellCastLockoutUntil = DateTime.UtcNow.AddSeconds(SpellCastLockoutSeconds);
                     }
@@ -862,7 +862,7 @@ namespace BotRunner
 
                 EnqueueCommandAckEvent(
                     _currentActionCorrelationId,
-                    action.ActionType,
+                    action.ObjectiveType,
                     CommandAckEvent.Types.AckStatus.Failed,
                     "unsupported_action",
                     GetRelatedId(action));

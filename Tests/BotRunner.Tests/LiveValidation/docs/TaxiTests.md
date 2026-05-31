@@ -12,7 +12,7 @@ topology parity, and SHODAN as the Background Gnome Mage director.
 ## Test Methods
 
 - `Taxi_HordeDiscovery`: stages the BG target at the Orgrimmar flight master
-  without enabling all taxi nodes, then dispatches `ActionType.VisitFlightMaster`.
+  without enabling all taxi nodes, then dispatches `ObjectiveType.VisitFlightMaster`.
 - `Taxi_HordeRide_OrgToXroads`: stages taxi readiness, dispatches
   `VisitFlightMaster`, dispatches `SelectTaxiNode` for Crossroads, and waits for
   a departure position delta.
@@ -36,8 +36,8 @@ The test body does not issue GM setup commands. The fixture owns:
 ## Runtime Linkage
 
 - SHODAN is director-only and never receives an action dispatch.
-- The BG action target receives only `ActionType.VisitFlightMaster` and
-  `ActionType.SelectTaxiNode`.
+- The BG action target receives only `ObjectiveType.VisitFlightMaster` and
+  `ObjectiveType.SelectTaxiNode`.
 - No `.tele`, `.modify money`, or taxi-node setup calls remain in the test body.
 
 ## Validation

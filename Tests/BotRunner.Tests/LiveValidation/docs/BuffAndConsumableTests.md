@@ -13,7 +13,7 @@ receives BotRunner actions.
 
 ### UseConsumable_AppliesBuff
 
-**Purpose:** Validate the BG `ActionType.UseItem` dispatch path for Elixir of
+**Purpose:** Validate the BG `ObjectiveType.UseItem` dispatch path for Elixir of
 Lion's Strength (`2454`) after Shodan-owned inventory and aura staging.
 
 **Setup path:**
@@ -22,7 +22,7 @@ Lion's Strength (`2454`) after Shodan-owned inventory and aura staging.
 - The test body issues no direct GM setup commands.
 
 **Action path:**
-- `ActionType.UseItem` with item id `2454`.
+- `ObjectiveType.UseItem` with item id `2454`.
 
 **Current live result:**
 - `buff_consumable_shodan.trx` passes overall, but this richer assertion skips
@@ -34,11 +34,11 @@ Lion's Strength (`2454`) after Shodan-owned inventory and aura staging.
 
 ### DismissBuff_RemovesBuff
 
-**Purpose:** Validate `ActionType.DismissBuff` after the target reaches a
+**Purpose:** Validate `ObjectiveType.DismissBuff` after the target reaches a
 buffed state.
 
 **Action path:**
-- `ActionType.DismissBuff` with buff name `Lesser Strength`.
+- `ObjectiveType.DismissBuff` with buff name `Lesser Strength`.
 
 **Current live result:**
 - Skips with `BB-BUFF-001`: BG currently cannot prove dismissal because

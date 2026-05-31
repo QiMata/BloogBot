@@ -19,7 +19,7 @@ committed corpse-run actions, and `LOOTFG1` is available only for the guarded
   Razor Hill coordinate staging, and death induction.
 - `RestoreBotRunnerAliveAtNavigationPointAsync(...)` encapsulates revive and
   cleanup staging.
-- The test body dispatches only `ActionType.ReleaseCorpse`,
+- The test body dispatches only `ObjectiveType.ReleaseCorpse`,
   `StartPhysicsRecording`, `RetrieveCorpse`, and `StopPhysicsRecording`.
 
 ## Current Evidence

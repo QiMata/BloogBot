@@ -137,9 +137,9 @@ public class MailParityTests
         LiveBotFixture.BotRunnerActionTarget target,
         ulong mailboxGuid)
     {
-        var result = await _bot.SendActionAsync(target.AccountName, new ActionMessage
+        var result = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
-            ActionType = ActionType.CheckMail,
+            ObjectiveType = ObjectiveType.CheckMail,
             Parameters = { new RequestParameter { LongParam = (long)mailboxGuid } }
         });
         _output.WriteLine($"[MAIL-PARITY] {target.RoleLabel} CheckMail result: {result}");

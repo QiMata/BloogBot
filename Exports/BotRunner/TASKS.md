@@ -564,7 +564,7 @@ Known remaining work in this owner: `0` items.
 - Pass result: `Direct Jump dispatch supports the live FG/BG movement activity parity bundle`
 - Last delta:
   - `ActionDispatcher` now dispatches `CharacterAction.Jump`.
-  - `BotRunnerService.ActionMapping` maps protobuf `ActionType.JUMP` to the
+  - `BotRunnerService.ActionMapping` maps protobuf `ObjectiveType.JUMP` to the
     shared action enum.
   - This supports `MovementParityTests.RunningJump_FgBgParity` without using
     Shodan or a behavior-script workaround.
@@ -679,7 +679,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (SpellCastOnTarget Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated Battle Shout live validation passed 1/1`
 - Last delta:
-  - `SpellCastOnTargetTests` now dispatches only BG `ActionType.CastSpell` after Shodan-directed Battle Shout spell, rage, and aura staging.
+  - `SpellCastOnTargetTests` now dispatches only BG `ObjectiveType.CastSpell` after Shodan-directed Battle Shout spell, rage, and aura staging.
   - FG launches idle for topology parity; the slice adds a fixture staging helper rather than changing BotRunner cast dispatch behavior.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -693,8 +693,8 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (BattlegroundQueue Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated WSG queue live validation passed 1/1`
 - Last delta:
-  - `BattlegroundQueueTests` now dispatches only BG `ActionType.JoinBattleground` after Shodan-directed minimum-level and Orgrimmar WSG battlemaster staging.
-  - The test also dispatches `ActionType.LeaveBattleground` as cleanup after queue action evidence is captured.
+  - `BattlegroundQueueTests` now dispatches only BG `ObjectiveType.JoinBattleground` after Shodan-directed minimum-level and Orgrimmar WSG battlemaster staging.
+  - The test also dispatches `ObjectiveType.LeaveBattleground` as cleanup after queue action evidence is captured.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -707,8 +707,8 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (BgInteraction Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated BgInteraction live validation passed overall with 3 BG passes and 2 tracked skips`
 - Last delta:
-  - `BgInteractionTests` now dispatches only BG `ActionType.InteractWith`, `CheckMail`, and `VisitFlightMaster` after Shodan-directed bank, auction-house, mailbox, mail-money, coinage, and flight-master staging.
-  - Auction-house interaction, mail collection, and flight-master visit passed. Bank deposit stays a tracked skip until a bank deposit `ActionType` exists; Deeprun Tram stays in the dedicated transport slice.
+  - `BgInteractionTests` now dispatches only BG `ObjectiveType.InteractWith`, `CheckMail`, and `VisitFlightMaster` after Shodan-directed bank, auction-house, mailbox, mail-money, coinage, and flight-master staging.
+  - Auction-house interaction, mail collection, and flight-master visit passed. Bank deposit stays a tracked skip until a bank deposit `ObjectiveType` exists; Deeprun Tram stays in the dedicated transport slice.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -721,7 +721,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (Buff/Consumable Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated buff/consumable live validation passed overall with 1 BG pass and 2 tracked skips`
 - Last delta:
-  - `BuffAndConsumableTests` and `ConsumableUsageTests` now dispatch only BG `ActionType.UseItem` / `DismissBuff` after Shodan-directed elixir and aura staging.
+  - `BuffAndConsumableTests` and `ConsumableUsageTests` now dispatch only BG `ObjectiveType.UseItem` / `DismissBuff` after Shodan-directed elixir and aura staging.
   - `ConsumableUsageTests` passed the legacy BG `UseItem` baseline. The stricter buff/slot and dismiss assertions stay tracked skips until BG consumable aura observation and `WoWUnit.Buffs` metadata are stable.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -735,7 +735,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (DeathCorpseRun Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated corpse-run live validation passed overall with 1 BG pass and 1 FG opt-in skip`
 - Last delta:
-  - `DeathCorpseRunTests` now dispatches only BG `ActionType.ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and `StopPhysicsRecording` after Shodan-directed Razor Hill corpse staging.
+  - `DeathCorpseRunTests` now dispatches only BG `ObjectiveType.ReleaseCorpse`, `StartPhysicsRecording`, `RetrieveCorpse`, and `StopPhysicsRecording` after Shodan-directed Razor Hill corpse staging.
   - The BG run still asserts `RetrieveCorpseTask` navtrace ownership and strict-alive recovery; the foreground crash-regression lane remains guarded by `WWOW_RETRY_FG_CRASH001=1`.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -749,7 +749,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (LootCorpse Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated loot live validation passed 1/1`
 - Last delta:
-  - `LootCorpseTests` now dispatches only BG `ActionType.StartMeleeAttack`, `StopAttack`, and `LootCorpse` after Shodan-directed clean-bag and Durotar mob-area staging.
+  - `LootCorpseTests` now dispatches only BG `ObjectiveType.StartMeleeAttack`, `StopAttack`, and `LootCorpse` after Shodan-directed clean-bag and Durotar mob-area staging.
   - The old dedicated combat fixture path was removed from this test; FG launches only for Shodan topology parity while the BG snapshot supplies kill, loot-dispatch, and inventory evidence.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -763,7 +763,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (Navigation/Alliance Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated navigation/alliance live validation passed 7/8 with one tracked skip`
 - Last delta:
-  - `NavigationTests` now dispatches only BG `ActionType.Goto` after Shodan-directed Durotar road and winding-road staging.
+  - `NavigationTests` now dispatches only BG `ObjectiveType.Goto` after Shodan-directed Durotar road and winding-road staging.
   - `AllianceNavigationTests` uses Shodan-directed Human Alliance coordinate staging and snapshot assertions; no production BotRunner action is dispatched in that class.
   - The Valley of Trials long diagonal remains a tracked skip because delivered `Goto` currently pops `GoToTask` with `no_path_timeout` before arrival under Shodan staging.
 - Validation/tests run:
@@ -778,7 +778,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (MovementSpeed Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated movement-speed live validation passed 1/1`
 - Last delta:
-  - `MovementSpeedTests` now dispatches only BG `ActionType.Goto` after Shodan-directed Durotar road staging.
+  - `MovementSpeedTests` now dispatches only BG `ObjectiveType.Goto` after Shodan-directed Durotar road staging.
   - Foreground shadow teleports were removed; FG launches only for Shodan topology parity while the BG snapshot supplies speed, Z-stability, and arrival evidence.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -792,7 +792,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (Corner/Tile navigation Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated corner/tile navigation live validation passed 6/6`
 - Last delta:
-  - `CornerNavigationTests` and `TileBoundaryCrossingTests` now dispatch only BG `ActionType.TravelTo` after Shodan-directed navigation point staging.
+  - `CornerNavigationTests` and `TileBoundaryCrossingTests` now dispatch only BG `ObjectiveType.TravelTo` after Shodan-directed navigation point staging.
   - Route checks cover Orgrimmar bank-to-AH, RFC corridor, Orgrimmar tile-boundary, and Durotar open-terrain tile-boundary movement.
   - Snapshot-only probes for Orgrimmar obstacles and Undercity tunnel staging remain fixture-owned setup with no BotRunner production action.
 - Validation/tests run:
@@ -807,7 +807,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (TravelPlanner Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated TravelPlanner live validation passed overall with 1 executable pass and 3 tracked skips`
 - Last delta:
-  - `TravelPlannerTests` now dispatches only BG `ActionType.TravelTo` after Shodan-directed street-level Orgrimmar staging.
+  - `TravelPlannerTests` now dispatches only BG `ObjectiveType.TravelTo` after Shodan-directed street-level Orgrimmar staging.
   - The short Orgrimmar route passes and proves action delivery plus movement start from the staged position.
   - The long Crossroads probes stay tracked skips because delivered `TravelTo` starts `GoToTask` but produces no position delta after 20s and leaves BG `CurrentAction=TravelTo`.
 - Validation/tests run:
@@ -822,7 +822,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (MountEnvironment Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated MountEnvironment live validation passed 4/4`
 - Last delta:
-  - `MountEnvironmentTests` now dispatches only BG `ActionType.CastSpell` after Shodan-directed mount loadout and scene-position staging.
+  - `MountEnvironmentTests` now dispatches only BG `ObjectiveType.CastSpell` after Shodan-directed mount loadout and scene-position staging.
   - Fixture-owned `.learn`, `.setskill`, `.dismount`, `.unaura`, and `.go xyz` commands remain outside the test body because they are setup, not production BotRunner behavior.
   - Outdoor success is verified by snapshot `MountDisplayId`; indoor block is verified by snapshot chat/error evidence.
 - Validation/tests run:
@@ -838,8 +838,8 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (MapTransition Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated MapTransition live validation passed 1/1`
 - Last delta:
-  - `MapTransitionTests` now dispatches only a post-bounce `ActionType.Goto` after Shodan-directed Ironforge and rejected Deeprun Tram staging.
-  - The fixture-owned map 369 `.go xyz` remains outside the test body because BotRunner has no production ActionType for forcing a server-rejected instance teleport.
+  - `MapTransitionTests` now dispatches only a post-bounce `ObjectiveType.Goto` after Shodan-directed Ironforge and rejected Deeprun Tram staging.
+  - The fixture-owned map 369 `.go xyz` remains outside the test body because BotRunner has no production ObjectiveType for forcing a server-rejected instance teleport.
   - BG liveness after the bounce is verified through a correlated command ACK; FG stays idle for topology parity.
 - Validation/tests run:
   - `dotnet build Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false` -> `passed (0 errors; existing warnings)`.
@@ -871,7 +871,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (NPC Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated NPC live validation passed 3 with 1 tracked trainer funding/mailbox skip`
 - Last delta:
-  - `NpcInteractionTests` now dispatches only NPC interaction `ActionType` messages or asserts snapshots after Shodan-directed staging.
+  - `NpcInteractionTests` now dispatches only NPC interaction `ObjectiveType` messages or asserts snapshots after Shodan-directed staging.
   - Vendor, flight-master, and object-manager coverage runs on FG/BG action targets; `Trainer_LearnAvailableSpells` is skipped after Shodan launch because live funding for trainer purchases is blocked by the documented money/mailbox staging gap.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -884,7 +884,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (Quest Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated quest-group live validation passed 6/6`
 - Last delta:
-  - `GossipQuestTests`, `QuestObjectiveTests`, `QuestInteractionTests`, and `StarterQuestTests` now dispatch only quest/gossip/combat `ActionType` messages or assert fixture-staged quest snapshot state after Shodan-directed setup.
+  - `GossipQuestTests`, `QuestObjectiveTests`, `QuestInteractionTests`, and `StarterQuestTests` now dispatch only quest/gossip/combat `ObjectiveType` messages or assert fixture-staged quest snapshot state after Shodan-directed setup.
   - The suite reuses `Economy.config.json`; `ECONBG1` receives actions, `ECONFG1` stays idle for topology parity, and SHODAN remains director-only.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -898,7 +898,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (Trading Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated Trading/TradeParity live validation passed 1 with 3 tracked foreground trade action skips`
 - Last delta:
-  - `TradingTests` now dispatches only trade `ActionType` messages after Shodan-directed trade staging; the BG offer/decline cancel proof passed.
+  - `TradingTests` now dispatches only trade `ObjectiveType` messages after Shodan-directed trade staging; the BG offer/decline cancel proof passed.
   - `TradeParityTests` and the item/gold transfer path remain explicit skips after Shodan launch/resolve because the foreground trade runtime currently ACKs `DeclineTrade`, `OfferItem`, and `AcceptTrade` as `Failed/behavior_tree_failed`.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -911,7 +911,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (Mail Shodan migration observation)
 - Pass result: `BotRunner now emits structured mail collection diagnostics; deterministic dispatch coverage stayed green and migrated MailSystem/MailParity live validation passed 4/4 with FG and BG actions`
 - Last delta:
-  - `MailSystemTests` and `MailParityTests` now dispatch only `ActionType.CheckMail` after Shodan-directed mailbox and SOAP mail staging.
+  - `MailSystemTests` and `MailParityTests` now dispatch only `ObjectiveType.CheckMail` after Shodan-directed mailbox and SOAP mail staging.
   - `ActionDispatcher` records `[MAIL-COLLECT]` markers from `CollectAllMailWithResultAsync(...)`, giving FG and BG mail tests structured completion evidence when snapshot deltas lag.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -924,7 +924,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (EconomyInteraction Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated EconomyInteraction live validation passed 3/3`
 - Last delta:
-  - `EconomyInteractionTests` now dispatches only `ActionType.InteractWith` for banker/auctioneer and `ActionType.CheckMail` for mailbox collection after Shodan-directed staging.
+  - `EconomyInteractionTests` now dispatches only `ObjectiveType.InteractWith` for banker/auctioneer and `ObjectiveType.CheckMail` for mailbox collection after Shodan-directed staging.
   - FG and BG both passed the bank, AH, and mail interaction baselines.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -937,7 +937,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (VendorBuySell Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated VendorBuySell live validation passed 2/2`
 - Last delta:
-  - `VendorBuySellTests` now dispatches only `ActionType.BuyItem`, `ActionType.SellItem`, and post-buy `DestroyItem` cleanup after Shodan-directed vendor/item/money staging.
+  - `VendorBuySellTests` now dispatches only `ObjectiveType.BuyItem`, `ObjectiveType.SellItem`, and post-buy `DestroyItem` cleanup after Shodan-directed vendor/item/money staging.
   - The suite remains a BG vendor packet baseline; FG is launched for Shodan topology parity but does not receive vendor buy/sell actions in this slice.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -950,7 +950,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (Bank Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated bank live validation passed 1 with 3 tracked skips`
 - Last delta:
-  - `BankInteractionTests` now dispatches only `ActionType.InteractWith` after Shodan-directed bank staging. Banker detection passes on FG/BG and the implemented banker interaction returns success.
+  - `BankInteractionTests` now dispatches only `ObjectiveType.InteractWith` after Shodan-directed bank staging. Banker detection passes on FG/BG and the implemented banker interaction returns success.
   - `BankParityTests` now stages Linen Cloth through `StageBotRunnerLoadoutAsync`; deposit/withdraw and bank-slot purchase remain explicit missing-action skips because BotRunner has no bank deposit/withdraw/slot-purchase action surface yet.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -963,7 +963,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (AuctionHouse Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and migrated AuctionHouse live validation passed 3 with 2 tracked skips`
 - Last delta:
-  - `AuctionHouseTests` now dispatches only `ActionType.InteractWith` after Shodan-directed AH staging. FG and BG auctioneer interactions return success.
+  - `AuctionHouseTests` now dispatches only `ObjectiveType.InteractWith` after Shodan-directed AH staging. FG and BG auctioneer interactions return success.
   - `AuctionHouseParityTests` now stages Linen Cloth through `StageBotRunnerLoadoutAsync`; post/buy and cancel remain explicit missing-action skips because BotRunner has no auction post/buy/cancel action surface yet.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -976,7 +976,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (PetManagement Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and the migrated PetManagement live slice passed`
 - Last delta:
-  - `PetManagementTests` now dispatches `ActionType.CastSpell` only after Shodan-directed hunter pet setup. BG Call Pet and Dismiss Pet both return success.
+  - `PetManagementTests` now dispatches `ObjectiveType.CastSpell` only after Shodan-directed hunter pet setup. BG Call Pet and Dismiss Pet both return success.
   - FG remains launched but idle in this slice because foreground spell-id casting is not the validated pet-management path.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -989,7 +989,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (Crafting Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and the migrated Crafting live slice passed`
 - Last delta:
-  - `CraftingProfessionTests` now dispatches `ActionType.CastSpell` only after Shodan-directed First Aid staging. BG crafting produces one Linen Bandage from one Linen Cloth.
+  - `CraftingProfessionTests` now dispatches `ObjectiveType.CastSpell` only after Shodan-directed First Aid staging. BG crafting produces one Linen Bandage from one Linen Cloth.
   - FG remains launched but idle in this slice because foreground spell-id casting is not the validated crafting path.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.
@@ -1002,7 +1002,7 @@ Known remaining work in this owner: `0` items.
 ### 2026-04-25 (Gathering Shodan migration observation)
 - Pass result: `No BotRunner production code changed; deterministic dispatch coverage stayed green and the migrated Gathering live slice documents a foreground mining gap`
 - Last delta:
-  - `GatheringProfessionTests` now dispatches `ActionType.StartGatheringRoute` only after Shodan-directed staging. BG mining and herbalism pass on the corrected route center.
+  - `GatheringProfessionTests` now dispatches `ObjectiveType.StartGatheringRoute` only after Shodan-directed staging. BG mining and herbalism pass on the corrected route center.
   - FG mining receives the action and moves around active copper candidates, but never reports gather success, bag delta, or skill delta before timeout. This is documented in the slice doc and inventory as a foreground gathering functional gap, not a BotRunner code delta in this slice.
 - Validation/tests run:
   - `dotnet test Tests/BotRunner.Tests/BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~FishingPoolActivationAnalyzerTests|FullyQualifiedName~LiveBotFixtureBotChatTests|FullyQualifiedName~GatheringRouteSelectionTests|FullyQualifiedName~BotRunnerServiceFishingDispatchTests" --logger "console;verbosity=minimal"` -> `passed (33/33)`.

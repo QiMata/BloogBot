@@ -82,9 +82,9 @@ public class GroupFormationTests
 
             // Step 2: FG invites BG by name.
             _output.WriteLine($"[GROUP] FG invites BG by name: {bgName} (attempt {groupAttempt + 1})");
-            var inviteResult = await _bot.SendActionAsync(fgAccount!, new ActionMessage
+            var inviteResult = await _bot.SendActionAsync(fgAccount!, new ObjectiveMessage
             {
-                ActionType = ActionType.SendGroupInvite,
+                ObjectiveType = ObjectiveType.SendGroupInvite,
                 Parameters = { new RequestParameter { StringParam = bgName } }
             });
             Assert.Equal(ResponseResult.Success, inviteResult);
@@ -92,9 +92,9 @@ public class GroupFormationTests
 
             // Step 3: BG accepts invite.
             _output.WriteLine("[GROUP] BG accepts invite");
-            var acceptResult = await _bot.SendActionAsync(bgAccount!, new ActionMessage
+            var acceptResult = await _bot.SendActionAsync(bgAccount!, new ObjectiveMessage
             {
-                ActionType = ActionType.AcceptGroupInvite
+                ObjectiveType = ObjectiveType.AcceptGroupInvite
             });
             Assert.Equal(ResponseResult.Success, acceptResult);
             await Task.Delay(1500);
@@ -133,11 +133,11 @@ public class GroupFormationTests
 
             var selfGuid = snap.Player?.Unit?.GameObject?.Base?.Guid ?? 0UL;
             var action = selfGuid != 0 && snap.PartyLeaderGuid == selfGuid
-                ? ActionType.DisbandGroup
-                : ActionType.LeaveGroup;
+                ? ObjectiveType.DisbandGroup
+                : ObjectiveType.LeaveGroup;
 
             _output.WriteLine($"[{label}] grouped (leader=0x{snap.PartyLeaderGuid:X}); sending {action} (attempt {attempt}/5)");
-            await _bot.SendActionAndWaitAsync(account, new ActionMessage { ActionType = action }, delayMs: 1000);
+            await _bot.SendActionAndWaitAsync(account, new ObjectiveMessage { ObjectiveType = action }, delayMs: 1000);
         }
     }
 

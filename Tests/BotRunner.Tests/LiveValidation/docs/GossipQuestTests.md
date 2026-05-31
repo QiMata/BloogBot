@@ -13,12 +13,12 @@ the BotRunner actions, and `ECONFG1` stays idle for topology parity.
 ### Gossip_MultiOption_SelectsCorrectOption
 
 Stages the BG bot at the Razor Hill inn through fixture helpers, locates a
-visible gossip NPC by snapshot, and dispatches `ActionType.InteractWith`.
+visible gossip NPC by snapshot, and dispatches `ObjectiveType.InteractWith`.
 
 ### Quest_Chain_CompletesSequentialQuests
 
 Stages the BG bot near the Razor Hill quest NPC, dispatches
-`ActionType.InteractWith`, and records the resulting quest-log snapshot.
+`ObjectiveType.InteractWith`, and records the resulting quest-log snapshot.
 
 ### Quest_RewardSelection_PicksBestReward
 
@@ -31,7 +31,7 @@ without GM commands in the test body.
 - Settings: `Services/WoWStateManager/Settings/Configs/Economy.config.json`
 - Staging: `LiveBotFixture.TestDirector` quest-location and quest-state helpers
 - Shared support: `QuestTestSupport`
-- Action path: `BotRunnerService.ActionDispatch` to `ActionType.InteractWith`
+- Action path: `BotRunnerService.ActionDispatch` to `ObjectiveType.InteractWith`
 - Assertion surface: `ActivitySnapshot.Player.QuestLogEntries` and recent chat
 
 ## Current Status
