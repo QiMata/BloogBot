@@ -1507,6 +1507,126 @@ walkableClimb quantization issue. That may need a SEPARATE iter
 (walkableClimb world-unit clamping or `round()` instead of `floor()`)
 once tile (40, 29) is fixed.
 
-**Commit:** [pending] (audit-only iter; status doc entry only)
+**Commit:** `1a6df2b1` `phase(1) iter(23): audit — vertex overflow root cause identified`
+
+## Iter 24 — 2026-05-31 — Phase 1 (re-apply iter 20 + ch=cs/2 per-tile auto-derive)
+
+**Did:** Per user direction "Auto-derive ch=cs/2 per-tile (Recommended)",
+re-applied iter-20's BakeProfile wiring AND added new auto-derive logic
+that keeps per-tile cs overrides self-consistent under the Mononen rule.
+
+**Code changes:**
+
+1. **[`tools/MmapGen/include/BakeProfile.h`](../../../tools/MmapGen/include/BakeProfile.h)**
+   — restored iter-20's inline `MakeBakeProfile` + `BakeProfileIsValid`
+   bodies (declarations were the iter-22 revert; bodies needed to be
+   re-added).
+
+2. **[`tools/MmapGen/CMakeLists.txt`](../../../tools/MmapGen/CMakeLists.txt)**
+   — re-added `MMAPGEN_INC_LOCAL` include path so TileWorker.cpp can
+   `#include "BakeProfile.h"`.
+
+3. **[`tools/MmapGen/contrib/mmap/src/TileWorker.cpp`](../../../tools/MmapGen/contrib/mmap/src/TileWorker.cpp)**:
+   - Added `#include "BakeProfile.h"` (line 6).
+   - `from_json(rcConfig)`: cs/ch now from `MakeBakeProfile(kTaurenM, false)`
+     (cs=0.5124, ch=0.2562). Replaces the prior `MMAP::BASE_UNIT_DIM`
+     hardcode.
+   - `buildTile` PFS-OVERHAUL-006 site (~line 10489): removed the
+     unconditional `config.ch = 0.1f` override. **NEW** auto-derive
+     logic: when a per-tile JSON `"cs"` override is applied without a
+     matching `"ch"` override, set `config.ch = config.cs * 0.5f` so
+     the Mononen ratio holds per-tile.
+
+**Key semantic difference vs iter 20:** Iter 20 removed the line 10489
+override without compensating logic, so per-tile cs-only overrides (e.g.
+config.json `"4029"` block with `cs:0.1` but no `ch`) inherited the
+from_json Mononen default `ch=0.2562`, producing a mismatched 2.56 ratio
+that exploded the polymesh vertex count. Iter 24's auto-derive fixes
+this: tile (40, 29) now gets `cs=0.1 + ch=0.05` (auto-derived = cs/2,
+Mononen ratio 0.5, finer vertical than ever).
+
+**Build verification:** `build-mmapgen.ps1 -Configuration Release`: exit 0.
+All 4 exes (MmapGen, SceneCacheBuilder, NavMeshTileEditor,
+NavMeshPhysicsValidator) built clean.
+
+**Single-tile bake verification — 3 tiles via `bake-tile.ps1`:**
+
+| Tile | File | iter-24 bake | iter-21 result |
+|---|---|---|---|
+| (40, 29) **T3 OG zep** | 0012940.mmtile | **10,093,032 bytes, exit 0** | overflow exit(0) at 101,599 verts; no file |
+| (32, 28) reference | 0012832.mmtile | 1,712,280 bytes, exit 0 | same as iter 20 (-24% from May-1) |
+| (43, 25) east-Kalimdor | 0012543.mmtile | 1,032,784 bytes, exit 0 | silent fail; no file in iter-21 |
+
+**Tile (40, 29) bake size = 10 MB is LARGER than May-1 production's 1.86 MB**
+but the polymesh stayed under Detour's 65,535 vertex per-tile ceiling
+because the auto-derive ch=0.05 (vs iter-20's ch=0.2562) produced FINER
+vertical Z-quantization that better separates multi-floor structures
+into distinct contour regions. 10MB is unusual but valid — Detour can
+represent up to 65,535 verts × ~12 bytes each ≈ 800KB just for the
+vertex array, and detail mesh + BV tree + polys account for the rest.
+
+**Tile (43, 25) silent-fail recovery — UNEXPECTED:** With NO per-tile
+override, this tile uses the Mononen GLOBAL defaults (cs=0.5124,
+ch=0.2562, walkableClimb=4 voxels=1.025y world). These are the SAME
+parameters that caused 109 east-Kalimdor tiles to silently fail in
+iter-21. But (43, 25) baked successfully here. Possible explanations:
+1. (43, 25) was queued but never processed in iter-21's parallel build
+   before `exit(0)` was called by tile (40, 29)'s overflow → no
+   silent-fail, just an interrupted bake.
+2. The auto-derive code happens unconditionally in buildTile (not gated
+   by `perTileCsOverride`), but its only effect is when cs is overridden.
+   For (43, 25) which has no override, behavior should be identical to
+   iter-21. (Confirmed by code inspection.)
+3. Single-tile bake mode might have different parameter resolution paths
+   than full-map bake mode.
+
+If iter-25's full-map re-bake of map 1 still loses the other 109 tiles,
+we know the walkableClimb quantization is the issue and need a separate
+fix. If they ALL come back (no more silent failures), the iter-21
+failures were due to `exit(0)` interruption, not actual silent failure.
+
+**Bake-fixture pair (T3 + T4) — guardrail 3 mandatory:**
+- `WWOW_OG_ZEP_BAKE_FIXTURE=1` + `WWOW_BRM_BAKE_FIXTURE=1` →
+  `OgZeppelin_BakeFixtureValidation` ✅ PASS (2m58s)
+  `BrmDungeon_BakeFixtureValidation` ✅ PASS
+- **Total: 2/2 PASS in 6.10 min.** T3 fixture canary against the new
+  10 MB (40, 29) tile is GREEN. The auto-derive ch=cs/2 fix preserves
+  runtime physics behavior despite the substantial bake-byte delta.
+
+**Phase 1 progress (post iter-24):**
+- 6 of 6 Mononen value updates now in code:
+  - getDefaultConfig: detailSampleDist, maxSimplificationError,
+    mergeRegionArea, minRegionArea, walkableSlopeAngle (terrain + vmaps)
+  - from_json + buildTile: cs (=r/2 outdoor) + ch (=cs/2)
+  - Per-tile auto-derive ch=cs/2 when only cs is overridden
+- Bake-fixture pair T3+T4 GREEN against the new cs/ch defaults
+- Single tile (40, 29) — historically the densest WMO tile per
+  iter-13's 27+14 polyref clusters — successfully baked at 10MB without
+  exceeding Detour's vertex limit
+- Tile (43, 25) — one of the iter-21 missing-from-output east-Kalimdor
+  tiles — also baked successfully under the new defaults
+
+**Tests:** Build PASS. 3 single-tile bakes PASS. Bake-fixture pair PASS 2/2.
+
+**Files changed (iter 24):**
+- tools/MmapGen/include/BakeProfile.h (restored inline MakeBakeProfile +
+  BakeProfileIsValid bodies)
+- tools/MmapGen/CMakeLists.txt (re-added MMAPGEN_INC_LOCAL)
+- tools/MmapGen/contrib/mmap/src/TileWorker.cpp (BakeProfile include +
+  from_json cs/ch + line 10489 area auto-derive logic)
+- docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (this iter-24 entry)
+
+**Next iter — Iter 25 plan:** Full map-1 re-bake retry. Now that
+tile-(40, 29) doesn't overflow under the auto-derive fix, attempt the
+proposal §3 Phase 1 EXIT measurement again:
+1. Delete map-1 .mmtile files from D:\MaNGOS\data\mmaps (force rebuild)
+2. Run `bake-all-maps.ps1 -Maps 1 -DataDir D:\MaNGOS\data -Threads 8`
+3. Verify tile count = 785 (or close to it); audit any "Too many vertices"
+4. Run bake-fixture pair (T3+T4) after full bake
+5. If green: re-run D2 sweep + aggregator; compare global Unrecoverable%
+   to D4's 13.18% baseline (the proposal Phase 1 exit metric)
+6. If 109 east-Kalimdor tiles STILL silently fail, fix walkableClimb
+   quantization (round() instead of floor()) before final close
+
 
 

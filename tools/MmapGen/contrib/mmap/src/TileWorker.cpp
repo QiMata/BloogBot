@@ -3,6 +3,7 @@
 #include "Maps/GridMapDefines.h"
 #include "DetourNavMeshQuery.h"
 #include "RecastAlloc.h"
+#include "BakeProfile.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -10116,10 +10117,16 @@ static int CullSuspiciousDetourPolys(dtNavMesh& navMesh, dtMeshTile& tile, const
 
 static void from_json(const json& j, rcConfig& config)
 {
+    // Phase 1 iter 24: cs/ch derived from MakeBakeProfile per Mononen rules
+    // (cs = r/2 outdoor, ch = cs/2). Replaces the prior MMAP::BASE_UNIT_DIM
+    // (0.2666) cs/ch hardcode which violated the ch=cs/2 rule. tileSize,
+    // borderSize, and walkable* remain on the json + auto-derive path for
+    // bounded scope in iter 24; iter 25+ may unify them through BakeProfile.
+    const auto bakeProfile = MMAP::MakeBakeProfile(MMAP::kTaurenM, /*indoor=*/false);
     config.tileSize               = MMAP::VERTEX_PER_TILE;
     config.borderSize             = j["borderSize"].get<int>();
-    config.cs                     = MMAP::BASE_UNIT_DIM;
-    config.ch                     = MMAP::BASE_UNIT_DIM;
+    config.cs                     = bakeProfile.cs;
+    config.ch                     = bakeProfile.ch;
     config.walkableSlopeAngle     = j["walkableSlopeAngle"].get<float>();
     config.walkableHeight         = j["walkableHeight"].get<int>();
     config.walkableClimb          = j["walkableClimb"].get<int>();
@@ -10469,28 +10476,34 @@ namespace MMAP
             agentHeight = jsonTileConfig["agentHeight"].get<float>();
         // END WWoW divergence
 
-        // BEGIN WWoW divergence (PFS-OVERHAUL-006): unified ch=0.1m for both
-        // continents and instances. The 0.25m continent default was producing
-        // coarse Z quantization on multi-floor structures (zeppelin towers,
-        // multi-floor inns, spiral ramps), forcing per-tile overrides. With
-        // walkableHeight / walkableClimb auto-derived from agentHeight /
-        // agentMaxClimbModelTerrainTransition divided by ch (lines 483-486),
-        // changing ch automatically rescales those filters to preserve the
-        // intended world-unit clearance / climb. Tile size grows ~1-3% on
-        // tiles with sparse vertical structure (most continent terrain) and
-        // up to ~2.5x on dense multi-floor tiles (acceptable trade for
-        // bake fidelity). Per-tile `ch` and `cs` overrides honored below
-        // for tiles that need different precision (rare). cs override is
-        // critical for tiles with thin overhanging structures (e.g., the
-        // OG zeppelin tower's deck edge) where coarse 0.27m horizontal
-        // voxels miss the deck triangle's true XY footprint, causing
-        // rcFilterWalkableLowHeightSpans to NOT mark under-deck cells as
-        // unwalkable, resulting in 2D-adjacent polygons at different Z.
-        config.ch = 0.1f;
-        if (jsonTileConfig.contains("ch"))
+        // Phase 1 iter 24: cs/ch arrive from from_json via MakeBakeProfile
+        // (Mononen rule cs=r/2 outdoor, ch=cs/2). The prior PFS-OVERHAUL-006
+        // Cycle-16 unconditional `config.ch = 0.1f` override is removed because
+        // it masked the from_json ch value, defeating any Mononen-rule tuning.
+        //
+        // Per-tile json "cs"/"ch" overrides are still honored for the rare
+        // tiles that need a different precision than the default outdoor
+        // profile (e.g. tile 4029 OG zep deck-edge with cs=0.1 fine horizontal).
+        //
+        // CRITICAL (iter 23 audit finding): some per-tile blocks (notably
+        // 4029) override cs but NOT ch. Pre-iter-24 the unconditional
+        // `config.ch = 0.1f` masked this — those tiles ran cs=override,
+        // ch=0.1. After removing that override, a per-tile cs-only override
+        // would inherit the from_json Mononen ch (0.2562) producing a
+        // mismatched ratio (e.g. cs=0.1, ch=0.2562, ratio 2.56) that explodes
+        // the polymesh vertex count. To preserve the Mononen ch=cs/2 rule
+        // PER-TILE, auto-derive ch=cs/2 when a per-tile cs override is
+        // applied without a matching ch override.
+        const bool perTileChOverride = jsonTileConfig.contains("ch");
+        const bool perTileCsOverride = jsonTileConfig.contains("cs");
+        if (perTileChOverride)
             config.ch = jsonTileConfig["ch"].get<float>();
-        if (jsonTileConfig.contains("cs"))
+        if (perTileCsOverride)
+        {
             config.cs = jsonTileConfig["cs"].get<float>();
+            if (!perTileChOverride)
+                config.ch = config.cs * 0.5f;  // Mononen ch=cs/2 per-tile auto-derive
+        }
         // PFS-OVERHAUL-006 Cycle 16 (2026-05-08): when `cs` is overridden small (e.g. 0.1)
         // the bake must keep TILES_PER_MAP*tileSize*cs >= 533.33y to cover the full map-tile.
         // Default tileSize=80 with cs=0.2666 yields 25*80*0.2666 = 533.2y. With cs=0.1 the
