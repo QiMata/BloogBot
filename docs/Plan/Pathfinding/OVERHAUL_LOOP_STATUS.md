@@ -826,4 +826,63 @@ to verify Phase 1's ≥30% Blocked-drop on that tile.
 - Sweep is in-flight; if it finishes during Phase 1 iters, iter X+
   re-aggregates for the final D4 §3+§4 numbers.
 
+**Commit:** `61067f91` `phase(1) iter(16): Phase 1 begins — author BakeProfile.h skeleton`
+
+---
+
+## Iter 17 — 2026-05-31 — Phase 1
+
+**Did:** Sweep stuck at 407 tiles (no progress since iter 16 — likely
+another Mulgore/Thousand Needles hang; defer recovery to iter 18+).
+
+Updated [`TileWorker.cpp::getDefaultConfig()`](../../../tools/MmapGen/contrib/mmap/src/TileWorker.cpp#L12042)
+with **5 Mononen-rule-compliant default values**:
+
+| Param | Was | Now | Rationale |
+|---|---|---|---|
+| `detailSampleDist` | 2.0 | 1.6 | cs * 6 (cs=BASE_UNIT_DIM=0.2666); was ~cs*7.5 |
+| `maxSimplificationError` | 1.8 | 1.3 | Mononen target; proposal rejects ≥ 1.5 |
+| `mergeRegionArea` | 10 | 40 | TrinityCore default; old too small |
+| `minRegionArea` | 30 | 20 | TrinityCore default; old slightly too large |
+| `walkableSlopeAngle` (terrain) | 75.0 | 60.0 | Was accepting steeper than physics-engine MAX_SLOPE |
+| `walkableSlopeAngleVMaps` (model) | 61.0 | 60.0 | Unified with terrain at physics MAX_SLOPE |
+
+These are the 5 of 6 Mononen non-compliances identified in
+[`OVERHAUL_PHASE1_PREP.md`](OVERHAUL_PHASE1_PREP.md) that can be fixed
+WITHOUT touching the `from_json(rcConfig)` cs/ch derivation. The
+**6th and biggest violation** — `ch = cs` (should be `ch = cs/2`) —
+is the from_json change, iter 18's bounded scope.
+
+**Phase exit criteria progress:**
+- Phase 1's "Recast parameter defaults set per Mononen rules" criterion:
+  partially done (5 of 6 values updated; ch/cs derivation pending iter 18).
+- AgentProfile struct exists (iter 16) but not yet driving values in code
+  (iter 18+).
+
+**Tests:** No bake. The change is values-only on a json literal; C++
+syntax unchanged, no compile-break risk. Iter 18 builds + bakes tile
+(32, 28) for actual verification.
+
+**Files changed:** tools/MmapGen/contrib/mmap/src/TileWorker.cpp
+(+1 doc comment + 6 value updates); docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md
+(iter 17 entry).
+
+**Next iter:** Iter 18 wakes in ~30 min. Bounded work: **update
+`from_json(rcConfig)` at TileWorker.cpp:10117 to derive `cs` and `ch`
+from `MakeBakeProfile(kTaurenM, indoor=false)` instead of the hardcoded
+`MMAP::BASE_UNIT_DIM` constant.** This is the BIGGEST single Mononen fix
+(ch=cs/2 replacing ch=cs). After that change, the actual MmapGen build
+(via MSBuild) + a single-tile bake of (32, 28) will be the next iter's
+follow-up (iter 19). Sweep recovery also queued for iter 18.
+
+**Blockers/risks:**
+- Native MSBuild verification not available from this loop's PowerShell
+  context. C++ build risk for the iter 18 from_json change is medium —
+  the cs/ch derivation depends on `kTaurenM`'s constexpr `csOutdoor()`
+  which requires the BakeProfile.h header to compile cleanly under
+  MmapGen's CMakeLists (which uses /std:c++17 per
+  [`CMakeLists.txt`](../../../tools/MmapGen/CMakeLists.txt) line ~95).
+- The sweep's continued hang means D4 final numbers won't update until
+  the sweep is restarted with `-NoLoadAdt` AGAIN if needed.
+
 **Commit:** _filled by commit step below_
