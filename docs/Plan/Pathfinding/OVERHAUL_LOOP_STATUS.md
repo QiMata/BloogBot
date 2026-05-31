@@ -209,4 +209,54 @@ per-edge work.
   manifest documents this; Phase 1's actual mitigation is the bake-fixture
   pair pre-commit gate (guardrail 3).
 
+**Commit:** `ce5d8154` `phase(0) iter(4): D3 test-failure baseline manifest from prior evidence`
+
+---
+
+## Iter 5 — 2026-05-31 — Phase 0
+
+**Did:** Sweep progress-checked at 248/785 (31.5%, ETA 160 min, healthy,
+pid 29900 alive). Pivoted the planned per-edge-classification work
+(iter-2 evidence already proves smooth-path segments at T1 stall
+classify ALL Walk Clear — runtime per-segment probes can't detect the
+wall-collision-creep failure; re-running would be redundant signal).
+Iter 5 instead built Phase 1 PREP via read-only code inventory.
+
+Wrote [`OVERHAUL_PHASE1_PREP.md`](OVERHAUL_PHASE1_PREP.md) — work-breakdown
+for Phase 1: AgentProfile + BakeProfile struct sketch (~80 LOC), current
+bake-default vs proposal-target table identifying **two non-Mononen
+violations** (`ch=cs=0.2666` instead of `ch=cs/2`; `walkableSlopeAngle=75°
+> physics 60°`) as the biggest correctness gaps. Surface area scoped:
+TileWorker.cpp 12,197 LOC (replace `getDefaultConfig` + `from_json`),
+MapBuilder.cpp:547-550 (the "Dont ask me why" two-cell-size footgun
+between `BASE_UNIT_DIM=0.2666` and `BASE_UNIT_DIM_MAP_BUILDER=0.13`),
+config.json 277 lines (delete 5 per-tile bake-param blocks, preserve 34
+`_README` + 8 `_NEGATIVE_RESULT_*` per proposal §3 Phase 1 step 4).
+Phase 1 estimated 10-18 hr wall-clock, 5-8 iters; starts ONLY after D4
+go-decision (expected iter 7-8 after sweep done).
+
+**Phase exit criteria progress:**
+- D2 (baseline reports): in flight, 31.5% by tile count.
+- D4 (go/no-go findings): ❌ not started; this prep doc feeds the
+  Phase-1-readiness section of D4.
+
+**Tests:** No bake, no live tests, no code modified — read-only.
+
+**Files changed:** docs/Plan/Pathfinding/OVERHAUL_PHASE1_PREP.md (new);
+docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 5 entry).
+
+**Next iter:** Iter 6 wakes in ~30 min for third sweep progress check
+(should be ~350-380/785, ETA ~2 hr remaining). If sweep healthy, iter 6
+does Phase 2 prep (Recast 1.6.0 vendor upgrade scope analysis) OR starts
+the map-0 sweep if hardware capacity allows (it doesn't — both maps
+serial through the same validator native state).
+
+**Blockers/risks:**
+- The "outdoor vs indoor" cs split is real but config doesn't have
+  per-tile indoor flags. Phase 1 first-pass uses `indoor = false`
+  globally and accepts the indoor refinement debt for iter 9+.
+- Phase 1's tile-size derivation may not produce the exact 533.33y
+  world unit per tile that MmapGen's 32x32 grid assumes; needs check
+  during Phase 1 implementation.
+
 **Commit:** _filled by commit step below_
