@@ -1628,5 +1628,87 @@ proposal §3 Phase 1 EXIT measurement again:
 6. If 109 east-Kalimdor tiles STILL silently fail, fix walkableClimb
    quantization (round() instead of floor()) before final close
 
+**Commit:** `38e2331a` `phase(1) iter(24): re-apply iter-20 + auto-derive ch=cs/2 per-tile`
+
+## Iter 25 — 2026-05-31 — Phase 1 (full map-1 re-bake retry, SUCCESS)
+
+**Did:** Retried the iter-21 full map-1 re-bake now that iter 24's
+auto-derive ch=cs/2 per-tile fix is in place. No code changes this iter —
+purely a re-execution of the iter-21 procedure with the iter-24
+implementation underneath.
+
+**Procedure:**
+1. Deleted all 785 map-1 `001*.mmtile` files from `D:\MaNGOS\data\mmaps`
+   to force `MmapGen.exe::shouldSkipTile` to rebuild from scratch (the
+   .preiter21 backup at `mmaps.preiter21` was already preserved from
+   iter 21 → 22 cycle and stays as rollback source).
+2. Launched `bake-all-maps.ps1 -Maps 1 -DataDir D:\MaNGOS\data
+   -Threads 8` via Start-Process wrapper (detached so the 10-min
+   PowerShell tool timeout doesn't kill it).
+3. Polled MmapGen.exe PID via Get-Process until it exited.
+
+**Bake result — CLEAN:**
+
+| Metric | Pre-iter-21 (May-1 backup) | Iter-21 (broken) | **Iter-25** |
+|---|---|---|---|
+| Tile count | 785 | 675 (lost 110) | **786 (+1: 0015142)** |
+| Total bytes | 876 MB | 615 MB | **676 MB** |
+| Wall-clock | n/a | 11.9 min | **12.3 min** |
+| "Too many vertices" | 0 | **1 (T3 → exit(0))** | **0** ✅ |
+| Failed building | 0 | 0 | **0** ✅ |
+| No detail mesh | 0 | 0 | **0** ✅ |
+| No polygons | 0 | 0 | **0** ✅ |
+| Building tile attempts | n/a | 853 (terminated) | **1018 (all)** ✅ |
+| Writing to file (success) | n/a | 675 | **786** ✅ |
+
+**The 110 tiles missing in iter-21 ALL came back in iter-25.** This
+confirms iter-24's hypothesis: those 110 weren't silent walkableClimb
+quantization failures — they were `exit(0)`-INTERRUPTED by tile (40, 29)'s
+vertex overflow before they could be processed. The auto-derive fix at
+tile (40, 29) (ch=0.05 instead of mismatched 0.2562) kept it under
+Detour's vertex ceiling, MmapGen ran to completion, and all 1018 tile
+slots got their chance to bake.
+
+**Bake-fixture pair (T3 + T4) — guardrail 3 mandatory:**
+- `WWOW_OG_ZEP_BAKE_FIXTURE=1` + `WWOW_BRM_BAKE_FIXTURE=1`
+- `OgZeppelin_BakeFixtureValidation` ✅ PASS (2m9s)
+- `BrmDungeon_BakeFixtureValidation` ✅ PASS
+- **Total: 2/2 PASS in 6.11 min.**
+
+T3 against the new full-bake produces a GREEN result — the auto-derive
+ch=cs/2 fix preserves runtime physics behavior even at scale across all
+785 freshly-baked tiles.
+
+**Phase 1 progress:**
+- 6 of 6 Mononen value updates applied AND validated end-to-end on a
+  full map-1 bake.
+- All 785 tiles produced. NO overflow. NO silent failures.
+- Bake-fixture pair (T3+T4) GREEN against the new bake.
+- 12.3 min wall-clock for full map-1 re-bake (≤30 min Phase 1 budget).
+
+**What's STILL needed for Phase 1 close:**
+- The proposal §3 Phase 1 exit metric is "≥30% Blocked-drop globally
+  per re-aggregated D2 sweep vs D4's 13.18% baseline". The sweep + aggregate
+  is iter 26.
+
+**Tests:** Bake PASS. Bake-fixture pair PASS 2/2.
+
+**Files changed (iter 25):**
+- `docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md` (this iter-25 entry)
+- `D:\MaNGOS\data\mmaps\001*.mmtile` (786 fresh-baked tiles; not in git)
+
+**Files preserved (NOT committed):**
+- `D:\MaNGOS\data\mmaps.iter21-failed\` (iter-21 broken 675-tile bake for diagnosis)
+- `tmp/bake-sweeps/iter25-full-map1\{map-001.log, bake-all.log, bake-summary.json}`
+  (iter-25 bake logs)
+
+**Next iter — Iter 26:** Run `phase0-sweep-map.ps1 -MapId 1 -NoLoadAdt
+-Samples 5` against the iter-25 bake. Then `phase0-aggregate-sweep.ps1
+-MapId 1`. Compare global Unrecoverable% (Blocked + UnsafeDrop) to D4's
+13.18% baseline. This is THE Phase 1 EXIT MEASUREMENT.
+
+Expected wall-clock: 3-5 hr for sweep + ~1 min aggregate.
+
+
 
 
