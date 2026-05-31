@@ -12044,21 +12044,21 @@ namespace MMAP
         return
         {
             { "borderSize",              0     }, // placeholder
-            { "detailSampleDist",        2.0f  },
+            { "detailSampleDist",        1.6f  }, // Phase 1: cs * 6 with cs=BASE_UNIT_DIM
             { "detailSampleMaxError",    0.5f  },
             { "maxEdgeLen",              0     }, // placeholder
             { "maxVertsPerPoly",         DT_VERTS_PER_POLYGON },
-            { "maxSimplificationError",  1.8f  },
+            { "maxSimplificationError",  1.3f  }, // Phase 1: Mononen target; proposal rejects >=1.5
             { "partitionType",           "watershed" },
-            { "mergeRegionArea",         10    },
-            { "minRegionArea",           30    },
+            { "mergeRegionArea",         40    }, // Phase 1: TrinityCore default; old 10 too small
+            { "minRegionArea",           20    }, // Phase 1: TrinityCore default; old 30 too large
             { "walkableClimb",           0     }, // placeholder
             { "walkableHeight",          0     }, // placeholder
             { "walkableRadius",          0     }, // placeholder
             { "walkableErosionRadius",   -1.0f }, // world units; -1 uses walkableRadius
             { "walkableErosionRadiusCells", -1  }, // cells; overrides world-unit erosion radius when >= 0
-            { "walkableSlopeAngle",      75.0f }, // slope terrain
-            { "walkableSlopeAngleVMaps", 61.0f }, // slope model (WMO...)
+            { "walkableSlopeAngle",      60.0f }, // Phase 1: physics MAX_SLOPE; was 75 (over-permissive)
+            { "walkableSlopeAngleVMaps", 60.0f }, // Phase 1: unified with terrain at physics MAX_SLOPE
             { "quick",                   -1    }, // skip 'undermesh removal'
             // PFS-OVERHAUL-006 / Phase 6: per-tile filterLedgeSpans overrides.
             // Defaults preserve legacy behavior on every tile that does not opt in.

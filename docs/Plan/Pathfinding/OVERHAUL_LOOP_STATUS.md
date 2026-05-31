@@ -961,4 +961,118 @@ post-tile-(32,28) bake; revert tile if T3 or T4 regresses.
 - Sweep status unknown (last log at 407 tiles, possibly hung again);
   iter 19 inspects + recovers OR kills it before the MmapGen build.
 
-**Commit:** _filled by commit step below_
+**Commit:** `1e7ced60` `phase(1) iter(18): REVERT iter 16+17 - unverified commits + build sanity`
+
+---
+
+## Iter 19 — 2026-05-31 — Phase 1 (redo iter 16+17 properly verified)
+
+**Did:** Reauthored Phase 1 step 1+2 in ONE end-to-end verified iter per
+iter-18's lesson. Killed stale Phase-0 sweep (parent pid 37640 + 5
+orphan validator children all hung in Thousand Needles) to free the
+NavMeshPhysicsValidator.exe build lock. Recreated
+[`tools/MmapGen/include/BakeProfile.h`](../../../tools/MmapGen/include/BakeProfile.h)
+from iter-16's design (one fix: `std::string_view` instead of `std::string`
+so `inline constexpr kTaurenM` is a literal type under /std:c++17 if/when
+the header gets wired). Re-applied iter-17's 5 Mononen value updates to
+[`TileWorker.cpp::getDefaultConfig`](../../../tools/MmapGen/contrib/mmap/src/TileWorker.cpp#L12042):
+detailSampleDist 2.0→1.6, maxSimplificationError 1.8→1.3, mergeRegionArea
+10→40, minRegionArea 30→20, walkableSlopeAngle 75→60 (terrain) + 61→60
+(vmaps).
+
+Built MmapGen.exe via `build-mmapgen.ps1 -Configuration Release`: exit 0,
+all four exes built (MmapGen + SceneCacheBuilder + NavMeshTileEditor +
+NavMeshPhysicsValidator). Backed up the existing `D:\MaNGOS\data\mmaps\
+0012832.mmtile` (2,355,660 bytes May-1 bake) to `.preiter19-<UTC>.bak`.
+Baked tile (32, 28) via `bake-tile.ps1 -Map 1 -Tiles "32,28" -DataDir
+D:\MaNGOS\data`: exit 0, 7.6s, **new tile size 2,253,964 bytes
+(-101,696 = -4.3%)**. Visible cull stages: [POLY-CULL] 620 disabled,
+[DT-POLY-CULL] 5,008 disabled.
+
+**Phase-0 probe results — APPLES-TO-APPLES:**
+
+| Metric (tile 32,28) | Old bake samples=5 | New bake samples=5 | Old bake samples=20 | New bake samples=20 |
+|---|---|---|---|---|
+| Paths found | 5 | 5 | 20 | 20 |
+| TotalSegments | 412 | 412 | 1643 | 1643 |
+| Blocked | 92 | 92 | 288 | 288 |
+| UnsafeDrop | 16 | 16 | 38 | 38 |
+| SteepClimb | 22 | 22 | 106 | 106 |
+| Walk | 16 | 16 | 77 | 77 |
+| Unrecoverable | 108 | 108 | 326 | 326 |
+
+**Probe output is byte-identical** between old and new bake at both
+sample sizes (md5 match on 8425-line JSON). I confirmed this is NOT a
+caching artifact: the validator fatals out without WWOW_DATA_DIR set,
+and the .bak swap test (move new tile to scratch, restore .bak, probe,
+restore new) round-trips correctly — both bakes truly produce identical
+seeded-path affordance histograms despite the -101KB tile-byte delta.
+
+**Interpretation:** The 5 Mononen value updates affect navmesh regions
+the 5+20 random seeded-sample paths DO NOT traverse. The tile structure
+changed (proven by the byte delta + the cull-stage logs), but the
+specific corridors Detour's findPath produced for these seed pairs
+happen to be in regions where slope-60-vs-75, mergeRegion-10-vs-40, and
+detailSampleDist deltas don't change polygon arrangement OR runtime
+physics classification.
+
+**Bake-fixture pair (T3 + T4) — guardrail 3 mandatory pre-commit check:**
+- `BotRunner.Tests` filter `BakeFixtureValidation`:
+  `OgZeppelin_BakeFixtureValidation` ✅ PASS (3m29s)
+  `BrmDungeon_BakeFixtureValidation` ✅ PASS
+- **Total: 2/2 PASS in 7.12 min.** No regression on the load-bearing
+  canary tests. Tile (32, 28) is distance ≥5 from T3 fixture (40, 29)
+  per Phase 1 starting-tile selection criteria — confirmed no cull-blast.
+
+**Phase exit criteria progress:**
+- Phase 1's "Recast parameter defaults set per Mononen rules" criterion:
+  5 of 6 violations fixed (this iter); 6th (ch=cs → ch=cs/2 in
+  `from_json` at TileWorker.cpp:10117) is iter 20's bounded scope and is
+  the LOAD-BEARING change per the probe-delta evidence.
+- Phase 1's "≥30% Blocked-drop on tile (32, 28)" exit: **0% measured at
+  this iter**. Iter 19 result is NEGATIVE-for-progress on the proposal's
+  primary metric. Genuine signal: the 5 non-cs/ch Mononen values are
+  insufficient for the Phase 1 win; the cs/ch fix is the dominant lever.
+- BakeProfile.h authored (skeleton; not yet wired into compile units).
+
+**Tests:** Build PASSED (Release, all 4 exes). Bake PASSED. Bake-fixture
+pair PASSED 2/2. No untrusted code committed.
+
+**Files changed:**
+- tools/MmapGen/include/BakeProfile.h (new, ~80 LOC)
+- tools/MmapGen/contrib/mmap/src/TileWorker.cpp (6 value updates +
+  Phase-1 marker comments)
+- docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (this iter-19 entry)
+
+**Next iter:** Iter 20 — **fix the 6th and BIGGEST Mononen violation**
+in `from_json(rcConfig)` at TileWorker.cpp:10117. Replace the hardcoded
+`config.cs = MMAP::BASE_UNIT_DIM; config.ch = MMAP::BASE_UNIT_DIM;`
+with `config.cs = profile.cs; config.ch = profile.ch;` where `profile =
+MakeBakeProfile(kTaurenM, indoor=false)`. This requires:
+(a) wiring BakeProfile.h into TileWorker.cpp via `#include
+"BakeProfile.h"` (need to add `tools/MmapGen/include` to CMakeLists
+include path); (b) implementing `MakeBakeProfile` body (header
+declares; needs definition — add inline in header OR new
+BakeProfile.cpp); (c) rebake tile (32,28); (d) samples=5+20 probe
+delta vs iter-19 baseline (which IS the May-1 bake's numbers; both are
+captured above); (e) bake-fixture pair pre-commit.
+Expected delta: ch=cs/2 halves vertical voxel resolution → many fewer
+multi-Z poly stacks → expect significant Blocked drop on dense WMO
+tiles (T1 stall pattern). Tile (32, 28) is mostly outdoor terrain so
+the delta may be smaller there; iter 21 probes a dense WMO tile (e.g.,
+the iter-2 7-poly OG-interior tile 40,28) for the dramatic case.
+
+**Blockers/risks:**
+- Probe-delta non-detection at samples=20 on tile (32, 28) is HONEST
+  signal that the 5 non-cs/ch Mononen values aren't moving the needle
+  on outdoor-terrain tile metrics. Don't deceive ourselves into thinking
+  Phase 1 is "30% done" — it's "5 of 6 violations addressed, ZERO
+  observable Blocked-delta yet". Real Phase 1 win is iter 20+.
+- The samples=5+20 byte-identical-output finding is also a methodology
+  lesson: tile-level random-seed probing has BLIND SPOTS to parameter
+  changes that don't affect traversed corridors. Future iter Phase 1
+  verification should probe multiple seeds OR aggregate across many
+  tiles (which D4's global histogram does — that's the right level for
+  Phase 1 close).
+
+**Commit:** `<TBD>` `phase(1) iter(19): redo iter 16+17 - 5 Mononen values + BakeProfile.h skeleton`
