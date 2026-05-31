@@ -356,4 +356,60 @@ pipeline deletion scope. Both feed D4. Iter 8 picks Phase 4 prep first
 - Sweep ETA continues drifting upward as denser tiles hit; total
   wall-clock now ~6.7 hr. Still within Phase 0 budget.
 
+**Commit:** `40d6a81a` `phase(0) iter(7): Phase 3 prep — vmap extractor inventory + WMO fix scope`
+
+---
+
+## Iter 8 — 2026-05-31 — Phase 0
+
+**Did:** Sweep progress-checked at 317/785 (40.4%, ETA 289 min, dense
+Orgrimmar tiles slowed rate to ~0.3 tiles/min; tile (40,28) — the iter-2
+stall tile — took 293s). pid 29900 healthy, zero errors. Wrote
+[`OVERHAUL_PHASE4_PREP.md`](OVERHAUL_PHASE4_PREP.md).
+
+**MAJOR Phase 4 findings:** PhysicsEngine module surface is ~10,872 LOC
+across `PhysicsEngine.cpp` (6,799), `PhysicsCollideSlide` (411),
+`PhysicsGroundSnap` (397), `PhysicsMovement` (308), `SceneQuery` (2,957)
+plus helpers. Three risks the proposal underestimated: (1) **THREE
+divergent vmap libraries** in the repo — bake-time CMaNGOS
+(`tools/MmapGen/src/game/vmap/` 5,141 LOC) + runtime
+`Exports/Navigation/` (different `StaticMapTree`/`VMapManager2`/`BIH`
+lineage) + external extractor. Direct `add_subdirectory` link is
+**impossible** — symbol conflicts (`MMAP::ModelInstance` vs
+`VMAP::ModelInstance` etc.). (2) **Detour bit-split divergence**
+(MmapGen CMakeLists comment explicitly documents `12/21/31` vs runtime
+`16/28/20`); compounds Phase 2's two-Detour finding. (3)
+`PhysicsCollideSlide.cpp` includes `PhysicsEngine.h` (6,799 LOC monolith
+header) AND `SceneQuery.h` — proposal §4 risk #3's "extract just the
+capsule-sweep API into a new PhysicsSweep static lib" is **the design
+path, not a fallback**.
+
+**Revised Phase 4 estimate: 22-35 hr wall-clock, 15-20 iters (vs
+proposal's "2-3 sessions").** Phase 4 is the budget driver. D4 must
+flag this so timeline expectations are honest.
+
+**Phase exit criteria progress:**
+- D2 (baseline reports): in flight, 40.4%.
+- D4 (go/no-go): not started. With Phase 1+2+3+4 prep all landed, D4
+  has the full risk picture; only needs the sweep aggregation. Expected
+  iter 11-12.
+
+**Tests:** No bake, no live tests, no code touched.
+
+**Files changed:** docs/Plan/Pathfinding/OVERHAUL_PHASE4_PREP.md (new);
+docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 8 entry).
+
+**Next iter:** Iter 9 wakes in ~30 min (sweep should be ~340-350/785).
+Bounded work: Phase 5 prep — inventory Navigation.cs's 5,600 LOC
+repair pipeline deletion scope + the `SnapshotStallGuard` /
+`StaticRoutePackCache` / `PathfindingOverlayBuilder` / `NavigationPath.ShouldPreferAlternatePath`
+deletion targets. This is the last phase prep doc needed before D4.
+
+**Blockers/risks:**
+- Phase 4 scope is materially larger than proposal stated; D4 needs to
+  set expectation honestly.
+- Sweep ETA continues to drift (now ~289 min remaining + 197 elapsed
+  = ~8 hr total). Acceptable but means D4 lands iter 11-12 instead
+  of iter 9-10.
+
 **Commit:** _filled by commit step below_
