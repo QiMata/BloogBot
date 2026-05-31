@@ -1075,4 +1075,4 @@ the iter-2 7-poly OG-interior tile 40,28) for the dramatic case.
   tiles (which D4's global histogram does — that's the right level for
   Phase 1 close).
 
-**Commit:** `<TBD>` `phase(1) iter(19): redo iter 16+17 - 5 Mononen values + BakeProfile.h skeleton`
+**Commit:** `9140ea44` `phase(1) iter(19): redo iter 16+17 verified end-to-end`
