@@ -81,7 +81,28 @@ Core areas:
 
 ## 5. Canonical Build and Test Commands
 
-Use these as primary commands in this repo.
+### Stable script interface (preferred)
+
+**Use `scripts/` instead of guessing stack-specific commands.** These are thin,
+strict wrappers over the commands below; they print progress, exit non-zero on
+failure, and run from anywhere in the tree. Full reference:
+[`scripts/README.md`](scripts/README.md) and
+[`docs/local-development.md`](docs/local-development.md).
+
+```powershell
+.\scripts\bootstrap.ps1          # verify .NET 8 SDK + dotnet restore
+.\scripts\build.ps1              # dotnet build the solution (Debug); -Configuration Release; -Native for C++
+.\scripts\format.ps1             # dotnet format (mutates files)
+.\scripts\lint.ps1               # dotnet format --verify-no-changes (read-only)
+.\scripts\test-fast.ps1          # unit tests only (Layer 3, no server)
+.\scripts\test.ps1               # full layered suite (all layers)
+.\scripts\test-integration.ps1   # live integration tests (Layer 4; needs MaNGOS stack)
+.\scripts\check.ps1              # pre-PR gate: lint (advisory) -> build -> fast tests
+.\scripts\clean.ps1              # remove build artifacts (bin/obj, Bot/<config>, ...)
+```
+
+From bash/git-bash the same names work via extensionless shims: `./scripts/build`,
+`./scripts/test-fast`, etc. The raw commands these wrap are documented below.
 
 ### Build .NET solution
 
@@ -260,9 +281,11 @@ If you modify `.proto` files in `Exports/BotCommLayer/Models/ProtoDef`:
 
 ## 13. Accuracy Notes for This Repo
 
-- Some legacy docs reference missing paths/scripts (for example `scripts/build.ps1`).
+- The `scripts/` interface (see §5 and [`scripts/README.md`](scripts/README.md)) now
+  exists and is the preferred entry point for build/test/lint/check. Earlier docs that
+  referenced `scripts/build.ps1` before it existed are now valid.
 - Treat actual files in the repository as source of truth when docs and filesystem diverge.
-- Prefer `run-tests.ps1`, solution/project files, and current task docs over outdated historical instructions.
+- Prefer `scripts/`, `run-tests.ps1`, solution/project files, and current task docs over outdated historical instructions.
 
 ## 14. Done Criteria for Agent Changes
 
