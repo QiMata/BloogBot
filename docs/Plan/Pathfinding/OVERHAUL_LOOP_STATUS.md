@@ -259,4 +259,52 @@ serial through the same validator native state).
   world unit per tile that MmapGen's 32x32 grid assumes; needs check
   during Phase 1 implementation.
 
+**Commit:** `37f414c0` `phase(0) iter(5): Phase 1 prep — bake-param inventory + AgentProfile sketch`
+
+---
+
+## Iter 6 — 2026-05-31 — Phase 0
+
+**Did:** Sweep progress-checked at 280/785 (35.7%, ETA 207 min, slowed
+from 184 because dense Mulgore/Thunder Bluff WMO tiles hit 78-135s/tile
+vs 14-21s edge tiles). pid 29900 alive. Wrote [`OVERHAUL_PHASE2_PREP.md`](OVERHAUL_PHASE2_PREP.md)
+documenting the recastnavigation vendor inventory.
+
+**MAJOR Phase 2 finding:** Two DIFFERENT Detour vendor copies exist
+in-tree — [`tools/MmapGen/dep/recastnavigation/Detour/`](../../../tools/MmapGen/dep/recastnavigation/Detour/)
+(bake-time, 9 of 9 header files differ from runtime) and
+[`Exports/Navigation/Detour/`](../../../Exports/Navigation/Detour/)
+(runtime, has extra `DetourPathCorridor.{h,cpp}` for the corridor-fallback
+helper). Both advertise `DT_NAVMESH_VERSION=7` but implementations
+differ — wire-format compatibility is "by accident" not guarantee.
+Proposal's Phase 2 wording assumed one shared copy; actual scope is
+**2× vendor replacement + divergence resolution**. Bake-time total
+20,270 LOC (Detour+Recast), runtime 9,383 LOC (Detour only). Vendor
+lineage: jackpoz 2014-06-20 TrinityCore fork with 104-line custom diff;
+v1.6.0 (May 2024) is ~10 years of upstream fixes ahead. The 104-line
+diff's main load-bearing change is `#define DT_POLYREF64 1` — Phase 2
+preserves this as a CMake build define.
+
+**Phase exit criteria progress:**
+- D2 (baseline reports): in flight, 35.7%, ETA 207 min.
+- D4 (go/no-go): not started; Phase 2 prep feeds the Phase-2-readiness
+  section of D4.
+
+**Tests:** No bake, no live tests, no code modified — read-only.
+
+**Files changed:** docs/Plan/Pathfinding/OVERHAUL_PHASE2_PREP.md (new);
+docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 6 entry).
+
+**Next iter:** Iter 7 wakes in ~30 min (sweep should be ~330-360/785,
+ETA ~3 hr remaining). Bounded work: write Phase 3 (vmap extractor)
+prep — locate the extractor + scope the AzerothCore PR #20822 +
+TrinityCore #23972 backport.
+
+**Blockers/risks:**
+- The two-copy Detour divergence means Phase 2 will need careful
+  consolidation; flagged as medium-likelihood risk in the prep doc.
+- Slowing sweep rate (3.5→2.4 tiles/min) means total wall-clock for
+  D2 may push to 6-7 hr (vs first estimate 6 hr). Acceptable per
+  proposal's "we can take our time".
+
 **Commit:** _filled by commit step below_
