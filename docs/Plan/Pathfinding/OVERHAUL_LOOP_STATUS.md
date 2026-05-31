@@ -412,4 +412,57 @@ deletion targets. This is the last phase prep doc needed before D4.
   = ~8 hr total). Acceptable but means D4 lands iter 11-12 instead
   of iter 9-10.
 
+**Commit:** `79ef62ee` `phase(0) iter(8): Phase 4 prep — PhysicsEngine link risk inventory`
+
+---
+
+## Iter 9 — 2026-05-31 — Phase 0
+
+**Did:** Sweep progress-checked at 333/785 (42.4%, ETA 319 min). Tile
+(36,29) took 299s; pid 29900 healthy zero errors. Wrote
+[`OVERHAUL_PHASE5_PREP.md`](OVERHAUL_PHASE5_PREP.md) — Phase 5 deletion
+inventory.
+
+**MAJOR Phase 5 findings:** (1) `Services/PathfindingService/Repository/
+Navigation.cs` is **7,697 LOC, not 5,600** as the proposal cites — 421
+mentions of "Repair" in 7.7K LOC, essentially the entire file IS the
+repair pipeline. Net Phase 5 deletion achievable: ≥10,000-12,000 LOC,
+not the proposal's ≥5,000 (a positive correction). (2) `NavigationPath.cs`
+is 5,647 LOC with 39 mentions of `ShouldPreferAlternatePath`/`IsRouteSupported`/
+corridor terms; all uses self-contained within the file. (3) `SnapshotStallGuard`
+is **test infrastructure ONLY** (lives in `LongPathingTests.cs`), not a
+runtime collision-creep detector — proposal §3 Phase 5 step 4's framing
+is wrong but the deletion target is real. (4) `StaticRoutePackCache.cs`
+(901 LOC) has 6 cross-layer callers (`PathfindingSocketServer`,
+`NavigationPathFactory` ×2, `TravelTask`, 3 test files) — deletion
+decision deferred to Phase 5 mid-iter pending p50 latency measurement.
+(5) `PathfindingOverlayBuilder.cs` (140 LOC) consumed by `TravelTask` —
+keep through Phase 5, defer deletion to Phase 6 unless transport research
+clears it.
+
+**Phase 5 revised estimate: 13-21 hr wall-clock, 7-11 iters.** Combined
+with Phase 0-4 totals, **the full overhaul timeline is ~58-95 hr /
+~45-60 iters AFTER D4 commits.**
+
+**Phase exit criteria progress:**
+- D2 (baseline reports): in flight, 42.4%.
+- **ALL FIVE phase prep docs landed.** D4 has full risk picture; only
+  needs the in-flight sweep aggregation. Expected iter 12-13.
+
+**Tests:** No bake, no live tests, no code touched.
+
+**Files changed:** docs/Plan/Pathfinding/OVERHAUL_PHASE5_PREP.md (new);
+docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 9 entry).
+
+**Next iter:** Iter 10 wakes in ~30 min. With all phase preps done,
+remaining iters until sweep finishes are progress checks + early D4
+drafting (synthesizing the 5 prep docs + the D3 manifest + the iter-2
+stall-coord findings into a single go/no-go recommendation).
+
+**Blockers/risks:**
+- The overhaul's total budget is materially larger than the proposal's
+  "8-15 sessions" estimate. D4 must communicate this honestly so the
+  user sets expectations correctly before any Phase 1+ code work begins.
+- Sweep ETA stable around 319 min remaining (~9.6 hr total wall-clock).
+
 **Commit:** _filled by commit step below_
