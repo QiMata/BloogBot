@@ -95,7 +95,9 @@ validation commands + do-not-edit rules per area without bloating this file. See
 - `shared-libraries` (`Exports/*` C# libs) · `services` (`Services/**`) ·
   `native` (C++ + `*.vcxproj`) · `bot-profiles` (`BotProfiles/**`) ·
   `tests` (`Tests/**`) · `ui` (`UI/**`) · `protobuf` (`.proto` + generated
-  `*.cs`) · `config` (`Config/**/*.json`) · `docs` (`docs/**/*.md`, task trackers).
+  `*.cs`) · `config` (`Config/**/*.json`) · `docs` (`docs/**/*.md`, task
+  trackers) · `infrastructure` (docker/compose/CI/build-props/`.editorconfig`) ·
+  `tools` (`tools/**/*.cs`) · `ai` (`BloogBot.AI/**`).
 
 Per-directory `CLAUDE.md` files cover component context (what each project is and
 depends on); the instruction files cover rules-by-file-type. Neither restates
