@@ -72,37 +72,28 @@ Completed item details are archived in `Services/PromptHandlingService/TASKS_ARC
 4. Transfer-focused tests: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Transfer|FullyQualifiedName~PromptFunctionBase" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-05-30
-- Active task: none. `PHS-STORY-MGR-001` is complete.
-- Last delta: added PromptHandlingService-owned storyline management models, repository methods, draft/publish validation service, and the localhost REST API host used by the Blazor Storyline Manager.
+- Last updated: 2026-05-31
+- Active task: none. Foundry persona deploy tooling is implemented and the dev Agent Application is live.
+- Last delta: added `tools/FoundryPersonaDeploy`, migrated service-local Foundry metadata to `evaluationSuites[]`, added the v1 persona runtime eval seed dataset, and deployed prompt-agent version `4`.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet restore Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --verbosity minimal` -> passed
-  - `dotnet build Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning
-  - `dotnet build Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --configuration Release --no-restore -v:minimal -m:1` -> passed with NETSDK1206 warning
-  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (36 passed, 3 skipped)
+  - `dotnet build tools\FoundryPersonaDeploy\FoundryPersonaDeploy.csproj --configuration Release -v:minimal` -> passed
+  - `dotnet run --project tools\FoundryPersonaDeploy\FoundryPersonaDeploy.csproj --configuration Release --no-build -- --dry-run` -> passed
+  - `dotnet run --project tools\FoundryPersonaDeploy\FoundryPersonaDeploy.csproj --configuration Release --no-build` -> passed; model deployment `Succeeded`, prompt-agent `wwow-persona-runtime-dev:4`, Agent Application deployment `Running`/`Succeeded`, project-scoped smoke `completed`, application smoke `completed`
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (38 passed, 3 skipped)
+  - `dotnet format tools\FoundryPersonaDeploy\FoundryPersonaDeploy.csproj --verify-no-changes --no-restore --verbosity minimal` -> passed
 - DB/config used:
-  - Default DB path: `storyline_runtime.sqlite` under content root.
-  - Runtime config: `Config/foundry/storyline-runtime.json`.
   - Foundry persona runtime config: `Config/foundry/persona-runtime.json`.
   - Agent metadata: `Services/PromptHandlingService/.foundry/agent-metadata.yaml`.
-  - Seed file: `Config/foundry/storyline-seed.json`.
-  - Tests used isolated temp SQLite DBs.
-- Deployment note: the `2026-01-15-preview` ARM API rejected deployment protocol `Agent`, so the running published application deployment uses protocol `Responses` version `1.0` for the OpenAI-compatible endpoint.
+  - Eval seed dataset: `Services/PromptHandlingService/.foundry/datasets/wwow-persona-runtime-dev-eval-seed-v1.jsonl`.
+- Deployment note: the tool targets protocol `Responses` version `1.0` for the Agent Application deployment and keeps Foundry advisory-only.
 - Files changed:
-  - `Services/PromptHandlingService/Storylines/StorylineModels.cs`
-  - `Services/PromptHandlingService/Storylines/StorylineManagementDtos.cs`
-  - `Services/PromptHandlingService/Storylines/IStorylineActivityCatalog.cs`
-  - `Services/PromptHandlingService/Storylines/IStorylineManagementService.cs`
-  - `Services/PromptHandlingService/Storylines/StorylineManagementService.cs`
-  - `Services/PromptHandlingService/Storylines/IStorylineRepository.cs`
-  - `Services/PromptHandlingService/Storylines/SqliteStorylineRepository.cs`
-  - `Services/PromptHandlingService.Api/`
-  - `docs/TASKS.md`
+  - `Config/foundry/persona-runtime.json`
+  - `Services/PromptHandlingService/.foundry/agent-metadata.yaml`
+  - `Services/PromptHandlingService/.foundry/datasets/wwow-persona-runtime-dev-eval-seed-v1.jsonl`
+  - `Services/PromptHandlingService/Foundry/FoundryProjectResponsesClient.cs`
+  - `tools/FoundryPersonaDeploy/`
+  - `Tests/PromptHandlingService.Tests/FoundryPersonaRuntimeTests.cs`
   - `Services/PromptHandlingService/TASKS.md`
-  - `Services/PromptHandlingService/TASKS_ARCHIVE.md`
-  - `Tests/PromptHandlingService.Tests/StorylineRuntimeTests.cs`
-  - `Tests/PromptHandlingService.Tests/TASKS.md`
-  - `Tests/PromptHandlingService.Tests/TASKS_ARCHIVE.md`
 - Next command: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`
 - Blockers: none
