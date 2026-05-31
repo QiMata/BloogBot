@@ -710,4 +710,57 @@ deferred sections need refinement before Phase 0 close).
   `MaybeLoadAdt` loads the 3×3 tile grid, ADT loading dense WMO data
   triggers something — possibly a Mulgore-specific WMO bug.
 
+**Commit:** `dcb6a579` `phase(0) iter(14): second sweep hang recovered; Phase 1 tile pick verified`
+
+---
+
+## Iter 15 — 2026-05-31 — Phase 0
+
+**Did:** Confirmed third sweep hang per iter-14's pattern threshold —
+tile (29,32) running 30+ min, plus an orphan validator from iter-14's
+kill (pid 43632, tile 33,31) still hung in background. Killed all 3
+processes (orphan + current child + parent). Per iter-14 commitment:
+switched sweep to `--no-load-adt` mode.
+
+Added `[switch]$NoLoadAdt` parameter + conditional invocation to
+[`phase0-sweep-map.ps1`](../../../tools/scripts/phase0-sweep-map.ps1).
+Relaunched sweep with `-NoLoadAdt` (pid 37640) — **per-tile time
+dropped from 100-300s to 17-25s (5-15× speedup)**. ETA dropped from
+1086 min to ~111 min for remaining tiles.
+
+Created sentinel for tile (29, 32) so the script skips it on resume.
+Total sentinel-skipped tiles now: 3 (30,30 iter 11; 33,31 iter 14;
+29,32 iter 15) = 0.38% data loss.
+
+**Documented methodology bias** in D4 §2b: first 374 tiles probed WITH
+ADT load; remaining ~390 tiles probed WITHOUT. Implication: second-
+half tiles' Unrecoverable rate will be biased slightly LOW. D4's
+13.47% baseline (iter 11+12) is from first half only. Phase 1
+verification of (32, 28) will use ADT-load BOTH ways for
+apples-to-apples within-tile comparison.
+
+**Phase exit criteria progress:** D2 sweep moving much faster post-
+mode-switch. Iter 16 should see ~200 more tiles done.
+
+**Tests:** No bake, no production code (the launcher script is a
+diagnostic tool, not production).
+
+**Files changed:** tools/scripts/phase0-sweep-map.ps1 (added -NoLoadAdt
+switch); docs/Plan/Pathfinding/OVERHAUL_PHASE0_D4_FINDINGS.md (§2b
+methodology bias section); docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md
+(iter 15 entry).
+
+**Next iter:** Iter 16 wakes in ~30 min. Sweep should be ~550-650/785
+at the new fast rate. If trending well, iter 17-18 should see sweep
+completion + final D4 aggregation.
+
+**Blockers/risks:**
+- The native AV hang in dense Mulgore tiles is a real validator bug
+  (worth filing as a Phase 6 follow-up: investigate
+  `Exports/Navigation/SafeGetPolyAtCoord` AV-tolerance pattern; AV
+  apparently manifests as infinite loop rather than throwable
+  exception sometimes).
+- Mixed-methodology aggregate is documented but reduces D4's signal
+  precision slightly.
+
 **Commit:** _filled by commit step below_

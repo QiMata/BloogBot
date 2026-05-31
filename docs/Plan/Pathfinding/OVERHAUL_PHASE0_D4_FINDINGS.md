@@ -71,6 +71,35 @@ evidence that the bake-vs-physics gap is real and structural.
 `UnrecoverableNonWalk` triage metric: **~12-16%** at these stall tiles,
 within the proposal §3 Phase 0 expected 20-30% baseline.
 
+## 2b. Methodology bias (iter 15 update)
+
+Iters 11, 14, and 15 hit native AVs in the validator's
+`MaybeLoadAdt` → `findNearestPoly` path on dense Mulgore/Thunder Bluff
+tiles, causing infinite hangs. After 3 occurrences (iter 15), the
+remaining sweep was switched to `--no-load-adt` mode which is 5-15×
+faster (17-25s/tile vs 100-300s/tile) but DOES NOT load the per-tile
+ADT context.
+
+**Implication:** the global aggregate is **mixed methodology**:
+- **Tiles 1-374** (iters 3-14, ~47% coverage): probed WITH ADT load.
+- **Tiles 375-785** (iter 15+, ~53% coverage): probed WITHOUT ADT load.
+
+The `--no-load-adt` mode has less classification fidelity for
+dynamic-overlay-affected segments. Expected effect on aggregate:
+**Unrecoverable rate in the second-half tiles will be biased slightly
+LOW** (a few % lower than they'd otherwise be).
+
+D4's 13.47% Unrecoverable rate is from the first half ONLY (ADT-loaded).
+The FINAL global aggregate at sweep close will be slightly lower than
+this, but the **top-20 worst-tiles list** (which is what matters for
+Phase 1 starting tile selection) is dominated by the first-half tiles
+that were probed WITH ADT.
+
+**Phase 1 verification will use BOTH halves' methodology consistently
+per-tile** — the (32, 28) baseline used ADT load; the post-Phase-1
+re-probe of (32, 28) will also use ADT load. So apples-to-apples
+within-tile comparison is preserved.
+
 ## 3. Global Blocked-poly ratio
 
 > Kickoff: "What's the global Blocked-poly ratio? Is it within the

@@ -19,7 +19,14 @@ param(
     [int]$MaxTiles = 0,                                                   # 0 = all
     [string]$DataDir = 'D:\MaNGOS\data',
     [string]$ValidatorExe = 'e:\repos\Westworld of Warcraft\Bot\Release\net8.0\NavMeshPhysicsValidator.exe',
-    [string]$OutRoot = 'e:\repos\Westworld of Warcraft\tmp\iter-overhaul-phase0'
+    [string]$OutRoot = 'e:\repos\Westworld of Warcraft\tmp\iter-overhaul-phase0',
+    # NoLoadAdt: pass --no-load-adt to validator. Iter 15 added this after
+    # 3 hangs in dense Mulgore/Thunder Bluff region — the validator's
+    # MaybeLoadAdt + dense WMO appears to trigger a native AV inside
+    # Detour findNearestPoly that hangs rather than throws. Without
+    # ADT context the validator's pathfinding signal is degraded
+    # (missing dynamic-overlay info) but the hang stops.
+    [switch]$NoLoadAdt
 )
 
 $ErrorActionPreference = 'Stop'
@@ -78,7 +85,12 @@ foreach ($t in $tiles) {
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        & $ValidatorExe $MapId --tile ('{0},{1}' -f $t.TileX, $t.TileY) --samples $Samples --silent --out $outJson 2>$null | Out-Null
+        if ($NoLoadAdt) {
+            & $ValidatorExe $MapId --tile ('{0},{1}' -f $t.TileX, $t.TileY) --samples $Samples --silent --no-load-adt --out $outJson 2>$null | Out-Null
+        }
+        else {
+            & $ValidatorExe $MapId --tile ('{0},{1}' -f $t.TileX, $t.TileY) --samples $Samples --silent --out $outJson 2>$null | Out-Null
+        }
         $code = $LASTEXITCODE
         $dur = ((Get-Date) - $tileStart).TotalSeconds
         if ($code -ge 0 -and (Test-Path $outJson)) {
