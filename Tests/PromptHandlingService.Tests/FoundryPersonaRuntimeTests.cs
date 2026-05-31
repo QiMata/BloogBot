@@ -60,6 +60,41 @@ public sealed class FoundryPersonaRuntimeOptionsTests
     }
 
     [Fact]
+    public void AgentMetadata_UsesEvaluationSuitesSeedV1Contract()
+    {
+        var metadataPath = FindRepoFile("Services/PromptHandlingService/.foundry/agent-metadata.yaml");
+        var metadata = File.ReadAllText(metadataPath);
+
+        Assert.Contains("evaluationSuites:", metadata);
+        Assert.DoesNotContain("testCases:", metadata);
+        Assert.Matches(@"datasetVersion:\s*""?v1""?", metadata);
+        Assert.Contains(".foundry/datasets/wwow-persona-runtime-dev-eval-seed-v1.jsonl", metadata);
+        Assert.Matches(@"applicationName:\s*""?wwow-persona-runtime-dev-app""?", metadata);
+        Assert.Matches(@"deploymentName:\s*""?wwow-persona-runtime-dev-deployment""?", metadata);
+        Assert.Contains("applicationEndpoint:", metadata);
+    }
+
+    [Fact]
+    public void AgentSeedDataset_UsesQueryExpectedBehaviorRows()
+    {
+        var datasetPath = FindRepoFile("Services/PromptHandlingService/.foundry/datasets/wwow-persona-runtime-dev-eval-seed-v1.jsonl");
+        var rows = File.ReadAllLines(datasetPath)
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
+
+        Assert.InRange(rows.Length, 15, 20);
+        foreach (var row in rows)
+        {
+            using var document = JsonDocument.Parse(row);
+            Assert.True(document.RootElement.TryGetProperty("query", out var query), row);
+            Assert.True(document.RootElement.TryGetProperty("expected_behavior", out var expectedBehavior), row);
+            Assert.False(string.IsNullOrWhiteSpace(query.GetString()));
+            Assert.False(string.IsNullOrWhiteSpace(expectedBehavior.GetString()));
+            Assert.False(document.RootElement.TryGetProperty("answer", out _));
+        }
+    }
+
+    [Fact]
     public void OptionsSurface_DoesNotExposeApiKeyProperty()
     {
         var propertyNames = typeof(FoundryPersonaRuntimeOptions)

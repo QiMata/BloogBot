@@ -49,19 +49,14 @@
 6. Foundry deterministic focus: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last updated: 2026-05-30
-- Active task: none. `PHS-STORY-MGR-TST-001` is complete.
-- Last delta: added deterministic management tests for storyline drafts, publish validation, graph snapshot replacement, invalid ActivityCatalog ids, character binding publish, memory candidate review, and graph layout round-trip.
+- Last updated: 2026-05-31
+- Active task: none. Foundry metadata and seed-dataset contract checks are in place.
+- Last delta: added deterministic checks that Foundry metadata uses `evaluationSuites[]`, accepts quoted YAML scalar values, and that the v1 seed dataset contains `query` plus `expected_behavior` rows.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet restore Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --verbosity minimal` -> passed
-  - `dotnet build Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Debug --no-restore -v:minimal -m:1` -> passed
-  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Debug --no-restore --filter "FullyQualifiedName~Storyline" --logger "console;verbosity=minimal"` -> passed (21 passed, 1 skipped)
-  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (36 passed, 3 skipped)
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (38 passed, 3 skipped)
 - Files changed:
-  - `Tests/PromptHandlingService.Tests/StorylineRuntimeTests.cs`
-  - `Tests/PromptHandlingService.Tests/StorylineManagementTests.cs`
+  - `Tests/PromptHandlingService.Tests/FoundryPersonaRuntimeTests.cs`
   - `Tests/PromptHandlingService.Tests/TASKS.md`
-  - `Tests/PromptHandlingService.Tests/TASKS_ARCHIVE.md`
 - Blockers: none
 - Next command: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`

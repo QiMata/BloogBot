@@ -3,5 +3,5 @@
   "model": "gpt-5-mini",
   "agentName": "wwow-persona-runtime-dev",
   "timeoutMs": 30000,
-  "maxOutputTokens": 512
+  "maxOutputTokens": 2048
 }
