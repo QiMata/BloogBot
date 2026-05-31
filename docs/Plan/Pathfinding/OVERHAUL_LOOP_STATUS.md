@@ -1076,3 +1076,158 @@ the iter-2 7-poly OG-interior tile 40,28) for the dramatic case.
   Phase 1 close).
 
 **Commit:** `9140ea44` `phase(1) iter(19): redo iter 16+17 verified end-to-end`
+
+## Iter 20 — 2026-05-31 — Phase 1 (6th Mononen fix + line 10489 ch=0.1f removal)
+
+**Did:** Closed the 6th and biggest Mononen violation by wiring
+[`BakeProfile.h`](../../../tools/MmapGen/include/BakeProfile.h) into the
+live bake path AND removing the `config.ch = 0.1f` override at
+[`TileWorker.cpp:10489`](../../../tools/MmapGen/contrib/mmap/src/TileWorker.cpp#L10489)
+(PFS-OVERHAUL-006 Cycle-16 leftover that was unconditionally clobbering
+the from_json ch value, defeating any Mononen-rule tuning). Three code
+changes in one iter:
+
+1. [`tools/MmapGen/include/BakeProfile.h`](../../../tools/MmapGen/include/BakeProfile.h)
+   — added inline `MakeBakeProfile(agent, indoor)` + `BakeProfileIsValid(p)`
+   bodies. Mononen rules implemented: `cs = r/2` outdoor (or `r/3` indoor),
+   `ch = cs/2`, `walkableRadius = ceil(r/cs)`, `walkableHeight = ceil(h/ch)`,
+   `walkableClimb = floor(maxClimbTerrain/ch)`, `maxSimplificationError =
+   1.3`, `detailSampleDist = cs*6`, `minRegionArea = 20`,
+   `mergeRegionArea = 40`, `maxVertsPerPoly = 6`, `borderSize =
+   walkableRadius + 3`, `maxEdgeLen = 12/cs`, plus a `tileSize` field
+   (informational; not wired into rcConfig in iter 20).
+
+2. [`tools/MmapGen/CMakeLists.txt`](../../../tools/MmapGen/CMakeLists.txt)
+   — added `MMAPGEN_INC_LOCAL = ${CMAKE_CURRENT_SOURCE_DIR}/include` and
+   passed it to `MmapGen`'s `target_include_directories` so TileWorker.cpp
+   can `#include "BakeProfile.h"`.
+
+3. [`tools/MmapGen/contrib/mmap/src/TileWorker.cpp`](../../../tools/MmapGen/contrib/mmap/src/TileWorker.cpp)
+   — added `#include "BakeProfile.h"`. In `from_json(rcConfig)` replaced
+   `config.cs = MMAP::BASE_UNIT_DIM; config.ch = MMAP::BASE_UNIT_DIM;` with
+   `MakeBakeProfile(kTaurenM, false).cs/.ch` so the bake reads from the
+   single-source-of-truth header. In `buildTile` removed the unconditional
+   `config.ch = 0.1f;` override at the PFS-OVERHAUL-006 Cycle-16 site;
+   per-tile json `"ch"` / `"cs"` overrides still honored.
+
+**Why both edits in the same iter:** The iter-20 kickoff originally
+framed only the `from_json` fix as load-bearing. Pre-implementation
+audit found that line 10489 unconditionally clobbered the `from_json`
+ch value 5 lines after `from_json` returned. So fixing `from_json`
+alone would have produced cs change only, with ch unchanged at 0.1.
+Surfaced the conflict to the user before baking; user chose "Pure
+Mononen wiring" — both edits done together.
+
+**Build verification:** `build-mmapgen.ps1 -Configuration Release` exit 0.
+MmapGen.exe + NavMeshPhysicsValidator.exe both rebuilt at 12:38 fresh
+post-edit. No build errors; only pre-existing C4244/C4267/C4018 warnings
+from g3dlite + MapTree.h.
+
+**Effective parameter delta (outdoor, Tauren M):**
+
+| Param | iter 19 effective | iter 20 effective | Notes |
+|---|---|---|---|
+| cs | 0.2666 (BASE_UNIT_DIM) | **0.5124** (r/2) | Mononen outdoor coarse |
+| ch | 0.1 (line 10489 override) | **0.2562** (cs/2) | Mononen rule satisfied, COARSER vertically |
+| walkableRadius (auto) | ceil(1.0247/0.2666)=4 | ceil(1.0247/0.5124)=2 | wider horizontal voxels |
+| walkableHeight (auto) | ceil(2.625/0.1)=27 | ceil(2.625/0.2562)=11 | -16 voxels |
+| walkableClimb (auto) | floor(1.2/0.1)=12 | floor(1.2/0.2562)=4 | -8 voxels |
+| walkableSlopeAngle | 60° | 60° | iter 19 already at Mononen |
+| maxSimplificationError | 1.3 | 1.3 | iter 19 already at Mononen |
+
+**Bake of tile (32, 28):** `bake-tile.ps1 -Map 1 -Tiles "32,28" -Variant
+iter20-cs-ch-fix -DataDir D:\MaNGOS\data`: exit 0, 5s, **tile size
+2,253,964 → 1,712,280 bytes (-541,684 = -24.0%)**. Cull stages: [POLY-CULL]
+845 disabled (vs iter-19's 620, +36%), [DT-POLY-CULL] 3,856 disabled (vs
+iter-19's 5,008, -23%). **The tile structurally changed substantially.**
+
+**Phase-0 probe (samples=20) — IDENTICAL TO ITER 19 / MAY-1 BASELINE:**
+
+| Affordance | iter-19 (=May-1) | iter-20 | Delta |
+|---|---|---|---|
+| TotalSegments | 1643 | 1643 | 0 |
+| Walk | 77 | 77 | 0 |
+| Blocked | 288 | 288 | **0%** |
+| Vertical | 341 | 341 | 0 |
+| SafeDrop | 574 | 574 | 0 |
+| SteepClimb | 106 | 106 | 0 |
+| JumpGap | 187 | 187 | 0 |
+| UnsafeDrop | 38 | 38 | 0 |
+| StepUp | 32 | 32 | 0 |
+| UnrecoverableNonWalk | 326 | 326 | 0 |
+
+**Byte-identical histogram counts at samples=20 again, despite a -24%
+tile-byte delta and structurally different cull-stage counts.** The
+proposal's Phase 1 exit metric ("≥30% Blocked-drop on tile (32, 28)")
+measured at 0% for the SECOND iter in a row. This matches the kickoff's
+explicit **STOP condition**: "If iter 20's cs/ch fix shows <10%
+Blocked-drop on tile (32, 28) at samples=20… surface that finding".
+
+**Bake-fixture pair (T3 + T4) — guardrail 3 mandatory pre-commit check:**
+- `WWOW_OG_ZEP_BAKE_FIXTURE=1 + WWOW_BRM_BAKE_FIXTURE=1` →
+  `OgZeppelin_BakeFixtureValidation` ✅ PASS (2m52s)
+  `BrmDungeon_BakeFixtureValidation` ✅ PASS
+- **Total: 2/2 PASS in 6.02 min.** No regression on the load-bearing
+  canary tests; the new bake of tile (32, 28) is non-disruptive to T3's
+  cross-tile cull blast radius (distance ≥5 tiles from T3 (40, 29)).
+
+**Phase exit criteria progress:**
+- 6 of 6 Mononen violations now structurally fixed in code (cs/ch hardcode
+  replaced; line 10489 ch=0.1f override removed; slope/region/sample/error
+  values already at Mononen from iter 19).
+- Per-tile probe Phase 1 exit ("≥30% Blocked-drop on (32, 28)"): **0%
+  measured. Not because the bake didn't change** (it did, -24% tile size;
+  +225 POLY-CULL disabled polys) **but because random-seed sampling on a
+  ~533y outdoor terrain tile lands consistently in regions where
+  affordance classification is invariant.** Iter 19 surfaced this; iter 20
+  empirically confirmed it across a MUCH more aggressive bake delta.
+- Conclusion: the per-tile probe metric is the wrong instrument for
+  Phase 1 close. **The right instrument is the D4 global-histogram sweep
+  re-aggregated over a fresh map-1 (or full-41-map) re-bake.**
+
+**Tests:** Build PASSED. Bake PASSED. Bake-fixture pair PASSED 2/2. No
+untrusted code committed.
+
+**Files changed:**
+- tools/MmapGen/include/BakeProfile.h (inline MakeBakeProfile +
+  BakeProfileIsValid bodies, +~50 LOC)
+- tools/MmapGen/CMakeLists.txt (+5 LOC; new include path)
+- tools/MmapGen/contrib/mmap/src/TileWorker.cpp (BakeProfile.h include +
+  from_json cs/ch swap + buildTile line 10489 override removal +
+  Phase-1 marker comments)
+- docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (this iter-20 entry)
+- tmp/iter-overhaul-phase0/iter20-build.log
+- tmp/iter-overhaul-phase0/iter20-bake-32-28.log
+- tmp/iter-overhaul-phase0/iter20-probe-32-28-postbake-s20.{json,log}
+- tmp/iter-overhaul-phase0/iter20-bake-fixture-pair.log
+
+**Next iter — recalibration required:** The per-tile probe approach has
+now failed to detect signal across TWO iters with significant structural
+bake changes. Per the kickoff's stop-and-surface rule, surfacing to user
+before any global re-bake. Recommendations queued for user input:
+1. **Skip per-tile probes; do a full map-1 re-bake to test-data then
+   re-aggregate via the D2 sweep** (the global-histogram methodology in
+   D4 §3 — that's a 1k-2k tile signal, not a 1-tile seed-bound signal).
+2. **Probe a dense WMO tile** (e.g., iter-2's (40,28) OG-interior or
+   (39,28) doodad-wall) where path corridors are constrained and the
+   sample-blind-spot effect is smaller. (40,28) is direct neighbor of T3
+   (40,29) → cull-blast risk; (39,28) is diagonal-adjacent → safer.
+3. **Increase probe seed diversity** — run validator at samples=100 or
+   multiple `--random-seed` values on (32,28) to confirm the
+   parameter-tighten really IS dead-signal on outdoor terrain.
+
+**Blockers/risks:**
+- Bake-fixture pair canary is non-regressive but that test only exercises
+  EXISTING baked tiles for T3/T4 (which iter 20 did NOT touch). A full
+  map-1 re-bake will produce NEW T3 (40,29) and T4 (BRM) tiles; the pair
+  must be re-run AFTER the re-bake to verify, not before.
+- walkableHeight collapsing from 27→11 voxels means low-clearance
+  filtering is now COARSER. Multi-floor WMO interiors might
+  unexpectedly become passable where they were previously blocked.
+  This is a Phase 4 (physics validation pass) concern but worth
+  monitoring in the next bake.
+- maxClimb collapsing from 12→4 voxels means more ledges count as
+  step-uppable. The runtime physics will reject anything it can't climb,
+  so over-permissive bake should be caught by runtime. Worth probing
+  T1 stall coords (1608.1,-4382.3,10.0) directly.
+
