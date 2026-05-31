@@ -450,7 +450,7 @@ this rule is slot S12.1 in
 | C++ native | `Navigation.dll`, `Physics.dll`, `Loader.dll` | Short, no namespace prefix |
 
 **Known issues (tracked in P10):**
-- `WowSharpClient.NetworkTests` — should be `WoWSharpClient.NetworkTests` (casing)
+- ~~`WowSharpClient.NetworkTests` casing~~ — **resolved 2026-05-31**: the C# `namespace` declarations were fixed to `WoWSharpClient.NetworkTests`; the folder, `.csproj`, and `.sln` were already correct-cased in git.
 - `WWoWBot.AI.Tests` / `BloogBot.AI` — prefix mismatch (legacy)
 - `pfprobe` / `wwow-path-probe` — informal tool names
 

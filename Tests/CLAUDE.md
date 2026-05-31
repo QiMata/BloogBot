@@ -14,7 +14,7 @@ ones.
 | `PathfindingService.Tests/` | Pathfinding algorithm and physics engine tests |
 | `PromptHandlingService.Tests/` | Dialog automation tests |
 | `WoWSharpClient.Tests/` | Protocol parsing, handler, and agent tests |
-| `WowSharpClient.NetworkTests/` | Network/socket, reconnect policy tests |
+| `WoWSharpClient.NetworkTests/` | Network/socket, reconnect policy tests |
 | `WoWSimulation/` | Full simulation integration tests |
 | `RecordedTests.PathingTests.Tests/` | Navigation regression tests |
 | `RecordedTests.Shared.Tests/` | Shared orchestration tests |
