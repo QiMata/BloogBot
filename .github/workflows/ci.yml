@@ -1,0 +1,56 @@
+# Minimal CI for BloogBot (Westworld of Warcraft), driven entirely through the
+# stable scripts/ interface so CI and local development run the same commands.
+#
+# Why this shape:
+#   - Windows-only: the repo targets win32 (WoW.exe injection, native C++, MSBuild).
+#   - The native C++ projects (FastCall/Loader/Navigation) pin the VS v145 / MSVC
+#     toolset, and ForegroundBotRunner copies their DLLs - so a *build* (and therefore
+#     the tests) needs that toolchain, which stock GitHub-hosted runners do not have.
+#   - So the always-on job does what a hosted runner CAN do reliably: restore + an
+#     advisory format check. The build + fast-test steps are gated behind the repo
+#     variable RUN_NATIVE_BUILD ('true'), so they only run on a runner provisioned
+#     with the C++ toolchain (e.g. self-hosted). Locally, full validation is
+#     `scripts/check`.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    name: Restore & lint (windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Bootstrap (verify SDK + restore)
+        shell: pwsh
+        run: .\scripts\bootstrap.ps1
+
+      - name: Lint (advisory)
+        shell: pwsh
+        continue-on-error: true
+        run: .\scripts\lint.ps1
+
+      # The following run only when a runner has the native C++ toolchain.
+      # Enable by setting the repository variable RUN_NATIVE_BUILD = true on a
+      # provisioned (e.g. self-hosted) Windows runner with the VS C++ workload.
+      - name: Build
+        if: ${{ vars.RUN_NATIVE_BUILD == 'true' }}
+        shell: pwsh
+        run: .\scripts\build.ps1 -Native
+
+      - name: Fast tests
+        if: ${{ vars.RUN_NATIVE_BUILD == 'true' }}
+        shell: pwsh
+        run: .\scripts\test-fast.ps1 -SkipBuild

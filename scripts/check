@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# POSIX shim -> PowerShell implementation. Real logic lives in check.ps1.
+exec pwsh -NoProfile -File "$(cd "$(dirname "$0")" && pwd)/check.ps1" "$@"

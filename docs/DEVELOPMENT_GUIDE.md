@@ -532,7 +532,9 @@ Both services mount `D:/MaNGOS/data` (configurable via `WWOW_VMANGOS_DATA_DIR`) 
 
 ### Building the Project
 
-The preferred way to build BloogBot is using the provided PowerShell build script:
+The preferred way to build and validate BloogBot is the stable
+[`scripts/`](../scripts/README.md) interface (see also
+[local-development.md](local-development.md)):
 
 ```powershell
 # Debug build (default)
@@ -541,11 +543,11 @@ The preferred way to build BloogBot is using the provided PowerShell build scrip
 # Release build
 .\scripts\build.ps1 -Configuration Release
 
-# Build with tests
-.\scripts\build.ps1 -Test
+# Build, then run the full test suite
+.\scripts\build.ps1 ; .\scripts\test.ps1
 
-# Clean and rebuild
-.\scripts\build.ps1 -Clean
+# Clean build artifacts, then rebuild
+.\scripts\clean.ps1 ; .\scripts\build.ps1
 ```
 
 ### Using CMake Directly
