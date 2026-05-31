@@ -76,6 +76,12 @@ area; per-directory `CLAUDE.md` files cover component context. See
 [`.github/instructions/README.md`](.github/instructions/README.md). Neither
 restates this file.
 
+Reusable task playbooks ("skills") live in `.claude/skills/<name>/SKILL.md` — read
+the matching skill before starting a recognized task category (adding an
+`IBotTask`, a packet handler, a LiveValidation test, a service/UI panel, etc.).
+The catalog + authoring contract is [`docs/Spec/15_SKILLS.md`](docs/Spec/15_SKILLS.md),
+enforced by `Tests/BotRunner.Tests/Spec/SkillsContractTests.cs`.
+
 ## Architecture Overview
 
 > **Pathfinding Overhaul Active (2026-05-06).** The pathfinding stack is in an
