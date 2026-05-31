@@ -28,13 +28,24 @@ expectations honestly before any Phase 1 code work begins.
 > Kickoff D4 spec: "Do the 3 known stall coords show Blocked edges in the probe?"
 
 **Confirmed.** Iter 2's [`--cull-coord`](OVERHAUL_PHASE0_STALL_COORDS.md)
-probe on prod-data mmaps found polygons at all three coords:
+probe on prod-data mmaps found polygons at the three known stalls.
+Iter 13 added a 4th data point — the **OG zep deck-edge** canonical
+stall (Cycle-17e / loop-17e / loop-24 close-out area, listed in
+proposal §6 as a Phase 6 regression test):
 
-| Stall | WoW coord | Tile | Polyrefs |
+| Stall | WoW coord | Tile | Polyrefs (Z-stack + 2y XY grid) |
 |---|---|---|---|
 | iter-1 east-wall | (1627.6, -4151.8, 36.9) | (39, 28) | 1 |
-| iter-2 OG-interior | (1608.1, -4382.3, 10.0) | (40, 28) | 7 (Z-stack) |
-| loop-25 doodad-wall | (1615.3, -4240.85, ~45) | (39, 28) | 11 (cluster) |
+| iter-2 OG-interior | (1608.1, -4382.3, 10.0) | (40, 28) | 7 |
+| loop-25 doodad-wall | (1615.3, -4240.85, ~45) | (39, 28) | 11 |
+| **OG zep deck-lip A** (boarding) | **(1338.1, -4646.0, 51.6)** | **(40, 29)** | **27** ⚠ |
+| OG zep deck-lip B (upper) | (1335.2, -4644.4, 53.5) | (40, 29) | 14 |
+
+**The OG zep deck-edge has the densest polyref clusters seen** —
+27 + 14 polys at the two canonical stall points, dwarfing the
+loop-25 doodad-wall's 11 and the iter-2 OG-interior's 7. Tile
+(40, 29) is also the T3 fixture canary tile, so Phase 4's per-edge
+sweep validates here against T3's existing checkpoints simultaneously.
 
 Stall 2's **7-polygon Z-stack** at one (X,Y) is the classic
 [loop-19 cull-pipeline-blocker signature](C:/Users/lrhod/.claude/projects/e--repos/memory/project_pfs_loop19_cull_pipeline_blocker.md):

@@ -622,4 +622,46 @@ will compare against this snapshot post-tighten.
 - New sweep instance's ETA calculation is misleading; true ETA depends
   on whether remaining tiles are dense interior or sparse edge.
 
+**Commit:** `ca9033e5` `phase(0) iter(12): D4 update with partial sweep numbers + Phase 1 tile pick`
+
+---
+
+## Iter 13 — 2026-05-31 — Phase 0
+
+**Did:** Sweep progress-checked (374 tiles; sweep continues slow in
+dense Mulgore region). Pivoted from iter-12's planned `--samples 20`
+baseline of (32,28) — the existing sweep output at `--samples 5`
+already IS the right Phase 1 BEFORE-snapshot (apples-to-apples
+comparison wants same sample count). Instead, **probed the OG zep
+deck-edge canonical stall coord** — proposal §6 lists it as a Phase 6
+regression test target and the iter-2 stall-coords doc only had 3 of 4.
+
+**Critical finding:** OG zep deck-edge has the densest polyref clusters
+yet seen — **27 unique polyrefs** at (1338.1, -4646.0, 51.6) and **14**
+at (1335.2, -4644.4, 53.5). Dwarfs the loop-25 doodad-wall's 11 and
+the iter-2 OG-interior's 7. This area (loop-17e / Cycle-17e / loop-24
+close-out) has been the source of multi-loop stall pain. Tile is
+(40, 29) which is ALSO the T3 fixture canary — Phase 4's per-edge
+sweep validates here against T3's existing checkpoints simultaneously.
+
+Updated D4 §1 with the 4th and 5th data points. The complete
+stall-coord polyref-count table now spans 1 → 27 polys, showing the
+bake-vs-physics gap scales dramatically with WMO interior density.
+
+**Phase exit criteria progress:** D4 §1 enhanced with the OG zep
+deck-edge data; otherwise unchanged.
+
+**Tests:** No bake, no live tests.
+
+**Files changed:** docs/Plan/Pathfinding/OVERHAUL_PHASE0_D4_FINDINGS.md
+(§1 updated); docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 13).
+Local: tmp/iter-overhaul-phase0/iter13-og-zep-deck-edge.json (probe output, gitignored).
+
+**Next iter:** Iter 14 wakes in ~30 min. Sweep should be progressing
+past Mulgore region. Bounded work: re-aggregate sweep + check for any
+new top-5 worst tiles + verify Phase 1 starting tile (32, 28) still
+holds the top recommendation under updated data.
+
+**Blockers/risks:** none new.
+
 **Commit:** _filled by commit step below_
