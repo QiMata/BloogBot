@@ -451,7 +451,7 @@ this rule is slot S12.1 in
 
 **Known issues (tracked in P10):**
 - ~~`WowSharpClient.NetworkTests` casing~~ — **resolved 2026-05-31**: the C# `namespace` declarations were fixed to `WoWSharpClient.NetworkTests`; the folder, `.csproj`, and `.sln` were already correct-cased in git.
-- `WWoWBot.AI.Tests` / `BloogBot.AI` — prefix mismatch (legacy)
+- ~~`BloogBot.AI` prefix mismatch~~ — **resolved 2026-05-31**: renamed to `WWoW.AI` / `WWoW.AI.Tests` (self-contained leaf; not in the .sln). The bare legacy product name `BloogBot` is a separate, ongoing phase-out.
 - ~~`pfprobe` / `wwow-path-probe`~~ — **resolved 2026-05-31**: `.scratch/wwow-path-probe` is a throwaway diagnostic in the scratch area, which is intentionally exempt from the `tools/` PascalCase convention. The shipped physics probe is `tools/PathPhysicsProbe/` (PascalCase, own README, implements the `mmo-physics-pathing-probe` skill).
 
 **Do NOT rename:** `BotRunner` (704 file references) or `BotCommLayer` (42 references) — risk too high for cosmetic benefit.

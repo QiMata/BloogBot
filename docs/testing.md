@@ -45,7 +45,7 @@ fixture library, not a suite). By category:
 
 | Category | Projects |
 |---|---|
-| Unit / logic | `BotRunner.Tests`, `WoWSharpClient.Tests`, `BloogBot.AI.Tests`, `PromptHandlingService.Tests`, `Systems.ServiceDefaults.Tests`, `WoWStateManagerUI.Tests` |
+| Unit / logic | `BotRunner.Tests`, `WoWSharpClient.Tests`, `WWoW.AI.Tests`, `PromptHandlingService.Tests`, `Systems.ServiceDefaults.Tests`, `WoWStateManagerUI.Tests` |
 | Native / physics | `Navigation.Physics.Tests`, `PathfindingService.Tests` |
 | Protocol / network | `WoWSharpClient.NetworkTests` |
 | In-process bot | `ForegroundBotRunner.Tests` |

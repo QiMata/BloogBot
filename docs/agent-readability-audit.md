@@ -71,10 +71,13 @@ from the hand-written `ActivityCatalog.cs` / `IActivityCatalog.cs` (which stay i
 `Activities/`). The only consumer coupling — one `<Compile>` glob in
 `PromptHandlingService.Api.csproj` — was updated to the new path.
 
-### P6 — Stale/known-issue naming (intentionally left alone)
-`WowSharpClient.NetworkTests` (folder) vs `WoWSharpClient.NetworkTests` (project),
-`BloogBot.AI` vs `WWoW.AI.Tests`. `CLAUDE.md` flags these as tracked P10 cosmetic
-issues that are **not worth the rename risk** (`BotRunner` alone has 704 references).
+### P6 — Stale/known-issue naming
+Originally left alone as P10 cosmetic issues. **Resolved 2026-05-31** (each a
+self-contained, low-blast-radius rename): the `WoWSharpClient.NetworkTests`
+namespace casing was fixed, and `BloogBot.AI` was renamed to `WWoW.AI`
+(+ `WWoW.AI.Tests`). `BotRunner` (704 refs) and `BotCommLayer` (42 refs) remain
+**deliberately un-renamed** — that rename risk still outweighs the cosmetic
+benefit. The bare legacy product name `BloogBot` is a separate, ongoing phase-out.
 
 ## Safe improvements completed (this pass)
 
@@ -96,7 +99,7 @@ issues that are **not worth the rename risk** (`BotRunner` alone has 704 referen
 4. **Folder READMEs** — `tools/README.md` (index of the 8 tool projects),
    `BotProfiles/README.md`, `Tests/README.md`, `Config/README.md`. Each points to the
    existing `CLAUDE.md` for agent rules rather than duplicating it.
-   (`BloogBot.AI/README.md` already existed and was left untouched.) (P4)
+   (`WWoW.AI/README.md` — formerly `BloogBot.AI/README.md` — already existed and was left untouched.) (P4)
 5. **`Tests/CLAUDE.md`** — corrected the stale "11 test projects" count to the actual
    15 projects (14 test/harness + `Tests.Infrastructure`).
 6. **`AGENTS.md` + `CLAUDE.md`** — added an identical "Generated Code & Layering —
@@ -120,7 +123,7 @@ issues that are **not worth the rename risk** (`BotRunner` alone has 704 referen
 | ~~Move/split the 5 generated protobuf files into a `Generated/` subfolder~~ — **done 2026-05-31** | The 5 generated `*.cs` moved to `Models/Generated/`; `WoWActivitySnapshotExtensions.cs` stays in `Models/`. `BotCommLayer.csproj` is SDK-default-glob (no edit); `protocsharp.bat` default output + the `.editorconfig` `generated_code` glob retargeted to `Generated/`; `protocpp.bat` writes outside the repo so it was untouched. Plan: `.agent/plans/protobuf-generated-subfolder.md`. |
 | Split `Services/PathfindingService/Repository/Navigation.cs` (~7,600 lines) | Inside the active pathfinding freeze (`docs/physics/README.md`). |
 | Touch `Exports/Navigation/PhysicsEngine.cpp` and other native files | Freeze-adjacent **and** unbuildable/unverifiable without the native toolchain. |
-| Rename `WowSharpClient.NetworkTests` casing / `BloogBot.AI` prefix / `BotRunner` | Tracked P10 cosmetic issues; `CLAUDE.md` says the rename risk outweighs the benefit. |
+| ~~Rename `WowSharpClient.NetworkTests` casing / `BloogBot.AI` prefix~~ — **done 2026-05-31** | Casing fixed (namespaces) and `BloogBot.AI` -> `WWoW.AI` (+ `WWoW.AI.Tests`, plan `.agent/plans/rename-bloogbot-ai.md`). Both self-contained. `BotRunner` (704 refs) / `BotCommLayer` (42 refs) **stay un-renamed** — risk still outweighs benefit. |
 | ~~Relocate `ActivityCatalogRows.Shard*.cs`~~ — **done 2026-05-31** | Moved to `Services/WoWStateManager/Activities/CatalogRows/`; one `<Compile>` glob in `PromptHandlingService.Api.csproj` + the skill doc updated. See P5 above. |
 | Extract helper functions from the 1,000–1,800-line service files | "Extract only when tests already protect behavior" — those tests can't be run on this box, so extraction is unverifiable here. |
 

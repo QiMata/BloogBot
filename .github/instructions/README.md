@@ -20,7 +20,7 @@ component context separately.
 | `docs.instructions.md` | `docs/**/*.md`, `**/TASKS.md`, `**/TASKS_ARCHIVE.md` |
 | `infrastructure.instructions.md` | `docker/**`, `compose.yaml`, `docker-compose*.yml`, `.github/workflows/*.yml`, `Directory.Build.{props,targets}`, `.editorconfig` |
 | `tools.instructions.md` | `tools/**/*.{cs,csproj}` (C++ `tools/MmapGen` → `native`) |
-| `ai.instructions.md` | `BloogBot.AI/**/*.cs` |
+| `ai.instructions.md` | `WWoW.AI/**/*.cs` |
 
 Whole-repo rules stay in [`../../AGENTS.md`](../../AGENTS.md),
 [`../../CLAUDE.md`](../../CLAUDE.md), and
