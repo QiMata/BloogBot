@@ -465,4 +465,55 @@ stall-coord findings into a single go/no-go recommendation).
   user sets expectations correctly before any Phase 1+ code work begins.
 - Sweep ETA stable around 319 min remaining (~9.6 hr total wall-clock).
 
+**Commit:** `d3bfb2ae` `phase(0) iter(9): Phase 5 prep — runtime simplification deletion inventory`
+
+---
+
+## Iter 10 — 2026-05-31 — Phase 0
+
+**Did:** Sweep progress-checked at 345/785 (43.9%, ETA 334 min, healthy).
+Wrote [`OVERHAUL_PHASE0_D4_FINDINGS.md`](OVERHAUL_PHASE0_D4_FINDINGS.md)
+DRAFT — synthesizes all 5 phase preps + D3 manifest + iter-2 stall-coord
+findings into a single go/no-go recommendation. Placeholders for global
+histogram + top-20-worst-tile data fill in iter 13-14.
+
+**D4 bottom line: 🟢 GO at materially larger budget than the proposal
+stated.** Revised overall budget ~58-95 hr / ~45-60 iters (vs proposal's
+8-15 sessions). Three discoveries drive the increase: (1) two-Detour
+copies divergence (Phase 2 scope 2× actual), (2) no in-tree vmap
+extractor (Phase 3 requires fork-first), (3) three vmap libraries
+(Phase 4 requires PhysicsSweep static lib + IGeometrySource abstraction
+as design path not fallback). None are blockers; Phase 4 has the highest
+risk and is the budget driver. **D4 recommends Phase ordering: 1 → 2 →
+3 → 4 → 5** (Phase 1 first for easy Mononen wins; Phase 2 sequencing
+prereq for Phase 4; Phase 3 can interleave with 2). **User decisions
+called out:** budget acceptance, Phase 4 risk tolerance, map 0 sweep
+deferred.
+
+**Phase exit criteria progress:**
+- D1, D3: ✅ done in earlier iters.
+- D2: in flight, 43.9% — global histogram + top-20-worst-tile aggregation
+  iter 13-14 fills D4's §3-4-5 placeholders.
+- D4: skeleton complete, awaiting sweep aggregation.
+
+**Tests:** No bake, no live tests, no code touched.
+
+**Files changed:** docs/Plan/Pathfinding/OVERHAUL_PHASE0_D4_FINDINGS.md
+(new); docs/Plan/Pathfinding/OVERHAUL_LOOP_STATUS.md (iter 10 entry).
+
+**Next iter:** Iter 11 wakes in ~30 min. Sweep should be ~370-385/785,
+ETA ~5 hr remaining. Bounded work options: (a) start drafting the
+**sweep-aggregator** script that converts the per-tile JSON to global
+histogram + top-20-worst-tile table — runs against partial results, will
+re-run at completion; (b) write the **OG zep deck-edge stall coord**
+targeted probe (proposal §6 Phase 6 lists this as a stall to add to
+regression tests; cheap +1 stall-coord data point for D4). Iter 11 picks
+(a) first since it has compound value (run-once now + run-final iter 14).
+
+**Blockers/risks:**
+- D4 has placeholders only; the FINAL D4 commit lands at iter 13-14
+  when sweep finishes.
+- Sweep continues to drift on dense tiles. Conservative estimate is
+  iter 13-14 for completion.
+
 **Commit:** _filled by commit step below_
