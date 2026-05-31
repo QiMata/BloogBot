@@ -14,7 +14,7 @@
   <ItemGroup>
     <Compile Include="..\WoWStateManager\Activities\IActivityCatalog.cs" Link="ActivityCatalog\IActivityCatalog.cs" />
     <Compile Include="..\WoWStateManager\Activities\ActivityCatalog.cs" Link="ActivityCatalog\ActivityCatalog.cs" />
-    <Compile Include="..\WoWStateManager\Activities\ActivityCatalogRows.Shard*.cs" Link="ActivityCatalog\%(Filename)%(Extension)" />
+    <Compile Include="..\WoWStateManager\Activities\CatalogRows\ActivityCatalogRows.Shard*.cs" Link="ActivityCatalog\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

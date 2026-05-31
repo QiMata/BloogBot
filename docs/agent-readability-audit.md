@@ -60,9 +60,13 @@ is safe to lock in.
 `Tests/`, `Config/` had a `CLAUDE.md` but no `README.md`.
 
 ### P5 — Generated-looking content in a service tree
-`Services/PathfindingService/Activities/ActivityCatalogRows.Shard{1,2,3}.cs` are
-tool-generated rows owned by the `activity-catalog-bootstrap` skill, living beside
-hand-written coordinator code. Not relocated (see below).
+`Services/WoWStateManager/Activities/ActivityCatalogRows.Shard{1..5}.cs` were
+tool-maintained rows owned by the `activity-catalog-bootstrap` skill, living beside
+hand-written coordinator code. **Resolved 2026-05-31:** the shard files were
+relocated to `Services/WoWStateManager/Activities/CatalogRows/`, separating them
+from the hand-written `ActivityCatalog.cs` / `IActivityCatalog.cs` (which stay in
+`Activities/`). The only consumer coupling — one `<Compile>` glob in
+`PromptHandlingService.Api.csproj` — was updated to the new path.
 
 ### P6 — Stale/known-issue naming (intentionally left alone)
 `WowSharpClient.NetworkTests` (folder) vs `WoWSharpClient.NetworkTests` (project),
@@ -114,7 +118,7 @@ issues that are **not worth the rename risk** (`BotRunner` alone has 704 referen
 | Split `Services/PathfindingService/Repository/Navigation.cs` (~7,600 lines) | Inside the active pathfinding freeze (`docs/physics/README.md`). |
 | Touch `Exports/Navigation/PhysicsEngine.cpp` and other native files | Freeze-adjacent **and** unbuildable/unverifiable without the native toolchain. |
 | Rename `WowSharpClient.NetworkTests` casing / `BloogBot.AI` prefix / `BotRunner` | Tracked P10 cosmetic issues; `CLAUDE.md` says the rename risk outweighs the benefit. |
-| Relocate `ActivityCatalogRows.Shard{1,2,3}.cs` | Owned by the `activity-catalog-bootstrap` skill and its catalog invariant tests; moving generated rows is a generator change, not an edit. |
+| ~~Relocate `ActivityCatalogRows.Shard*.cs`~~ — **done 2026-05-31** | Moved to `Services/WoWStateManager/Activities/CatalogRows/`; one `<Compile>` glob in `PromptHandlingService.Api.csproj` + the skill doc updated. See P5 above. |
 | Extract helper functions from the 1,000–1,800-line service files | "Extract only when tests already protect behavior" — those tests can't be run on this box, so extraction is unverifiable here. |
 
 ## Recommended future refactors (when the freezes lift / a toolchain is available)
