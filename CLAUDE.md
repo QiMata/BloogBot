@@ -82,6 +82,17 @@ the matching skill before starting a recognized task category (adding an
 The catalog + authoring contract is [`docs/Spec/15_SKILLS.md`](docs/Spec/15_SKILLS.md),
 enforced by `Tests/BotRunner.Tests/Spec/SkillsContractTests.cs`.
 
+## Execution Plans for Large or Risky Changes
+
+Before starting broad or risky edits — multi-package refactors, database/schema
+changes, auth/authz changes, public-API or IPC/protobuf contract changes,
+infrastructure changes, production migrations, large dependency upgrades, or
+anything touching the pathfinding freeze, the protobuf wire contract, or the
+Shodan / test-isolation rules — create or update an execution plan first, get it
+reviewed, then implement. Small, localized edits are exempt. The convention,
+trigger list, and reusable plan template are in
+[`.agent/PLANS.md`](.agent/PLANS.md).
+
 ## Architecture Overview
 
 > **Pathfinding Overhaul Active (2026-05-06).** The pathfinding stack is in an
