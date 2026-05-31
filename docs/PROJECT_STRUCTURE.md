@@ -26,7 +26,7 @@ BloogBot/
 ?   ??? COPILOT_CONTEXT.md          # Copilot quick reference
 ?   ??? COPILOT_INSTRUCTIONS.md     # Copilot instructions
 ?
-??? BloogBot.AI/                    # AI coordination module
+??? WWoW.AI/                    # AI coordination module
 ??? Exports/                        # Core libraries and native components
 ??? Services/                       # Background services and workers
 ??? Tests/                          # Unit and integration tests
@@ -551,13 +551,13 @@ BackgroundBotRunner/
 - `RealmEndpoint:IpAddress` - WoW server address
 - `Ollama:BaseUri/Model` - AI prompt handling
 
-## BloogBot.AI Module
+## WWoW.AI Module
 
 Advanced AI coordination using Semantic Kernel.
 
 ```
-BloogBot.AI/
-??? BloogBot.AI.csproj
+WWoW.AI/
+??? WWoW.AI.csproj
 ?
 ??? Annotations/
 ?   ??? ActivityPluginAttribute.cs  # Plugin metadata attribute
@@ -651,7 +651,7 @@ Tests/
 | Physics constants | `Exports/Navigation/PhysicsTolerances.h` |
 | Scene geometry queries | `Exports/Navigation/SceneQuery.cpp` |
 | Game object models | `Exports/GameData.Core/Models/` |
-| AI state machine | `BloogBot.AI/StateMachine/` |
+| AI state machine | `WWoW.AI/StateMachine/` |
 | IPC communication | `Exports/BotCommLayer/` |
 | Native DLL injection | `Exports/Loader/` |
 | WoW API calls (Vanilla) | `Exports/FastCall/` |

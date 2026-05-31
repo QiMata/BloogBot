@@ -13,7 +13,7 @@ project itself). Run everything with `dotnet test WestworldOfWarcraft.sln`.
 | `WoWSharpClient.NetworkTests/` | Network/socket and reconnect-policy tests. |
 | `PromptHandlingService.Tests/` | Dialog automation. |
 | `ForegroundBotRunner.Tests/` | FG injection/memory tests. |
-| `BloogBot.AI.Tests/` | Decision-engine / state-machine tests. |
+| `WWoW.AI.Tests/` | Decision-engine / state-machine tests. |
 | `WoWSimulation/` | Full simulation integration. |
 | `RecordedTests.PathingTests.Tests/`, `RecordedTests.Shared.Tests/` | Navigation regression vs recorded runs. |
 | `WoWStateManagerUI.Tests/` | WPF dashboard view-model tests. |

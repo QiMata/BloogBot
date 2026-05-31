@@ -1,8 +1,8 @@
 ---
-applyTo: "BloogBot.AI/**/*.cs"
+applyTo: "WWoW.AI/**/*.cs"
 ---
 
-# AI decision & memory layer (`BloogBot.AI/*`)
+# AI decision & memory layer (`WWoW.AI/*`)
 
 The activity state machine, LLM advisory, and character-memory layer that sits
 above the runtime.
@@ -31,7 +31,7 @@ above the runtime.
 
 ```powershell
 .\scripts\build.ps1
-.\scripts\test-fast.ps1                      # includes WWoWBot.AI.Tests
+.\scripts\test-fast.ps1                      # includes WWoW.AI.Tests
 ```
 
 ## Do NOT
@@ -43,7 +43,7 @@ above the runtime.
 
 ## See also
 
-- `BloogBot.AI/CLAUDE.md`, `Services/DecisionEngineService`
+- `WWoW.AI/CLAUDE.md`, `Services/DecisionEngineService`
   (`services.instructions.md`), `docs/architecture/aota/`.
-- The legacy `BloogBot.AI` / `WWoWBot.AI.Tests` prefix mismatch is tracked in
-  `CLAUDE.md` (P10) — do not rename as part of unrelated work.
+- The legacy `BloogBot.AI` prefix was renamed to `WWoW.AI` (and
+  `WWoW.AI.Tests`) on 2026-05-31, resolving the P10 mismatch.

@@ -76,7 +76,7 @@ Create/edit configuration files in the output `Bot/` directory:
 UI Layer          ? User interfaces, Aspire orchestration
 Services Layer    ? Background workers (Pathfinding, StateManager, etc.)
 Exports Layer     ? Core libraries, native DLLs
-BloogBot.AI       ? Advanced AI coordination
+WWoW.AI       ? Advanced AI coordination
 ```
 
 ### Key Projects
@@ -274,9 +274,9 @@ public class MyGameObject : WoWObject, IMyGameObject
 }
 ```
 
-### Adding a New Activity (BloogBot.AI)
+### Adding a New Activity (WWoW.AI)
 
-1. **Add to BotActivity enum** in `BloogBot.AI/States/BotActivity.cs`:
+1. **Add to BotActivity enum** in `WWoW.AI/States/BotActivity.cs`:
 
 ```csharp
 public enum BotActivity
@@ -286,7 +286,7 @@ public enum BotActivity
 }
 ```
 
-2. **Add relevant triggers** in `BloogBot.AI/States/Trigger.cs`:
+2. **Add relevant triggers** in `WWoW.AI/States/Trigger.cs`:
 
 ```csharp
 public enum Trigger

@@ -288,7 +288,7 @@ dotnet test Tests/ --filter Category=Integration
 ## Additional Resources
 
 ### Related Documentation
-- **[WWoW.AI](../BloogBot.AI/README.md)**: Core AI behavior coordination
+- **[WWoW.AI](../WWoW.AI/README.md)**: Core AI behavior coordination
 - **[Exports Layer](../Exports/README.md)**: Shared libraries and communication
 - **[UI Components](../UI/README.md)**: Management and monitoring interfaces
 
