@@ -20,7 +20,7 @@ against MaNGOS.
 - Key files (verified):
   - Compiled catalog: `Services/WoWStateManager/Activities/ActivityCatalog.cs`
     (`BuildAll()`), row literals in
-    `Services/WoWStateManager/Activities/ActivityCatalogRows.Shard1.cs` …
+    `Services/WoWStateManager/Activities/CatalogRows/ActivityCatalogRows.Shard1.cs` …
     `Shard5.cs`, interface `IActivityCatalog.cs`.
   - UI mirror: `UI/WoWStateManagerUI/Services/ActivityCatalogService.cs`.
   - Source rows (leveling guide): `docs/Plan/Activities/_catalog_rows/*.md`;
