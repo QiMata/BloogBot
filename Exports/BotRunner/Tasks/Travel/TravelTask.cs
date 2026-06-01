@@ -23,6 +23,17 @@ public class TravelTask : BotTask, IBotTask
     private const int MaxReplans = 3;
     private const float DefaultArrivalRadius = 5.0f;
     private const float WalkLegArrivalRadius = 15.0f;
+    // A plain (non-transport) walk leg only "arrives" when the bot is within the
+    // 2D radius AND on roughly the same vertical layer as leg.End. Without this,
+    // a destination directly above the bot (deck / tower / upper floor) within
+    // WalkLegArrivalRadius horizontally falsely completes the leg at the base —
+    // e.g. OG zeppelin tower: Frezza (z=53.6) is ~14.5y due-south of the Grunt
+    // base (z=24), so the base is 2D<=15y from Frezza yet ~30y below it. The leg
+    // would complete at the base and dump the bot into the Standard-policy
+    // route-exhausted fallback, which cannot drive the long climb. 6y matches the
+    // transport vertical tolerance: enough for capsule height + slope/ground-Z
+    // noise, tight enough to reject a floor/deck layer mismatch. (2026-06-01)
+    private const float WalkLegVerticalArrivalTolerance = 6.0f;
     private const float WalkLegTransportArrivalRadius = 4.0f;
     private const float WalkLegTransportVerticalArrivalTolerance = 6.0f;
     // Phase 5.3.6 (PFS-OVERHAUL-006): under WWOW_OFFMESH_NATIVE_BOARDING, the
@@ -425,7 +436,7 @@ public class TravelTask : BotTask, IBotTask
     private bool CanCompleteWalkLeg(RouteLeg leg, float verticalDelta)
     {
         if (!WalkLegHandsOffToTransport(leg))
-            return true;
+            return verticalDelta <= WalkLegVerticalArrivalTolerance;
 
         var tolerance = TransportWaitingLogic.IsNativeOffMeshBoardingEnabled()
             ? WalkLegNativeOffMeshTransportVerticalArrivalTolerance

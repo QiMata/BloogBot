@@ -196,3 +196,46 @@ dotnet test  Tests\BotRunner.Tests\BotRunner.Tests.csproj -c Release --no-build 
 ```
 Diag: `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`; screenshots:
 `tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`.
+
+## UPDATE 2 (2026-06-01, later) — base→climb ROOT-CAUSED + FIXED; bot now climbs z24→z42; next blocker = mid-climb disconnect
+
+After fixing the false-green (UPDATE 1), the honest RED localized the real blocker and it
+was root-caused + fixed with a unit + live-validated change.
+
+**Root cause (FIXED): vertical-blind walk-leg arrival.** `TravelTask.CanCompleteWalkLeg`
+returned `true` unconditionally for a non-transport walk leg, so `TryGetWalkLegArrival`
+completed the leg on **2D distance ≤ 15y alone**. Frezza (z=53.6) is ~14.5y DUE-SOUTH of
+the Grunt base (z=24), so at the base the 2D distance is ~14.8y ≤ 15y → the leg
+**false-completed at the base** (~30y below the deck), exhausting the route and dumping the
+bot into the line-178 `route-exhausted` branch which calls `TryNavigateToward(_targetPosition)`
+with the **default Standard policy** (no LongTravel corridor/off-mesh, and no immediate
+diagnostics — the "12s silence"). The bot then sat frozen at the base.
+
+**Fix (committed, freeze-aligned — an arrival-VERIFICATION fix per R2/R3, NOT a route
+relaxation):** added `WalkLegVerticalArrivalTolerance = 6.0f` (matches the transport vertical
+tolerance) and changed `CanCompleteWalkLeg` non-transport branch to
+`return verticalDelta <= WalkLegVerticalArrivalTolerance;`. A walk leg now only "arrives"
+when the bot is within the 2D radius AND on roughly the same vertical layer.
+
+**Validated two ways:**
+- Unit: `Tests/BotRunner.Tests/Travel/TravelTaskTests.cs` →
+  `Update_TargetDirectlyAboveWithinHorizontalRadius_DoesNotCompleteWalkLegAtBase` (new guard);
+  full `TravelTaskTests` 15/15 green (transport-handoff completion tests unaffected).
+- Live: the bot now **climbs the spiral ramp z24→z42** (idx0→~60 of 128, each `afford=StepUp`,
+  `leg=0/1` — no premature completion), vs previously stalling at the base. ~60% of the climb.
+
+**NEXT BLOCKER (new, distinct): mid-climb client disconnect/reset at ~z42 on the upper spiral.**
+At ~z41.9 (idx60) the FG client returns to `LoginScreen` mid-run (a second `[TICK#1]
+screen=LoginScreen map=0` ~3s after reaching z42), then re-enters world at the same z=41.9
+with the objective LOST → `IdleTask` → the 20s stuck-guard fails the test. No WER crash dump
+was produced → most likely a **server-side disconnect** (vmangos movement validation/anti-cheat
+kicking the StepUp spiral climb), not a hard client crash. This is a movement-emission / anti-cheat
+parity problem (see `mmo-movement-diagnostics` / `mmo-fg-client-re` / `crash-cluster-triage`),
+a deeper and distinct surface from the arrival fix — do NOT band-aid it.
+
+Revised next target: capture WHY the client disconnects at ~z42 — pair the FG screenshot
+timeline with the bot's outbound movement packets on the StepUp climb vs what vmangos accepts
+(speed/Z-delta validation), and check the vmangos `wow-mangosd` container log for a kick
+reason around the disconnect timestamp. Secondary latent issue worth fixing: the line-178
+`route-exhausted` fallback uses Standard policy — should use `NavigationRoutePolicy.LongTravel`
+so a legitimate near-target route exhaustion can still drive vertical/off-mesh nav.

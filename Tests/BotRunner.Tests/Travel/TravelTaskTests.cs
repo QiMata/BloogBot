@@ -181,6 +181,89 @@ public class TravelTaskTests
     }
 
     [Fact]
+    public void Update_TargetDirectlyAboveWithinHorizontalRadius_DoesNotCompleteWalkLegAtBase()
+    {
+        // Regression guard (2026-06-01): a plain (non-transport) walk leg whose
+        // End is directly ABOVE the bot — within WalkLegArrivalRadius (15y)
+        // horizontally but far below vertically — must NOT complete at the base.
+        // OG zeppelin tower: literal Frezza (z=53.6) is ~14.8y 2D from this base
+        // spot (z=24) yet ~30y above it. Before the WalkLegVerticalArrivalTolerance
+        // gate, TryGetWalkLegArrival returned true here (2D<=15 && CanComplete=true),
+        // falsely completing the leg at the base and dumping the bot into the
+        // Standard-policy route-exhausted fallback that cannot drive the climb.
+        var taskStack = new Stack<IBotTask>();
+        var diagnostics = new List<string>();
+        var immediateDiagnostics = new List<string>();
+
+        // 2D distance to Frezza = ~14.8y (<= 15y radius); vertical delta = ~29.6y.
+        var playerPosition = new Position(1328.1f, -4635.0f, 24.0f);
+        var literalFrezzaTarget = new Position(1331.1f, -4649.5f, 53.6f);
+        const uint mapId = 1u;
+        const ulong transportGuid = 0UL;
+        var movementFlags = MovementFlags.MOVEFLAG_NONE;
+
+        var player = new Mock<IWoWLocalPlayer>(MockBehavior.Loose);
+        player.SetupGet(p => p.MapId).Returns(mapId);
+        player.SetupGet(p => p.Position).Returns(() => playerPosition);
+        player.SetupGet(p => p.MovementFlags).Returns(() => movementFlags);
+        player.SetupGet(p => p.TransportGuid).Returns(() => transportGuid);
+        player.Setup(p => p.GetFacingForPosition(It.IsAny<Position>())).Returns(0f);
+
+        var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
+        objectManager.SetupGet(o => o.Player).Returns(player.Object);
+        objectManager.SetupGet(o => o.PhysicsHitWall).Returns(false);
+        objectManager.SetupGet(o => o.PhysicsBlockedFraction).Returns(1f);
+        objectManager.SetupGet(o => o.PhysicsWallNormal2D).Returns((0f, 0f));
+
+        var context = new Mock<IBotContext>(MockBehavior.Loose);
+        context.SetupGet(c => c.ObjectManager).Returns(objectManager.Object);
+        context.SetupGet(c => c.BotTasks).Returns(taskStack);
+        context.SetupGet(c => c.Config).Returns(new BotBehaviorConfig());
+        context.Setup(c => c.AddDiagnosticMessage(It.IsAny<string>()))
+            .Callback<string>(diagnostics.Add);
+        context.Setup(c => c.AddImmediateDiagnostic(It.IsAny<string>()))
+            .Callback<string>(immediateDiagnostics.Add);
+
+        var pathfinding = new Mock<PathfindingClient>(MockBehavior.Loose);
+        pathfinding
+            .Setup(p => p.GetPathResult(
+                It.IsAny<uint>(),
+                It.IsAny<Position>(),
+                It.IsAny<Position>(),
+                It.IsAny<IReadOnlyList<DynamicObjectProto>?>(),
+                It.IsAny<bool>(),
+                It.IsAny<Race>(),
+                It.IsAny<Gender>()))
+            .Returns((uint _, Position start, Position end, IReadOnlyList<DynamicObjectProto>? _, bool _, Race _, Gender _) =>
+                CreateSupportedPathResult(start, end));
+        var container = new Mock<IDependencyContainer>(MockBehavior.Loose);
+        container.SetupGet(c => c.PathfindingClient).Returns(pathfinding.Object);
+        context.SetupGet(c => c.Container).Returns(container.Object);
+
+        var task = new TravelTask(
+            context.Object,
+            mapId,
+            literalFrezzaTarget,
+            new TravelOptions
+            {
+                PlayerFaction = TravelFaction.Horde,
+                DiscoveredFlightNodes = [25u, 23u]
+            },
+            arrivalRadius: 15f);
+        taskStack.Push(task);
+
+        task.Update();
+
+        // Must NOT falsely arrive/complete at the base.
+        Assert.DoesNotContain(diagnostics, message => message.Contains("reason=walk_arrived", StringComparison.Ordinal));
+        Assert.DoesNotContain(diagnostics, message => message.Contains("[TRAVEL_COMPLETE]", StringComparison.Ordinal));
+        // The task stays active and keeps navigating upward toward the climb.
+        Assert.Same(task, taskStack.Peek());
+        Assert.Contains(immediateDiagnostics, message => message.Contains("[TRAVEL_EXEC] walk-nav enter leg=0", StringComparison.Ordinal));
+        objectManager.Verify(o => o.MoveToward(It.IsAny<Position>(), It.IsAny<float>()), Times.Once);
+    }
+
+    [Fact]
     public void Update_FlightPathLandingWithLingeringMountDisplay_CompletesFlightLeg()
     {
         var taskStack = new Stack<IBotTask>();
