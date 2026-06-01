@@ -36,12 +36,13 @@ public partial class LiveBotFixture
     public readonly record struct ItemDirective(uint ItemId, int Count);
 
     /// <summary>
-    /// Explicit action target for Shodan-shaped tests. By default Shodan is the
-    /// production GM-admin liaison (it lets human players on the live server
-    /// request on-demand activities from the WoWStateManager), and the
-    /// LiveValidation suite reuses it for setup tasks that require GM targeting
-    /// — *only* for setup. A small number of opt-in rosters intentionally bind
-    /// SHODAN to FG/BG so a live proof can be rerun with Shodan's capsule.
+    /// Explicit action target for Shodan-shaped tests. Shodan is the production
+    /// GM-admin liaison (it lets human players on the live server request
+    /// on-demand activities from the WoWStateManager), and the LiveValidation
+    /// suite reuses it for setup tasks that require GM targeting — *only* for
+    /// setup. Objective dispatch normally goes to dedicated FG/BG test accounts;
+    /// a small number of opt-in rosters intentionally bind SHODAN to FG/BG so a
+    /// live proof can be rerun with Shodan's capsule.
     /// <see cref="ResolveBotRunnerActionTargets"/> rejects Shodan as an action
     /// target unless the active config assigned SHODAN to FG/BG on purpose.
     /// </summary>

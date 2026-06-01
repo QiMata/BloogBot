@@ -678,7 +678,7 @@ public class LongPathingTests
         var diagnosticBaseline = startSnapshot?.RecentChatMessages.ToArray() ?? Array.Empty<string>();
 
         // Dispatch TravelTo Undercity destination — same as the full test, so
-        // the route planner emits the same boarding-corridor walk leg we're
+        // the route planner emits the same boarding-corridor/Frezza walk leg we're
         // isolating.
         var dispatch = await _bot.SendActionAsync(target.AccountName, new ObjectiveMessage
         {
