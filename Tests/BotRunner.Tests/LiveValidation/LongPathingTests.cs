@@ -1015,9 +1015,31 @@ public class LongPathingTests
                     snapshot,
                     (message, stallSnapshot) => FailWithScreenshot(message, target.AccountName, stallSnapshot));
 
-                if (snapshot?.RecentChatMessages != null)
+                var pos = GetPosition(snapshot);
+
+                // Primary arrival signal: the bot is physically AT Frezza.
+                if (pos != null
+                    && snapshot?.CurrentMapId == OrgrimmarMapId
+                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY) <= 6f
+                    && Math.Abs(pos.Z - OrgrimmarFrezzaZ) <= 4f)
                 {
-                    foreach (var msg in snapshot.RecentChatMessages)
+                    return true;
+                }
+
+                // Secondary signal: a [TRAVEL_LEG] complete reason=walk_arrived event,
+                // but ONLY when it is (a) NEW since the post-teleport baseline (delta —
+                // not a stale ring entry) AND (b) corroborated by the bot actually being
+                // near Frezza. Without both guards a stale walk_arrived left in the
+                // RecentChatMessages ring by EnsureCleanSlate/teleport FALSE-GREENS the
+                // test at the tower base (R16, 2026-06-01: reported arrival at z=24.8,
+                // ~29y below Frezza, with the bot still on the ground). Arrival must
+                // reflect visual reality, never a chat message alone.
+                if (pos != null
+                    && snapshot?.CurrentMapId == OrgrimmarMapId
+                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY) <= 12f
+                    && Math.Abs(pos.Z - OrgrimmarFrezzaZ) <= 6f)
+                {
+                    foreach (var msg in GetDeltaMessages(diagnosticBaseline, snapshot?.RecentChatMessages))
                     {
                         if (msg.IndexOf("[TRAVEL_LEG] complete", StringComparison.Ordinal) >= 0
                             && msg.IndexOf("reason=walk_arrived", StringComparison.Ordinal) >= 0)
@@ -1027,11 +1049,7 @@ public class LongPathingTests
                     }
                 }
 
-                var pos = GetPosition(snapshot);
-                return pos != null
-                    && snapshot?.CurrentMapId == OrgrimmarMapId
-                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY) <= 6f
-                    && Math.Abs(pos.Z - OrgrimmarFrezzaZ) <= 4f;
+                return false;
             },
             TimeSpan.FromSeconds(90),
             pollIntervalMs: 500,
