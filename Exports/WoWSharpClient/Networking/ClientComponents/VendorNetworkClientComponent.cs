@@ -25,7 +25,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private bool _disposed;
         private readonly ConcurrentQueue<SoulboundConfirmation> _pendingSoulboundConfirmations = new();
 
-        private static readonly HashSet<uint> SpecialItems = [ 6948 ];
+        private static readonly HashSet<uint> SpecialItems = [6948];
         private static readonly HashSet<string> JunkItemNames = ["broken", "cracked", "damaged", "worn", "tattered", "frayed", "bent", "rusty"];
 
         // Subjects for observable API

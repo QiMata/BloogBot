@@ -93,25 +93,25 @@ namespace BotRunner.Travel
         private void LoadStaticLocations()
         {
             // Horde capitals
-            AddStatic("Orgrimmar",              1, 1676.0f, -4315.0f, 61.0f);
-            AddStatic("Thunder Bluff",          1, -1278.0f, 127.0f, 131.0f);
-            AddStatic("Undercity",              0, 1586.0f, 239.0f, -52.0f);
+            AddStatic("Orgrimmar", 1, 1676.0f, -4315.0f, 61.0f);
+            AddStatic("Thunder Bluff", 1, -1278.0f, 127.0f, 131.0f);
+            AddStatic("Undercity", 0, 1586.0f, 239.0f, -52.0f);
 
             // Alliance capitals
-            AddStatic("Stormwind",              0, -8913.0f, 554.0f, 94.0f);
-            AddStatic("Ironforge",              0, -4981.0f, -881.0f, 502.0f);
-            AddStatic("Darnassus",              1, 9947.0f, 2482.0f, 1316.0f);
+            AddStatic("Stormwind", 0, -8913.0f, 554.0f, 94.0f);
+            AddStatic("Ironforge", 0, -4981.0f, -881.0f, 502.0f);
+            AddStatic("Darnassus", 1, 9947.0f, 2482.0f, 1316.0f);
 
             // Neutral quest hubs
-            AddStatic("Crossroads",             1, -442.0f, -2598.0f, 96.0f);
-            AddStatic("Tarren Mill",            0, -7.0f, -920.0f, 55.0f);
-            AddStatic("Southshore",             0, -808.0f, -547.0f, 7.0f);
-            AddStatic("Ratchet",                1, -957.0f, -3754.0f, 5.0f);
-            AddStatic("Booty Bay",              0, -14354.0f, 518.0f, 22.0f);
-            AddStatic("Gadgetzan",              1, -7150.0f, -3789.0f, 8.0f);
-            AddStatic("Cenarion Hold",          1, -6815.0f, 730.0f, 42.0f);
-            AddStatic("Light's Hope Chapel",    0, 2280.0f, -5312.0f, 82.0f);
-            AddStatic("Everlook",               1, 6723.0f, -4609.0f, 720.0f);
+            AddStatic("Crossroads", 1, -442.0f, -2598.0f, 96.0f);
+            AddStatic("Tarren Mill", 0, -7.0f, -920.0f, 55.0f);
+            AddStatic("Southshore", 0, -808.0f, -547.0f, 7.0f);
+            AddStatic("Ratchet", 1, -957.0f, -3754.0f, 5.0f);
+            AddStatic("Booty Bay", 0, -14354.0f, 518.0f, 22.0f);
+            AddStatic("Gadgetzan", 1, -7150.0f, -3789.0f, 8.0f);
+            AddStatic("Cenarion Hold", 1, -6815.0f, 730.0f, 42.0f);
+            AddStatic("Light's Hope Chapel", 0, 2280.0f, -5312.0f, 82.0f);
+            AddStatic("Everlook", 1, 6723.0f, -4609.0f, 720.0f);
         }
 
         private void AddStatic(string name, uint mapId, float x, float y, float z)

@@ -41,71 +41,71 @@ namespace WoWSharpClient.Handlers
                     switch (opcode)
                     {
                         case Opcode.MSG_MOVE_TELEPORT:
-                        {
-                            // MSG_MOVE_TELEPORT format: packed_guid + MovementInfo (NO counter).
-                            // Different from MSG_MOVE_TELEPORT_ACK which includes a counter field.
-                            ulong teleportGuid = ReaderUtils.ReadPackedGuid(reader);
-                            MovementInfoUpdate teleportData =
-                                MovementPacketHandler.ParseMovementInfo(reader);
-
-                            Log.Information(
-                                "[MovementHandler] MSG_MOVE_TELEPORT: guid={Guid:X} pos=({X:F1},{Y:F1},{Z:F1})",
-                                teleportGuid, teleportData.X, teleportData.Y, teleportData.Z);
-
-                            // Only process as a player teleport if the GUID matches our player.
-                            // MSG_MOVE_TELEPORT can also be sent for creatures (MaNGOS sends these
-                            // when mobs are moved). Processing creature teleports as player teleports
-                            // triggers NotifyTeleportIncoming → _isBeingTeleported=true → movement
-                            // state reset → auto-attack heartbeat disruption → mob evades.
-                            var teleportPlayer = ctx.ObjectManager.Player;
-                            bool isPlayerTeleport = teleportPlayer != null && teleportPlayer.Guid == teleportGuid;
-
-                            if (isPlayerTeleport)
                             {
-                                ctx.ObjectManager.NotifyTeleportIncoming(teleportData.Z);
-                            }
+                                // MSG_MOVE_TELEPORT format: packed_guid + MovementInfo (NO counter).
+                                // Different from MSG_MOVE_TELEPORT_ACK which includes a counter field.
+                                ulong teleportGuid = ReaderUtils.ReadPackedGuid(reader);
+                                MovementInfoUpdate teleportData =
+                                    MovementPacketHandler.ParseMovementInfo(reader);
 
-                            ctx.ObjectManager.QueueUpdate(
-                                new WoWSharpObjectManager.ObjectStateUpdate(
-                                    teleportGuid,
-                                    WoWSharpObjectManager.ObjectUpdateOperation.Update,
-                                    isPlayerTeleport ? WoWObjectType.Player : WoWObjectType.Unit,
-                                    teleportData,
-                                    []
-                                )
-                            );
-
-                            // Directly update player position so MovementController uses the
-                            // teleported position in its very next heartbeat/stop packet.
-                            if (isPlayerTeleport)
-                            {
-                                teleportPlayer!.Position.X = teleportData.X;
-                                teleportPlayer.Position.Y = teleportData.Y;
-                                teleportPlayer.Position.Z = teleportData.Z;
                                 Log.Information(
-                                    "[MovementHandler] Teleport: directly updated player position to ({X:F1},{Y:F1},{Z:F1})",
-                                    teleportData.X, teleportData.Y, teleportData.Z);
-                            }
+                                    "[MovementHandler] MSG_MOVE_TELEPORT: guid={Guid:X} pos=({X:F1},{Y:F1},{Z:F1})",
+                                    teleportGuid, teleportData.X, teleportData.Y, teleportData.Z);
 
-                            // Only ACK player teleports. Creature MSG_MOVE_TELEPORT packets
-                            // must NOT be ACKed — doing so sets _isBeingTeleported=true in
-                            // EventEmitter_OnTeleport, which blocks MovementController updates
-                            // and disrupts auto-attack heartbeats → mob evades. (BT-COMBAT-002)
-                            if (isPlayerTeleport)
-                            {
-                                var teleportCounter = ctx.ObjectManager.IncrementTeleportSequence();
-                                ctx.EventEmitter.FireOnTeleport(
-                                    new RequiresAcknowledgementArgs(teleportGuid, teleportCounter)
+                                // Only process as a player teleport if the GUID matches our player.
+                                // MSG_MOVE_TELEPORT can also be sent for creatures (MaNGOS sends these
+                                // when mobs are moved). Processing creature teleports as player teleports
+                                // triggers NotifyTeleportIncoming → _isBeingTeleported=true → movement
+                                // state reset → auto-attack heartbeat disruption → mob evades.
+                                var teleportPlayer = ctx.ObjectManager.Player;
+                                bool isPlayerTeleport = teleportPlayer != null && teleportPlayer.Guid == teleportGuid;
+
+                                if (isPlayerTeleport)
+                                {
+                                    ctx.ObjectManager.NotifyTeleportIncoming(teleportData.Z);
+                                }
+
+                                ctx.ObjectManager.QueueUpdate(
+                                    new WoWSharpObjectManager.ObjectStateUpdate(
+                                        teleportGuid,
+                                        WoWSharpObjectManager.ObjectUpdateOperation.Update,
+                                        isPlayerTeleport ? WoWObjectType.Player : WoWObjectType.Unit,
+                                        teleportData,
+                                        []
+                                    )
                                 );
+
+                                // Directly update player position so MovementController uses the
+                                // teleported position in its very next heartbeat/stop packet.
+                                if (isPlayerTeleport)
+                                {
+                                    teleportPlayer!.Position.X = teleportData.X;
+                                    teleportPlayer.Position.Y = teleportData.Y;
+                                    teleportPlayer.Position.Z = teleportData.Z;
+                                    Log.Information(
+                                        "[MovementHandler] Teleport: directly updated player position to ({X:F1},{Y:F1},{Z:F1})",
+                                        teleportData.X, teleportData.Y, teleportData.Z);
+                                }
+
+                                // Only ACK player teleports. Creature MSG_MOVE_TELEPORT packets
+                                // must NOT be ACKed — doing so sets _isBeingTeleported=true in
+                                // EventEmitter_OnTeleport, which blocks MovementController updates
+                                // and disrupts auto-attack heartbeats → mob evades. (BT-COMBAT-002)
+                                if (isPlayerTeleport)
+                                {
+                                    var teleportCounter = ctx.ObjectManager.IncrementTeleportSequence();
+                                    ctx.EventEmitter.FireOnTeleport(
+                                        new RequiresAcknowledgementArgs(teleportGuid, teleportCounter)
+                                    );
+                                }
+                                else
+                                {
+                                    Log.Debug(
+                                        "[MovementHandler] Skipping teleport ACK for non-player GUID {Guid:X}",
+                                        teleportGuid);
+                                }
+                                break;
                             }
-                            else
-                            {
-                                Log.Debug(
-                                    "[MovementHandler] Skipping teleport ACK for non-player GUID {Guid:X}",
-                                    teleportGuid);
-                            }
-                            break;
-                        }
                         case Opcode.MSG_MOVE_TELEPORT_ACK:
                             ulong guid = ReaderUtils.ReadPackedGuid(reader);
                             uint movementCounter = reader.ReadUInt32();
@@ -229,21 +229,21 @@ namespace WoWSharpClient.Handlers
                             );
                             break;
                         case Opcode.SMSG_MONSTER_MOVE:
-                        {
-                            ulong moverGuid = ReaderUtils.ReadPackedGuid(reader);
-                            var moveData = ParseMonsterMove(reader);
-                            QueueMonsterMoveUpdate(moverGuid, moveData, ctx);
-                            break;
-                        }
+                            {
+                                ulong moverGuid = ReaderUtils.ReadPackedGuid(reader);
+                                var moveData = ParseMonsterMove(reader);
+                                QueueMonsterMoveUpdate(moverGuid, moveData, ctx);
+                                break;
+                            }
                         case Opcode.SMSG_MONSTER_MOVE_TRANSPORT:
-                        {
-                            ulong moverGuid = ReaderUtils.ReadPackedGuid(reader);
-                            ulong transportGuid = ReaderUtils.ReadPackedGuid(reader);
-                            var moveData = ParseMonsterMove(reader);
-                            ApplyTransportMoveState(moveData, transportGuid);
-                            QueueMonsterMoveUpdate(moverGuid, moveData, ctx);
-                            break;
-                        }
+                            {
+                                ulong moverGuid = ReaderUtils.ReadPackedGuid(reader);
+                                ulong transportGuid = ReaderUtils.ReadPackedGuid(reader);
+                                var moveData = ParseMonsterMove(reader);
+                                ApplyTransportMoveState(moveData, transportGuid);
+                                QueueMonsterMoveUpdate(moverGuid, moveData, ctx);
+                                break;
+                            }
                         case Opcode.SMSG_SPLINE_MOVE_SET_RUN_MODE:
                             ApplySplineFlagToggle(reader, ctx, MovementFlags.MOVEFLAG_WALK_MODE, apply: false, "set run mode");
                             break;

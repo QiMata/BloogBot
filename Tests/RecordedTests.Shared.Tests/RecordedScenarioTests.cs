@@ -148,24 +148,24 @@ public sealed class RecordedScenarioTests
     }
 
     private sealed class TestDesiredState(string name, ITestLogger logger) : IServerDesiredState
-        {
-            private readonly ITestLogger _logger = logger;
+    {
+        private readonly ITestLogger _logger = logger;
 
         public string Name { get; } = name;
 
         public int ApplyCalls { get; private set; }
 
-            public Task ApplyAsync(IBotRunner gmRunner, IRecordedTestContext context, CancellationToken cancellationToken)
-            {
-                _logger.Info($"[State] {Name}: applying for '{context.TestName}'");
-                ApplyCalls++;
-                return Task.CompletedTask;
-            }
+        public Task ApplyAsync(IBotRunner gmRunner, IRecordedTestContext context, CancellationToken cancellationToken)
+        {
+            _logger.Info($"[State] {Name}: applying for '{context.TestName}'");
+            ApplyCalls++;
+            return Task.CompletedTask;
+        }
 
-            public Task RevertAsync(IBotRunner runner, IRecordedTestContext context, CancellationToken cancellationToken)
-            {
-                _logger.Info($"[State] {Name}: reverting for '{context.TestName}'");
-                return Task.CompletedTask;
-            }
+        public Task RevertAsync(IBotRunner runner, IRecordedTestContext context, CancellationToken cancellationToken)
+        {
+            _logger.Info($"[State] {Name}: reverting for '{context.TestName}'");
+            return Task.CompletedTask;
         }
     }
+}

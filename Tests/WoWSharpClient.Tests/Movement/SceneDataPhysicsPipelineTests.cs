@@ -147,8 +147,11 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
 
         NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
         {
-            X = input.X, Y = input.Y, Z = input.Z,
-            GroundZ = input.Z, GroundNz = 1,
+            X = input.X,
+            Y = input.Y,
+            Z = input.Z,
+            GroundZ = input.Z,
+            GroundNz = 1,
             MoveFlags = input.MoveFlags,
         };
 
@@ -175,8 +178,11 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
 
         NativeLocalPhysics.TestStepOverride = input => new NativePhysics.PhysicsOutput
         {
-            X = input.X, Y = input.Y, Z = input.Z,
-            GroundZ = input.Z, GroundNz = 1,
+            X = input.X,
+            Y = input.Y,
+            Z = input.Z,
+            GroundZ = input.Z,
+            GroundNz = 1,
             MoveFlags = input.MoveFlags,
         };
 
@@ -227,8 +233,11 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
 
             return new SceneTileResponse
             {
-                MapId = request.MapId, TileX = request.TileX, TileY = request.TileY,
-                Success = true, TriangleCount = 0,
+                MapId = request.MapId,
+                TileX = request.TileX,
+                TileY = request.TileY,
+                Success = true,
+                TriangleCount = 0,
             };
         };
 
@@ -301,8 +310,11 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
             capturedPhysicsInput = input;
             return new NativePhysics.PhysicsOutput
             {
-                X = input.X, Y = input.Y, Z = 34f,
-                GroundZ = 34f, GroundNz = 1f,
+                X = input.X,
+                Y = input.Y,
+                Z = 34f,
+                GroundZ = 34f,
+                GroundNz = 1f,
                 MoveFlags = input.MoveFlags & ~(uint)MovementFlags.MOVEFLAG_FALLINGFAR,
             };
         };
@@ -347,8 +359,11 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
             physicsStepCount++;
             return new NativePhysics.PhysicsOutput
             {
-                X = input.X, Y = input.Y, Z = input.Z,
-                GroundZ = input.Z, GroundNz = 1f,
+                X = input.X,
+                Y = input.Y,
+                Z = input.Z,
+                GroundZ = input.Z,
+                GroundNz = 1f,
                 MoveFlags = input.MoveFlags,
             };
         };
@@ -417,8 +432,11 @@ public sealed class SceneDataPhysicsPipelineTests : IDisposable
             physicsStepCount++;
             return new NativePhysics.PhysicsOutput
             {
-                X = input.X, Y = input.Y, Z = input.Z - 1f,
-                GroundZ = -200000f, GroundNz = 1f,
+                X = input.X,
+                Y = input.Y,
+                Z = input.Z - 1f,
+                GroundZ = -200000f,
+                GroundNz = 1f,
                 MoveFlags = (uint)MovementFlags.MOVEFLAG_FALLINGFAR,
                 FallTime = 50,
             };

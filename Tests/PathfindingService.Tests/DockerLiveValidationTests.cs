@@ -115,7 +115,7 @@ public sealed class DockerLiveValidationTests
             {
                 MapId = 1,
                 Start = new Game.Position { X = 1332.76f, Y = -4633.40f, Z = 24.0783f },
-                End   = new Game.Position { X = 1320.142944f, Y = -4653.158691f, Z = 53.891945f },
+                End = new Game.Position { X = 1320.142944f, Y = -4653.158691f, Z = 53.891945f },
                 Straight = false,
             }
         };

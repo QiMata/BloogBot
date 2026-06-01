@@ -1,6 +1,6 @@
 using WoWSharpClient.Networking.Implementation;
 
-namespace WowSharpClient.NetworkTests;
+namespace WoWSharpClient.NetworkTests;
 
 public class ExponentialBackoffPolicyTests
 {

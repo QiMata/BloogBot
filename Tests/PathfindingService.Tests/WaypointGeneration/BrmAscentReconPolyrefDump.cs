@@ -191,7 +191,7 @@ public class BrmAscentReconPolyrefDump : IClassFixture<PathfindingValidationFixt
         // The two coords involved in WP[663]->WP[664] of the FC->UBRS
         // smooth path (per BrmAscentRenderingExpectations baseline run).
         var jumpFrom = new XYZ(-7945.7f, -1289.2f, 97.2f);
-        var jumpTo   = new XYZ(-7946.8f, -1291.7f, 124.4f);
+        var jumpTo = new XYZ(-7946.8f, -1291.7f, 124.4f);
 
         // Probe each at strict (capsule) and wide (pre-search) extents.
         // Also probe a vertical column at the XY to map every walkable

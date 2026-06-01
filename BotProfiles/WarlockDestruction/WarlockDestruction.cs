@@ -3,7 +3,8 @@ using WarlockDestruction.Tasks;
 
 using BotProfiles.Common;
 namespace WarlockDestruction
-{    public class WarlockDestruction : BotBase
+{
+    public class WarlockDestruction : BotBase
     {
         public override string Name => "Destruction Warlock";
 

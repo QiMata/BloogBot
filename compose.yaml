@@ -1,0 +1,33 @@
+# Self-contained local database for WWoW development.
+#
+# Goal: `docker compose up -d` on a fresh clone brings up a working MariaDB with
+# ZERO manual prerequisites (no pre-created network, no host-path mounts).
+#
+# This is the *minimal* local dependency. It starts an empty MariaDB; loading an
+# actual VMaNGOS world dump (mangos/characters/realmd/logs) is a separate,
+# documented step that uses docker/database/docker-compose.yml + the .env vars.
+# See docs/local-development.md.
+#
+# Defaults here are LOCAL-ONLY and safe to commit (root/root). They are NOT
+# production secrets. Override the password via WWOW_VMANGOS_DB_ROOT_PASSWORD.
+
+services:
+  db:
+    image: mariadb:10.11            # pinned to match docker/database/docker-compose.yml + the Aspire AppHost
+    container_name: wwow-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${WWOW_VMANGOS_DB_ROOT_PASSWORD:-root}
+    ports:
+      - "${WWOW_VMANGOS_DB_PORT:-3306}:3306"
+    volumes:
+      - wwow-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  wwow-db-data:

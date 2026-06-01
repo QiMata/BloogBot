@@ -57,6 +57,14 @@ Master tracker: `MASTER-SUB-019`
 4. [x] `PHS-MISS-004` Restore test discovery for existing PromptHandling test methods.
 - **Already addressed.** All test methods already have `[Fact(Skip = "Integration: requires local Ollama")]` attributes. Test discovery is correct — 2 non-skipped tests run, 12 integration tests are properly skipped.
 
+## Foundry Storyline Runtime
+
+Completed item details are archived in `Services/PromptHandlingService/TASKS_ARCHIVE.md`.
+
+## Storyline Manager API
+
+Completed item details are archived in `Services/PromptHandlingService/TASKS_ARCHIVE.md`.
+
 ## Simple Command Set
 1. Build service: `dotnet build Services/PromptHandlingService/PromptHandlingService.csproj --configuration Release --no-restore`
 2. Build tests: `dotnet build Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore`
@@ -64,14 +72,28 @@ Master tracker: `MASTER-SUB-019`
 4. Transfer-focused tests: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Transfer|FullyQualifiedName~PromptFunctionBase" --logger "console;verbosity=minimal"`
 
 ## Session Handoff
-- Last updated: 2026-02-28
-- Active task: all PromptHandlingService tasks complete (PHS-MISS-001..004)
-- Last delta: PHS-MISS-002/003 (14 transfer-contract + initialization tests in PromptFunctionBaseTransferTests.cs)
+- Last updated: 2026-05-31
+- Active task: none. Foundry persona deploy tooling is implemented and the dev Agent Application is live.
+- Last delta: added `tools/FoundryPersonaDeploy`, migrated service-local Foundry metadata to `evaluationSuites[]`, added the v1 persona runtime eval seed dataset, and deployed prompt-agent version `4`.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet test Tests/PromptHandlingService.Tests -c Debug --filter PromptFunctionBaseTransferTests` — 14/14 pass
+  - `dotnet build tools\FoundryPersonaDeploy\FoundryPersonaDeploy.csproj --configuration Release -v:minimal` -> passed
+  - `dotnet run --project tools\FoundryPersonaDeploy\FoundryPersonaDeploy.csproj --configuration Release --no-build -- --dry-run` -> passed
+  - `dotnet run --project tools\FoundryPersonaDeploy\FoundryPersonaDeploy.csproj --configuration Release --no-build` -> passed; model deployment `Succeeded`, prompt-agent `wwow-persona-runtime-dev:4`, Agent Application deployment `Running`/`Succeeded`, project-scoped smoke `completed`, application smoke `completed`
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (38 passed, 3 skipped)
+  - `dotnet format tools\FoundryPersonaDeploy\FoundryPersonaDeploy.csproj --verify-no-changes --no-restore --verbosity minimal` -> passed
+- DB/config used:
+  - Foundry persona runtime config: `Config/foundry/persona-runtime.json`.
+  - Agent metadata: `Services/PromptHandlingService/.foundry/agent-metadata.yaml`.
+  - Eval seed dataset: `Services/PromptHandlingService/.foundry/datasets/wwow-persona-runtime-dev-eval-seed-v1.jsonl`.
+- Deployment note: the tool targets protocol `Responses` version `1.0` for the Agent Application deployment and keeps Foundry advisory-only.
 - Files changed:
-  - `Tests/PromptHandlingService.Tests/PromptFunctionBaseTransferTests.cs` — new (14 tests)
+  - `Config/foundry/persona-runtime.json`
+  - `Services/PromptHandlingService/.foundry/agent-metadata.yaml`
+  - `Services/PromptHandlingService/.foundry/datasets/wwow-persona-runtime-dev-eval-seed-v1.jsonl`
+  - `Services/PromptHandlingService/Foundry/FoundryProjectResponsesClient.cs`
+  - `tools/FoundryPersonaDeploy/`
+  - `Tests/PromptHandlingService.Tests/FoundryPersonaRuntimeTests.cs`
   - `Services/PromptHandlingService/TASKS.md`
-- Next command: continue with next queue file
+- Next command: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`
 - Blockers: none

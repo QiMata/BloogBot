@@ -67,9 +67,9 @@ namespace WoWSharpClient.Client
             var router = new MessageRouter<Opcode>();
 
             var client = new AuthClient(connection, framer, encryptor, codec, router);
-            
+
             // Add any test-specific configurations here
-            
+
             return client;
         }
 
@@ -86,9 +86,9 @@ namespace WoWSharpClient.Client
             var router = new MessageRouter<Opcode>();
 
             var client = new WorldClient(connection, framer, encryptor, codec, router);
-            
+
             // Add any test-specific configurations here
-            
+
             return client;
         }
 
@@ -117,7 +117,7 @@ namespace WoWSharpClient.Client
         public static WorldClient CreateWorldClientWithReconnection(string host, int port)
         {
             var baseConnection = new TcpConnection();
-            
+
             // Create reconnection policy
             var reconnectPolicy = new ExponentialBackoffPolicy(
                 maxAttempts: 5,
@@ -125,7 +125,7 @@ namespace WoWSharpClient.Client
                 maxDelay: TimeSpan.FromSeconds(30));
 
             var connectionManager = new ConnectionManager(baseConnection, reconnectPolicy, host, port);
-            
+
             var encryptor = new NoEncryption();
             IMessageFramer framer = new WoWMessageFramer();
             var codec = new WoWPacketCodec();

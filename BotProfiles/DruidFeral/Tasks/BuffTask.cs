@@ -15,7 +15,7 @@ namespace DruidFeral.Tasks
                 BotTasks.Pop();
                 return;
             }
-            
+
             ObjectManager.CastSpell(MarkOfTheWild);
             ObjectManager.CastSpell(Thorns);
         }

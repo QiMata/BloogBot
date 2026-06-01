@@ -111,8 +111,12 @@ namespace WoWSharpClient.Tests.Agent
             _talentAgent.UpdateAvailableTalentPoints(1);
             var talentInfo = new TalentInfo
             {
-                TalentId = talentId, CurrentRank = 0, MaxRank = 5, TabIndex = 0,
-                Prerequisites = Array.Empty<TalentPrerequisite>(), RequiredTreePoints = 0
+                TalentId = talentId,
+                CurrentRank = 0,
+                MaxRank = 5,
+                TabIndex = 0,
+                Prerequisites = Array.Empty<TalentPrerequisite>(),
+                RequiredTreePoints = 0
             };
             var tree = new TalentTreeInfo { TabIndex = 0, PointsSpent = 0, Talents = [talentInfo] };
             _talentAgent.HandleTalentInfoReceived(1, 0, [tree]);
@@ -139,8 +143,12 @@ namespace WoWSharpClient.Tests.Agent
             _talentAgent.UpdateAvailableTalentPoints(5);
             var talentInfo = new TalentInfo
             {
-                TalentId = talentId, CurrentRank = 1, MaxRank = 5, TabIndex = 0,
-                Prerequisites = Array.Empty<TalentPrerequisite>(), RequiredTreePoints = 0
+                TalentId = talentId,
+                CurrentRank = 1,
+                MaxRank = 5,
+                TabIndex = 0,
+                Prerequisites = Array.Empty<TalentPrerequisite>(),
+                RequiredTreePoints = 0
             };
             var tree = new TalentTreeInfo { TabIndex = 0, PointsSpent = 5, Talents = [talentInfo] };
             _talentAgent.HandleTalentInfoReceived(5, 0, [tree]);
@@ -172,8 +180,12 @@ namespace WoWSharpClient.Tests.Agent
             _talentAgent.UpdateAvailableTalentPoints(1);
             var talentInfo = new TalentInfo
             {
-                TalentId = talentId, TalentIndex = talentIndex, TabIndex = tabIndex,
-                CurrentRank = 0, MaxRank = 5, Prerequisites = Array.Empty<TalentPrerequisite>(),
+                TalentId = talentId,
+                TalentIndex = talentIndex,
+                TabIndex = tabIndex,
+                CurrentRank = 0,
+                MaxRank = 5,
+                Prerequisites = Array.Empty<TalentPrerequisite>(),
                 RequiredTreePoints = 0
             };
             var tree = new TalentTreeInfo { TabIndex = tabIndex, PointsSpent = 0, Talents = [talentInfo] };
@@ -287,7 +299,8 @@ namespace WoWSharpClient.Tests.Agent
             _talentAgent.UpdateAvailableTalentPoints(10);
             var talentBuild = new TalentBuild
             {
-                Name = "Test Build", ClassId = 1,
+                Name = "Test Build",
+                ClassId = 1,
                 Allocations = [
                     new TalentAllocation { TalentId = 101, TargetRank = 2, Priority = 1 },
                     new TalentAllocation { TalentId = 102, TargetRank = 1, Priority = 2 }
@@ -363,8 +376,12 @@ namespace WoWSharpClient.Tests.Agent
             _talentAgent.UpdateAvailableTalentPoints(5);
             var talentInfo = new TalentInfo
             {
-                TalentId = 101, CurrentRank = 0, MaxRank = 5, TabIndex = 0,
-                Prerequisites = [], RequiredTreePoints = 0
+                TalentId = 101,
+                CurrentRank = 0,
+                MaxRank = 5,
+                TabIndex = 0,
+                Prerequisites = [],
+                RequiredTreePoints = 0
             };
             var tree = new TalentTreeInfo { TabIndex = 0, PointsSpent = 5, Talents = [talentInfo] };
             _talentAgent.HandleTalentInfoReceived(5, 0, [tree]);
@@ -399,8 +416,12 @@ namespace WoWSharpClient.Tests.Agent
             };
             var talentInfo = new TalentInfo
             {
-                TalentId = 101, CurrentRank = 0, MaxRank = 5, TabIndex = 0,
-                Prerequisites = [], RequiredTreePoints = 0
+                TalentId = 101,
+                CurrentRank = 0,
+                MaxRank = 5,
+                TabIndex = 0,
+                Prerequisites = [],
+                RequiredTreePoints = 0
             };
             var tree = new TalentTreeInfo { TabIndex = 0, PointsSpent = 10, Talents = [talentInfo] };
             _talentAgent.HandleTalentInfoReceived(10, 0, [tree]);
@@ -467,7 +488,8 @@ namespace WoWSharpClient.Tests.Agent
         {
             var tree = new TalentTreeInfo
             {
-                TabIndex = 0, PointsSpent = 10,
+                TabIndex = 0,
+                PointsSpent = 10,
                 Talents = [
                     new TalentInfo { TalentId = 101, CurrentRank = 2 },
                     new TalentInfo { TalentId = 102, CurrentRank = 1 }

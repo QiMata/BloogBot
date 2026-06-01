@@ -17,7 +17,7 @@ namespace DruidFeral.Tasks
                 BotTasks.Pop();
                 return;
             }
-            
+
             if (ObjectManager.Player.Position.DistanceTo(ObjectManager.GetTarget(ObjectManager.Player).Position) < 27 && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(Wrath) && ObjectManager.Player.InLosWith(ObjectManager.GetTarget(ObjectManager.Player)))
             {
                 if (ObjectManager.Player.IsMoving)

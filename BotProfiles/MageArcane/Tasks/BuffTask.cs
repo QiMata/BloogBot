@@ -14,7 +14,7 @@ namespace MageArcane.Tasks
                 BotTasks.Push(new ConjureItemsTask(BotContext));
                 return;
             }
-            
+
             TryCastSpell(ArcaneIntellect, castOnSelf: true);
 
             if (ObjectManager.IsSpellReady(IceArmor))
@@ -29,7 +29,7 @@ namespace MageArcane.Tasks
         {
             if (!ObjectManager.Player.HasBuff(name) && ObjectManager.IsSpellReady(name) && ObjectManager.IsSpellReady(name))
             {
-                ObjectManager.CastSpell(name,castOnSelf: castOnSelf);
+                ObjectManager.CastSpell(name, castOnSelf: castOnSelf);
             }
         }
     }

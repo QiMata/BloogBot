@@ -1,6 +1,9 @@
 # Tests - Test Infrastructure
 
-11 test projects using **xUnit + Moq**. Run all with `dotnet test WestworldOfWarcraft.sln`.
+15 projects (14 test/harness projects + the shared `Tests.Infrastructure` library)
+using **xUnit + Moq**. Run all with `dotnet test WestworldOfWarcraft.sln`. See
+[README.md](README.md) for the full project list; the table below covers the main
+ones.
 
 ## Test Projects
 
@@ -11,7 +14,7 @@
 | `PathfindingService.Tests/` | Pathfinding algorithm and physics engine tests |
 | `PromptHandlingService.Tests/` | Dialog automation tests |
 | `WoWSharpClient.Tests/` | Protocol parsing, handler, and agent tests |
-| `WowSharpClient.NetworkTests/` | Network/socket, reconnect policy tests |
+| `WoWSharpClient.NetworkTests/` | Network/socket, reconnect policy tests |
 | `WoWSimulation/` | Full simulation integration tests |
 | `RecordedTests.PathingTests.Tests/` | Navigation regression tests |
 | `RecordedTests.Shared.Tests/` | Shared orchestration tests |

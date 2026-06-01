@@ -39,7 +39,7 @@ namespace WoWSharpClient.Client
         /// Falls back to the legacy singleton if not set (migration bridge).
         /// </summary>
         internal WoWSharpEventEmitter EventEmitter { get; set; }
-        
+
         private string _username = string.Empty;
         private string _password = string.Empty;
         private SrpClient? _srpClient;
@@ -104,9 +104,9 @@ namespace WoWSharpClient.Client
                 realmListTimeout,
                 RealmListTimeoutEnvironmentVariable,
                 DefaultRealmListTimeout);
-            
+
             _pipeline = new PacketPipeline<Opcode>(connection, encryptor, framer, codec, router);
-            
+
             RegisterAuthHandlers();
         }
 
@@ -257,14 +257,14 @@ namespace WoWSharpClient.Client
         {
             // Use TaskCompletionSource to wait for the realm list response
             var realmListTcs = new TaskCompletionSource<List<Realm>>();
-            
+
             // Store the TCS for the response handler to complete
             _realmListCompletionSource = realmListTcs;
 
             // Create CMD_REALM_LIST packet
             using var memoryStream = new MemoryStream();
             using var writer = new BinaryWriter(memoryStream, Encoding.UTF8, true);
-            
+
             writer.Write((byte)0x10);   // CMD_REALM_LIST opcode
             writer.Write((uint)0x00);   // Padding (unused, always 0)
 
@@ -367,54 +367,54 @@ namespace WoWSharpClient.Client
                 switch (opcode)
                 {
                     case 0x00: // CMD_AUTH_LOGON_CHALLENGE response
-                    {
-                        // opcode(1) + unk(1) + result(1) = 3 bytes minimum
-                        if (snapshot.Length < 3) return;
-                        byte result = snapshot[2];
-                        if (result != 0x00) // Not SUCCESS — short error packet (3 bytes)
                         {
-                            consumed = 3;
-                            await HandleAuthLogonChallengeResponse(snapshot.AsMemory(0, consumed));
+                            // opcode(1) + unk(1) + result(1) = 3 bytes minimum
+                            if (snapshot.Length < 3) return;
+                            byte result = snapshot[2];
+                            if (result != 0x00) // Not SUCCESS — short error packet (3 bytes)
+                            {
+                                consumed = 3;
+                                await HandleAuthLogonChallengeResponse(snapshot.AsMemory(0, consumed));
+                            }
+                            else
+                            {
+                                // Success: fixed 119 bytes
+                                if (snapshot.Length < 119) return; // Wait for more data
+                                consumed = 119;
+                                await HandleAuthLogonChallengeResponse(snapshot.AsMemory(0, consumed));
+                            }
+                            break;
                         }
-                        else
-                        {
-                            // Success: fixed 119 bytes
-                            if (snapshot.Length < 119) return; // Wait for more data
-                            consumed = 119;
-                            await HandleAuthLogonChallengeResponse(snapshot.AsMemory(0, consumed));
-                        }
-                        break;
-                    }
                     case 0x01: // CMD_AUTH_LOGON_PROOF response
-                    {
-                        if (snapshot.Length < 2) return;
-                        byte result = snapshot[1];
-                        if (result != 0x00) // Error — opcode(1) + error(1) + unk(2) = 4 bytes
                         {
-                            int errorLen = Math.Min(4, snapshot.Length);
-                            consumed = errorLen;
-                            await HandleAuthLogonProofResponse(snapshot.AsMemory(0, consumed));
+                            if (snapshot.Length < 2) return;
+                            byte result = snapshot[1];
+                            if (result != 0x00) // Error — opcode(1) + error(1) + unk(2) = 4 bytes
+                            {
+                                int errorLen = Math.Min(4, snapshot.Length);
+                                consumed = errorLen;
+                                await HandleAuthLogonProofResponse(snapshot.AsMemory(0, consumed));
+                            }
+                            else
+                            {
+                                // Success: opcode(1) + error(1) + M2(20) + accountFlags(4) = 26 bytes
+                                if (snapshot.Length < 26) return;
+                                consumed = 26;
+                                await HandleAuthLogonProofResponse(snapshot.AsMemory(0, consumed));
+                            }
+                            break;
                         }
-                        else
-                        {
-                            // Success: opcode(1) + error(1) + M2(20) + accountFlags(4) = 26 bytes
-                            if (snapshot.Length < 26) return;
-                            consumed = 26;
-                            await HandleAuthLogonProofResponse(snapshot.AsMemory(0, consumed));
-                        }
-                        break;
-                    }
                     case 0x10: // CMD_REALM_LIST response
-                    {
-                        // opcode(1) + size(2 LE) then size bytes of body
-                        if (snapshot.Length < 3) return;
-                        ushort bodySize = BitConverter.ToUInt16(snapshot, 1);
-                        int totalSize = 3 + bodySize;
-                        if (snapshot.Length < totalSize) return; // Wait for more data
-                        consumed = totalSize;
-                        await HandleRealmListResponse(snapshot.AsMemory(0, consumed));
-                        break;
-                    }
+                        {
+                            // opcode(1) + size(2 LE) then size bytes of body
+                            if (snapshot.Length < 3) return;
+                            ushort bodySize = BitConverter.ToUInt16(snapshot, 1);
+                            int totalSize = 3 + bodySize;
+                            if (snapshot.Length < totalSize) return; // Wait for more data
+                            consumed = totalSize;
+                            await HandleRealmListResponse(snapshot.AsMemory(0, consumed));
+                            break;
+                        }
                     default:
                         Console.WriteLine($"[AuthClient] Unknown auth opcode: 0x{opcode:X2}, buffer size: {snapshot.Length}");
                         // Discard one byte and retry
@@ -472,12 +472,12 @@ namespace WoWSharpClient.Client
 
                 byte[] clientPublicKey = challenge.ClientPublicKey;
                 byte[] clientProof = challenge.ClientProof;
-                
+
                 byte[] crcHash = SHA1.HashData(Arrays.Concatenate(crcSalt, clientProof));
 
                 using var memoryStream = new MemoryStream();
                 using var writer = new BinaryWriter(memoryStream, Encoding.UTF8, true);
-                
+
                 writer.Write((byte)0x01); // Opcode: CMD_AUTH_LOGON_PROOF
                 writer.Write(clientPublicKey);
                 writer.Write(clientProof);
@@ -562,7 +562,7 @@ namespace WoWSharpClient.Client
                 Console.WriteLine($"[AuthClient] <- CMD_REALM_LIST [{packet.Length}]");
 
                 var realms = new List<Realm>();
-                
+
                 if (packet.Length >= 8)
                 {
                     byte opcode = packet[0];
@@ -574,7 +574,7 @@ namespace WoWSharpClient.Client
                     {
                         using var bodyStream = new MemoryStream(packet, 8, packet.Length - 8);
                         using var bodyReader = new BinaryReader(bodyStream, Encoding.UTF8, true);
-                        
+
                         for (int i = 0; i < numOfRealms && bodyStream.Position < bodyStream.Length; i++)
                         {
                             try
@@ -585,7 +585,7 @@ namespace WoWSharpClient.Client
                                     Flags = bodyReader.ReadByte(),
                                     RealmName = PacketManager.ReadCString(bodyReader),
                                 };
-                                
+
                                 var addressPort = PacketManager.ReadCString(bodyReader);
                                 if (addressPort.Contains(':'))
                                 {

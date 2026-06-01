@@ -76,7 +76,7 @@ Create/edit configuration files in the output `Bot/` directory:
 UI Layer          ? User interfaces, Aspire orchestration
 Services Layer    ? Background workers (Pathfinding, StateManager, etc.)
 Exports Layer     ? Core libraries, native DLLs
-BloogBot.AI       ? Advanced AI coordination
+WWoW.AI       ? Advanced AI coordination
 ```
 
 ### Key Projects
@@ -274,9 +274,9 @@ public class MyGameObject : WoWObject, IMyGameObject
 }
 ```
 
-### Adding a New Activity (BloogBot.AI)
+### Adding a New Activity (WWoW.AI)
 
-1. **Add to BotActivity enum** in `BloogBot.AI/States/BotActivity.cs`:
+1. **Add to BotActivity enum** in `WWoW.AI/States/BotActivity.cs`:
 
 ```csharp
 public enum BotActivity
@@ -286,7 +286,7 @@ public enum BotActivity
 }
 ```
 
-2. **Add relevant triggers** in `BloogBot.AI/States/Trigger.cs`:
+2. **Add relevant triggers** in `WWoW.AI/States/Trigger.cs`:
 
 ```csharp
 public enum Trigger
@@ -532,7 +532,9 @@ Both services mount `D:/MaNGOS/data` (configurable via `WWOW_VMANGOS_DATA_DIR`) 
 
 ### Building the Project
 
-The preferred way to build BloogBot is using the provided PowerShell build script:
+The preferred way to build and validate BloogBot is the stable
+[`scripts/`](../scripts/README.md) interface (see also
+[local-development.md](local-development.md)):
 
 ```powershell
 # Debug build (default)
@@ -541,11 +543,11 @@ The preferred way to build BloogBot is using the provided PowerShell build scrip
 # Release build
 .\scripts\build.ps1 -Configuration Release
 
-# Build with tests
-.\scripts\build.ps1 -Test
+# Build, then run the full test suite
+.\scripts\build.ps1 ; .\scripts\test.ps1
 
-# Clean and rebuild
-.\scripts\build.ps1 -Clean
+# Clean build artifacts, then rebuild
+.\scripts\clean.ps1 ; .\scripts\build.ps1
 ```
 
 ### Using CMake Directly

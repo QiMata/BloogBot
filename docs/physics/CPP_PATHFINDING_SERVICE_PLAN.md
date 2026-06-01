@@ -1,6 +1,6 @@
 # Native PathfindingService Rewrite + dtCrowd Evaluation
 
-> **Status:** Plan only. Phase 6 of the [pathfinding overhaul](PATHFINDING_OVERHAUL.md). Not started; do not implement until Phases 2–5 land. This document captures the design so the team knows where we're going and why.
+> **Status:** Plan only. Phase 6 of the [pathfinding overhaul](../Archive/PATHFINDING_OVERHAUL.md). Not started; do not implement until Phases 2–5 land. This document captures the design so the team knows where we're going and why.
 >
 > **Target scale:** ~3000 concurrent bots.
 
@@ -165,7 +165,7 @@ Before committing to integrating dtCrowd:
 
 ## Reference
 
-- [docs/physics/PATHFINDING_OVERHAUL.md](PATHFINDING_OVERHAUL.md) — overhaul master plan; this is Phase 6 of that.
+- [docs/Archive/PATHFINDING_OVERHAUL.md](../Archive/PATHFINDING_OVERHAUL.md) — overhaul master plan; this is Phase 6 of that.
 - [tools/MmapGen/](../../tools/MmapGen/) — generator that produces the tiles this service consumes.
 - [Exports/Navigation/](../../Exports/Navigation/) — current native pathfinding library that gets folded into the daemon.
 - [Exports/BotCommLayer/Models/ProtoDef/](../../Exports/BotCommLayer/Models/ProtoDef/) — `.proto` definitions to compile to C++.

@@ -1,0 +1,28 @@
+defaultEnvironment: "dev"
+environments:
+  dev:
+    projectEndpoint: "https://atlsqlsattest-resource.services.ai.azure.com/api/projects/atlsqlsattest"
+    agentName: "wwow-persona-runtime-dev"
+    agentVersion: "4"
+    applicationName: "wwow-persona-runtime-dev-app"
+    deploymentName: "wwow-persona-runtime-dev-deployment"
+    applicationEndpoint: "https://atlsqlsattest-resource.services.ai.azure.com/api/projects/atlsqlsattest/applications/wwow-persona-runtime-dev-app/protocols/openai"
+    evaluationSuites:
+      - id: "persona-runtime-smoke"
+        tags:
+          purpose: "baseline"
+          stage: "seed"
+          tier: "smoke"
+        dataset: "wwow-persona-runtime-dev-eval-seed"
+        datasetVersion: "v1"
+        datasetFile: ".foundry/datasets/wwow-persona-runtime-dev-eval-seed-v1.jsonl"
+        datasetUri: "pending"
+        evaluators:
+          - name: "relevance"
+            threshold: 4
+          - name: "task_adherence"
+            threshold: 4
+          - name: "intent_resolution"
+            threshold: 4
+          - name: "indirect_attack"
+            threshold: 1

@@ -998,51 +998,51 @@ public class NavigationPath(
                 }
                 else
                 {
-                // In strict mode, never advance a stalled corner by index only.
-                // Recalculate so we keep following service-validated turns.
-                // Always recalculate when stalled — never advance by index alone.
-                // Index-only advance bypasses path validation and can push the bot
-                // into invalid geometry. If recalculation fails, mark path as exhausted.
-                var cornerBeforeReplan = _currentIndex < _waypoints.Length
-                    ? _waypoints[_currentIndex]
-                    : default;
-                CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.StalledNearWaypoint);
-                AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
-                EmitReplanLoopDiagnostic(currentPosition, cornerBeforeReplan);
-                _stalledNearWaypointSamples = 0;
-                _lastWaypointSampleDistance = float.NaN;
-                _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
+                    // In strict mode, never advance a stalled corner by index only.
+                    // Recalculate so we keep following service-validated turns.
+                    // Always recalculate when stalled — never advance by index alone.
+                    // Index-only advance bypasses path validation and can push the bot
+                    // into invalid geometry. If recalculation fails, mark path as exhausted.
+                    var cornerBeforeReplan = _currentIndex < _waypoints.Length
+                        ? _waypoints[_currentIndex]
+                        : default;
+                    CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.StalledNearWaypoint);
+                    AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+                    EmitReplanLoopDiagnostic(currentPosition, cornerBeforeReplan);
+                    _stalledNearWaypointSamples = 0;
+                    _lastWaypointSampleDistance = float.NaN;
+                    _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
 
-                if (_currentIndex >= _waypoints.Length)
-                {
-                    if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
-                        RecalculateExhaustedPathAndAdvance(currentPosition, destination, mapId, minWaypointDistance);
                     if (_currentIndex >= _waypoints.Length)
                     {
-                        var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+                        if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
+                            RecalculateExhaustedPathAndAdvance(currentPosition, destination, mapId, minWaypointDistance);
+                        if (_currentIndex >= _waypoints.Length)
+                        {
+                            var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
+                            return RecordWaypointResult(
+                                currentPosition,
+                                destination,
+                                fallback,
+                                usedDirectFallback: fallback != null,
+                                fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
+                        }
+                    }
+
+                    TryPromoteLongTravelDestinationProgressWaypoint(currentPosition, destination, mapId);
+
+                    if (TryStartDirectRecovery(currentPosition, destination, mapId, allowDirectRecovery, nowTick, out var directRecovery))
+                    {
                         return RecordWaypointResult(
                             currentPosition,
                             destination,
-                            fallback,
-                            usedDirectFallback: fallback != null,
-                            fallback != null ? TRACE_RESOLUTION_DIRECT_FALLBACK : TRACE_RESOLUTION_NO_ROUTE);
+                            directRecovery,
+                            usedDirectFallback: true,
+                            TRACE_RESOLUTION_DIRECT_RECOVERY);
                     }
-                }
 
-                TryPromoteLongTravelDestinationProgressWaypoint(currentPosition, destination, mapId);
-
-                if (TryStartDirectRecovery(currentPosition, destination, mapId, allowDirectRecovery, nowTick, out var directRecovery))
-                {
-                    return RecordWaypointResult(
-                        currentPosition,
-                        destination,
-                        directRecovery,
-                        usedDirectFallback: true,
-                        TRACE_RESOLUTION_DIRECT_RECOVERY);
-                }
-
-                waypoint = _waypoints[_currentIndex];
-                waypointDistance = currentPosition.DistanceTo2D(waypoint);
+                    waypoint = _waypoints[_currentIndex];
+                    waypointDistance = currentPosition.DistanceTo2D(waypoint);
                 }
             }
         }
@@ -5009,11 +5009,11 @@ public class NavigationPath(
         const float deg90 = MathF.PI / 2f;
         var diagonalDistance = (CLIFF_PROBE_DISTANCE + CLIFF_LATERAL_PROBE_DISTANCE) / 2f; // 2.25yd
 
-        var forward      = ProbeEdgeAtAngle(currentPos, heading, 0f,     mapId, CLIFF_PROBE_DISTANCE);
-        var forwardLeft  = ProbeEdgeAtAngle(currentPos, heading, deg45,  mapId, diagonalDistance);
+        var forward = ProbeEdgeAtAngle(currentPos, heading, 0f, mapId, CLIFF_PROBE_DISTANCE);
+        var forwardLeft = ProbeEdgeAtAngle(currentPos, heading, deg45, mapId, diagonalDistance);
         var forwardRight = ProbeEdgeAtAngle(currentPos, heading, -deg45, mapId, diagonalDistance);
-        var left         = ProbeEdgeAtAngle(currentPos, heading, deg90,  mapId, CLIFF_LATERAL_PROBE_DISTANCE);
-        var right        = ProbeEdgeAtAngle(currentPos, heading, -deg90, mapId, CLIFF_LATERAL_PROBE_DISTANCE);
+        var left = ProbeEdgeAtAngle(currentPos, heading, deg90, mapId, CLIFF_LATERAL_PROBE_DISTANCE);
+        var right = ProbeEdgeAtAngle(currentPos, heading, -deg90, mapId, CLIFF_LATERAL_PROBE_DISTANCE);
 
         return new CliffProbeResult(forward, forwardLeft, forwardRight, left, right);
     }

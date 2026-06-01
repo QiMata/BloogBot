@@ -19,11 +19,12 @@
 - [x] Local prompt-runner tests do not require live network/model access for default CI command path.
 - [x] If integration prompt tests are enabled, local Ollama endpoint and model names are explicitly documented per test.
 
-## Current Status (2026-04-15)
+## Current Status (2026-05-24)
 - Known remaining owner-local items: `0`.
 - Default prompt-function tests use `ScriptedPromptRunner` and are deterministic/offline.
 - Ollama prompt tests are isolated behind `Category=Integration`.
 - Additional DecisionEngine runtime tests live here because this test project already references `DecisionEngineService`.
+- Foundry persona runtime tests use a fake Foundry client by default; live smoke coverage is statically skipped and opt-in via environment variables.
 - Completed item details are archived in `Tests/PromptHandlingService.Tests/TASKS_ARCHIVE.md`.
 
 ## Completed P0 Items
@@ -32,6 +33,9 @@
 - [x] `PHS-TST-003` Add contract tests for `PromptFunctionBase.TransferHistory` behavior (`PHS-MISS-001` guard).
 - [x] `PHS-TST-004` Convert legacy repository tests into discoverable and bounded execution slices.
 - [x] `PHS-TST-005` Simplify command surface and align README with timeout-safe defaults.
+- [x] `PHS-FDRY-TST-001` Add deterministic Foundry persona runtime adapter tests for options validation, prompt assembly, fake-client runtime parsing/error paths, secret leakage, and skipped live smoke gates.
+- [x] `PHS-STORY-TST-001` Add deterministic Foundry storyline graph runtime tests for schema, seed, repository, resolver, runtime guardrails, binding propagation, and secret scanning.
+- [x] `PHS-STORY-MGR-TST-001` Add deterministic storyline management tests for drafts, publish validation, graph snapshot replacement, gameplay arcs, character bindings, memory review, and graph layout.
 
 ## Open Tasks
 - None.
@@ -42,28 +46,17 @@
 3. Transfer-history contract focus: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~TransferHistory|FullyQualifiedName~PromptFunctionBase" --logger "console;verbosity=minimal"`.
 4. Repository smoke/integration focus: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~MangosRepositoryTest" --logger "console;verbosity=minimal"`.
 5. Prompt Ollama integration opt-in: `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "Category=Integration" --logger "console;verbosity=minimal"`.
+6. Foundry deterministic focus: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`.
 
 ## Session Handoff
-- Last updated: 2026-04-15
-- Active task: none. `PHS-TST-001` through `PHS-TST-005` are complete.
-- Last delta: added `DecisionEngineRuntimeTests` coverage for `Services/DecisionEngineService` startup preflight.
+- Last updated: 2026-05-31
+- Active task: none. Foundry metadata and seed-dataset contract checks are in place.
+- Last delta: added deterministic checks that Foundry metadata uses `evaluationSuites[]`, accepts quoted YAML scalar values, and that the v1 seed dataset contains `query` plus `expected_behavior` rows.
 - Pass result: `delta shipped`
 - Validation/tests run:
-  - `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "Category!=Integration" --logger "console;verbosity=minimal"` -> `passed (27 passed, 161 skipped, 0 failed, 188 total)`
-  - `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-build --no-restore --settings Tests/test.runsettings --filter "FullyQualifiedName~IntentionParserFunctionTests|FullyQualifiedName~GMCommandGeneratorFunctionTests|FullyQualifiedName~CharacterSkillPrioritizationFunctionTests" --logger "console;verbosity=minimal"` -> `passed (12/12)`
-  - `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --filter "FullyQualifiedName~DecisionEngineRuntimeTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
-  - `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~DecisionEngineRuntimeTests" --logger "console;verbosity=minimal"` -> `passed (4/4)`
-  - `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --settings Tests/test.runsettings --filter "Category!=Integration" --logger "console;verbosity=minimal"` -> `passed (31 passed, 161 skipped, 0 failed, 192 total)`
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (38 passed, 3 skipped)
 - Files changed:
-  - `Tests/PromptHandlingService.Tests/DecisionEngineRuntimeTests.cs`
-  - `Tests/PromptHandlingService.Tests/ScriptedPromptRunner.cs`
-  - `Tests/PromptHandlingService.Tests/IntentionParserFunctionTests.cs`
-  - `Tests/PromptHandlingService.Tests/GMCommandGeneratorFunctionTests.cs`
-  - `Tests/PromptHandlingService.Tests/CharacterSkillPrioritizationFunctionTests.cs`
-  - `Tests/PromptHandlingService.Tests/README.md`
+  - `Tests/PromptHandlingService.Tests/FoundryPersonaRuntimeTests.cs`
   - `Tests/PromptHandlingService.Tests/TASKS.md`
-  - `Tests/PromptHandlingService.Tests/TASKS_ARCHIVE.md`
-  - `docs/TASKS.md`
-  - `docs/TASKS_ARCHIVE.md`
 - Blockers: none
-- Next command: `rg -n "^- \[ \]" --glob TASKS.md`
+- Next command: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`

@@ -7,7 +7,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace WowSharpClient.NetworkTests
+namespace WoWSharpClient.NetworkTests
 {
     /// <summary>
     /// A deterministic test encryptor that XOR-transforms only the 4-byte S->C header

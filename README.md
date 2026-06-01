@@ -11,7 +11,7 @@ The repository is organized into several large subsystems. Each has its own READ
 | [Services](./Services/README.md) | Distributed worker services that coordinate bots, navigation, prompts, and decision making. |
 | [Exports](./Exports/README.md) | Core libraries and native components injected into the WoW client or consumed by services. |
 | [UI](./UI/README.md) | User interfaces for orchestrating bots and monitoring systems. |
-| [WWoW.AI](./BloogBot.AI/README.md) | Experimental AI agents and supporting tooling. |
+| [WWoW.AI](./WWoW.AI/README.md) | Experimental AI agents and supporting tooling. |
 | [Documentation](./docs/README.md) | Technical documentation including physics system details. |
 | [Recorded Tests Shared Library](./WWoW.RecordedTests.Shared/README.md) | Orchestration primitives for automated, recorded integration tests. |
 | [Recorded Test Ideas](./WWoW.RecordedTests.Shared/RECORDED_TEST_IDEAS.md) | Backlog of high-value encounters to automate and film. |
@@ -32,75 +32,93 @@ Ultimately, WWoW is about **intellectual exploration** – understanding how to 
 
 WWoW is built upon an open-source WoW bot framework (originally known as *BloogBot*), and extends it into a full simulation platform. The current features include:
 
-* **Automated Player Characters:** WWoW’s bots can create and control WoW characters to fight monsters, level up, and travel the world **without human input**. Each bot runs *in-process* with the game client, giving it direct control over the character’s actions and responses.
+* **Automated Player Characters:** WWoW’s bots can create and control WoW characters to fight monsters, level up, and travel the world **without human input**. Each bot runs in one of two interchangeable modes — *foreground* (injected into a real `WoW.exe` for true client parity) or *background* (headless, emulating the WoW network protocol with no game client) — both driven by the same core behavior engine.
 * **Multi-Expansion Support:** The platform currently works with WoW Classic era game clients – Vanilla (1.12.1), Burning Crusade (2.4.3), and Wrath of the Lich King (3.3.5). This corresponds to popular private server versions (e.g. Kronos, TurtleWoW, Atlantiss, Warmane) and any self-hosted server based on MaNGOS/TrinityCore for those expansions. (Modern retail WoW is not supported due to vastly different code and anti-cheat mechanisms.)
 * **Questing and Combat AI:** Bots come with class-specific “profiles” that dictate their combat rotations and behaviors. For example, a Frost Mage bot knows how to cast frost spells, kite enemies, and use food/drink to recover mana. All provided class profiles (e.g. FrostMageBot, etc.) are functional and can be customized. The AI uses a state-machine approach – e.g. states for *Idle*, *Patrol*, *Combat*, *Rest*, *Dead* – to manage behavior. Bots will engage hostile mobs, use spells/abilities, loot corpses, and even retreat or rest when needed.
 * **Navigation and Pathfinding:** To move convincingly and avoid obstacles, WWoW uses a navigation mesh system. You’ll generate **movement maps (navmeshes)** from the game data, which the bot uses for pathfinding. Bots can intelligently move toward targets, roam between towns and wilderness, and navigate around terrain features. The pathfinding is based on compiled game world data (similar to Recast/Detour algorithms) to ensure the AI knows where it can walk or where obstacles are.
 * **Hotspots and Grinding Areas:** WWoW defines **hotspots** – locations in the game world optimal for certain level ranges or objectives. Each hotspot includes waypoints for the bot to patrol, the level range of monsters, and references to nearby NPCs (like innkeepers or vendors). Bots can switch between hotspots as they level up, creating a progression (e.g. starting in a newbie zone, then moving to tougher areas as they gain levels).
 * **NPC Interaction (Vendors/Repair):** Bots can interact with non-player characters for basic needs. For example, when gear durability gets low or bags are full, a bot will travel to a repair vendor or shop to sell junk and restock ammunition. Innkeepers are known to the bot as well, potentially for setting hearthstones or buying food/drink. This ensures the AI can sustain itself over long play sessions without human help.
 * **Death and Recovery:** If a bot character dies (for example, overwhelmed by enemies), it will automatically handle corpse retrieval and resurrection. It uses the navmesh to navigate from the graveyard back to its corpse. (If the area is too dangerous or the death point is unreachable, the bot may respawn at a spirit healer after a timeout.)
-* **Persistence and Data Logging:** WWoW can log and persist world data via a database. By default, it can use an **SQLite database** stored locally (no setup required) to remember things like discovered NPCs, hotspots, blacklisted troublesome mobs, etc. Alternatively, it supports **Microsoft SQL/Azure SQL** for cloud data storage. On first run, the necessary tables (for tracking NPCs, hotspots, bot commands, etc.) are automatically created in the database. This persistent data allows bots to “remember” important info across sessions and enables analysis of bot behavior over time.
-* **Discord Integration (optional):** WWoW includes optional Discord bot integration. If enabled with your Discord Bot Token and server info, the system can send notifications or accept simple commands via a Discord channel. This can be used to monitor your AI players remotely (e.g. get notified of level-ups or deaths) or to issue commands like pausing the bots. (Discord integration can be turned off in settings if not needed.)
+* **Persistence (local-only):** WWoW persists data across **local** stores — there is no cloud-database dependency. The MaNGOS server holds the game world in **MySQL/MariaDB** (read-mostly from the bot's side — mutate only via SOAP), the bot caches derived game knowledge (quests, dialog/storylines) in **SQLite**, and the decision-engine knowledge base plus agent memory live in **PostgreSQL**. See [`docs/data-model.md`](./docs/data-model.md) for the full data model.
 * **Recorded Test Harness:** The [`WWoW.RecordedTests.Shared`](./WWoW.RecordedTests.Shared/README.md) library bundles orchestration helpers for filmed regression tests. It ensures private servers are available, coordinates foreground/background runners, and centralizes artifact capture for automated video evidence.
-* **Stealth Operation:** The bots run inside the WoW client process itself, which not only gives them direct access to game functions but also makes them harder to detect by the game’s anti-bot measures. In fact, WWoW disables the legacy Warden anti-cheat in older clients upon injection. The approach is similar to how some cheat bots work, but here it is purposed for creating a believable simulation rather than gaining unfair advantage in competitive play.
+* **Stealth Operation (foreground mode):** A foreground bot runs inside the WoW client process itself, which gives it direct access to game functions and makes it harder to detect by the game's anti-bot measures; WWoW also disables the legacy Warden anti-cheat in older clients upon injection. (Background bots sidestep the client entirely.) The approach is similar to how some cheat bots work, but here it is purposed for creating a believable simulation rather than gaining unfair advantage in competitive play.
 * **Extensibility:** The architecture is modular. You can create new **bot profiles** (for classes or even custom behaviors) by implementing the AI logic for that profile (e.g., how a Warrior fights vs. how a Mage fights). You can also extend the system with new types of agents or scripts – for instance, creating a “QuestingBot” that completes quests, or a “ChatBot” that engages in in-game chat using AI. Developers can use the provided API of the bot to get information about the game state (e.g. player health, nearby units, inventory) and take actions (move, attack, cast spells, etc.).
 
-**Technical Highlights:** Under the hood, WWoW is written in C#/.NET 4.6 with some C++ components. A custom **bootstrapper** program uses Windows API calls to launch the WoW client and **inject a DLL** into it. This DLL bootstraps a .NET runtime inside the game process and loads the bot’s managed code, effectively “plugging in” our AI agent into the game’s memory space. Once injected, the bot uses memory reading/writing and function calls to control the game (e.g. to move the character or cast spells directly via game functions). The project also makes use of third-party libraries and data:
+**Technical Highlights:** Under the hood, WWoW is a set of **C#/.NET 8** worker services (orchestrated with **.NET Aspire**) plus a few native **C++** components. In *foreground* mode, `WoWStateManager` launches the WoW client and injects the native `Loader.dll` (`Exports/Loader`), which bootstraps the .NET 8 runtime inside the game process and loads `ForegroundBotRunner`; the injected bot then controls the game through direct memory read/write and game-function calls. In *background* mode, `BackgroundBotRunner` drives a character purely over the WoW network protocol (`Exports/WoWSharpClient`) with no game client at all. The project also makes use of supporting libraries and data:
 
-* **Navigation Meshes:** Precomputed move maps (you’ll generate these from WoW’s game data) to allow pathfinding.
-* **Newtonsoft JSON:** Used for configuration files and profile definitions.
-* **Azure Cloud Services:** (Optional) for data storage and potentially analytics – e.g. Azure SQL database and planned integration with Azure AI services (see the Roadmap).
-* **Discord .NET libraries:** For the Discord integration feature.
+* **Navigation meshes:** Precomputed movement maps generated from the client's map data by [`tools/MmapGen`](./tools/MmapGen/), consumed by the Detour/Recast pathfinder in `Exports/Navigation`.
+* **System.Text.Json:** Configuration (`appsettings.json`) and profile/activity definitions.
+* **AI providers:** Decision-making and dialog use a **local LLM via [Ollama](https://ollama.com)** by default, with optional hosted providers (OpenAI / Azure OpenAI).
 
 Finally, note that WWoW remains a **work-in-progress hobby project** – while many features work, there may be quirks or bugs, and not all WoW game content is handled yet. It’s already capable of basic leveling and combat autonomously, but making bots truly **human-like** in all aspects (grouping, chatting, complex quest logic, PvP tactics, etc.) is an ongoing effort.
 
 ## Installation and Setup
 
-Follow these steps to get started with WWoW on your own machine:
+Follow these steps to build and run WWoW on your own machine. For deeper
+references see [`docs/DEVELOPMENT_GUIDE.md`](./docs/DEVELOPMENT_GUIDE.md),
+[`docs/local-development.md`](./docs/local-development.md), and
+[`docs/BUILD.md`](./docs/BUILD.md).
 
 1. **Prerequisites:**
 
-   * **Windows PC** – WWoW runs on Windows and interfaces with the Windows WoW game client.
-   * **World of Warcraft Game Client (Legacy):** You need a WoW client of one of the supported versions (1.12.1, 2.4.3, or 3.3.5a). You can use any vanilla/TBC/WotLK client, such as those from popular private servers or from your own MaNGOS/Trinity installation. Make sure you have the client executable (usually `WoW.exe`) and game data. (WWoW does *not* supply the game files.)
-   * **Visual Studio 2022** (Community or higher) with C# and C++ workloads installed. The project is a Visual Studio solution that includes C# and C++ projects. Having the latest .NET Framework SDK and C++ build tools is required to compile the bot and injector.
-   * **.NET Framework 4.6.1** targeting pack (Visual Studio should have this by default, as that’s the target framework for the C# projects).
-   * (Optional) **Azure SQL or Local SQL Server** if you plan to use a cloud or external database for data logging. This is optional – by default WWoW can run with a local embedded database.
+   * **Windows PC** – WWoW targets Windows and, in foreground mode, injects into the Windows WoW client.
+   * **World of Warcraft client (legacy):** a supported build — **1.12.1 (5875)**, **2.4.3 (8606)**, or **3.3.5a (12340)**. WWoW does *not* supply game files; bring your own from a private-server / MaNGOS install.
+   * **.NET 8 SDK** – required for everything; pinned to the 8.0.x line by [`global.json`](./global.json). A newer-only SDK (9.x/10.x) is rejected with an explicit message so local builds stay in step with CI.
+   * **PowerShell 7+** (`pwsh`) – the scripts in [`scripts/`](./scripts/) are the supported build/test interface.
+   * **Visual Studio 2022 or 2025** with the **Desktop development with C++** workload (Platform Toolset **v145**) – only needed to build the native C++ projects (`Exports/Navigation`, `Exports/Loader`, `Exports/FastCall`). Pure .NET work does not need it.
+   * **Git LFS** – large physics-recording fixtures are stored via LFS.
+   * **Docker Desktop** – runs the local MaNGOS server stack (database + realmd + mangosd + SOAP). The inner build/test loop does not need it.
+   * **(Optional) `aspire` workload** – `dotnet workload install aspire`, only to launch the .NET Aspire AppHost.
 
-2. **Clone the Repository:** Download or clone the `WWoW` project (currently in the `QiMata/BloogBot` repo, will be renamed to WWoW). Open the solution file `BloogBot.sln` in Visual Studio.
+2. **Clone & restore:**
 
-3. **Build the Solution:** Restore any NuGet packages if prompted, then build the solution (set configuration to Debug or Release as desired). If the build fails, read the errors – you might be missing some components. For example, install any C++ platform SDKs or .NET targeting packs that Visual Studio suggests. A successful build will produce several binaries, including the injector executable and the bot DLL.
+   ```powershell
+   git clone <repo-url> WestworldOfWarcraft
+   cd WestworldOfWarcraft
+   pwsh ./scripts/bootstrap.ps1     # verifies the .NET 8 SDK, restores packages + tools
+   ```
 
-4. **Configure Settings:** Before running, configure the necessary settings:
+3. **Build:** Build the managed solution plus the native C++ DLLs:
 
-   * **WoW Path:** Locate the file `Bootstrapper/bootstrapperSettings.json`. Edit the `"PathToWoW"` field to point to your WoW client’s executable file (for example: `"C:\\Games\\WoW-1.12.1\\WoW.exe"`). This is the program the injector will launch.
-   * **Bot Settings:** Open `BloogBot/botSettings.json`. Here you can configure:
+   ```powershell
+   pwsh ./scripts/build.ps1 -Native   # WestworldOfWarcraft.sln + Navigation/Loader/FastCall
+   ```
 
-     * `DatabaseType` and `DatabasePath` – for database logging. For easiest setup, use `"DatabaseType": "sqlite"`, and WWoW will create a local `db.db` file automatically on first run. If you prefer to use SQL Server/Azure, set `"DatabaseType": "mssql"` and put your connection string in `DatabasePath` (e.g., `"DatabasePath": "Server=myserver.database.windows.net;Database=MyWoW;User Id=...;Password=...;"`). The bot will auto-create the necessary tables in whichever database you point it to.
-     * `DiscordBotEnabled` and Discord tokens/IDs – if you want to enable the Discord integration, set this to `true` and provide your bot token and the IDs for the guild, channel, and role it should use. For initial setup you can keep this disabled (false).
-     * Other behavior tweaks: `Food`/`Drink` item names (your character will use these for regen), `TargetingIncludedNames` or `ExcludedNames` (to focus or avoid certain mobs by name), `CreatureType...` booleans to filter target types (beasts, undead, etc.), `LootQuality` filters, and so on. These let you customize what the bot will attack or loot. The defaults are reasonable for general leveling.
-     * **Choose a Profile:** You should also decide which bot profile (class script) to run. By default, the solution might be set up with a particular class (e.g., FrostMageBot). If you want to use a different class, make sure its project is built and adjust the startup as needed (or compile your own profile DLL). Profiles are typically separate class libraries that the main bot loads. For simplicity, stick to one of the included profiles to start (mage, priest, etc.) – you’ll need a WoW character of that class to use it.
-   * **Movemaps/Navmesh Data:** Follow the instructions on generating navmesh (movement map) data for the game world. In short, you’ll use a tool (the original author provides one in an article) to process WoW’s map files (MPQ data or client data) and produce a set of mesh files or a database that the bot uses for navigation. Place the resulting navigation data where the bot can access it. (Typically, `DatabasePath` might point to a folder or DB for nav data if using a separate nav system, or the nav data might be baked into the bot’s database tables – consult the documentation for details. In the current setup, nav meshes are likely read from the Azure/SQL database or from files generated by the earlier mentioned process.)
-   * **Action Bar Setup:** (For Vanilla 1.12 clients) Ensure your character’s **Auto-Attack ability is placed in the rightmost slot of your main action bar**. This is a quirk of the bot: it expects auto-attack there to initiate combat properly in Vanilla. For TBC/WotLK clients, auto-attack might be automatically handled, but it’s good practice to slot it as described if applicable.
+   > **Kill `WoW.exe` before building.** Foreground injection copies the native DLLs from the build output; a running `WoW.exe` locks them and causes `MSB3027` copy errors. `scripts/build.ps1` warns when it sees a running client — close it (or `taskkill /F /PID <pid>` for that specific PID) and rebuild.
 
-5. **Launch the WWoW Bot:** You have two ways to start:
+4. **Start the local server stack (Docker):** Bring up the MaNGOS stack (database, realm/world servers, SOAP) — see [`docs/DOCKER_STACK.md`](./docs/DOCKER_STACK.md) for the full walkthrough and the `.env` values the stacks expect. For the Windows all-in-one container:
 
-   * **From Visual Studio:** Set the startup project to `Bootstrapper` (this is the injector executable). Press F5 (or Run). This will load the bootstrapper, which in turn launches the WoW client and injects the bot. You should see the WoW game window appear – log in to your server of choice and enter the world with your character. The bot will usually begin operation once your character is in the world.
-   * **From Command Line/Explorer:** After building, navigate to the output `Bin` folder and run `Bootstrapper.exe` directly. Make sure `Loader.dll` and `BloogBot.exe` (the bot DLL and main module) are in the same folder along with the `botSettings.json` and other necessary files. Running `Bootstrapper.exe` will open the WoW client as configured and inject the bot similarly.
+   ```powershell
+   docker compose -f docker-compose.windows.yml up -d
+   ```
 
-6. **In-Game Behavior:** Once in-game, if everything is set up, the bot will typically take a few seconds to initialize. You might see your character start to move on its own. By default, the bot will load the profile for the class corresponding to your character. It will target the nearest suitable enemy and begin its combat rotation. You can watch as it kills mobs, loots them, rests to eat/drink when low on health or mana, and continues. If you have multiple hotspots configured (and stored in the database), the bot will move to the next area when appropriate (e.g. if it has outleveled the current spot).
+5. **Configure:** Bot configuration lives in `Services/WoWStateManager/appsettings.json` (full schema in [`docs/CONFIG_SCHEMA.md`](./docs/CONFIG_SCHEMA.md)):
 
-   * You can still **override or control the character** at any time by pressing keys – but note the bot might assume control back quickly. It’s recommended to let the AI drive to observe its behavior. If you need to stop the bot, you can simply close the WoW client or use the Discord command (if configured) or stop the Bootstrapper.
-   * Monitor the console/logs: The bot may output status info to a console or log file (depending on implementation). In Visual Studio’s output or a log window, you might see messages like “Targeting X”, “Casting Frostbolt”, “Moving to hotspot Y”, or errors if something goes wrong. This can help debug if the bot isn’t doing what you expect.
+   * Point **`GameClient:ExecutablePath`** at your `WoW.exe` for foreground mode (e.g. `"D:\\World of Warcraft\\WoW.exe"`).
+   * The character roster is a set of `Settings/Configs/*.config.json` entries (`CharacterSettings`): `AccountName`, `CharacterClass` / `CharacterRace`, and **`RunnerType`** = `Foreground` (DLL-injected) or `Background` (headless). Missing accounts are created on the server via SOAP.
+   * There is **no** `botSettings.json` or `Bootstrapper` settings file — those belonged to the retired standalone injector.
 
-7. **Troubleshooting Setup:**
+6. **Run:** Launch the orchestrated stack via the .NET Aspire AppHost:
 
-   * If the WoW process launches but the bot doesn’t seem active, ensure that your game client version is correct and was detected. The bot checks the client’s version on startup to apply the correct memory offsets for that expansion. If it fails to recognize it, it might not inject properly (the default config is for Vanilla if not detected). Make sure you’re using a supported build (check the `.exe` file version matches exactly 1.12.1 (5875), 2.4.3 (8606), or 3.3.5 (12340)).
-   * If you get errors about missing DLLs or references, double-check that all subprojects in the solution built correctly. The C++ `Loader.dll` is especially important – if it fails to compile, the injection won’t work. You may need to install the Visual C++ v142 toolset or Windows SDK.
-   * Database connection issues: If using Azure/local SQL and the bot crashes on startup, it might be unable to connect to your DB. You can disable DB usage by switching to SQLite mode to test if that’s the problem. With SQLite, ensure the program has write permission in its folder to create `db.db`.
-   * Discord issues: If Discord integration is on and misconfigured, the bot might hang or error on startup (waiting for Discord client). If so, disable it (`DiscordBotEnabled: false`) and try again, then configure properly.
-   * Anti-virus or firewall: Injecting into another process can trigger security software. Ensure your setup isn’t blocking the bootstrapper. It might help to run Visual Studio or the .exe as Administrator.
+   ```powershell
+   dotnet run --project UI/Systems/Systems.AppHost
+   ```
 
-Once the setup is confirmed, you effectively have your own small “Westworld” in Azeroth! The AI character will carry on battling and leveling. You can even set up multiple bots (by running multiple game clients and injectors) to populate the world with a party of AI adventurers.
+   This starts `WoWStateManager` (bot lifecycle + foreground injection, ports 9000/9001), `PathfindingService` (9002), `SceneDataService` (9003), and the supporting services. `WoWStateManager` then launches and injects foreground bots and/or spins up headless background bots according to your config. The WPF operator console (`UI/WoWStateManagerUI`) can attach for monitoring.
+
+7. **In-game behavior:** Once a bot is in the world it initializes within a few seconds and acts on its profile — targeting suitable enemies, running its combat rotation, looting, resting to eat/drink at low health or mana, and traveling between areas as it levels. A foreground bot runs inside the real client, so you can watch the character move; a background bot has no window.
+
+8. **Troubleshooting:**
+
+   * **Build can't copy native DLLs (`MSB3027`):** a `WoW.exe` is running and locking them — close it (or `taskkill /F /PID <pid>` for that specific PID) and rebuild.
+   * **Native build fails / MSBuild not found:** install the Visual Studio **Desktop development with C++** workload and the **v145** toolset; `pwsh ./scripts/build.ps1 -Native` prints exactly what is missing.
+   * **"Compatible SDK not found":** install the **.NET 8** SDK — a 9.x/10.x-only machine is rejected on purpose so local builds match CI.
+   * **Bot doesn't act / wrong offsets:** confirm the client build is exactly **1.12.1 (5875)**, **2.4.3 (8606)**, or **3.3.5a (12340)** — memory offsets are version-specific.
+   * **Vanilla auto-attack:** on 1.12 clients, place the **Auto-Attack** ability in the rightmost main action-bar slot so the bot can initiate melee correctly.
+   * **Injection blocked:** anti-virus / firewall may flag process injection; allow the build output (and try running elevated).
+   * More: [`docs/troubleshooting.md`](./docs/troubleshooting.md).
+
+Once it's running you effectively have your own small *Westworld* in Azeroth — and you can populate the world with many characters at once by adding entries to the roster (headless background bots in particular run many-to-a-machine cheaply).
 
 ## Usage Examples
 
@@ -110,9 +128,9 @@ What can you do with WWoW? Here are a few scenarios to illustrate how the platfo
 * **Party of Bots (PvE Exploration):** You could configure multiple bots to run together, simulating a full party. For instance, run a Warrior bot as a tank, a Priest bot as a healer, and several DPS bots. With additional scripting, they could even coordinate (e.g., assisting the warrior’s target). They could collectively take on harder content like dungeons or elite monsters. This is excellent for testing how AI agents can cooperate and fulfill MMORPG group roles.
 * **Mixed Reality Server:** Host a small WoW server where a few human friends play alongside bot players. The bots might fill the world to make it lively: some could be grinding in the fields, others could be wandering in town. As a human player, you can trade with them, group up, or duel them. Ideally, the bots behave naturally enough that your friends might not immediately realize that “Nightelf Hunter Jane” over there is AI-controlled. This scenario brings the *Westworld* concept to life – a blend of real and AI characters sharing a virtual world.
 * **AI Behavior Research:** Use WWoW as a research environment. For example, you could log all bot actions and state transitions to the database for offline analysis (thanks to the data logging feature). Researchers could analyze this data to find patterns or train machine learning models. One might replace the built-in decision-making with a custom AI (e.g., a reinforcement learning agent that learns to optimize XP gain, or a language model that generates in-game chat messages to make the bot seem more social). WWoW provides the scaffolding to plug in such experimental AI modules within a real game world.
-* **Headless Simulation:** Although currently the bots use the actual game client for all rendering and physics (since they run in the client), one could imagine running many bots on a server in a headless fashion for load testing or large-scale simulations. For instance, spawn 50 AI players on a test realm to see how the server and game economy react. (Achieving this would require further development to allow multiple clients or a headless mode, see Roadmap.)
+* **Headless Simulation:** Background bots already run **headless** — `BackgroundBotRunner` drives a character purely over the WoW network protocol with no game client, so you can run many bots on one machine for load testing or large-scale simulations (e.g. populate a test realm with dozens of AI players and watch how the server and economy react). Foreground bots, which run inside a real client for full rendering/physics parity, are heavier and used when client fidelity matters.
 
-**Interacting with Bots:** At present, bot characters will respond to the game world (combat, NPCs) but have limited social interaction with players. They won’t initiate chat on their own (unless you extend their code to do so). However, one could extend WWoW to give bots conversational abilities using AI (for example, integrate an NLP model so they can respond to whispers or messages). Part of the vision is to eventually have bots that *talk* and *group* like players. For now, you might use Discord or the console to issue commands to bots (e.g., telling a bot to pause, or go to a certain location). As a player, you can also try to `'/follow'` a bot or invite it to a party (if programmed, bots could accept invites). These interactions are areas for future improvement.
+**Interacting with Bots:** At present, bot characters will respond to the game world (combat, NPCs) but have limited social interaction with players. They won’t initiate chat on their own (unless you extend their code to do so). However, one could extend WWoW to give bots conversational abilities using AI (for example, integrate an NLP model so they can respond to whispers or messages). Part of the vision is to eventually have bots that *talk* and *group* like players. For now, you can steer bots through the WPF operator console or with in-game GM/chat commands (e.g., telling a bot to pause, or go to a certain location). As a player, you can also try to `'/follow'` a bot or invite it to a party (if programmed, bots could accept invites). These interactions are areas for future improvement.
 
 In summary, WWoW usage can range from a passive observer (watching your AI toon do its thing), to an active participant in a mixed world, to a developer tweaking AI algorithms. It’s a sandbox – feel free to experiment!
 
@@ -120,14 +138,14 @@ In summary, WWoW usage can range from a passive observer (watching your AI toon 
 
 Contributions to WWoW (Westworld of Warcraft) are welcome! This project is at the intersection of game development, AI, and systems programming – there are many ways to improve it. If you’d like to help:
 
-* **Project Structure:** Begin by familiarizing yourself with the code layout. Key components include:
+* **Project Structure:** Begin by familiarizing yourself with the code layout (canonical map: [`docs/PROJECT_STRUCTURE.md`](./docs/PROJECT_STRUCTURE.md); architecture hub: [`docs/architecture.md`](./docs/architecture.md)). At a glance:
 
-  * `BloogBot` (core bot logic library in C#) – contains game object models, state machines, navigation, combat logic, etc.
-  * `Bootstrapper` (C# injector exe) – launches the game and injects the bot.
-  * `Loader` (C++ DLL) – responsible for starting the .NET runtime inside WoW’s process.
-  * Profile projects (e.g. `FrostMageBot`, `HolyPriestBot`, etc.) – each is a DLL implementing a specific class rotation/behavior.
-  * `Navigation` (if present) – might include tools for pathfinding or imported navmesh data.
-  * `Docs` – any documentation or SQL schema files (e.g., `SqlSchema.SQL` and `SqliteSchema.SQL` define the database structure used).
+  * `Exports/` – core libraries and native components: `GameData.Core` (interfaces), `BotRunner` (the shared behavior engine), `WoWSharpClient` (pure-C# WoW protocol), `BotCommLayer` (Protobuf/TCP IPC), and the C++ `Navigation` (Detour/Recast + physics), `Loader` (CLR injection), and `FastCall`.
+  * `Services/` – worker services: `WoWStateManager` (orchestration + foreground injection), `ForegroundBotRunner` (injected, in-process), `BackgroundBotRunner` (headless), `PathfindingService`, `SceneDataService`, `DecisionEngineService`, `PromptHandlingService`.
+  * `BotProfiles/` – per class/spec combat rotation profiles.
+  * `UI/` – the WPF operator console (`WoWStateManagerUI`) and the .NET Aspire AppHost (`Systems/Systems.AppHost`).
+  * `tools/` – CLI utilities, including the `MmapGen` navmesh generator.
+  * `docs/` – specifications, plans, and architecture documentation.
 
 * **Coding Guidelines:** We follow standard C# coding styles for the managed code and typical C++ practices for the injector. Ensure any new code is well-documented and tested. Because this is a hobby/research project, we value clarity and experimentation over strict style – but try to match the general structure of existing code for consistency. For example, if adding a new bot behavior, see how existing states and profiles are implemented.
 

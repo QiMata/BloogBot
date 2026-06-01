@@ -145,9 +145,9 @@ public static class WoWUIAutomation
     public static void SendKeyPress(ushort virtualKey, bool hold = false)
     {
         const uint KEYEVENTF_KEYUP = 0x0002;
-        
+
         var inputs = new INPUT[hold ? 1 : 2];
-        
+
         // Key down
         inputs[0] = new INPUT
         {
@@ -197,7 +197,7 @@ public static class WoWUIAutomation
         const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
 
         var inputs = new INPUT[2];
-        
+
         uint downFlag = rightClick ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN;
         uint upFlag = rightClick ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP;
 
@@ -251,7 +251,7 @@ public static class WoWUIAutomation
         public static bool ClickCharacterCreation()
         {
             if (!FocusWoWWindow()) return false;
-            
+
             // Typical coordinates for character creation button (adjust as needed)
             SendMouseClick(400, 500);
             Thread.Sleep(100);
@@ -261,7 +261,7 @@ public static class WoWUIAutomation
         public static bool CreateRandomCharacter()
         {
             if (!FocusWoWWindow()) return false;
-            
+
             // Random character creation sequence
             SendMouseClick(300, 200); // Race selection
             Thread.Sleep(500);
@@ -275,7 +275,7 @@ public static class WoWUIAutomation
         public static bool EnterWorld()
         {
             if (!FocusWoWWindow()) return false;
-            
+
             // Click Enter World button
             SendMouseClick(640, 480); // Typical center-bottom location
             Thread.Sleep(2000);
@@ -297,7 +297,7 @@ public static class WoWUIAutomation
         public static void MoveTowardsDirection(float seconds, bool forward = true)
         {
             if (!FocusWoWWindow()) return;
-            
+
             ushort key = forward ? VK_W : VK_S;
             SendKeyPress(key, hold: true);
             Thread.Sleep((int)(seconds * 1000));

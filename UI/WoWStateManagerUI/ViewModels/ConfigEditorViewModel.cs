@@ -258,7 +258,10 @@ namespace WoWStateManagerUI.ViewModels
             {
                 var copy = new ActivityParameter
                 {
-                    Key = p.Key, Value = p.Value, Description = p.Description, IsRequired = p.IsRequired,
+                    Key = p.Key,
+                    Value = p.Value,
+                    Description = p.Description,
+                    IsRequired = p.IsRequired,
                     SearchKind = p.SearchKind,
                 };
                 if (p.Choices.Count > 0)

@@ -1,63 +1,85 @@
 ---
 name: debugging
 description: Debugging workflow for BloogBot/WWoW codebase. Use when investigating bugs, errors, unexpected behavior, or service failures.
+trigger: debug, investigate a bug, error, unexpected behavior, service failure, trace a request, bot not moving, crash, IPC issue, find root cause
 ---
 
 # Debugging in BloogBot
 
-## Two Execution Modes
+## Goal
 
-Identify which mode the bug occurs in — debugging steps differ:
+Localize and root-cause a bug, error, or service failure by identifying the
+execution mode and tracing the request through the layered architecture to the
+responsible component.
 
-### ForegroundBotRunner (In-Process)
-- Bot is injected into WoW.exe via `Exports/Loader/dllmain.cpp`
-- Direct memory read/write via `Services/ForegroundBotRunner/Mem/`
-- Native function calls via `Exports/FastCall/` (x86 fastcall convention)
-- Debug: Check DLL injection logs, memory offsets, Lua execution errors
+## Inputs
 
-### BackgroundBotRunner (Headless Protocol)
-- Pure C# protocol emulation in `Exports/WoWSharpClient/`
-- No game client needed — packet-level debugging
-- Debug: Check packet handlers in `WoWSharpClient/Handlers/`, auth flow in `Client/`
+- The symptom and which execution mode it occurs in:
+  - **ForegroundBotRunner (in-process)** — injected into WoW.exe via
+    `Exports/Loader/dllmain.cpp`; direct memory r/w via
+    `Services/ForegroundBotRunner/Mem/`; native calls via `Exports/FastCall/`
+    (x86 fastcall).
+  - **BackgroundBotRunner (headless protocol)** — pure C# protocol emulation in
+    `Exports/WoWSharpClient/`; no client; packet-level debugging via
+    `WoWSharpClient/Handlers/` and `Client/`.
+- IPC surface: all services talk Protobuf/TCP via `Exports/BotCommLayer/`
+  (PathfindingService 5001; WoWStateManager 5002 char-state, 8088 state-manager
+  API — confirm current ports against the service `appsettings`).
 
-## Service Communication (IPC)
+## Preconditions
 
-All services communicate via Protobuf TCP sockets (`Exports/BotCommLayer/`):
-- **PathfindingService** — port 5001
-- **WoWStateManager** — ports 5002 (char state), 8088 (state manager API)
+- Identify the execution mode first — the steps differ between FG and BG.
+- Reproduce the symptom (or have a log/recording that captures it).
 
-To trace IPC issues:
-1. Check `BotCommLayer/ProtobufSocketServer.cs` for connection handling
-2. Check the specific service's socket server/client classes
-3. Verify port availability and service startup order
+## Procedure
 
-## Common Failure Patterns
+1. **Trace IPC issues**: check `BotCommLayer/ProtobufSocketServer.cs` for
+   connection handling → the specific service's socket server/client → port
+   availability and startup order.
+2. **Trace a request through the layers**:
+   1. Entry point: `ForegroundBotRunner` or `BackgroundBotRunner`.
+   2. Into `BotRunner/BotRunnerService.cs` (core behavior tree).
+   3. Game state: `GameData.Core` interfaces → concrete implementations.
+   4. Movement → `PathfindingService` (5001) → `Navigation.dll`.
+   5. State change → `WoWStateManager` (5002/8088) → FSM transitions.
+   6. Protocol → `WoWSharpClient/OpCodeDispatcher.cs` → specific `Handlers/`.
+3. **Debug physics** (complex C++): see `docs/physics/README.md`; key (large) files
+   `PhysicsEngine.cpp`, `PhysicsCollideSlide.cpp`, `PhysicsMovement.cpp`,
+   `PhysicsGroundSnap.cpp` — read in chunks / via Codex.
 
-| Symptom | Likely Cause | Where to Look |
-|---------|-------------|---------------|
-| Bot not moving | Pathfinding failure or stuck state | `Services/PathfindingService/PathfindingServiceWorker.cs` → `Exports/Navigation/PathFinder.cpp` |
-| Physics glitch (falling through world) | Physics engine collision | `Exports/Navigation/PhysicsCollideSlide.cpp`, `PhysicsGroundSnap.cpp` |
-| Wrong spell cast | Profile rotation logic | `BotProfiles/<ClassSpec>/` — check spell priority |
-| State machine stuck | FSM transition missing | `Services/WoWStateManager/StateManagerWorker.cs` |
-| Connection timeout | Protocol or network issue | `Exports/WoWSharpClient/Client/`, `Networking/` |
-| DLL injection crash | Loader or CLR bootstrap | `Exports/Loader/dllmain.cpp`, `simple_loader.cpp` |
+## Verification
+
+- Reproduce the symptom, apply the fix, and confirm the symptom is gone.
+- Add a regression test or guard where feasible (`.\scripts\test-fast.ps1`).
+- Use repo-scoped process cleanup only — never blanket-kill dotnet/WoW.exe/Game.exe.
+
+## Outputs
+
+- A root-cause statement, the fix, and (where feasible) a regression guard.
+- A `FailureReason`/crash-cluster entry if the bug warrants one.
+
+## Failure modes and recovery
+
+Common failure patterns and where to look:
+
+| Symptom | Likely cause | Where to look |
+|---|---|---|
+| Bot not moving | Pathfinding failure / stuck state | `Services/PathfindingService/PathfindingServiceWorker.cs` → `Exports/Navigation/PathFinder.cpp` |
+| Physics glitch (falling through world) | Collision response | `Exports/Navigation/PhysicsCollideSlide.cpp`, `PhysicsGroundSnap.cpp` |
+| Wrong spell cast | Profile rotation logic | `BotProfiles/<ClassSpec>/` spell priority |
+| State machine stuck | Missing FSM transition | `Services/WoWStateManager/StateManagerWorker.cs` |
+| Connection timeout | Protocol/network | `Exports/WoWSharpClient/Client/`, `Networking/` |
+| DLL injection crash | Loader / CLR bootstrap | `Exports/Loader/dllmain.cpp`, `simple_loader.cpp` |
 | Game objects not detected | ObjectManager sync | `Exports/WoWSharpClient/WoWSharpObjectManager.cs` |
-| Decision engine wrong choice | ML model or input data | `Services/DecisionEngineService/DecisionEngine.cs`, `MLModel.cs` |
+| Decision engine wrong choice | ML model / input data | `Services/DecisionEngineService/DecisionEngine.cs`, `MLModel.cs` |
 
-## Tracing a Request Through Service Layers
+- **Debugging the wrong mode** wastes effort — confirm FG vs BG first.
+- **Reading huge physics/packet files inline** fills context — search first, read in
+  chunks, or summarize via Codex.
 
-1. Start at the entry point: `ForegroundBotRunner` or `BackgroundBotRunner`
-2. Follow into `BotRunner/BotRunnerService.cs` (core behavior tree)
-3. Check game state: `GameData.Core` interfaces → concrete implementations
-4. If movement: trace to `PathfindingService` (port 5001) → `Navigation.dll`
-5. If state change: trace to `WoWStateManager` (port 5002/8088) → FSM transitions
-6. If protocol: trace through `WoWSharpClient/OpCodeDispatcher.cs` → specific `Handlers/`
+## Related skills
 
-## Debugging Physics Issues
-
-The physics engine is complex C++ code. See `docs/physics/README.md` for detailed documentation.
-Key files (all large — read in chunks):
-- `PhysicsEngine.cpp` — Main simulation loop
-- `PhysicsCollideSlide.cpp` — Collision response
-- `PhysicsMovement.cpp` — Character movement
-- `PhysicsGroundSnap.cpp` — Ground detection
+- [[crash-cluster-triage]] — when the symptom is a reproducible WoW.exe crash.
+- [[fg-bg-physics-parity]] — when FG and BG physics diverge.
+- [[failure-reason-mapping]] — classify the failure you found.
+- [[botrunner-task-implementation]] — when the bug is in a Task.

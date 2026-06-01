@@ -686,7 +686,7 @@ namespace PathfindingService.Repository
         // point along a teleport segment still intersects the off-mesh
         // AABB with this window.
         private const float OffMeshSegmentXyExtent = 2.0f;
-        private const float OffMeshSegmentZExtent  = 4.0f;
+        private const float OffMeshSegmentZExtent = 4.0f;
 
         /// <summary>
         /// Returns true if either endpoint of a smooth-path segment lies

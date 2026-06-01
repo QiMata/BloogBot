@@ -1550,7 +1550,7 @@ void PathFinder::createFilter()
 	// Detour A* search to 170-306 seconds per FlameCrest -> UBRS query, with
 	// 1105-corner smooth paths the bot could not follow. Reverted. The mesh
 	// needs an off-mesh connection for the BRM ascent (Phase 4 of
-	// docs/physics/PATHFINDING_OVERHAUL.md) or a per-tile maxSteepSlopePolyZRange
+	// docs/Archive/PATHFINDING_OVERHAUL.md) or a per-tile maxSteepSlopePolyZRange
 	// bake-side knob before the runtime filter alone can carry the change.
 
 	m_filter.setIncludeFlags(includeFlags);

@@ -27,7 +27,7 @@ namespace WarlockDestruction.Tasks
                     BotTasks.Push(new SummonPetTask(BotContext));
                 }
                 else if (ObjectManager.Player.ChannelingId == 0 && !ObjectManager.Player.IsCasting && ObjectManager.IsSpellReady(HealthFunnel) && ObjectManager.Player.HealthPercent > 30)
-                        ObjectManager.CastSpell(HealthFunnel);
+                    ObjectManager.CastSpell(HealthFunnel);
 
                 return;
             }

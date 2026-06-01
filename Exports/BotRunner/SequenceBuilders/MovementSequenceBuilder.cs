@@ -71,7 +71,8 @@ namespace BotRunner
                         wnx = wn.X; wny = wn.Y;
                         bf = wsOm.PhysicsBlockedFraction;
                     }
-                    try {
+                    try
+                    {
                         var waypoint = navPath.GetNextWaypoint(_objectManager.Player.Position, target, _objectManager.Player.MapId, allowDirectFallback: false, physicsHitWall: hitWall, wallNormalX: wnx, wallNormalY: wny, blockedFraction: bf, currentTransportGuid: _objectManager.Player.TransportGuid);
                         if (navPath.ShouldHoldPositionForTransport(_objectManager.Player.Position, waypoint))
                         {

@@ -132,7 +132,7 @@ await server.StartAsync();
 
 ### Data Models
 
-#### Game Object Models (Models/Game.cs)
+#### Game Object Models (Models/Generated/Game.cs)
 
 Comprehensive protobuf definitions for World of Warcraft entities:
 
@@ -172,7 +172,7 @@ var player = new WoWPlayer
 };
 ```
 
-#### Communication Models (Models/Communication.cs)
+#### Communication Models (Models/Generated/Communication.cs)
 
 Messaging infrastructure for bot coordination:
 
@@ -229,7 +229,7 @@ Based on the Big Five personality model:
 | **Agreeableness** | Cooperation and trust | 0.0-1.0 |
 | **Neuroticism** | Emotional stability | 0.0-1.0 |
 
-#### Pathfinding Models (Models/Pathfinding.cs)
+#### Pathfinding Models (Models/Generated/Pathfinding.cs)
 
 Navigation and physics:
 
@@ -240,7 +240,7 @@ Navigation and physics:
 | **LineOfSightRequest/Response** | Line-of-sight checks |
 | **PhysicsInput/Output** | Client physics simulation state |
 
-#### Database Models (Models/Database.cs)
+#### Database Models (Models/Generated/Database.cs)
 
 Game database access including area triggers, creature spawns, NPC AI data, battleground templates, and many more game data types.
 

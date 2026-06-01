@@ -1,0 +1,806 @@
+@page "/"
+@using System.Text.Json
+@implements IAsyncDisposable
+@inject StorylineApiClient Api
+@inject IJSRuntime Js
+
+<section class="workspace">
+    <header class="topbar">
+        <div>
+            <h1>Storyline Manager</h1>
+            <p>@StatusText</p>
+        </div>
+        <button class="icon-button" title="Refresh" @onclick="LoadAsync">↻</button>
+    </header>
+
+    <nav class="tabs" aria-label="Storyline sections">
+        @foreach (var tab in Tabs)
+        {
+            <button class="tab @(ActiveTab == tab ? "active" : "")" @onclick="() => ActiveTab = tab">@tab</button>
+        }
+    </nav>
+
+    @if (!string.IsNullOrWhiteSpace(ErrorText))
+    {
+        <div class="notice error">@ErrorText</div>
+    }
+
+    @if (ActiveTab == "Personas")
+    {
+        <section class="grid two">
+            <div class="panel">
+                <h2>Profiles</h2>
+                <table>
+                    <thead><tr><th>Name</th><th>ID</th><th>Created</th></tr></thead>
+                    <tbody>
+                        @foreach (var persona in Personas)
+                        {
+                            <tr>
+                                <td>@persona.DisplayName</td>
+                                <td><code>@persona.PersonaId</code></td>
+                                <td>@persona.CreatedAtUtc.ToLocalTime().ToString("g")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <DraftEditor Title="Persona Draft"
+                         Kind="@StorylineDraftKind.PersonaProfile"
+                         TargetId="@PersonaTargetId"
+                         PayloadJson="@PersonaPayloadJson"
+                         OnTargetIdChanged="value => { PersonaTargetId = value; }"
+                         OnPayloadChanged="value => { PersonaPayloadJson = value; }"
+                         OnSave="SaveDraftAsync" />
+        </section>
+    }
+    else if (ActiveTab == "Narrative Graphs")
+    {
+        <section class="grid graph-layout">
+            <div class="panel">
+                <h2>Graphs</h2>
+                <select class="full" @onchange="SelectGraphAsync">
+                    @foreach (var graph in Graphs)
+                    {
+                        <option value="@graph.GraphId" selected="@(SelectedGraph?.GraphId == graph.GraphId)">
+                            @graph.Name (@graph.GraphId)
+                        </option>
+                    }
+                </select>
+                <div class="canvas-actions">
+                    <button @onclick="SaveGraphLayoutAsync" disabled="@(SelectedGraph is null)">Save Layout</button>
+                    <button @onclick="SeedGraphDraftFromSelection" disabled="@(SelectedGraph is null)">Edit Draft</button>
+                </div>
+                <svg id="story-graph-canvas" class="graph-canvas" viewBox="0 0 920 520" role="img" aria-label="Narrative graph canvas">
+                    @if (SelectedGraph is not null)
+                    {
+                        @foreach (var transition in SelectedGraph.Transitions)
+                        {
+                            var from = GetNodeView(transition.FromNodeId);
+                            var to = GetNodeView(transition.ToNodeId);
+                            if (from is not null && to is not null)
+                            {
+                                <line x1="@(from.X + 90)" y1="@(from.Y + 32)" x2="@(to.X + 90)" y2="@(to.Y + 32)" class="edge" />
+                            }
+                        }
+                        @foreach (var node in GraphNodes)
+                        {
+                            <g class="graph-node" data-node-id="@node.NodeId" transform="translate(@node.X @node.Y)">
+                                <rect width="180" height="64" rx="6" />
+                                <text x="12" y="24">@node.Title</text>
+                                <text x="12" y="46" class="node-id">@node.NodeId</text>
+                            </g>
+                        }
+                    }
+                </svg>
+            </div>
+            <DraftEditor Title="Graph Draft"
+                         Kind="@StorylineDraftKind.NarrativeGraph"
+                         TargetId="@GraphTargetId"
+                         PayloadJson="@GraphPayloadJson"
+                         OnTargetIdChanged="value => { GraphTargetId = value; }"
+                         OnPayloadChanged="value => { GraphPayloadJson = value; }"
+                         OnSave="SaveDraftAsync" />
+        </section>
+    }
+    else if (ActiveTab == "Gameplay Arcs")
+    {
+        <section class="grid two">
+            <div class="panel">
+                <h2>Published Arcs</h2>
+                <table>
+                    <thead><tr><th>Name</th><th>Version</th><th>Steps</th></tr></thead>
+                    <tbody>
+                        @foreach (var arc in GameplayArcs)
+                        {
+                            <tr>
+                                <td>@arc.Name</td>
+                                <td><code>@arc.ArcId:@arc.VersionId</code></td>
+                                <td>@arc.Steps.Count</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <DraftEditor Title="Gameplay Arc Draft"
+                         Kind="@StorylineDraftKind.GameplayArc"
+                         TargetId="@ArcTargetId"
+                         PayloadJson="@ArcPayloadJson"
+                         OnTargetIdChanged="value => { ArcTargetId = value; }"
+                         OnPayloadChanged="value => { ArcPayloadJson = value; }"
+                         OnSave="SaveDraftAsync" />
+        </section>
+    }
+    else if (ActiveTab == "Characters")
+    {
+        <section class="grid two">
+            <div class="panel">
+                <h2>Bindings</h2>
+                <table>
+                    <thead><tr><th>Character</th><th>Persona</th><th>Graph</th><th>Arc</th></tr></thead>
+                    <tbody>
+                        @foreach (var binding in CharacterBindings)
+                        {
+                            <tr>
+                                <td>@binding.CharacterName</td>
+                                <td><code>@binding.PersonaId</code></td>
+                                <td><code>@binding.ActiveGraphId / @binding.ActiveNodeId</code></td>
+                                <td><code>@($"{binding.GameplayArcId}:{binding.GameplayArcVersionId}".Trim(':'))</code></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <DraftEditor Title="Character Binding Draft"
+                         Kind="@StorylineDraftKind.CharacterBinding"
+                         TargetId="@CharacterTargetId"
+                         PayloadJson="@CharacterPayloadJson"
+                         OnTargetIdChanged="value => { CharacterTargetId = value; }"
+                         OnPayloadChanged="value => { CharacterPayloadJson = value; }"
+                         OnSave="SaveDraftAsync" />
+        </section>
+    }
+    else if (ActiveTab == "Memory Review")
+    {
+        <section class="panel">
+            <h2>Pending Memory</h2>
+            <div class="filters">
+                <input placeholder="Character ID" @bind="MemoryCharacterId" />
+                <button @onclick="LoadMemoryAsync">Load</button>
+            </div>
+            <table>
+                <thead><tr><th>Candidate</th><th>Persona</th><th>Source</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var candidate in MemoryCandidates)
+                    {
+                        <tr>
+                            <td>@candidate.CandidateText</td>
+                            <td><code>@candidate.PersonaId</code></td>
+                            <td>@candidate.SourceInput</td>
+                            <td class="row-actions">
+                                <button title="Approve" @onclick="() => ReviewMemoryAsync(candidate.CandidateId, StorylineMemoryStatus.Approved)">✓</button>
+                                <button title="Reject" @onclick="() => ReviewMemoryAsync(candidate.CandidateId, StorylineMemoryStatus.Rejected)">×</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+    else if (ActiveTab == "Activity Catalog")
+    {
+        <section class="panel">
+            <h2>Activity Catalog</h2>
+            <table>
+                <thead><tr><th>Activity</th><th>Family</th><th>Location</th><th>Level</th><th>Faction</th></tr></thead>
+                <tbody>
+                    @foreach (var item in ActivityCatalog)
+                    {
+                        <tr>
+                            <td><code>@item.Id</code><br />@item.DisplayLabel</td>
+                            <td>@item.Family</td>
+                            <td>@item.Location</td>
+                            <td>@item.MinLevel-@item.MaxLevel</td>
+                            <td>@item.FactionPolicy</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+    else if (ActiveTab == "Foundry Deployments")
+    {
+        <section class="grid deploy-layout">
+            <div class="panel">
+                <h2>Deploy Target</h2>
+                <div class="deploy-form">
+                    <label>
+                        Persona
+                        <select class="full" @onchange="SelectDeploymentPersona">
+                            @foreach (var persona in Personas)
+                            {
+                                <option value="@persona.PersonaId" selected="@(DeploymentPersonaId == persona.PersonaId)">
+                                    @persona.DisplayName (@persona.PersonaId)
+                                </option>
+                            }
+                        </select>
+                    </label>
+                    <label>
+                        Persona Version
+                        <select class="full" @onchange="SelectDeploymentVersion">
+                            @foreach (var version in DeploymentPersonaVersions)
+                            {
+                                <option value="@version.PersonaVersionId" selected="@(DeploymentPersonaVersionId == version.PersonaVersionId)">
+                                    @version.Version (@version.PersonaVersionId)
+                                </option>
+                            }
+                        </select>
+                    </label>
+                    <label>
+                        Narrative Graph
+                        <select class="full" @onchange="SelectDeploymentGraph">
+                            @foreach (var graph in Graphs)
+                            {
+                                <option value="@graph.GraphId" selected="@(DeploymentGraphId == graph.GraphId)">
+                                    @graph.Name (@graph.GraphId)
+                                </option>
+                            }
+                        </select>
+                    </label>
+                </div>
+                <div class="canvas-actions">
+                    <button @onclick="PreviewFoundryDeploymentAsync" disabled="@IsFoundryBusy">Preview</button>
+                    <button @onclick="DeployFoundryPreviewAsync" disabled="@(!CanDeployFoundryPreview || IsFoundryBusy)">Deploy Preview</button>
+                    @if (PromotableDeployment is not null)
+                    {
+                        <button @onclick="PromoteFoundryDeploymentAsync" disabled="@IsFoundryBusy">Promote</button>
+                    }
+                </div>
+
+                @if (FoundryPreview is not null)
+                {
+                    <div class="notice @(FoundryPreview.IsValid ? "ok" : "error")">
+                        @(FoundryPreview.IsValid ? "Preview is valid." : "Preview has validation errors.")
+                    </div>
+                    @if (FoundryPreview.Errors.Count > 0)
+                    {
+                        <ul class="validation-list">
+                            @foreach (var error in FoundryPreview.Errors)
+                            {
+                                <li><code>@error.FieldPath</code> @error.Message</li>
+                            }
+                        </ul>
+                    }
+                    <dl class="deployment-meta">
+                        <dt>Content hash</dt>
+                        <dd><code>@FoundryPreview.ContentHash</code></dd>
+                        <dt>Model</dt>
+                        <dd><code>@FoundryPreview.Model</code></dd>
+                        <dt>Agent</dt>
+                        <dd><code>@FoundryPreview.AgentName</code></dd>
+                        <dt>Last deployment</dt>
+                        <dd>@DeploymentSummary(FoundryPreview.LastDeployment)</dd>
+                    </dl>
+                }
+
+                @if (ActiveFoundryDeployment is not null)
+                {
+                    <dl class="deployment-meta">
+                        <dt>Deployment</dt>
+                        <dd><code>@ActiveFoundryDeployment.DeploymentId</code></dd>
+                        <dt>Status</dt>
+                        <dd>@ActiveFoundryDeployment.Status</dd>
+                        <dt>Agent version</dt>
+                        <dd><code>@(ActiveFoundryDeployment.AgentVersion ?? "(pending)")</code></dd>
+                        <dt>Error</dt>
+                        <dd>@(string.IsNullOrWhiteSpace(ActiveFoundryDeployment.ErrorText) ? "(none)" : ActiveFoundryDeployment.ErrorText)</dd>
+                    </dl>
+                }
+            </div>
+            <div class="panel">
+                <h2>Instruction Preview</h2>
+                <textarea class="instruction-preview" readonly value="@FoundryInstructions"></textarea>
+            </div>
+        </section>
+    }
+    else if (ActiveTab == "Settings")
+    {
+        <section class="panel settings">
+            <h2>Settings</h2>
+            <dl>
+                <dt>API base URL</dt>
+                <dd><code>@Api.BaseAddress</code></dd>
+                <dt>Database</dt>
+                <dd><code>@Health?.DatabasePath</code></dd>
+                <dt>Personas</dt>
+                <dd>@Health?.PersonaCount</dd>
+                <dt>Graphs</dt>
+                <dd>@Health?.NarrativeGraphCount</dd>
+            </dl>
+        </section>
+    }
+</section>
+
+@code {
+    private static readonly string[] Tabs =
+    [
+        "Personas",
+        "Narrative Graphs",
+        "Gameplay Arcs",
+        "Characters",
+        "Memory Review",
+        "Activity Catalog",
+        "Foundry Deployments",
+        "Settings"
+    ];
+
+    private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true
+    };
+
+    private DotNetObjectReference<Index>? _selfReference;
+    private string ActiveTab { get; set; } = "Personas";
+    private string StatusText { get; set; } = "Loading storyline API state.";
+    private string ErrorText { get; set; } = string.Empty;
+    private StorylineHealthDto? Health { get; set; }
+    private IReadOnlyList<PersonaProfileDto> Personas { get; set; } = Array.Empty<PersonaProfileDto>();
+    private IReadOnlyList<PersonaVersionDto> PersonaVersions { get; set; } = Array.Empty<PersonaVersionDto>();
+    private IReadOnlyList<NarrativeGraphDto> Graphs { get; set; } = Array.Empty<NarrativeGraphDto>();
+    private IReadOnlyList<GameplayStoryArcDto> GameplayArcs { get; set; } = Array.Empty<GameplayStoryArcDto>();
+    private IReadOnlyList<CharacterStoryBindingDto> CharacterBindings { get; set; } = Array.Empty<CharacterStoryBindingDto>();
+    private IReadOnlyList<ActivityCatalogItemDto> ActivityCatalog { get; set; } = Array.Empty<ActivityCatalogItemDto>();
+    private IReadOnlyList<MemoryCandidateDto> MemoryCandidates { get; set; } = Array.Empty<MemoryCandidateDto>();
+    private NarrativeGraphDto? SelectedGraph { get; set; }
+    private List<GraphNodeView> GraphNodes { get; } = new();
+    private string PersonaTargetId { get; set; } = "new-persona";
+    private string GraphTargetId { get; set; } = "new-graph";
+    private string ArcTargetId { get; set; } = "new-arc:v1";
+    private string CharacterTargetId { get; set; } = "new-character";
+    private string MemoryCharacterId { get; set; } = string.Empty;
+    private string PersonaPayloadJson { get; set; } = string.Empty;
+    private string GraphPayloadJson { get; set; } = string.Empty;
+    private string ArcPayloadJson { get; set; } = string.Empty;
+    private string CharacterPayloadJson { get; set; } = string.Empty;
+    private string DeploymentPersonaId { get; set; } = string.Empty;
+    private string DeploymentPersonaVersionId { get; set; } = string.Empty;
+    private string DeploymentGraphId { get; set; } = string.Empty;
+    private FoundryDeploymentPreviewDto? FoundryPreview { get; set; }
+    private FoundryDeploymentDto? ActiveFoundryDeployment { get; set; }
+    private CancellationTokenSource? _foundryPollCts;
+    private bool IsFoundryBusy { get; set; }
+
+    private IEnumerable<PersonaVersionDto> DeploymentPersonaVersions =>
+        PersonaVersions.Where(version => string.Equals(version.PersonaId, DeploymentPersonaId, StringComparison.Ordinal));
+
+    private bool CanDeployFoundryPreview =>
+        FoundryPreview?.IsValid == true &&
+        string.Equals(FoundryPreview.PersonaId, DeploymentPersonaId, StringComparison.Ordinal) &&
+        string.Equals(FoundryPreview.PersonaVersionId, DeploymentPersonaVersionId, StringComparison.Ordinal) &&
+        string.Equals(FoundryPreview.GraphId, DeploymentGraphId, StringComparison.Ordinal);
+
+    private string FoundryInstructions => FoundryPreview?.Instructions ?? string.Empty;
+
+    private FoundryDeploymentDto? PromotableDeployment =>
+        IsSucceeded(ActiveFoundryDeployment)
+            ? ActiveFoundryDeployment
+            : IsSucceeded(FoundryPreview?.LastDeployment)
+                ? FoundryPreview?.LastDeployment
+                : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _selfReference = DotNetObjectReference.Create(this);
+        SeedDraftEditors();
+        await LoadAsync().ConfigureAwait(false);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (ActiveTab == "Narrative Graphs" && SelectedGraph is not null && _selfReference is not null)
+        {
+            await Js.InvokeVoidAsync("storylineGraph.attachNodeDrag", "#story-graph-canvas", _selfReference);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            ErrorText = string.Empty;
+            Health = await Api.GetHealthAsync().ConfigureAwait(false);
+            Personas = await Api.GetPersonasAsync().ConfigureAwait(false);
+            PersonaVersions = await Api.GetPersonaVersionsAsync().ConfigureAwait(false);
+            Graphs = await Api.GetGraphsAsync().ConfigureAwait(false);
+            GameplayArcs = await Api.GetGameplayArcsAsync().ConfigureAwait(false);
+            CharacterBindings = await Api.GetCharactersAsync().ConfigureAwait(false);
+            ActivityCatalog = await Api.GetActivityCatalogAsync().ConfigureAwait(false);
+            EnsureDeploymentSelection();
+            SelectedGraph ??= Graphs.FirstOrDefault();
+            if (SelectedGraph is not null)
+            {
+                await LoadSelectedGraphLayoutAsync().ConfigureAwait(false);
+            }
+
+            StatusText = $"Connected to {Api.BaseAddress}";
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+            StatusText = "Storyline API is unavailable.";
+        }
+    }
+
+    private void SelectDeploymentPersona(ChangeEventArgs args)
+    {
+        DeploymentPersonaId = args.Value?.ToString() ?? string.Empty;
+        DeploymentPersonaVersionId = DeploymentPersonaVersions.FirstOrDefault()?.PersonaVersionId ?? string.Empty;
+        ClearFoundryPreview();
+    }
+
+    private void SelectDeploymentVersion(ChangeEventArgs args)
+    {
+        DeploymentPersonaVersionId = args.Value?.ToString() ?? string.Empty;
+        ClearFoundryPreview();
+    }
+
+    private void SelectDeploymentGraph(ChangeEventArgs args)
+    {
+        DeploymentGraphId = args.Value?.ToString() ?? string.Empty;
+        ClearFoundryPreview();
+    }
+
+    private async Task PreviewFoundryDeploymentAsync()
+    {
+        try
+        {
+            IsFoundryBusy = true;
+            ErrorText = string.Empty;
+            FoundryPreview = await Api.PreviewFoundryDeploymentAsync(DeploymentRequest()).ConfigureAwait(false);
+            ActiveFoundryDeployment = FoundryPreview?.LastDeployment;
+            StatusText = FoundryPreview?.IsValid == true
+                ? $"Previewed Foundry instructions for {DeploymentPersonaVersionId} / {DeploymentGraphId}."
+                : "Foundry deployment target has validation errors.";
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+        finally
+        {
+            IsFoundryBusy = false;
+        }
+    }
+
+    private async Task DeployFoundryPreviewAsync()
+    {
+        if (!CanDeployFoundryPreview)
+        {
+            await PreviewFoundryDeploymentAsync().ConfigureAwait(false);
+            if (!CanDeployFoundryPreview)
+            {
+                return;
+            }
+        }
+
+        try
+        {
+            IsFoundryBusy = true;
+            ErrorText = string.Empty;
+            ActiveFoundryDeployment = await Api.QueueFoundryDeploymentAsync(DeploymentRequest()).ConfigureAwait(false);
+            StatusText = ActiveFoundryDeployment is null
+                ? "Deployment request did not return a status."
+                : $"Queued Foundry deployment {ActiveFoundryDeployment.DeploymentId}.";
+            if (ActiveFoundryDeployment is not null)
+            {
+                StartFoundryPolling(ActiveFoundryDeployment.DeploymentId);
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+        finally
+        {
+            IsFoundryBusy = false;
+        }
+    }
+
+    private async Task PromoteFoundryDeploymentAsync()
+    {
+        var deployment = PromotableDeployment;
+        if (deployment is null)
+        {
+            return;
+        }
+
+        try
+        {
+            IsFoundryBusy = true;
+            ErrorText = string.Empty;
+            ActiveFoundryDeployment = await Api.PromoteFoundryDeploymentAsync(
+                deployment.DeploymentId,
+                new PromoteFoundryDeploymentRequest(Environment.UserName)).ConfigureAwait(false);
+            StatusText = $"Promoted Foundry deployment {deployment.DeploymentId}.";
+            FoundryPreview = await Api.PreviewFoundryDeploymentAsync(DeploymentRequest()).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            ErrorText = ex.Message;
+        }
+        finally
+        {
+            IsFoundryBusy = false;
+        }
+    }
+
+    private void StartFoundryPolling(string deploymentId)
+    {
+        _foundryPollCts?.Cancel();
+        _foundryPollCts?.Dispose();
+        _foundryPollCts = new CancellationTokenSource();
+        _ = PollFoundryDeploymentAsync(deploymentId, _foundryPollCts.Token);
+    }
+
+    private async Task PollFoundryDeploymentAsync(string deploymentId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(1500, cancellationToken).ConfigureAwait(false);
+                var deployment = await Api.GetFoundryDeploymentAsync(deploymentId, cancellationToken).ConfigureAwait(false);
+                if (deployment is null)
+                {
+                    return;
+                }
+
+                await InvokeAsync(() =>
+                {
+                    ActiveFoundryDeployment = deployment;
+                    StatusText = $"Foundry deployment {deployment.DeploymentId}: {deployment.Status}.";
+                    StateHasChanged();
+                }).ConfigureAwait(false);
+
+                if (!IsRunning(deployment))
+                {
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() =>
+            {
+                ErrorText = ex.Message;
+                StateHasChanged();
+            }).ConfigureAwait(false);
+        }
+    }
+
+    private void EnsureDeploymentSelection()
+    {
+        if (string.IsNullOrWhiteSpace(DeploymentPersonaId) ||
+            Personas.All(persona => !string.Equals(persona.PersonaId, DeploymentPersonaId, StringComparison.Ordinal)))
+        {
+            DeploymentPersonaId = Personas.FirstOrDefault()?.PersonaId ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(DeploymentPersonaVersionId) ||
+            PersonaVersions.All(version => !string.Equals(version.PersonaVersionId, DeploymentPersonaVersionId, StringComparison.Ordinal)))
+        {
+            DeploymentPersonaVersionId = DeploymentPersonaVersions.FirstOrDefault()?.PersonaVersionId ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(DeploymentGraphId) ||
+            Graphs.All(graph => !string.Equals(graph.GraphId, DeploymentGraphId, StringComparison.Ordinal)))
+        {
+            DeploymentGraphId = Graphs.FirstOrDefault()?.GraphId ?? string.Empty;
+        }
+    }
+
+    private FoundryDeploymentTargetRequest DeploymentRequest() =>
+        new(DeploymentPersonaId, DeploymentPersonaVersionId, DeploymentGraphId, Environment.UserName);
+
+    private void ClearFoundryPreview()
+    {
+        FoundryPreview = null;
+        ActiveFoundryDeployment = null;
+    }
+
+    private static bool IsRunning(FoundryDeploymentDto deployment) =>
+        string.Equals(deployment.Status, StorylineFoundryDeploymentStatus.Queued, StringComparison.Ordinal) ||
+        string.Equals(deployment.Status, StorylineFoundryDeploymentStatus.Running, StringComparison.Ordinal);
+
+    private static bool IsSucceeded(FoundryDeploymentDto? deployment) =>
+        string.Equals(deployment?.Status, StorylineFoundryDeploymentStatus.Succeeded, StringComparison.Ordinal);
+
+    private static string DeploymentSummary(FoundryDeploymentDto? deployment) =>
+        deployment is null
+            ? "(none)"
+            : $"{deployment.Status} {deployment.RequestedAtUtc.ToLocalTime():g} {deployment.AgentVersion ?? string.Empty}".Trim();
+
+    private async Task SelectGraphAsync(ChangeEventArgs args)
+    {
+        var graphId = args.Value?.ToString();
+        SelectedGraph = Graphs.FirstOrDefault(graph => graph.GraphId == graphId);
+        if (SelectedGraph is not null)
+        {
+            await LoadSelectedGraphLayoutAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task LoadSelectedGraphLayoutAsync()
+    {
+        GraphNodes.Clear();
+        if (SelectedGraph is null)
+        {
+            return;
+        }
+
+        var layout = await Api.GetGraphLayoutAsync(SelectedGraph.GraphId).ConfigureAwait(false);
+        var positions = layout?.Nodes.ToDictionary(node => node.NodeId, StringComparer.Ordinal) ??
+            new Dictionary<string, GraphLayoutNodeDto>(StringComparer.Ordinal);
+        for (var i = 0; i < SelectedGraph.Nodes.Count; i++)
+        {
+            var node = SelectedGraph.Nodes[i];
+            if (positions.TryGetValue(node.NodeId, out var position))
+            {
+                GraphNodes.Add(new GraphNodeView(node.NodeId, node.Title, position.X, position.Y));
+                continue;
+            }
+
+            var column = i % 3;
+            var row = i / 3;
+            GraphNodes.Add(new GraphNodeView(node.NodeId, node.Title, 70 + column * 260, 60 + row * 130));
+        }
+    }
+
+    private async Task SaveGraphLayoutAsync()
+    {
+        if (SelectedGraph is null)
+        {
+            return;
+        }
+
+        var layout = new GraphLayoutDto(
+            SelectedGraph.GraphId,
+            GraphNodes.Select(node => new GraphLayoutNodeDto(node.NodeId, node.X, node.Y)).ToArray(),
+            1,
+            DateTime.UtcNow);
+        await Api.SaveGraphLayoutAsync(layout).ConfigureAwait(false);
+        StatusText = $"Saved layout for {SelectedGraph.GraphId}.";
+    }
+
+    private async Task SaveDraftAsync(string kind, string targetId, string payloadJson)
+    {
+        var draft = await Api.SaveDraftAsync(new StorylineDraftDto(
+            string.Empty,
+            kind,
+            targetId,
+            StorylineDraftStatus.Draft,
+            payloadJson,
+            default,
+            default,
+            null,
+            string.Empty,
+            string.Empty)).ConfigureAwait(false);
+        StatusText = draft is null
+            ? "Draft save did not return a response."
+            : $"Saved draft {draft.DraftId}.";
+    }
+
+    private async Task LoadMemoryAsync()
+    {
+        if (string.IsNullOrWhiteSpace(MemoryCharacterId))
+        {
+            MemoryCandidates = Array.Empty<MemoryCandidateDto>();
+            return;
+        }
+
+        MemoryCandidates = await Api.GetMemoryCandidatesAsync(MemoryCharacterId, StorylineMemoryStatus.Pending)
+            .ConfigureAwait(false);
+    }
+
+    private async Task ReviewMemoryAsync(string candidateId, string status)
+    {
+        await Api.ReviewMemoryCandidateAsync(candidateId, status).ConfigureAwait(false);
+        await LoadMemoryAsync().ConfigureAwait(false);
+        StatusText = $"{status} memory candidate {candidateId}.";
+    }
+
+    private void SeedGraphDraftFromSelection()
+    {
+        if (SelectedGraph is null)
+        {
+            return;
+        }
+
+        GraphTargetId = SelectedGraph.GraphId;
+        GraphPayloadJson = JsonSerializer.Serialize(SelectedGraph, _jsonOptions);
+    }
+
+    private void SeedDraftEditors()
+    {
+        PersonaPayloadJson = JsonSerializer.Serialize(new PersonaProfileDto(
+            PersonaTargetId,
+            "New Persona",
+            "Short operator-authored persona description.",
+            DateTime.UtcNow), _jsonOptions);
+        GraphPayloadJson = JsonSerializer.Serialize(new NarrativeGraphDto(
+            GraphTargetId,
+            "New Graph",
+            "Storyline graph draft.",
+            DateTime.UtcNow,
+            new[]
+            {
+                new NarrativeNodeDto("start", GraphTargetId, "Start", "Opening node.", "I can talk, but cannot act on the world.", 10)
+            },
+            Array.Empty<NarrativeTransitionDto>()), _jsonOptions);
+        ArcPayloadJson = JsonSerializer.Serialize(new GameplayStoryArcDto(
+            "new-arc",
+            "v1",
+            "New Gameplay Arc",
+            "Activity sequence.",
+            false,
+            DateTime.UtcNow,
+            null,
+            Array.Empty<GameplayArcStepDto>()), _jsonOptions);
+        CharacterPayloadJson = JsonSerializer.Serialize(new CharacterStoryBindingDto(
+            CharacterTargetId,
+            "New Character",
+            "Westworld-Test",
+            "new-persona",
+            "new-persona:v1",
+            "new-graph",
+            "start",
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            "steady",
+            DateTime.UtcNow), _jsonOptions);
+    }
+
+    private GraphNodeView? GetNodeView(string nodeId) =>
+        GraphNodes.FirstOrDefault(node => string.Equals(node.NodeId, nodeId, StringComparison.Ordinal));
+
+    [JSInvokable]
+    public Task MoveNode(string nodeId, double x, double y)
+    {
+        var node = GetNodeView(nodeId);
+        if (node is not null)
+        {
+            node.X = Math.Clamp(x, 12, 728);
+            node.Y = Math.Clamp(y, 12, 444);
+        }
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _foundryPollCts?.Cancel();
+        _foundryPollCts?.Dispose();
+        _selfReference?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    private sealed class GraphNodeView
+    {
+        public GraphNodeView(string nodeId, string title, double x, double y)
+        {
+            NodeId = nodeId;
+            Title = title;
+            X = x;
+            Y = y;
+        }
+
+        public string NodeId { get; }
+        public string Title { get; }
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+}

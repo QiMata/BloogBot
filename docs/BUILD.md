@@ -25,6 +25,9 @@ The build system includes:
 
 ### Local Development Build
 
+Use the stable [`scripts/`](../scripts/README.md) interface (each command also has an
+extensionless bash shim, e.g. `./scripts/build`):
+
 ```powershell
 # Build Debug configuration (default)
 .\scripts\build.ps1
@@ -32,14 +35,14 @@ The build system includes:
 # Build Release configuration
 .\scripts\build.ps1 -Configuration Release
 
-# Build with tests
-.\scripts\build.ps1 -Test
+# Build the .NET solution + native C++ projects
+.\scripts\build.ps1 -Native
 
-# Build native projects only
-.\scripts\build.ps1 -NativeOnly
+# Build, then run the full test suite
+.\scripts\build.ps1 ; .\scripts\test.ps1
 
-# Clean and rebuild
-.\scripts\build.ps1 -Clean -Configuration Release
+# Clean build artifacts, then rebuild
+.\scripts\clean.ps1 ; .\scripts\build.ps1 -Configuration Release
 ```
 
 ### Using CMake Directly

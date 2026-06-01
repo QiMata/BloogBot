@@ -1,1 +1,8 @@
+# Stable script interface (scripts/): keep PowerShell as CRLF and the extensionless
+# POSIX shims as LF so they stay runnable from bash. Order matters - the *.ps1 rule
+# below overrides the broader scripts/* rule.
+/scripts/* text eol=lf
+/scripts/*.ps1 text eol=crlf
+/scripts/*.md text eol=lf
+
 # Git LFS tracking for large recording files used in physics tests

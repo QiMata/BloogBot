@@ -21,6 +21,46 @@ Out: combat chat (handled by combat tasks via existing
 `SAY_RAID_TARGET_*` patterns), in-game emote-cycling
 (non-functional), Discord / out-of-game integrations.
 
+Foundry-backed persona dialogue is an optional PromptHandlingService
+adapter for drafting social text only. Its output is post-filtered and
+advisory; it does not pick chat-trigger state transitions, execute mail
+/ invite / AH actions, bypass `AdvisoryValidator`, or replace the
+deterministic template/advisor flow below.
+
+### 1.1 Foundry storyline graph boundary
+
+`Services/PromptHandlingService` owns the persistent storyline graph
+runtime. Persona profiles, persona versions, character state, approved
+memory, narrative nodes/transitions, agent bindings, and conversation
+bindings are application-owned SQLite state. Foundry receives a compact
+`PersonaPromptRequest` derived from that state and may only draft
+dialogue text plus proposed memory candidates.
+
+Foundry does **not** evaluate narrative transitions, mutate accepted
+memory, execute world actions, or choose chat / mail / invite / trade /
+combat state. Memory candidates returned by Foundry remain `Pending`
+until the deterministic management review path accepts or rejects them.
+
+`Services/PromptHandlingService.Api` exposes the local trusted management API
+for this state under `/api/storylines/v1`. It binds to loopback only and is the
+authoritative writer for storyline SQLite changes, draft/publish validation,
+and runtime storyline records. The Blazor Storyline Manager uses this REST JSON
+surface only; it does not open SQLite directly.
+
+Direct authoring edits update drafts. Publishing validates required IDs,
+graph/node/transition integrity, ActivityCatalog ids for gameplay arc steps,
+duplicate step order, missing character bindings, and disallowed runtime
+mutations before touching runtime tables. Publishing a narrative graph replaces
+that graph's published snapshot by upserting the current graph/nodes/transitions
+and deleting removed nodes/transitions. Gameplay arcs are ordered sequences of
+ActivityCatalog ids plus optional narrative hooks; v1 does not author
+objective-level activity internals.
+
+Publishing character storyline bindings updates persona/version, active
+graph/node, conversation binding, and optional gameplay-arc metadata in the
+storyline runtime. It does not assign live bot activities in v1 and does not
+replace the StateManager protobuf/TCP control flow.
+
 ## 2. Activity rows backed by this spec
 
 | Catalog id | Family | Notes |

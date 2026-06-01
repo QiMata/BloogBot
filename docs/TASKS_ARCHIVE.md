@@ -2,6 +2,71 @@
 
 Completed items moved from TASKS.md.
 
+## Handoff (2026-05-30) - Blazor Storyline Manager local authoring slice
+
+- Completed: added a separate local Blazor Storyline Manager authoring app and PromptHandlingService-owned REST JSON API under `/api/storylines/v1`.
+- Runtime boundary: WPF remains the default operator/test host and StateManager still uses protobuf/TCP. The new API is localhost-only, trusted, authoring/admin-only, and authoritative for storyline SQLite writes plus draft/publish validation. Character binding publish updates storyline runtime records only; it does not assign live bot activities in v1.
+- Delivered:
+  - `Services/PromptHandlingService.Api` API host with endpoints for health, personas, graphs, gameplay arcs, characters, drafts, publish, memory review, ActivityCatalog lookup, and graph layout.
+  - Draft/publish persistence, gameplay arc tables, character storyline binding metadata, graph layout storage, and publish services in `Services/PromptHandlingService/Storylines`.
+  - `UI/StorylineManager` Blazor Server app with typed REST client tabs for authoring workflows and SVG graph layout editing.
+  - Deterministic PromptHandlingService tests for draft publish, invalid graph/activity validation, graph snapshot replacement, character binding publish, memory approve/reject, and graph layout round-trip.
+- Validation:
+  - `dotnet restore Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --verbosity minimal` -> passed.
+  - `dotnet restore UI\StorylineManager\StorylineManager.csproj --verbosity minimal` -> passed.
+  - `dotnet restore Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --verbosity minimal` -> passed.
+  - `dotnet build Services\PromptHandlingService.Api\PromptHandlingService.Api.csproj --configuration Release --no-restore -v:minimal -m:1` -> passed.
+  - `dotnet build UI\StorylineManager\StorylineManager.csproj --configuration Release --no-restore -v:minimal -m:1` -> passed.
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (36 passed, 3 skipped).
+  - `dotnet build WestworldOfWarcraft.sln --configuration Debug --no-restore -v:minimal -m:1` -> failed before a full solution verdict because existing native projects could not import `$(VCTargetsPath)\Microsoft.Cpp.Default.props` and unrelated projects lacked restored `obj\project.assets.json`; the new API/UI projects built successfully.
+- Files changed include `Services/PromptHandlingService/Storylines/**`, `Services/PromptHandlingService.Api/**`, `UI/StorylineManager/**`, `Tests/PromptHandlingService.Tests/StorylineManagementTests.cs`, docs/specs, solution membership, and task trackers.
+- Next command: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests\PromptHandlingService.Tests\PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`.
+
+## Handoff (2026-05-24) - PHS-FDRY-DEPLOY-001 Foundry prompt agent and Agent Application
+
+- Completed: deployed the PromptHandlingService Foundry persona runtime slice to Azure AI Foundry dev.
+- Azure context: subscription `4513b073-3a04-4f5c-b272-bbcc329b2d49`, resource group `rg-jrhodes-0775`, account `atlsqlsattest-resource`, project `atlsqlsattest`, endpoint `https://atlsqlsattest-resource.services.ai.azure.com/api/projects/atlsqlsattest`.
+- Deployed resources: model deployment `gpt-5-mini` (`GlobalStandard`, capacity 50, model version `2025-08-07`), prompt agent `wwow-persona-runtime-dev` version `1`, Agent Application `wwow-persona-runtime-dev-app`, managed deployment `wwow-persona-runtime-dev-deployment`.
+- Note: ARM API `2026-01-15-preview` rejected deployment protocol `Agent`; the running app deployment uses protocol `Responses` version `1.0`, matching the OpenAI-compatible `/protocols/openai/responses` endpoint.
+- Validation:
+  - Model deployment create -> passed; provisioning `Succeeded`, state `Running`.
+  - Prompt agent create/update -> passed; version `1` active.
+  - Agent Application create/update -> passed; provisioning `Succeeded`.
+  - Managed deployment create/update -> passed; state `Running`, provisioning `Succeeded`.
+  - Final Azure readbacks -> passed; model `Running`/`Succeeded`, prompt-agent version `active`, Agent Application deployment `Running`/`Succeeded`.
+  - Project-scoped and published application Responses smokes -> passed; status `completed`.
+  - `$env:DOTNET_ROLL_FORWARD='Major'; $env:WWOW_FOUNDRY_LIVE='1'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~StorylinePersonaLiveSmokeTests.SeededStorylineRuntimeSmoke_UsesConfiguredFoundryProject|FullyQualifiedName~FoundryPersonaLiveSmokeTests.DirectModelResponseSmoke_UsesConfiguredFoundryProject" --logger "console;verbosity=minimal"` -> passed after temporarily enabling the two statically skipped live tests (2 passed, 0 failed).
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (29 passed, 3 skipped).
+- Files changed: `Config/foundry/persona-runtime.json`, `Services/PromptHandlingService/.foundry/agent-metadata.yaml`, `Services/PromptHandlingService/Foundry/FoundryProjectResponsesClient.cs`, `Tests/PromptHandlingService.Tests/FoundryPersonaRuntimeTests.cs`, `Tests/PromptHandlingService.Tests/StorylineRuntimeTests.cs`, and task trackers.
+- Next command: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`.
+
+## Handoff (2026-05-24) - PHS-STORY-001 Foundry storyline graph runtime
+
+- Completed: added a persistent PromptHandlingService storyline runtime with SQLite-backed persona profiles/versions, character state, approved memory facts/episodes, pending memory candidates, narrative graphs/nodes/transitions, agent bindings, and conversation bindings.
+- Runtime boundary: Foundry receives deterministic `PersonaPromptRequest` state and may draft dialogue plus memory candidates only. Narrative transitions, accepted memory, and world/game actions remain deterministic and application-owned.
+- DB/config used: default runtime DB path is `storyline_runtime.sqlite` under content root; config is `Config/foundry/storyline-runtime.json`; seed file is `Config/foundry/storyline-seed.json`; tests used temp SQLite DBs.
+- Validation:
+  - `dotnet build Services/PromptHandlingService/PromptHandlingService.csproj --configuration Release --no-restore` -> passed (0 warnings, 0 errors).
+  - `dotnet build Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore` -> passed (0 warnings, 0 errors).
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (29 passed, 3 skipped on final run).
+- Files changed: `Services/PromptHandlingService/Storylines/**`, `Services/PromptHandlingService/Foundry/**`, `Services/PromptHandlingService/ServiceCollectionExtensions.cs`, `Config/foundry/storyline-runtime.json`, `Config/foundry/storyline-seed.json`, `Tests/PromptHandlingService.Tests/StorylineRuntimeTests.cs`, `Tests/PromptHandlingService.Tests/FoundryPersonaRuntimeTests.cs`, `docs/SPEC.md`, `docs/Spec/21_SOCIAL_FABRIC.md`, and task trackers.
+- Next command: remove the skip on `StorylinePersonaLiveSmokeTests.SeededStorylineRuntimeSmoke_UsesConfiguredFoundryProject`, then run `$env:DOTNET_ROLL_FORWARD='Major'; $env:WWOW_FOUNDRY_LIVE='1'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~StorylinePersonaLiveSmokeTests.SeededStorylineRuntimeSmoke_UsesConfiguredFoundryProject" --logger "console;verbosity=minimal"`.
+
+## Handoff (2026-05-24) - PHS-FDRY-001 Foundry persona runtime adapter
+
+- Completed: added the first Foundry slice as a PromptHandlingService persona/dialogue runtime adapter. Foundry output remains advisory text only and cannot select deterministic state transitions, execute world actions, bypass `AdvisoryValidator`, or replace DecisionEngine advisors.
+- Azure context: endpoint `https://atlsqlsattest-resource.services.ai.azure.com/api/projects/atlsqlsattest`, direct model `gpt-5-mini`, prompt agent name `wwow-persona-runtime-dev`.
+- Validation:
+  - `dotnet restore Services/PromptHandlingService/PromptHandlingService.csproj` -> passed.
+  - `dotnet restore Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj` -> passed.
+  - `dotnet restore Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --runtime win-x86` -> passed.
+  - `dotnet build Services/PromptHandlingService/PromptHandlingService.csproj --configuration Release --no-restore` -> passed (0 warnings, 0 errors on final run).
+  - `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> failed before test execution because x64 .NET 8 runtime is not installed.
+  - `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (14 passed, 2 skipped).
+  - `dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --arch x86 --filter "FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"` -> passed (14 passed, 2 skipped).
+- Files changed: `Services/PromptHandlingService/Foundry/**`, `Services/PromptHandlingService/PromptHandlingService.csproj`, `Services/PromptHandlingService/ServiceCollectionExtensions.cs`, `Services/PromptHandlingService/.foundry/agent-metadata.yaml`, `Config/foundry/persona-runtime.json`, `Tests/PromptHandlingService.Tests/FoundryPersonaRuntimeTests.cs`, `docs/Spec/20_DECISION_ENGINE.md`, `docs/Spec/21_SOCIAL_FABRIC.md`, `docs/Spec/24_BEHAVIORAL_VARIATION.md`, and task trackers.
+- Next command: `$env:DOTNET_ROLL_FORWARD='Major'; $env:WWOW_FOUNDRY_LIVE='1'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~FoundryPersonaLiveSmokeTests.DirectModelResponseSmoke_UsesConfiguredFoundryProject" --logger "console;verbosity=minimal"`.
+
 ## Archived Snapshot (2026-04-29) - MVT-TRANSPORT-NAMED-UC closeout
 
 - [x] Closed `MVT-TRANSPORT-NAMED-UC`: the stricter named-Undercity elevator

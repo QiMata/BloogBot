@@ -33,7 +33,7 @@ WWoW is a simulation platform transforming a World of Warcraft-like server into 
 /Services/          - Background worker services
 /UI/                - User interface projects (WPF, Aspire)
 /Tests/             - Unit and integration tests
-/BloogBot.AI/       - Semantic Kernel AI integration
+/WWoW.AI/           - Semantic Kernel AI integration
 ```
 
 ### Project Navigation Guide
@@ -184,7 +184,7 @@ IWoWObject (base)
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `GRAVITY` | 19.29 | WoW gravity (yards/s²) |
+| `GRAVITY` | 19.29 | WoW gravity (yards/sï¿½) |
 | `JUMP_VELOCITY` | 7.96 | Initial jump velocity |
 | `STEP_HEIGHT` | 2.125 | Max auto-step height |
 | `STEP_DOWN_HEIGHT` | 4.0 | Max ground snap distance |
@@ -219,10 +219,10 @@ IWoWObject (base)
 1. Edit `.proto` files in `BotCommLayer/Models/ProtoDef/`
 2. Run `protocsharp.bat` to regenerate C# classes
 3. Update service consumers to use new message types
-# BloogBot/WestworldOfWarcraft AI Instructions
+# WWoW (Westworld of Warcraft) AI Instructions
 
 ## Testing Guidelines
-BloogBot is a sophisticated World of Warcraft automation platform that creates AI-driven characters indistinguishable from human players. This is a distributed multi-service architecture with process injection, AI decision-making, and advanced pathfinding capabilities.
+WWoW is a sophisticated World of Warcraft automation platform that creates AI-driven characters indistinguishable from human players. This is a distributed multi-service architecture with process injection, AI decision-making, and advanced pathfinding capabilities.
 
 - Use xUnit for unit tests
 - Test projects mirror source structure: `Tests/{ProjectName}.Tests/`
@@ -241,7 +241,7 @@ BloogBot is a sophisticated World of Warcraft automation platform that creates A
 - `Exports/`: Core libraries (BotRunner, WoWSharpClient, Navigation C++ modules)  
 - `Services/`: Distributed .NET 8 Worker Services with TCP socket communication
 - `BotProfiles/`: Class-specific AI logic (MEF plugins implementing `IBot`)
-- `BloogBot.AI/`: Semantic Kernel integration for advanced AI decision-making
+- `WWoW.AI/`: Semantic Kernel integration for advanced AI decision-making
 - `UI/`: WPF management interfaces and Blazor web dashboards
 
 ## Security Notes
@@ -295,7 +295,7 @@ When generating prompts, instructions, or text intended for copying to clipboard
 **Pathfinding**: Uses Detour navigation meshes (`.mmtile` files) with sub-5ms A* performance. Always validate map data exists before pathfinding calls.
 
 **Rationale**: Codeblocks can cause issues when users copy/paste prompts to other tools or contexts, as the formatting may not transfer correctly or may include unwanted characters.
-**AI Integration**: `BloogBot.AI` uses Semantic Kernel with activity-based plugin loading. Plugins activate based on current `BotActivity` state (Questing, Combat, Trading, etc.).
+**AI Integration**: `WWoW.AI` uses Semantic Kernel with activity-based plugin loading. Plugins activate based on current `BotActivity` state (Questing, Combat, Trading, etc.).
 
 ---
 **Error Handling**: Services must handle WoW client disconnections gracefully. Use circuit breaker patterns for external service calls (MaNGOS SOAP, Ollama AI).

@@ -61,7 +61,7 @@ Thank you for your interest in contributing to the WWoW project! This document p
    cd BloogBot
    ```
 
-2. Open `BloogBot.sln` in Visual Studio 2022
+2. Open `WestworldOfWarcraft.sln` in Visual Studio 2022
 
 3. Build the solution:
    ```bash
@@ -120,7 +120,7 @@ WWoW/
 ?   ??? StateManagerUI/         # WPF monitoring app
 ?   ??? WWoW.Systems/           # Aspire orchestration
 ??? Tests/                      # Unit/integration tests
-??? BloogBot.AI/                # Semantic Kernel integration
+??? WWoW.AI/                    # Semantic Kernel integration
 ??? ARCHITECTURE.md             # System architecture docs
 ```
 
@@ -233,6 +233,7 @@ For native components (`Loader`, `FastCall`, `Navigation`):
 2. **Build the solution**: `dotnet build`
 3. **Update documentation** if adding new features
 4. **Follow naming conventions** described above
+5. **Plan large/risky changes first**: for multi-package refactors, schema/auth/API/infra changes, production migrations, large dependency upgrades, or edits to a frozen area (pathfinding, protobuf wire contract), create or link an execution plan ([`.agent/PLANS.md`](../.agent/PLANS.md)) **before** broad edits
 
 ### PR Requirements
 
@@ -253,6 +254,7 @@ For native components (`Loader`, `FastCall`, `Navigation`):
    - [ ] Documentation updated
    - [ ] README.md added/updated for new projects
    - [ ] No new warnings introduced
+   - [ ] For large/risky changes, an execution plan was created/linked (see [`.agent/PLANS.md`](../.agent/PLANS.md))
 
 ### Review Process
 

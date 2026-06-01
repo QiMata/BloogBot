@@ -173,8 +173,8 @@ namespace WoWSharpClient.Tests.Agent
             _mockWorldClient.Verify(
                 x => x.SendOpcodeAsync(
                     Opcode.CMSG_STORE_LOOT_IN_SLOT,
-                    It.Is<byte[]>(payload => 
-                        payload.Length == 3 && 
+                    It.Is<byte[]>(payload =>
+                        payload.Length == 3 &&
                         payload[0] == lootSlot &&
                         payload[1] == bag &&
                         payload[2] == slot),
@@ -484,7 +484,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             var receivedData = new List<LootWindowData>();
-            
+
             // Subscribe to the observable
             _lootingAgent.LootWindowChanges.Subscribe(data => receivedData.Add(data));
 
@@ -494,7 +494,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             Assert.Equal(2, receivedData.Count);
-            
+
             var openData = receivedData[0];
             Assert.True(openData.IsOpen);
             Assert.Equal((ulong)0x12345678, openData.LootTargetGuid);
@@ -577,7 +577,7 @@ namespace WoWSharpClient.Tests.Agent
             // Assert
             Assert.Single(receivedData);
             Assert.Equal(isOpen, receivedData[0].IsOpen);
-            
+
             if (isOpen)
             {
                 Assert.Equal(lootTargetGuid, receivedData[0].LootTargetGuid);
@@ -650,7 +650,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             _lootingAgent.HandleLootWindowChanged(true, 0x12345678);
-            
+
             // Add loot items to the available loot
             var lootSlots = new List<LootSlotInfo>
             {
@@ -659,7 +659,7 @@ namespace WoWSharpClient.Tests.Agent
                 new(2, 3, "Item 3", 1, ItemQuality.Uncommon, false, false, LootSlotType.Item),
                 new(3, 4, "Item 4", 1, ItemQuality.Rare, false, false, LootSlotType.Item)
             };
-            
+
             _lootingAgent.HandleLootList(0x12345678, lootSlots);
 
             // Act
@@ -919,7 +919,7 @@ namespace WoWSharpClient.Tests.Agent
             Assert.NotNull(lootData);
             Assert.Equal(itemId, lootData.ItemId);
             Assert.Equal(quantity, lootData.Quantity);
-            
+
             subscription.Dispose();
         }
 
@@ -944,7 +944,7 @@ namespace WoWSharpClient.Tests.Agent
             Assert.True(eventFired);
             Assert.NotNull(moneyData);
             Assert.Equal(amount, moneyData.Amount);
-            
+
             subscription.Dispose();
         }
 
@@ -969,7 +969,7 @@ namespace WoWSharpClient.Tests.Agent
             Assert.True(eventFired);
             Assert.NotNull(errorData);
             Assert.Equal(errorMessage, errorData.ErrorMessage);
-            
+
             subscription.Dispose();
         }
 
@@ -992,7 +992,7 @@ namespace WoWSharpClient.Tests.Agent
             Assert.Single(closeEvents);
             Assert.True(openEvents[0].IsOpen);
             Assert.False(closeEvents[0].IsOpen);
-            
+
             openSubscription.Dispose();
             closeSubscription.Dispose();
         }

@@ -643,7 +643,7 @@ namespace GameData.Core.Constants
                 }
             }
         }
-        
+
         private static void UseHardcodedValues()
         {
             foreach (var kvp in PlayerCapsuleMinimums)

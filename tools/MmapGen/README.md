@@ -7,7 +7,7 @@ by `Exports/Navigation` and `Services/PathfindingService`.
 > elevators, zeppelins) and capsule-correct walkable rules belong in the
 > navmesh, not in 5,600 lines of managed query-time repair. Owning the
 > generator in-tree is the foundation of the pathfinding overhaul described
-> in [docs/physics/PATHFINDING_OVERHAUL.md](../../docs/physics/PATHFINDING_OVERHAUL.md).
+> in [docs/Archive/PATHFINDING_OVERHAUL.md](../../docs/Archive/PATHFINDING_OVERHAUL.md).
 
 ## Status
 
@@ -93,7 +93,7 @@ change in `contrib/mmap/src/TileWorker.cpp` /
 
 ## See also
 
-- [docs/physics/PATHFINDING_OVERHAUL.md](../../docs/physics/PATHFINDING_OVERHAUL.md) — master plan, ADR, sequencing, freeze contract
+- [docs/Archive/PATHFINDING_OVERHAUL.md](../../docs/Archive/PATHFINDING_OVERHAUL.md) — master plan, ADR, sequencing, freeze contract
 - [docs/physics/MMAP_FORMAT.md](../../docs/physics/MMAP_FORMAT.md) — tile/wrapper format the loader accepts
 - [docs/physics/CPP_PATHFINDING_SERVICE_PLAN.md](../../docs/physics/CPP_PATHFINDING_SERVICE_PLAN.md) — native PathfindingService rewrite + dtCrowd evaluation
 - [docs/physics/MMAP_NAVMESH_GENERATION.md](../../docs/physics/MMAP_NAVMESH_GENERATION.md) — historical (pre-overhaul) generator notes

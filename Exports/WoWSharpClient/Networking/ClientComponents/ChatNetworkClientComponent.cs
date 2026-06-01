@@ -26,26 +26,26 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly IWorldClient _worldClient;
         private readonly ILogger<ChatNetworkClientComponent> _logger;
         private readonly object _stateLock = new();
-        
+
         // Operation state tracking (chat-specific extras)
         private bool _isChatOperationInProgress;
         private DateTime? _lastChatOperationTime;
-        
+
         // Player state
         private bool _isAfk;
         private bool _isDnd;
         private string? _afkMessage;
         private string? _dndMessage;
-        
+
         // Active channels tracking (use dictionary as a set)
         private readonly ConcurrentDictionary<string, byte> _activeChannels = new(StringComparer.OrdinalIgnoreCase);
-        
+
         // Reactive observables for chat events (built from world client opcode streams)
         private readonly IObservable<ChatMessageData> _incomingMessages;
         private readonly IObservable<OutgoingChatMessageData> _outgoingMessages;
         private readonly IObservable<ChatNotificationData> _chatNotifications;
         private readonly IObservable<ChatCommandData> _executedCommands;
-        
+
         // Filtered observables for specific chat types
         private readonly Lazy<IObservable<ChatMessageData>> _sayMessages;
         private readonly Lazy<IObservable<ChatMessageData>> _whisperMessages;
@@ -55,7 +55,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         private readonly Lazy<IObservable<ChatMessageData>> _channelMessages;
         private readonly Lazy<IObservable<ChatMessageData>> _systemMessages;
         private readonly Lazy<IObservable<ChatMessageData>> _emoteMessages;
-        
+
         // Chat rate limiting
         private readonly Dictionary<ChatMsg, DateTime> _lastMessageTimes = new();
         private readonly Dictionary<ChatMsg, TimeSpan> _chatCooldowns = new()
@@ -68,7 +68,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             { ChatMsg.CHAT_MSG_RAID, TimeSpan.FromMilliseconds(500) },
             { ChatMsg.CHAT_MSG_CHANNEL, TimeSpan.FromMilliseconds(500) }
         };
-        
+
         // Thread safety
         private bool _disposed = false;
 
@@ -116,28 +116,28 @@ namespace WoWSharpClient.Networking.ClientComponents
             _executedCommands = Observable.Never<ChatCommandData>();
 
             // Initialize filtered observables lazily for better performance
-            _sayMessages = new Lazy<IObservable<ChatMessageData>>(() => 
+            _sayMessages = new Lazy<IObservable<ChatMessageData>>(() =>
                 _incomingMessages.Where(msg => msg.ChatType == ChatMsg.CHAT_MSG_SAY));
-            
-            _whisperMessages = new Lazy<IObservable<ChatMessageData>>(() => 
+
+            _whisperMessages = new Lazy<IObservable<ChatMessageData>>(() =>
                 _incomingMessages.Where(msg => msg.ChatType == ChatMsg.CHAT_MSG_WHISPER || msg.ChatType == ChatMsg.CHAT_MSG_WHISPER_INFORM));
-            
-            _partyMessages = new Lazy<IObservable<ChatMessageData>>(() => 
+
+            _partyMessages = new Lazy<IObservable<ChatMessageData>>(() =>
                 _incomingMessages.Where(msg => msg.ChatType == ChatMsg.CHAT_MSG_PARTY));
-            
-            _guildMessages = new Lazy<IObservable<ChatMessageData>>(() => 
+
+            _guildMessages = new Lazy<IObservable<ChatMessageData>>(() =>
                 _incomingMessages.Where(msg => msg.ChatType == ChatMsg.CHAT_MSG_GUILD));
-            
-            _raidMessages = new Lazy<IObservable<ChatMessageData>>(() => 
+
+            _raidMessages = new Lazy<IObservable<ChatMessageData>>(() =>
                 _incomingMessages.Where(msg => msg.ChatType == ChatMsg.CHAT_MSG_RAID || msg.ChatType == ChatMsg.CHAT_MSG_RAID_WARNING));
-            
-            _channelMessages = new Lazy<IObservable<ChatMessageData>>(() => 
+
+            _channelMessages = new Lazy<IObservable<ChatMessageData>>(() =>
                 _incomingMessages.Where(msg => msg.ChatType == ChatMsg.CHAT_MSG_CHANNEL));
-            
-            _systemMessages = new Lazy<IObservable<ChatMessageData>>(() => 
+
+            _systemMessages = new Lazy<IObservable<ChatMessageData>>(() =>
                 _incomingMessages.Where(msg => msg.ChatType == ChatMsg.CHAT_MSG_SYSTEM));
-            
-            _emoteMessages = new Lazy<IObservable<ChatMessageData>>(() => 
+
+            _emoteMessages = new Lazy<IObservable<ChatMessageData>>(() =>
                 _incomingMessages.Where(msg => msg.ChatType == ChatMsg.CHAT_MSG_EMOTE || msg.ChatType == ChatMsg.CHAT_MSG_TEXT_EMOTE));
 
             _logger.LogDebug("ChatNetworkClientComponent initialized with opcode-backed observables");
@@ -226,7 +226,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetChatOperationInProgress(true);
-                
+
                 _logger.LogDebug("Sending {ChatType} message: '{Message}' to '{Destination}'", chatType, message, destination ?? "default");
 
                 // Apply rate limiting
@@ -390,11 +390,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetChatOperationInProgress(true);
-                
+
                 _logger.LogDebug("Listing channel: {ChannelName}", channelName);
-                
+
                 await ExecuteCommandAsync("chatlist", [channelName], cancellationToken);
-                
+
                 _logger.LogInformation("Listed channel: {ChannelName}", channelName);
             }
             catch (Exception ex)
@@ -418,12 +418,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetChatOperationInProgress(true);
-                
+
                 if (string.IsNullOrWhiteSpace(afkMessage))
                 {
                     _logger.LogDebug("Removing AFK status");
                     await ExecuteCommandAsync("afk", null, cancellationToken);
-                    
+
                     lock (_stateLock)
                     {
                         _isAfk = false;
@@ -434,7 +434,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     _logger.LogDebug("Setting AFK status with message: {AfkMessage}", afkMessage);
                     await ExecuteCommandAsync("afk", [afkMessage], cancellationToken);
-                    
+
                     lock (_stateLock)
                     {
                         _isAfk = true;
@@ -461,12 +461,12 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetChatOperationInProgress(true);
-                
+
                 if (string.IsNullOrWhiteSpace(dndMessage))
                 {
                     _logger.LogDebug("Removing DND status");
                     await ExecuteCommandAsync("dnd", null, cancellationToken);
-                    
+
                     lock (_stateLock)
                     {
                         _isDnd = false;
@@ -477,7 +477,7 @@ namespace WoWSharpClient.Networking.ClientComponents
                 {
                     _logger.LogDebug("Setting DND status with message: {DndMessage}", dndMessage);
                     await ExecuteCommandAsync("dnd", [dndMessage], cancellationToken);
-                    
+
                     lock (_stateLock)
                     {
                         _isDnd = true;
@@ -511,11 +511,11 @@ namespace WoWSharpClient.Networking.ClientComponents
             try
             {
                 SetChatOperationInProgress(true);
-                
+
                 // Build command string
                 var commandBuilder = new StringBuilder();
                 commandBuilder.Append('/').Append(command);
-                
+
                 if (arguments != null && arguments.Length > 0)
                 {
                     foreach (var arg in arguments)
@@ -621,7 +621,7 @@ namespace WoWSharpClient.Networking.ClientComponents
         /// Handles an incoming chat message from the server.
         /// This method remains for compatibility; incoming pipeline is opcode-backed.
         /// </summary>
-        public void HandleIncomingMessage(ChatMsg chatType, Language language, ulong senderGuid, ulong targetGuid, 
+        public void HandleIncomingMessage(ChatMsg chatType, Language language, ulong senderGuid, ulong targetGuid,
             string senderName, string channelName, byte playerRank, string text, PlayerChatTag playerChatTag)
         {
             try
@@ -697,7 +697,7 @@ namespace WoWSharpClient.Networking.ClientComponents
             {
                 var remainingCooldown = requiredCooldown - timeSinceLastMessage;
                 _logger.LogDebug("Applying rate limiting for {ChatType}, waiting {RemainingMs}ms", chatType, remainingCooldown.TotalMilliseconds);
-                
+
                 await Task.Delay(remainingCooldown, cancellationToken);
             }
         }

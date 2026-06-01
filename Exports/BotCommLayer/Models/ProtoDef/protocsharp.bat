@@ -10,8 +10,8 @@ if "%~1"=="" (
 )
 
 if "%~2"=="" (
-    echo No output directory provided. Using default ../
-    set "OUTPUT_DIR=.."
+    echo No output directory provided. Using default ../Generated
+    set "OUTPUT_DIR=..\Generated"
 ) else (
     set "OUTPUT_DIR=%~2"
 )

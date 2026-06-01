@@ -106,8 +106,10 @@ public class WowSelectorSourceScanWindowRecordTests
     private static Vector3[] BuildPointGrid()
     {
         Vector3[] pointGrid = new Vector3[17 * 17];
-        for (int row = 0; row < 17; ++row) {
-            for (int column = 0; column < 17; ++column) {
+        for (int row = 0; row < 17; ++row)
+        {
+            for (int column = 0; column < 17; ++column)
+            {
                 int index = (row * 17) + column;
                 pointGrid[index] = new Vector3(
                     (column * 0.5f) + (row * 0.03125f),
@@ -121,7 +123,8 @@ public class WowSelectorSourceScanWindowRecordTests
 
     private static void AssertRecordsEqual(SelectorCandidateRecord[] expected, int expectedCount, SelectorCandidateRecord[] actual, int actualOffset = 0)
     {
-        for (int i = 0; i < expectedCount; ++i) {
+        for (int i = 0; i < expectedCount; ++i)
+        {
             int actualIndex = actualOffset + i;
             Assert.Equal(expected[i].FilterPlane.Normal.X, actual[actualIndex].FilterPlane.Normal.X);
             Assert.Equal(expected[i].FilterPlane.Normal.Y, actual[actualIndex].FilterPlane.Normal.Y);

@@ -136,7 +136,7 @@ namespace WoWSharpClient.Tests.Agent
             // Arrange
             ulong targetGuid = 0x12345678;
             var mockTargetingAgent = new Mock<ITargetingNetworkClientComponent>();
-            
+
             mockTargetingAgent
                 .Setup(x => x.SetTargetAsync(It.IsAny<ulong>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
@@ -270,7 +270,7 @@ namespace WoWSharpClient.Tests.Agent
         {
             // Arrange
             var receivedData = new List<AttackStateData>();
-            
+
             // Subscribe to the observable
             _attackClientComponent.AttackStateChanges.Subscribe(data => receivedData.Add(data));
 
@@ -280,7 +280,7 @@ namespace WoWSharpClient.Tests.Agent
 
             // Assert
             Assert.Equal(2, receivedData.Count);
-            
+
             var startData = receivedData[0];
             Assert.True(startData.IsAttacking);
             Assert.Equal((ulong)0x87654321, startData.VictimGuid);

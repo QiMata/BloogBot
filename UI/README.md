@@ -329,7 +329,7 @@ docker-compose -f test-compose.yml up
 
 ### Core WWoW Ecosystem
 - **[Services Layer](../Services/README.md)**: Backend automation services
-- **[WWoW.AI](../BloogBot.AI/README.md)**: AI behavior coordination
+- **[WWoW.AI](../WWoW.AI/README.md)**: AI behavior coordination
 - **[Exports Layer](../Exports/README.md)**: Shared libraries and communication
 
 ### External Dependencies

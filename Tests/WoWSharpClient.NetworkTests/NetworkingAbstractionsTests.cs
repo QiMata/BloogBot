@@ -3,7 +3,7 @@ using GameData.Core.Enums;
 using System;
 using System.Threading.Tasks;
 
-namespace WowSharpClient.NetworkTests
+namespace WoWSharpClient.NetworkTests
 {
     public class NetworkingAbstractionsTests
     {
@@ -85,19 +85,19 @@ namespace WowSharpClient.NetworkTests
         {
             // Arrange
             using var framer = new WoWMessageFramer();
-            
+
             // Create a WoW packet: size (big-endian) + opcode (little-endian) + payload
             var payload = new byte[] { 0x01, 0x02, 0x03 };
             var packet = new byte[7]; // 2 bytes size + 2 bytes opcode + 3 bytes payload
-            
+
             // Size = 5 (opcode + payload) in big-endian
             packet[0] = 0x00;
             packet[1] = 0x05;
-            
+
             // Opcode = CMSG_PING (0x1DC) in little-endian
             packet[2] = 0xDC;
             packet[3] = 0x01;
-            
+
             // Payload
             Array.Copy(payload, 0, packet, 4, payload.Length);
 

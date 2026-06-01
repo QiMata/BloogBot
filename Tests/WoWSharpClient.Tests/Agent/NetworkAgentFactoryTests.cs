@@ -163,7 +163,7 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithNullWorldClient_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => 
+            Assert.Throws<ArgumentNullException>(() =>
                 new NetworkClientComponentFactory(null!, _mockLoggerFactory.Object));
         }
 
@@ -171,7 +171,7 @@ namespace WoWSharpClient.Tests.Agent
         public void Constructor_WithNullLoggerFactory_ThrowsArgumentNullException()
         {
             // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => 
+            Assert.Throws<ArgumentNullException>(() =>
                 new NetworkClientComponentFactory(_mockWorldClient.Object, null!));
         }
 
