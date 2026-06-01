@@ -64,9 +64,9 @@ Activity     ← major dynamic event:        "Run UBRS", "Molten Core raid", "Wa
 | Layer | Today's surface | Phase-1 target | Phase-2 target |
 |---|---|---|---|
 | Activity | `ActivityDefinition` catalog row + `AssignedActivity` string (`"Fishing[Ratchet]"`) parsed by [`ActivityResolver`](../../Exports/BotRunner/Activities/ActivityResolver.cs). Returns an `IBotTask` directly — no `IActivity` object. | (no change) | New `IActivity` runtime contract modeled on D2's [`IActivity.cs`](../../../../D2Bot/D2Orchestrator/Orchestration/Activities/IActivity.cs). Instantiated *from* an `ActivityDefinition`. |
-| Objective | Snapshot-only: `WoWActivitySnapshot.travel_objective` (travel-specific) + `progression_status.current_objective` (free-form string). No `IObjective` interface. | (no change) | New `IObjective` runtime contract modeled on D2's [`BotObjectiveContract`](../../../../D2Bot/D2Orchestrator/Orchestration/ObjectiveRuntimeContracts.cs). New `ObjectiveType` enum on the proto. |
+| Objective | `ObjectiveMessage` on the StateManager↔BotRunner wire, plus snapshot projections like `WoWActivitySnapshot.travel_objective` and `progression_status.current_objective`. No `IObjective` interface. | (no change) | New `IObjective` runtime contract modeled on D2's [`BotObjectiveContract`](../../../../D2Bot/D2Orchestrator/Orchestration/ObjectiveRuntimeContracts.cs), backed by the existing `ObjectiveType` enum. |
 | Task | [`IBotTask`](../../Exports/BotRunner/Interfaces/IBotTask.cs) + `BotTaskStatus` enum. Stack-based. | Phase-1 closes the IBotTask substrate per [`Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md`](../Plan/02_PHASE1_ACTION_TASK_FOUNDATION.md). | (no change) |
-| Action | `ObjectiveType` enum (~85 values) + `ObjectiveMessage` over protobuf. | (no change) | (no change — closed set) |
+| Action | Atomic local memory, packet, and input primitives invoked by Tasks. No Action wire type. | (no change) | (no change — local primitive taxonomy) |
 
 ## Test-naming convention
 

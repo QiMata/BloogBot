@@ -127,7 +127,6 @@ public sealed class DockerLiveValidationTests
         Assert.Equal(PathfindingResponse.PayloadOneofCase.Path, response.PayloadCase);
         Assert.NotEmpty(response.Path.Corners);
 
-        // Find the largest single-segment teleport jump in the result —
         // Lower-layer route corners must stay inside the zeppelin tower footprint.
         var exteriorHillCorners = new List<string>();
         for (int i = 0; i < response.Path.Corners.Count; i++)

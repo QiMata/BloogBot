@@ -13,6 +13,7 @@ Cross-service TCP socket communication using Protocol Buffers. Length-prefixed b
 | `Models/Generated/Game.cs` | auto | WoWObject, WoWUnit, WoWPlayer, Position |
 | `Models/Generated/Pathfinding.cs` | auto | PathfindingRequest, PhysicsInput/Output, LineOfSight |
 | `Models/Generated/Database.cs` | auto | Game database entities |
+| `Models/Generated/Scenedata.cs` | auto | Scene data messages |
 
 ## Protobuf Code Generation
 

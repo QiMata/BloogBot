@@ -1715,7 +1715,3 @@ ch=cs/2 fix preserves runtime physics behavior even at scale across all
 13.18% baseline. This is THE Phase 1 EXIT MEASUREMENT.
 
 Expected wall-clock: 3-5 hr for sweep + ~1 min aggregate.
-
-
-
-
