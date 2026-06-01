@@ -16,6 +16,48 @@ public sealed record PublishDraftResultDto(
     string TargetId,
     IReadOnlyList<ValidationErrorDto> Errors);
 
+public sealed record FoundryDeploymentTargetRequest(
+    string PersonaId,
+    string PersonaVersionId,
+    string GraphId,
+    string RequestedBy = "");
+
+public sealed record PromoteFoundryDeploymentRequest(
+    string PromotedBy = "");
+
+public sealed record FoundryDeploymentPreviewDto(
+    bool IsValid,
+    string PersonaId,
+    string PersonaVersionId,
+    string GraphId,
+    IReadOnlyList<ValidationErrorDto> Errors,
+    string ContentHash,
+    string Instructions,
+    string Model,
+    string AgentName,
+    int MaxOutputTokens,
+    FoundryDeploymentDto? LastDeployment);
+
+public sealed record FoundryDeploymentDto(
+    string DeploymentId,
+    string PersonaId,
+    string PersonaVersionId,
+    string GraphId,
+    string Status,
+    string ContentHash,
+    string Model,
+    string AgentName,
+    string? AgentVersion,
+    string? AgentVersionId,
+    int MaxOutputTokens,
+    string RequestedBy,
+    DateTime RequestedAtUtc,
+    DateTime? StartedAtUtc,
+    DateTime? CompletedAtUtc,
+    string PromotedBy,
+    DateTime? PromotedAtUtc,
+    string ErrorText);
+
 public sealed record StorylineDraftDto(
     string DraftId,
     string Kind,

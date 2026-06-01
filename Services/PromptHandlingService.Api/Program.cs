@@ -14,6 +14,7 @@ builder.Services.AddPromptHandlingServices(builder.Configuration);
 builder.Services.AddSingleton<IActivityCatalog, ActivityCatalog>();
 builder.Services.AddSingleton<IStorylineActivityCatalog, ActivityCatalogStorylineAdapter>();
 builder.Services.AddSingleton<IStorylineManagementService, StorylineManagementService>();
+builder.Services.AddHostedService<StorylineFoundryDeploymentWorker>();
 builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
@@ -48,6 +49,9 @@ api.MapGet("/personas/{personaId}", async (string personaId, IStorylineManagemen
     var persona = await service.GetPersonaAsync(personaId, ct).ConfigureAwait(false);
     return persona is null ? Results.NotFound() : Results.Ok(persona);
 });
+
+api.MapGet("/persona-versions", (string? personaId, IStorylineManagementService service, CancellationToken ct) =>
+    service.ListPersonaVersionsAsync(personaId, ct));
 
 api.MapGet("/graphs", (IStorylineManagementService service, CancellationToken ct) =>
     service.ListNarrativeGraphsAsync(ct));
@@ -93,6 +97,57 @@ api.MapPost("/drafts/{draftId}/publish", async (
 {
     var result = await service.PublishDraftAsync(draftId, request, ct).ConfigureAwait(false);
     return result.Published ? Results.Ok(result) : Results.Json(result, statusCode: StatusCodes.Status400BadRequest);
+});
+
+api.MapPost("/foundry/deployments/preview", (
+    FoundryDeploymentTargetRequest request,
+    IStorylineFoundryDeploymentService service,
+    CancellationToken ct) =>
+        service.PreviewDeploymentAsync(request, ct));
+
+api.MapPost("/foundry/deployments", async (
+    FoundryDeploymentTargetRequest request,
+    IStorylineFoundryDeploymentService service,
+    CancellationToken ct) =>
+{
+    try
+    {
+        var deployment = await service.QueueDeploymentAsync(request, ct).ConfigureAwait(false);
+        return Results.Accepted($"/api/storylines/v1/foundry/deployments/{deployment.DeploymentId}", deployment);
+    }
+    catch (StorylineFoundryDeploymentValidationException ex)
+    {
+        return Results.Json(ex.Preview, statusCode: StatusCodes.Status400BadRequest);
+    }
+});
+
+api.MapGet("/foundry/deployments/{deploymentId}", async (
+    string deploymentId,
+    IStorylineFoundryDeploymentService service,
+    CancellationToken ct) =>
+{
+    var deployment = await service.GetDeploymentAsync(deploymentId, ct).ConfigureAwait(false);
+    return deployment is null ? Results.NotFound() : Results.Ok(deployment);
+});
+
+api.MapPost("/foundry/deployments/{deploymentId}/promote", async (
+    string deploymentId,
+    PromoteFoundryDeploymentRequest request,
+    IStorylineFoundryDeploymentService service,
+    CancellationToken ct) =>
+{
+    try
+    {
+        var deployment = await service.PromoteDeploymentAsync(deploymentId, request, ct).ConfigureAwait(false);
+        return deployment is null ? Results.NotFound() : Results.Ok(deployment);
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new
+        {
+            errors = new[] { new ValidationErrorDto("deploymentId", "invalid_status", ex.Message) }
+        });
+    }
 });
 
 api.MapGet("/memory-candidates", async (string characterId, string? status, IStorylineManagementService service, CancellationToken ct) =>

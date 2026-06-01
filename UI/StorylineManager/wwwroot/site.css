@@ -111,6 +111,10 @@ code {
   grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.65fr);
 }
 
+.deploy-layout {
+  grid-template-columns: minmax(360px, 0.8fr) minmax(0, 1.2fr);
+}
+
 .panel {
   background: #ffffff;
   border: 1px solid #d1d7dd;
@@ -135,6 +139,12 @@ code {
   background: #fff1f0;
   border: 1px solid #e1a8a1;
   color: #7f1d1d;
+}
+
+.notice.ok {
+  background: #eef8f0;
+  border: 1px solid #9bc9a3;
+  color: #1c5c2d;
 }
 
 table {
@@ -163,10 +173,16 @@ th {
 }
 
 .draft-editor label,
+.deploy-form label,
+.deploy-form,
 .filters {
   display: grid;
   gap: 0.35rem;
   margin-bottom: 0.75rem;
+}
+
+.deploy-form {
+  gap: 0.75rem;
 }
 
 .filters {
@@ -190,6 +206,12 @@ textarea {
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 0.86rem;
   line-height: 1.35;
+}
+
+.instruction-preview {
+  width: 100%;
+  min-height: 640px;
+  box-sizing: border-box;
 }
 
 .graph-canvas {
@@ -233,25 +255,38 @@ textarea {
   white-space: nowrap;
 }
 
+.deployment-meta,
 .settings dl {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 0.5rem 1rem;
 }
 
+.deployment-meta {
+  margin: 0.75rem 0 0;
+}
+
+.deployment-meta dt,
 .settings dt {
   color: #52606d;
   font-weight: 650;
 }
 
+.deployment-meta dd,
 .settings dd {
   margin: 0;
   min-width: 0;
   word-break: break-word;
 }
 
+.validation-list {
+  margin: 0.75rem 0;
+  padding-left: 1.25rem;
+}
+
 @media (max-width: 920px) {
   .grid.two,
+  .deploy-layout,
   .graph-layout {
     grid-template-columns: 1fr;
   }

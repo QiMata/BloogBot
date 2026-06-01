@@ -2,6 +2,7 @@ using System.IO;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using PromptHandlingService.Foundry.Deployment;
 using PromptHandlingService.Cache;
 using PromptHandlingService.Foundry;
 using PromptHandlingService.Storylines;
@@ -26,12 +27,16 @@ public static class ServiceCollectionExtensions
             new FoundryProjectResponsesClient(provider.GetRequiredService<FoundryPersonaRuntimeOptions>()));
         services.AddSingleton<IFoundryPersonaRuntime, FoundryPersonaRuntime>();
         services.AddSingleton<FoundryAgentProvisioner>();
+        services.AddSingleton<IStorylineFoundryDeploymentProvisioner, StorylineFoundryDeploymentProvisioner>();
         services.AddSingleton(provider =>
         {
             var environment = provider.GetRequiredService<IHostEnvironment>();
             return StorylineRuntimeOptions.FromConfiguration(configuration, environment.ContentRootPath);
         });
         services.AddSingleton<IStorylineRepository, SqliteStorylineRepository>();
+        services.AddSingleton<StorylineFoundryInstructionBuilder>();
+        services.AddSingleton<IStorylineFoundryDeploymentQueue, StorylineFoundryDeploymentQueue>();
+        services.AddSingleton<IStorylineFoundryDeploymentService, StorylineFoundryDeploymentService>();
         services.AddSingleton<IStorylineContextResolver, StorylineContextResolver>();
         services.AddSingleton<IStorylinePersonaRuntime, StorylinePersonaRuntime>();
 

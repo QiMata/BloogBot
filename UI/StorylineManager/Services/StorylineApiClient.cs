@@ -20,6 +20,16 @@ public sealed class StorylineApiClient
     public async Task<IReadOnlyList<PersonaProfileDto>> GetPersonasAsync(CancellationToken cancellationToken = default) =>
         await GetListAsync<PersonaProfileDto>("personas", cancellationToken).ConfigureAwait(false);
 
+    public async Task<IReadOnlyList<PersonaVersionDto>> GetPersonaVersionsAsync(
+        string? personaId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var path = string.IsNullOrWhiteSpace(personaId)
+            ? "persona-versions"
+            : $"persona-versions?personaId={Uri.EscapeDataString(personaId)}";
+        return await GetListAsync<PersonaVersionDto>(path, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<NarrativeGraphDto>> GetGraphsAsync(CancellationToken cancellationToken = default) =>
         await GetListAsync<NarrativeGraphDto>("graphs", cancellationToken).ConfigureAwait(false);
 
@@ -63,6 +73,56 @@ public sealed class StorylineApiClient
             request,
             cancellationToken).ConfigureAwait(false);
         return await response.Content.ReadFromJsonAsync<PublishDraftResultDto>(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FoundryDeploymentPreviewDto?> PreviewFoundryDeploymentAsync(
+        FoundryDeploymentTargetRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("foundry/deployments/preview", request, cancellationToken)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<FoundryDeploymentPreviewDto>(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FoundryDeploymentDto?> QueueFoundryDeploymentAsync(
+        FoundryDeploymentTargetRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("foundry/deployments", request, cancellationToken)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<FoundryDeploymentDto>(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FoundryDeploymentDto?> GetFoundryDeploymentAsync(
+        string deploymentId,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.GetAsync(
+                $"foundry/deployments/{Uri.EscapeDataString(deploymentId)}",
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<FoundryDeploymentDto>(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<FoundryDeploymentDto?> PromoteFoundryDeploymentAsync(
+        string deploymentId,
+        PromoteFoundryDeploymentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync(
+            $"foundry/deployments/{Uri.EscapeDataString(deploymentId)}/promote",
+            request,
+            cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<FoundryDeploymentDto>(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<MemoryCandidateDto?> ReviewMemoryCandidateAsync(

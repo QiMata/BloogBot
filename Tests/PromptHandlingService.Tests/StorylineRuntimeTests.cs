@@ -29,6 +29,7 @@ public sealed class StorylineRepositoryTests
         Assert.Contains("NarrativeNode", tableNames);
         Assert.Contains("NarrativeTransition", tableNames);
         Assert.Contains("AgentBinding", tableNames);
+        Assert.Contains("StorylineFoundryDeployment", tableNames);
         Assert.Contains("ConversationBinding", tableNames);
         Assert.Contains("StorylineDraft", tableNames);
         Assert.Contains("GameplayStoryArc", tableNames);
@@ -121,6 +122,41 @@ public sealed class StorylineRepositoryTests
         Assert.Equal("Player prefers short directions.", Assert.Single(await repository.GetApprovedMemoryFactsAsync(StorylineTestData.CharacterId, StorylineTestData.PersonaId, CancellationToken.None)).Text);
         Assert.Equal("Helped a traveler find the inn.", Assert.Single(await repository.GetApprovedMemoryEpisodesAsync(StorylineTestData.CharacterId, StorylineTestData.PersonaId, CancellationToken.None)).Summary);
         Assert.Equal("Guest asked about the inn.", Assert.Single(await repository.GetMemoryCandidatesAsync(StorylineTestData.CharacterId, StorylineMemoryStatus.Pending, CancellationToken.None)).CandidateText);
+    }
+
+    [Fact]
+    public async Task AgentBindingLookup_PrefersExactGraphAndFallsBackToLegacyBinding()
+    {
+        using var workspace = TempWorkspace.Create();
+        using var repository = CreateRepository(workspace.DatabasePath);
+        await repository.UpsertAgentBindingAsync(StorylineTestData.Binding() with
+        {
+            BindingId = "legacy-binding",
+            GraphId = string.Empty,
+            AgentName = "legacy-agent",
+            IsDefault = true
+        }, CancellationToken.None);
+        await repository.UpsertAgentBindingAsync(StorylineTestData.Binding() with
+        {
+            BindingId = "exact-binding",
+            GraphId = StorylineTestData.GraphId,
+            AgentName = "graph-agent",
+            IsDefault = false
+        }, CancellationToken.None);
+
+        var exact = await repository.GetAgentBindingAsync(
+            StorylineTestData.PersonaId,
+            StorylineTestData.PersonaVersionId,
+            StorylineTestData.GraphId,
+            CancellationToken.None);
+        var fallback = await repository.GetAgentBindingAsync(
+            StorylineTestData.PersonaId,
+            StorylineTestData.PersonaVersionId,
+            "unknown-graph",
+            CancellationToken.None);
+
+        Assert.Equal("graph-agent", exact?.AgentName);
+        Assert.Equal("legacy-agent", fallback?.AgentName);
     }
 
     private static SqliteStorylineRepository CreateRepository(string databasePath, string seedPath = "", bool importSeed = false) => new(new StorylineRuntimeOptions
