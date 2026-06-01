@@ -39,8 +39,12 @@ public sealed class StorylineContextResolver : IStorylineContextResolver
         var transitions = await _repository.GetNarrativeTransitionsAsync(state.ActiveGraphId, state.ActiveNodeId, cancellationToken)
             .ConfigureAwait(false);
 
-        var binding = await _repository.GetAgentBindingAsync(state.PersonaId, state.PersonaVersionId, cancellationToken).ConfigureAwait(false)
-            ?? throw new StorylineRuntimeException($"Missing agent binding for persona '{state.PersonaId}' version '{state.PersonaVersionId}'.");
+        var binding = await _repository.GetAgentBindingAsync(
+                state.PersonaId,
+                state.PersonaVersionId,
+                state.ActiveGraphId,
+                cancellationToken).ConfigureAwait(false)
+            ?? throw new StorylineRuntimeException($"Missing agent binding for persona '{state.PersonaId}' version '{state.PersonaVersionId}' graph '{state.ActiveGraphId}'.");
 
         var memorySummary = await BuildMemorySummaryAsync(state.CharacterId, state.PersonaId, cancellationToken).ConfigureAwait(false);
         var characterName = string.IsNullOrWhiteSpace(input.CharacterName) ? state.CharacterName : input.CharacterName.Trim();

@@ -5,6 +5,7 @@ public interface IStorylineManagementService
     Task<StorylineHealthDto> GetHealthAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<PersonaProfileDto>> ListPersonasAsync(CancellationToken cancellationToken);
     Task<PersonaProfileDto?> GetPersonaAsync(string personaId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PersonaVersionDto>> ListPersonaVersionsAsync(string? personaId, CancellationToken cancellationToken);
     Task<IReadOnlyList<NarrativeGraphDto>> ListNarrativeGraphsAsync(CancellationToken cancellationToken);
     Task<NarrativeGraphDto?> GetNarrativeGraphAsync(string graphId, CancellationToken cancellationToken);
     Task<IReadOnlyList<GameplayStoryArcDto>> ListGameplayArcsAsync(CancellationToken cancellationToken);

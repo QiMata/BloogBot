@@ -159,12 +159,49 @@ public sealed partial class SqliteStorylineRepository
         public string PersonaId { get; set; } = string.Empty;
         [Indexed]
         public string PersonaVersionId { get; set; } = string.Empty;
+        [Indexed]
+        public string GraphId { get; set; } = string.Empty;
         public string Model { get; set; } = string.Empty;
         public string AgentName { get; set; } = string.Empty;
         public string? AgentVersion { get; set; }
         public int MaxOutputTokens { get; set; }
         public bool IsDefault { get; set; }
         public DateTime CreatedAtUtc { get; set; }
+    }
+
+    [Table("StorylineFoundryDeployment")]
+    internal sealed class StorylineFoundryDeploymentRow
+    {
+        [PrimaryKey]
+        public string DeploymentId { get; set; } = string.Empty;
+        [Indexed]
+        public string PersonaId { get; set; } = string.Empty;
+        [Indexed]
+        public string PersonaVersionId { get; set; } = string.Empty;
+        [Indexed]
+        public string GraphId { get; set; } = string.Empty;
+        [Indexed]
+        public string Status { get; set; } = string.Empty;
+        public string ContentHash { get; set; } = string.Empty;
+        public string Instructions { get; set; } = string.Empty;
+        public string Model { get; set; } = string.Empty;
+        public string AgentName { get; set; } = string.Empty;
+        public string? AgentVersion { get; set; }
+        public string? AgentVersionId { get; set; }
+        public int MaxOutputTokens { get; set; }
+        public string RequestedBy { get; set; } = string.Empty;
+        public DateTime RequestedAtUtc { get; set; }
+        public DateTime? StartedAtUtc { get; set; }
+        public DateTime? CompletedAtUtc { get; set; }
+        public string PromotedBy { get; set; } = string.Empty;
+        public DateTime? PromotedAtUtc { get; set; }
+        public string ErrorText { get; set; } = string.Empty;
+    }
+
+    internal sealed class TableInfoRow
+    {
+        [Column("name")]
+        public string Name { get; set; } = string.Empty;
     }
 
     [Table("ConversationBinding")]

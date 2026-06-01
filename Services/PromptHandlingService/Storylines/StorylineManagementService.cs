@@ -40,6 +40,12 @@ public sealed class StorylineManagementService : IStorylineManagementService
         return profile is null ? null : ToDto(profile);
     }
 
+    public async Task<IReadOnlyList<PersonaVersionDto>> ListPersonaVersionsAsync(string? personaId, CancellationToken cancellationToken)
+    {
+        var versions = await _repository.ListPersonaVersionsAsync(personaId, cancellationToken).ConfigureAwait(false);
+        return versions.Select(ToDto).ToArray();
+    }
+
     public async Task<IReadOnlyList<NarrativeGraphDto>> ListNarrativeGraphsAsync(CancellationToken cancellationToken)
     {
         var graphs = await _repository.ListNarrativeGraphsAsync(cancellationToken).ConfigureAwait(false);
@@ -605,6 +611,14 @@ public sealed class StorylineManagementService : IStorylineManagementService
         profile.DisplayName,
         profile.Description,
         profile.CreatedAtUtc);
+
+    private static PersonaVersionDto ToDto(PersonaVersion version) => new(
+        version.PersonaVersionId,
+        version.PersonaId,
+        version.Version,
+        version.PromptSummary,
+        version.IsActive,
+        version.CreatedAtUtc);
 
     private static StorylineDraftDto ToDto(StorylineDraft draft) => new(
         draft.DraftId,

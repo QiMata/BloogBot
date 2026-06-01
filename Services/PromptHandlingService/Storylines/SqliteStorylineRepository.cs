@@ -445,6 +445,8 @@ public sealed partial class SqliteStorylineRepository : IStorylineRepository, ID
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateRequired(binding.BindingId, nameof(binding.BindingId));
+        ValidateRequired(binding.PersonaId, nameof(binding.PersonaId));
+        ValidateRequired(binding.PersonaVersionId, nameof(binding.PersonaVersionId));
         lock (_sync)
         {
             EnsureNotDisposed();
@@ -456,15 +458,104 @@ public sealed partial class SqliteStorylineRepository : IStorylineRepository, ID
 
     public Task<AgentBinding?> GetAgentBindingAsync(string personaId, string personaVersionId, CancellationToken cancellationToken)
     {
+        return GetAgentBindingAsync(personaId, personaVersionId, string.Empty, cancellationToken);
+    }
+
+    public Task<AgentBinding?> GetAgentBindingAsync(
+        string personaId,
+        string personaVersionId,
+        string graphId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var normalizedGraphId = NormalizeOptionalKey(graphId);
+        lock (_sync)
+        {
+            EnsureNotDisposed();
+            AgentBindingRow? row = null;
+            if (!string.IsNullOrWhiteSpace(normalizedGraphId))
+            {
+                row = _connection.Query<AgentBindingRow>(
+                    "select * from AgentBinding where PersonaId = ? and PersonaVersionId = ? and GraphId = ? order by IsDefault desc, CreatedAtUtc desc, BindingId asc limit 1",
+                    personaId,
+                    personaVersionId,
+                    normalizedGraphId).FirstOrDefault();
+            }
+
+            row ??= _connection.Query<AgentBindingRow>(
+                "select * from AgentBinding where PersonaId = ? and PersonaVersionId = ? and (GraphId is null or GraphId = '') order by IsDefault desc, CreatedAtUtc desc, BindingId asc limit 1",
+                personaId,
+                personaVersionId).FirstOrDefault();
+            return Task.FromResult(row is null ? null : FromRow(row));
+        }
+    }
+
+    public Task PromoteAgentBindingAsync(AgentBinding binding, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateRequired(binding.BindingId, nameof(binding.BindingId));
+        ValidateRequired(binding.PersonaId, nameof(binding.PersonaId));
+        ValidateRequired(binding.PersonaVersionId, nameof(binding.PersonaVersionId));
+        ValidateRequired(binding.GraphId, nameof(binding.GraphId));
+        lock (_sync)
+        {
+            EnsureNotDisposed();
+            _connection.RunInTransaction(() =>
+            {
+                _connection.Execute(
+                    "update AgentBinding set IsDefault = 0 where PersonaId = ? and PersonaVersionId = ? and GraphId = ? and IsDefault = 1",
+                    binding.PersonaId,
+                    binding.PersonaVersionId,
+                    binding.GraphId);
+                _connection.InsertOrReplace(ToRow(binding with { IsDefault = true }));
+            });
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task UpsertFoundryDeploymentAsync(StorylineFoundryDeployment deployment, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidateRequired(deployment.DeploymentId, nameof(deployment.DeploymentId));
+        ValidateRequired(deployment.PersonaId, nameof(deployment.PersonaId));
+        ValidateRequired(deployment.PersonaVersionId, nameof(deployment.PersonaVersionId));
+        ValidateRequired(deployment.GraphId, nameof(deployment.GraphId));
+        lock (_sync)
+        {
+            EnsureNotDisposed();
+            _connection.InsertOrReplace(ToRow(deployment));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<StorylineFoundryDeployment?> GetFoundryDeploymentAsync(string deploymentId, CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_sync)
         {
             EnsureNotDisposed();
-            var rows = _connection.Query<AgentBindingRow>(
-                "select * from AgentBinding where PersonaId = ? and PersonaVersionId = ? order by IsDefault desc, CreatedAtUtc desc, BindingId asc limit 1",
+            var row = _connection.Find<StorylineFoundryDeploymentRow>(deploymentId);
+            return Task.FromResult(row is null ? null : FromRow(row));
+        }
+    }
+
+    public Task<StorylineFoundryDeployment?> GetLatestFoundryDeploymentAsync(
+        string personaId,
+        string personaVersionId,
+        string graphId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_sync)
+        {
+            EnsureNotDisposed();
+            var row = _connection.Query<StorylineFoundryDeploymentRow>(
+                "select * from StorylineFoundryDeployment where PersonaId = ? and PersonaVersionId = ? and GraphId = ? order by RequestedAtUtc desc, DeploymentId asc limit 1",
                 personaId,
-                personaVersionId);
-            var row = rows.FirstOrDefault();
+                personaVersionId,
+                graphId).FirstOrDefault();
             return Task.FromResult(row is null ? null : FromRow(row));
         }
     }
@@ -726,6 +817,8 @@ public sealed partial class SqliteStorylineRepository : IStorylineRepository, ID
             _connection.CreateTable<NarrativeNodeRow>();
             _connection.CreateTable<NarrativeTransitionRow>();
             _connection.CreateTable<AgentBindingRow>();
+            EnsureColumn("AgentBinding", "GraphId", "TEXT NOT NULL DEFAULT ''");
+            _connection.CreateTable<StorylineFoundryDeploymentRow>();
             _connection.CreateTable<ConversationBindingRow>();
             _connection.CreateTable<StorylineDraftRow>();
             _connection.CreateTable<GameplayStoryArcRow>();
@@ -835,6 +928,9 @@ public sealed partial class SqliteStorylineRepository : IStorylineRepository, ID
         return $"{characterId.Trim()}::{participant}";
     }
 
+    private static string NormalizeOptionalKey(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
+
     private static string ArcVersionKey(string arcId, string versionId) => $"{arcId.Trim()}::{versionId.Trim()}";
 
     private void DeleteRowsNotIn(
@@ -856,6 +952,17 @@ public sealed partial class SqliteStorylineRepository : IStorylineRepository, ID
         _connection.Execute(
             $"delete from {tableName} where {scopeColumn} = ? and {idColumn} not in ({placeholders})",
             args.ToArray());
+    }
+
+    private void EnsureColumn(string tableName, string columnName, string columnDefinition)
+    {
+        var columns = _connection.Query<TableInfoRow>($"pragma table_info({tableName})");
+        if (columns.Any(column => string.Equals(column.Name, columnName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        _connection.Execute($"alter table {tableName} add column {columnName} {columnDefinition}");
     }
 
     private static DateTime NormalizeDate(DateTime value) => value == default ? DateTime.UtcNow : value;
@@ -1059,6 +1166,7 @@ public sealed partial class SqliteStorylineRepository : IStorylineRepository, ID
         BindingId = binding.BindingId,
         PersonaId = binding.PersonaId,
         PersonaVersionId = binding.PersonaVersionId,
+        GraphId = NormalizeOptionalKey(binding.GraphId),
         Model = binding.Model,
         AgentName = binding.AgentName,
         AgentVersion = binding.AgentVersion,
@@ -1072,12 +1180,59 @@ public sealed partial class SqliteStorylineRepository : IStorylineRepository, ID
         BindingId = row.BindingId,
         PersonaId = row.PersonaId,
         PersonaVersionId = row.PersonaVersionId,
+        GraphId = NormalizeOptionalKey(row.GraphId),
         Model = row.Model,
         AgentName = row.AgentName,
         AgentVersion = row.AgentVersion,
         MaxOutputTokens = row.MaxOutputTokens,
         IsDefault = row.IsDefault,
         CreatedAtUtc = row.CreatedAtUtc
+    };
+
+    private static StorylineFoundryDeploymentRow ToRow(StorylineFoundryDeployment deployment) => new()
+    {
+        DeploymentId = deployment.DeploymentId,
+        PersonaId = deployment.PersonaId,
+        PersonaVersionId = deployment.PersonaVersionId,
+        GraphId = deployment.GraphId,
+        Status = deployment.Status,
+        ContentHash = deployment.ContentHash,
+        Instructions = deployment.Instructions,
+        Model = deployment.Model,
+        AgentName = deployment.AgentName,
+        AgentVersion = deployment.AgentVersion,
+        AgentVersionId = deployment.AgentVersionId,
+        MaxOutputTokens = deployment.MaxOutputTokens,
+        RequestedBy = deployment.RequestedBy,
+        RequestedAtUtc = NormalizeDate(deployment.RequestedAtUtc),
+        StartedAtUtc = deployment.StartedAtUtc,
+        CompletedAtUtc = deployment.CompletedAtUtc,
+        PromotedBy = deployment.PromotedBy,
+        PromotedAtUtc = deployment.PromotedAtUtc,
+        ErrorText = deployment.ErrorText
+    };
+
+    private static StorylineFoundryDeployment FromRow(StorylineFoundryDeploymentRow row) => new()
+    {
+        DeploymentId = row.DeploymentId,
+        PersonaId = row.PersonaId,
+        PersonaVersionId = row.PersonaVersionId,
+        GraphId = row.GraphId,
+        Status = row.Status,
+        ContentHash = row.ContentHash,
+        Instructions = row.Instructions,
+        Model = row.Model,
+        AgentName = row.AgentName,
+        AgentVersion = row.AgentVersion,
+        AgentVersionId = row.AgentVersionId,
+        MaxOutputTokens = row.MaxOutputTokens,
+        RequestedBy = row.RequestedBy,
+        RequestedAtUtc = row.RequestedAtUtc,
+        StartedAtUtc = row.StartedAtUtc,
+        CompletedAtUtc = row.CompletedAtUtc,
+        PromotedBy = row.PromotedBy,
+        PromotedAtUtc = row.PromotedAtUtc,
+        ErrorText = row.ErrorText
     };
 
     private static ConversationBindingRow ToRow(ConversationBinding binding) => new()

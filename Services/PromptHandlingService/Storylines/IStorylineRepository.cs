@@ -48,6 +48,16 @@ public interface IStorylineRepository
 
     Task UpsertAgentBindingAsync(AgentBinding binding, CancellationToken cancellationToken);
     Task<AgentBinding?> GetAgentBindingAsync(string personaId, string personaVersionId, CancellationToken cancellationToken);
+    Task<AgentBinding?> GetAgentBindingAsync(string personaId, string personaVersionId, string graphId, CancellationToken cancellationToken);
+    Task PromoteAgentBindingAsync(AgentBinding binding, CancellationToken cancellationToken);
+
+    Task UpsertFoundryDeploymentAsync(StorylineFoundryDeployment deployment, CancellationToken cancellationToken);
+    Task<StorylineFoundryDeployment?> GetFoundryDeploymentAsync(string deploymentId, CancellationToken cancellationToken);
+    Task<StorylineFoundryDeployment?> GetLatestFoundryDeploymentAsync(
+        string personaId,
+        string personaVersionId,
+        string graphId,
+        CancellationToken cancellationToken);
 
     Task UpsertConversationBindingAsync(ConversationBinding binding, CancellationToken cancellationToken);
     Task<ConversationBinding?> GetConversationBindingAsync(string characterId, string? guestId, CancellationToken cancellationToken);

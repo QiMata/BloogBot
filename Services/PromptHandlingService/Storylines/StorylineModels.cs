@@ -140,6 +140,7 @@ public sealed record AgentBinding
     public string BindingId { get; init; } = string.Empty;
     public string PersonaId { get; init; } = string.Empty;
     public string PersonaVersionId { get; init; } = string.Empty;
+    public string GraphId { get; init; } = string.Empty;
     public string Model { get; init; } = string.Empty;
     public string AgentName { get; init; } = string.Empty;
     public string? AgentVersion { get; init; }
@@ -149,6 +150,38 @@ public sealed record AgentBinding
 
     public PersonaPromptRuntimeBinding ToRuntimeBinding() =>
         new(Model, AgentName, AgentVersion, MaxOutputTokens);
+}
+
+public static class StorylineFoundryDeploymentStatus
+{
+    public const string Queued = "Queued";
+    public const string Running = "Running";
+    public const string Succeeded = "Succeeded";
+    public const string Failed = "Failed";
+    public const string Promoted = "Promoted";
+}
+
+public sealed record StorylineFoundryDeployment
+{
+    public string DeploymentId { get; init; } = string.Empty;
+    public string PersonaId { get; init; } = string.Empty;
+    public string PersonaVersionId { get; init; } = string.Empty;
+    public string GraphId { get; init; } = string.Empty;
+    public string Status { get; init; } = StorylineFoundryDeploymentStatus.Queued;
+    public string ContentHash { get; init; } = string.Empty;
+    public string Instructions { get; init; } = string.Empty;
+    public string Model { get; init; } = string.Empty;
+    public string AgentName { get; init; } = string.Empty;
+    public string? AgentVersion { get; init; }
+    public string? AgentVersionId { get; init; }
+    public int MaxOutputTokens { get; init; } = 512;
+    public string RequestedBy { get; init; } = string.Empty;
+    public DateTime RequestedAtUtc { get; init; } = DateTime.UtcNow;
+    public DateTime? StartedAtUtc { get; init; }
+    public DateTime? CompletedAtUtc { get; init; }
+    public string PromotedBy { get; init; } = string.Empty;
+    public DateTime? PromotedAtUtc { get; init; }
+    public string ErrorText { get; init; } = string.Empty;
 }
 
 public sealed record ConversationBinding
