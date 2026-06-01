@@ -234,5 +234,6 @@ public sealed class IBotTaskContractTests
         public BotRunner.Constants.BotBehaviorConfig Config { get; } = new();
         public IWoWEventHandler EventHandler => null!;
         public void AddDiagnosticMessage(string message) { }
+        public void AddImmediateDiagnostic(string message) { }
     }
 }

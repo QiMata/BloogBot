@@ -67,6 +67,10 @@ public static class ConfigurationParser
             // Test execution
             TestFilter = config["test-filter"] ?? config["TestFilter"],
             CategoryFilter = config["category-filter"] ?? config["CategoryFilter"],
+            StatusFilter = config["status"] ?? config["StatusFilter"],
+            IncludeExperimental = ParseBool(config["include-experimental"], false),
+            IncludeBakeBlocked = ParseBool(config["include-bake-blocked"], false),
+            ListSkipped = ParseBool(config["list-skipped"], false),
             StopOnFirstFailure = ParseBool(config["stop-on-failure"], false),
             ArtifactsRoot = config["artifacts-root"] ?? config["ARTIFACTS_ROOT"] ?? "./TestLogs",
             // --disable-recording takes precedence over --enable-recording
@@ -120,6 +124,10 @@ public static class ConfigurationParser
             // Test execution
             { "--test-filter", "test-filter" },
             { "--category", "category-filter" },
+            { "--status", "status" },
+            { "--include-experimental", "include-experimental" },
+            { "--include-bake-blocked", "include-bake-blocked" },
+            { "--list-skipped", "list-skipped" },
             { "--stop-on-failure", "stop-on-failure" },
             { "--artifacts-root", "artifacts-root" },
             { "--enable-recording", "enable-recording" },

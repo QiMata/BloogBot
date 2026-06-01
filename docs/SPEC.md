@@ -85,6 +85,7 @@ Companion top-level docs:
 | [`Spec/22_WORLD_CYCLES.md`](Spec/22_WORLD_CYCLES.md) | Calendar / weekly reset / holiday events / world-buff windows / world-boss respawn cadence |
 | [`Spec/23_ONDEMAND_API.md`](Spec/23_ONDEMAND_API.md) | OnDemand request DSL, response shapes, rejection codes, Shodan whisper parser |
 | [`Spec/24_BEHAVIORAL_VARIATION.md`](Spec/24_BEHAVIORAL_VARIATION.md) | `PersonalityProfile` per-bot knobs for indistinguishability (timing / route / economy / social) |
+| [`Spec/25_AUTHORITY.md`](Spec/25_AUTHORITY.md) | Authority model (client-authoritative / server-validated) + per-action-class table |
 
 ## Implementation plan (Plan/)
 

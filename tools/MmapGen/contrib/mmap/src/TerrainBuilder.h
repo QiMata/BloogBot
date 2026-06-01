@@ -20,6 +20,7 @@
 #define _MMAP_TERRAIN_BUILDER_H
 
 #include <set>
+#include <string>
 #include <vector>
 
 #include "MMapCommon.h"
@@ -82,6 +83,14 @@ namespace MMAP
         MeshTriangleSource source;
     };
 
+    struct MeshTriangleDetailRange
+    {
+        int first;
+        int last;
+        MeshTriangleSource source;
+        std::string label;
+    };
+
     struct MeshData
     {
         G3D::Array<float> solidVerts;
@@ -140,9 +149,27 @@ namespace MMAP
             AddSourceTriangleRange(first, last, MeshTriangleSource::GameObject);
         }
 
+        void AddDetailTriangleRange(int first, int last, MeshTriangleSource source, const std::string& label)
+        {
+            if (last > first)
+                detailTriangleRanges.push_back({ first, last, source, label });
+        }
+
+        const char* DetailLabelForTriangle(int tri) const
+        {
+            for (const auto& range : detailTriangleRanges)
+            {
+                if (tri >= range.first && tri < range.last)
+                    return range.label.c_str();
+            }
+
+            return "";
+        }
+
         int vmapFirstTriangle = 0;
         int vmapLastTriangle = 0;
         std::vector<MeshTriangleSourceRange> sourceTriangleRanges;
+        std::vector<MeshTriangleDetailRange> detailTriangleRanges;
     };
 
     class TerrainBuilder

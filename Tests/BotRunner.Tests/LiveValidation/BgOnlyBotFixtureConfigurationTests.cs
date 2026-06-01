@@ -76,6 +76,54 @@ public class BgOnlyBotFixtureConfigurationTests
         Assert.Equal("Shodan", fixture.ShodanCharacterName);
     }
 
+    [Fact]
+    public void LongPathingShodanForegroundSettings_SeedsShodanAsForegroundAccount()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services",
+            "WoWStateManager",
+            "Settings",
+            "Configs",
+            "LongPathing.ShodanForeground.config.json");
+
+        var fixture = new TestableBgOnlyFixture();
+        fixture.ApplySettingsPath(settingsPath);
+        fixture.SeedExpectedAccounts();
+
+        Assert.Equal("SHODAN", fixture.FgAccountName);
+        Assert.Equal("LPATHBG1", fixture.BgAccountName);
+        Assert.Equal("SHODAN", fixture.ShodanAccountName);
+        Assert.Equal("Shodan", fixture.ShodanExpectedCharacterName);
+    }
+
+    [Fact]
+    public void LongPathingShodanForegroundSettings_IdentifiesShodanAsForegroundAndDirector()
+    {
+        var settingsPath = ResolveRepoPath(
+            "Services",
+            "WoWStateManager",
+            "Settings",
+            "Configs",
+            "LongPathing.ShodanForeground.config.json");
+
+        var fixture = new TestableBgOnlyFixture();
+        fixture.ApplySettingsPath(settingsPath);
+        fixture.SeedExpectedAccounts();
+
+        fixture.IdentifyBots(
+            new Communication.WoWActivitySnapshot { AccountName = "SHODAN", CharacterName = "Shodan" },
+            new Communication.WoWActivitySnapshot { AccountName = "LPATHBG1", CharacterName = "Kargganshwte" });
+
+        Assert.Equal("SHODAN", fixture.FgAccountName);
+        Assert.Equal("Shodan", fixture.FgCharacterName);
+        Assert.Equal("SHODAN", fixture.ShodanAccountName);
+        Assert.Equal("Shodan", fixture.ShodanCharacterName);
+        Assert.Equal("LPATHBG1", fixture.BgAccountName);
+        Assert.Equal("Kargganshwte", fixture.BgCharacterName);
+        Assert.NotNull(fixture.ForegroundBot);
+        Assert.NotNull(fixture.ShodanBot);
+    }
+
     private static string ResolveRepoPath(params string[] segments)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

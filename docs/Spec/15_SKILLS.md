@@ -22,6 +22,31 @@ Two registries:
    (referenced from `~/.claude/skills/` on the workstation) — carry
    game-agnostic patterns reused across all game repos.
 
+### Monorepo shared skills INSTALLED TODAY — the 12 `mmo-*` (use these now)
+
+> **Read this first.** The "Required new skills (Phase 10 parallel track)" table below is an *aspirational
+> 18-skill backlog* + an ML auto-bootstrap design. It is NOT the inventory that exists on disk. The skills an
+> agent can actually invoke today are the **12 monorepo-shared `mmo-*` skills** at `e:/repos/.claude/skills/`
+> (also installed in `~/.claude/skills/` and `~/.codex/skills/`). They are mapped to every AOTA element + PCE
+> component by the **skill-routing table in [`../../../docs/AOTA_AUTHORING_STANDARD.md`](../../../docs/AOTA_AUTHORING_STANDARD.md) §10** — that table is the canonical "which skill for which work" reference.
+
+| Skill | Scope / when to use |
+|---|---|
+| `mmo-fg-client-re` | FG memory structures, object managers, input paths, UI/menu flows, packet capture, action invocation. **Resolves `<RE-NEEDED>` Action signals + verification offsets.** |
+| `mmo-bg-client-parity` | Deterministic BG client (`MovementController`/`PhysicsEngine`/`ObjectManager`/`EventEmitter`/`NetClient`) + FG/BG parity. |
+| `mmo-botrunner-tasks` | `IBotTask` / behavior-tree execution — every Task family (Combat/NPC/Travel/Recovery/Inventory/Economy/Social/…). |
+| `mmo-protobuf-contracts` | Wire contracts: `ObjectiveMessage`/`ObjectiveType`/`ActivitySnapshot`, framing, delta snapshots. |
+| `mmo-decision-activities` | DecisionEngine + On-Demand Activities + utility scoring + objective catalogs. |
+| `mmo-pathfinding` | Recast/Detour navmesh, MmapGen bake iteration, route queries, off-mesh links. |
+| `mmo-scene-data-service` | Local collision slices / 3×3 scene data for BG physics. |
+| `mmo-physics-pathing-probe` | Bake-vs-runtime physics gap localization (bot stalls on a Detour-walkable path). |
+| `mmo-movement-diagnostics` | Run-movement RE via screenshot+snapshot timeline (capsule, slope/step-up, stalls). |
+| `mmo-statemanager-orchestration` | Launch config, process monitoring, Objective dispatch, ActivitySnapshot plumbing, hot reload. |
+| `mmo-live-fixtures` | Live test fixtures, snapshot polling, fail-fast, screenshot artifacts (R3/R11/R16). |
+| `mmo-repo-hygiene` | Cleanup, artifact classification, AGENTS/CLAUDE curation (R12). |
+
+The 18-skill table below remains the longer-term packaging backlog; do not treat its names as installed skills.
+
 Each `SKILL.md` follows the structure:
 
 ```markdown

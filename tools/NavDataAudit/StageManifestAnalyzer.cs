@@ -27,8 +27,16 @@ public sealed record AnchorStageSummary(
     int? FinalWinnerComponentPolyCount,
     bool? FinalWinnerSupportCandidate,
     bool? FinalWinnerCompetingLower,
+    bool? FinalWinnerRouteableToAnyTarget,
     int? FinalSupportComponentCount,
     int? FinalLowerComponentCount,
+    int? FinalResolvedRouteTargetCount,
+    int? FinalRouteableSupportCandidateCount,
+    int? FinalRouteableSupportComponentCount,
+    bool? SourceFootprintContainsAnchorProjection,
+    bool? SourceFootprintContainsAnchorCell,
+    bool? RasterizeSupportContainsAnchorCell,
+    string? EarlyCoverageFinding,
     bool CoverageComplete);
 
 public static class StageManifestAnalyzer
@@ -143,8 +151,42 @@ public static class StageManifestAnalyzer
         int? finalWinnerComponentPolyCount = null;
         bool? finalWinnerSupport = null;
         bool? finalWinnerLower = null;
+        bool? finalWinnerRouteable = null;
         int? finalSupportComponentCount = null;
         int? finalLowerComponentCount = null;
+        int? finalResolvedRouteTargetCount = null;
+        int? finalRouteableSupportCandidateCount = null;
+        int? finalRouteableSupportComponentCount = null;
+        bool? sourceFootprintContainsAnchorProjection = null;
+        bool? sourceFootprintContainsAnchorCell = null;
+        bool? rasterizeSupportContainsAnchorCell = null;
+        string? earlyCoverageFinding = null;
+
+        if (stagesByName.TryGetValue("sourceFootprint", out var sourceFootprintStage))
+        {
+            sourceFootprintContainsAnchorProjection = GetBool(sourceFootprintStage, "supportContainsAnchorProjection");
+            sourceFootprintContainsAnchorCell = GetBool(sourceFootprintStage, "supportContainsAnchorCell");
+        }
+
+        if (stagesByName.TryGetValue("rasterize", out var rasterizeStage))
+            rasterizeSupportContainsAnchorCell = GetBool(rasterizeStage, "supportContainsAnchorCell");
+
+        if (sourceFootprintContainsAnchorProjection.HasValue ||
+            sourceFootprintContainsAnchorCell.HasValue ||
+            rasterizeSupportContainsAnchorCell.HasValue)
+        {
+            var sourceProjection = sourceFootprintContainsAnchorProjection ?? false;
+            var sourceCell = sourceFootprintContainsAnchorCell ?? false;
+            var rasterCell = rasterizeSupportContainsAnchorCell ?? false;
+
+            if (!sourceProjection && !sourceCell)
+                earlyCoverageFinding = rasterCell ? "raster_only_anchor_cell_overlap" : "source_footprint_or_seam_hole";
+            else if (!rasterCell)
+                earlyCoverageFinding = "raster_anchor_cell_coverage_hole";
+            else
+                earlyCoverageFinding = "early_support_overlap_present";
+        }
+
         if (stagesByName.TryGetValue("finalDetour", out var finalStage) &&
             finalStage.TryGetProperty("finalWinner", out var finalWinner))
         {
@@ -153,10 +195,14 @@ public static class StageManifestAnalyzer
             finalWinnerComponentPolyCount = GetInt(finalWinner, "componentPolyCount");
             finalWinnerSupport = GetBool(finalWinner, "supportCandidate");
             finalWinnerLower = GetBool(finalWinner, "competingLower");
+            finalWinnerRouteable = GetBool(finalWinner, "routeableToAnyTarget");
             var finalSupportCount = GetInt(finalStage, "supportCandidateCount") ?? 0;
             var finalSupportBandCount = GetInt(finalStage, "supportBandCandidateCount") ?? finalSupportCount;
             finalSupportComponentCount = GetInt(finalStage, "supportComponentCount");
             finalLowerComponentCount = GetInt(finalStage, "lowerComponentCount");
+            finalResolvedRouteTargetCount = GetInt(finalStage, "resolvedRouteTargetCount");
+            finalRouteableSupportCandidateCount = GetInt(finalStage, "routeableSupportCandidateCount");
+            finalRouteableSupportComponentCount = GetInt(finalStage, "routeableSupportComponentCount");
 
             if (firstBadStage is null &&
                 (finalWinnerLower ?? false) &&
@@ -164,6 +210,15 @@ public static class StageManifestAnalyzer
             {
                 firstBadStage = "finalDetour";
                 firstBadReason = "lower_competitor_dominant";
+            }
+            else if (firstBadStage is null &&
+                finalResolvedRouteTargetCount.GetValueOrDefault() > 0 &&
+                (finalWinnerSupport ?? false) &&
+                !(finalWinnerRouteable ?? false) &&
+                finalRouteableSupportCandidateCount.GetValueOrDefault() > 0)
+            {
+                firstBadStage = "finalDetour";
+                firstBadReason = "winner_component_trapped";
             }
             else if (firstBadStage is null &&
                 !(finalWinnerSupport ?? false) &&
@@ -183,7 +238,7 @@ public static class StageManifestAnalyzer
             WowY: wowY,
             WowZ: wowZ,
             SourceSupportFound: sourceSupportFound,
-            PresentStageCount: stagesByName.Count,
+            PresentStageCount: ExpectedStages.Count(stagesByName.ContainsKey),
             MissingStages: missingStages,
             FirstBadStage: firstBadStage,
             FirstBadReason: firstBadReason,
@@ -192,8 +247,16 @@ public static class StageManifestAnalyzer
             FinalWinnerComponentPolyCount: finalWinnerComponentPolyCount,
             FinalWinnerSupportCandidate: finalWinnerSupport,
             FinalWinnerCompetingLower: finalWinnerLower,
+            FinalWinnerRouteableToAnyTarget: finalWinnerRouteable,
             FinalSupportComponentCount: finalSupportComponentCount,
             FinalLowerComponentCount: finalLowerComponentCount,
+            FinalResolvedRouteTargetCount: finalResolvedRouteTargetCount,
+            FinalRouteableSupportCandidateCount: finalRouteableSupportCandidateCount,
+            FinalRouteableSupportComponentCount: finalRouteableSupportComponentCount,
+            SourceFootprintContainsAnchorProjection: sourceFootprintContainsAnchorProjection,
+            SourceFootprintContainsAnchorCell: sourceFootprintContainsAnchorCell,
+            RasterizeSupportContainsAnchorCell: rasterizeSupportContainsAnchorCell,
+            EarlyCoverageFinding: earlyCoverageFinding,
             CoverageComplete: missingStages.Count == 0);
     }
 

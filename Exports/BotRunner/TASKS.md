@@ -29,6 +29,10 @@
 - [x] `CharacterAction.TravelTo` now upserts a persistent `TravelTask` for
   cross-map targets instead of returning `TravelTo cross-map not yet
   implemented`; deterministic dispatch coverage proves the task is queued.
+- [x] Same-map `CharacterAction.TravelTo` now also upserts a persistent
+  `TravelTask` for non-arrived long-pathing targets, so direct proof routes
+  like Grunt-base -> literal Frezza emit the normal `TRAVEL_*` planning and
+  waypoint diagnostics instead of falling back to `GoToTask route=none`.
 - [x] `TransportData` now maps the live Orgrimmar/Undercity zeppelin to
   entry `164871` and keeps the Grom'gol zeppelin entries separate.
 - [x] Long-travel navigation uses vertical-aware waypoint arrival and now
@@ -56,6 +60,9 @@
     reaches the Orgrimmar zeppelin deck approach near
     `(1330.7,-4653.0,53.5)` without recurring stalls near `(1546,-4430)` or
     `(1508,-4420)`.
+  - [x] Focused Grunt-base -> Frezza deck climb now reaches the zeppelin
+    platform without leaving the tower route or falling into stalled
+    lower-layer replans.
   - [ ] Investigate the remaining Orgrimmar -> Undercity zeppelin
     boarding/transfer evidence gap. Screenshot evidence has moved the
     Orgrimmar/Undercity dock anchors to the gangplank/deck positions, but the
@@ -83,6 +90,102 @@ Known remaining work in this owner: `0` items.
 4. `powershell -ExecutionPolicy Bypass -File .\\run-tests.ps1 -CleanupRepoScopedOnly`
 
 ## Session Handoff
+### 2026-05-29 (DeckLip tower route green; dense deck breadcrumbs require surface commit)
+- Pass result: focused `DeckLipClimbFromGruntToFrezza` live validation is
+  green. The old exterior-hill route is gone, the old exhausted-prefix
+  `waypoint=null` gap remains fixed, and the final live run reached the
+  zeppelin platform without `stalled_near_waypoint` replans after the initial
+  path.
+- Last delta:
+  - MmapGen tile `1:40,29` now preserves explicit physics-step bridge source
+    ribbons through mixed-wall/final Detour culls, so the lower tower entrance
+    route remains connected inside the `Orczeppelinhouse.wmo` bounds instead
+    of preferring the exterior hill.
+  - `NavigationPath` now requires close body-sized commit for dense long-travel
+    waypoints whenever the bot is vertically offset from that waypoint surface.
+    This covers both turning deck corners and straight deck breadcrumbs, giving
+    the Tauren capsule elbow room instead of auto-completing upper-deck points
+    while still below the platform.
+  - Added deterministic regressions for the live upper-deck edge and straight
+    breadcrumb skip shapes.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelDoesNotSkipUpperDeckEdgeWaypointFromLowerLayer|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelDoesNotSkipStraightUpperDeckBreadcrumbFromLowerLayer|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsDenseDetourCornerUntilActuallyClose|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelBodySizedAcceptanceAdvancesThroughExecutableDenseWiggles|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelSkipsCollinearDenseBreadcrumbsUntilNextCommitPoint|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelRequiresCommitBeforeDenseReversal|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsFirstCompactUphillLipSupportStepWhenPreviousContextComesFromPathStart|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelPathExhaustedWithinCooldown_RecalculatesImmediatelyAndAdvancesPastStartBreadcrumb|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_StalledLongTravelPromotesAlongExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_ShortRoutePathExhaustedWithinCooldown_RecalculatesImmediately" --logger "console;verbosity=minimal"` -> `passed (12/12)`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests" --logger "console;verbosity=minimal" -- RunConfiguration.TestSessionTimeout=300000` -> `passed (4/4)`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests|FullyQualifiedName~IsOffMeshConnectionAtCoordTests|FullyQualifiedName~LongPathingRouteTests.OrgrimmarToUndercityZeppelin_BoardingIsOffMeshLink|FullyQualifiedName~LongPathingRouteTests.OrgrimmarDeckEdgeToBoardingPosition_PolygonListIncludesOffMeshConnection|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToBoardingPosition_IntraTilePolygonListIncludesOffMeshConnection" --logger "console;verbosity=minimal" -- RunConfiguration.TestSessionTimeout=300000` -> `passed (11/11)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly` -> no repo-scoped processes to stop before both live reruns.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='2'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=normal" -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (1/1)` twice; final clean run completed the live test in `54s`.
+- Evidence:
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\02-climb-poll-00050-LPATHFG1-20260529T185315Z.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\02-climb-poll-00050-LPATHFG1-20260529T185315Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\03-final-LPATHFG1-20260529T185318Z.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToFrezza\03-final-LPATHFG1-20260529T185318Z.json`
+- Files changed:
+  - `Exports/BotRunner/Movement/NavigationPath.cs`
+  - `Tests/BotRunner.Tests/Movement/NavigationPathTests.cs`
+  - `tools/MmapGen/config.json`
+  - `tools/MmapGen/contrib/mmap/src/TileWorker.cpp`
+  - `tools/MmapGen/offmesh.txt`
+  - `Exports/BotRunner/TASKS.md`
+- Next command: `git status --short`
+
+### 2026-05-26 (same-map `TravelTo` now enters `TravelTask`; live red moved from spawn-startup to the later tower-approach stall)
+- Pass result: built on top of commit `b3c107ba` (`Block false same-map TravelTo arrival below Frezza`). Same-map `TravelTo` no longer routes the literal Frezza proof through `GoToTask`; the live run now enters `TravelTask`, emits `TRAVEL_*` diagnostics immediately, reaches many waypoints from the Grunt-base spawn, and fails later at the tower-approach wall/cliff stall.
+- Last delta:
+  - Same-map `CharacterAction.TravelTo` now keeps the existing `15y` / `4y` arrival gate but otherwise upserts `TravelTask` instead of `GoToTask`.
+  - Added immediate `[TRAVEL_DISPATCH]` diagnostics for both same-map and cross-map `TravelTo` staging.
+  - Updated deterministic dispatch coverage so same-map `TravelTo` expects `TravelTask` ownership, repeated dispatch does not grow the task stack, and the literal-Frezza slice emits `[TRAVEL_PLAN]`, `[TRAVEL_LEG]`, `[TRAVEL_EXEC] walk-nav`, and `[NAV_EXEC] try-enter route=LongTravel`.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_|FullyQualifiedName~Update_SameMapLiteralFrezzaSlice_EmitsTravelPlanAndWalkNavDiagnostics|FullyQualifiedName~Update_GruntBaseDeckLipSlice_EmitsImmediatePlanAndWalkNavBoundaries" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (7/7)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 41 s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.log`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.log`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Expected-bot-to-walk-from-the-OG-tower-base-Grunt-spawn-to-literal-Frezza-1331.1-LPATHFG1-client-36448-win0-20260526_211122.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\03-final-LPATHFG1-20260527T011119Z.json`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The startup gap is closed: `botrunner_LPATHFG1.diag.log` now shows `[TRAVEL_DISPATCH]`, `[TRAVEL_PLAN] legs=1 Walk`, `[TRAVEL_LEG] start index=0 type=Walk`, and many `[TRAVEL_WAYPOINT_REACHED]` events from the Grunt-base spawn.
+  - The failure moved back to the later tower approach. The live assertion ends at `Final position: (1353.1,-4525.3,34.6) map=1 dist2D=126.1y`, and the failure screenshot shows the bot pressed into a wall/cliff face instead of stalling at spawn.
+  - The next credible gap is route/contract behavior, not startup: the same run logs smoothed `raw_detour` requests with `blockedReason=interior_projection:98`, but later alternate unsmoothed responses still report `blockedReason=none` while producing a short route with a huge jump toward `(1320.1,-4653.2,53.7)`.
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceCombatDispatchTests.cs`
+  - `Tests/BotRunner.Tests/Travel/TravelTaskTests.cs`
+- Next command: `rg -n "blockedReason|raw_detour|smoothPath|GetPathResult|IsPathUsable|AdvanceReachableWaypoints" E:\repos\Westworld of Warcraft\Services\PathfindingService E:\repos\Westworld of Warcraft\Exports\BotRunner\Movement E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests`
+
+### 2026-05-26 (same-map `TravelTo` no longer false-completes on Frezza's lower lane; live red moved to spawn-geometry creep)
+- Pass result: built on top of commit `870a78a0` (`Document literal Frezza long-pathing proof`). Same-map `TravelTo` no longer accepts the literal Frezza objective as "arrived" from the lower Grunt-base lane just because XY fell inside the legacy 15y radius. The focused live proof now stays in `GoToTask`, moves a few yards for real, and fails on a new wall-collision creep against nearby spawn geometry instead of popping `GoToTask arrived`.
+- Last delta:
+  - Added an opt-in vertical-arrival gate to `GoToTask` and `UpsertGoToTask(...)`.
+  - Same-map `CharacterAction.TravelTo` now keeps the legacy 15y XY arrival radius but requires `|dz| <= 4y` before the action auto-completes or its persistent `GoToTask` can pop `arrived`.
+  - Added deterministic coverage for the exact literal-Frezza false-arrival shape.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_SameMap_UpsertsPersistentGoToTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_AlreadyWithinLegacyArrivalTolerance_StopsWithoutTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_WithinHorizontalToleranceButWrongVerticalLayer_UpsertsPersistentGoToTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask|FullyQualifiedName~BotRunnerServiceGoToDispatchTests|FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~Update_RequireVerticalArrival_DoesNotPopTaskWhenOnlyWithinHorizontalTolerance" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_same_map_travelto_vertical_arrival_20260526_fix2.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (12/12)`.
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526_vertical_arrival_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`28s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_vertical_arrival_20260526_fix2.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_vertical_arrival_fix1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-wall-collision-creep-before-OG-zeppelin-tower-ramp-climb-from-base-t-LPATHFG1-client-20676-win0-20260526_204920.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+- Practical read:
+  - The prior false completion is gone: the new live snapshot no longer contains `[TASK] GoToTask pop reason=arrived`.
+  - The live proof now stays active long enough to move from `(1332.1,-4634.5,23.9)` to `(1329.7,-4635.0,23.8)` before stalling with forward intent held (`flags=0x1`, `currentSpeed=0.00`).
+  - BotRunner still emits only `[GOTO_ROUTE] plan=1 route=none drops=0 cliffs=0 vertical=0`; no `TRAVEL_*` diagnostics appear because same-map `TravelTo` still routes through `GoToTask`, not `TravelTask`.
+  - The local service continues to prove the literal Frezza query itself is real:
+    - `start=(1332.8,-4633.4,24.0) end=(1331.1,-4649.5,53.6)`
+    - `pathLen=144 blockedReason=interior_projection:98`
+  - The failure screenshot shows the FG target jammed against nearby Grunt-base tent/prop geometry at spawn, not climbing the ramp.
+- Files changed:
+  - `Exports/BotRunner/ActionDispatcher.cs`
+  - `Exports/BotRunner/Tasks/GoToTask.cs`
+  - `Tests/BotRunner.Tests/BotRunnerServiceCombatDispatchTests.cs`
+  - `Tests/BotRunner.Tests/GoToTaskFallbackTests.cs`
+- Next command: `rg -n "CharacterAction.TravelTo|UpsertTravelTask|GoToTask|NavigationRoutePolicy.Standard|NavigationRoutePolicy.LongTravel" E:\repos\Westworld of Warcraft\Exports\BotRunner E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests`
+
 ### 2026-05-04 (stopped after screenshot-anchor cleanup)
 - Pass result: stopped before another live rerun; screenshot anchors are
   applied and BotRunner deterministic transport gates are green.

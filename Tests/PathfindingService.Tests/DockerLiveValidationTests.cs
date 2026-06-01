@@ -100,29 +100,22 @@ public sealed class DockerLiveValidationTests
         Assert.True(sw.Elapsed.TotalSeconds < 5, $"first warm query took {sw.Elapsed.TotalSeconds:F1}s; expected <5s with .scene loaded");
     }
 
-    [SkippableTheory]
-    [InlineData("tower_underpass", 1357.20f, -4516.20f, 32.00f)]
-    [InlineData("bridge_side", 1337.20f, -4654.80f, 49.80f)]
-    [InlineData("tower_base_live_vertical", 1342.40f, -4652.10f, 24.60f)]
-    [InlineData("exterior_steep_incline", 1381.00f, -4380.90f, 26.00f)]
-    public async Task DockerPathfinding_OgZepClosureRoute_TraversesOffMesh(
-        string label, float startX, float startY, float startZ)
+    [SkippableFact]
+    public async Task DockerPathfinding_OgZepGruntBaseToBoarding_StaysInsideTowerFootprint()
     {
-        // PFS-OVERHAUL-006 loop-24 A5.5 + A5.6 + A5.7 close-out validation.
-        // For each of the 4 routes whose CriticalWalkLegs tests closed
-        // (19/4 -> 23/0), confirm the LIVE wwow-pathfinding docker
-        // container produces a path that uses the deployed off-mesh
-        // connection (single-corner-pair teleport hop), proving the new
-        // off-mesh entries are live, not just bake-time artifacts.
         Skip.IfNot(Environment.GetEnvironmentVariable("WWOW_RUN_DOCKER_VALIDATION") == "1", "WWOW_RUN_DOCKER_VALIDATION not set");
+
+        const float orcZeppelinHouseMaxY = -4618.9623f;
+        const float exteriorHillMarginY = 16.0f;
+        const float lowerTowerLayerCeilingZ = 45.0f;
 
         var request = new PathfindingRequest
         {
             Path = new CalculatePathRequest
             {
                 MapId = 1,
-                Start = new Game.Position { X = startX, Y = startY, Z = startZ },
-                End = new Game.Position { X = 1320.14f, Y = -4653.16f, Z = 53.89f },
+                Start = new Game.Position { X = 1332.76f, Y = -4633.40f, Z = 24.0783f },
+                End = new Game.Position { X = 1320.142944f, Y = -4653.158691f, Z = 53.891945f },
                 Straight = false,
             }
         };
@@ -134,28 +127,31 @@ public sealed class DockerLiveValidationTests
         Assert.Equal(PathfindingResponse.PayloadOneofCase.Path, response.PayloadCase);
         Assert.NotEmpty(response.Path.Corners);
 
-        // Find the largest single-segment teleport jump in the result —
-        // an off-mesh teleport produces a single ~20-25y horizontal hop
-        // between consecutive corners that's far above the smooth-path's
-        // typical 0.5y-2y step. If the path took the off-mesh shortcut,
-        // we'll see a >= 15y jump somewhere.
-        float maxSegmentJump = 0f;
-        for (int i = 0; i < response.Path.Corners.Count - 1; i++)
+        // Lower-layer route corners must stay inside the zeppelin tower footprint.
+        var exteriorHillCorners = new List<string>();
+        for (int i = 0; i < response.Path.Corners.Count; i++)
         {
-            var c0 = response.Path.Corners[i];
-            var c1 = response.Path.Corners[i + 1];
-            var dx = c1.X - c0.X;
-            var dy = c1.Y - c0.Y;
-            var horizontal = MathF.Sqrt(dx * dx + dy * dy);
-            if (horizontal > maxSegmentJump) maxSegmentJump = horizontal;
+            var corner = response.Path.Corners[i];
+            if (corner.Y <= orcZeppelinHouseMaxY + exteriorHillMarginY ||
+                corner.Z >= lowerTowerLayerCeilingZ)
+            {
+                continue;
+            }
+
+            exteriorHillCorners.Add($"[{i}] ({corner.X:F1},{corner.Y:F1},{corner.Z:F1})");
         }
 
+        var final = response.Path.Corners[^1];
+        var finalDz = MathF.Abs(final.Z - request.Path.End.Z);
         Console.Error.WriteLine(
-            $"[DOCKER-VALIDATE] og-zep-route label={label} corners={response.Path.Corners.Count} " +
+            $"[DOCKER-VALIDATE] og-zep-grunt-base-boarding corners={response.Path.Corners.Count} " +
             $"elapsed={sw.ElapsedMilliseconds}ms result={response.Path.Result} " +
-            $"maxSegmentJump={maxSegmentJump:F1}y");
+            $"final=({final.X:F1},{final.Y:F1},{final.Z:F1}) finalDz={finalDz:F1} " +
+            $"exteriorHillCornerCount={exteriorHillCorners.Count}");
 
-        Assert.True(sw.Elapsed.TotalSeconds < 10, $"{label} response took {sw.Elapsed.TotalSeconds:F1}s; expected <10s");
+        Assert.Empty(exteriorHillCorners);
+        Assert.True(final.Z >= 50.0f && finalDz <= 2.0f, $"Expected OG zep route to finish on the upper tower layer; got final=({final.X:F1},{final.Y:F1},{final.Z:F1})");
+        Assert.True(sw.Elapsed.TotalSeconds < 10, $"OG zep gangplank response took {sw.Elapsed.TotalSeconds:F1}s; expected <10s");
     }
 
     private static async Task<PathfindingResponse> SendRequestAsync(PathfindingRequest request)

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Pathfinding;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
@@ -165,7 +166,12 @@ public class TravelTask : BotTask, IBotTask
 
         if (!_initialized)
         {
+            EmitImmediateTravelDiagnostic(
+                $"[TRAVEL_EXEC] init enter map={player.MapId} pos={FormatCompactPosition(player.Position)} " +
+                $"targetMap={_targetMapId} target={FormatCompactPosition(_targetPosition)}");
             PlanRoute();
+            EmitImmediateTravelDiagnostic(
+                $"[TRAVEL_EXEC] init exit routeLegs={_route?.Count ?? 0} currentLeg={_currentLegIndex}");
             _initialized = true;
         }
 
@@ -225,6 +231,9 @@ public class TravelTask : BotTask, IBotTask
 
         try
         {
+            EmitImmediateTravelDiagnostic(
+                $"[TRAVEL_EXEC] plan-route enter fromMap={player.MapId} from={FormatCompactPosition(player.Position)} " +
+                $"toMap={_targetMapId} to={FormatCompactPosition(_targetPosition)}");
             var router = new CrossMapRouter();
             _route = router.PlanRoute(
                 player.MapId,
@@ -254,9 +263,14 @@ public class TravelTask : BotTask, IBotTask
                     _targetPosition.Y);
                 EmitTravelDiagnostic($"[TRAVEL_PLAN] legs={_route.Count} {DescribeRoute(_route)}");
             }
+
+            EmitImmediateTravelDiagnostic(
+                $"[TRAVEL_EXEC] plan-route exit legs={_route?.Count ?? 0} currentLeg={_currentLegIndex}");
         }
         catch (Exception ex)
         {
+            EmitImmediateTravelDiagnostic(
+                $"[TRAVEL_EXEC] plan-route error type={ex.GetType().Name} message={ex.Message}");
             Logger.LogError(ex, "[TravelTask] Route planning failed");
             _route = null;
         }
@@ -284,10 +298,18 @@ public class TravelTask : BotTask, IBotTask
             return;
         }
 
+        EmitImmediateTravelDiagnostic(
+            $"[TRAVEL_EXEC] walk-nav enter leg={_currentLegIndex} map={player.MapId} " +
+            $"player={FormatCompactPosition(player.Position)} target={FormatCompactPosition(leg.End)}");
+        var navigationStopwatch = Stopwatch.StartNew();
         var navigated = TryNavigateToward(
             leg.End,
             allowDirectFallback: false,
             routePolicy: NavigationRoutePolicy.LongTravel);
+        navigationStopwatch.Stop();
+        EmitImmediateTravelDiagnostic(
+            $"[TRAVEL_EXEC] walk-nav exit leg={_currentLegIndex} nav={navigated} " +
+            $"elapsedMs={navigationStopwatch.ElapsedMilliseconds}");
         EmitWalkNavigationTrace(player, leg, navigated, now);
         ObserveWalkLegProgress(player, leg, navigated, now);
     }
@@ -973,6 +995,11 @@ public class TravelTask : BotTask, IBotTask
     {
         BotContext.AddDiagnosticMessage(message);
         BotRunnerService.DiagLog(message);
+    }
+
+    private void EmitImmediateTravelDiagnostic(string message)
+    {
+        BotContext.AddImmediateDiagnostic(message);
     }
 
     private void ResetWalkTraceMarkers()

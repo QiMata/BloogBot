@@ -1999,6 +1999,214 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void GetNextWaypoint_LongTravelPathExhaustedWithinCooldown_RecalculatesImmediatelyAndAdvancesPastStartBreadcrumb()
+    {
+        long tick = 0;
+        var requestedStarts = new List<Position>();
+        var destination = new Position(100f, 0f, 10f);
+        var exhaustedPrefixEnd = new Position(8f, 0f, 0f);
+        var current = new Position(8.1f, 0f, 0f);
+        var currentBreadcrumb = new Position(8.1f, 0f, 0f);
+        var climbSupport = new Position(8.6f, 0f, 0.8f);
+        var climbFollowUp = new Position(12f, 0f, 2f);
+        var pathfindingCalls = 0;
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, _, _) =>
+            {
+                pathfindingCalls++;
+                requestedStarts.Add(start);
+                return pathfindingCalls == 1
+                    ? [exhaustedPrefixEnd]
+                    : [currentBreadcrumb, climbSupport, climbFollowUp];
+            },
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => tick,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            tightenDenseWaypointAcceptance: true);
+
+        var firstWaypoint = navPath.GetNextWaypoint(
+            new Position(0f, 0f, 0f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        tick = 500;
+
+        var replannedWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(firstWaypoint);
+        Assert.NotNull(replannedWaypoint);
+        Assert.Equal(2, pathfindingCalls);
+        Assert.Equal(2, requestedStarts.Count);
+        Assert.Equal(2, trace.PlanVersion);
+        Assert.Equal(NavigationTraceReason.PathExhaustedStillFar, trace.LastReplanReason);
+        Assert.Equal("waypoint", trace.LastResolution);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+        Assert.True(requestedStarts[1].DistanceTo2D(current) < 0.05f);
+        Assert.True(replannedWaypoint!.DistanceTo2D(climbSupport) < 0.05f);
+        Assert.True(MathF.Abs(replannedWaypoint.Z - climbSupport.Z) < 0.05f);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(climbSupport) < 0.05f);
+        Assert.True(MathF.Abs(trace.ActiveWaypoint.Z - climbSupport.Z) < 0.05f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelPathExhaustedTowerTrapReplanKeepsFirstUphillSupportUntilReached()
+    {
+        long tick = 0;
+        var requestedStarts = new List<Position>();
+        var destination = new Position(1320.1f, -4653.2f, 53.9f);
+        var exhaustedPrefixEnd = new Position(1353.1f, -4525.5f, 34.7f);
+        var current = new Position(1353.1f, -4525.5f, 34.7f);
+        var firstSupport = new Position(1352.2f, -4527.0f, 35.7f);
+        var deeperWallSupport = new Position(1350.3f, -4527.0f, 35.9f);
+        var followUp = new Position(1348.2f, -4526.7f, 35.8f);
+        var pathfindingCalls = 0;
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, start, _, _) =>
+            {
+                pathfindingCalls++;
+                requestedStarts.Add(start);
+                return pathfindingCalls == 1
+                    ? [exhaustedPrefixEnd]
+                    : [firstSupport, deeperWallSupport, followUp, destination];
+            },
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => tick,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var firstWaypoint = navPath.GetNextWaypoint(
+            new Position(1348f, -4521f, 33f),
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        tick = 500;
+
+        var replannedWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        tick = 550;
+
+        var stillHeldWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(firstWaypoint);
+        Assert.NotNull(replannedWaypoint);
+        Assert.NotNull(stillHeldWaypoint);
+        Assert.Equal(2, pathfindingCalls);
+        Assert.Equal(2, requestedStarts.Count);
+        Assert.True(requestedStarts[1].DistanceTo2D(current) < 0.05f);
+        Assert.Equal(2, trace.PlanVersion);
+        Assert.Equal(NavigationTraceReason.PathExhaustedStillFar, trace.LastReplanReason);
+        Assert.Equal("waypoint", trace.LastResolution);
+        Assert.Equal(0, trace.CurrentWaypointIndex);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(replannedWaypoint!.DistanceTo2D(firstSupport) < 0.05f);
+        Assert.True(stillHeldWaypoint!.DistanceTo2D(firstSupport) < 0.05f);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(firstSupport) < 0.05f);
+        Assert.True(MathF.Abs(trace.ActiveWaypoint.Z - firstSupport.Z) < 0.05f);
+        Assert.True(stillHeldWaypoint.DistanceTo2D(deeperWallSupport) > 0.5f);
+    }
+
+    [Fact]
+    public void RecalculateAfterMovementStall_LongTravelTowerTrapReplanKeepsFirstUphillSupportUntilReached()
+    {
+        var destination = new Position(1320.1f, -4653.2f, 53.9f);
+        var current = new Position(1353.8f, -4524.7f, 34.4f);
+        var currentBreadcrumb = new Position(1353.8f, -4524.7f, 34.4f);
+        var firstSupport = new Position(1354.2f, -4524.6f, 34.9f);
+        var deeperWallSupport = new Position(1354.6f, -4524.5f, 35.8f);
+        var followUp = new Position(1355.0f, -4524.4f, 36.1f);
+        var pathfindingCalls = 0;
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            {
+                pathfindingCalls++;
+                return pathfindingCalls == 1
+                    ? [new Position(100f, 100f, 0f)]
+                    : [currentBreadcrumb, firstSupport, deeperWallSupport, followUp, destination];
+            },
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            new Position(0f, 0f, 0f),
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.InitialPath);
+
+        var recalculated = navPath.RecalculateAfterMovementStall(
+            current,
+            destination,
+            mapId: 1);
+
+        var trace = navPath.TraceSnapshot;
+
+        Assert.True(recalculated);
+        Assert.True(pathfindingCalls >= 2);
+        Assert.Equal(NavigationTraceReason.StalledNearWaypoint, trace.LastReplanReason);
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(firstSupport) < 0.05f);
+        Assert.True(MathF.Abs(trace.ActiveWaypoint.Z - firstSupport.Z) < 0.05f);
+        Assert.True(MathF.Abs(trace.ActiveWaypoint.Z - deeperWallSupport.Z) > 0.5f);
+    }
+
+    [Fact]
     public void GetNextWaypoint_TraceRecordsStallDrivenReplanReason()
     {
         var pathfindingCalls = 0;
@@ -2852,6 +3060,1239 @@ public class NavigationPathTests
     }
 
     [Fact]
+    public void RecalculateAfterMovementStall_DeckLipAlternatePath_KeepsDescendingCorridorBeforeBoardingJump()
+    {
+        var pathfindingCalls = 0;
+        var current = new Position(1353.1f, -4525.3f, 34.6f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var ledgeReturn = new Position(1357.2f, -4516.2f, 32.2f);
+        var boardingJump = new Position(1320.1f, -4653.2f, 53.7f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            {
+                pathfindingCalls++;
+                return
+                [
+                    new Position(1346.6f, -4524.9f, 32.4f),
+                    new Position(1343.6f, -4523.1f, 30.3f),
+                    new Position(1342.0f, -4520.6f, 28.6f),
+                    new Position(1342.0f, -4515.9f, 27.8f),
+                    new Position(1343.6f, -4514.2f, 27.7f),
+                    new Position(1345.5f, -4512.4f, 27.7f),
+                    new Position(1347.5f, -4511.5f, 27.7f),
+                    new Position(1348.9f, -4511.3f, 27.8f),
+                    ledgeReturn,
+                    boardingJump,
+                    destination,
+                ];
+            },
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            enableDynamicProbeSkipping: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 1.0247f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var initialWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        var recovered = navPath.RecalculateAfterMovementStall(
+            current,
+            destination,
+            mapId: 1);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(initialWaypoint);
+        Assert.True(recovered);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(
+            trace.CurrentWaypointIndex <= 7,
+            $"Expected deck-lip stall recovery to keep the active waypoint inside the local descending corridor before the ledge-return/boarding jump; got idx={trace.CurrentWaypointIndex} active=({trace.ActiveWaypoint!.X:F1},{trace.ActiveWaypoint.Y:F1},{trace.ActiveWaypoint.Z:F1}) calls={pathfindingCalls}.");
+        Assert.True(
+            trace.ActiveWaypoint!.DistanceTo2D(ledgeReturn) > 1f,
+            $"Expected deck-lip stall recovery to avoid promoting directly to the ledge-return waypoint; active=({trace.ActiveWaypoint.X:F1},{trace.ActiveWaypoint.Y:F1},{trace.ActiveWaypoint.Z:F1}).");
+        Assert.Equal(NavigationTraceReason.StalledNearWaypoint, trace.LastReplanReason);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump()
+    {
+        var current = new Position(1346.6f, -4525.0f, 32.3f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var boardingJump = new Position(1320.1f, -4653.2f, 53.7f);
+        var smoothBlockedPath = new[]
+        {
+            new Position(1346.6f, -4524.9f, 32.4f),
+            new Position(1343.6f, -4523.1f, 30.3f),
+            new Position(1342.0f, -4520.6f, 28.6f),
+            new Position(1342.0f, -4515.9f, 27.8f),
+            new Position(1343.6f, -4514.2f, 27.7f),
+            new Position(1345.5f, -4512.4f, 27.7f),
+            new Position(1347.5f, -4511.5f, 27.7f),
+            new Position(1348.9f, -4511.3f, 27.8f),
+            new Position(1354.3f, -4528.0f, 35.0f),
+            new Position(1350.1f, -4556.4f, 37.6f),
+            new Position(1344.4f, -4594.0f, 42.1f),
+            new Position(1338.6f, -4629.8f, 47.7f),
+            new Position(1332.9f, -4644.7f, 52.4f),
+            boardingJump,
+            destination,
+        };
+        var unsafeAlternatePath = new[]
+        {
+            new Position(1346.6f, -4524.9f, 32.4f),
+            new Position(1343.6f, -4523.1f, 30.3f),
+            new Position(1342.0f, -4520.6f, 28.6f),
+            new Position(1342.0f, -4515.9f, 27.8f),
+            new Position(1343.6f, -4514.2f, 27.7f),
+            new Position(1345.5f, -4512.4f, 27.7f),
+            new Position(1347.5f, -4511.5f, 27.7f),
+            new Position(1348.9f, -4511.3f, 27.8f),
+            new Position(1357.2f, -4516.2f, 32.2f),
+            boardingJump,
+            new Position(1322.3f, -4650.9f, 53.9f),
+            new Position(1328.3f, -4649.3f, 53.8f),
+        };
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners: smoothBlockedPath,
+                    Result: "raw_detour",
+                    RawCornerCount: (uint)smoothBlockedPath.Length,
+                    BlockedSegmentIndex: 12,
+                    BlockedReason: "interior_projection:13",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 3,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners: unsafeAlternatePath,
+                    Result: "raw_detour",
+                    RawCornerCount: (uint)unsafeAlternatePath.Length,
+                    BlockedSegmentIndex: null,
+                    BlockedReason: "none",
+                    MaxAffordance: PathSegmentAffordance.Drop,
+                    PathSupported: true,
+                    StepUpCount: 0,
+                    DropCount: 1,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 1,
+                    BlockedCount: 0,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            enableDynamicProbeSkipping: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 1.0247f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.True(trace.SmoothPath, $"Expected the long-travel replan to keep the smooth projection-blocked prefix. Trace={trace}");
+        Assert.DoesNotContain(pathfinding.SmoothCalls, smoothPath => !smoothPath);
+        Assert.False(trace.RouteDecision.AlternateSelected, $"Expected no unsafe alternate selection. Trace={trace}");
+        Assert.True(trace.PlannedWaypoints.Length >= 10, $"Expected a retained smooth prefix. Trace={trace}");
+        Assert.DoesNotContain(trace.PlannedWaypoints, point => point.DistanceTo2D(boardingJump) <= 0.1f);
+        Assert.Equal(1343.6f, trace.ActiveWaypoint!.X, 1);
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp()
+    {
+        var planStart = new Position(1353.2f, -4525.5f, 34.7f);
+        var current = new Position(1354.0f, -4524.9f, 34.7f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var lipSupport = new Position(1352.8f, -4526.0f, 35.9f);
+        var wallFacingFollowUp = new Position(1352.5f, -4526.5f, 36.0f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                planStart,
+                lipSupport,
+                wallFacingFollowUp,
+            ]);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            supportsNativeLocalPhysicsQueries: false,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            planStart,
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathExhaustedStillFar);
+
+        var continuedWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+        var plannedSummary = string.Join(
+            " -> ",
+            trace.PlannedWaypoints.Select(point => $"({point.X:F1},{point.Y:F1},{point.Z:F1})"));
+
+        Assert.NotNull(continuedWaypoint);
+        Assert.True(
+            MathF.Abs(continuedWaypoint!.X - lipSupport.X) < 0.05f
+            && MathF.Abs(continuedWaypoint.Y - lipSupport.Y) < 0.05f
+            && MathF.Abs(continuedWaypoint.Z - lipSupport.Z) < 0.05f,
+            $"Expected the first post-replan tick to keep the compact uphill lip support step instead of skipping to the wall-facing follow-up. returned=({continuedWaypoint.X:F1},{continuedWaypoint.Y:F1},{continuedWaypoint.Z:F1}) idx={trace.CurrentWaypointIndex} active=({trace.ActiveWaypoint?.X:F1},{trace.ActiveWaypoint?.Y:F1},{trace.ActiveWaypoint?.Z:F1}) planned=[{plannedSummary}]");
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+        Assert.NotEqual(wallFacingFollowUp.X, continuedWaypoint.X);
+        Assert.NotEqual(wallFacingFollowUp.Y, continuedWaypoint.Y);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelKeepsFirstCompactUphillLipSupportStepWhenPreviousContextComesFromPathStart()
+    {
+        var planStart = new Position(1353.5f, -4525.2f, 34.7f);
+        var current = new Position(1352.9f, -4525.9f, 35.0f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var lipSupport = new Position(1353.1f, -4525.7f, 35.9f);
+        var wallFacingFollowUp = new Position(1352.7f, -4526.3f, 36.0f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                lipSupport,
+                wallFacingFollowUp,
+            ]);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            supportsNativeLocalPhysicsQueries: false,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            planStart,
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathExhaustedStillFar);
+
+        var continuedWaypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+        var plannedSummary = string.Join(
+            " -> ",
+            trace.PlannedWaypoints.Select(point => $"({point.X:F1},{point.Y:F1},{point.Z:F1})"));
+
+        Assert.NotNull(continuedWaypoint);
+        Assert.True(
+            MathF.Abs(continuedWaypoint!.X - lipSupport.X) < 0.05f
+            && MathF.Abs(continuedWaypoint.Y - lipSupport.Y) < 0.05f
+            && MathF.Abs(continuedWaypoint.Z - lipSupport.Z) < 0.05f,
+            $"Expected the first compact uphill lip support step to remain active even when the previous support only exists in _pathStartPosition. returned=({continuedWaypoint.X:F1},{continuedWaypoint.Y:F1},{continuedWaypoint.Z:F1}) idx={trace.CurrentWaypointIndex} active=({trace.ActiveWaypoint?.X:F1},{trace.ActiveWaypoint?.Y:F1},{trace.ActiveWaypoint?.Z:F1}) planned=[{plannedSummary}]");
+        Assert.Equal(0, trace.CurrentWaypointIndex);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(lipSupport) < 0.05f);
+        Assert.NotEqual(wallFacingFollowUp.X, continuedWaypoint.X);
+        Assert.NotEqual(wallFacingFollowUp.Y, continuedWaypoint.Y);
+    }
+
+    [Fact]
+    public void CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixWhenItOnlyMakesLocalClimbProgress()
+    {
+        var current = new Position(1352.8f, -4525.9f, 34.9f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var planLead = new Position(1353.2f, -4525.5f, 34.7f);
+        var lipSupport = new Position(1352.8f, -4526.0f, 35.9f);
+        var wallFacingFollowUp = new Position(1352.5f, -4526.5f, 36.0f);
+        var blockedBeyond = new Position(1352.2f, -4527.0f, 36.1f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners:
+                    [
+                        planLead,
+                        lipSupport,
+                        wallFacingFollowUp,
+                        blockedBeyond,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 4,
+                    BlockedSegmentIndex: 2,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 1,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners:
+                    [
+                        planLead,
+                        wallFacingFollowUp,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 2,
+                    BlockedSegmentIndex: 0,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 0,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            current,
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathExhaustedStillFar);
+
+        var traceAfterCalculate = navPath.TraceSnapshot;
+        var bestGlobalProgress = current.DistanceTo(destination)
+            - traceAfterCalculate.PlannedWaypoints.Min(point => point.DistanceTo(destination));
+
+        Assert.Equal(3, traceAfterCalculate.PlannedWaypoints.Length);
+        Assert.True(traceAfterCalculate.SmoothPath, $"Expected the compact projection-blocked prefix to stay on the smooth route. Trace={traceAfterCalculate}");
+        Assert.False(traceAfterCalculate.RouteDecision.AlternateSelected, $"Expected no alternate short route selection. Trace={traceAfterCalculate}");
+        Assert.True(bestGlobalProgress < 1.0f, $"Expected this live-shaped prefix to make less than one yard of global destination progress. progress={bestGlobalProgress:F2} trace={traceAfterCalculate}");
+        Assert.Contains(traceAfterCalculate.PlannedWaypoints, point => point.DistanceTo2D(lipSupport) < 0.05f);
+    }
+
+    [Fact]
+    public void CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixThatTemporarilyRegressesGlobalDistanceWhileClimbing()
+    {
+        var current = new Position(1352.1f, -4526.7f, 35.2f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var backstepSupport = new Position(1352.6f, -4526.0f, 35.8f);
+        var higherBackstep = new Position(1352.9f, -4525.4f, 36.3f);
+        var wallClimbSupport = new Position(1353.2f, -4524.9f, 36.6f);
+        var blockedBeyond = new Position(1353.5f, -4524.4f, 36.8f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners:
+                    [
+                        backstepSupport,
+                        higherBackstep,
+                        wallClimbSupport,
+                        blockedBeyond,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 4,
+                    BlockedSegmentIndex: 2,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 1,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners:
+                    [
+                        backstepSupport,
+                        wallClimbSupport,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 2,
+                    BlockedSegmentIndex: 0,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 0,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            current,
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathUnavailable);
+
+        var traceAfterCalculate = navPath.TraceSnapshot;
+        var bestGlobalProgress = current.DistanceTo(destination)
+            - traceAfterCalculate.PlannedWaypoints.Min(point => point.DistanceTo(destination));
+
+        Assert.Equal(3, traceAfterCalculate.PlannedWaypoints.Length);
+        Assert.True(traceAfterCalculate.SmoothPath, $"Expected the compact climbing backstep prefix to stay on the smooth route. Trace={traceAfterCalculate}");
+        Assert.True(bestGlobalProgress < 0.0f, $"Expected this live-shaped climbing backstep prefix to temporarily regress global destination distance. progress={bestGlobalProgress:F2} trace={traceAfterCalculate}");
+        Assert.Contains(traceAfterCalculate.PlannedWaypoints, point => point.DistanceTo2D(wallClimbSupport) < 0.05f);
+    }
+
+    [Fact]
+    public void CalculatePath_LongTravelKeepsTwoCornerProjectionBlockedSmoothPrefixAtDeckLipWallSlice()
+    {
+        var current = new Position(1351.7f, -4526.9f, 35.3f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var lipWallSupport = new Position(1352.4f, -4526.6f, 36.1f);
+        var upperWallSupport = new Position(1352.9f, -4526.0f, 36.6f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, _, _, _) => new PathfindingRouteResult(
+                Corners:
+                [
+                    lipWallSupport,
+                    upperWallSupport,
+                ],
+                Result: "raw_detour",
+                RawCornerCount: 2,
+                BlockedSegmentIndex: 0,
+                BlockedReason: "end_projection:124.2",
+                MaxAffordance: PathSegmentAffordance.StepUp,
+                PathSupported: false,
+                StepUpCount: 1,
+                DropCount: 0,
+                CliffCount: 0,
+                VerticalCount: 0,
+                TotalZGain: 0f,
+                TotalZLoss: 0f,
+                MaxSlopeAngleDeg: 0f,
+                JumpGapCount: 0,
+                SafeDropCount: 0,
+                UnsafeDropCount: 0,
+                BlockedCount: 1,
+                MaxClimbHeight: 0f,
+                MaxGapDistance: 0f,
+                MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            current,
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathUnavailable);
+
+        var traceAfterCalculate = navPath.TraceSnapshot;
+        var bestGlobalProgress = current.DistanceTo(destination)
+            - traceAfterCalculate.PlannedWaypoints.Min(point => point.DistanceTo(destination));
+
+        Assert.Equal(2, traceAfterCalculate.PlannedWaypoints.Length);
+        Assert.True(traceAfterCalculate.SmoothPath, $"Expected the two-corner projection-blocked wall-slice prefix to stay on the smooth route. Trace={traceAfterCalculate}");
+        Assert.False(traceAfterCalculate.RouteDecision.AlternateSelected, $"Expected no alternate route selection for the retained two-corner smooth prefix. Trace={traceAfterCalculate}");
+        Assert.True(bestGlobalProgress < 0.0f, $"Expected the retained wall-slice prefix to temporarily regress global destination distance while gaining height. progress={bestGlobalProgress:F2} trace={traceAfterCalculate}");
+        Assert.Contains(traceAfterCalculate.PlannedWaypoints, point => point.DistanceTo2D(upperWallSupport) < 0.05f);
+    }
+
+    [Fact]
+    public void CalculatePath_LongTravelAcceptsCompactEndProjectionWallSupportPrefixBeforeAlternateFallback()
+    {
+        var current = new Position(1352.5f, -4526.3f, 35.1f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var wallSupportA = new Position(1352.5f, -4526.3f, 35.1f);
+        var wallSupportB = new Position(1352.4f, -4526.5f, 35.8f);
+        var wallSupportC = new Position(1352.3f, -4526.8f, 36.1f);
+        var blockedBeyond = new Position(1352.1f, -4527.2f, 36.2f);
+        var unsafeAlternateSupport = new Position(1352.2f, -4527.0f, 35.7f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners:
+                    [
+                        wallSupportA,
+                        wallSupportB,
+                        wallSupportC,
+                        blockedBeyond,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 4,
+                    BlockedSegmentIndex: 2,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 1,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners:
+                    [
+                        wallSupportA,
+                        unsafeAlternateSupport,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 2,
+                    BlockedSegmentIndex: 0,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 0,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            current,
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathUnavailable);
+
+        var traceAfterCalculate = navPath.TraceSnapshot;
+        var bestGlobalProgress = current.DistanceTo(destination)
+            - traceAfterCalculate.PlannedWaypoints.Min(point => point.DistanceTo(destination));
+
+        Assert.Equal(3, traceAfterCalculate.PlannedWaypoints.Length);
+        Assert.True(traceAfterCalculate.SmoothPath, $"Expected the compact end-projection wall support prefix to stay on the smooth route. Trace={traceAfterCalculate}");
+        Assert.DoesNotContain(pathfinding.SmoothCalls, smoothPath => !smoothPath);
+        Assert.False(traceAfterCalculate.RouteDecision.AlternateSelected, $"Expected no alternate short route selection. Trace={traceAfterCalculate}");
+        Assert.True(bestGlobalProgress < 1.0f, $"Expected this compact wall support prefix to make less than one yard of global destination progress while climbing. progress={bestGlobalProgress:F2} trace={traceAfterCalculate}");
+        Assert.Contains(traceAfterCalculate.PlannedWaypoints, point => point.DistanceTo2D(wallSupportC) < 0.05f);
+    }
+
+    [Fact]
+    public void CalculatePath_LongTravelAcceptsFollowUpCompactEndProjectionWallSupportPrefixAtHigherWallSlice()
+    {
+        var current = new Position(1352.5f, -4526.4f, 35.1f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var wallSupportA = new Position(1352.5f, -4526.4f, 35.1f);
+        var wallSupportB = new Position(1352.4f, -4526.6f, 36.0f);
+        var wallSupportC = new Position(1352.3f, -4526.8f, 36.1f);
+        var blockedBeyond = new Position(1352.2f, -4527.0f, 36.2f);
+        var unsafeAlternateSupport = new Position(1352.2f, -4527.0f, 35.7f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners:
+                    [
+                        wallSupportA,
+                        wallSupportB,
+                        wallSupportC,
+                        blockedBeyond,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 4,
+                    BlockedSegmentIndex: 2,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 1,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners:
+                    [
+                        wallSupportA,
+                        unsafeAlternateSupport,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 2,
+                    BlockedSegmentIndex: 0,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 0,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            current,
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathUnavailable);
+
+        var traceAfterCalculate = navPath.TraceSnapshot;
+        var bestGlobalProgress = current.DistanceTo(destination)
+            - traceAfterCalculate.PlannedWaypoints.Min(point => point.DistanceTo(destination));
+
+        Assert.Equal(3, traceAfterCalculate.PlannedWaypoints.Length);
+        Assert.True(traceAfterCalculate.SmoothPath, $"Expected the higher wall-slice compact end-projection prefix to stay on the smooth route. Trace={traceAfterCalculate}");
+        Assert.DoesNotContain(pathfinding.SmoothCalls, smoothPath => !smoothPath);
+        Assert.False(traceAfterCalculate.RouteDecision.AlternateSelected, $"Expected no alternate short route selection at the higher wall slice. Trace={traceAfterCalculate}");
+        Assert.True(bestGlobalProgress < 1.0f, $"Expected this higher wall support prefix to make less than one yard of global destination progress while climbing. progress={bestGlobalProgress:F2} trace={traceAfterCalculate}");
+        Assert.Contains(traceAfterCalculate.PlannedWaypoints, point => point.DistanceTo2D(wallSupportC) < 0.05f);
+    }
+
+    [Fact]
+    public void CalculatePath_LongTravelAcceptsMicroEndProjectionWallSupportPrefixAtPinnedWallSlice()
+    {
+        var current = new Position(1352.1f, -4526.7f, 35.2f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var wallSupportA = new Position(1352.1f, -4526.7f, 35.2f);
+        var wallSupportB = new Position(1352.16f, -4526.79f, 35.8f);
+        var wallSupportC = new Position(1352.19f, -4526.90f, 36.14f);
+        var blockedBeyond = new Position(1352.24f, -4527.02f, 36.2f);
+        var unsafeAlternateSupport = new Position(1352.24f, -4527.00f, 35.74f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners:
+                    [
+                        wallSupportA,
+                        wallSupportB,
+                        wallSupportC,
+                        blockedBeyond,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 4,
+                    BlockedSegmentIndex: 2,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 1,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners:
+                    [
+                        wallSupportA,
+                        unsafeAlternateSupport,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 2,
+                    BlockedSegmentIndex: 0,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 0,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        navPath.CalculatePath(
+            current,
+            destination,
+            mapId: 1,
+            force: true,
+            reason: NavigationTraceReason.PathUnavailable);
+
+        var traceAfterCalculate = navPath.TraceSnapshot;
+        var bestGlobalProgress = current.DistanceTo(destination)
+            - traceAfterCalculate.PlannedWaypoints.Min(point => point.DistanceTo(destination));
+
+        Assert.Equal(3, traceAfterCalculate.PlannedWaypoints.Length);
+        Assert.True(traceAfterCalculate.SmoothPath, $"Expected the pinned-wall micro end-projection prefix to stay on the smooth route. Trace={traceAfterCalculate}");
+        Assert.DoesNotContain(pathfinding.SmoothCalls, smoothPath => !smoothPath);
+        Assert.False(traceAfterCalculate.RouteDecision.AlternateSelected, $"Expected no unsafe alternate selection at the pinned wall slice. Trace={traceAfterCalculate}");
+        Assert.True(bestGlobalProgress < 0.5f, $"Expected this pinned-wall support prefix to make only local climb progress. progress={bestGlobalProgress:F2} trace={traceAfterCalculate}");
+        Assert.Contains(traceAfterCalculate.PlannedWaypoints, point => point.DistanceTo2D(wallSupportC) < 0.05f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelKeepsMicroUphillWallSupportStepActiveAtPinnedWallSlice()
+    {
+        var current = new Position(1352.1f, -4526.7f, 35.2f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var wallSupportA = new Position(1352.1f, -4526.7f, 35.2f);
+        var wallSupportB = new Position(1352.16f, -4526.79f, 35.8f);
+        var wallSupportC = new Position(1352.19f, -4526.90f, 36.14f);
+        var blockedBeyond = new Position(1352.24f, -4527.02f, 36.2f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, _, _, _) => new PathfindingRouteResult(
+                Corners:
+                [
+                    wallSupportA,
+                    wallSupportB,
+                    wallSupportC,
+                    blockedBeyond,
+                ],
+                Result: "raw_detour",
+                RawCornerCount: 4,
+                BlockedSegmentIndex: 2,
+                BlockedReason: "end_projection:124.2",
+                MaxAffordance: PathSegmentAffordance.StepUp,
+                PathSupported: false,
+                StepUpCount: 1,
+                DropCount: 0,
+                CliffCount: 0,
+                VerticalCount: 0,
+                TotalZGain: 0f,
+                TotalZLoss: 0f,
+                MaxSlopeAngleDeg: 0f,
+                JumpGapCount: 0,
+                SafeDropCount: 0,
+                UnsafeDropCount: 0,
+                BlockedCount: 1,
+                MaxClimbHeight: 0f,
+                MaxGapDistance: 0f,
+                MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.True(
+            MathF.Abs(waypoint!.X - wallSupportB.X) < 0.05f
+            && MathF.Abs(waypoint.Y - wallSupportB.Y) < 0.05f
+            && MathF.Abs(waypoint.Z - wallSupportB.Z) < 0.05f,
+            $"Expected the first pinned-wall tick to keep the micro uphill support step active instead of skipping through the wall-facing follow-up. returned=({waypoint.X:F2},{waypoint.Y:F2},{waypoint.Z:F2}) idx={trace.CurrentWaypointIndex} active=({trace.ActiveWaypoint?.X:F2},{trace.ActiveWaypoint?.Y:F2},{trace.ActiveWaypoint?.Z:F2}) trace={trace}");
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(wallSupportB) < 0.05f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelDoesNotAutoCompleteFinalMicroUphillWallSupportWaypoint()
+    {
+        var current = new Position(1352.16f, -4526.79f, 35.8f);
+        var finalSupport = new Position(1352.19f, -4526.90f, 36.14f);
+        var blockedBeyond = new Position(1352.24f, -4527.02f, 36.2f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, _, _, _) => new PathfindingRouteResult(
+                Corners:
+                [
+                    current,
+                    finalSupport,
+                    blockedBeyond,
+                ],
+                Result: "raw_detour",
+                RawCornerCount: 3,
+                BlockedSegmentIndex: 1,
+                BlockedReason: "end_projection:124.2",
+                MaxAffordance: PathSegmentAffordance.StepUp,
+                PathSupported: false,
+                StepUpCount: 1,
+                DropCount: 0,
+                CliffCount: 0,
+                VerticalCount: 0,
+                TotalZGain: 0f,
+                TotalZLoss: 0f,
+                MaxSlopeAngleDeg: 0f,
+                JumpGapCount: 0,
+                SafeDropCount: 0,
+                UnsafeDropCount: 0,
+                BlockedCount: 1,
+                MaxClimbHeight: 0f,
+                MaxGapDistance: 0f,
+                MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: false,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            current,
+            new Position(1331.11f, -4649.45f, 53.6269f),
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.True(
+            MathF.Abs(waypoint!.X - finalSupport.X) < 0.05f
+            && MathF.Abs(waypoint.Y - finalSupport.Y) < 0.05f
+            && MathF.Abs(waypoint.Z - finalSupport.Z) < 0.05f,
+            $"Expected the final micro uphill wall-support waypoint to remain active instead of exhausting the route early. returned=({waypoint.X:F2},{waypoint.Y:F2},{waypoint.Z:F2}) idx={trace.CurrentWaypointIndex} active=({trace.ActiveWaypoint?.X:F2},{trace.ActiveWaypoint?.Y:F2},{trace.ActiveWaypoint?.Z:F2}) trace={trace}");
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+        Assert.NotNull(trace.ActiveWaypoint);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelUsesMicroBlockedIndexZeroWallSupportFallbackWhenSmoothReturnsNoPath()
+    {
+        var current = new Position(1351.95f, -4526.90f, 35.26f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var microSupport = new Position(1352.20f, -4527.00f, 35.74f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners: [],
+                    Result: "no_path",
+                    RawCornerCount: 0,
+                    BlockedSegmentIndex: null,
+                    BlockedReason: "none",
+                    MaxAffordance: PathSegmentAffordance.Walk,
+                    PathSupported: false,
+                    StepUpCount: 0,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 0,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners:
+                    [
+                        current,
+                        microSupport,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 2,
+                    BlockedSegmentIndex: 0,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 1,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: true,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.NotNull(waypoint);
+        Assert.True(
+            MathF.Abs(waypoint!.X - microSupport.X) < 0.05f
+            && MathF.Abs(waypoint.Y - microSupport.Y) < 0.05f
+            && MathF.Abs(waypoint.Z - microSupport.Z) < 0.05f,
+            $"Expected the tiny blocked-index-zero wall foothold to remain active when smooth returns no path. returned=({waypoint.X:F2},{waypoint.Y:F2},{waypoint.Z:F2}) idx={trace.CurrentWaypointIndex} active=({trace.ActiveWaypoint?.X:F2},{trace.ActiveWaypoint?.Y:F2},{trace.ActiveWaypoint?.Z:F2}) trace={trace}");
+        Assert.False(trace.SmoothPath, $"Expected the caller to promote the unsmoothed blocked-index-zero fallback only after the smooth request returned no path. Trace={trace}");
+        Assert.True(trace.RouteDecision.AlternateSelected, $"Expected the fallback path to come from the alternate unsmoothed request. Trace={trace}");
+        Assert.Equal(1, trace.CurrentWaypointIndex);
+        Assert.NotNull(trace.ActiveWaypoint);
+        Assert.True(trace.ActiveWaypoint!.DistanceTo2D(microSupport) < 0.05f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelRejectsBlockedIndexZeroWallSupportFallbackThatJumpsTooFarWhenSmoothReturnsNoPath()
+    {
+        var current = new Position(1352.10f, -4526.70f, 35.20f);
+        var destination = new Position(1331.11f, -4649.45f, 53.6269f);
+        var unsafeSupport = new Position(1352.24f, -4527.00f, 35.74f);
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) => [],
+            getPathResult: (_, _, _, _, smoothPath, _, _) => smoothPath
+                ? new PathfindingRouteResult(
+                    Corners: [],
+                    Result: "no_path",
+                    RawCornerCount: 0,
+                    BlockedSegmentIndex: null,
+                    BlockedReason: "none",
+                    MaxAffordance: PathSegmentAffordance.Walk,
+                    PathSupported: false,
+                    StepUpCount: 0,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 0,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f)
+                : new PathfindingRouteResult(
+                    Corners:
+                    [
+                        current,
+                        unsafeSupport,
+                    ],
+                    Result: "raw_detour",
+                    RawCornerCount: 2,
+                    BlockedSegmentIndex: 0,
+                    BlockedReason: "end_projection:124.2",
+                    MaxAffordance: PathSegmentAffordance.StepUp,
+                    PathSupported: false,
+                    StepUpCount: 1,
+                    DropCount: 0,
+                    CliffCount: 0,
+                    VerticalCount: 0,
+                    TotalZGain: 0f,
+                    TotalZLoss: 0f,
+                    MaxSlopeAngleDeg: 0f,
+                    JumpGapCount: 0,
+                    SafeDropCount: 0,
+                    UnsafeDropCount: 0,
+                    BlockedCount: 1,
+                    MaxClimbHeight: 0f,
+                    MaxGapDistance: 0f,
+                    MaxDropHeight: 0f));
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            preferSmoothPath: true,
+            allowAlternatePathMode: true,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: false,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+        var trace = navPath.TraceSnapshot;
+
+        Assert.Null(waypoint);
+        Assert.False(trace.RouteDecision.HasPath, $"Expected the wider blocked-index-zero foothold to stay rejected even when smooth returns no path. Trace={trace}");
+        Assert.False(trace.RouteDecision.AlternateSelected, $"Expected the caller to leave the unsafe blocked-index-zero fallback rejected. Trace={trace}");
+        Assert.True(trace.SmoothPath, $"Expected the final trace to stay on the empty smooth decision when the blocked-index-zero foothold exceeds the micro support envelope. Trace={trace}");
+    }
+
+    [Fact]
+    public void GetNextWaypoint_WaypointDiagnostics_DoNotThrowWhenAdvanceExhaustsCorridor()
+    {
+        var diagnostics = new List<string>();
+        var current = new Position(0f, 0f, 0f);
+        var destination = new Position(2f, 0f, 0f);
+        var pathfinding = new DelegatePathfindingClient((_, start, _, _) =>
+        [
+            new Position(start.X, start.Y, start.Z),
+            new Position(start.X + 0.5f, start.Y, start.Z),
+            new Position(start.X + 1.0f, start.Y, start.Z),
+        ]);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 10_000,
+            enableProbeHeuristics: false,
+            diagnosticSink: diagnostics.Add,
+            waypointDiagnosticCadence: 1);
+
+        var ex = Record.Exception(() => navPath.GetNextWaypoint(
+            current,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false));
+
+        Assert.Null(ex);
+        Assert.Contains(
+            diagnostics,
+            message => message.Contains("[TRAVEL_WAYPOINT_REACHED]")
+                && message.Contains("idx=3/3")
+                && message.Contains("waypoint=none"));
+    }
+
+    [Fact]
     public void GetNextWaypoint_LongTravelKeepsCompactRopeSupportStepBeforeStallPromotion()
     {
         var current = new Position(1371.1f, -4439.4f, 30.9f);
@@ -3200,6 +4641,102 @@ public class NavigationPathTests
         Assert.Equal(6f, initialWaypoint!.X);
         Assert.Equal(10f, nearPromotedWaypoint!.X);
         Assert.Equal(6f, finalWaypoint!.X);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelDoesNotSkipUpperDeckEdgeWaypointFromLowerLayer()
+    {
+        var lowerLayerPosition = new Position(1345.3f, -4645.0f, 53.5f);
+        var deckEntry = new Position(1345.0f, -4644.6f, 54.1f);
+        var edgeCommit = new Position(1343.5f, -4642.6f, 54.1f);
+        var deckMid = new Position(1341.7f, -4643.3f, 54.1f);
+        var acrossDeck = new Position(1339.8f, -4644.1f, 54.1f);
+        var deckOuterEdge = new Position(1337.9f, -4644.8f, 54.1f);
+        var destination = new Position(1320.143f, -4653.159f, 53.892f);
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                deckEntry,
+                edgeCommit,
+                deckMid,
+                acrossDeck,
+                deckOuterEdge,
+                destination,
+            ],
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: true,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            lowerLayerPosition,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.True(waypoint!.DistanceTo2D(edgeCommit) < 0.05f);
+        Assert.True(MathF.Abs(waypoint.Z - edgeCommit.Z) < 0.05f);
+        Assert.Equal(1, navPath.TraceSnapshot.CurrentWaypointIndex);
+        Assert.True(waypoint.DistanceTo2D(acrossDeck) > 0.5f);
+    }
+
+    [Fact]
+    public void GetNextWaypoint_LongTravelDoesNotSkipStraightUpperDeckBreadcrumbFromLowerLayer()
+    {
+        var lowerLayerPosition = new Position(1345.2f, -4642.5f, 53.5f);
+        var nearDeckCommit = new Position(1343.6f, -4642.0f, 54.1f);
+        var straightDeckCommit = new Position(1341.8f, -4642.9f, 54.1f);
+        var nextStraightDeck = new Position(1340.0f, -4643.8f, 54.1f);
+        var outerDeck = new Position(1338.2f, -4644.6f, 54.1f);
+        var destination = new Position(1320.143f, -4653.159f, 53.892f);
+
+        var pathfinding = new DelegatePathfindingClient(
+            getPath: (_, _, _, _) =>
+            [
+                nearDeckCommit,
+                straightDeckCommit,
+                nextStraightDeck,
+                outerDeck,
+                destination,
+            ],
+            isInLineOfSight: (_, _, _) => true);
+
+        var navPath = new NavigationPath(
+            pathfinding,
+            () => 0,
+            enableProbeHeuristics: false,
+            requireVerticalWaypointArrival: true,
+            validateLocalPhysicsSegments: true,
+            supportsNativeLocalPhysicsQueries: true,
+            capsuleRadius: 0.975f,
+            capsuleHeight: 2.625f,
+            race: Race.Tauren,
+            gender: Gender.Male,
+            tightenDenseWaypointAcceptance: true);
+
+        var waypoint = navPath.GetNextWaypoint(
+            lowerLayerPosition,
+            destination,
+            mapId: 1,
+            allowDirectFallback: false);
+
+        Assert.NotNull(waypoint);
+        Assert.True(waypoint!.DistanceTo2D(straightDeckCommit) < 0.05f);
+        Assert.True(MathF.Abs(waypoint.Z - straightDeckCommit.Z) < 0.05f);
+        Assert.Equal(1, navPath.TraceSnapshot.CurrentWaypointIndex);
+        Assert.True(waypoint.DistanceTo2D(nextStraightDeck) > 0.5f);
     }
 
     [Fact]

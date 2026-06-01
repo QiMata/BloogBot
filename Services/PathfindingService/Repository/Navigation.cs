@@ -85,6 +85,8 @@ namespace PathfindingService.Repository
         private const float FloatingSupportProjectionMinDrop = 1.0f;
         private const float FloatingSupportProjectionMaxDrop = 6.0f;
         private const float NativePathEndpointMaxDistance = 8.0f;
+        private const float NativePathInteriorProjectionMinXyExtent = 2.0f;
+        private const float NativePathInteriorProjectionZExtent = 1.8f;
         private const float SmoothCorridorExpansionMinSegmentLength = 6f;
         // Sub-corner-level LOS validation parameters for the smooth-expansion
         // output of TryExpandCorridorWithSmoothNativeSegments. Detour's
@@ -411,6 +413,19 @@ namespace PathfindingService.Repository
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
         private static extern bool LineOfSight(uint mapId, NativeXyz from, NativeXyz to);
+
+        [DllImport(DLL_NAME, EntryPoint = "GetPolyAtCoord", CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool GetPolyAtCoord(
+            uint mapId,
+            NativeXyz coord,
+            float searchExtentXY,
+            float searchExtentZ,
+            out ulong outPolyRef,
+            out byte outPolyType,
+            out NativeXyz outNearestPoint,
+            out float outSurfaceZ,
+            out byte outPosOverPoly);
 
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         private static extern void PathArrFree(IntPtr pathArr);
@@ -944,11 +959,42 @@ namespace PathfindingService.Repository
                     resolution.BlockedSegmentIndex,
                     blockedReason);
             }
+
+            if (!HasUsableNativeEndpointAnchors(start, end, rawPath, out var endpointBlockedReason))
+            {
+                return new NavigationPathResult(
+                    rawPath,
+                    rawPath,
+                    "raw_detour",
+                    rawPath.Length >= 2 ? rawPath.Length - 2 : 0,
+                    endpointBlockedReason);
+            }
+
+            if (resolution.BlockedSegmentIndex is int nativeBlockedSegmentIndex)
+            {
+                return new NavigationPathResult(
+                    rawPath,
+                    rawPath,
+                    "raw_detour",
+                    nativeBlockedSegmentIndex,
+                    blockedReason);
+            }
+
+            if (TryFindInteriorProjectionGap(mapId, rawPath, smoothPath, agentRadius, out var interiorBlockedIndex, out var interiorBlockedReason))
+            {
+                return new NavigationPathResult(
+                    rawPath,
+                    rawPath,
+                    "raw_detour",
+                    interiorBlockedIndex,
+                    interiorBlockedReason);
+            }
+
             return new NavigationPathResult(
                 rawPath,
                 rawPath,
                 "raw_detour",
-                resolution.BlockedSegmentIndex,
+                null,
                 blockedReason);
         }
 
@@ -2040,6 +2086,61 @@ namespace PathfindingService.Repository
                 return false;
             }
 
+            return true;
+        }
+
+        private static bool TryFindInteriorProjectionGap(
+            uint mapId,
+            XYZ[] path,
+            bool smoothPath,
+            float agentRadius,
+            out int blockedSegmentIndex,
+            out string blockedReason)
+        {
+            blockedSegmentIndex = 0;
+            blockedReason = "none";
+            if (!smoothPath || path.Length < 3)
+                return false;
+
+            var searchExtentXY = MathF.Max(agentRadius, NativePathInteriorProjectionMinXyExtent);
+            for (var i = 1; i < path.Length - 1; i++)
+            {
+                if (!TryQueryPolyAtCoord(mapId, path[i], searchExtentXY, NativePathInteriorProjectionZExtent, out var hasPoly))
+                    continue;
+
+                if (hasPoly)
+                    continue;
+
+                blockedSegmentIndex = Math.Max(0, i - 1);
+                blockedReason = $"interior_projection:{i}";
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryQueryPolyAtCoord(
+            uint mapId,
+            XYZ coord,
+            float searchExtentXY,
+            float searchExtentZ,
+            out bool hasPoly)
+        {
+            hasPoly = false;
+            var ok = GetPolyAtCoord(
+                mapId,
+                new NativeXyz(coord),
+                searchExtentXY,
+                searchExtentZ,
+                out var polyRef,
+                out _,
+                out _,
+                out _,
+                out _);
+            if (!ok)
+                return false;
+
+            hasPoly = polyRef != 0;
             return true;
         }
 

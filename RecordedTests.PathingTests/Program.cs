@@ -50,6 +50,13 @@ internal class Program
             // Parse configuration from CLI → env → config
             var configuration = ConfigurationParser.Parse(args);
 
+            // --list-skipped is a diagnostic short-circuit: print non-Stable rows and exit.
+            if (configuration.ListSkipped)
+            {
+                PrintSkippedTests(PathingTestDefinitions.All);
+                return 0;
+            }
+
             // Start PathfindingService in-process if configured
             if (configuration.StartPathfindingServiceInProcess)
             {
@@ -253,6 +260,11 @@ internal class Program
     {
         var filtered = allTests.AsEnumerable();
 
+        // Status gating: Stable-only by default. Explicit --status overrides; otherwise
+        // --include-experimental / --include-bake-blocked widen the set additively.
+        var allowedStatuses = ResolveAllowedStatuses(config);
+        filtered = filtered.Where(t => allowedStatuses.Contains(t.Status));
+
         // Filter by test name - EXACT MATCH (case-insensitive)
         if (!string.IsNullOrEmpty(config.TestFilter))
         {
@@ -277,13 +289,64 @@ internal class Program
                 filterDesc.Add($"name='{config.TestFilter}'");
             if (!string.IsNullOrEmpty(config.CategoryFilter))
                 filterDesc.Add($"category='{config.CategoryFilter}'");
+            filterDesc.Add($"status ∈ {{{string.Join(", ", allowedStatuses)}}}");
 
             throw new InvalidOperationException(
                 $"No tests match the specified filters: {string.Join(", ", filterDesc)}. " +
-                $"Available tests: {string.Join(", ", allTests.Select(t => t.Name))}");
+                $"Available tests: {string.Join(", ", allTests.Select(t => $"{t.Name}({t.Status})"))}");
         }
 
         return result;
+    }
+
+    private static HashSet<TestStatus> ResolveAllowedStatuses(TestConfiguration config)
+    {
+        if (!string.IsNullOrWhiteSpace(config.StatusFilter))
+        {
+            var explicitSet = new HashSet<TestStatus>();
+            foreach (var token in config.StatusFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (Enum.TryParse<TestStatus>(token, ignoreCase: true, out var status))
+                    explicitSet.Add(status);
+                else
+                    throw new InvalidOperationException(
+                        $"Unknown status '{token}' in --status filter. Valid values: {string.Join(", ", Enum.GetNames(typeof(TestStatus)))}");
+            }
+            return explicitSet;
+        }
+
+        var allowed = new HashSet<TestStatus> { TestStatus.Stable };
+        if (config.IncludeExperimental) allowed.Add(TestStatus.Experimental);
+        if (config.IncludeBakeBlocked) allowed.Add(TestStatus.BakeBlocked);
+        return allowed;
+    }
+
+    private static void PrintSkippedTests(IReadOnlyList<PathingTestDefinition> allTests)
+    {
+        Console.WriteLine("Non-Stable test definitions (gated by --status / --include-* flags):");
+        Console.WriteLine();
+        var byStatus = allTests
+            .Where(t => t.Status != TestStatus.Stable)
+            .GroupBy(t => t.Status)
+            .OrderBy(g => g.Key);
+
+        var total = 0;
+        foreach (var group in byStatus)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"  [{group.Key}] ({group.Count()} tests)");
+            Console.ResetColor();
+            foreach (var t in group.OrderBy(t => t.Category).ThenBy(t => t.Name))
+            {
+                var reason = string.IsNullOrWhiteSpace(t.StatusReason) ? "(no reason given)" : t.StatusReason;
+                Console.WriteLine($"    - {t.Name} [{t.Category}] — {reason}");
+                total++;
+            }
+        }
+
+        var stableCount = allTests.Count(t => t.Status == TestStatus.Stable);
+        Console.WriteLine();
+        Console.WriteLine($"Summary: {stableCount} Stable / {total} gated / {allTests.Count} total");
     }
 
     private static async Task<List<OrchestrationResult>> RunTestsAsync(

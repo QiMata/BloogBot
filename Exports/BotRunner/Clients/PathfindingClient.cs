@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Pathfinding;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 namespace BotRunner.Clients
 {
@@ -147,22 +148,60 @@ namespace BotRunner.Clients
             bool smoothPath = false, Race race = 0, Gender gender = 0)
         {
             ResetFailureWindow();
+            var requestStopwatch = Stopwatch.StartNew();
+            _logger?.LogInformation(
+                "[PATH-REQ] start map={MapId} start=({StartX:F1},{StartY:F1},{StartZ:F1}) end=({EndX:F1},{EndY:F1},{EndZ:F1}) smooth={Smooth} overlay={OverlayCount} race={Race} gender={Gender}",
+                mapId,
+                start.X,
+                start.Y,
+                start.Z,
+                end.X,
+                end.Y,
+                end.Z,
+                smoothPath,
+                nearbyObjects?.Count ?? 0,
+                race,
+                gender);
 
             try
             {
                 var response = SendRequest(
                     BuildPathRequest(mapId, start, end, nearbyObjects, smoothPath, race, gender),
                     _pathRequestTimeoutMs);
+                requestStopwatch.Stop();
                 _consecutiveFailures = 0;
                 if (response.PayloadCase == PathfindingResponse.PayloadOneofCase.Error)
                     throw new Exception(response.Error.Message);
                 if (response.PayloadCase != PathfindingResponse.PayloadOneofCase.Path)
                     throw new Exception($"Unexpected pathfinding response payload: {response.PayloadCase}");
 
-                return ToRouteResult(response.Path);
+                var routeResult = ToRouteResult(response.Path);
+                _logger?.LogInformation(
+                    "[PATH-REQ] finish map={MapId} elapsedMs={ElapsedMs} payload={PayloadCase} result={Result} corners={CornerCount} blockedIndex={BlockedIndex} blockedReason={BlockedReason}",
+                    mapId,
+                    requestStopwatch.ElapsedMilliseconds,
+                    response.PayloadCase,
+                    routeResult.Result,
+                    routeResult.Corners.Length,
+                    routeResult.BlockedSegmentIndex,
+                    routeResult.BlockedReason);
+                return routeResult;
             }
             catch (Exception ex)
             {
+                requestStopwatch.Stop();
+                _logger?.LogWarning(
+                    ex,
+                    "[PATH-REQ] failed map={MapId} elapsedMs={ElapsedMs} start=({StartX:F1},{StartY:F1},{StartZ:F1}) end=({EndX:F1},{EndY:F1},{EndZ:F1}) smooth={Smooth}",
+                    mapId,
+                    requestStopwatch.ElapsedMilliseconds,
+                    start.X,
+                    start.Y,
+                    start.Z,
+                    end.X,
+                    end.Y,
+                    end.Z,
+                    smoothPath);
                 NoteFailure("path request", ex);
                 return PathfindingRouteResult.Empty;
             }

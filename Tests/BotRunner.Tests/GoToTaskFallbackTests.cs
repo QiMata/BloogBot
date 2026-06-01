@@ -126,6 +126,35 @@ public class GoToTaskFallbackTests
         om.Verify(o => o.MoveToward(It.IsAny<Position>(), It.IsAny<float>()), Times.Never);
     }
 
+    [Fact]
+    public void Update_RequireVerticalArrival_DoesNotPopTaskWhenOnlyWithinHorizontalTolerance()
+    {
+        var (ctx, om, stack) = AtomicTaskTestHelpers.CreateContext();
+        var playerPosition = new Position(1332.1f, -4634.5f, 23.9f);
+        var upperDeckTarget = new Position(1331.1f, -4649.5f, 53.6f);
+        var player = AtomicTaskTestHelpers.CreatePlayer(playerPosition);
+        player.Setup(p => p.MapId).Returns(1u);
+        player.Setup(p => p.Race).Returns(Race.Tauren);
+        player.Setup(p => p.Gender).Returns(Gender.Male);
+        player.Setup(p => p.TransportGuid).Returns(0UL);
+        om.Setup(o => o.Player).Returns(player.Object);
+
+        var task = new GoToTask(
+            ctx.Object,
+            upperDeckTarget.X,
+            upperDeckTarget.Y,
+            upperDeckTarget.Z,
+            15f,
+            requireVerticalArrival: true,
+            verticalTolerance: 4f);
+        stack.Push(task);
+
+        task.Update();
+
+        Assert.Single(stack);
+        om.Verify(o => o.MoveToward(It.IsAny<Position>(), It.IsAny<float>()), Times.Once);
+    }
+
     private static void SetPrivateField(object instance, string fieldName, object? value)
     {
         var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)

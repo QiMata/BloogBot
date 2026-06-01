@@ -137,32 +137,22 @@ public class BackgroundRecordedTestRunner(
     /// <inheritdoc />
     public async Task RunTestAsync(IRecordedTestContext context, CancellationToken cancellationToken)
     {
-        if (_testDefinition.EndPosition == null)
-            throw new InvalidOperationException($"Test '{_testDefinition.Name}' has no end position defined");
-
-        var startPos = _testDefinition.StartPosition;
-        var endPos = _testDefinition.EndPosition;
-        var expectedEndMapId = _testDefinition.EndMapId ?? _testDefinition.MapId;
-
+        _testDefinition.Validate();
         _logger.Info($"[BG] Starting pathfinding test: {_testDefinition.Name}");
-        _logger.Info($"[BG] Start: ({startPos.X:F2}, {startPos.Y:F2}, {startPos.Z:F2}) MapId: {_testDefinition.MapId}");
-        _logger.Info($"[BG] End: ({endPos.X:F2}, {endPos.Y:F2}, {endPos.Z:F2}) MapId: {expectedEndMapId}");
         _logger.Info($"[BG] Transport Mode: {_testDefinition.Transport}");
 
-        // Set up timeout based on ExpectedDuration * 1.5
         var maxDuration = _testDefinition.ExpectedDuration * 1.5;
         using var timeoutCts = new CancellationTokenSource(maxDuration);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
         try
         {
-            // Wait for player to be ready (teleport from GM commands to take effect)
             await DelayAsync(TimeSpan.FromSeconds(2), linkedCts.Token);
 
-            if (NavigateToDestinationOverride != null)
-                await NavigateToDestinationOverride(endPos, expectedEndMapId, linkedCts.Token);
+            if (_testDefinition.IsMultiSegment)
+                await RunChainAsync(linkedCts.Token);
             else
-                await NavigateToDestinationAsync(endPos, expectedEndMapId, linkedCts.Token);
+                await RunSingleSegmentAsync(linkedCts.Token);
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
         {
@@ -173,9 +163,99 @@ public class BackgroundRecordedTestRunner(
         {
             StopMovement();
         }
+    }
 
-        // Validate success criteria
+    /// <summary>
+    /// Legacy single-segment execution: navigate Start → End once, then assert arrival.
+    /// </summary>
+    private async Task RunSingleSegmentAsync(CancellationToken cancellationToken)
+    {
+        var startPos = _testDefinition.StartPosition;
+        var endPos = _testDefinition.EndPosition!;
+        var expectedEndMapId = _testDefinition.EndMapId ?? _testDefinition.MapId;
+
+        _logger.Info($"[BG] Start: ({startPos.X:F2}, {startPos.Y:F2}, {startPos.Z:F2}) MapId: {_testDefinition.MapId}");
+        _logger.Info($"[BG] End:   ({endPos.X:F2}, {endPos.Y:F2}, {endPos.Z:F2}) MapId: {expectedEndMapId}");
+
+        if (NavigateToDestinationOverride != null)
+            await NavigateToDestinationOverride(endPos, expectedEndMapId, cancellationToken);
+        else
+            await NavigateToDestinationAsync(endPos, expectedEndMapId, cancellationToken);
+
         ValidateSuccessCriteria(endPos, expectedEndMapId);
+    }
+
+    /// <summary>
+    /// Multi-segment chain execution: iterate Waypoints[i] → Waypoints[i+1], asserting per-segment
+    /// arrival. A segment failure (timeout, stuck, or out-of-radius) aborts the chain and surfaces
+    /// which named waypoint was unreachable, so partial failures are diagnosable.
+    /// </summary>
+    private async Task RunChainAsync(CancellationToken cancellationToken)
+    {
+        var waypoints = _testDefinition.Waypoints!;
+        var expectedEndMapId = _testDefinition.EndMapId ?? _testDefinition.MapId;
+
+        _logger.Info($"[BG] Chain has {waypoints.Count} waypoints ({waypoints.Count - 1} segments) on MapId {_testDefinition.MapId}");
+        for (int i = 0; i < waypoints.Count; i++)
+        {
+            var wp = waypoints[i];
+            _logger.Info($"[BG]   [{i}] '{wp.Name}' = ({wp.Position.X:F2}, {wp.Position.Y:F2}, {wp.Position.Z:F2})");
+        }
+
+        for (int i = 0; i < waypoints.Count - 1; i++)
+        {
+            var from = waypoints[i];
+            var to = waypoints[i + 1];
+            var segmentLabel = $"[{i + 1}/{waypoints.Count - 1}] {from.Name} → {to.Name}";
+            _logger.Info($"[BG] Segment {segmentLabel}: navigating...");
+
+            _positionHistory.Clear();
+
+            try
+            {
+                if (NavigateToDestinationOverride != null)
+                    await NavigateToDestinationOverride(to.Position, expectedEndMapId, cancellationToken);
+                else
+                    await NavigateToDestinationAsync(to.Position, expectedEndMapId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"Chain segment '{segmentLabel}' failed: {ex.Message}", ex);
+            }
+
+            ValidateSegmentArrival(to, segmentLabel, isFinalSegment: i == waypoints.Count - 2, expectedEndMapId);
+        }
+
+        _logger.Info($"[BG] Chain complete: all {waypoints.Count - 1} segments validated");
+    }
+
+    /// <summary>
+    /// Per-segment arrival check. Intermediate segments allow the full <see cref="SuccessRadiusYards"/>
+    /// tolerance and don't require the final map id (chain may cross maps via transport). The final
+    /// segment additionally enforces map id equality.
+    /// </summary>
+    private void ValidateSegmentArrival(NamedWaypoint to, string segmentLabel, bool isFinalSegment, uint expectedEndMapId)
+    {
+        var finalPos = GetCurrentPosition();
+        var distance = finalPos.DistanceTo(to.Position);
+        var currentMapId = GetCurrentMapId();
+
+        _logger.Info($"[BG] Segment {segmentLabel}: arrived at ({finalPos.X:F2}, {finalPos.Y:F2}, {finalPos.Z:F2}); " +
+                     $"distance to '{to.Name}' = {distance:F1} yd, MapId = {currentMapId}");
+
+        if (distance > SuccessRadiusYards)
+        {
+            throw new InvalidOperationException(
+                $"Segment {segmentLabel} failed: final position is {distance:F1} yards from waypoint '{to.Name}' " +
+                $"(must be within {SuccessRadiusYards} yards)");
+        }
+
+        if (isFinalSegment && currentMapId != expectedEndMapId)
+        {
+            throw new InvalidOperationException(
+                $"Segment {segmentLabel} failed: final MapId is {currentMapId} (expected: {expectedEndMapId})");
+        }
     }
 
     private async Task NavigateToDestinationAsync(Position endPos, uint expectedEndMapId, CancellationToken cancellationToken)

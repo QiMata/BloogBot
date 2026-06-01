@@ -159,7 +159,8 @@ namespace BotRunner
             Stack<IBotTask> tasks,
             IDependencyContainer container,
             Constants.BotBehaviorConfig config,
-            Action<string> addDiagnosticMessage) : IBotContext
+            Action<string> addDiagnosticMessage,
+            Action<string> addImmediateDiagnostic) : IBotContext
         {
             public Microsoft.Extensions.Logging.ILoggerFactory? LoggerFactory => null;
             public IObjectManager ObjectManager => objectManager;
@@ -168,6 +169,7 @@ namespace BotRunner
             public Constants.BotBehaviorConfig Config => config;
             public IWoWEventHandler EventHandler => objectManager.EventHandler;
             public void AddDiagnosticMessage(string message) => addDiagnosticMessage(message);
+            public void AddImmediateDiagnostic(string message) => addImmediateDiagnostic(message);
         }
     }
 }

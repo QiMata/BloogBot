@@ -29,107 +29,33 @@
 //     `// WWoW:` tag.
 // ============================================================================
 
-// WWoW: Orgrimmar -> Undercity zeppelin gangplank (map 1, Kalimdor side dock)
-// Original screenshot-derived anchors (2026-05-06):
-//   ApproachPosition cluster:  (1338.10, -4646.00, 51.60)
-//   BoardingPosition (deck):   (1320.142944, -4653.158691, 53.891945)
-// These were the bot's recorded positions when stalled, not the actual
-// walkable upper-platform / gangplank elevations. Snapping to the existing
-// walkable detail verts in tile (1, 40, 29) -- see Phase 3 follow-up:
-//   approach (closest walkable to (1338,-4646)): (1330.66, -4656.03, 96.29)
-//   deck     (closest walkable to (1320,-4653)): (1315.33, -4650.00, 98.54)
-// XY distance ~16 units — plausible OG zeppelin gangplank length. Detour
-// requires both endpoints to lie within walkableClimb of an actual
-// walkable polygon at the seed Z; the original z=51-54 anchors fell below
-// the tile's walkable mesh floor (hmin=72.29) and Detour silently dropped
-// the connection at dtCreateNavMeshData::classifyOffMeshPoint's height
-// check (DetourNavMeshBuilder.cpp:344-348). See memory note
-// project_mmapgen_offmesh_axis_swap.md for the full diagnosis.
-1 40,29 (1330.66 -4656.03 96.29) (1315.33 -4650.00 98.54) 4.0 // WWoW: OG upper platform -> OG-UC zeppelin gangplank end (proof-test anchor; revalidate after 40,29 axis correction)
-1 40,29 (1315.33 -4650.00 98.54) (1330.66 -4656.03 96.29) 4.0 // WWoW: reverse (redundant given bidir flag on forward; revalidate after 40,29 axis correction)
-// Bridge from walkable upper platform to BotRunner's existing ApproachPosition + BoardingPosition
-// (TransportData.cs lines 179, 186). The forward entry's start is on walkable mesh; the end is
-// at the bot's expected boarding/approach Z, so the path query "navigate to (1338.10,-4646.00,51.60)"
-// finds the off-mesh poly via dtNavMeshQuery::findNearestPoly and routes through it. The DT_OFFMESH_CON_BIDIR
-// flag (set by default for offmesh.txt entries with dir=1) lets the bot traverse the link in both
-// directions without needing a reverse entry — and a reverse entry would be silently dropped at
-// dtCreateNavMeshData::classifyOffMeshPoint's height check (start z=51.60 below the tile's walkable
-// mesh floor at hmin=72.29).
-1 40,29 (1330.66 -4656.03 96.29) (1338.10 -4646.00 51.60) 4.0 // WWoW: OG upper platform -> ApproachPosition (BotRunner staging point; revalidate after 40,29 axis correction)
-1 40,29 (1330.66 -4656.03 96.29) (1320.14 -4653.16 53.89) 4.0 // WWoW: OG upper platform -> BoardingPosition (gangplank/deck; revalidate after 40,29 axis correction)
-// ----------------------------------------------------------------------------
-// Phase 4 experiment matrix outcomes (PFS-OVERHAUL-004, 2026-05-06):
-//   H1 (radius 4.0 → 12.0 on all four entries): NO EFFECT. PROOF C still
-//   failed with maxZ=62.15 across 477 corners; the path stayed at sea level.
-//   This rules out "radius too narrow for Detour's findNearestPoly" as the
-//   blocker.
-//   H2b (FindPathPolygonsForAgent helper, this session): the smoke test
-//   between the upper-platform and gangplank-end anchors (i.e. the EXACT
-//   off-mesh anchor pair) returns polyCount=5 with offMeshPolyCount=0.
-//   Detour's findPath does not traverse the off-mesh polygon EVEN BETWEEN
-//   ITS OWN ANCHORS. PROOF C (flight master → ApproachPosition) likewise
-//   returns polyCount=296 offMeshPolyCount=0. Diagnosis: the upper-platform
-//   anchor at z=96 is too far above the nearest walkable polygon (which is
-//   at z≈54 on the dock) for dtNavMesh::connectExtOffMeshLinks's
-//   findNearestPoly snap to bridge — the off-mesh polygon is dangling in
-//   the tile, present in offMeshConCount but not linked into the navmesh
-//   graph. Adding a sea-level anchor pair (H2a below) is the next test.
-// ----------------------------------------------------------------------------
+// WWoW: Orgrimmar -> Undercity zeppelin upper-deck seam (map 1, Kalimdor side dock)
+// The old z=96 proof anchors were outside Orczeppelinhouse.wmo's real bounds
+// and were removed after bbox-backed live evidence showed they could mask
+// exterior-hill routing. Use actual deck / boarding coordinates here.
+// Current measured seam: both endpoints are inside Orczeppelinhouse.wmo's
+// measured bounds and sit on physics-clear walkable upper-deck support.
+1 40,29 (1329.877 -4653.495 53.609) (1320.143 -4653.159 53.892) 2.5 // WWoW: OG zeppelin deck edge -> BoardingPosition seam (physics-clear, inside tower bbox)
 
-// WWoW: H2a sea-level shortcut (PFS-OVERHAUL-004 Phase 4, 2026-05-06).
-// Bridges the canonical OG-city walkable point (1604.8, -4425.6, 10.36) — the
-// start of the existing orgrimmar_flight_master_tower_descent walkable-leg
-// test — directly to BoardingPosition (1320.14, -4653.16, 53.89). Both
-// endpoints are confirmed walkable: the start by an existing walkable-leg
-// test, the end by the live CrossroadsToUndercity test trace where the bot
-// reached (1338.1, -4646.0, 51.6) at z=51.6 (within walkableClimb of 53.89).
-// Tile coordinate: tileX = 32 - floor(-4425.6/533.33) = 40; tileY = 32 -
-// floor(1604.8/533.33) = 28 -> 1 40,28 -> mmtile filename 0012840.mmtile
-// (sprintf order is mapID, tileY, tileX).
-1 40,28 (1604.8 -4425.6 10.36) (1320.14 -4653.16 53.89) 4.0 // WWoW: OG city sea-level walk -> BoardingPosition (Phase 4 H2a; revalidate)
-// ----------------------------------------------------------------------------
+// WWoW: Orgrimmar eastern approach steep-climb bypass (MmapGen tile 39,28; file 0012839.mmtile)
+// Loop-26 / NEXT_SESSION_LONGPATHING_HANDOFF: CrossroadsToUndercity_UsesFlightAndZeppelin
+// + OrgrimmarToUndercityZeppelin_BoardsAndDeplanes stall at (1627.6,-4151.8,36.9). FG physics
+// reports intent-flag=0x1 currentSpeed=0 for ~15s. PathPhysicsProbe --detour-resolve --smooth
+// shows segment 0 is a 64.9° SteepClimb (validation=Clear) from z=36.9 to z=38.02 — bake's
+// walkableClimb=1.8 accepts the 1.12y step, but the runtime physics correctly rejects 65°
+// slopes. Raw corner-to-corner segment 0 is BlockedGeometry over 32y/10.7y. Smooth densifier
+// produces 21 short StepUps (slopes 27-43°) before reaching Walk affordance at segment 22.
+// Start poly: 0x1000013D00286 (idx 646, area=1, surfaceZ=37.273, posOverPoly=1).
+// End poly:   0x1000013D0027D (idx 637, area=1, surfaceZ=45.635, posOverPoly=1).
+// Distance: 16.5y horizontal, 8.7y vertical — the natural Detour A* cost across the staircase
+// is ~20y so the off-mesh wins. Same pattern as the loop-24 close-out on tile (40,29).
+// Tile-coord note: MmapGen internal tileX corresponds to Recast X = WoW Y axis (per
+// TerrainBuilder::copyVertices swap), so this coord (WoW X=1627.6, WoW Y=-4151.8) lives in
+// MmapGen tileX=39 (WoW Y range -4266..-3733) and tileY=28 (WoW X range 1600..2133). The
+// filename `<mapID:3><tileY:2><tileX:2>.mmtile` produces 0012839.mmtile for that tile.
+1 39,28 (1627.600 -4151.800 37.273) (1622.160 -4163.970 45.635) 2.5 // WWoW: OG east-wall approach steep-climb bypass
 
-// WWoW: H2c intra-tile off-mesh proof (PFS-OVERHAUL-004 Phase 4, 2026-05-06).
-// Both endpoints inside tile (40, 29) bounds (Recast X / WoW Y -4800..-4266.67,
-// Recast Z / WoW X 1066.67..1600.0). Eliminates the cross-tile linkage variable that
-// H2a leaves open. Start coord is the canonical intermediate from
-// orgrimmar_city_to_zeppelin_tower_lower_approach walkable-leg test
-// (LongPathingRouteTests.cs:71); end coord is BoardingPosition.
-1 40,29 (1356.8 -4501.3 29.44) (1320.14 -4653.16 53.89) 4.0 // WWoW: H2c intra-tile off-mesh proof (revalidate)
 // ----------------------------------------------------------------------------
-
-// WWoW: PFS-OVERHAUL-006 loop-24 Phase A5.5 (2026-05-18). Four off-mesh
-// entries on tile (40, 29) connecting each of the 4 failing CriticalWalkLegs
-// tests' start coords directly to BoardingPosition. With the A5.2 + A5.3
-// off-mesh-aware managed pipeline now in place, these entries are safe to
-// deploy (loop-23 Surface C's "managed-pipeline-hang risk" is resolved).
-// Closure target: 23/0 on CrossroadsToUndercity_CriticalWalkLegs by giving
-// Detour's findPath a single-teleport corridor that bypasses the tile (40,29)
-// coord-2 phantom stack which dominates wall time on these routes (200s per
-// failing case pre-A5.5 per loop-24 Phase A5.4 measurement).
-//
-// Test → Source coord mapping (per loop-23 Surface C handoff):
-//   tower_underpass:           (1357.20, -4516.20, 32.00)
-//   bridge_side:               (1337.20, -4654.80, 49.80)
-//   tower_base_live_vertical:  (1342.40, -4652.10, 24.60)
-//   exterior_steep_incline:    (1381.00, -4380.90, 26.00)
-//
-// Caveats:
-// - Endpoint Z values fall below tile (40, 29)'s walkable mesh hmin = 72.29
-//   per the earlier original-z OG entries' findings (see lines 33-47). Detour
-//   may silently drop these at dtCreateNavMeshData::classifyOffMeshPoint's
-//   height check. If post-bake probe shows no off-mesh poly at any source,
-//   revert and surface to user — alternative is to bind to higher-Z anchors
-//   on the upper platform (z=96) and rely on the bot's MovementController to
-//   exit the teleport at the lower destination Z.
-// - "size" 4.0 matches existing OG zep entries. Bidirectional by default
-//   so the bot can use these from either direction.
-1 40,29 (1357.20 -4516.20 32.00) (1320.14 -4653.16 53.89) 4.0 // WWoW: tower_underpass -> boarding (loop-24 A5.5)
-1 40,29 (1337.20 -4654.80 49.80) (1320.14 -4653.16 53.89) 4.0 // WWoW: bridge_side -> boarding (loop-24 A5.5)
-1 40,29 (1342.40 -4652.10 24.60) (1320.14 -4653.16 53.89) 4.0 // WWoW: tower_base_live_vertical -> boarding (loop-24 A5.5)
-1 40,29 (1381.00 -4380.90 26.00) (1320.14 -4653.16 53.89) 4.0 // WWoW: exterior_steep_incline -> boarding (loop-24 A5.5)
-// ----------------------------------------------------------------------------
-
 // WWoW: Undercity zeppelin elevator (map 0, Tirisfal side)
 // TODO[overhaul]: replace placeholder coordinates with measured anchors. The
 // elevator descends from the upper Tirisfal platform to the Undercity sewer

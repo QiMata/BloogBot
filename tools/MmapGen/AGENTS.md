@@ -105,6 +105,30 @@ expected order in a comment block.
   Use `anchorStageManifestCoordsWow` for analysis-only extra probe coords when
   you need stage answers for shifted dead-end points without changing the
   actual compact-span / final-Detour cull coord list.
+  Use `preRegionAnchorCoordsWow` when a shifted hallway/city dead-end needs
+  earlier source-support / compact cleanup proof without also promoting that XY
+  into the checked-in final Detour stack-cull list.
+  Use `anchorRouteTargetsWow` when a stage-clean anchor still dead-ends inside
+  final Detour and you need reachability proof for the local winner component.
+  Keep `postDetourCullAnchorTrappedComponents` off in the checked-in config
+  unless a validated branch improves the real route sweep; on tile `1:40,29`
+  the routeability evidence is useful, but the cull is not promotable yet.
+  Keep `borrowMissingAnchorSourceSupportFromNeighbors=false` by default; it can
+  make a sourceSupport blind spot look green in the manifest while making the
+  real hallway route shape worse.
+  If `1523.800,-4425.900,17.100` still dies at `polymesh`, the next allowed
+  experiment surface is the pre-poly contour pair:
+  `prePolyPreserveAnchorSupportCoordsWow` +
+  `prePolyUseRawAnchorSupportContoursWow`. On `2026-05-24` that pair moved
+  `1523.8` to `finalDetour / lower_competitor_dominant` while keeping the
+  focused deck slice `7/7`, which proves the contour can survive later in the
+  pipeline. It did NOT improve the full route count yet, so leave both keys
+  absent in the checked-in config until a branch improves more than the stage
+  answer.
+  Do not retry `maxVertsPerPoly=4` or `=6` as a follow-up to that contour
+  branch. Both values reintroduced top-deck connector / giant-bridge
+  regressions even though they made some hallway/exterior anchors look more
+  routeable in the manifest.
   Leave `logAnchorStageDiagnostics=false` unless you explicitly need the older
   per-subtile `HF-SRC-ANCHOR` / `CHF-SRC-ANCHOR` / `CHF-SRC-COMP` print stream.
   If exact dead-end coords are green in the manifest but live/raw-Detour

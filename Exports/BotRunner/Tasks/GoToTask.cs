@@ -27,34 +27,52 @@ public class GoToTask : BotTask, IBotTask
     private const float InitialDirectFallbackDistance2D = 60f;
     private const float PositionMatchEpsilon = 0.5f;
     private const float ToleranceMatchEpsilon = 0.1f;
+    private const float DefaultVerticalArrivalTolerance = 4f;
     private int _lastLoggedRoutePlanVersion;
     private readonly DateTime _createdUtc = DateTime.UtcNow;
     private bool _loggedFirstResolutionAttempt;
     private bool _loggedFirstSuccessfulWaypoint;
     private bool _loggedFirstNullWaypoint;
     private const float TransportArrivalZTolerance = 3f;
+    private bool _requireVerticalArrival;
+    private float _verticalTolerance;
 
-    public GoToTask(IBotContext botContext, float x, float y, float z, float tolerance = 3f)
+    public GoToTask(
+        IBotContext botContext,
+        float x,
+        float y,
+        float z,
+        float tolerance = 3f,
+        bool requireVerticalArrival = false,
+        float verticalTolerance = 0f)
         : base(botContext)
     {
         _target = new Position(x, y, z);
         _tolerance = tolerance > 0 ? tolerance : 3f;
+        _requireVerticalArrival = requireVerticalArrival;
+        _verticalTolerance = NormalizeVerticalTolerance(requireVerticalArrival, verticalTolerance);
     }
 
     internal Position Target => _target;
     internal float Tolerance => _tolerance;
+    internal bool RequireVerticalArrival => _requireVerticalArrival;
+    internal float VerticalTolerance => _verticalTolerance;
 
-    internal bool MatchesTarget(Position target, float tolerance)
+    internal bool MatchesTarget(Position target, float tolerance, bool requireVerticalArrival = false, float verticalTolerance = 0f)
     {
         return _target.DistanceTo2D(target) <= PositionMatchEpsilon
             && Math.Abs(_target.Z - target.Z) <= PositionMatchEpsilon
-            && Math.Abs(_tolerance - tolerance) <= ToleranceMatchEpsilon;
+            && Math.Abs(_tolerance - tolerance) <= ToleranceMatchEpsilon
+            && _requireVerticalArrival == requireVerticalArrival
+            && Math.Abs(_verticalTolerance - NormalizeVerticalTolerance(requireVerticalArrival, verticalTolerance)) <= ToleranceMatchEpsilon;
     }
 
-    internal void Retarget(Position target, float tolerance)
+    internal void Retarget(Position target, float tolerance, bool requireVerticalArrival = false, float verticalTolerance = 0f)
     {
         _target = target;
         _tolerance = tolerance > 0 ? tolerance : 3f;
+        _requireVerticalArrival = requireVerticalArrival;
+        _verticalTolerance = NormalizeVerticalTolerance(requireVerticalArrival, verticalTolerance);
         _navPath?.Clear();
         _noPathSinceUtc = null;
         _lastNoPathLogUtc = DateTime.MinValue;
@@ -266,10 +284,23 @@ public class GoToTask : BotTask, IBotTask
         var requiresTransport = (_navPath?.IsRidingTransport ?? false)
             || TransportData.DetectElevatorCrossing(player.MapId, player.Position, _target) != null;
         if (!requiresTransport)
-            return true;
+        {
+            if (!_requireVerticalArrival)
+                return true;
+
+            return Math.Abs(player.Position.Z - _target.Z) <= _verticalTolerance;
+        }
 
         return player.TransportGuid == 0
             && Math.Abs(player.Position.Z - _target.Z) <= MathF.Max(_tolerance, TransportArrivalZTolerance);
+    }
+
+    private static float NormalizeVerticalTolerance(bool requireVerticalArrival, float verticalTolerance)
+    {
+        if (!requireVerticalArrival)
+            return 0f;
+
+        return verticalTolerance > 0f ? verticalTolerance : DefaultVerticalArrivalTolerance;
     }
 
 }

@@ -12,9 +12,22 @@ public class PathingTestDefinitionsTests
     // ================================================================
 
     [Fact]
-    public void All_Returns20Tests()
+    public void All_StableRowCount_IsBaseline20()
     {
-        PathingTestDefinitions.All.Should().HaveCount(20);
+        // The canonical Stable set (Basic 3 + Transport 4 + Cave 3 + Terrain 3 +
+        // Advanced 3 + EdgeCase 4) remains 20 after Phase 1 added Experimental rows.
+        // Phase 2 promotions will grow this count; bump the expected value then.
+        PathingTestDefinitions.All
+            .Where(t => t.Status == TestStatus.Stable)
+            .Should().HaveCount(20);
+    }
+
+    [Fact]
+    public void All_TotalRowCount_IncludesExperimentalSeed()
+    {
+        // After Phase 1, All includes ~51 Experimental scaffold rows in addition to
+        // the 20 Stable baseline. Bound loosely to allow Phase 2 churn.
+        PathingTestDefinitions.All.Should().HaveCountGreaterThanOrEqualTo(60);
     }
 
     [Fact]
@@ -71,9 +84,15 @@ public class PathingTestDefinitionsTests
     // ================================================================
 
     [Fact]
-    public void GetCategories_Returns6Categories()
+    public void GetCategories_IncludesStableBaselineCategories()
     {
-        PathingTestDefinitions.GetCategories().Should().HaveCount(6);
+        // The 6 canonical Stable categories (Basic, Transport, Cave, Terrain, Advanced,
+        // EdgeCase) must always be present. Phase 1 adds Experimental categories
+        // (Dungeon, LongTravel.EK, LongTravel.Kalimdor, LongTravel.CrossContinent,
+        // GrandTour, CapitalLoop); Phase 2 promotions may add or rename more.
+        var cats = PathingTestDefinitions.GetCategories().ToList();
+        cats.Should().Contain(new[] { "Basic", "Transport", "Cave", "Terrain", "Advanced", "EdgeCase" });
+        cats.Should().HaveCountGreaterThanOrEqualTo(6);
     }
 
     [Theory]

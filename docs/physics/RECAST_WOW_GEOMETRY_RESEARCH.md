@@ -938,6 +938,87 @@ is a chained final-Detour trapped-basin problem. The next useful move is a
 reachability-aware/component-targeted cull or earlier contour/polymesh
 prevention, not more support-band threshold tuning.
 
+### 2026-05-24 routeability-aware finalDetour cull follow-up
+
+I kept the finalDetour component metadata and extended it into a real
+routeability proof surface:
+
+- `anchorRouteTargetsWow` lets each anchor resolve a local escape target.
+- the manifest summary now records:
+  - `FinalWinnerRouteableToAnyTarget`
+  - `FinalResolvedRouteTargetCount`
+  - `FinalRouteableSupportCandidateCount`
+  - `FinalRouteableSupportComponentCount`
+- the optional experiment flag
+  `postDetourCullAnchorTrappedComponents=true` disables a trapped local winner
+  only when the same anchor window still contains another support component
+  that can route to the configured target.
+
+Validated experiment branches:
+
+- `tmp/bake-sweeps/og_4029_anchor_routeability_cull-20260524T004027Z/`
+  - saved tile hash:
+    `B84D1CD2369E03721ECBDC83656EC4E700E546886CFF49C231F52F05CED086AF`
+- `tmp/bake-sweeps/og_4029_anchor_routeability_chain_targets-20260524T005038Z/`
+  - saved tile hash:
+    `039BEDF73A2318B0D6559BDC0FB453D240875EDD08BA2319F56A0EA26D85EA94`
+
+Validation commands:
+
+```powershell
+$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'
+powershell -ExecutionPolicy Bypass -File 'E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1' -Map 1 -Tiles '40,29' -Variant 'og_4029_anchor_routeability_chain_targets' -DataDir 'D:\wwow-bot\test-data'
+
+$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'
+dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj' --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_anchor_routeability_chain_targets_focused.trx" --results-directory 'E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding'
+
+$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'
+dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj' --configuration Release --no-build --no-restore --settings 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings' -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=critical_walk_legs_og_4029_anchor_routeability_chain_targets.trx" --results-directory 'E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding'
+```
+
+Observed results:
+
+- focused OG slice stayed green `7/7`
+- full raw-Detour `CriticalWalkLegs` stayed flat at `17/23`
+- the six failing route labels did not change
+- the underpass failure changed shape: it no longer dead-ended, but the route
+  climbed toward the overhead ramp/ceiling within `1.6y` of the start before
+  moving horizontally out
+
+What the routeability proof actually taught us:
+
+- city / hallway / hallway-exit anchors still resolved `0` routeable support
+  components even with local chain targets:
+  - `1545.000,-4434.500,11.100`
+  - `1518.200,-4419.800,17.100`
+  - `1491.400,-4417.300,23.300`
+- the cull therefore had nothing actionable to remove on those chained trapped
+  basins
+- `1364.867,-4374.000,26.109` and `1355.600,-4522.300,33.100` did resolve
+  routeable support components, which is why the underpass/exterior branch
+  changed while the hallway chain did not
+
+Practical conclusion:
+
+- keep the routeability fields in the manifest and summary
+- keep `postDetourCullAnchorTrappedComponents` disabled in the default tile
+  config for now
+- do not spend another loop only rewiring route targets
+- the next productive fix surface is still earlier structural loss:
+  `polymesh`/`contours` for the hallway-city chain, and lower-vs-overhead
+  support disambiguation for the underpass
+- checked-in proof-only validation:
+  - `tmp/bake-sweeps/og_4029_anchor_routeability_proof_only_qfix_manifest_only-20260524T012055Z/`
+  - saved tile hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - focused slice stayed `7/7`
+  - full `CriticalWalkLegs` stayed `17/23`
+  - compatibility note:
+    `1520.600,-4426.500,17.900` must stay manifest-only. When it leaked into
+    `postDetourCullAnchorPolyStacksCoordsWow`, the default routeability branch
+    drifted to a different tile hash and different local basin answers without
+    improving the route sweep.
+
 ### Follow-up: combined post-erode restore + source-support window cull
 
 - Why this branch existed:
@@ -1032,3 +1113,1618 @@ dotnet test 'E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\Pathf
     by those exact endpoint cells resolving onto the wrong local support layer
   - next diagnosis should look further along the corridor/connectivity surface,
     not blindly keep trimming the exact endpoint basin again
+
+### Follow-up: decoupled pre-region anchor coords and negative source-support borrow
+
+- Why this branch existed:
+  - the routeability-proof baseline taught us an important hygiene rule:
+    `1520.600,-4426.500,17.900` changed hallway answers when it leaked into
+    `postDetourCullAnchorPolyStacksCoordsWow`, but that did not prove the fix
+    belonged in the final Detour stack cull itself
+  - the next step was to separate "earlier compact/source cleanup work coords"
+    from "final Detour stack-cull coords" so we could test the hallway dead-end
+    effect at the right bake stage
+- New code/config surface:
+  - `preRegionAnchorCoordsWow`
+    - drives only the source-support / upper-compact cleanup windows
+    - falls back to `postDetourCullAnchorPolyStacksCoordsWow` for backward
+      compatibility when omitted
+  - `borrowMissingAnchorSourceSupportFromNeighbors`
+    - lets a no-source-support anchor temporarily borrow the nearest same-band
+      source support from a nearby anchor
+    - intentionally disabled by default; this is an experiment surface only
+- Variant 1:
+  `tmp/bake-sweeps/og_4029_pre_region_anchor_split_15206-20260524T023316Z/`
+  - saved tile hash:
+    `B196C738FF6ABA04B35055461112E8722AD0A2209A515100F8A9E53A6DD9AAA5`
+  - focused OG slice stayed `7/7`
+  - full raw-Detour `CriticalWalkLegs` stayed `17/23`
+  - stage-proof learning:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `polymesh / upper_support_lost`
+    - `1521.300,-4422.500,17.100` ->
+      still `sourceSupport / no_source_support_probe`
+  - conclusion:
+    - the old `1520.600,-4426.500,17.900` effect was real, but it was an
+      earlier compact/source cleanup effect, not proof that this XY belongs in
+      the checked-in final Detour cull coord list
+- Variant 2:
+  `tmp/bake-sweeps/og_4029_pre_region_anchor_borrow_15213-20260524T024038Z/`
+  - saved tile hash:
+    `98D17DF9AE904BD1DC544729D4B96980361644C950AE9053F9F7D497E81CA3FE`
+  - stage-proof learning:
+    - `1521.300,-4422.500,17.100` stopped failing at `sourceSupport`
+    - it borrowed from `1522.500,-4424.100,17.000`
+    - `1522.500,-4424.100,17.000` also stayed green
+    - `1523.800,-4425.900,17.100` still failed at
+      `polymesh / upper_support_lost`
+  - runtime negative result:
+    - direct `1518.2,-4419.8,17.1 -> full goal` collapsed to a two-corner path
+      immediately
+  - conclusion:
+    - filling the `1521.3` source-support blind spot by borrowing from a
+      neighbor improves the proof surface, but it is not promotable while it
+      worsens the real hallway route shape
+- Checked-in default restore:
+  - bake dir:
+    `tmp/bake-sweeps/og_4029_pre_region_split_default_restore-20260524T024742Z/`
+  - saved tile hash restored to the proof-only baseline:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+  - keep:
+    - `borrowMissingAnchorSourceSupportFromNeighbors=false`
+    - `1520.600,-4426.500,17.900` manifest-only, not in the checked-in final
+      Detour cull coord list
+  - practical next move:
+    - keep using the decoupled pre-region coord list for targeted experiments
+    - do not promote neighbor borrowing again unless the direct route probes and
+      full route sweep both improve, not just the manifest
+
+### Follow-up: shifted pre-region endpoint seeding moves the dead-end forward, but routeability cull is still wrong
+
+- Experimental branches:
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_traps_v1-20260524T025737Z/`
+    - tile hash:
+      `8533ACF1BD05DCAF7BCA7078BB54F9489E29B82C6D299BD0D8010DF57FB1DADE`
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_traps_v2-20260524T030130Z/`
+    - tile hash:
+      `0ABAF48CEB6879FC177644A83490C26206628D1E3D6B9E5CF1720C1A999BBA87`
+- Method:
+  - take the actual partial-path endpoints from direct runtime probes and seed
+    them into `preRegionAnchorCoordsWow` only, not the checked-in final Detour
+    cull coord list
+- Positive learning:
+  - this does move the stalled city / hallway branch further along the corridor
+  - direct full-goal / segmented probe progression:
+    - baseline city branch:
+      `1545.0,-4434.5,11.1 -> 1537.2667,-4437.9,13.0089`
+    - shifted v1:
+      `1545.0,-4434.5,11.1 -> 1539.2667,-4437.9,12.3089`
+    - shifted v2:
+      `1545.0,-4434.5,11.1 -> 1541.2667,-4437.9,12.0089`
+    - hallway-to-exit segment moved from
+      `1513.9668,-4416.6,18.4089` to `1515.9668,-4418.6,17.9089`
+  - this is the first branch in this loop that materially advanced the
+    dead-end coords instead of only changing stage labels
+- Remaining limit:
+  - the exterior chain still did not close
+  - `1491.4 -> 1381.3` still only resolved to the local exact-exit anchor
+    `1471.3667,-4416.6,25.3089`
+  - `1381.3 -> boarding` still died at the underpass branch
+- Rejected combo:
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_traps_v2_routecull-20260524T030400Z/`
+    - tile hash:
+      `B3086CD68A7778B7FFC14E2D7DAA2A353CACA6F2746B417E935C23F279984911`
+  - combining the improved pre-region branch with
+    `postDetourCullAnchorTrappedComponents=true` is not promotable
+  - the manifest looked better at the underpass:
+    - `1364.867,-4374.000,26.109` became green + routeable
+    - `1381.300,-4370.600,26.000` flipped to
+      `finalDetour / upper_support_lost`
+  - but the actual route got worse:
+    - `1381.3 -> boarding` dropped onto a low descending branch toward
+      `1366.8667,-4374.0,14.0089`
+- Checked-in restore after these experiments:
+  - `tmp/bake-sweeps/og_4029_restore_after_iter_20260524-20260524T030827Z/`
+  - tile hash restored to:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-24 pre-poly contour preservation follow-up
+
+- Goal:
+  - prove whether `1523.800,-4425.900,17.100` can survive the
+    contour-to-polymesh handoff with a source-backed support contour instead of
+    disappearing before final Detour
+- New native experiment surfaces:
+  - `RC_PRESERVE_BORDER_VERTEX`
+  - `prePolyPreserveAnchorSupportCoordsWow`
+  - `prePolyUseRawAnchorSupportContoursWow`
+- Best experimental branch:
+  - `tmp/bake-sweeps/og_4029_prepoly_raw_plus_preserve_1523_v1-20260524T143954Z/`
+  - saved tile hash:
+    `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`
+  - focused OG slice stayed `7/7`
+  - full raw-Detour sweep stayed `17/23`
+- Strongest new proof from this loop:
+  - `1523.8` no longer first failed at `polymesh`; it moved to
+    `finalDetour / lower_competitor_dominant`
+  - the surviving support contour was no longer the coarse default contour:
+    - support-band contour vertex count grew to `19`
+    - the final Detour stage still broke it into `14` support-band candidates
+    - `FinalRouteableSupportComponentCount` stayed `0`
+  - interpretation:
+    - the support floor is present in the final tile on this branch
+    - it is just too fragmented/trapped to win a useful route
+- Rejected follow-ups:
+  - `tmp/bake-sweeps/og_4029_pre_region_shifted_v2_plus_prepoly_raw_preserve_1523_v1-20260524T144503Z/`
+    - combining the best shifted `preRegionAnchorCoordsWow` branch with the
+      raw+preserve contour branch regressed `1523.8` back to
+      `polymesh / upper_support_lost`
+  - `tmp/bake-sweeps/og_4029_prepoly_raw_preserve_1523_maxverts4_v1-20260524T144728Z/`
+    - saved tile hash:
+      `6530FC7C41C030557088AFED612BE667BB279F4BECB667F00C60CAB15E07F9C1`
+    - manifest looked better for several hallway/exit/exterior anchors, but
+      the focused deck slice regressed to `5/7`
+    - exact focused failures:
+      - `OrgrimmarZeppelinTopRampDeck_PreservesDeckConnectorSurfaces`
+      - `OrgrimmarZeppelinTopRampDeck_HasNoLargeBridgePolygons`
+- Current best interpretation:
+  - the real target is not another global knob sweep
+  - the next structural bake fix should be a local contour resimplification
+    between the default `8`-vertex support contour and the raw-preserved
+    `19`-vertex contour for `1523.8`
+- Checked-in restore after this loop:
+  - `tmp/bake-sweeps/og_4029_restore_after_prepoly_iteration_20260524-20260524T145052Z/`
+  - tile hash restored to:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-24 upstream/sibling memo + local resimplify follow-up
+
+- Short source-backed memo:
+  - `docs/physics/RECAST_WOW_SIBLING_COMPARISON_2026_05_24.md`
+- New targeted native surface added in `TileWorker.cpp`:
+  - `prePolyResimplifyAnchorSupportMaxError`
+  - `prePolyResimplifyAnchorSupportMaxEdgeLen`
+  - `prePolyResimplifyAnchorSupportTessellateWallEdges`
+  - `prePolyResimplifyAnchorSupportTessellateAreaEdges`
+  - `ResimplifyRawAnchorSupportContours(...)`
+- Critical correction:
+  - the earlier same-day `og_4029_prepoly_resimplify_1523_mse13_v1` write-up
+    was wrong about the branch being a true resimplify negative result
+  - root cause:
+    `RestoreRawAnchorSupportContours(...)` sets `contour.nverts = contour.nrverts`,
+    while the original resimplify helper still skipped when
+    `contour.nrverts <= contour.nverts`
+  - practical consequence:
+    the raw-restored contour was never actually re-simplified in that first
+    branch
+- Exact corrected follow-up commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - real bug-fixed `1.3` branch:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_prepoly_resimplify_1523_mse13_notess_v3' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_prepoly_resimplify_1523_mse13_notess.json'`
+  - local `maxEdgeLen` isolation:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_prepoly_resimplify_1523_mse13_edge24_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_prepoly_resimplify_1523_mse13_edge24.json'`
+  - tight-end upstream-range `1.1` branch:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_prepoly_resimplify_1523_mse11_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_prepoly_resimplify_1523_mse11.json'`
+  - focused/full validation for the changed branches:
+    - `og_4029_prepoly_resimplify_1523_mse13_notess_v3`
+    - `og_4029_prepoly_resimplify_1523_mse11_v1`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_resimplify_bugfix_iteration_20260524' -DataDir 'D:\wwow-bot\test-data'`
+- Observed corrected results:
+  - real contour fact now proven from bake logs:
+    - `[CONTOUR-ANCHOR-RAW] anchor=(1523.800,-4425.900,17.100) contour=1 region=8 verts=19->448`
+  - bug-fixed `1.3` branch:
+    - `448 -> 21`
+    - hash:
+      `F02666AFF5F064FC2999657718DC5B0084613F37C3DE4015DA339A43EC06959D`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+  - `maxEdgeLen=24` isolation:
+    - still `448 -> 21`
+    - same hash:
+      `F02666AFF5F064FC2999657718DC5B0084613F37C3DE4015DA339A43EC06959D`
+    - no extra tests run because the saved tile matched the already-validated
+      bug-fixed `1.3` branch exactly
+  - `1.1` branch:
+    - `448 -> 22`
+    - hash:
+      `089DBEC002F4D8DF9BDBD091D32F659364F958C40F50E04F9D95357EDDD39FAD`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - same six remaining reds
+- Current stage authority from the corrected manifests:
+  - `F02666...` branch:
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1522.500,-4424.100,17.000` ->
+      no first-bad stage
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - `089DBE...` branch:
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1522.500,-4424.100,17.000` ->
+      no first-bad stage
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+  - restored baseline `A01DEE...` branch:
+    - `1523.800,-4425.900,17.100` still ->
+      `finalDetour / lower_competitor_dominant`
+- Practical interpretation:
+  - the local contour family is now better understood:
+    - default simplified support contour is too coarse
+    - raw-preserved contour is too fragmented
+    - upstream-style local resimplify at `1.3` and `1.1` still collapses back
+      to a near-coarse `21/22`-vertex contour
+  - `maxEdgeLen` was not the missing lever for this contour
+  - the next promotable branch should pivot to explicit local contour
+    preservation / custom simplification or to source-support /
+    lower-competitor classification work
+  - keep global knob churn off the table
+- Checked-in restore after this corrected follow-up:
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_resimplify_bugfix_iteration_20260524-20260524T231759Z/`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-25 UTC local raw-window follow-up
+
+- New targeted native surface added on top of the resimplify helper:
+  - `prePolyResimplifyAnchorSupportLocalPreserveRadius`
+  - helper `InjectAnchorLocalRawVertices(...)`
+  - refactor helper `FinalizeAnchorContourFlags(...)`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - radius `3.0` bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_prepoly_resimplify_1523_localraw_r3_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_prepoly_resimplify_1523_localraw_r3.json'`
+  - radius `6.0` bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_prepoly_resimplify_1523_localraw_r6_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_prepoly_resimplify_1523_localraw_r6.json'`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_localraw_window_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Observed results:
+  - radius `3.0`:
+    - contour:
+      `448 -> 46`
+    - hash:
+      `F076A6FA0974755EA1F8384BB3C2154E064804EDD8604001030F6C6D637C2DC5`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - manifest:
+      - `1523.800,-4425.900,17.100` still ->
+        `finalDetour / lower_competitor_dominant`
+      - `1522.500,-4424.100,17.000` still ->
+        no first-bad stage
+    - decisive log:
+      - `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=2 lowerFringeCulled=0 supportBandCandidates=2`
+  - radius `6.0`:
+    - contour:
+      `448 -> 145`
+    - hash:
+      `5997F2588CE58B979CE0CC8C199076F7C5A979284C2AEFFB837E99377A21E459`
+    - focused:
+      `7/7`
+    - full:
+      `17/23`
+    - regression:
+      - `1522.500,-4424.100,17.000` ->
+        `finalDetour / support_footprint_missed_anchor`
+      - hallway live-wall stall route ended deeper at
+        `(1514.0,-4426.5,20.2)`
+    - decisive log:
+      - `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=14 lowerFringeCulled=0 supportBandCandidates=14`
+- Current best interpretation:
+  - the "missing middle contour" hypothesis was useful, but the local raw-window
+    follow-up shows the real blocker more clearly:
+    the final support footprint still does not reach `1523.8`
+  - when the bake can preserve nearby support-band fragments yet the final cull
+    still reports `supports=0` and `lowerFringeCulled=0`, more contour detail
+    is the wrong next lever
+  - the next serious branch should pivot to support-footprint-aware
+    lower-competitor handling or earlier source-support classification, with a
+    local `ch` override remaining only as a research-backed sibling-style
+    fallback
+- Checked-in restore after this loop:
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_localraw_window_iteration_20260525-20260525T002411Z/`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-25 UTC support-gap follow-up
+
+- New targeted native surface:
+  - `postDetourCullAnchorPolyStacksSupportGap2D`
+  - helper `GetDetourBoundsGap2D(...)`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_anchor_support_gap1_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_anchor_support_gap1.json'`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_support_gap1_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Observed results:
+  - saved hash:
+    `33F6D5DA3189CF1985120B247D23C9EF0C978995B10FF79C90A65DB5ABFE991D`
+  - focused:
+    `7/7`
+  - full:
+    `17/23`
+  - the new cull did fire at the red anchor:
+    - `1523.8` changed from
+      `lowerFringeCulled=0`
+      to
+      `lowerFringeCulled=2`
+    - measured `bestSupportGap2D=0.300`
+  - but the stage answer did not move:
+    - `1523.800,-4425.900,17.100` still ->
+      `finalDetour / lower_competitor_dominant`
+- Current best interpretation:
+  - the real lower basin is broader than the tiny no-overlap fringe this cull
+    can see
+  - that makes the support-gap branch a good proof surface but not a sufficient
+    fix
+  - the next branch should move earlier into compact/source-support footprint
+    work rather than widening this same finalDetour idea blindly
+- Checked-in restore after this loop:
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_support_gap1_iteration_20260525-20260525T005613Z/`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+### 2026-05-25 UTC support-footprint follow-up
+
+- WWoW tested two follow-ups aimed at the remaining `1523.8` footprint hole.
+- Raw+preserve contour + support-gap combination:
+  - hash:
+    `EFD2DCE534EFB2A9039447DFBE84C6F695701C507ED60DC0592C71752EB783FD`
+  - focused/full:
+    `7/7`, `17/23`
+  - decisive proof:
+    - `1523.8` still logged
+      `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=14 lowerFringeCulled=2 ... supportBandCandidates=14 ... bestSupportGap2D=0.300`
+    - `1523.800,-4425.900,17.100` still ->
+      `finalDetour / lower_competitor_dominant`
+    - `1522.500,-4424.100,17.000` regressed ->
+      `finalDetour / support_footprint_missed_anchor`
+- Support-band floor-slack widening:
+  - native/config surface:
+    `AnchorSupportBandTuning` /
+    `anchorSourceSupportFloorSlackBelow`
+  - tested local override:
+    `anchorSourceSupportFloorSlackBelow = 0.35`
+  - hash:
+    `CD5F1EB58003C4326D03B8A638EA154AF2855F3547520000AE39E45E59163FE0`
+  - focused/full:
+    `7/7`, `17/23`
+  - decisive proof:
+    - `1523.8` still logged
+      `[DT-ANCHOR-CULL-SKIP] ... supports=0 upperFringe=4 lowerFringeCulled=0 ... supportBandCandidates=4 ... bestSupportGap2D=-1.000`
+    - `1523.800,-4425.900,17.100` still ->
+      `finalDetour / lower_competitor_dominant`
+    - `1522.500,-4424.100,17.000` and
+      `1521.267,-4425.600,17.609` both regressed ->
+      `finalDetour / lower_competitor_dominant`
+- Interpretation:
+  - these are two more bounded negatives, but they narrow the search well
+  - the surviving support at `1523.8` is not failing because the contour or
+    support floor is generically too small; it is failing because the exact
+    anchor neighborhood still does not overlap the right surviving support
+    footprint
+  - do not keep widening generic support-band slack or small finalDetour gap
+    trims here
+  - the next serious family should be exact-neighborhood support-footprint
+    bridging / overlap or earlier source-support classification
+
+### 2026-05-25 UTC raster patch follow-up
+
+- WWoW then tested a source-backed raster footprint bridge at `1523.8`:
+  `preRasterizeAnchorSupportPatchCoordsWow` +
+  `preRasterizeAnchorSupportPatchHalfExtent`.
+- Raster patch only:
+  - hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+    (same as stable baseline)
+  - focused:
+    `7/7`
+  - decisive proof:
+    - `1523.8` gained support at
+      `median` and `regions`
+      (`supportCell=true`)
+    - but lost it again at
+      `contours`
+      and still ended at
+      `finalDetour / lower_competitor_dominant`
+- Raster patch + raw+preserve contour carry:
+  - hash:
+    `52D99D419A201AC86DA1512A1BBDAFC0F955627B11A0A96041732DCD22DF2FC8`
+  - focused/full:
+    `7/7`, `17/23`
+  - decisive proof:
+    - the earlier recovered footprint survived through `regions`
+    - `polymesh supportCount` returned to `16`
+    - `finalDetour supportComponentCount` still stayed `0`
+    - the saved tile collapsed exactly to the old raw+preserve shard branch
+- Interpretation:
+  - this is the cleanest current stage proof for `1523.8`
+  - the footprint can be recovered before contour extraction, so the next real
+    loss is `rcBuildContours(...)`
+  - carrying raw contour vertices later is still insufficient once the branch
+    just reproduces `52D99...`
+  - next serious work should move from raster/finalDetour tuning into local
+    contour-builder preservation or custom simplification for a source-backed
+    recovered footprint
+
+### 2026-05-25 UTC boundary pre-seed follow-up
+
+The next contour-stage retry tested the official-Recast-style seed phase
+directly instead of another post-simplify reinjection pass.
+
+- New local surface:
+  - `SimplifyAnchorContour(..., mandatorySeedMask)`
+  - `BuildAnchorSupportBandBoundaryVertexMask(...)`
+  - config key:
+    `prePolyResimplifyAnchorSupportBandBoundarySeedRadius`
+- Exact commands:
+  - build:
+    `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+  - bake:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3.json'`
+  - focused/full validation:
+    - focused TRX:
+      `tmp/test-runtime/results-pathfinding/og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1_focused.trx`
+    - full TRX:
+      `tmp/test-runtime/results-pathfinding/critical_walk_legs_og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1.trx`
+  - restore:
+    `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_restore_after_boundary_preseed_iteration_20260525' -DataDir 'D:\wwow-bot\test-data'`
+- Artifact + hash:
+  - changed tile artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_boundary_preseed_anchoronly_r3_v1-20260525T173241Z/`
+  - saved tile hash:
+    `EB6F72B9E86E550DB277BA767D2BCB07D5C99337E729191B0C52378CF487DADC`
+  - restored hash:
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- Decisive proof:
+  - the branch really did move the support-band boundary into the seed phase:
+    `[CONTOUR-ANCHOR-BAND-SEED] ... contour=3 region=7 seededBoundaryVerts=4 seedRadius=3.000`
+  - that still simplified to the same coarse shape:
+    `raw 11 -> 158`, then `158 -> 13`
+  - route results stayed on the same regression profile as the later boundary
+    carry family:
+    - focused:
+      `3/7`
+    - full:
+      `20/23`
+  - `1523.800,-4425.900,17.100` still ended at
+    `finalDetour / lower_competitor_dominant`
+- Practical conclusion:
+  - for this contour family, the missing lever is not simply "move the same
+    boundary endpoints earlier"
+  - the recovered region-7 footprint still collapses back to the same
+    non-routeable contour even when the support-band boundary becomes a
+    mandatory simplifier seed
+  - next serious work should stop iterating on boundary-seed timing alone and
+    instead change the contour-builder shape more fundamentally or move earlier
+    into source/vertical classification
+
+### 2026-05-25 UTC existing-simplified local carry follow-up
+
+The next contour-stage retry removed the local resimplify step entirely and
+worked on the current `rcBuildContours()` output directly.
+
+- Upstream Recast source review before touching WWoW code:
+  - `simplifyContour(...)` carries raw-point indices in the simplified contour
+    until the final flag rewrite, so a same-order XYZ remap back onto `rverts`
+    is a bounded, source-consistent way to splice raw vertices into the
+    existing simplified contour without rerunning the simplifier:
+    https://raw.githubusercontent.com/recastnavigation/recastnavigation/main/Recast/Source/RecastContour.cpp
+- New local surface:
+  - `BuildAnchorContourRawIndexView(...)`
+  - `CarryLocalRawVerticesIntoExistingAnchorSupportContours(...)`
+  - config keys:
+    `prePolyCarryAnchorSupportCoordsWow`,
+    `prePolyCarryAnchorSupportBandLocalRadius`
+- Experiment:
+  - variant:
+    `og_4029_raster_support_patch06_carry_local_band_r4_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_carry_local_band_r4_v1-20260525T193344Z/`
+  - changed hash:
+    `3D3BEA0EFB858DBC0B4D72C501CCE50864CE4A7A8F3D2DA8280A2356ECAD97E3`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the branch avoided local resimplify entirely
+  - direct local carry still fired on the existing simplified contours:
+    - `contour 1 / region 8 verts=13->42 injectedSupportBandRawVerts=29`
+    - `contour 3 / region 7 verts=11->31 injectedSupportBandRawVerts=20`
+    - `contour 4 / region 19 verts=3->10 injectedSupportBandRawVerts=7`
+  - `1523.800,-4425.900,17.100` still stayed
+    `finalDetour / lower_competitor_dominant`
+- Practical read:
+  - skipping resimplify is not enough by itself
+  - on this branch, the direct local carry was still too broad because it
+    reopened every same-band contour in the anchor window
+  - the next contour-stage retry must either isolate a single recovered contour
+    more strictly or move the same support mask into the real
+    `rcBuildContours(...)` simplifier instead of post-contour reinjection
+
+### 2026-05-25 UTC anchor-containing no-resimplify carry follow-up
+
+- WWoW then closed the obvious narrower retry on the same no-resimplify
+  surface:
+  - same raster patch
+  - same local carry radius (`4.0`)
+  - same preserve surface
+  - but `prePolySupportContourSelectionMode = anchorContaining`
+- Experiment:
+  - variant:
+    `og_4029_raster_support_patch06_carry_local_band_anchoronly_r4_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_carry_local_band_anchoronly_r4_v1-20260525T195224Z/`
+  - changed hash:
+    `1932EC1BC322393040870F3293C9CF9B9EA6CCBB640974A3595B87CC4D5839B8`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - selector diagnostics still isolated the same contour:
+    - `contour 1 / region 8 verts=226 containsAnchor=0 closestDistance2D=0.836`
+    - `contour 3 / region 7 verts=158 containsAnchor=1 closestDistance2D=0.200`
+    - `contour 4 / region 19 verts=10 containsAnchor=0 closestDistance2D=1.997`
+  - only the anchor-containing contour was reopened:
+    - `contour 3 / region 7 verts=11->31 injectedSupportBandRawVerts=20`
+  - `1523.800,-4425.900,17.100` still stayed
+    `finalDetour / lower_competitor_dominant`
+- Practical read:
+  - the failure was not just "too many same-band contours got reopened"
+  - even the single-contour no-resimplify branch still reproduces the same bad
+    deck / hallway-exit / underpass route family
+  - that closes the most plausible post-contour narrowing branch; the next
+    meaningful retry should move the support mask into the real
+    `rcBuildContours(...)` simplify phase or earlier
+
+### 2026-05-25 UTC contour-build simplify-time seed follow-up
+
+WWoW then tested that exact earlier retry by moving the same support-band mask
+into upstream Recast's real `simplifyContour(...)` path during
+`rcBuildContours()`.
+
+- New local surface:
+  - `rcAnchorContourSimplifyOverride`
+  - `rcSetContourSimplifyAnchorOverrides(...)`
+  - `rcClearContourSimplifyAnchorOverrides()`
+  - `BuildContourSimplifyAnchorOverrides(...)`
+  - config keys:
+    `contourBuildSeedAnchorSupportCoordsWow`,
+    `contourBuildSeedAnchorSupportBandLocalRadius`
+- Experiment:
+  - variant:
+    `og_4029_raster_support_patch06_contourbuild_seed_local_anchoronly_r4_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_contourbuild_seed_local_anchoronly_r4_v1-20260525T200739Z/`
+  - changed hash:
+    `C0873DE50193A03921A761F75C278B82B001100B2E58BFCF4721DA8D827A5357`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the upstream simplify-time seed really fired on the selected recovered
+    contour:
+    `[CONTOUR-BUILD-ANCHOR-SEED] region=7 rawVerts=158 simplifiedVerts=33 seededSupportBandRawVerts=26 matchedOverrides=1`
+  - selector diagnostics still isolated the same contour family:
+    - `contour 1 / region 8 verts=226 containsAnchor=0 closestDistance2D=0.836`
+    - `contour 3 / region 7 verts=158 containsAnchor=1 closestDistance2D=0.200`
+    - `contour 4 / region 19 verts=10 containsAnchor=0 closestDistance2D=1.997`
+  - the later preserve pass still only touched `contour 3 / region 7`:
+    `preservedBorderVerts=33`
+  - most important manifest correction:
+    - `1523.8` still had nearby surviving support through
+      `contours supportCandidateCount=1` and
+      `polymesh supportCandidateCount=2`
+    - but `supportContainsAnchorProjection=false` throughout and
+      `finalDetour supportCount=0`
+    - the final answer still stayed:
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+- Practical read:
+  - this closes the most plausible "same mask, earlier timing" contour branch
+  - the surviving support is still missing the exact final footprint overlap at
+    `1523.8`, not just vanishing wholesale during contour extraction
+  - after this branch, contour-family retries are exhausted enough that the
+    next serious fallback should be the research-backed local `ch` override or
+    another genuinely earlier source/vertical classification experiment
+
+### 2026-05-25 UTC local `ch=0.05` override follow-up
+
+WWoW then took the research-backed local-`ch` fallback in the finer direction:
+hold the raster support patch fixed, but lower tile `1:40,29` from
+`ch=0.1` to `ch=0.05`.
+
+- Upstream basis:
+  - Recast's `rcConfig` docs define `ch` as the y-axis voxel size, say smaller
+    values increase vertical raster precision, and call out a practical minimum
+    around `0.05`.
+  - The same docs define `walkableClimb` and `walkableHeight` in voxel units
+    derived from `ch`, so a `ch` override changes the vertical quantization and
+    ledge/clearance contract rather than just adding detail.
+  - TrinityCore's current mmaps discussion documents a real map-local
+    `config.ch *= 2` override for a pathological map, so tile-local `ch`
+    handling is a legitimate sibling pattern.
+- Experiment:
+  - variant:
+    `og_4029_raster_support_patch06_ch005_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_ch005_v1-20260525T202957Z/`
+  - changed hash:
+    `4E8C3C6AF492AAA995044BD30345E3A2DB2BDEAA64B1D96D6E6332A2513EC4B9`
+  - focused/full:
+    `4/7`, `17/23`
+- Decisive proof:
+  - the branch heavily reshaped the saved tile
+    (`8775316 -> 2398200`, delta `-6377116` bytes)
+  - but the decisive anchor did not move:
+    - `1523.8` still kept
+      `contours supportCandidateCount=1`
+      and `polymesh supportCandidateCount=2`
+    - `finalDetour supportCandidateCount=0`
+    - final answer still stayed:
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - the regression widened outside the prior contour-family failure set:
+    - new full reds:
+      `orgrimmar_city_live_vertical_replan_recovery`,
+      `orgrimmar_city_hallway_live_wall_stall_recovery`,
+      `orgrimmar_city_hallway_exit_live_stall_recovery`,
+      `orgrimmar_city_hallway_exit_live_stall_recovery_corridor`,
+      `orgrimmar_exterior_incline_live_stall_exact_recovery`,
+      `orgrimmar_zeppelin_tower_ramp_underpass_stall_screenshot_recovery`
+- Practical read:
+  - finer `ch` is a real bounded negative on `40,29`
+  - it proves the missing lever is not simply "more vertical precision near the
+    recovered support footprint"
+  - if local `ch` remains worth testing after contour-family exhaustion, the
+    only defensible next move is the coarser sibling-style direction, not more
+    finer-precision retries
+
+### 2026-05-25 UTC local `ch=0.2` override follow-up
+
+WWoW then closed the coarser sibling-style direction too by raising tile
+`1:40,29` from `ch=0.1` to `ch=0.2` while keeping the same raster support
+patch fixed.
+
+- Experiment:
+  - variant:
+    `og_4029_raster_support_patch06_ch020_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_ch020_v1-20260525T204524Z/`
+  - changed hash:
+    `55E5288EC5464DACC1BC696B70BBA6F0A8F808B29A97BAA9A7FA47F266C8A428`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the branch still changed the saved tile heavily
+    (`8775316 -> 2434340`, delta `-6340976` bytes)
+  - but the decisive anchor still stayed on the same read:
+    - `1523.8` kept
+      `contours supportCandidateCount=1`
+      and `polymesh supportCandidateCount=2`
+    - `finalDetour supportCandidateCount=0`
+    - final answer still stayed:
+      `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - the route profile simply snapped back to the same contour-family
+    regression set:
+    - focused deck/static-blocker slice back to `3/7`
+    - full `CriticalWalkLegs` back to the same `20/23` with
+      `hallway_exit_corridor`, `ramp_underpass_stall_screenshot_recovery`, and
+      `underpass_live_stall_exact_recovery`
+- Practical read:
+  - the sibling-style coarser `ch` direction is also a bounded negative
+  - with both `ch=0.05` and `ch=0.2` negative, the local-`ch` fallback is now
+    exhausted in both directions for the exact `1523.8` failure
+  - the next credible branch should return to contour/source shape work, not
+    another vertical-quantization override
+
+### 2026-05-25 UTC selected full-raw contour carry follow-up
+
+WWoW then closed the last obvious pre-polymesh carry retry by swapping only
+the selected anchor-containing support contour back to its full raw
+`rverts` payload before `rcBuildPolyMesh()`.
+
+- Upstream basis:
+  - Recast's `rcContour` docs define `rverts` as raw contour data and `verts`
+    as the simplified contour:
+    `https://recastnav.com/structrcContour.html`
+  - Recast's `rcBuildContours()` docs say the raw contours match the region
+    outlines exactly:
+    `https://recastnav.com/group__recast.html`
+- Experiment:
+  - new local surface:
+    `CarrySelectedRawAnchorSupportContours(...)`
+  - config key:
+    `prePolyCarrySelectedRawAnchorSupportCoordsWow`
+  - variant:
+    `og_4029_raster_support_patch06_fullraw_anchoronly_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_fullraw_anchoronly_v1-20260525T210253Z/`
+  - changed hash:
+    `1B0620C72AC82213750CB15175DC509BD1B55D77F99827DD911E2AB9EF1C11D3`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_fullraw_anchoronly_iteration_20260525-20260525T210710Z/`
+  - focused/full:
+    `3/7`, `19/23`
+- Decisive proof:
+  - the carry surface really fired:
+    `[CONTOUR-ANCHOR-FULL-RAW-CARRY] carried 147 raw contour vertex(s) across 1 contour(s)`
+  - on the same selected contour, that means the branch reopened the shape from
+    `11` simplified vertices back to its full `158` raw vertices before
+    polymesh
+  - yet the decisive anchor still stayed:
+    `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+  - the route profile got worse rather than better:
+    - deck connector surfaces dropped to `80`
+    - the flightmaster route exploded to `1037` points while still keeping the
+      same steep-incline and rope-line blocker evidence
+    - full `CriticalWalkLegs` regressed to `19/23` with a new hallway wall
+      stall, a `46.2y` first corridor segment, a `136.3y` early stop on the
+      ramp-underpass route, and a direct `no_path` on the underpass exact
+      recovery
+- Practical read:
+  - this closes the remaining "restore more raw contour later" family
+  - because the full raw selected contour still leaves the same final anchor
+    answer, the missing `1523.8` overlap is not merely a later
+    pre-polymesh simplification loss
+  - the next credible retry should change the contour-builder shape itself
+    inside or before `rcBuildContours()`, not widen the same pre-polymesh raw
+    carry family again
+
+### 2026-05-25 UTC contour-build boundary-only seed follow-up
+
+WWoW then tried the remaining earlier boundary-shape retry by seeding only the
+support-band boundary crossings during `rcBuildContours()` simplification
+itself.
+
+- Experiment:
+  - new surface:
+    `boundarySeedRadiusCells` on `rcAnchorContourSimplifyOverride`,
+    `buildAnchorSupportBandBoundaryVertexMask(...)`,
+    `seedAnchorSupportBandBoundaryVertices(...)`, and
+    `contourBuildSeedAnchorSupportBandBoundaryRadius`
+  - variant:
+    `og_4029_raster_support_patch06_contourbuild_seed_boundary_anchoronly_r3_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_contourbuild_seed_boundary_anchoronly_r3_v1-20260525T212238Z/`
+  - changed hash:
+    `3F9EB2930393D48E13B28267D6C11B0E9C0D5282C488D9CE8CC4403FB6C269E4`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_contourbuild_boundary_iteration_20260525-20260525T212518Z/`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the earliest boundary-only seed really fired:
+    `[CONTOUR-BUILD-ANCHOR-SEED] region=7 rawVerts=158 simplifiedVerts=11 seededBoundaryVerts=2 seededSupportBandRawVerts=0 matchedOverrides=1`
+  - that is the key negative: it touched the selected contour, but still left
+    the contour at the same `11` simplified vertices
+  - `1523.8` still stayed:
+    `finalDetour / lower_competitor_dominant`
+  - the route profile stayed bad rather than getting cleaner:
+    - focused still `3/7`
+    - full `CriticalWalkLegs` still `20/23`
+    - the flightmaster route was still invalid, now with `364` points and a
+      lower flight-master bonfire blocker added to the same hallway /
+      steep-incline / rope-line evidence
+- Practical read:
+  - earliest boundary-only contour seeding is too sparse or too inert on this
+    tile
+  - once the seed fires and the selected contour still stays at the same
+    simplified vertex count, stop iterating on that sparse boundary-only
+    family
+  - the next retry needs a denser contour-builder reshape or an even earlier
+    raw-contour / region / source-stage change
+
+### 2026-05-25 UTC raster patch resolved-support-point center follow-up
+
+The next targeted question was whether the `1523.8` raster patch simply sat on
+the wrong XY. WWoW added a loader-compatible
+`preRasterizeAnchorSupportPatchCenterMode` surface so the injected support
+patch could be centered on the resolved source-support footprint rather than
+the anchor itself.
+
+- Experiment:
+  - new surface:
+    `preRasterizeAnchorSupportPatchCenterMode`
+    plus support-point XY tracking in `AnchorSourceSupportProbe`
+  - variant:
+    `og_4029_raster_support_patch06_center_support_anchoronly_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_center_support_anchoronly_v1-20260525T214345Z/`
+  - changed hash:
+    `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_center_support_iteration_20260525-20260525T214839Z/`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the source-support probe resolved the nearest real support at
+    `support=(1523.668,-4426.176,17.704)` with `dist2D=0.306`
+  - the injected raster patch really did move onto that resolved point:
+    `[HF-ANCHOR-SUPPORT-PATCH] ... center=(1523.668,-4426.176,17.704) centerMode=resolvedSupportPoint halfExtent=0.600 ...`
+  - yet the earliest support evidence stayed exactly the same:
+    - `median` still kept the nearest support component at
+      `minDistance2D=0.5315163135528564`
+    - `regions` stayed identical
+    - `contours` still kept only `supportCandidateCount=1`
+    - `polymesh` still kept only `supportCandidateCount=2`
+    - `1523.8` still ended at
+      `finalDetour / lower_competitor_dominant`
+- Practical read:
+  - the local source-support XY was real, but centering the patch on it still
+    did not populate the missing anchor cell or change the downstream support
+    components
+  - this closes the "maybe the patch center is wrong" branch
+  - one narrow bridge-shaped patch between that resolved support point and the
+    anchor projection was still worth testing, but if it produced the same tile
+    hash then the raster micro-shape family was exhausted
+
+### 2026-05-25 UTC raster patch resolved-support-to-anchor bridge follow-up
+
+WWoW then spent that last small raster-shape retry on a narrow bridge strip
+back toward the anchor projection.
+
+- Experiment:
+  - new surface:
+    `preRasterizeAnchorSupportPatchBridgeHalfWidth`
+  - variant:
+    `og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1`
+  - artifact:
+    `tmp/bake-sweeps/og_4029_raster_support_patch06_bridge_support_anchoronly_w030_v1-20260525T220138Z/`
+  - changed hash:
+    `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+  - restore artifact:
+    `tmp/bake-sweeps/og_4029_restore_after_bridge_support_iteration_20260525-20260525T220350Z/`
+  - focused/full:
+    `3/7`, `20/23`
+- Decisive proof:
+  - the bake log proved the new strip executed:
+    `[HF-ANCHOR-SUPPORT-BRIDGE] ... halfWidth=0.300 length=0.306 ...`
+  - the support pass reported `rasterized 2 support patch(es)` for the center
+    patch plus bridge strip
+  - yet the saved tile hash stayed exactly the same as the resolved-center-only
+    branch:
+    `40B9A6FB44B2555BE39909D767AC480668843E7AEAA478468BEC4349C2C92CC8`
+  - `median` and `regions` component lists stayed byte-for-byte identical
+  - `1523.8` still ended at
+    `finalDetour / lower_competitor_dominant`
+- Practical read:
+  - this closes not just "wrong patch center" but also these tiny local raster
+    patch-shape micro-variants at this size/placement
+- the next credible retry should not be another micro patch reshaping
+  branch; it needs a more structural earlier raster/source change or a
+  contour-builder/simplification change
+
+### 2026-05-26 pre-raster same-source corridor-promotion follow-up
+
+The next bounded retry moved exactly onto that earlier raster/source surface:
+promote real source triangles from the recovered `1523.8` support corridor
+before the normal Recast stages run, instead of trying to restore compact spans
+after the loss point.
+
+Exact branch:
+
+- branch:
+  `og_4029_source_support_corridor_promote_w030_v2`
+- artifact:
+  `tmp/bake-sweeps/og_4029_source_support_corridor_promote_w030_v2-20260526T031600Z/`
+- hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_support_corridor_promote_w030_v2' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_support_corridor_promote_w030.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+
+Decisive proof:
+
+- the branch really activated on the intended anchor:
+  `[SRC-ANCHOR-PROMOTE] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) dist2D=0.306 halfWidth=0.300 source=vmap candidates=0 promotedSteep=0 promotedNull=0`
+- that is stronger than "hash unchanged" by itself. It says the recovered
+  support source did not have any steep/null triangles left inside the tested
+  support->anchor corridor to promote into walkable raster input.
+- the bad anchor kept the same baseline-like stage profile:
+  - `buildCHF`: `supportCandidateCount=80`, `lowerCandidateCount=3040`
+  - `erode`: `supportCandidateCount=8`, `lowerCandidateCount=2882`
+  - `median`: `supportCandidateCount=56`, `lowerCandidateCount=0`
+  - `regions`: `supportCandidateCount=56`, `lowerCandidateCount=0`
+  - `contours`: `supportCandidateCount=1`, `lowerCandidateCount=8`
+  - `polymesh`: `supportCandidateCount=2`, `lowerCandidateCount=23`
+  - `finalDetour`: `supportCandidateCount=0`, `lowerCandidateCount=5`,
+    winner `0x1000000000ADAB`
+- important anchors stayed unchanged:
+  - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+  - `1523.800,-4425.900,17.100` ->
+    `finalDetour / lower_competitor_dominant`
+  - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+  - `1364.867,-4374.000,26.109` ->
+    `finalDetour / winner_component_trapped`
+
+Practical conclusion:
+
+- this is a clean bounded negative on the earlier source/raster-input branch
+  that used the SAME recovered support source and SAME narrow corridor
+- the next `1523.8` retry must move to a different input surface than
+  "existing same-source non-walkable triangles inside a `0.300` corridor"
+- because the serialized tile hash never moved off the stable baseline and the
+  early-stage manifest gate did not move, focused/full route reruns would have
+  been wasteful and were intentionally skipped
+
+### 2026-05-26 post-median compact-bridge follow-up
+
+The next bounded retry moved later than raster but still earlier than
+contours/final Detour: a post-median compact-heightfield bridge keyed only to
+the recovered `1523.8` source-support footprint.
+
+Why the experiment was shaped this way:
+
+- official Recast docs describe `rcCompactHeightfield` as the compact
+  representation of open space used to form regions, and explicitly note that
+  it is not conducive to arbitrary span insertion/removal after build time:
+  https://recastnav.com/structrcCompactHeightfield.html and
+  https://recastnav.com/group__recast.html
+- because of that contract, the WWoW bridge pass did NOT invent new compact
+  spans; it only attempted to re-enable support-band spans that were already
+  walkable before erode and were still present in the compact span array
+
+Exact branch:
+
+- branch:
+  `og_4029_compact_support_bridge_anchor1523_w030_v2`
+- artifact:
+  `tmp/bake-sweeps/og_4029_compact_support_bridge_anchor1523_w030_v2-20260526T005547Z/`
+- hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Decisive proof:
+
+- the compact bridge executed on the right recovered support point:
+  `[CHF-SRC-BRIDGE] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) dist2D=0.306 bridgeHalfWidth=0.300 corridorCells=45 supportCells=1 nullSupportCandidates=0 restored=0`
+- the new `anchorSourceSupportBridge` stage was identical to `median`:
+  - `supportCandidateCount=56`
+  - `supportContainsAnchorProjection=false`
+  - `supportContainsAnchorCell=false`
+  - nearest support component stayed at
+    `minDistance2D=0.5315163135528564`
+- `regions` stayed identical to the bridge stage
+- the bad anchor still ended at
+  `1523.800,-4425.900,17.100 -> finalDetour / lower_competitor_dominant`
+
+Practical conclusion:
+
+- this is a clean bounded negative on the intended compact-stage restore
+  surface
+- the important proof is `nullSupportCandidates=0`: the support->anchor
+  corridor did not contain any erased support-band compact spans left to
+  recover after median
+- the next credible retry must move earlier than this pass and change the
+  source/raster/compact input so the missing support-band cells exist in the
+  compact data at all
+
+### 2026-05-26 source-footprint vs raster anchor-cell coverage probe
+
+After the compact-bridge and same-source corridor-promotion negatives, the next
+bounded question was narrower: is the remaining `1523.8` miss a
+source-footprint / seam hole, or a raster-only anchor-cell coverage hole?
+
+Upstream Recast gives the right framing for that split:
+
+- the Recast README describes the build as triangle rasterization into voxels,
+  then filtering, regioning, and polygon generation:
+  https://github.com/recastnavigation/recastnavigation
+- `rcHeightfield` is documented as an xz-grid of span columns populated by
+  `rcRasterizeTriangle`, then consumed by `rcBuildCompactHeightfield`:
+  https://recastnav.com/structrcHeightfield.html
+  https://recastnav.com/Recast_8h.html
+- upstream `RecastRasterization.cpp` shows `rasterizeTri(...)` clipping each
+  triangle into every touched row and column, then adding spans per touched
+  cell:
+  https://raw.githubusercontent.com/recastnavigation/recastnavigation/main/Recast/Source/RecastRasterization.cpp
+
+Inference for WWoW: if the recovered support source never covers the anchor
+projection or anchor cell in a pre-raster `sourceFootprint` probe, there is no
+later raster-only anchor-cell fix to recover there. If the source footprint
+does cover the anchor but `rasterize` does not, that is a distinct raster
+coverage lane.
+
+Exact branch:
+
+- variant:
+  `og_4029_source_footprint_manifest_probe_v2`
+- artifact:
+  `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_manifest_probe_v2-20260526T044213Z\`
+- hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `dotnet build E:\repos\Westworld of Warcraft\tools\NavDataAudit\NavDataAudit.csproj --configuration Release`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_manifest_probe_v2' -DataDir 'D:\wwow-bot\test-data'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- `dotnet run --project E:\repos\Westworld of Warcraft\tools\NavDataAudit\NavDataAudit.csproj --configuration Release --no-build -- --stage-summary-only --stage-manifest E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_manifest_probe_v2-20260526T044213Z\analysis\map0012940_anchor_stage_manifest.json --write-stage-summary E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_manifest_probe_v2-20260526T044213Z\analysis\map0012940_anchor_stage_summary.json --write-stage-summary-csv E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_manifest_probe_v2-20260526T044213Z\analysis\map0012940_anchor_stage_summary.csv`
+
+What changed in the proof surface:
+
+- `TileWorker.cpp` now writes an earlier `sourceFootprint` manifest stage before
+  rasterization.
+- `NavDataAudit` now summarizes:
+  - `SourceFootprintContainsAnchorProjection`
+  - `SourceFootprintContainsAnchorCell`
+  - `RasterizeSupportContainsAnchorCell`
+  - `EarlyCoverageFinding`
+- important instrumentation correction: trust `v2`, not the superseded `v1`
+  probe branch. The final `v2` analyzer keeps the canonical `FirstBadStage`
+  contract intact by NOT promoting raw heightfield / compact lower-dominance
+  hints into the real first-bad-stage classification. That preserved the known
+  `1522.500,-4424.100,17.000 -> no firstBadStage` and
+  `1521.267,-4425.600,17.609 -> no firstBadStage` facts.
+
+Decisive proof for `1523.800,-4425.900,17.100`:
+
+- source support probe:
+  - `source=vmap`
+  - `triIndex=537325`
+  - `support=(1523.668,-4426.176,17.704)`
+  - `distance2D=0.30609676241874695`
+  - `projectedInside=false`
+- new early stages:
+  - `sourceFootprint`:
+    `supportCandidateCount=5`, `lowerCandidateCount=24`,
+    `supportContainsAnchorProjection=false`,
+    `supportContainsAnchorCell=false`,
+    `lowerContainsAnchorCell=true`,
+    `supportProjectionCandidateCount=0`,
+    `supportCellCandidateCount=0`,
+    `lowerCellCandidateCount=3`,
+    `nearestSupportDistance2D=0.30609676241874695`
+  - `rasterize`:
+    `supportCandidateCount=138`, `lowerCandidateCount=3193`,
+    `supportContainsAnchorCell=false`,
+    `lowerContainsAnchorCell=true`
+- later stages stayed on the stable baseline profile:
+  - `buildCHF`: `80/3040`
+  - `erode`: `8/2882`
+  - `median`: `56/0`
+  - `regions`: `56/0`
+  - `contours`: `1/8`
+  - `polymesh`: `2/23`
+  - `finalDetour`: `0/5`, winner `0x1000000000ADAB`
+- summary answer stayed canonical:
+  - `FirstBadStage=finalDetour`
+  - `FirstBadReason=lower_competitor_dominant`
+  - `EarlyCoverageFinding=source_footprint_or_seam_hole`
+
+Cross-check anchors:
+
+- unchanged anchors that must stay preserved:
+  - `1522.500,-4424.100,17.000` -> no `FirstBadStage`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1521.267,-4425.600,17.609` -> no `FirstBadStage`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1364.867,-4374.000,26.109` ->
+    `finalDetour / winner_component_trapped`,
+    `EarlyCoverageFinding=early_support_overlap_present`
+- classifier cross-check proving the new split is real, not tautological:
+  - `1479.767,-4426.000,25.309` kept no `FirstBadStage`, but showed
+    `SourceFootprintContainsAnchorProjection=true`,
+    `SourceFootprintContainsAnchorCell=true`,
+    `RasterizeSupportContainsAnchorCell=false`, and therefore
+    `EarlyCoverageFinding=raster_anchor_cell_coverage_hole`
+
+Practical read:
+
+- `1523.8` is now best treated as a source-footprint / seam-hole lane, not a
+  late contour lane, not a post-median compact-restore lane, and not the same
+  narrow same-source corridor-promotion lane that already returned
+  `candidates=0`.
+- `1364.867,-4374.000,26.109` remains a separate trapped-component lane; do
+  not spend more `1523.8` budget on trapped-component ideas unless a branch
+  clearly moves both for the same reason.
+- the saved tile hash stayed on the stable live baseline, so focused tests and
+  full `CriticalWalkLegs` were intentionally skipped for this instrumentation
+  branch.
+- confirmed live tile hash remains
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`.
+
+### 2026-05-26 pre-raster anchor-cell support-band promotion follow-up
+
+After the new `sourceFootprint` proof made `1523.800,-4425.900,17.100` look
+like a source-footprint / seam-hole lane, the next bounded retry asked an even
+earlier question: are there any already-loaded hidden support-band triangles
+touching the exact anchor cell that can be promoted before rasterization?
+
+Exact branch:
+
+- variant:
+  `og_4029_source_footprint_anchorcell_promote_v1`
+- artifact:
+  `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_anchorcell_promote_v1-20260526T132241Z\`
+- temp config:
+  `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_anchorcell_promote_v1.json`
+- hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Code surface:
+
+- `TileWorker.cpp` now includes
+  `PromoteAnchorSupportCellTriangles(...)`
+- new opt-in keys:
+  - `preRasterizePromoteAnchorSupportCellCoordsWow`
+  - `preRasterizePromoteAnchorSupportCellCrossSourceOnly`
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_anchorcell_promote_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_anchorcell_promote_v1.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+
+Decisive negative:
+
+- the corrected rerun emitted the expected pre-raster support probe:
+  - `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) support=(1523.668,-4426.176,17.704) delta=0.604 tri=537325 source=vmap dist2D=0.306 inside=0`
+- but the bake log emitted no `[SRC-ANCHOR-CELL-PROMOTE]` lines at all
+- the saved tile hash stayed byte-identical to the stable live baseline:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- the new stage summary stayed unchanged for the important anchors:
+  - `1523.800,-4425.900,17.100` still ->
+    `FirstBadStage=finalDetour`,
+    `FirstBadReason=lower_competitor_dominant`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1522.500,-4424.100,17.000` still ->
+    no `FirstBadStage`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1521.267,-4425.600,17.609` still ->
+    no `FirstBadStage`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - classifier cross-check stayed intact:
+    `1479.767,-4426.000,25.309` still ->
+    `SourceFootprintContainsAnchorProjection=true`,
+    `SourceFootprintContainsAnchorCell=true`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=raster_anchor_cell_coverage_hole`
+
+Practical read:
+
+- this branch failed the manifest gate immediately:
+  it did not move `sourceFootprint` or `rasterize` for `1523.8`
+- treat that as another bounded negative for the "hidden support-band triangle
+  already overlaps the anchor cell" hypothesis
+- because both the early gate and the tile hash stayed unchanged, focused tests
+  and full `CriticalWalkLegs` were intentionally skipped
+- the next credible `1523.8` branch must look earlier than "promote hidden
+  anchor-cell triangles already in the loaded mesh" and instead inspect where
+  the source footprint is missed or clipped in the first place:
+  source-family seam, tile/subtile clip, source window, or support-triangle
+  selection/transform
+
+### 2026-05-26 source-footprint candidate detail trace follow-up
+
+The next bounded retry did not try to "fix" `1523.8` yet. Instead it answered
+the narrower structural question left by the new `sourceFootprint` stage:
+is the remaining miss a cross-source seam, a cross-group seam inside the same
+WMO, or a same-group footprint miss inside the already-selected source?
+
+Exact branches:
+
+- first trace variant:
+  `og_4029_source_footprint_candidate_trace_v1`
+- first trace artifact:
+  `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_candidate_trace_v1-20260526T134605Z\`
+- comparison trace variant:
+  `og_4029_source_footprint_candidate_trace_compare_v1`
+- comparison trace artifact:
+  `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_candidate_trace_compare_v1-20260526T135311Z\`
+- temp configs:
+  - `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_v1.json`
+  - `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_compare_v1.json`
+- saved tile hash for both runs:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Code surface:
+
+- `TerrainBuilder.h/cpp` now record source-detail ownership for VMap triangle
+  ranges via:
+  - `MeshTriangleDetailRange`
+  - `MeshData::AddDetailTriangleRange(...)`
+  - `MeshData::DetailLabelForTriangle(...)`
+- `TileWorker.cpp` now adds opt-in source-footprint candidate tracing via:
+  - `traceSourceFootprintCandidateCoordsWow`
+  - `traceSourceFootprintCandidateLimit`
+  - `[SRC-FOOTPRINT-CAND] ... detail=...` diagnostics
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_candidate_trace_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_v1.json'`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_candidate_trace_compare_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_candidate_trace_compare_v1.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+
+Decisive proof:
+
+- `1523.800,-4425.900,17.100`:
+  - support candidates stayed the known upper set:
+    `537325`, `537328`, `537384`, `537388`, `537391`
+  - lower cell-overlap vmap candidates stayed:
+    `534606`, `537806`
+  - every one of those vmap triangles traced as
+    `detail=Ogrimmar.wmo#group133`
+  - the critical support/lower split therefore no longer looks like
+    terrain-vs-vmap or even group-vs-group; it is happening inside one WMO
+    group
+- comparison anchors proved the split is real, not a logging artifact:
+  - `1522.500,-4424.100,17.000` also traced only
+    `Ogrimmar.wmo#group133`
+    - support candidates:
+      `532764`, `537807`
+    - lower cell-overlap vmap candidates:
+      `534605`, `537804`
+    - summary still stayed:
+      no `FirstBadStage`,
+      `SourceFootprintContainsAnchorProjection=false`,
+      `SourceFootprintContainsAnchorCell=false`,
+      `RasterizeSupportContainsAnchorCell=false`
+  - `1521.267,-4425.600,17.609` also traced only
+    `Ogrimmar.wmo#group133`
+    - support candidates:
+      `537384`, `532767`, `532763`, `537388`
+    - lower cell-overlap vmap candidates:
+      `534605`, `537804`, `532764`, `537807`
+    - summary still stayed:
+      no `FirstBadStage`,
+      `SourceFootprintContainsAnchorProjection=false`,
+      `SourceFootprintContainsAnchorCell=false`,
+      `RasterizeSupportContainsAnchorCell=false`
+  - raster-only classifier cross-check still held:
+    `1479.767,-4426.000,25.309` traced an in-cell
+    `Ogrimmar.wmo#group133` support triangle (`531628`) and still stayed
+    `EarlyCoverageFinding=raster_anchor_cell_coverage_hole`
+- the strongest per-anchor delta is now vertical, not source-family:
+  - `1521.267` lower same-group cell overlap sat only `-0.480` below the chosen
+    support
+  - `1522.500` lower same-group cell overlap sat `-0.965` below the chosen
+    support
+  - `1523.800` lower same-group cell overlap sat `-1.588` below the chosen
+    support while the best upper support stayed only `0.306` away in XY
+
+Practical read:
+
+- `1523.8` is no longer best explained as a cross-source seam or a cross-group
+  seam
+- the next real `1523.8` branch should treat the miss as one of:
+  - same-group source-support selection inside `Ogrimmar.wmo#group133`
+  - same-group local source-footprint hole/gap inside that group
+  - same-group clipping/window loss before rasterization
+- because both trace variants kept the saved tile hash on the stable live
+  baseline, focused tests and full `CriticalWalkLegs` were intentionally
+  skipped
+- the next bounded instrumentation should trace raw candidate scores / exact
+  triangle vertices for the `group133` neighborhood around `1523.8` so the
+  code can choose between "support selection bug" and "literal same-group mesh
+  gap" before adding another source-side fix surface
+
+### 2026-05-26 same-group source-footprint cap gate for `1523.8`
+
+After the detail trace narrowed the lane to one same-group source, WWoW tested
+the first true source-surface creation branch for that exact lane: if the
+nearest support is only `0.306` away and the miss lives inside
+`Ogrimmar.wmo#group133`, can a tiny same-detail source cap centered on the
+anchor move `sourceFootprint` before rasterization?
+
+Exact branch:
+
+- variant:
+  `og_4029_source_footprint_cap_v1`
+- authoritative artifact:
+  `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_cap_v1-20260526T141404Z\`
+- temp config:
+  `E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_v1.json`
+- hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Code surface:
+
+- new helper in `TileWorker.cpp`:
+  `InjectAnchorSourceFootprintCaps(...)`
+- new opt-in keys:
+  - `preRasterizeCreateAnchorSourceFootprintCapCoordsWow`
+  - `preRasterizeCreateAnchorSourceFootprintCapHalfExtent`
+  - `preRasterizeCreateAnchorSourceFootprintCapMaxSupportDistance2D`
+  - `preRasterizeCreateAnchorSourceFootprintCapMinSameDetailLowerDrop`
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_cap_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_v1.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+
+Decisive negative:
+
+- the corrected rerun did arm the new support-probe list for the cap branch:
+  `bake.log` starts with the targeted
+  `[SRC-ANCHOR-SUPPORT] anchor=(1523.800,-4425.900,17.100) ...`
+  read before the normal manifest-wide support stream
+- but the bake emitted no `[SRC-FOOTPRINT-CAP]` lines at all
+- the saved tile hash stayed byte-identical to the stable live baseline:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+- the important stage-summary rows stayed unchanged:
+  - `1523.800,-4425.900,17.100` still ->
+    `FirstBadStage=finalDetour`,
+    `FirstBadReason=lower_competitor_dominant`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`,
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1522.500,-4424.100,17.000` still ->
+    no `FirstBadStage`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`
+  - `1521.267,-4425.600,17.609` still ->
+    no `FirstBadStage`,
+    `SourceFootprintContainsAnchorProjection=false`,
+    `SourceFootprintContainsAnchorCell=false`,
+    `RasterizeSupportContainsAnchorCell=false`
+
+Practical read:
+
+- this is another bounded negative for the `1523.8` source-footprint lane
+- the first same-group source-cap implementation was too strict or otherwise
+  failed to arm, despite the earlier candidate trace proving the same-group
+  lower overlap exists at that coord
+- do not waste route reruns here:
+  neither the manifest gate nor the saved tile hash moved
+- the next retry should keep the same source-cap surface but simplify or log the
+  precondition, instead of assuming the current "same-detail lower-overlap"
+  gate is the right one
+
+### 2026-05-26 source-cap anchor-frame fix plus region-zero follow-up
+
+The next pass proved that the first same-group source-cap "negative" was not a
+real rejection of the cap surface. The cap code was computing the anchor cell
+in the map-wide raster frame instead of the internal `213 x 213` subtile frame,
+so the branch never actually touched the `1523.8` cell it meant to test.
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_cap_force_v1_trace' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json'`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_cap_force_anchorframe_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+
+Artifacts:
+
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_cap_force_v1_trace-20260526T143246Z\`
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_cap_force_anchorframe_v1-20260526T144426Z\`
+- both runs preserved the stable live tile hash:
+  `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Code surface:
+
+- `TileWorker.cpp` now derives pre-raster anchor cells from the anchor's
+  internal raster subtile via:
+  - `BuildTileRasterConfig(...)`
+  - `TryBuildAnchorRasterConfig(...)`
+- both pre-raster source helpers now use that corrected subtile frame:
+  - `PromoteAnchorSupportCellTriangles(...)`
+  - `InjectAnchorSourceFootprintCaps(...)`
+- the source-cap branch also gained extra diagnostics:
+  - `preRasterizeCreateAnchorSourceFootprintCapRequireSameDetailLowerDrop`
+  - `[SRC-FOOTPRINT-CAP-SKIP] ...`
+  - `[SRC-FOOTPRINT-CAP-GATE] ...`
+  - richer `[SRC-FOOTPRINT-CAP] ...`
+
+Decisive proof:
+
+- the frame-trace run exposed the actual failure:
+  `[SRC-FOOTPRINT-CAP-SKIP] anchor=(1523.800,-4425.900,17.100) tri=537325 detail=Ogrimmar.wmo#group133 dist2D=0.306 reason=anchor_cell_oob cell=(3741,4571) dims=(241,241) bmin=(-4800.000,1066.667) cs=0.100`
+- after the anchor-frame fix, the branch finally armed:
+  `[SRC-FOOTPRINT-CAP] anchor=(1523.800,-4425.900,17.100) detail=Ogrimmar.wmo#group133 support=(1523.668,-4426.176,17.704) dist2D=0.306 capHalfExtent=0.300 requireLowerDrop=0 cellCandidates=2 resolvedCandidates=2 qualifiedLowerCandidates=2 sameDetailLowerMinY=16.116 sameDetailLowerDrop=1.588 added=2`
+- the early proof for `1523.800,-4425.900,17.100` moved exactly where the
+  earlier manifest gate required:
+  - `sourceFootprint` moved from
+    `supportContainsAnchorProjection=false`,
+    `supportContainsAnchorCell=false`
+    to
+    `supportContainsAnchorProjection=true`,
+    `supportContainsAnchorCell=true`
+  - `rasterize` moved from
+    `supportContainsAnchorCell=false`
+    to
+    `supportContainsAnchorCell=true`
+  - `median` and `regions` moved from `56/0` to `77/0` and gained a new
+    support component at the anchor:
+    `cellCount=21`, `supportSpanCount=21`, `containsAnchorCell=true`,
+    `touchesBoundary=false`, `regionIds=[]`
+- but the later route-defining stages did not move at all:
+  - `contours` still `1/8`
+  - `polymesh` still `2/23`
+  - `finalDetour` still `0/5`, winner `0x1000000000ADAB`
+  - saved tile hash still
+    `A01DEE47154601C9FDD1C8377EE82BD7C4AB7205D78F9947E356B8B97AD48123`
+
+Practical read:
+
+- the first same-group source-cap negative was false because the anchor-cell
+  frame was wrong
+- once fixed, the source-footprint branch proved something sharper than
+  "cap works" or "cap fails": the new upper support survives into compact space
+  and reaches the anchor neighborhood, but it never acquires a nonzero region
+  id, so `rcBuildContours()` still sees the old world
+- the next credible `1523.8` branch is therefore not another contour carry or
+  finalDetour trim; it must connect or preserve that same-group support island
+  early enough that the region builder no longer leaves it at `regionIds=[]`
+- focused tests and full `CriticalWalkLegs` were intentionally skipped again
+  because the saved tile hash never moved
+
+### 2026-05-26 same-detail source-footprint bridge turns region zero into region 30
+
+After the anchor-frame fix, the live question for `1523.800,-4425.900,17.100`
+was no longer "can we make sourceFootprint overlap exist?" but "can the new
+same-group support survive region assignment?" WWoW answered that by adding a
+second opt-in pre-raster helper that builds one narrow same-detail ribbon from
+the anchor to the farthest nearby support-band triangle inside the same source
+family.
+
+Exact commands:
+
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\MmapGen\build-mmapgen.ps1`
+- `$env:WWOW_VMANGOS_DATA_DIR='D:\MaNGOS\data'; powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\tools\scripts\bake-tile.ps1 -Map 1 -Tiles '40,29' -Variant 'og_4029_source_footprint_bridge_anchorframe_v1' -DataDir 'D:\wwow-bot\test-data' -ConfigPath 'E:\repos\Westworld of Warcraft\tmp\config-experiments\og_4029_source_footprint_cap_force_v1.json'`
+- `Get-FileHash 'D:/wwow-bot/test-data/mmaps/0012940.mmtile' -Algorithm SHA256 | Select-Object -ExpandProperty Hash`
+- `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~MmapMeshQualityTests.OrgrimmarZeppelinTopRampDeck|FullyQualifiedName~LongPathingRouteTests.OrgrimmarCityToZeppelinTowerLowerApproach_DensifiesLocalPhysicsRepairSegments|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToZeppelinRoute_AvoidsKnownStaticObjectBlockers|FullyQualifiedName~LongPathingRouteTests.OrgrimmarFlightMasterToFrezzaSpawn_UsesCurrentBoardingShortcut" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_source_footprint_bridge_anchorframe_v1_focused.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding`
+- `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingRouteTests.CrossroadsToUndercity_CriticalWalkLegs_HaveWalkablePathfindingRoutes" --logger "console;verbosity=minimal" --logger "trx;LogFileName=og_4029_source_footprint_bridge_anchorframe_v1_critical_walk_legs.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding -- RunConfiguration.TestSessionTimeout=1200000`
+
+Artifacts:
+
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_bridge_anchorframe_v1-20260526T151016Z\`
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_bridge_anchorframe_v1-20260526T151016Z\analysis\map0012940_anchor_stage_summary.json`
+- `E:\repos\Westworld of Warcraft\tmp\bake-sweeps\og_4029_source_footprint_bridge_anchorframe_v1-20260526T151016Z\analysis\map0012940_anchor_stage_manifest.json`
+- saved tile hash:
+  `35579EA49C8CC1D2A2F1086EF5812D4C5F461BD2EC4E3135012AB60129175721`
+
+Code surface:
+
+- new helper in `TileWorker.cpp`:
+  `InjectAnchorSourceFootprintBridges(...)`
+- new opt-in config keys:
+  - `preRasterizeCreateAnchorSourceFootprintBridgeCoordsWow`
+  - `preRasterizeCreateAnchorSourceFootprintBridgeHalfWidth`
+  - `preRasterizeCreateAnchorSourceFootprintBridgeMaxTargetDistance2D`
+  - `preRasterizeCreateAnchorSourceFootprintBridgeMinTargetDistance2D`
+  - `preRasterizeCreateAnchorSourceFootprintBridgeMinSameDetailLowerDrop`
+  - `preRasterizeCreateAnchorSourceFootprintBridgeRequireSameDetailLowerDrop`
+
+Decisive proof:
+
+- the bridge kept the same-group cap branch alive and targeted the farthest
+  known same-detail support-band candidate:
+  `[SRC-FOOTPRINT-BRIDGE] anchor=(1523.800,-4425.900,17.100) detail=Ogrimmar.wmo#group133 targetTri=537388 target=(1522.374,-4427.174,17.841) targetDist2D=1.912 bridgeHalfWidth=0.300 requireLowerDrop=0 cellCandidates=4 resolvedCandidates=4 qualifiedLowerCandidates=2 sameDetailLowerMinY=16.116 added=2`
+- the early proof stayed improved:
+  - `sourceFootprint`:
+    `supportCandidateCount=9`, `lowerCandidateCount=24`,
+    `supportContainsAnchorProjection=true`,
+    `supportContainsAnchorCell=true`
+  - `rasterize`:
+    `supportCandidateCount=282`, `lowerCandidateCount=3193`,
+    `supportContainsAnchorCell=true`
+- the compact/region seam finally moved in the way the earlier cap-only branch
+  could not:
+  - the anchor support component still existed at `median`, but now also kept
+    that connectivity through `regions`
+  - the decisive change was
+    `regionIds=[] -> regionIds=[30]` for the anchor support component
+- once that happened, the later stages moved coherently:
+  - `contours`: `supportCandidateCount=2`, `lowerCandidateCount=8`
+  - `polymesh`: `supportCandidateCount=9`, `lowerCandidateCount=23`
+  - `finalDetour`: `supportCandidateCount=3`, `lowerCandidateCount=5`
+  - final winner changed from the old lower competitor `0x1000000000ADAB` to
+    support winner `0x1000000000ADA5`
+- the summary row for `1523.800,-4425.900,17.100` is now:
+  - `FirstBadStage=null`
+  - `FirstBadReason=null`
+  - `FinalWinnerSupportCandidate=true`
+  - `FinalWinnerCompetingLower=false`
+  - `EarlyCoverageFinding=early_support_overlap_present`
+- the comparison anchors preserved the split that made this lane useful:
+  - `1522.500,-4424.100,17.000` stayed
+    `FirstBadStage=null` with
+    `EarlyCoverageFinding=source_footprint_or_seam_hole`
+  - `1521.267,-4425.600,17.609` stayed
+    `FirstBadStage=null` with the same early coverage read
+  - `1364.867,-4374.000,26.109` still stayed
+    `finalDetour / winner_component_trapped`
+
+Practical read:
+
+- the `1523.8` lane is now best described as "same-group support island needed
+  real connectivity before region assignment," not as a contour or Detour-only
+  miss
+- once the cap branch has already moved `sourceFootprint` and `rasterize` but
+  leaves the anchor support component at `regionIds=[]`, the next credible
+  source-surface experiment is a same-detail bridge to the surviving support
+  band, not another late contour carry
+- focused validation passed `7/7`, and the required full `CriticalWalkLegs`
+  rerun stayed at the pre-existing `17/23` baseline with the same unrelated
+  six red legs, so the promoted hash fixed the target lane without reopening
+  the rest of the known backlog
+
+### 2026-05-25 UTC contour raw-bypass plus support-arc follow-up
+
+The next contour-focused loop closed three distinct "change the contour shape
+itself" branches for `1523.800,-4425.900,17.100`.
+
+- contour-build raw bypass:
+  - branch:
+    `og_4029_raster_support_patch06_contourbuild_seed_supportarc_supportcenter_anchoronly_r3_rawbypass_v1`
+  - hash:
+    `8E98F676F48FAB2952EF9D89CE6A22A40F8F3C3CC0CF8354A6B4C5AFD1F3E8A8`
+  - focused/full:
+    `3/7`, `19/23`
+  - decisive proof:
+    `[CONTOUR-BUILD-ANCHOR-SEED] region=7 rawVerts=158 simplifiedVerts=158 rawBypassVerts=158 seededSupportBandArcRawVerts=22 matchedOverrides=1`
+  - read:
+    even full raw contour carry inside `rcBuildContours()` still left
+    `1523.8 -> finalDetour / lower_competitor_dominant`
+- pre-poly support-arc on the anchor-containing contour:
+  - `r3` hash:
+    `52C9913EB0F4306A3912A8869D537689A227733560BD38DE4FE12E5F360F5C6B`
+  - `r6` hash:
+    `62D0AEA1268141CC44FC7D00C6CA2B891E446FFD96217339DC79ADA97CA30E5D`
+  - focused/full stayed:
+    `3/7`, `20/23`
+  - decisive proof widened exactly as intended:
+    `11 -> 158 -> 29` with `18` preserved arc verts at `r3`, then
+    `11 -> 158 -> 36` with `25` preserved arc verts at `r6`
+- pre-poly support-arc on the nearest non-containing support contour:
+  - branch:
+    `og_4029_raster_support_patch06_prepoly_resimplify_supportarc_supportcenter_nearest_noncontaining_r6_v1`
+  - hash:
+    `A6A9FA5B231AD484EA72E364D0DE26C1F964D5AD797F5B45BC06C4DCEC04AB3D`
+  - focused/full:
+    `3/7`, `20/23`
+  - decisive proof:
+    `region 8` really did reopen from `13 -> 226 -> 124` with
+    `preservedSupportBandArcRawVerts=109`
+- cross-branch invariant:
+  - despite those real contour changes, the stable baseline `A01DEE...`, the
+    contour-build raw-bypass branch, and both support-arc families all kept
+    the same `1523.8` stage-summary counts:
+    - `contours`: `supportCandidateCount=1`, `lowerCandidateCount=8`
+    - `polymesh`: `supportCandidateCount=2`, `lowerCandidateCount=23`
+    - `finalDetour`: `supportCandidateCount=0`, `lowerCandidateCount=5`,
+      winner `0x1000000000ADAB`
+  - the important anchor outcomes stayed:
+    - `1522.500,-4424.100,17.000` -> no `firstBadStage`
+    - `1523.800,-4425.900,17.100` ->
+      `finalDetour / lower_competitor_dominant`
+    - `1521.267,-4425.600,17.609` -> no `firstBadStage`
+    - `1364.867,-4374.000,26.109` ->
+      `finalDetour / winner_component_trapped`
+- practical read:
+  - the problem is no longer "which of the two plausible support contours
+    should get more raw vertices?"
+  - once both plausible contours and even the full raw contour keep the same
+    support/lower accounting, more late contour carry is just reshaping deck
+    quality without moving the real `1523.8` proof surface
+  - the next defensible retry must change earlier source/compact support
+    overlap, not another pre-poly contour-preserve variant

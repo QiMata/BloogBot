@@ -443,6 +443,10 @@ public class NavigationPath(
     private readonly Action<string>? _diagnosticSink = diagnosticSink;
     private readonly int _waypointDiagnosticCadence = waypointDiagnosticCadence;
     private long _waypointAdvanceCount;
+
+    private void EmitNavigationDiagnostic(string message)
+        => _diagnosticSink?.Invoke(message);
+
     private Position[] _waypoints = [];
     private float[] _waypointAcceptanceRadii = [];
     private Position? _pathStartPosition;
@@ -540,6 +544,8 @@ public class NavigationPath(
     private const float DENSE_REVERSAL_TURN_ANGLE_DEG = 135f;
     private const float DENSE_REVERSAL_MIN_SEGMENT_DISTANCE = 1.5f;
     private const float DENSE_REVERSAL_ACCEPTANCE_CAPSULE_MULTIPLIER = 1.75f;
+    private const float DENSE_EDGE_CLEARANCE_MAX_SEGMENT_DISTANCE = 4.5f;
+    private const float DENSE_EDGE_CLEARANCE_MIN_VERTICAL_DELTA = 0.35f;
     private const float WAYPOINT_REACH_DISTANCE = 3.5f;   // default fallback (no radii computed)
     private const float WAYPOINT_VERTICAL_REACH_TOLERANCE = 1.25f;
     private const float WAYPOINT_VERTICAL_LAYER_DRIFT_TOLERANCE = 3.0f;
@@ -548,6 +554,7 @@ public class NavigationPath(
     private const float WAYPOINT_VERTICAL_LAYER_PROMOTION_MIN_2D = 6.0f;
     private const float COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE = 2.75f;
     private const float COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA = 0.4f;
+    private const float COMPACT_UPHILL_EXACT_COMMIT_CAPSULE_MULTIPLIER = 1.05f;
     private const float TIGHT_DESCENDING_TRANSITION_MAX_SEGMENT_DISTANCE = 5.5f;
     private const float TIGHT_DESCENDING_TRANSITION_MIN_Z_DROP = 0.4f;
     private const float CORNER_COMMIT_DISTANCE = 1.25f;   // default fallback
@@ -603,6 +610,34 @@ public class NavigationPath(
     private const float PATH_POINT_DEDUP_EPSILON = 0.05f;
     private const float MAX_FIRST_WAYPOINT_DISTANCE = 120f;
     private const float MIN_DESTINATION_PROGRESS = 1f;
+    private const int PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_WAYPOINTS = 4;
+    private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_CUMULATIVE_2D = 1.25f;
+    private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_NET_2D = 0.5f;
+    private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_Z_DELTA = 0.5f;
+    private const float PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_CUMULATIVE_2D = 0.18f;
+    private const float PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_NET_2D = 0.18f;
+    private const float PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_Z_DELTA = 0.9f;
+    private const float PROJECTION_PREFIX_MICRO_END_BLOCK_MAX_START_RADIUS_2D = 0.35f;
+    private const float PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_CUMULATIVE_2D = 0.1f;
+    private const float PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_NET_2D = 0.1f;
+    private const float PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_Z_DELTA = 0.3f;
+    private const float PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MAX_START_RADIUS_2D = 0.2f;
+    private const float PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MIN_CUMULATIVE_2D = 0.18f;
+    private const float PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MAX_CUMULATIVE_2D = 0.32f;
+    private const float PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MIN_NET_2D = 0.18f;
+    private const float PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MAX_NET_2D = 0.32f;
+    private const float PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MIN_Z_DELTA = 0.35f;
+    private const float PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MAX_Z_DELTA = 0.55f;
+    private const float PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MAX_START_RADIUS_2D = 0.32f;
+    private const float PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MAX_FIRST_POINT_OFFSET_2D = 0.15f;
+    private const float MICRO_UPHILL_SUPPORT_REACH_MAX_RADIUS_2D = 0.35f;
+    private const float MICRO_UPHILL_SUPPORT_REACH_MIN_VERTICAL_DELTA = 0.25f;
+    private const float MICRO_UPHILL_SUPPORT_SEGMENT_MAX_DISTANCE = 0.35f;
+    private const float MICRO_UPHILL_SUPPORT_SEGMENT_MIN_Z_DELTA = 0.3f;
+    private const float PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_CUMULATIVE_2D = 0.44f;
+    private const float PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_NET_2D = 0.44f;
+    private const float PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_Z_DELTA = 0.95f;
+    private const float PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_DESTINATION_REGRESSION = 0.25f;
     private const float MAX_SEGMENT_DISTANCE = 1200f;
     private const float PATH_TRAVERSABILITY_SEGMENT_EPSILON = 0.05f;
     private const float STRICT_DESTINATION_ENDPOINT_DISTANCE = 8f;
@@ -788,7 +823,7 @@ public class NavigationPath(
             // If we're still not near the destination, recalculate path periodically.
             if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
             {
-                CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
+                RecalculateExhaustedPathAndAdvance(currentPosition, destination, mapId, minWaypointDistance);
             }
 
             if (_currentIndex >= _waypoints.Length)
@@ -828,7 +863,7 @@ public class NavigationPath(
         if (_currentIndex >= _waypoints.Length)
         {
             if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
-                CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
+                RecalculateExhaustedPathAndAdvance(currentPosition, destination, mapId, minWaypointDistance);
             if (_currentIndex >= _waypoints.Length)
             {
                 var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
@@ -981,7 +1016,7 @@ public class NavigationPath(
                     if (_currentIndex >= _waypoints.Length)
                     {
                         if (currentPosition.DistanceTo2D(destination) > WAYPOINT_REACH_DISTANCE)
-                            CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
+                            RecalculateExhaustedPathAndAdvance(currentPosition, destination, mapId, minWaypointDistance);
                         if (_currentIndex >= _waypoints.Length)
                         {
                             var fallback = ResolveDirectFallback(currentPosition, destination, mapId, allowDirectFallback);
@@ -1052,6 +1087,16 @@ public class NavigationPath(
         => IsLongTravelStyleRoute() && _tightenDenseWaypointAcceptance
             ? MathF.Max(CORNER_COMMIT_DISTANCE, _capsuleRadius * LONG_TRAVEL_AGENT_CORNER_COMMIT_RADIUS_MULTIPLIER)
             : CORNER_COMMIT_DISTANCE;
+
+    private void RecalculateExhaustedPathAndAdvance(
+        Position currentPosition,
+        Position destination,
+        uint mapId,
+        float minWaypointDistance)
+    {
+        CalculatePath(currentPosition, destination, mapId, reason: NavigationTraceReason.PathExhaustedStillFar);
+        AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
+    }
 
     public bool RecalculateAfterMovementStall(
         Position currentPosition,
@@ -1162,11 +1207,11 @@ public class NavigationPath(
 
         var wpCount = _waypoints.Length;
         var idx = _currentIndex;
-        var wp = (idx >= 0 && idx < wpCount) ? _waypoints[idx] : default;
+        var wp = (idx >= 0 && idx < wpCount) ? _waypoints[idx] : null;
         _diagnosticSink(
             $"[TRAVEL_WAYPOINT_REACHED] adv={_waypointAdvanceCount} idx={idx}/{wpCount} reason={reason} "
             + $"player=({currentPosition.X:F1},{currentPosition.Y:F1},{currentPosition.Z:F1}) "
-            + $"waypoint=({wp.X:F1},{wp.Y:F1},{wp.Z:F1})");
+            + $"waypoint={FormatUsabilityPoint(wp)}");
     }
 
     /// <summary>
@@ -1215,10 +1260,62 @@ public class NavigationPath(
 
         var verticalDelta = MathF.Abs(currentPosition.Z - waypoint.Z);
         if (verticalDelta <= WAYPOINT_VERTICAL_REACH_TOLERANCE)
-            return true;
+        {
+            var reachIndex = waypointIndex ?? _currentIndex;
+            if (RequiresTightCommitForDenseEdgeClearance(currentPosition, reachIndex, verticalDelta))
+                return false;
+
+            return !RequiresExactArrivalForMicroUphillSupport(currentPosition, waypoint, reachIndex, verticalDelta);
+        }
 
         var index = waypointIndex ?? _currentIndex;
         return CanTreatSmallCollisionLayerDriftAsReached(currentPosition, waypoint, index, verticalDelta);
+    }
+
+    private bool RequiresTightCommitForDenseEdgeClearance(
+        Position currentPosition,
+        int waypointIndex,
+        float verticalDelta)
+    {
+        if (!_tightenDenseWaypointAcceptance
+            || !IsLongTravelStyleRoute()
+            || waypointIndex < 0
+            || waypointIndex >= _waypoints.Length
+            || verticalDelta < DENSE_EDGE_CLEARANCE_MIN_VERTICAL_DELTA)
+        {
+            return false;
+        }
+
+        var waypoint = _waypoints[waypointIndex];
+        var horizontalDelta = currentPosition.DistanceTo2D(waypoint);
+        if (!float.IsFinite(horizontalDelta) || horizontalDelta <= GetCornerCommitDistance())
+            return false;
+
+        return IsDenseEdgeClearanceWaypoint(waypointIndex);
+    }
+
+    private bool IsDenseEdgeClearanceWaypoint(int waypointIndex)
+    {
+        if (waypointIndex < 0 || waypointIndex + 1 >= _waypoints.Length)
+            return false;
+
+        var previous = waypointIndex > 0
+            ? _waypoints[waypointIndex - 1]
+            : _pathStartPosition;
+        if (previous is not Position prev)
+            return false;
+
+        var current = _waypoints[waypointIndex];
+        var next = _waypoints[waypointIndex + 1];
+        var inbound = prev.DistanceTo2D(current);
+        var outbound = current.DistanceTo2D(next);
+        if (!float.IsFinite(inbound) || !float.IsFinite(outbound))
+            return false;
+
+        if (MathF.Max(inbound, outbound) > DENSE_EDGE_CLEARANCE_MAX_SEGMENT_DISTANCE)
+            return false;
+
+        return true;
     }
 
     private bool CanPromoteToWaypointOnCurrentLayer(Position currentPosition, Position waypoint)
@@ -1235,6 +1332,34 @@ public class NavigationPath(
             return false;
 
         return horizontalDelta >= MathF.Max(WAYPOINT_VERTICAL_LAYER_PROMOTION_MIN_2D, verticalDelta);
+    }
+
+    private bool RequiresExactArrivalForMicroUphillSupport(
+        Position currentPosition,
+        Position waypoint,
+        int waypointIndex,
+        float verticalDelta)
+    {
+        if (!_tightenDenseWaypointAcceptance
+            || !IsLongTravelStyleRoute()
+            || waypointIndex < 0
+            || waypointIndex >= _waypoints.Length
+            || verticalDelta <= MICRO_UPHILL_SUPPORT_REACH_MIN_VERTICAL_DELTA)
+        {
+            return false;
+        }
+
+        var horizontalDelta = currentPosition.DistanceTo2D(waypoint);
+        if (!float.IsFinite(horizontalDelta) || horizontalDelta > MICRO_UPHILL_SUPPORT_REACH_MAX_RADIUS_2D)
+            return false;
+
+        var incomingMicroUphill = waypointIndex > 0
+            && _waypoints[waypointIndex - 1].DistanceTo2D(waypoint) <= MICRO_UPHILL_SUPPORT_SEGMENT_MAX_DISTANCE
+            && waypoint.Z - _waypoints[waypointIndex - 1].Z >= MICRO_UPHILL_SUPPORT_SEGMENT_MIN_Z_DELTA;
+        var outgoingMicroUphill = waypointIndex + 1 < _waypoints.Length
+            && waypoint.DistanceTo2D(_waypoints[waypointIndex + 1]) <= MICRO_UPHILL_SUPPORT_SEGMENT_MAX_DISTANCE
+            && _waypoints[waypointIndex + 1].Z - waypoint.Z >= MICRO_UPHILL_SUPPORT_SEGMENT_MIN_Z_DELTA;
+        return incomingMicroUphill || outgoingMicroUphill;
     }
 
     private bool TryReplanFromNearVerticalLayerMismatch(
@@ -1446,8 +1571,21 @@ public class NavigationPath(
             if (distanceToCurrentWaypoint2D <= PATH_POINT_DEDUP_EPSILON)
                 return true;
 
-            if (distanceToCurrentWaypoint2D <= GetCornerCommitDistance())
+            if (ShouldHoldEarlyReplannedUphillSupport(
+                currentPosition,
+                _currentIndex))
+            {
+                return false;
+            }
+
+            var requiresExactCompactUphillCommit =
+                RequiresExactCompactUphillSupportCommit(currentPosition, _currentIndex, distanceToCurrentWaypoint2D);
+            if (distanceToCurrentWaypoint2D <= GetCornerCommitDistance()
+                && !requiresExactCompactUphillCommit)
                 return true;
+
+            if (requiresExactCompactUphillCommit)
+                return false;
 
             if (ShouldHoldNearWaypointBeforeUphillLayerProgression(currentPosition, _currentIndex, distanceToCurrentWaypoint2D))
                 return false;
@@ -1474,6 +1612,53 @@ public class NavigationPath(
 
         return TryGetLineOfSight(currentPosition, _waypoints[_currentIndex + 1], mapId, out var nextWaypointVisible)
             && nextWaypointVisible;
+    }
+
+    private bool ShouldHoldEarlyReplannedUphillSupport(
+        Position currentPosition,
+        int waypointIndex)
+    {
+        var earlySupportReplan =
+            _traceLastReplanReason == NavigationTraceReason.PathExhaustedStillFar
+            || _traceLastReplanReason == NavigationTraceReason.StalledNearWaypoint;
+
+        if (!_tightenDenseWaypointAcceptance
+            || !earlySupportReplan
+            || !IsLongTravelStyleRoute()
+            || waypointIndex < 0
+            || waypointIndex >= _waypoints.Length
+            || waypointIndex >= PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_WAYPOINTS)
+        {
+            return false;
+        }
+
+        var waypoint = _waypoints[waypointIndex];
+        if (waypoint.Z - currentPosition.Z <= MICRO_UPHILL_SUPPORT_REACH_MIN_VERTICAL_DELTA)
+            return false;
+
+        return IsCompactUphillSupportNeighborhood(waypointIndex);
+    }
+
+    private bool IsCompactUphillSupportNeighborhood(int waypointIndex)
+    {
+        var waypoint = _waypoints[waypointIndex];
+
+        var previousWaypoint = waypointIndex > 0
+            ? _waypoints[waypointIndex - 1]
+            : _pathStartPosition;
+        if (previousWaypoint is Position previous
+            && previous.DistanceTo2D(waypoint) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
+            && waypoint.Z - previous.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA)
+        {
+            return true;
+        }
+
+        if (waypointIndex + 1 >= _waypoints.Length)
+            return false;
+
+        var next = _waypoints[waypointIndex + 1];
+        return waypoint.DistanceTo2D(next) <= COMPACT_VERTICAL_TRANSITION_MAX_SEGMENT_DISTANCE
+            && next.Z - waypoint.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
     }
 
     private bool ShouldHoldNearWaypointBeforeUphillLayerProgression(
@@ -1522,6 +1707,39 @@ public class NavigationPath(
             return false;
 
         return next.Z - waypoint.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
+    }
+
+    private bool RequiresExactCompactUphillSupportCommit(
+        Position currentPosition,
+        int waypointIndex,
+        float distanceToWaypoint2D)
+    {
+        if (!_tightenDenseWaypointAcceptance
+            || !_requireVerticalWaypointArrival
+            || waypointIndex < 0
+            || waypointIndex >= _waypoints.Length
+            || distanceToWaypoint2D > GetCornerCommitDistance())
+        {
+            return false;
+        }
+
+        var waypoint = _waypoints[waypointIndex];
+        if (waypoint.Z - currentPosition.Z <= WAYPOINT_VERTICAL_REACH_TOLERANCE * 0.5f)
+            return false;
+
+        var previousWaypoint = waypointIndex > 0
+            ? _waypoints[waypointIndex - 1]
+            : _pathStartPosition;
+        var exactSupportMaxDistance = MathF.Max(
+            MICRO_UPHILL_SUPPORT_SEGMENT_MAX_DISTANCE,
+            _capsuleRadius * COMPACT_UPHILL_EXACT_COMMIT_CAPSULE_MULTIPLIER);
+        var incomingCompactUphill = previousWaypoint is Position previous
+            && previous.DistanceTo2D(waypoint) <= exactSupportMaxDistance
+            && waypoint.Z - previous.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
+        var outgoingCompactUphill = waypointIndex + 1 < _waypoints.Length
+            && waypoint.DistanceTo2D(_waypoints[waypointIndex + 1]) <= exactSupportMaxDistance
+            && _waypoints[waypointIndex + 1].Z - waypoint.Z >= COMPACT_VERTICAL_TRANSITION_MIN_Z_DELTA;
+        return incomingCompactUphill || outgoingCompactUphill;
     }
 
     private bool ShouldHoldNearWaypointBeforeTightDescendingTransition(
@@ -3257,19 +3475,71 @@ public class NavigationPath(
         return true;
     }
 
-    private bool IsPathUsable(uint mapId, Position start, Position end, Position[] path)
+    private bool IsPathUsable(
+        uint mapId,
+        Position start,
+        Position end,
+        Position[] path,
+        PathfindingRouteResult routeResult,
+        bool allowMicroBlockedIndexZeroProjectionFallback = false)
     {
         if (path.Length == 0)
+        {
+            EmitPathUsabilityRejection("empty_path", start, end, path, routeResult);
             return false;
+        }
 
-        if (start.DistanceTo(path[0]) > MAX_FIRST_WAYPOINT_DISTANCE)
+        var firstWaypointDistance = start.DistanceTo(path[0]);
+        if (firstWaypointDistance > MAX_FIRST_WAYPOINT_DISTANCE)
+        {
+            EmitPathUsabilityRejection(
+                "first_waypoint_too_far",
+                start,
+                end,
+                path,
+                routeResult,
+                firstWaypointDistance: firstWaypointDistance);
             return false;
+        }
 
-        if (_strictPathValidation && !HasDestinationClosure(end, path))
+        var hasDestinationClosure = HasDestinationClosure(end, path);
+        if (_strictPathValidation && !hasDestinationClosure)
+        {
+            EmitPathUsabilityRejection(
+                "strict_destination_closure",
+                start,
+                end,
+                path,
+                routeResult,
+                firstWaypointDistance: firstWaypointDistance,
+                hasDestinationClosure: hasDestinationClosure);
             return false;
+        }
 
-        if (!HasSaneSegments(path) || !HasDestinationProgress(start, end, path))
+        var hasSaneSegments = HasSaneSegments(path);
+        var hasBaseDestinationProgress = HasDestinationProgress(start, end, path);
+        var projectionPrefixAccepted = ShouldAcceptProjectionBlockedLocalExecutionPrefix(
+            start,
+            end,
+            path,
+            routeResult,
+            allowMicroBlockedIndexZeroProjectionFallback);
+        var hasDestinationProgress = hasBaseDestinationProgress || projectionPrefixAccepted;
+        if (!hasSaneSegments || !hasDestinationProgress)
+        {
+            EmitPathUsabilityRejection(
+                "segment_or_progress_gate",
+                start,
+                end,
+                path,
+                routeResult,
+                firstWaypointDistance: firstWaypointDistance,
+                hasDestinationClosure: hasDestinationClosure,
+                hasSaneSegments: hasSaneSegments,
+                hasBaseDestinationProgress: hasBaseDestinationProgress,
+                projectionPrefixAccepted: projectionPrefixAccepted);
             return false;
+        }
 
         // In non-strict mode, trust the navmesh path without collision-based LOS
         // validation between consecutive corners. Long outdoor paths (460y+ corpse
@@ -3278,10 +3548,257 @@ public class NavigationPath(
         if (!_strictPathValidation)
             return true;
 
-        return HasTraversableSegments(mapId, start, path);
+        var hasTraversableSegments = HasTraversableSegments(mapId, start, path);
+        if (!hasTraversableSegments)
+        {
+            EmitPathUsabilityRejection(
+                "strict_traversability",
+                start,
+                end,
+                path,
+                routeResult,
+                firstWaypointDistance: firstWaypointDistance,
+                hasDestinationClosure: hasDestinationClosure,
+                hasSaneSegments: hasSaneSegments,
+                hasBaseDestinationProgress: hasBaseDestinationProgress,
+                projectionPrefixAccepted: projectionPrefixAccepted,
+                hasTraversableSegments: hasTraversableSegments);
+            return false;
+        }
+
+        return true;
     }
 
-    private ValidatedPathResult GetValidatedPath(uint mapId, Position start, Position end, bool smoothPath)
+    private void EmitPathUsabilityRejection(
+        string reason,
+        Position start,
+        Position end,
+        IReadOnlyList<Position> path,
+        PathfindingRouteResult routeResult,
+        float firstWaypointDistance = float.NaN,
+        bool? hasDestinationClosure = null,
+        bool? hasSaneSegments = null,
+        bool? hasBaseDestinationProgress = null,
+        bool? projectionPrefixAccepted = null,
+        bool? hasTraversableSegments = null)
+    {
+        if (_diagnosticSink == null)
+            return;
+
+        var startToEndDistance = start.DistanceTo(end);
+        var bestDistanceToEnd = startToEndDistance;
+        var finalDistanceToEnd = path.Count > 0 ? path[^1].DistanceTo(end) : float.NaN;
+        var cumulative2D = 0f;
+        var bestNet2D = 0f;
+        var maxAbsZDelta = 0f;
+        var previous = start;
+        for (var i = 0; i < path.Count; i++)
+        {
+            var point = path[i];
+            cumulative2D += previous.DistanceTo2D(point);
+            bestNet2D = MathF.Max(bestNet2D, start.DistanceTo2D(point));
+            maxAbsZDelta = MathF.Max(maxAbsZDelta, MathF.Abs(point.Z - start.Z));
+            bestDistanceToEnd = MathF.Min(bestDistanceToEnd, point.DistanceTo(end));
+            previous = point;
+        }
+
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] usable-check reject reason={reason} strict={_strictPathValidation} count={path.Count} " +
+            $"firstDist={firstWaypointDistance:F2} closure={FormatUsabilityFlag(hasDestinationClosure)} " +
+            $"sane={FormatUsabilityFlag(hasSaneSegments)} baseProgress={FormatUsabilityFlag(hasBaseDestinationProgress)} " +
+            $"projPrefix={FormatUsabilityFlag(projectionPrefixAccepted)} traversable={FormatUsabilityFlag(hasTraversableSegments)} " +
+            $"startToEnd={startToEndDistance:F2} bestEnd={bestDistanceToEnd:F2} finalEnd={finalDistanceToEnd:F2} " +
+            $"cumulative2D={cumulative2D:F2} bestNet2D={bestNet2D:F2} maxAbsZ={maxAbsZDelta:F2} " +
+            $"blockedIndex={(routeResult.BlockedSegmentIndex?.ToString() ?? "null")} blockedReason={routeResult.BlockedReason} " +
+            $"first={FormatUsabilityPoint(path.Count > 0 ? path[0] : null)} last={FormatUsabilityPoint(path.Count > 0 ? path[^1] : null)}");
+    }
+
+    private static bool ShouldAcceptProjectionBlockedLocalExecutionPrefix(
+        Position start,
+        Position end,
+        IReadOnlyList<Position> path,
+        PathfindingRouteResult routeResult,
+        bool allowMicroBlockedIndexZeroProjectionFallback)
+    {
+        if (path.Count == 0
+            || path.Count > PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_WAYPOINTS
+            || routeResult.BlockedSegmentIndex is not int blockedSegmentIndex
+            || blockedSegmentIndex < 0
+            || !IsProjectionBlockedReason(routeResult.BlockedReason))
+        {
+            return false;
+        }
+
+        var startToEndDistance = start.DistanceTo(end);
+        var bestDistanceToEnd = startToEndDistance;
+        var cumulative2D = 0f;
+        var bestNet2D = 0f;
+        var maxAbsZDelta = 0f;
+        var previous = start;
+
+        for (var i = 0; i < path.Count; i++)
+        {
+            var point = path[i];
+            cumulative2D += previous.DistanceTo2D(point);
+            bestNet2D = MathF.Max(bestNet2D, start.DistanceTo2D(point));
+            maxAbsZDelta = MathF.Max(maxAbsZDelta, MathF.Abs(point.Z - start.Z));
+            bestDistanceToEnd = MathF.Min(bestDistanceToEnd, point.DistanceTo(end));
+            previous = point;
+        }
+
+        var hasMeaningfulVerticalSupportGain = maxAbsZDelta >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_Z_DELTA;
+        if (bestDistanceToEnd > startToEndDistance + PROJECTION_PREFIX_LOCAL_EXECUTION_MAX_DESTINATION_REGRESSION
+            && !hasMeaningfulVerticalSupportGain)
+        {
+            return false;
+        }
+
+        var meetsStandardProjectionPrefixGate =
+            cumulative2D >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_CUMULATIVE_2D
+            && (bestNet2D >= PROJECTION_PREFIX_LOCAL_EXECUTION_MIN_NET_2D
+                || hasMeaningfulVerticalSupportGain);
+        if (meetsStandardProjectionPrefixGate)
+            return true;
+
+        if (allowMicroBlockedIndexZeroProjectionFallback
+            && IsMicroBlockedIndexZeroEndProjectionWallSupportFallback(
+                start,
+                path,
+                routeResult,
+                blockedSegmentIndex,
+                cumulative2D,
+                bestNet2D,
+                maxAbsZDelta))
+        {
+            return true;
+        }
+
+        if (IsMicroEndProjectionWallSupportPrefix(
+            start,
+            path,
+            routeResult,
+            blockedSegmentIndex,
+            cumulative2D,
+            bestNet2D,
+            maxAbsZDelta))
+        {
+            return true;
+        }
+
+        // Some lip-climb reroutes only expose a tiny end-projection support corridor
+        // before the service runs out of projected corners. Keep that compact smooth
+        // prefix when it still gains a full yard of height and leaves blocked corners
+        // downstream, but do not reopen the blocked-index-zero alternate fallback.
+        return blockedSegmentIndex > 0
+            && path.Count >= 3
+            && routeResult.Corners.Length > path.Count
+            && routeResult.BlockedReason.StartsWith("end_projection:", StringComparison.OrdinalIgnoreCase)
+            && cumulative2D >= PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_CUMULATIVE_2D
+            && bestNet2D >= PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_NET_2D
+            && maxAbsZDelta >= PROJECTION_PREFIX_COMPACT_END_BLOCK_MIN_Z_DELTA;
+    }
+
+    private static bool IsMicroBlockedIndexZeroEndProjectionWallSupportFallback(
+        Position start,
+        IReadOnlyList<Position> path,
+        PathfindingRouteResult routeResult,
+        int blockedSegmentIndex,
+        float cumulative2D,
+        float bestNet2D,
+        float maxAbsZDelta)
+    {
+        if (blockedSegmentIndex != 0
+            || path.Count != 2
+            || routeResult.Corners.Length != 2
+            || !routeResult.BlockedReason.StartsWith("end_projection:", StringComparison.OrdinalIgnoreCase)
+            || start.DistanceTo2D(path[0]) > PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MAX_FIRST_POINT_OFFSET_2D
+            || cumulative2D < PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MIN_CUMULATIVE_2D
+            || cumulative2D > PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MAX_CUMULATIVE_2D
+            || bestNet2D < PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MIN_NET_2D
+            || bestNet2D > PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MAX_NET_2D
+            || maxAbsZDelta < PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MIN_Z_DELTA
+            || maxAbsZDelta > PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MAX_Z_DELTA
+            || routeResult.DropCount > 0
+            || routeResult.UnsafeDropCount > 0
+            || routeResult.CliffCount > 0
+            || routeResult.JumpGapCount > 0)
+        {
+            return false;
+        }
+
+        var maxStartRadius2D = 0f;
+        var previousZ = start.Z;
+        for (var i = 0; i < path.Count; i++)
+        {
+            var point = path[i];
+            maxStartRadius2D = MathF.Max(maxStartRadius2D, start.DistanceTo2D(point));
+            if (point.Z + 0.05f < previousZ)
+                return false;
+
+            previousZ = point.Z;
+        }
+
+        return maxStartRadius2D <= PROJECTION_PREFIX_BLOCKED_ZERO_MICRO_END_BLOCK_MAX_START_RADIUS_2D;
+    }
+
+    private static bool IsMicroEndProjectionWallSupportPrefix(
+        Position start,
+        IReadOnlyList<Position> path,
+        PathfindingRouteResult routeResult,
+        int blockedSegmentIndex,
+        float cumulative2D,
+        float bestNet2D,
+        float maxAbsZDelta)
+    {
+        if (blockedSegmentIndex <= 0
+            || path.Count < 2
+            || routeResult.Corners.Length <= path.Count
+            || !routeResult.BlockedReason.StartsWith("end_projection:", StringComparison.OrdinalIgnoreCase)
+            || start.DistanceTo2D(path[0]) > PATH_POINT_DEDUP_EPSILON)
+        {
+            return false;
+        }
+
+        var minCumulative2D = path.Count >= 3
+            ? PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_CUMULATIVE_2D
+            : PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_CUMULATIVE_2D;
+        var minNet2D = path.Count >= 3
+            ? PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_NET_2D
+            : PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_NET_2D;
+        var minZDelta = path.Count >= 3
+            ? PROJECTION_PREFIX_MICRO_END_BLOCK_MIN_Z_DELTA
+            : PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MIN_Z_DELTA;
+        var maxStartRadiusLimit = path.Count >= 3
+            ? PROJECTION_PREFIX_MICRO_END_BLOCK_MAX_START_RADIUS_2D
+            : PROJECTION_PREFIX_FINAL_MICRO_END_BLOCK_MAX_START_RADIUS_2D;
+        if (cumulative2D < minCumulative2D
+            || bestNet2D < minNet2D
+            || maxAbsZDelta < minZDelta)
+        {
+            return false;
+        }
+
+        var maxStartRadius2D = 0f;
+        var previousZ = start.Z;
+        for (var i = 0; i < path.Count; i++)
+        {
+            var point = path[i];
+            maxStartRadius2D = MathF.Max(maxStartRadius2D, start.DistanceTo2D(point));
+            if (point.Z + 0.05f < previousZ)
+                return false;
+
+            previousZ = point.Z;
+        }
+
+        return maxStartRadius2D <= maxStartRadiusLimit;
+    }
+
+    private ValidatedPathResult GetValidatedPath(
+        uint mapId,
+        Position start,
+        Position end,
+        bool smoothPath,
+        bool allowMicroBlockedIndexZeroProjectionFallback = false)
     {
         if (_pathfinding == null)
             return new([], [], false, 0, null, smoothPath, false);
@@ -3301,23 +3818,33 @@ public class NavigationPath(
 
         var usedNearbyObjectOverlay = nearbyObjects is { Count: > 0 };
         var nearbyObjectCount = nearbyObjects?.Count ?? 0;
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] validated-path enter map={mapId} smooth={smoothPath} overlay={usedNearbyObjectOverlay} overlayCount={nearbyObjectCount} " +
+            $"start=({start.X:F1},{start.Y:F1},{start.Z:F1}) end=({end.X:F1},{end.Y:F1},{end.Z:F1})");
 
+        var serviceRequestStopwatch = Stopwatch.StartNew();
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] service-request enter map={mapId} smooth={smoothPath} overlay={usedNearbyObjectOverlay}");
         var rawPathResult = usedNearbyObjectOverlay
             ? _pathfinding.GetPathResult(mapId, start, end, nearbyObjects, smoothPath, _race, _gender)
             : _pathfinding.GetPathResult(mapId, start, end, nearbyObjects: null, smoothPath, _race, _gender);
-        var serviceRejectedStaticBlock = IsServiceStaticBlock(rawPathResult);
-        var rawPath = serviceRejectedStaticBlock
-            ? Array.Empty<Position>()
-            : rawPathResult.Corners;
+        serviceRequestStopwatch.Stop();
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] service-request exit elapsedMs={serviceRequestStopwatch.ElapsedMilliseconds} corners={rawPathResult.Corners.Length} " +
+            $"result={rawPathResult.Result} blockedIndex={(rawPathResult.BlockedSegmentIndex?.ToString() ?? "null")} blockedReason={rawPathResult.BlockedReason}");
+        var rawPath = SelectServiceSeedPath(rawPathResult);
         var sanitizedPath = SanitizePath(rawPath);
+        EmitNavigationDiagnostic($"[NAV_PATH] sanitize exit count={sanitizedPath.Length}");
         var prunedPath = _enableProbeHeuristics
             ? PruneProbeWaypoints(start, sanitizedPath)
             : sanitizedPath;
+        EmitNavigationDiagnostic($"[NAV_PATH] prune exit count={prunedPath.Length}");
         // LOS-based string-pulling: remove intermediate waypoints where a straight
         // line is unobstructed. Corners remain because LOS is blocked by walls.
         var pulledPath = _enableProbeHeuristics
             ? StringPullPath(mapId, start, prunedPath)
             : prunedPath;
+        EmitNavigationDiagnostic($"[NAV_PATH] string-pull exit count={pulledPath.Length}");
 
         // Phase 3: Validate path segments against dynamic objects (closed doors, etc.).
         // String-pulling already checks LOS, but consecutive navmesh waypoints (4y apart)
@@ -3336,11 +3863,14 @@ public class NavigationPath(
             || (_enableProbeHeuristics
             && pulledPath.Length > 0
             && dynValidatedPath.Length == 0);
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] dynamic-validate exit count={dynValidatedPath.Length} rejected={rejectedByDynamicBlocker}");
 
         // Phase 3a: Post-path Z correction — replace navmesh Z with collision ground Z
         // where they differ. Fixes Orgrimmar WMO areas where navmesh Z diverges from
         // the actual walkable surface by a few yards.
         var zCorrectedPath = CorrectPathZFromCollision(mapId, dynValidatedPath);
+        EmitNavigationDiagnostic($"[NAV_PATH] z-correct exit count={zCorrectedPath.Length}");
 
         // Phase 3b: replace or reject waypoints whose local collision support resolves
         // to a different WMO layer than the navmesh path. BG movement will snap to that
@@ -3349,6 +3879,7 @@ public class NavigationPath(
         var layerRepairedPath = validateLocalPhysicsSegments
             ? RepairCollisionLayerMismatchedWaypoints(mapId, start, zCorrectedPath)
             : zCorrectedPath;
+        EmitNavigationDiagnostic($"[NAV_PATH] layer-repair exit count={layerRepairedPath.Length}");
 
         var localPhysicsValidationLimit = _enableProbeHeuristics
             ? int.MaxValue
@@ -3356,14 +3887,22 @@ public class NavigationPath(
         var localPhysicsValidatedPath = validateLocalPhysicsSegments
             ? ValidateSegmentsAgainstLocalPhysics(mapId, start, layerRepairedPath, localPhysicsValidationLimit)
             : layerRepairedPath;
+        EmitNavigationDiagnostic($"[NAV_PATH] local-physics exit count={localPhysicsValidatedPath.Length}");
 
         // Phase 4b: Cliff rerouting — probe each segment for cliff edges and insert
         // offset waypoints to steer the bot away from dangerous drops.
         var cliffReroutedPath = _enableProbeHeuristics
             ? ReroutePathAroundCliffs(mapId, start, localPhysicsValidatedPath)
             : localPhysicsValidatedPath;
+        EmitNavigationDiagnostic($"[NAV_PATH] cliff-reroute exit count={cliffReroutedPath.Length}");
 
-        var usable = IsPathUsable(mapId, start, end, cliffReroutedPath);
+        var usable = IsPathUsable(
+            mapId,
+            start,
+            end,
+            cliffReroutedPath,
+            rawPathResult,
+            allowMicroBlockedIndexZeroProjectionFallback);
 
         sw.Stop();
         Metrics.RecordPathDuration(sw.ElapsedMilliseconds);
@@ -3376,6 +3915,8 @@ public class NavigationPath(
         }
 
         var result = usable ? cliffReroutedPath : [];
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] validated-path exit usable={usable} resultCount={result.Length} elapsedMs={sw.ElapsedMilliseconds}");
         Metrics.RecordPathLength(result.Length);
         if (result.Length == 0)
             Metrics.IncrementPathsFailed();
@@ -3390,6 +3931,57 @@ public class NavigationPath(
     private static bool IsServiceStaticBlock(PathfindingRouteResult routeResult)
         => routeResult.BlockedSegmentIndex.HasValue
             && !routeResult.BlockedReason.StartsWith("dynamic_overlay", StringComparison.OrdinalIgnoreCase);
+
+    private Position[] SelectServiceSeedPath(PathfindingRouteResult routeResult)
+    {
+        if (IsServiceDynamicOverlayBlock(routeResult))
+            return [];
+
+        if (TryGetProjectionBlockedPrefix(routeResult, out var prefix))
+        {
+            EmitNavigationDiagnostic(
+                $"[NAV_PATH] projection-prefix exit count={prefix.Length} blockedIndex={routeResult.BlockedSegmentIndex} blockedReason={routeResult.BlockedReason}");
+            return prefix;
+        }
+
+        return IsServiceStaticBlock(routeResult)
+            ? []
+            : routeResult.Corners;
+    }
+
+    private static bool TryGetProjectionBlockedPrefix(
+        PathfindingRouteResult routeResult,
+        out Position[] prefix)
+    {
+        prefix = [];
+        if (routeResult.Corners.Length < 2
+            || routeResult.BlockedSegmentIndex is not int blockedSegmentIndex
+            || !IsProjectionBlockedReason(routeResult.BlockedReason))
+        {
+            return false;
+        }
+
+        var prefixLength = blockedSegmentIndex == 0
+            ? Math.Min(routeResult.Corners.Length, 2)
+            : Math.Clamp(blockedSegmentIndex + 1, 0, routeResult.Corners.Length);
+        if (prefixLength < 2)
+            return false;
+
+        prefix = new Position[prefixLength];
+        Array.Copy(routeResult.Corners, prefix, prefixLength);
+        return true;
+    }
+
+    private static bool IsProjectionBlockedReason(string? blockedReason)
+        => !string.IsNullOrWhiteSpace(blockedReason)
+            && (blockedReason.StartsWith("interior_projection:", StringComparison.OrdinalIgnoreCase)
+                || blockedReason.StartsWith("end_projection:", StringComparison.OrdinalIgnoreCase));
+
+    private static string FormatUsabilityFlag(bool? value)
+        => !value.HasValue ? "n/a" : value.Value ? "True" : "False";
+
+    private static string FormatUsabilityPoint(Position? point)
+        => point == null ? "none" : $"({point.X:F1},{point.Y:F1},{point.Z:F1})";
 
     private static string? BuildNearbyObjectOverlaySignature(IReadOnlyList<DynamicObjectProto>? nearbyObjects)
     {
@@ -3810,16 +4402,25 @@ public class NavigationPath(
             && start.DistanceTo(end) <= SHORT_ROUTE_TRACE_DISTANCE
             && (reason == NavigationTraceReason.PathExhaustedStillFar
                 || reason == NavigationTraceReason.PathUnavailable);
+        var urgentExhaustedRouteRecalc = !force
+            && reason == NavigationTraceReason.PathExhaustedStillFar
+            && _hasCalculatedPath
+            && _currentIndex >= _waypoints.Length;
         if (!force
             && _hasCalculatedPath
             && nowTick - _lastCalculationTick < RECALCULATE_COOLDOWN_MS
-            && !urgentShortRouteRecalc)
+            && !urgentShortRouteRecalc
+            && !urgentExhaustedRouteRecalc)
         {
             return;
         }
 
         if (force)
             Metrics.IncrementRecalculationsTriggered();
+
+        EmitNavigationDiagnostic(
+            $"[NAV_PATH] calculate-path enter map={mapId} force={force} reason={reason} " +
+            $"start=({start.X:F1},{start.Y:F1},{start.Z:F1}) end=({end.X:F1},{end.Y:F1},{end.Z:F1})");
 
         try
         {
@@ -3907,7 +4508,12 @@ public class NavigationPath(
             if (shouldCompareAlternate)
             {
                 alternateEvaluated = true;
-                var alternatePath = GetValidatedPath(mapId, start, end, smoothPath: !preferSmooth);
+                var alternatePath = GetValidatedPath(
+                    mapId,
+                    start,
+                    end,
+                    smoothPath: !preferSmooth,
+                    allowMicroBlockedIndexZeroProjectionFallback: selectedPath.PlannedPath.Length == 0 && preferSmooth);
                 var alternateAffordances = ClassifyRouteAffordances(start, alternatePath.PlannedPath);
                 if (ShouldPreferAlternatePath(
                     start,
@@ -3972,11 +4578,15 @@ public class NavigationPath(
                     alternateSelected,
                     endpointRetargeted),
                 reason);
+            EmitNavigationDiagnostic(
+                $"[NAV_PATH] calculate-path exit map={mapId} reason={reason} waypointCount={_waypoints.Length} currentIndex={_currentIndex}");
         }
         catch (Exception ex)
         {
             Serilog.Log.Warning("[NAV-DIAG] CalculatePath FAILED: map={MapId}, start=({SX:F1},{SY:F1},{SZ:F1}), end=({EX:F1},{EY:F1},{EZ:F1}): {Error}",
                 mapId, start.X, start.Y, start.Z, end.X, end.Y, end.Z, ex.Message);
+            EmitNavigationDiagnostic(
+                $"[NAV_PATH] calculate-path failed map={mapId} reason={reason} error={ex.GetType().Name}: {ex.Message}");
             _waypoints = [];
             _waypointAcceptanceRadii = [];
             _pathStartPosition = null;

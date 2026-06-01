@@ -77,7 +77,7 @@ namespace BotRunner
 
         private IBehaviourTreeNode BuildBehaviorTreeFromActions(List<(CharacterAction, List<object>)> actionMap)
         {
-            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage);
+            var context = new BotRunnerContext(_objectManager, _botTasks, _container, _behaviorConfig, EnqueueDiagnosticMessage, DiagLog);
             var builder = new BehaviourTreeBuilder()
                 .Sequence("StateManager Action Sequence");
 
@@ -1225,6 +1225,9 @@ namespace BotRunner
 
                     case CharacterAction.TravelTo:
                         {
+                            const float sameMapTravelArrivalTolerance = 15f;
+                            const float sameMapTravelVerticalArrivalTolerance = 4f;
+
                             // Params: [0]=mapId, [1]=x (float), [2]=y (float), [3]=z (float)
                             var targetMapId = (uint)Convert.ToInt32(actionEntry.Item2[0]);
                             var targetX = Convert.ToSingle(actionEntry.Item2[1]);
@@ -1233,45 +1236,71 @@ namespace BotRunner
                             builder.Do($"TravelTo map={targetMapId} ({targetX:F0},{targetY:F0},{targetZ:F0})", time =>
                             {
                                 var target = new Position(targetX, targetY, targetZ);
+                                var options = new TravelOptions
+                                {
+                                    PlayerFaction = TravelFaction.Horde,
+                                    DiscoveredFlightNodes = FlightPathData
+                                        .GetNodesForFaction((int)_objectManager.Player.MapId, FlightPathData.Faction.Horde)
+                                        .Select(n => n.NodeId)
+                                        .ToArray()
+                                };
+
                                 if (_objectManager.Player.MapId != targetMapId)
                                 {
-                                    var options = new TravelOptions
-                                    {
-                                        PlayerFaction = TravelFaction.Horde,
-                                        DiscoveredFlightNodes = FlightPathData
-                                            .GetNodesForFaction((int)_objectManager.Player.MapId, FlightPathData.Faction.Horde)
-                                            .Select(n => n.NodeId)
-                                            .ToArray()
-                                    };
+                                    context.AddImmediateDiagnostic(
+                                        $"[TRAVEL_DISPATCH] cross-map stage playerMap={_objectManager.Player.MapId} " +
+                                        $"targetMap={targetMapId} target=({targetX:F1},{targetY:F1},{targetZ:F1}) stack={_botTasks.Count}");
 
-                                    var travelResult = UpsertTravelTask(_botTasks, context, targetMapId, target, options, arrivalRadius: 15f);
-                                    if (travelResult != TravelTaskUpsertResult.Duplicate)
+                                    var crossMapTravelResult = UpsertTravelTask(_botTasks, context, targetMapId, target, options, arrivalRadius: sameMapTravelArrivalTolerance);
+                                    if (crossMapTravelResult != TravelTaskUpsertResult.Duplicate)
                                     {
                                         Log.Information(
                                             "[BOT RUNNER] TravelTo staged upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1})",
-                                            travelResult,
+                                            crossMapTravelResult,
                                             targetMapId,
                                             targetX,
                                             targetY,
                                             targetZ);
                                     }
 
+                                    context.AddImmediateDiagnostic(
+                                        $"[TRAVEL_DISPATCH] cross-map upsert={crossMapTravelResult} stack={_botTasks.Count}");
+
                                     return BehaviourTreeStatus.Success;
                                 }
 
                                 var finalDist = _objectManager.Player.Position.DistanceTo2D(target);
-                                if (finalDist <= 15f)
+                                var finalDz = Math.Abs(_objectManager.Player.Position.Z - target.Z);
+                                if (finalDist <= sameMapTravelArrivalTolerance
+                                    && finalDz <= sameMapTravelVerticalArrivalTolerance)
                                 {
                                     _objectManager.StopAllMovement();
                                     return BehaviourTreeStatus.Success;
                                 }
 
-                                var result = UpsertGoToTask(_botTasks, context, targetX, targetY, targetZ, tolerance: 15f);
-                                if (result != GoToTaskUpsertResult.Duplicate)
+                                context.AddImmediateDiagnostic(
+                                    $"[TRAVEL_DISPATCH] same-map stage playerMap={_objectManager.Player.MapId} " +
+                                    $"targetMap={targetMapId} target=({targetX:F1},{targetY:F1},{targetZ:F1}) stack={_botTasks.Count}");
+                                var sameMapTravelResult = UpsertTravelTask(
+                                    _botTasks,
+                                    context,
+                                    targetMapId,
+                                    target,
+                                    options,
+                                    arrivalRadius: sameMapTravelArrivalTolerance);
+                                if (sameMapTravelResult != TravelTaskUpsertResult.Duplicate)
                                 {
-                                    Log.Information("[BOT RUNNER] TravelTo upsert: {Result} target=({X:F1},{Y:F1},{Z:F1}) tolerance=15.0",
-                                        result, targetX, targetY, targetZ);
+                                    Log.Information(
+                                        "[BOT RUNNER] TravelTo same-map upsert: {Result} targetMap={Map} target=({X:F1},{Y:F1},{Z:F1}) arrivalRadius=15.0",
+                                        sameMapTravelResult,
+                                        targetMapId,
+                                        targetX,
+                                        targetY,
+                                        targetZ);
                                 }
+
+                                context.AddImmediateDiagnostic(
+                                    $"[TRAVEL_DISPATCH] same-map upsert={sameMapTravelResult} stack={_botTasks.Count}");
 
                                 return BehaviourTreeStatus.Success;
                             });
@@ -1312,21 +1341,30 @@ namespace BotRunner
             float x,
             float y,
             float z,
-            float tolerance)
+            float tolerance,
+            bool requireVerticalArrival = false,
+            float verticalTolerance = 0f)
         {
             var target = new Position(x, y, z);
             var normalizedTolerance = tolerance > 0f ? tolerance : 3f;
             var existingTask = botTasks.OfType<Tasks.GoToTask>().FirstOrDefault();
             if (existingTask != null)
             {
-                if (existingTask.MatchesTarget(target, normalizedTolerance))
+                if (existingTask.MatchesTarget(target, normalizedTolerance, requireVerticalArrival, verticalTolerance))
                     return GoToTaskUpsertResult.Duplicate;
 
-                existingTask.Retarget(target, normalizedTolerance);
+                existingTask.Retarget(target, normalizedTolerance, requireVerticalArrival, verticalTolerance);
                 return GoToTaskUpsertResult.Retargeted;
             }
 
-            botTasks.Push(new Tasks.GoToTask(botContext, target.X, target.Y, target.Z, normalizedTolerance));
+            botTasks.Push(new Tasks.GoToTask(
+                botContext,
+                target.X,
+                target.Y,
+                target.Z,
+                normalizedTolerance,
+                requireVerticalArrival,
+                verticalTolerance));
             return GoToTaskUpsertResult.Pushed;
         }
 

@@ -1362,20 +1362,14 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         }
     }
 
-    // Phase 3 walkable-snapped OG↔UC zeppelin off-mesh anchors. The original
-    // screenshot-derived seeds at z=51-54 were the bot's recorded ground
-    // positions when stalled, not the actual upper-platform / gangplank
-    // elevations. Tile (1, 29, 40)'s walkable mesh floor is at z≈72 (per a
-    // managed binary parse of the regenerated tile's polyMeshDetail verts),
-    // so seeds below that elevation are silently dropped at Detour's
-    // dtCreateNavMeshData::classifyOffMeshPoint height-check
-    // (DetourNavMeshBuilder.cpp:344-348). Snapped to the closest existing
-    // walkable detail verts in tile (1, 40, 29) — see tools/MmapGen/offmesh.txt
-    // and memory note project_mmapgen_offmesh_axis_swap.md.
-    private static readonly Position OrgrimmarZeppelinUpperPlatformWalkable =
-        new(1330.66f, -4656.03f, 96.29f);
-    private static readonly Position OrgrimmarZeppelinGangplankEndWalkable =
-        new(1315.33f, -4650.00f, 98.54f);
+    // Current OG boarding seam uses measured deck-edge and BoardingPosition
+    // anchors inside Orczeppelinhouse.wmo. Older z=96 proof anchors and
+    // terrain-to-boarding shortcuts were removed after live evidence showed
+    // they could hide exterior-hill routing.
+    private static readonly Position OrgrimmarZeppelinDeckEdgeWalkable =
+        new(1329.877f, -4653.495f, 53.609f);
+    private static readonly Position OrgrimmarZeppelinBoardingPositionWalkable =
+        new(1320.142944f, -4653.158691f, 53.891945f);
     // Phase 5.3.4 pre-flight gate (PFS-OVERHAUL-005). Phase 5.3 FG verification
     // proved BoardingPosition (1320.14,-4653.16,53.89) is REAL walkable (C4
     // settled with dz=0.0) and ApproachPosition (1338.10,-4646.00,51.60) is REAL
@@ -1394,12 +1388,11 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
     {
         // Phase 3 proof gate (PFS-OVERHAUL-003). Two assertions:
         //
-        // PROOF A — the regenerated tile (1, 40, 29) authoritatively encodes a
+        // PROOF A - the regenerated tile (1, 40, 29) authoritatively encodes a
         //   bidirectional dtOffMeshConnection between the OG zeppelin tower's
-        //   upper-platform anchor (1330.66, -4656.03, 96.29) and the
-        //   gangplank-end anchor (1315.33, -4650.00, 98.54). Parsed directly
-        //   from the on-disk .mmtile (wrapper + Detour payload), so the test
-        //   is independent of the runtime path-query stack.
+        //   measured deck-edge anchor and BoardingPosition. Parsed directly
+        //   from the on-disk .mmtile (wrapper + Detour payload), so the test is
+        //   independent of the runtime path-query stack.
         //
         // PROOF B — a Detour path query across that boarding edge does not
         //   trip any of the six managed repair-phase counters in
@@ -1431,24 +1424,24 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         // endpoint, matching solidVerts and the ADT tile frame.
         static (float A, float B, float C) ToOnDisk(float wowX, float wowY, float wowZ)
             => (wowY, wowZ, wowX);
-        var upperPlatformOnDisk = ToOnDisk(
-            OrgrimmarZeppelinUpperPlatformWalkable.X,
-            OrgrimmarZeppelinUpperPlatformWalkable.Y,
-            OrgrimmarZeppelinUpperPlatformWalkable.Z);
-        var gangplankEndOnDisk = ToOnDisk(
-            OrgrimmarZeppelinGangplankEndWalkable.X,
-            OrgrimmarZeppelinGangplankEndWalkable.Y,
-            OrgrimmarZeppelinGangplankEndWalkable.Z);
+        var deckEdgeOnDisk = ToOnDisk(
+            OrgrimmarZeppelinDeckEdgeWalkable.X,
+            OrgrimmarZeppelinDeckEdgeWalkable.Y,
+            OrgrimmarZeppelinDeckEdgeWalkable.Z);
+        var boardingPositionOnDisk = ToOnDisk(
+            OrgrimmarZeppelinBoardingPositionWalkable.X,
+            OrgrimmarZeppelinBoardingPositionWalkable.Y,
+            OrgrimmarZeppelinBoardingPositionWalkable.Z);
         const float Tolerance = 1.0f;
 
         OffMeshConnectionRecord? match = null;
         foreach (var c in connections)
         {
-            var aMatchesUpperBStartsGangplank = NearOnDisk(c.Pos, 0, upperPlatformOnDisk, Tolerance)
-                && NearOnDisk(c.Pos, 3, gangplankEndOnDisk, Tolerance);
-            var aMatchesGangplankBStartsUpper = NearOnDisk(c.Pos, 0, gangplankEndOnDisk, Tolerance)
-                && NearOnDisk(c.Pos, 3, upperPlatformOnDisk, Tolerance);
-            if (aMatchesUpperBStartsGangplank || aMatchesGangplankBStartsUpper)
+            var aMatchesDeckEdgeBStartsBoarding = NearOnDisk(c.Pos, 0, deckEdgeOnDisk, Tolerance)
+                && NearOnDisk(c.Pos, 3, boardingPositionOnDisk, Tolerance);
+            var aMatchesBoardingBStartsDeckEdge = NearOnDisk(c.Pos, 0, boardingPositionOnDisk, Tolerance)
+                && NearOnDisk(c.Pos, 3, deckEdgeOnDisk, Tolerance);
+            if (aMatchesDeckEdgeBStartsBoarding || aMatchesBoardingBStartsDeckEdge)
             {
                 match = c;
                 break;
@@ -1458,13 +1451,13 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         Assert.True(
             match.HasValue,
             $"Tile (map=1, tileX=40, tileY=29) does not contain an off-mesh "
-            + $"connection between OG upper-platform anchor "
-            + $"({OrgrimmarZeppelinUpperPlatformWalkable.X:F2},"
-            + $"{OrgrimmarZeppelinUpperPlatformWalkable.Y:F2},"
-            + $"{OrgrimmarZeppelinUpperPlatformWalkable.Z:F2}) and gangplank-end "
-            + $"anchor ({OrgrimmarZeppelinGangplankEndWalkable.X:F2},"
-            + $"{OrgrimmarZeppelinGangplankEndWalkable.Y:F2},"
-            + $"{OrgrimmarZeppelinGangplankEndWalkable.Z:F2}). Found "
+            + $"connection between OG deck-edge anchor "
+            + $"({OrgrimmarZeppelinDeckEdgeWalkable.X:F2},"
+            + $"{OrgrimmarZeppelinDeckEdgeWalkable.Y:F2},"
+            + $"{OrgrimmarZeppelinDeckEdgeWalkable.Z:F2}) and BoardingPosition "
+            + $"anchor ({OrgrimmarZeppelinBoardingPositionWalkable.X:F2},"
+            + $"{OrgrimmarZeppelinBoardingPositionWalkable.Y:F2},"
+            + $"{OrgrimmarZeppelinBoardingPositionWalkable.Z:F2}). Found "
             + $"{connections.Count} other connection(s); see test output for "
             + "their endpoints. Likely cause: tools/MmapGen/offmesh.txt seed "
             + "missing or the tile was not regenerated since the seed was added.");
@@ -1482,8 +1475,8 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
         var before = NavigationPerformanceMetrics.Snapshot;
         var pathResult = _navigation.CalculateValidatedPath(
             Kalimdor,
-            OrgrimmarZeppelinUpperPlatformWalkable.ToXYZ(),
-            OrgrimmarZeppelinGangplankEndWalkable.ToXYZ(),
+            OrgrimmarZeppelinDeckEdgeWalkable.ToXYZ(),
+            OrgrimmarZeppelinBoardingPositionWalkable.ToXYZ(),
             smoothPath: true,
             agentRadius: TaurenMaleCapsule.Radius,
             agentHeight: TaurenMaleCapsule.Height);
@@ -1507,8 +1500,8 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
 
         Assert.True(
             pathResult.Path.Length > 0,
-            "Expected a non-empty path result for the OG upper-platform → "
-            + $"gangplank-end query; got result='{pathResult.Result}' "
+            "Expected a non-empty path result for the OG deck-edge to "
+            + $"BoardingPosition query; got result='{pathResult.Result}' "
             + $"length={pathResult.Path.Length}. If 'no_path', the off-mesh entry "
             + "exists in the tile but Detour cannot reach it from one of the "
             + "endpoints (likely cause: endpoint over a non-walkable poly — fix "
@@ -1661,18 +1654,18 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
     }
 
     [Fact]
-    public void OrgrimmarUpperPlatformToGangplankEnd_PolygonListIncludesOffMeshConnection()
+    public void OrgrimmarDeckEdgeToBoardingPosition_PolygonListIncludesOffMeshConnection()
     {
         // Smoke test for the new test-only FindPathPolygonsForAgent C export
         // (PFS-OVERHAUL-004 H2b). Validates the export works on a route that
-        // PROOF A + PROOF B already prove is correctly baked: the same upper-
-        // platform ↔ gangplank-end pair the off-mesh entry was authored for.
+        // PROOF A + PROOF B already prove is correctly baked: the same
+        // deck-edge to BoardingPosition pair the off-mesh entry was authored for.
         // The corridor between these two anchors MUST include at least one
         // off-mesh polygon — if this smoke test fails, the export is broken or
         // the tile lost its off-mesh entries, and PROOF C's polygon-list
         // assertion is meaningless until that's fixed.
-        var start = OrgrimmarZeppelinUpperPlatformWalkable.ToXYZ();
-        var end = OrgrimmarZeppelinGangplankEndWalkable.ToXYZ();
+        var start = OrgrimmarZeppelinDeckEdgeWalkable.ToXYZ();
+        var end = OrgrimmarZeppelinBoardingPositionWalkable.ToXYZ();
 
         var polyResult = NavigationInterop.QueryPathPolygons(
             Kalimdor, start, end,
@@ -1688,8 +1681,8 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
 
         Assert.True(
             polyResult.Success,
-            "FindPathPolygonsForAgent returned false for the upper-platform → "
-            + "gangplank-end smoke route. Either the export is missing from the "
+            "FindPathPolygonsForAgent returned false for the deck-edge to "
+            + "BoardingPosition smoke route. Either the export is missing from the "
             + "loaded Navigation.dll (rebuild + ensure Bot/Release/net8.0/Navigation.dll "
             + "is fresh) or the proof anchors are no longer on the navmesh. Check "
             + "[POLYLIST] lines in stderr.");
@@ -1702,13 +1695,13 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
 
         Assert.True(
             polyResult.ContainsOffMeshPoly,
-            $"Expected the corridor between upper-platform anchor "
-            + $"({OrgrimmarZeppelinUpperPlatformWalkable.X:F2},"
-            + $"{OrgrimmarZeppelinUpperPlatformWalkable.Y:F2},"
-            + $"{OrgrimmarZeppelinUpperPlatformWalkable.Z:F2}) and gangplank-end anchor "
-            + $"({OrgrimmarZeppelinGangplankEndWalkable.X:F2},"
-            + $"{OrgrimmarZeppelinGangplankEndWalkable.Y:F2},"
-            + $"{OrgrimmarZeppelinGangplankEndWalkable.Z:F2}) to include at least one "
+            $"Expected the corridor between deck-edge anchor "
+            + $"({OrgrimmarZeppelinDeckEdgeWalkable.X:F2},"
+            + $"{OrgrimmarZeppelinDeckEdgeWalkable.Y:F2},"
+            + $"{OrgrimmarZeppelinDeckEdgeWalkable.Z:F2}) and BoardingPosition anchor "
+            + $"({OrgrimmarZeppelinBoardingPositionWalkable.X:F2},"
+            + $"{OrgrimmarZeppelinBoardingPositionWalkable.Y:F2},"
+            + $"{OrgrimmarZeppelinBoardingPositionWalkable.Z:F2}) to include at least one "
             + $"DT_POLYTYPE_OFFMESH_CONNECTION polygon (the bidirectional anchor entry "
             + $"PROOF A confirms is in the tile). Observed polyCount="
             + $"{polyResult.TotalPolyCount} with offMeshPolyCount=0. If PROOF A is also "
@@ -1719,25 +1712,14 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
     [Fact]
     public void OrgrimmarCityToBoardingPosition_IntraTilePolygonListIncludesOffMeshConnection()
     {
-        // Phase 4 H2d outcome (PFS-OVERHAUL-004). H2d instrumentation in
-        // baseOffMeshLinks proved the off-mesh polys ARE linked at runtime
-        // (dxz^2=0.00 for all 4 baked entries — the prior "links are dangling"
-        // theory was wrong). The earlier H2c smoke test failed for a different
-        // reason: the upper-platform ↔ gangplank-end pair are ~16 units apart
-        // and Detour finds a 5-poly direct ground path of comparable cost,
-        // correctly preferring it over the off-mesh hop.
-        //
-        // This assertion uses off-mesh entry #2's anchors — upper-platform
-        // (z=96.29) → ApproachPosition (z=51.60). The ground walk between
-        // them requires descending the entire OG ramp (hundreds of units);
-        // the off-mesh hop is ~46 units. Detour MUST prefer the off-mesh.
-        // If this test passes, the off-mesh-link infrastructure is fully
-        // working end-to-end and the Phase 4 mesh-side claim is proven.
+        // Count the current OG/UC upper-deck seam after touching the route
+        // that owns it. Stale terrain-to-boarding shortcut entries were removed;
+        // this gate only proves the real in-tower seam remains linked.
         // Touch the navmesh first so it is loaded before we count.
         var probe = NavigationInterop.QueryPathPolygons(
             Kalimdor,
-            OrgrimmarZeppelinUpperPlatformWalkable.ToXYZ(),
-            OrgrimmarZeppelinGangplankEndWalkable.ToXYZ(),
+            OrgrimmarZeppelinDeckEdgeWalkable.ToXYZ(),
+            OrgrimmarZeppelinBoardingPositionWalkable.ToXYZ(),
             TaurenMaleCapsule.Radius, TaurenMaleCapsule.Height);
         _output.WriteLine($"H2d probe: success={probe.Success} totalPolyCount={probe.TotalPolyCount}");
 
@@ -1751,22 +1733,19 @@ public class LongPathingRouteTests(NavigationFixture fixture, ITestOutputHelper 
             + "Bot/Release/net8.0/Navigation.dll is fresh) or no navMesh is "
             + "loaded for Kalimdor. Check [OMLINK] in stderr.");
 
-        Assert.True(counts.Total >= 4,
-            $"Expected at least 4 off-mesh polygons on Kalimdor (the four "
-            + $"OG↔UC zeppelin entries baked into tile (1, 40, 29)); got "
+        Assert.True(counts.Total >= 1,
+            $"Expected at least one off-mesh polygon on Kalimdor (the current "
+            + $"OG/UC upper-deck seam baked into tile (1, 40, 29)); got "
             + $"total={counts.Total}. If 0, the navmesh wasn't fully loaded "
             + $"or the tile lost its off-mesh entries.");
 
-        // The 4 OG↔UC zeppelin entries in tile (1, 40, 29) are all intra-tile
-        // (side==0xff) so baseOffMeshLinks/connectExtOffMeshLinks(tile,tile,-1)
-        // both fire and the runtime poly's firstLink chain is non-empty. Any
-        // additional cross-tile entries (e.g., the prior H2a sea-level entry
-        // in tile (28, 40) whose end lands in tile (29, 40)) may or may not
-        // link depending on tile load order; that is tracked separately.
-        Assert.True(counts.Linked >= 4,
-            $"H2d GATE: expected at least the 4 OG↔UC intra-tile off-mesh "
-            + $"polygons in tile (1, 40, 29) to be linked at runtime; got "
-            + $"linked={counts.Linked} of total={counts.Total}. If linked < 4, "
+        // The current OG/UC seam is intra-tile (side==0xff), so
+        // baseOffMeshLinks/connectExtOffMeshLinks(tile,tile,-1) should link it
+        // when tile 40,29 loads.
+        Assert.True(counts.Linked >= 1,
+            $"H2d GATE: expected the OG/UC intra-tile off-mesh polygon in "
+            + $"tile (1, 40, 29) to be linked at runtime; got "
+            + $"linked={counts.Linked} of total={counts.Total}. If linked < 1, "
             + $"the runtime baseOffMeshLinks / connectExtOffMeshLinks failed "
             + $"to snap the off-mesh anchors to a ground polygon. Check "
             + $"[OFFLINK] lines in stderr for the failing endpoint.");

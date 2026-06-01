@@ -451,6 +451,24 @@ private:
 	rcContourSet& operator=(const rcContourSet&);
 };
 
+/// Targeted simplify-time anchor override for contour experiments.
+/// @ingroup recast
+struct rcAnchorContourSimplifyOverride
+{
+	int anchorX;						///< Anchor x cell in the contour build grid. [Units: vx]
+	int anchorZ;						///< Anchor z cell in the contour build grid. [Units: vx]
+	int windowCenterX;					///< Local preserve-window x cell in the contour build grid. [Units: vx]
+	int windowCenterZ;					///< Local preserve-window z cell in the contour build grid. [Units: vx]
+	int supportFloorMinY;				///< Minimum support-band y cell to preserve. [Units: vx]
+	int supportFloorMaxY;				///< Maximum support-band y cell to preserve. [Units: vx]
+	int supportBandArcPreserveRadiusCells;	///< XY preserve radius for the shortest raw support-band arc around the local window. [Units: vx]
+	int preserveRadiusCells;			///< XY preserve radius for support-band-local raw vertices. [Units: vx]
+	int boundarySeedRadiusCells;		///< XY radius used to preserve support-band boundary crossings around the anchor. [Units: vx]
+	int localPreserveRadiusCells;		///< XY preserve radius for raw vertices regardless of support-band membership. [Units: vx]
+	bool bypassSimplificationOnSeedMatch;	///< When true, a matched seeded contour keeps its full raw contour through rcBuildContours().
+	bool requireContourContainsAnchor;	///< Limit seeding to contours that contain the anchor projection.
+};
+
 /// Represents a polygon mesh suitable for use in building a navigation mesh. 
 /// @ingroup recast
 struct rcPolyMesh
@@ -609,6 +627,13 @@ static const int RC_BORDER_VERTEX = 0x10000;
 /// (Used during the region and contour build process.)
 /// @see rcCompactSpan::reg, #rcContour::verts, #rcContour::rverts
 static const int RC_AREA_BORDER = 0x20000;
+
+/// Preserve border vertex flag.
+/// [WWoW-DIVERGENCE] 2026-05-24: lets tile-local contour preservation opt
+/// specific border vertices out of rcBuildPolyMesh()'s border-vertex removal.
+/// (Used during the build process.)
+/// @see rcCompactSpan::reg, #rcContour::verts, #rcContour::rverts
+static const int RC_PRESERVE_BORDER_VERTEX = 0x40000;
 
 /// Contour build flags.
 /// @see rcBuildContours
@@ -1309,6 +1334,14 @@ bool rcBuildHeightfieldLayers(rcContext* ctx, const rcCompactHeightfield& chf,
 bool rcBuildContours(rcContext* ctx, const rcCompactHeightfield& chf,
 					 float maxError, int maxEdgeLen,
 					 rcContourSet& cset, int buildFlags = RC_CONTOUR_TESS_WALL_EDGES);
+
+/// Sets per-thread contour simplify anchor overrides used by rcBuildContours().
+/// @ingroup recast
+void rcSetContourSimplifyAnchorOverrides(const rcAnchorContourSimplifyOverride* overrides, int count);
+
+/// Clears per-thread contour simplify anchor overrides used by rcBuildContours().
+/// @ingroup recast
+void rcClearContourSimplifyAnchorOverrides();
 
 /// Builds a polygon mesh from the provided contours.
 /// @ingroup recast

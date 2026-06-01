@@ -649,22 +649,27 @@ namespace MMAP
             position.x -= 32 * GRID_SIZE;
             position.y -= 32 * GRID_SIZE;
 
-            for (vector<GroupModel>::iterator it = groupModels.begin(); it != groupModels.end(); ++it)
+            for (size_t groupIndex = 0; groupIndex < groupModels.size(); ++groupIndex)
             {
+                GroupModel& groupModel = groupModels[groupIndex];
                 vector<Vector3> tempVertices;
                 vector<Vector3> transformedVertices;
                 vector<MeshTriangle> tempTriangles;
                 WmoLiquid* liquid = nullptr;
 
-                (*it).getMeshData(tempVertices, tempTriangles, liquid);
+                groupModel.getMeshData(tempVertices, tempTriangles, liquid);
 
                 // first handle collision mesh
                 transform(tempVertices, transformedVertices, scale, rotation, position);
 
                 int offset = meshData.solidVerts.size() / 3;
+                const int firstTri = meshData.solidTris.size() / 3;
 
                 copyVertices(transformedVertices, meshData.solidVerts); // (x, y, z) -> (y, z, x)
                 copyIndices(tempTriangles, meshData.solidTris, offset, isM2);
+                const int lastTri = meshData.solidTris.size() / 3;
+                meshData.AddDetailTriangleRange(firstTri, lastTri, MeshTriangleSource::VMap,
+                    instance.name + "#group" + std::to_string(groupIndex));
 
                 // now handle liquid data
                 if (liquid)

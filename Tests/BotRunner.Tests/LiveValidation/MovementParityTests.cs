@@ -31,7 +31,6 @@ public sealed class MovementParityTests
     private readonly LiveBotFixture _bot;
     private readonly ITestOutputHelper _output;
 
-    private const int PathfindingServicePort = 9002;
     private const int KalimdorMapId = 1;
     private const int EasternKingdomsMapId = 0;
     private const float DurotarStartX = -500f;
@@ -73,6 +72,9 @@ public sealed class MovementParityTests
         _bot.SetOutput(output);
         TestSkip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
     }
+
+    private static (string IpAddress, int Port) ResolvePathfindingEndpoint()
+        => BotServiceFixture.ResolveCurrentPathfindingEndpoint();
 
     [SkippableFact]
     public async Task Pathfinding_PointAToPointB_FgBgParity()
@@ -199,7 +201,8 @@ public sealed class MovementParityTests
     [SkippableFact]
     public async Task TransportRide_FgBgParity()
     {
-        TestSkip.IfNot(_bot.IsPathfindingReady, "PathfindingService not available on port 9002.");
+        var pathfindingEndpoint = ResolvePathfindingEndpoint();
+        TestSkip.IfNot(_bot.IsPathfindingReady, $"PathfindingService not available on port {pathfindingEndpoint.Port}.");
 
         var accounts = await EnsureDirectMovementAccountsAsync();
         await StagePairAtNamedUndercityAsync(accounts);
@@ -437,9 +440,10 @@ public sealed class MovementParityTests
 
     private IReadOnlyList<WorldPoint> ResolveUndercityLowerPathfindingRoute()
     {
+        var pathfindingEndpoint = ResolvePathfindingEndpoint();
         using var client = new PathfindingClient(
-            "127.0.0.1",
-            PathfindingServicePort,
+            pathfindingEndpoint.IpAddress,
+            pathfindingEndpoint.Port,
             NullLogger<PathfindingClient>.Instance);
 
         var start = new Position(
@@ -453,6 +457,7 @@ public sealed class MovementParityTests
 
         var result = client.GetPathResult((uint)EasternKingdomsMapId, start, end, smoothPath: false);
         _output.WriteLine(
+            $"[PATHFINDING] Using endpoint {pathfindingEndpoint.IpAddress}:{pathfindingEndpoint.Port}{Environment.NewLine}" +
             $"[PATHFINDING] Undercity named teleport -> west lower board: result={result.Result} supported={result.PathSupported} corners={result.Corners.Length}/{result.RawCornerCount} blocked={result.BlockedReason} segment={result.BlockedSegmentIndex?.ToString() ?? "none"} maxAffordance={result.MaxAffordance} zGain={result.TotalZGain:F1} zLoss={result.TotalZLoss:F1} maxSlope={result.MaxSlopeAngleDeg:F1}");
 
         Assert.True(

@@ -89,6 +89,31 @@ Last refresh: 2026-05-30 (Blazor Storyline Manager local authoring slice)
 - Files changed include `Services/PromptHandlingService/Storylines/*`, `Services/PromptHandlingService.Api/*`, `UI/StorylineManager/*`, `Tests/PromptHandlingService.Tests/StorylineManagementTests.cs`, `Tests/PromptHandlingService.Tests/StorylineRuntimeTests.cs`, `WestworldOfWarcraft.sln`, docs, and task trackers.
 - Next command: `$env:DOTNET_ROLL_FORWARD='Major'; dotnet test Tests/PromptHandlingService.Tests/PromptHandlingService.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~Storyline|FullyQualifiedName~Foundry" --logger "console;verbosity=minimal"`
 
+## Orgrimmar Zeppelin Tower Pathing Note (2026-05-29)
+
+- `DeckLipClimbFromGruntToFrezza` is now live green against
+  `D:\wwow-bot\test-data`. The old exhausted-prefix `waypoint=null` gap is
+  still fixed, the route no longer escapes to the exterior hill outside the
+  tower model bounds, and the final clean live run reached the Frezza/boarding
+  platform without `stalled_near_waypoint` replans after the initial path.
+- Mesh-side delta: tile `1:40,29` now preserves explicit physics-step bridge
+  ribbons through source and final Detour culls, keeping the lower tower
+  entrance route connected inside the WMO bounds.
+- Runtime delta: dense long-travel deck waypoints require close body-sized
+  commit when the bot is vertically offset from the waypoint surface, so the
+  Tauren capsule does not auto-complete upper-deck breadcrumbs while still
+  below the platform.
+- Latest deterministic gates:
+  `NavigationPathTests` focused dense/edge batch -> `passed (12/12)`;
+  `DeckLipRawPathContractTests` -> `passed (4/4)`;
+  focused PathfindingService deck/off-mesh seam batch -> `passed (11/11)`.
+- Latest live command:
+  `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_CLIMB_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='2'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToFrezza" --logger "console;verbosity=normal" -- RunConfiguration.TestSessionTimeout=1200000` -> `passed (1/1)`; final clean run completed the live test in `54s`.
+- Current evidence:
+  `tmp/test-runtime/screenshots/long-pathing/timeline/DeckLipClimbFromGruntToFrezza/02-climb-poll-00050-LPATHFG1-20260529T185315Z.{png,json}`;
+  `tmp/test-runtime/screenshots/long-pathing/timeline/DeckLipClimbFromGruntToFrezza/03-final-LPATHFG1-20260529T185318Z.{png,json}`;
+  `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`.
+
 ## Parallel tracks
 
 | Track | Active slot | Owner | Status | File |
@@ -322,6 +347,392 @@ adds consecutive-fire counter at `NavigationPath.cs:633`, escalates to
 Test gap covered in handoff §6 (`NavigationPathTests.cs` near line 2310).
 Tauren capsule, bake, and `Navigation.cs` 8-phase repair pipeline are NOT
 the fix surface.
+
+**2026-05-26 long-pathing update (post `035d1b82`).** The "are we using the
+right coordinates?" challenge is now answered on the promoted live tile
+baseline `D:\wwow-bot\test-data\mmaps\0012940.mmtile`
+(`35579EA49C8CC1D2A2F1086EF5812D4C5F461BD2EC4E3135012AB60129175721`):
+commit `aac53962` (`Add literal Frezza deck-lip proof`) added a direct
+Grunt-base -> literal Frezza live proof plus deterministic contract coverage.
+Exact commands/results:
+
+- `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests|FullyQualifiedName~WaypointDumpDiagnostic.Dump_GruntToFrezza_PolygonChain|FullyQualifiedName~WaypointDumpDiagnostic.Compare_GruntToFrezza_vs_GruntToSnurk_SmoothPaths|FullyQualifiedName~RawPathContractTests" --logger "console;verbosity=normal" --logger "trx;LogFileName=pathfinding_grunt_literal_frezza_contract_20260526_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (7/7)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`38s`.
+
+Evidence:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\pathfinding_grunt_literal_frezza_contract_20260526_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-40164-win0-20260526_202201.png`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+
+Decisive read:
+
+- The service really can route to literal Frezza on the promoted data:
+  `Navigation.CalculateRawPath(...)` returned `len=144 blockedSeg=97 blockedReason=interior_projection:98 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`.
+- The live run queried literal Frezza (`end=(1331.1,-4649.5,53.6)`) but never
+  emitted `[TRAVEL_PLAN]`, `[TRAVEL_LEG]`, `[TRAVEL_WALK_NAV]`, or
+  `[TRAVEL_WAYPOINT_REACHED]`.
+- Latest live snapshot/chat instead shows `[GOTO_ROUTE] plan=1 route=none`
+  followed by `[TASK] GoToTask pop reason=arrived`, with the stall anchored
+  near spawn at `anchor=(1332.8,-4633.4,24.0)` and
+  `current=(1332.1,-4634.5,23.9)`.
+
+Treat the current red as a BotRunner same-map `TravelTo` decomposition /
+task-selection / objective-start bug, not as wrong Frezza coordinates and not
+as a reason to rebake the promoted tile.
+
+Follow-up on the same promoted tile, built on commit `870a78a0`
+(`Document literal Frezza long-pathing proof`):
+
+- `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_SameMap_UpsertsPersistentGoToTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_AlreadyWithinLegacyArrivalTolerance_StopsWithoutTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_WithinHorizontalToleranceButWrongVerticalLayer_UpsertsPersistentGoToTask|FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask|FullyQualifiedName~BotRunnerServiceGoToDispatchTests|FullyQualifiedName~GoToArrivalTests|FullyQualifiedName~Update_RequireVerticalArrival_DoesNotPopTaskWhenOnlyWithinHorizontalTolerance" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_same_map_travelto_vertical_arrival_20260526_fix2.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (12/12)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526_vertical_arrival_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after ~`28s`.
+
+Evidence:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_vertical_arrival_20260526_fix2.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_vertical_arrival_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-wall-collision-creep-before-OG-zeppelin-tower-ramp-climb-from-base-t-LPATHFG1-client-20676-win0-20260526_204920.png`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+
+Decisive read:
+
+- Same-map `TravelTo` no longer falsely completes from the lower lane; the live
+  rerun removed `[TASK] GoToTask pop reason=arrived` and now moves a few yards
+  for real before failing.
+- The new honest live red is a spawn-geometry wall creep near
+  `(1329.7,-4635.0,23.8)` with only `[GOTO_ROUTE] plan=1 route=none`; it still
+  never enters the `TRAVEL_*` diagnostic path.
+- The promoted tile remains good enough to answer the literal Frezza route
+  query; the next credible fix surface is same-map `TravelTo` dispatch/executor
+  ownership, not another bake.
+
+### 2026-05-27 - projection-blocked prefix retention landed without touching the promoted `.mmtile`; the next focused live rerun moved the red forward
+- Active task: keep the promoted `D:\wwow-bot\test-data\mmaps\0012940.mmtile` baseline, preserve the proven `Grunt #1 -> Frezza` contract (`len=144`, `blockedReason=interior_projection:98`), and stop BotRunner from discarding the usable smooth corridor prefix before the live proof is rerun.
+- Pass result: `shipped in commit 5346cd78; caller-side route consumption now preserves the usable smooth raw_detour prefix for projection-blocked results, and the next focused live rerun proved the remaining blocker was not WoWStateManager startup after all`.
+- Last delta:
+  - `NavigationPath` now routes service results through `SelectServiceSeedPath(...)` and keeps a prefix for `interior_projection:*` / `end_projection:*` blocks when the service returned a valid blocked-segment index.
+  - Added deterministic coverage `NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump`.
+  - Revalidated the existing deck-lip deterministic bundle on the carried current-head workspace before committing.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump|FullyQualifiedName~NavigationPathTests.RecalculateAfterMovementStall_DeckLipAlternatePath_KeepsDescendingCorridorBeforeBoardingJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsTightDescendingRopeStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelMovementStuckPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_decklip_projection_prefix_20260527_takeover_iter1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (5/5)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_decklip_projection_prefix_20260527_takeover_iter1.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_takeover_rerun_20260527_after_prefix_fix.trx`
+- Practical read:
+  - The caller-side deterministic red is now closed on current HEAD without changing nav data.
+  - The immediate next live rerun launched StateManager successfully, reached the deck lip, and exposed a more specific caller-side issue: long-travel advanced past a compact uphill support waypoint and then drove the Tauren into the wall face near `(1351.9,-4526.9,35.2)`.
+- Next command: `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelAdvancesUphillBreadcrumbWithinAgentCommitRadius|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactRopeSupportStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_compact_uphill_lip_commit_20260527_iter2a_fix4.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner`
+
+### 2026-05-27 - compact uphill lip-support commit guard landed after the live wall-face rerun
+- Active task: keep the promoted tile, keep the proven `Grunt #1 -> Frezza` service contract intact, and continue narrowing the remaining deck-lip failure on caller-side route execution before touching nav data again.
+- Pass result: `the focused literal-Frezza rerun after 5346cd78 disproved the port-9000 startup theory, and commit a3581302 then fixed the next caller-side bug by preventing long-travel from auto-skipping compact uphill lip-support steps inside the widened body-sized commit radius`.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_takeover_rerun_20260527_after_prefix_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 19 s`.
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelAdvancesUphillBreadcrumbWithinAgentCommitRadius|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactRopeSupportStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_compact_uphill_lip_commit_20260527_iter2a_fix4.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (4/4)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_takeover_rerun_20260527_after_prefix_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-23388-win0-20260527_012019.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00120-LPATHFG1-20260527T052012Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_compact_uphill_lip_commit_20260527_iter2a_fix4.trx`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The screenshot and log now agree that the live failure was a real wall-face press, not a state-detection false negative.
+  - The post-replan three-point corridor from the live failure is now deterministically covered, and the caller keeps the lip-support waypoint active instead of advancing directly to the wall-facing follow-up.
+  - No PathfindingService code changed in this slice, and there is still no credible reason to rebake or reopen the resolved tile `1:40,29` theory.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_compact_lip_commit_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - live rerun after `a3581302` exposed a second caller-side gate; compact projection prefixes are now accepted
+- Active task: keep the promoted tile, keep the proven `Grunt #1 -> Frezza` pathfinding contract intact, and continue removing caller-side long-travel rejection rules before touching nav data again.
+- Pass result: `the focused literal-Frezza rerun after a3581302 still failed live, but it sharpened the bug: BotRunner retained a 3-point smooth end_projection prefix and then rejected it inside IsPathUsable(...) as insufficient global destination progress. Commit b0540afb closes that second caller-side gate by allowing compact retained projection prefixes that make real local climb progress.`
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_compact_lip_commit_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 10 s`.
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixWhenItOnlyMakesLocalClimbProgress|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactRopeSupportStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelAdvancesUphillBreadcrumbWithinAgentCommitRadius" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_projection_prefix_local_progress_20260527_iter3b.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (5/5)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_compact_lip_commit_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-25744-win0-20260527_014547.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00110-LPATHFG1-20260527T054542Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_projection_prefix_local_progress_20260527_iter3b.trx`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The new live failure mode is still caller-only: the service returned `corners=4 result=raw_detour blockedIndex=2 blockedReason=end_projection:124.2`, then BotRunner alone converted that retained 3-point prefix into `usable=False resultCount=0` and `waypointCount=0`.
+  - The new deterministic repro proves why: this local lip-climb prefix makes `<1y` of global destination progress before the climb completes, so the generic destination-progress rule was too strict for retained projection-blocked execution prefixes.
+  - Commit `b0540afb` fixes only that acceptance rule; there is still no reason to rebake, touch PathfindingService, or reopen the resolved tile `1:40,29` story.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_projection_prefix_progress_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - live rerun after `b0540afb` climbed higher; the next retained prefix needed a vertical backstep allowance
+- Active task: keep the promoted tile, keep the stable `Grunt #1 -> Frezza` contract, and continue removing caller-side long-travel acceptance failures that still prevent the wall climb from completing live.
+- Pass result: `the focused literal-Frezza rerun after b0540afb still failed live, but it climbed to a higher wall-face settle point at (1352.1,-4526.7,35.2). The next retained 3-point end_projection prefix was still being rejected as unusable, which pointed to a final caller-side over-constraint: compact vertical support prefixes that temporarily regress raw destination distance. Commit 20b8bde1 relaxes that only for meaningful climbing backsteps.`
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_projection_prefix_progress_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 13 s`.
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixWhenItOnlyMakesLocalClimbProgress|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixThatTemporarilyRegressesGlobalDistanceWhileClimbing|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactRopeSupportStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelAdvancesUphillBreadcrumbWithinAgentCommitRadius" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_projection_prefix_vertical_backstep_20260527_iter4a.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (6/6)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_projection_prefix_progress_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-25664-win0-20260527_020254.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00110-LPATHFG1-20260527T060247Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_projection_prefix_vertical_backstep_20260527_iter4a.trx`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - `b0540afb` was a partial success: the live stall moved upward, which means the caller now accepts at least one more compact projection-blocked support slice before failing.
+  - The remaining failure still died at `validated-path exit usable=False resultCount=0` with the same `count=3` retained prefix, so the next caller gate had to be the regression guard rather than a service/pathfinding change.
+  - Commit `20b8bde1` keeps the fix narrowly scoped to compact prefixes with meaningful vertical gain; there is still no rebake, service, or coordinate reason to touch the promoted nav baseline.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_projection_prefix_backstep_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - live rerun after `20b8bde1` exposed a discarded `blockedIndex=0` wall-slice prefix; caller fix `94372e3c` now keeps it
+- Active task: keep the promoted tile, keep the stable Grunt #1 -> Frezza contract, and continue removing caller-side long-travel failures on the literal live proof before touching any service/bake surface.
+- Pass result: `the focused literal-Frezza rerun after 20b8bde1 still failed live, but it revealed the next caller-only bug very clearly. At the higher wall-face settle point (1351.7,-4526.9,35.3), smooth replans now return a compact two-corner raw_detour with blockedIndex=0 and blockedReason=end_projection:124.2. BotRunner was dropping that service result before validation, producing nav=False / resolution=no_route. Commit 94372e3c keeps that exact projection-blocked smooth prefix and adds deterministic coverage for the live wall slice.`
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_projection_prefix_backstep_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 27 s`.
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelKeepsTwoCornerProjectionBlockedSmoothPrefixAtDeckLipWallSlice|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixWhenItOnlyMakesLocalClimbProgress|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixThatTemporarilyRegressesGlobalDistanceWhileClimbing|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactRopeSupportStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelAdvancesUphillBreadcrumbWithinAgentCommitRadius" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_projection_prefix_blockedindex0_20260527_iter5a.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (7/7)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_projection_prefix_backstep_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00110-LPATHFG1-20260527T061442Z.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00110-LPATHFG1-20260527T061442Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_projection_prefix_blockedindex0_20260527_iter5a.trx`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The live screenshot/timeline still show a real wall-face press, so this remains an execution/caller-state problem rather than a false detector or service drift.
+  - The new dead-end is at seed-path selection, not later validation: the service's compact smooth prefix was being discarded before sanitize/local-physics could even consider it.
+  - The top-level failure screenshot capture timed out on this run, but the timeline checkpoint artifacts were saved and are enough to verify visual reality against the log.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_blockedindex0_prefix_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - diagnostic-only follow-up after `94372e3c` instruments the next live wall-slice decision
+- Active task: keep the promoted tile and existing pathfinding contract fixed, then use the next focused live rerun to answer two caller-side questions precisely: which `IsPathUsable(...)` gate rejects the retained wall-slice prefixes, and what inner exception is hiding behind the `adv=48 idx=2/3` loop error.
+- Pass result: `commit 33f3a06d added no pathfinding/nav-data behavior change. It only instruments BotRunner so the next live rerun emits exact path-usability rejection metrics and unwraps TargetInvocationException inner details in the diag log.`
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelKeepsTwoCornerProjectionBlockedSmoothPrefixAtDeckLipWallSlice|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixWhenItOnlyMakesLocalClimbProgress|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_usability_diag_compile_20260527_iter6a.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (3/3)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_usability_diag_compile_20260527_iter6a.trx`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - We already know the caller now retains the blocked-index-zero smooth prefix. The next unknown is narrower: whether those retained prefixes die in the progress gate, traversability gate, or an exception-driven state loss right after waypoint advancement.
+  - No PathfindingService code, service config, or `.mmtile` content changed here.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_usability_diag_instrumentation.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - diagnostic rerun after `33f3a06d` isolated a caller crash; fix `2e8f1e03` now removes that failure surface
+- Active task: keep the promoted tile and current pathfinding contract stable, then verify the literal-Frezza live proof after removing the newly exposed waypoint-diagnostic crash.
+- Pass result: `the focused live rerun after 33f3a06d exposed the hidden LOOP-ERROR as a NullReferenceException inside NavigationPath.OnWaypointAdvanced(...) while the bot was climbing through the 3-point wall corridor. Commit 2e8f1e03 fixes that crash without touching any service or nav-data surface.`
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_usability_diag_instrumentation.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 12 s`.
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_WaypointDiagnostics_DoNotThrowWhenAdvanceExhaustsCorridor|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelKeepsTwoCornerProjectionBlockedSmoothPrefixAtDeckLipWallSlice|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixWhenItOnlyMakesLocalClimbProgress|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_waypoint_diag_exhaustion_fix_20260527_iter6b.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (4/4)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_usability_diag_instrumentation.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-27976-win0-20260527_024529.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00120-LPATHFG1-20260527T064527Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_waypoint_diag_exhaustion_fix_20260527_iter6b.trx`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The screenshot still shows a real wall-face press, and the new logs show the smooth 3-point wall corridor becomes usable right before the crash. That makes the diagnostic exception the immediate blocker to clear before revisiting the later compact-prefix thresholds.
+  - No pathfinding service, state-manager startup, coordinate, or promoted-tile theory changed in this slice.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_waypoint_diag_exhaustion_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - post-crash live rerun isolated a compact smooth wall-support gate; fix `07cffa55` landed caller-side
+- Pass result: the focused literal-Frezza rerun after `2e8f1e03` still failed live, but it removed the old waypoint-diagnostic crash from the picture and narrowed the next blocker to a caller-only compact smooth `end_projection:*` prefix. The retained wall-support prefix was `count=3 blockedIndex=2 blockedReason=end_projection:124.2`, and `IsPathUsable(...)` rejected it with `cumulative2D=0.53 bestNet2D=0.53 maxAbsZ=1.03`. Commit `07cffa55` (`Accept compact end-projection wall support prefixes`) now keeps that exact live-shaped support slice while leaving the blocked-index-zero alternate fallback closed.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_waypoint_diag_exhaustion_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 11 s`.
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactEndProjectionWallSupportPrefixBeforeAlternateFallback|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelKeepsTwoCornerProjectionBlockedSmoothPrefixAtDeckLipWallSlice|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixWhenItOnlyMakesLocalClimbProgress|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixThatTemporarilyRegressesGlobalDistanceWhileClimbing|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_compact_end_projection_wall_support_20260527_iter6c.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (5/5)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_waypoint_diag_exhaustion_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-28156-win0-20260527_025540.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00110-LPATHFG1-20260527T065536Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_compact_end_projection_wall_support_20260527_iter6c.trx`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The latest live evidence still points squarely at caller-side route consumption: the promoted tile and service contract remained stable, the screenshot still shows real wall pressure, and the next loss happens only when BotRunner refuses to keep the retained smooth support prefix.
+  - `07cffa55` is intentionally narrow and does not reopen the earlier unsafe alternate path or any rebake theory.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_compact_end_projection_wall_support_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - live rerun after `07cffa55` showed the next higher-wall compact support gate; fix `1eb123ab` landed caller-side
+- Pass result: the focused literal-Frezza rerun after `07cffa55` still failed live, but it proved the earlier compact end-projection fix was real progress: BotRunner accepted and executed two more retained smooth wall-support prefixes before the next higher-wall slice stalled. The new failing prefix still had `blockedIndex=2 blockedReason=end_projection:124.2`; it just fell slightly under the previous compact higher-wall thresholds at `cumulative2D=0.45 bestNet2D=0.45 maxAbsZ=0.99`. Commit `1eb123ab` (`Accept follow-up end-projection wall support prefixes`) now widens only that narrow higher-wall compact gate while keeping the blocked-index-zero alternate fallback closed.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_compact_end_projection_wall_support_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 11 s`.
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactEndProjectionWallSupportPrefixBeforeAlternateFallback|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsFollowUpCompactEndProjectionWallSupportPrefixAtHigherWallSlice|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelKeepsTwoCornerProjectionBlockedSmoothPrefixAtDeckLipWallSlice|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixWhenItOnlyMakesLocalClimbProgress|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactProjectionBlockedLipPrefixThatTemporarilyRegressesGlobalDistanceWhileClimbing|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_followup_compact_end_projection_wall_support_20260527_iter6d.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (6/6)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_compact_end_projection_wall_support_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-8820-win0-20260527_030935.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00110-LPATHFG1-20260527T070929Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_followup_compact_end_projection_wall_support_20260527_iter6d.trx`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The service contract and promoted tile still stayed fixed. The new information is purely caller-side: `07cffa55` already bought more live progress, and the next red is just the follow-up higher-wall support prefix missing the compact gate by `0.01-0.05y`.
+  - `1eb123ab` keeps the same narrow shape restrictions and only lowers that higher-wall compact threshold enough to cover the new live slice.
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_followup_end_projection_wall_support_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - live rerun after `1eb123ab` isolated the pinned-wall micro support slice; fix `d41caa41` landed caller-side
+- Pass result: the focused literal-Frezza rerun after `1eb123ab` still failed live, but it narrowed the next bug again without moving the promoted tile or the service contract. The new decisive slice from `current=(1352.1,-4526.7,35.2)` kept `blockedIndex=2 blockedReason=end_projection:124.2`; the retained smooth prefix died at `count=3 cumulative2D=0.22 bestNet2D=0.22 maxAbsZ=0.94`, and the screenshot still showed a real wall-face press. Commit `d41caa41` (`Hold micro end-projection wall support steps`) now keeps that pinned-wall micro retained prefix usable, stops the long-travel vertical reach rule from auto-completing the tiny uphill wall-support breadcrumbs, and keeps the final 2-waypoint support climb alive instead of collapsing to `no_route`.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_followup_end_projection_wall_support_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 14 s`.
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactEndProjectionWallSupportPrefixBeforeAlternateFallback|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsFollowUpCompactEndProjectionWallSupportPrefixAtHigherWallSlice|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsMicroEndProjectionWallSupportPrefixAtPinnedWallSlice|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsMicroUphillWallSupportStepActiveAtPinnedWallSlice|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelDoesNotAutoCompleteFinalMicroUphillWallSupportWaypoint|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump|FullyQualifiedName~NavigationPathTests.RecalculateAfterMovementStall_DeckLipAlternatePath_KeepsDescendingCorridorBeforeBoardingJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_micro_wall_support_20260527_iter7c.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (9/9)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_followup_end_projection_wall_support_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-1896-win0-20260527_031950.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00120-LPATHFG1-20260527T071946Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_micro_wall_support_20260527_iter7c.trx`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The red is still route-consumption/execution, not a bake or socket-contract issue. The promoted tile, exact NPC pair, and live screenshot all stayed stable while BotRunner mishandled the final tiny wall-support climb.
+  - `d41caa41` is intentionally narrow and caller-only. It does not reopen blocked-index-zero alternates and does not touch PathfindingService or `.mmtile` assets.
+  - The new deterministic coverage now pins the whole caller bug family exposed by the latest rerun: the 3-corner pinned-wall support prefix, the first micro uphill wall-support step, and the final 2-corner support climb from the higher support foothold.
+- Commits:
+  - `d41caa41` `Hold micro end-projection wall support steps`
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_micro_end_projection_wall_support_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - live rerun after `d41caa41` moved the remaining red to a blocked-index-zero caller fallback
+- Pass result: the focused literal-Frezza rerun built on `d41caa41` and `4d85db82` still failed live, but the failure surface moved again without changing PathfindingService or the promoted tile. The previously fixed pinned-wall micro prefix no longer dominated. At the new wall slice, smooth returned `corners=0 result=no_path blockedIndex=null blockedReason=none`; the unsmoothed follow-up returned `corners=2 result=raw_detour blockedIndex=0 blockedReason=end_projection:124.2`; BotRunner then rejected that fallback with `projPrefix=False` / `segment_or_progress_gate` and the screenshot showed a true wall-face press.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_micro_end_projection_wall_support_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 15 s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_micro_end_projection_wall_support_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-stall-before-OG-zeppelin-tower-ramp-climb-from-base-to-literal-Frezz-LPATHFG1-client-26828-win0-20260527_082152.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00110-LPATHFG1-20260527T122145Z.json`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - `d41caa41` bought a little real movement (`moved=0.2`) and cleared the prior pinned-wall micro-prefix blocker.
+  - The remaining red is still caller-side route consumption/execution, but it is now a different slice: what to do when smooth collapses to `no_path` and the only local foothold left is a tiny blocked-index-zero `end_projection:124.2` fallback.
+  - There is still no rebake reason and no reason to reopen the old Tauren/Gnome, port, GM-command, or coordinate theories.
+- Commits:
+  - `d41caa41` `Hold micro end-projection wall support steps`
+  - `4d85db82` `Document micro wall-support caller fix`
+- Next command: `rg -n "SelectServiceSeedPath|TryGetProjectionBlockedPrefix|IsProjectionBlockedReason|IsPathUsable|segment_or_progress_gate|blockedIndex=0" E:\repos\Westworld of Warcraft\Exports\BotRunner\Movement\NavigationPath.cs E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\Movement\NavigationPathTests.cs`
+
+### 2026-05-27 - deterministic caller follow-up now admits only the tiniest blocked-index-zero foothold after smooth `no_path`
+- Pass result: built on the `be3e6745` findings handoff, the next caller-only slice does not touch PathfindingService or the promoted tile. `NavigationPath` now allows a 2-corner `blockedIndex=0 end_projection:*` foothold only when the smooth request has already returned `no_path` and the fallback stays inside a very small uphill support envelope. A neighboring slightly larger foothold still stays rejected.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelUsesMicroBlockedIndexZeroWallSupportFallbackWhenSmoothReturnsNoPath|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelRejectsBlockedIndexZeroWallSupportFallbackThatJumpsTooFarWhenSmoothReturnsNoPath|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsMicroEndProjectionWallSupportPrefixAtPinnedWallSlice|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsMicroUphillWallSupportStepActiveAtPinnedWallSlice|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelDoesNotAutoCompleteFinalMicroUphillWallSupportWaypoint|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactEndProjectionWallSupportPrefixBeforeAlternateFallback|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsFollowUpCompactEndProjectionWallSupportPrefixAtHigherWallSlice|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsProjectionBlockedSmoothPrefixInsteadOfUnsafeAlternateJump" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_blockedindex0_micro_fallback_20260527_iter8a.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (8/8)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_blockedindex0_micro_fallback_20260527_iter8a.trx`
+- Practical read:
+  - This keeps the older unsafe blocked-index-zero/jump class closed while giving the literal-Frezza wall slice one more caller-only foothold after smooth collapses.
+  - The next real proof is live: rerun the focused literal-Frezza test against the same promoted tile and inspect whether the bot climbs past the wall face or exposes the next caller-state.
+- Commits:
+  - `be3e6745` `Document post-d41caa41 decklip live fallback`
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_blockedindex0_micro_fallback_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - live rerun after `0689fb5d` moved the remaining red to earlier wall-collision creep
+- Pass result: the focused literal-Frezza rerun after `0689fb5d` still failed live, but it no longer collapsed at the later pinned-wall `no_route` surface. The run now reaches the earlier compact lip-support shelf, keeps a 3-point smooth support prefix alive, and then creeps into the wall with forward intent set and zero actual speed.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_blockedindex0_micro_fallback_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 9 s`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_blockedindex0_micro_fallback_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-wall-collision-creep-before-OG-zeppelin-tower-ramp-climb-from-base-t-LPATHFG1-client-7416-win0-20260527_084402.png`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00090-LPATHFG1-20260527T124351Z.json`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\02-climb-poll-00100-LPATHFG1-20260527T124356Z.json`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - `0689fb5d` bought real caller progress, but the next live bug is still caller-side and earlier in the shelf climb.
+  - The most likely next surface is exact-arrival handling when the compact uphill support step becomes the first planned corner and loses its previous-step context.
+- Commits:
+  - `0689fb5d` `Allow micro blocked-index-zero wall fallback`
+- Next command: `rg -n "RequiresExactCompactUphillSupportCommit|_pathStartPosition|GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp" E:\repos\Westworld of Warcraft\Exports\BotRunner\Movement\NavigationPath.cs E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\Movement\NavigationPathTests.cs`
+
+### 2026-05-27 - deterministic caller follow-up now preserves compact uphill waypoint-0 context via `_pathStartPosition`
+- Pass result: built on the `16a88034` live findings, the next caller-only slice does not touch PathfindingService or the promoted tile. `NavigationPath` now lets the exact-arrival guard treat `_pathStartPosition` as the prior support when the first planned corner is itself a compact uphill lip-support step, which matches the new wall-creep shelf surface.
+- Validation/tests run:
+  - `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsCompactUphillLipSupportStepBeforeWallFacingFollowUp|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsFirstCompactUphillLipSupportStepWhenPreviousContextComesFromPathStart|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelUsesMicroBlockedIndexZeroWallSupportFallbackWhenSmoothReturnsNoPath|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelRejectsBlockedIndexZeroWallSupportFallbackThatJumpsTooFarWhenSmoothReturnsNoPath|FullyQualifiedName~NavigationPathTests.CalculatePath_LongTravelAcceptsCompactEndProjectionWallSupportPrefixBeforeAlternateFallback|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsMicroUphillWallSupportStepActiveAtPinnedWallSlice" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_pathstart_compact_uplip_20260527_iter8b.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (6/6)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_pathstart_compact_uplip_20260527_iter8b.trx`
+- Practical read:
+  - This is still a caller-only refinement. It specifically targets the case where the first compact uphill support step lost its previous context during sanitize/prune.
+  - The next real proof is live: rerun the focused literal-Frezza test and see whether the bot stops auto-committing the first lip-support step early.
+- Commits:
+  - `16a88034` `Document post-0689fb5d decklip live rerun`
+- Next command: `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_pathstart_compact_uplip_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000`
+
+### 2026-05-27 - inspection pass: the live literal-Frezza run is targeting the right place, but the current route family still goes the "wrong way" before caller fallback makes it worse
+- Pass result: the inspection pass corrected the route story for the literal deck-lip red. The live rerun behind `57832873` truly dispatches a same-map single-leg `TravelTo` directly to Frezza's literal spawn, yet the bot still starts by moving away from the nearby tower doorway because the promoted service route family itself prefers the exterior/lip-shortcut approach from Grunt1. BotRunner then worsens that surface by rejecting the long smooth blocked prefix and accepting the shorter unsafe unsmoothed alternate.
+- Validation/tests run:
+  - `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_after_pathstart_compact_uplip_fix.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 8 s`.
+  - `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~WaypointDumpDiagnostic.Compare_GruntToFrezza_vs_GruntToSnurk_SmoothPaths" --logger "console;verbosity=minimal" --logger "trx;LogFileName=waypointdump_grunt_frezza_vs_snurk_20260527_iter9a.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (1/1)`.
+- Evidence:
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_after_pathstart_compact_uplip_fix.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\waypointdump_grunt_frezza_vs_snurk_20260527_iter9a.trx`
+  - `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Long-travel-wall-collision-creep-before-OG-zeppelin-tower-ramp-climb-from-base-t-LPATHFG1-client-28872-win0-20260527_090105.png`
+  - `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+- Practical read:
+  - The user's "it starts right by the doorway but goes the complete opposite direction" observation is real. On the current promoted tile, the smooth Grunt1 -> Frezza diagnostic still walks out through the `1304,-4553` lane and only later climbs through the outer lip/spiral approach.
+  - The live caller is not dispatching the wrong target anymore. The current rerun logs `targetMap=1 target=(1331.1,-4649.5,53.6)` and `legs=1`, so the literal same-map objective survives into `TravelTask`.
+  - The next regression happens in caller-side route consumption. `NavigationPath` rejects the 98-corner projection-blocked smooth prefix because it never gets globally closer to Frezza before the projection block, then accepts the 14-corner unsmoothed alternate that exposes the wrong-way/jump shape immediately.
+  - After that, the later shelf-climb bug is still there too: the caller auto-advances uphill support points while the player is still below them and eventually collapses to `waypoint=null`.
+- Commits:
+  - `57832873` `Keep compact lip support context from path start`
+- Next command: `rg -n "targetMap=1 target=\\(1331\\.1,-4649\\.5,53\\.6\\)|baseProgress=False projPrefix=False|observed: shortcut through lip" D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log E:\repos\Westworld of Warcraft\Exports\BotRunner\Movement\NavigationPath.cs E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\WaypointGeneration\WaypointDumpDiagnostic.cs`
+
+Follow-up on the same promoted tile, built on commit `b3c107ba`
+(`Block false same-map TravelTo arrival below Frezza`):
+
+- `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~BuildBehaviorTreeFromActions_TravelTo_|FullyQualifiedName~Update_SameMapLiteralFrezzaSlice_EmitsTravelPlanAndWalkNavDiagnostics|FullyQualifiedName~Update_GruntBaseDeckLipSlice_EmitsImmediatePlanAndWalkNavBoundaries" --logger "console;verbosity=minimal" --logger "trx;LogFileName=botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (7/7)`.
+- `powershell -ExecutionPolicy Bypass -File E:\repos\Westworld of Warcraft\run-tests.ps1 -CleanupRepoScopedOnly; $env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; $env:WWOW_USE_LOCAL_PATHFINDING_SERVICE='1'; $env:WWOW_DECKLIP_DIRECT_FREZZA_TEST='1'; $env:WWOW_NAV_SCREENSHOT_EVERY_N_WAYPOINTS='1'; Remove-Item Env:WWOW_LONG_PATHING_SETTINGS_PATH -ErrorAction Ignore; dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-build --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza" --logger "console;verbosity=minimal" --logger "trx;LogFileName=long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live -- RunConfiguration.TestSessionTimeout=1200000` -> `failed (1/1)` after `1 m 41 s`.
+
+Evidence:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\botrunner_same_map_travelto_traveltask_dispatch_20260526_fix1.log`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.trx`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-live\long_pathing_decklip_literal_frezza_tauren_fg_20260526_traveltask_dispatch_fix1.log`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\Expected-bot-to-walk-from-the-OG-tower-base-Grunt-spawn-to-literal-Frezza-1331.1-LPATHFG1-client-36448-win0-20260526_211122.png`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\`
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\screenshots\long-pathing\timeline\DeckLipClimbFromGruntToLiteralFrezza\03-final-LPATHFG1-20260527T011119Z.json`
+- `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log`
+
+Decisive read:
+
+- Same-map `TravelTo` now really enters `TravelTask` on the live proof surface:
+  the diag log shows `[TRAVEL_DISPATCH]`, `[TRAVEL_PLAN] legs=1 Walk`,
+  `[TRAVEL_LEG] start index=0 type=Walk`, and many
+  `[TRAVEL_WAYPOINT_REACHED]` events from the Grunt-base spawn.
+- The current live red moved later, not deeper into startup. The run now fails
+  at `Final position: (1353.1,-4525.3,34.6) map=1 dist2D=126.1y`, and the
+  screenshot shows wall/cliff pressure at the later tower approach rather than
+  the old spawn creep.
+- The next credible gap is route/contract behavior on the promoted tile:
+  later replans alternate between smoothed `raw_detour` requests tagged
+  `blockedReason=interior_projection:98` and short unsmoothed `raw_detour`
+  responses that still report `blockedReason=none` while jumping toward
+  `(1320.1,-4653.2,53.7)`.
+
+Follow-up on the same promoted tile, built on commit `fc01c417`
+(`Add socket proof for Grunt to Frezza path`):
+
+- `$env:WWOW_DATA_DIR='D:\wwow-bot\test-data'; dotnet test E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\PathfindingService.Tests.csproj --configuration Release --no-restore --settings E:\repos\Westworld of Warcraft\Tests\PathfindingService.Tests\test.runsettings -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~DeckLipRawPathContractTests.CalculateRawPath_DeckLipGruntBaseToLiteralFrezza_EndsNearRequestedTargetDespiteInteriorProjectionGap|FullyQualifiedName~PathfindingSocketServerIntegrationTests.HandlePath_DeckLipGruntNpcToLiteralFrezza_ReturnsCurrentServicePathThroughIsolatedPort" --logger "console;verbosity=normal" --logger "trx;LogFileName=decklip_grunt1_to_frezza_socket_contract_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding` -> `passed (2/2)`.
+
+Evidence:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-pathfinding\decklip_grunt1_to_frezza_socket_contract_20260526.trx`
+
+Decisive read:
+
+- The exact lower-deck NPC start already in the proof surface is
+  `Grunt #1 = (1332.76,-4633.40,24.0783)` and the literal destination is
+  `Frezza = (1331.11,-4649.45,53.6269)`.
+- The direct Navigation contract and the normal protobuf/TCP socket contract
+  now agree on the same route signature:
+  `result=raw_detour len=144 blockedSeg=97 blockedReason=interior_projection:98 final=(1328.32,-4649.35,53.84) dist2D=2.79 dz=0.21`.
+- That closes out "wrong coordinates" and "wrong local pathfinding port" as
+  the leading explanation for the current live red. The next credible suspect
+  remains the later live execution layer around waypoint promotion / stall
+  recovery after the bot has already left spawn and entered `TravelTask`.
+
+Follow-up on the caller-side reproduction surface, built on commit `f3d4515b`
+(`Add deck-lip stall recovery regression`):
+
+- `dotnet test E:\repos\Westworld of Warcraft\Tests\BotRunner.Tests\BotRunner.Tests.csproj --configuration Release --no-restore -m:1 -p:UseSharedCompilation=false --filter "FullyQualifiedName~NavigationPathTests.RecalculateAfterMovementStall_DeckLipAlternatePath_KeepsDescendingCorridorBeforeBoardingJump|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelKeepsTightDescendingRopeStepBeforeStallPromotion|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelMovementStuckPromotesExistingCorridorBeforeReplanning|FullyQualifiedName~NavigationPathTests.GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning" --logger "console;verbosity=minimal" --logger "trx;LogFileName=navigationpath_decklip_altcorridor_falsification_20260526.trx" --results-directory E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner` -> `passed (4/4)`.
+
+Evidence:
+
+- `E:\repos\Westworld of Warcraft\tmp\test-runtime\results-botrunner\navigationpath_decklip_altcorridor_falsification_20260526.trx`
+
+Decisive read:
+
+- A new deterministic `NavigationPath` regression modeled the later live
+  alternate-path window at current `(1353.1,-4525.3,34.6)` with the same
+  local descending corridor and the later `ledgeReturn=(1357.2,-4516.2,32.2)`
+  / `boardingJump=(1320.1,-4653.2,53.7)` suffix.
+- That modeled `RecalculateAfterMovementStall(...)` case stayed inside the
+  local corridor instead of immediately promoting into the boarding jump.
+- So the current "waypoint promotion bug" suspicion is now narrower: either
+  the live churn needs a different caller-state shape than this deterministic
+  model captured, or the real culprit is another caller-side surface after the
+  replan rather than `RecalculateAfterMovementStall(...)` itself.
 
 (Legacy D2 prompt below preserved for context.) Start from the D1 stopping point, not from B/C bake or
 scale hypotheses. The original column stall mechanism is a BotRunner

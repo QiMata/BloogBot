@@ -228,4 +228,75 @@ public sealed class AnchorStageManifestAnalyzerTests
         Assert.False(anchor.FinalWinnerSupportCandidate);
         Assert.False(anchor.FinalWinnerCompetingLower);
     }
+
+    [Fact]
+    public void Analyze_ReportsFinalDetourWhenWinnerSupportIsTrappedButAlternateSupportRoutesOut()
+    {
+        const string manifestJson = """
+        {
+          "schemaVersion": 1,
+          "anchors": [
+            {
+              "id": "hallway-route-trap",
+              "label": "1518.200,-4419.800,17.100",
+              "wowX": 1518.2,
+              "wowY": -4419.8,
+              "wowZ": 17.1,
+              "sourceSupport": {
+                "found": true
+              },
+              "stages": [
+                { "name": "rasterize", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "filterLowHanging", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "filterLedge", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "removeUseless", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "filterLowHeight", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "waterInheritance", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "buildCHF", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "markGameObjects", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "erode", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "median", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "regions", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "contours", "upperSupportExists": true, "dominantLowerCandidate": false },
+                { "name": "polymesh", "upperSupportExists": true, "dominantLowerCandidate": false },
+                {
+                  "name": "finalDetour",
+                  "upperSupportExists": true,
+                  "dominantLowerCandidate": false,
+                  "supportCandidateCount": 2,
+                  "supportBandCandidateCount": 2,
+                  "supportComponentCount": 2,
+                  "resolvedRouteTargetCount": 1,
+                  "routeableSupportCandidateCount": 1,
+                  "routeableSupportComponentCount": 1,
+                  "finalWinner": {
+                    "polyRef": "0x1000000000ADA1",
+                    "componentId": 8039,
+                    "componentPolyCount": 1,
+                    "supportCandidate": true,
+                    "competingLower": false,
+                    "routeableToAnyTarget": false
+                  }
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+        using var document = JsonDocument.Parse(manifestJson);
+        var summary = StageManifestAnalyzer.Analyze(document);
+        var anchor = Assert.Single(summary.Anchors);
+
+        Assert.True(anchor.CoverageComplete);
+        Assert.Equal("finalDetour", anchor.FirstBadStage);
+        Assert.Equal("winner_component_trapped", anchor.FirstBadReason);
+        Assert.Equal("0x1000000000ADA1", anchor.FinalWinnerPolyRef);
+        Assert.True(anchor.FinalWinnerSupportCandidate);
+        Assert.False(anchor.FinalWinnerCompetingLower);
+        Assert.False(anchor.FinalWinnerRouteableToAnyTarget);
+        Assert.Equal(1, anchor.FinalResolvedRouteTargetCount);
+        Assert.Equal(1, anchor.FinalRouteableSupportCandidateCount);
+        Assert.Equal(1, anchor.FinalRouteableSupportComponentCount);
+    }
 }

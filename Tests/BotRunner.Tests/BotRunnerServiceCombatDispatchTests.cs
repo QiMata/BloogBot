@@ -311,7 +311,7 @@ public class BotRunnerServiceCombatDispatchTests
     }
 
     [Fact]
-    public void BuildBehaviorTreeFromActions_TravelTo_SameMap_UpsertsPersistentGoToTask()
+    public void BuildBehaviorTreeFromActions_TravelTo_SameMap_UpsertsPersistentTravelTask()
     {
         var service = CreateService(out var objectManager);
         var player = new WoWLocalPlayer(new HighGuid(0x20))
@@ -327,11 +327,33 @@ public class BotRunnerServiceCombatDispatchTests
         objectManager.Verify(o => o.StopAllMovement(), Times.Never);
 
         var tasks = GetBotTasks(service);
-        var goTo = Assert.IsType<GoToTask>(Assert.Single(tasks));
-        Assert.Equal(100f, goTo.Target.X);
-        Assert.Equal(200f, goTo.Target.Y);
-        Assert.Equal(15f, goTo.Target.Z);
-        Assert.Equal(15f, goTo.Tolerance);
+        var travel = Assert.IsType<TravelTask>(Assert.Single(tasks));
+        Assert.Equal(1u, travel.TargetMapId);
+        Assert.Equal(100f, travel.TargetPosition.X);
+        Assert.Equal(200f, travel.TargetPosition.Y);
+        Assert.Equal(15f, travel.TargetPosition.Z);
+        Assert.Equal(15f, travel.ArrivalRadius);
+    }
+
+    [Fact]
+    public void BuildBehaviorTreeFromActions_TravelTo_SameMap_RepeatedDispatch_DoesNotGrowTravelTaskStack()
+    {
+        var service = CreateService(out var objectManager);
+        var player = new WoWLocalPlayer(new HighGuid(0x201))
+        {
+            MapId = 1,
+            Position = new Position(10f, 20f, 5f),
+        };
+        objectManager.SetupGet(o => o.Player).Returns(player);
+
+        var node = BuildActionTree(service, CharacterAction.TravelTo, 1, 100f, 200f, 15f);
+
+        Assert.Equal(BehaviourTreeStatus.Success, node.Tick(new TimeData(0.1f)));
+        Assert.Equal(BehaviourTreeStatus.Success, node.Tick(new TimeData(0.1f)));
+        objectManager.Verify(o => o.StopAllMovement(), Times.Never);
+
+        var travel = Assert.IsType<TravelTask>(Assert.Single(GetBotTasks(service)));
+        Assert.Equal(1u, travel.TargetMapId);
     }
 
     [Fact]
@@ -353,10 +375,31 @@ public class BotRunnerServiceCombatDispatchTests
     }
 
     [Fact]
-    public void BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask()
+    public void BuildBehaviorTreeFromActions_TravelTo_WithinHorizontalToleranceButWrongVerticalLayer_UpsertsPersistentTravelTask()
     {
         var service = CreateService(out var objectManager);
         var player = new WoWLocalPlayer(new HighGuid(0x22))
+        {
+            MapId = 1,
+            Position = new Position(1332.1f, -4634.5f, 23.9f),
+        };
+        objectManager.SetupGet(o => o.Player).Returns(player);
+
+        var node = BuildActionTree(service, CharacterAction.TravelTo, 1, 1331.1f, -4649.5f, 53.6f);
+
+        Assert.Equal(BehaviourTreeStatus.Success, node.Tick(new TimeData(0.1f)));
+        objectManager.Verify(o => o.StopAllMovement(), Times.Never);
+
+        var travel = Assert.IsType<TravelTask>(Assert.Single(GetBotTasks(service)));
+        Assert.Equal(1u, travel.TargetMapId);
+        Assert.Equal(15f, travel.ArrivalRadius);
+    }
+
+    [Fact]
+    public void BuildBehaviorTreeFromActions_TravelTo_CrossMap_UpsertsPersistentTravelTask()
+    {
+        var service = CreateService(out var objectManager);
+        var player = new WoWLocalPlayer(new HighGuid(0x23))
         {
             MapId = 1,
             Position = new Position(10f, 20f, 5f),
