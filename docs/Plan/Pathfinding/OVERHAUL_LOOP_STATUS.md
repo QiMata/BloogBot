@@ -6,7 +6,14 @@ Kickoff:  [NEXT_SESSION_RECAST_PHYSICS_OVERHAUL_KICKOFF.md](NEXT_SESSION_RECAST_
 
 Each iteration is one bounded unit of work toward the next unmet phase
 exit criterion. Every iter ends with a commit + push (R15) regardless
-of result. Negative results commit too.
+of result. Negative results commit too. **Commit/push to the working
+branch `develop` — NEVER `main`** (CI/linters gate `main`);
+create it off up-to-date `origin/main` if missing. Per phase-exit/milestone,
+land it on `main` via an auto-merging PR (`gh pr create --base main --head
+develop --fill` then `gh pr merge develop --auto
+--squash`); after merge resync (`git fetch origin main && git reset --hard
+origin/main && git push --force-with-lease`). Full procedure:
+[`../../../../docs/BRANCHING_WORKFLOW.md`](../../../../docs/BRANCHING_WORKFLOW.md).
 
 ---
 
