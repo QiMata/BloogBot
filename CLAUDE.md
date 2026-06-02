@@ -171,8 +171,8 @@ MSBUILD="C:/Program Files/Microsoft Visual Studio/18/Community/MSBuild/Current/B
 | Windows API / process management | `Exports/WinImports/` |
 | In-process bot (memory read/write, Lua) | `Services/ForegroundBotRunner/` |
 | Headless bot (protocol emulation) | `Services/BackgroundBotRunner/` |
-| A* pathfinding service (port 5001) | `Services/PathfindingService/` |
-| Bot state machine / FSM (ports 5002, 8088) | `Services/WoWStateManager/` |
+| A* pathfinding service (port 9002) | `Services/PathfindingService/` |
+| Bot state machine / FSM (ports 9000, 9001) | `Services/WoWStateManager/` |
 | ML-based decision engine | `Services/DecisionEngineService/` |
 | Dialog/prompt automation | `Services/PromptHandlingService/` |
 | Class/spec combat profiles (18+ classes) | `BotProfiles/` |

@@ -128,8 +128,8 @@ public interface IDependencyContainer
 
 | Listener | Port | Purpose |
 |----------|------|---------|
-| CharacterStateSocketListener | 5002 | Receives character activity snapshots, provides state info |
-| StateManagerSocketListener | 8088 | Processes state change requests, coordinates transitions |
+| CharacterStateSocketListener | 9001 | Receives character activity snapshots, provides state info |
+| StateManagerSocketListener | 9000 | Processes state change requests, coordinates transitions |
 
 ## State Types
 
@@ -286,11 +286,11 @@ myBot.Start(container, () => Console.WriteLine("Bot stopped."));
   },
   "CharacterStateListener": {
     "IpAddress": "127.0.0.1",
-    "Port": "5002"
+    "Port": "9001"
   },
   "StateManagerListener": {
     "IpAddress": "127.0.0.1",
-    "Port": "8088"
+    "Port": "9000"
   },
   "MangosSOAP": {
     "IpAddress": "http://localhost:7878"

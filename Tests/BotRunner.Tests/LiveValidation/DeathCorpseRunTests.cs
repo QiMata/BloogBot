@@ -116,7 +116,7 @@ public class DeathCorpseRunTests
         await _bot.EnsureSettingsAsync(settingsPath);
         _bot.SetOutput(_output);
         global::Tests.Infrastructure.Skip.IfNot(_bot.IsReady, _bot.FailureReason ?? "Live bot not ready");
-        global::Tests.Infrastructure.Skip.IfNot(_bot.IsPathfindingReady, "PathfindingService not available on port 5001.");
+        global::Tests.Infrastructure.Skip.IfNot(_bot.IsPathfindingReady, "PathfindingService not available on port 9002.");
         await _bot.AssertConfiguredCharactersMatchAsync(settingsPath);
         global::Tests.Infrastructure.Skip.If(
             string.IsNullOrWhiteSpace(_bot.ShodanAccountName),

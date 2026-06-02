@@ -485,14 +485,14 @@ Or use Visual Studio Test Explorer.
 docker compose -f docker-compose.vmangos-linux.yml up -d pathfinding-service scene-data-service
 
 # Verify services
-docker ps  # Should show pathfinding-service (5001) and scene-data-service (5003)
+docker ps  # Should show pathfinding-service (9002) and scene-data-service (9003)
 ```
 
 ### Service Architecture
 | Service | Port | Purpose | Data Volume |
 |---------|------|---------|-------------|
-| pathfinding-service | 5001 | Detour A* path queries | mmaps/, maps/ |
-| scene-data-service | 5003 | VMAP/ADT scene triangles | vmaps/ |
+| pathfinding-service | 9002 | Detour A* path queries | mmaps/, maps/ |
+| scene-data-service | 9003 | VMAP/ADT scene triangles | vmaps/ |
 | war-worldserver | 8085 | VMaNGOS game server | Full WoW data |
 
 ### Data Volumes

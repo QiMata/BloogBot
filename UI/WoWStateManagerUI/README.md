@@ -14,7 +14,7 @@ on-demand activity configs through StateManager APIs.
 # Build
 dotnet build UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release
 
-# Run (requires StateManager on port 8088)
+# Run (requires StateManager on port 9000)
 dotnet run --project UI/WoWStateManagerUI/WoWStateManagerUI.csproj --configuration Release
 
 # Test converters
@@ -25,8 +25,8 @@ dotnet test Tests/WoWStateManagerUI.Tests/WoWStateManagerUI.Tests.csproj --confi
 
 | Port | Service | Required |
 |------|---------|----------|
-| 8088 | StateManager API | Yes |
-| 5002 | Character state IPC | Yes |
+| 9000 | StateManager API | Yes |
+| 9001 | Character state IPC | Yes |
 | 3724 | MaNGOS realm | Status panel |
 | 8085 | MaNGOS world | Status panel |
 

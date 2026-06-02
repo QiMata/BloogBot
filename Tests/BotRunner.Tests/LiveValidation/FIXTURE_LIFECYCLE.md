@@ -24,7 +24,7 @@ All live-validation classes in `Tests/BotRunner.Tests/LiveValidation/` share one
 - verifies `FastCall.dll`
 - verifies MaNGOS auth/world/MySQL availability
 - starts `WoWStateManager`
-- waits for `PathfindingService` on port `5001`
+- waits for `PathfindingService` on port `9002`
 
 ### Step 2: Enable command surface
 
@@ -36,7 +36,7 @@ All live-validation classes in `Tests/BotRunner.Tests/LiveValidation/` share one
 ### Step 3: Connect to StateManager
 
 - creates `StateManagerTestClient`
-- connects to `127.0.0.1:8088`
+- connects to `127.0.0.1:9000`
 
 ### Step 4: Wait for bots to enter world
 

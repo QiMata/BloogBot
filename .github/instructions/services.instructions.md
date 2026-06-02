@@ -19,8 +19,8 @@ execution modes plus supporting services.
 
 | Service | Port(s) | Role |
 |---------|---------|------|
-| PathfindingService | 5001 | A* + physics validation (native `Navigation.dll`) |
-| WoWStateManager | 5002, 8088 | FSM / activity orchestration hub |
+| PathfindingService | 9002 | A* + physics validation (native `Navigation.dll`) |
+| WoWStateManager | 9000, 9001 | FSM / activity orchestration hub |
 | DecisionEngineService | — | ML decision engine |
 | PromptHandlingService | — | dialog / gossip / quest prompts |
 | SceneDataService | TCP socket | world tile + object snapshots |

@@ -254,7 +254,7 @@ WWoW is a sophisticated World of Warcraft automation platform that creates AI-dr
 **Bot Profile Development**: Create new class behaviors by implementing `IBot` in `BotProfiles/` with MEF `[Export(typeof(IBot))]`. Each profile defines task factories (`CreateRestTask`, `CreatePvERotationTask`, etc.) and uses state machine patterns for combat logic.
 
 ## AI Assistant Guidelines
-**Service Communication**: Services use TCP sockets with custom protocols. `StateManager` orchestrates on port 8088, `PathfindingService` on 5000, character state listeners on 5002. Use `ActivityMemberState` for character state synchronization.
+**Service Communication**: Services use TCP sockets with custom protocols. `StateManager` orchestrates on port 9000, `PathfindingService` on 9002, character state listeners on 9001. Use `ActivityMemberState` for character state synchronization.
 
 ### Prefer Direct File Edits Over Scripts
 **Memory Management**: `ForegroundBotRunner` uses direct memory access patterns with `ObjectManager` for game object enumeration. Always use position validation and range checking for safety.

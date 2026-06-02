@@ -22,7 +22,7 @@ namespace WoWStateManager.Listeners
     public class CharacterStateSocketListener : ProtobufPipelineSocketServer<WoWActivitySnapshot, WoWActivitySnapshot>
     {
         /// <summary>
-        /// Thread-safe snapshot storage. Written by port 5002 (bot polls), read by port 8088 (test queries).
+        /// Thread-safe snapshot storage. Written by port 9001 (bot polls), read by port 9000 (test queries).
         /// Must be ConcurrentDictionary because these ports run on separate threads.
         /// </summary>
         public ConcurrentDictionary<string, WoWActivitySnapshot> CurrentActivityMemberList { get; } = new();
@@ -38,7 +38,7 @@ namespace WoWStateManager.Listeners
         private static readonly TimeSpan PendingActionTtl = TimeSpan.FromMinutes(5);
 
         /// <summary>
-        /// Pending actions queued by external callers (e.g. test fixtures via port 8088).
+        /// Pending actions queued by external callers (e.g. test fixtures via port 9000).
         /// Stored per-account and consumed in FIFO order on subsequent bot polls.
         /// </summary>
         private readonly ConcurrentDictionary<string, ConcurrentQueue<TimestampedAction>> _pendingActions = new();
@@ -353,7 +353,7 @@ namespace WoWStateManager.Listeners
 
         /// <summary>
         /// Queues an action to be delivered to the specified bot on its next poll.
-        /// Used by the test fixture (via port 8088) to send commands to bots.
+        /// Used by the test fixture (via port 9000) to send commands to bots.
         /// </summary>
         /// <summary>
         /// Returns true if the action was successfully enqueued, false if it was dropped (e.g. dead/ghost state).

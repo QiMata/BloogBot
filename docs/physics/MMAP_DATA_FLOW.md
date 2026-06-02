@@ -135,7 +135,7 @@ results.
 
 | Port | Purpose | Owner |
 |---|---|---|
-| `5001` | Production Docker (`wwow-pathfinding` container) | docker compose |
+| `9002` | Production Docker (`wwow-pathfinding` container) | docker compose |
 | `5101` | Live-bot test fixture (`PathfindingTestFixture`) | `BotRunner.Tests` LiveValidation |
 | `5111` | Waypoint-correctness fixture (`PathfindingValidationFixture`) | `PathfindingService.Tests/WaypointGeneration/*` |
 

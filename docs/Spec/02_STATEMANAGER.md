@@ -303,7 +303,7 @@ See [`Spec/08_PROTOCOLS.md`](08_PROTOCOLS.md) for the proto layout.
 
 ## Dashboard summary API
 
-StateManager exposes summary APIs over port 8088 (existing
+StateManager exposes summary APIs over port 9000 (existing
 `StateManagerListener`). The Dashboard polls these every 1–5 s
 (configurable). Endpoints (all protobuf, no HTTP):
 

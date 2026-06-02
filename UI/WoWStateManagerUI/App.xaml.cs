@@ -18,7 +18,7 @@ namespace WoWStateManagerUI
 
         /// <summary>
         /// Env var that carries the StateManager protobuf endpoint (e.g.
-        /// <c>tcp://127.0.0.1:8088</c>). Reserved for Phase 3 work that wires the UI's
+        /// <c>tcp://127.0.0.1:9000</c>). Reserved for Phase 3 work that wires the UI's
         /// bot-state surface to the StateManager protobuf channel; not consumed today.
         /// </summary>
         public const string StateManagerUrlEnvVar = "WWOW_UI_STATEMANAGER_URL";

@@ -10,7 +10,7 @@
                                                       |                      |
 +--------------------+        Loadout + assigned       |                      |
 | Catalog (compiled) |  ----------------------------> |    StateManager      |
-+--------------------+                                |  (port 8088 / 5002)  |
++--------------------+                                |  (port 9000 / 9001)  |
                                                       |                      |
 +--------------------+        Snapshots                |                      |
 |   FG/BG Bot N      |  ----------------------------> |  - mode handler      |
@@ -18,11 +18,11 @@
                                                       |  - OnDemand launcher  |
 +--------------------+        Path/scene queries       |  - coordinators     |
 | PathfindingService |  <---------------------------- |  - metrics/log out   |
-|   (port 5001)      |                                +-----+----------------+
+|   (port 9002)      |                                +-----+----------------+
 +--------------------+                                      |
 +--------------------+                                      | ObjectiveMessages
 |  SceneDataService  |                                      v
-|   (port 5003)      |   <--- bot local queries --- +----------------------+
+|   (port 9003)      |   <--- bot local queries --- +----------------------+
 +--------------------+                              |  BotRunner (FG/BG)    |
                                                     |   - behavior trees    |
 +--------------------+                              |   - IBotTask stack    |
@@ -103,7 +103,7 @@ runtime `IActivity` / `IObjective` contracts in
 ### 4. Path query
 
 ```
-Bot --(PathRequest proto)--> PathfindingService (port 5001)
+Bot --(PathRequest proto)--> PathfindingService (port 9002)
   → route-pack cache lookup (signature match)
     → hit: return packed path
     → miss: native Detour query
@@ -128,10 +128,10 @@ UI edit --> StateManager.SaveConfig(scope, payload)
 |---|---|---|
 | `mangosd` | World server (Docker) | 8085 (world), 7878 (SOAP) |
 | `realmd` | Auth/realm server (Docker) | 3724 |
-| `WoWStateManager.exe` | Orchestrator, lease ledger, mode dispatch | 8088 (UI), 5002 (bot snapshot ingest) |
+| `WoWStateManager.exe` | Orchestrator, lease ledger, mode dispatch | 9000 (UI/API), 9001 (bot snapshot ingest) |
 | `WoWStateManagerUI.exe` | WPF operator console | — |
-| `PathfindingService.exe` (Docker `wwow-pathfinding`) | Detour routes, route packs | 5001 |
-| `SceneDataService.exe` (Docker `wwow-scene-data`) | Collision/ground-Z slices | 5003 |
+| `PathfindingService.exe` (Docker `wwow-pathfinding`) | Detour routes, route packs | 9002 |
+| `SceneDataService.exe` (Docker `wwow-scene-data`) | Collision/ground-Z slices | 9003 |
 | `DecisionEngineService.exe` | ML rotation/threat advice | 5004 |
 | `PromptHandlingService.exe` | Optional LLM intent | 5005 |
 | `BackgroundBotRunner.exe` × N | Headless bots (50–100 per process target) | — |

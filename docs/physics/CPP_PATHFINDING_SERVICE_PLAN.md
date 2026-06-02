@@ -18,7 +18,7 @@ At that point the .NET layer is overhead:
 - **Two deployment artifacts.** Today: `Navigation.dll` + `PathfindingService.exe` (.NET). Native: a single `wwow-pathfinding` daemon. Simpler ops.
 - **Container size.** A native binary + Detour data is ~10 MB; a .NET self-contained publish is ~100 MB. At 3000-bot scale we may run multiple shards.
 
-The wire protocol stays the same (length-prefixed protobuf over TCP, port 5001). Existing clients (`BotRunner`, tests, `WoWStateManagerUI`) connect with no code change.
+The wire protocol stays the same (length-prefixed protobuf over TCP, port 9002). Existing clients (`BotRunner`, tests, `WoWStateManagerUI`) connect with no code change.
 
 ---
 
@@ -26,7 +26,7 @@ The wire protocol stays the same (length-prefixed protobuf over TCP, port 5001).
 
 ```
 +-----------------------------------------------------------+
-| wwow-pathfinding (native C++ daemon, port 5001)           |
+| wwow-pathfinding (native C++ daemon, port 9002)           |
 | +-------------------------------------------------------+ |
 | | Connection loop (asio or hand-rolled IOCP)            | |
 | | per-conn: read uint32 length → read N bytes proto     | |
@@ -125,7 +125,7 @@ Before committing to integrating dtCrowd:
 
 ### Phase 6.0 — Wire protocol parity
 
-- Compile existing `.proto` to C++. Wire a tiny native daemon that just echoes requests as no-op responses. Prove `BotRunner` connects to it on port 5001 and gets a (canned) response.
+- Compile existing `.proto` to C++. Wire a tiny native daemon that just echoes requests as no-op responses. Prove `BotRunner` connects to it on port 9002 and gets a (canned) response.
 - Run side-by-side with the .NET service on a different port; toggle via `appsettings.json`.
 
 ### Phase 6.1 — Native pathfinding parity

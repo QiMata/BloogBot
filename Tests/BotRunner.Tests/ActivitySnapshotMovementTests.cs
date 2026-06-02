@@ -300,7 +300,7 @@ namespace BotRunner.Tests
         public void InventoryMap_ShouldSurviveStateChangeResponseWrapping()
         {
             // This tests the EXACT path: snapshot → StateChangeResponse → bytes → deserialize
-            // This is what happens between StateManager (port 8088) and the test client.
+            // This is what happens between StateManager (port 9000) and the test client.
 
             // Arrange: snapshot with inventory data
             var snapshot = new WoWActivitySnapshot

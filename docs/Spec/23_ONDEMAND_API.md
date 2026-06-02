@@ -11,7 +11,7 @@
 ## 1. Transport
 
 The OnDemand API rides the **existing** length-prefixed protobuf-on-TCP
-contract (port 8088), through two methods on
+contract (port 9000), through two methods on
 `Services/WoWStateManager/Listeners/StateManagerSocketListener.cs`:
 
 | Method | Direction | Wire payload |

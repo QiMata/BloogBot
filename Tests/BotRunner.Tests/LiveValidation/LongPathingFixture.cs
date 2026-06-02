@@ -15,9 +15,9 @@ namespace BotRunner.Tests.LiveValidation;
 /// port (default 5101 via WWOW_TEST_PATHFINDING_PORT) BEFORE StateManager
 /// starts, and points the StateManager + BotRunner at it via
 /// WWOW_TEST_PATHFINDING_PORT. The Docker `wwow-pathfinding` container
-/// (port 5001) is left untouched — it's the production target after a
+/// (port 9002) is left untouched — it's the production target after a
 /// release, not a test dependency. Without the env var, behavior is
-/// unchanged (assumes someone is listening on port 5001).
+/// unchanged (assumes someone is listening on port 9002).
 ///
 /// The roster source can be overridden per run via
 /// `WWOW_LONG_PATHING_SETTINGS_PATH`, which lets the same live proof execute

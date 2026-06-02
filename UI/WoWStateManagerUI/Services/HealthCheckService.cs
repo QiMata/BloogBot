@@ -52,8 +52,8 @@ namespace WoWStateManagerUI.Services
             var realmd = CheckPortAsync(3724);
             var mangosd = CheckPortAsync(8085);
             var soap = CheckPortAsync(7878);
-            var pathfinding = CheckPortAsync(5001);
-            var sceneData = CheckPortAsync(5003);
+            var pathfinding = CheckPortAsync(9002);
+            var sceneData = CheckPortAsync(9003);
 
             await Task.WhenAll(realmd, mangosd, soap, pathfinding, sceneData);
 

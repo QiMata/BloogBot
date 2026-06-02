@@ -22,8 +22,8 @@ Launched by StateManager via `dotnet BackgroundBotRunner.dll` with environment v
 
 ```
 BackgroundBotWorker (IHostedService)
-├── PathfindingClient → PathfindingService (port 5001)
-├── CharacterStateUpdateClient → StateManager (port 5002)
+├── PathfindingClient → PathfindingService (port 9002)
+├── CharacterStateUpdateClient → StateManager (port 9001)
 ├── WoWClient → MaNGOS server (auth + world protocol)
 ├── WoWSharpObjectManager (singleton) → IObjectManager
 ├── BotRunnerService → behavior tree execution
@@ -45,8 +45,8 @@ BackgroundBotWorker (IHostedService)
 
 | Section | Key | Default |
 |---------|-----|---------|
-| PathfindingService | IpAddress/Port | 127.0.0.1:5001 |
-| CharacterStateListener | IpAddress/Port | 127.0.0.1:5002 |
+| PathfindingService | IpAddress/Port | 127.0.0.1:9002 |
+| CharacterStateListener | IpAddress/Port | 127.0.0.1:9001 |
 | RealmEndpoint | IpAddress | 127.0.0.1 |
 | BotBehavior | MaxPullRange, RestHpThresholdPct, GatherDetectRange, etc. | Various |
 

@@ -86,9 +86,9 @@ has the full map).
 | MaNGOS realmd (auth) | `3724` | `docker-compose.vmangos-linux.yml` / `docker-compose.windows.yml` |
 | MaNGOS world (mangosd) | `8085` | same |
 | MaNGOS SOAP API | `7878` | same — used by the GM/test-director (see `CLAUDE.md`) |
-| PathfindingService | `9002` (Docker), `5001` (in-proc) | `docker-compose.vmangos-linux.yml` / `docs/TECHNICAL_NOTES.md` |
-| SceneDataService | `9003` (Docker), `5003` (in-proc) | same |
-| WoWStateManager (+ UI sidecar) | `5002` (+ `8088`) | `docs/TECHNICAL_NOTES.md` |
+| PathfindingService | `9002` | `docker-compose.vmangos-linux.yml` / `docs/TECHNICAL_NOTES.md` |
+| SceneDataService | `9003` | same |
+| WoWStateManager (+ UI sidecar) | `9001` (+ `9000`) | `docs/TECHNICAL_NOTES.md` |
 
 ## Local service dependencies (Docker)
 

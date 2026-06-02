@@ -13,7 +13,7 @@ namespace Tests.Infrastructure;
 /// pathfinding tests.
 ///
 /// Live tests (LongPathingTests, etc.) historically connected to whatever
-/// process happened to be listening on port 5001 — typically the
+/// process happened to be listening on port 9002 — typically the
 /// `wwow-pathfinding` Docker container. That gave us a moving target: a
 /// test could pass against a stale tile cache or a stale binary build of
 /// the service, and we wouldn't know until we manually `docker compose
@@ -29,7 +29,7 @@ namespace Tests.Infrastructure;
 ///       // fixture.Port is the port the spawned process is listening on.
 ///       // Set WWOW_TEST_PATHFINDING_PORT (or pass to your downstream
 ///       // fixture explicitly) so StateManager + BotRunner connect to
-///       // this port rather than 5001.
+///       // this port rather than 9002.
 ///   }
 ///   finally
 ///   {
@@ -37,7 +37,7 @@ namespace Tests.Infrastructure;
 ///   }
 ///
 /// Reads `WWOW_USE_LOCAL_PATHFINDING_SERVICE`. When unset, callers should
-/// fall back to the existing port-5001 Docker behavior. When set to "1",
+/// fall back to the existing port-9002 Docker behavior. When set to "1",
 /// callers should use this fixture and route through fixture.Port.
 /// </summary>
 public sealed class PathfindingTestFixture : IAsyncDisposable

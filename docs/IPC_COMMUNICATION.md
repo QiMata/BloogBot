@@ -379,15 +379,15 @@ message StateChangeResponse {
 {
   "PathfindingService": {
     "IpAddress": "127.0.0.1",
-    "Port": "5000"
+    "Port": "9002"
   },
   "CharacterStateListener": {
     "IpAddress": "127.0.0.1",
-    "Port": "5001"
+    "Port": "9001"
   },
   "StateManagerListener": {
     "IpAddress": "127.0.0.1",
-    "Port": "5002"
+    "Port": "9000"
   },
   "RealmEndpoint": {
     "IpAddress": "127.0.0.1"

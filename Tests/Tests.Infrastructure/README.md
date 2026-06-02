@@ -93,7 +93,7 @@ Integration tests can be configured via environment variables:
 | `WWOW_TEST_AUTH_PORT` | `3724` | WoW auth server port |
 | `WWOW_TEST_WORLD_PORT` | `8085` | WoW world server port |
 | `WWOW_TEST_PATHFINDING_IP` | `127.0.0.1` | PathfindingService IP |
-| `WWOW_TEST_PATHFINDING_PORT` | `5001` | PathfindingService port |
+| `WWOW_TEST_PATHFINDING_PORT` | `9002` | PathfindingService port |
 | `WWOW_TEST_USERNAME` | `TESTBOT1` | Test account username |
 | `WWOW_TEST_PASSWORD` | `PASSWORD` | Test account password |
 

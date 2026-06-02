@@ -81,9 +81,9 @@ Phase 1 + Phase 2 + Phase 3 in flight. The bots need to be doing
 - **Read-only paths:** all of `Services/WoWStateManager/` for instrumentation points
 - **Goal:** Emit the 14 StateManager-prefixed metrics from
   [`Spec/10_METRICS.md`](../Spec/10_METRICS.md). `/metrics` returns
-  Prometheus format on port `8088`.
+  Prometheus format on port `9000`.
 - **Success criteria:**
-  - [ ] `curl http://localhost:8088/metrics` shows all required names.
+  - [ ] `curl http://localhost:9000/metrics` shows all required names.
   - [ ] Cardinality budget tests pass (label sets per metric â‰¤ budget).
 
 ### S5.3 â€” Wire BotRunner metrics

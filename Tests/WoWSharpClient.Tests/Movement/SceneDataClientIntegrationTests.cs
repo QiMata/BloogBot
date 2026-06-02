@@ -10,7 +10,7 @@ namespace WoWSharpClient.Tests.Movement;
 
 /// <summary>
 /// Tests for SceneDataClient: tile coordinate mapping, retry/dedup behavior,
-/// and live connectivity to SceneDataService (port 5003).
+/// and live connectivity to SceneDataService (port 9003).
 /// </summary>
 public sealed class SceneDataClientIntegrationTests
 {
@@ -19,7 +19,7 @@ public sealed class SceneDataClientIntegrationTests
         try
         {
             using var client = new ProtobufSocketClient<SceneTileRequest, SceneTileResponse>(
-                "127.0.0.1", 5003, NullLogger.Instance);
+                "127.0.0.1", 9003, NullLogger.Instance);
             var response = client.SendMessage(new SceneTileRequest
             {
                 MapId = 1,
@@ -159,7 +159,7 @@ public sealed class SceneDataClientIntegrationTests
     }
 
     // =========================================================================
-    // Live Integration — connect to real SceneDataService on port 5003
+    // Live Integration — connect to real SceneDataService on port 9003
     // =========================================================================
 
     [SkippableFact]
@@ -168,7 +168,7 @@ public sealed class SceneDataClientIntegrationTests
     {
         try
         {
-            var realClient = new SceneDataClient("127.0.0.1", 5003, NullLogger.Instance);
+            var realClient = new SceneDataClient("127.0.0.1", 9003, NullLogger.Instance);
             var result = realClient.EnsureSceneDataAround(1, 1629f, -4373f);
 
             Skip.IfNot(result, "SceneDataService not reachable or returned no data for Orgrimmar");
@@ -183,7 +183,7 @@ public sealed class SceneDataClientIntegrationTests
     [Trait("Category", "RequiresInfrastructure")]
     public void LiveService_AlteracValley_ReturnsTriangles()
     {
-        var client = new SceneDataClient("127.0.0.1", 5003, NullLogger.Instance);
+        var client = new SceneDataClient("127.0.0.1", 9003, NullLogger.Instance);
         var result = client.EnsureSceneDataAround(30, 686f, -294f);
 
         Skip.IfNot(result, "SceneDataService not reachable or returned no data for AV (map 30)");
@@ -193,7 +193,7 @@ public sealed class SceneDataClientIntegrationTests
     [Trait("Category", "RequiresInfrastructure")]
     public void LiveService_RagefireChasm_ReturnsTriangles()
     {
-        var client = new SceneDataClient("127.0.0.1", 5003, NullLogger.Instance);
+        var client = new SceneDataClient("127.0.0.1", 9003, NullLogger.Instance);
         var result = client.EnsureSceneDataAround(389, 3f, -11f);
 
         Skip.IfNot(result, "SceneDataService not reachable or returned no data for RFC (map 389)");
@@ -204,7 +204,7 @@ public sealed class SceneDataClientIntegrationTests
     public void LiveService_Map0_48_32_TileExists()
     {
         using var client = new ProtobufSocketClient<SceneTileRequest, SceneTileResponse>(
-            "127.0.0.1", 5003, NullLogger.Instance);
+            "127.0.0.1", 9003, NullLogger.Instance);
 
         var response = client.SendMessage(new SceneTileRequest
         {
@@ -222,7 +222,7 @@ public sealed class SceneDataClientIntegrationTests
     public void LiveService_Map1_28_41_TileExists()
     {
         using var client = new ProtobufSocketClient<SceneTileRequest, SceneTileResponse>(
-            "127.0.0.1", 5003, NullLogger.Instance);
+            "127.0.0.1", 9003, NullLogger.Instance);
 
         var response = client.SendMessage(new SceneTileRequest
         {
@@ -239,10 +239,10 @@ public sealed class SceneDataClientIntegrationTests
     [Trait("Category", "RequiresInfrastructure")]
     public void LiveService_Map409_31_33_TileCanBeSynthesizedFromSceneSource()
     {
-        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 5003");
+        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 9003");
 
         using var client = new ProtobufSocketClient<SceneTileRequest, SceneTileResponse>(
-            "127.0.0.1", 5003, NullLogger.Instance);
+            "127.0.0.1", 9003, NullLogger.Instance);
 
         var response = client.SendMessage(new SceneTileRequest
         {
@@ -261,10 +261,10 @@ public sealed class SceneDataClientIntegrationTests
     [Trait("Category", "RequiresInfrastructure")]
     public void LiveService_Map409_30_33_TileReturnsSceneData()
     {
-        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 5003");
+        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 9003");
 
         using var client = new ProtobufSocketClient<SceneTileRequest, SceneTileResponse>(
-            "127.0.0.1", 5003, NullLogger.Instance);
+            "127.0.0.1", 9003, NullLogger.Instance);
 
         var response = client.SendMessage(new SceneTileRequest
         {
@@ -291,10 +291,10 @@ public sealed class SceneDataClientIntegrationTests
         float y,
         string label)
     {
-        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 5003");
+        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 9003");
 
         var (tileX, tileY) = SceneDataClient.WorldToTile(x, y);
-        var client = new SceneDataClient("127.0.0.1", 5003, NullLogger.Instance);
+        var client = new SceneDataClient("127.0.0.1", 9003, NullLogger.Instance);
 
         var result = client.EnsureSceneDataAround(mapId, x, y);
 

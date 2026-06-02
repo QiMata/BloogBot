@@ -44,7 +44,7 @@ message PathResponse {
 }
 ```
 
-Existing surface lives at `Services/PathfindingService/` (port 5001).
+Existing surface lives at `Services/PathfindingService/` (port 9002).
 The Detour native layer ships as `Navigation.dll`.
 
 ### Required capabilities
@@ -160,7 +160,7 @@ message GroundZRequest {
 }
 ```
 
-Existing surface at `Services/SceneDataService/` (port 5003).
+Existing surface at `Services/SceneDataService/` (port 9003).
 `GetWalkableGroundZ` was added 2026-05-10 in commit `1c530288` to fix
 the OG cliff-fall parity break.
 

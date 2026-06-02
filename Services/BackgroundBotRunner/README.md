@@ -157,9 +157,9 @@ var lootingAgent = agentFactory.LootingAgent;
 
 ### External Services
 
-- **PathfindingService**: Advanced navigation and collision detection (port 5000)
-- **StateManager**: Multi-character state coordination (port 5001)
-- **Character State Listener**: Real-time character state updates (port 8081)
+- **PathfindingService**: Advanced navigation and collision detection (port 9002)
+- **StateManager**: Multi-character state coordination (CharacterStateListener, port 9001)
+- **Character State Listener**: Real-time character state updates (port 9001)
 - **Ollama AI Service**: Large language model integration for intelligent decisions
 
 ## Configuration
@@ -174,11 +174,11 @@ Configure via `appsettings.json`:
   },
   "PathfindingService": {
     "IpAddress": "127.0.0.1",
-    "Port": 5000
+    "Port": 9002
   },
   "CharacterStateListener": {
     "IpAddress": "127.0.0.1",
-    "Port": 8081
+    "Port": 9001
   },
   "RealmEndpoint": {
     "IpAddress": "127.0.0.1"

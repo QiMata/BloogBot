@@ -48,20 +48,20 @@ docker compose -f .\docker-compose.vmangos-linux.yml down
   `WWOW_NAVIGATION_PRELOAD_MAPS=all` so the Docker runtime loads every
   available `.mmap` once at startup. Use `none` for focused test or fast
   iteration overrides.
-- `wwow-scene-data` loads collision/scene data from `WWOW_DATA_DIR=/wwow-data` and listens on `0.0.0.0:5003`.
+- `wwow-scene-data` loads collision/scene data from `WWOW_DATA_DIR=/wwow-data` and listens on `0.0.0.0:9003`.
 - Both services mount `${WWOW_VMANGOS_DATA_DIR:-D:/MaNGOS/data}` read-only.
 - Published ports:
   - `realmd`: `3724`
   - `mangosd`: `8085`
   - `SOAP`: `7878`
-  - `pathfinding-service`: `5001`
-  - `scene-data-service`: `5003`
+  - `pathfinding-service`: `9002`
+  - `scene-data-service`: `9003`
 
 ## Current Validation (2026-05-05)
 
 - `docker ps` confirms both split services are live:
-  - `wwow-pathfinding` -> `0.0.0.0:5001->5001/tcp`
-  - `wwow-scene-data` -> `0.0.0.0:5003->5003/tcp`
+  - `wwow-pathfinding` -> `0.0.0.0:9002->9002/tcp`
+  - `wwow-scene-data` -> `0.0.0.0:9003->9003/tcp`
 - `docker logs --since 5m wwow-pathfinding` shows `[Navigation] preloading 41 configured map(s)` from mounted `/wwow-data`, `Navigation loaded in 117.7s`, and the service ready message.
 - `docker exec wwow-pathfinding cat /app/pathfinding_status.json` reports `IsReady=true` with all 41 discovered map IDs in `LoadedMaps`.
 - `docker logs --tail 80 wwow-scene-data` shows ready state and initialized map coverage.
@@ -86,9 +86,9 @@ $env:MangosServer__MangosDirectory='C:\Mangos\server'
 
 Validation signals:
 
-- `wwow-pathfinding` listening on `127.0.0.1:5001`
-- `wwow-scene-data` listening on `127.0.0.1:5003`
-- `WoWStateManager` listening on `127.0.0.1:5002` and `127.0.0.1:8088`
+- `wwow-pathfinding` listening on `127.0.0.1:9002`
+- `wwow-scene-data` listening on `127.0.0.1:9003`
+- `WoWStateManager` listening on `127.0.0.1:9001` and `127.0.0.1:9000`
 
 ## Migration Marker Sync
 
@@ -99,4 +99,4 @@ powershell -ExecutionPolicy Bypass -File .\docker\linux\vmangos\Sync-MigrationMa
 ## Notes
 
 - `WoWStateManager` only manages WoW client instances; it does not launch/stop `PathfindingService` or `SceneDataService`.
-- Split service endpoints are still `wwow-pathfinding:5001` and `wwow-scene-data:5003` on the compose network.
+- Split service endpoints are still `wwow-pathfinding:9002` and `wwow-scene-data:9003` on the compose network.

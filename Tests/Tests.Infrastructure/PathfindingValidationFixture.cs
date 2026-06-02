@@ -13,7 +13,7 @@ namespace Tests.Infrastructure;
 /// <see cref="PathfindingTestFixture"/>. Provides a pathfinding service
 /// instance whose Navigation.dll is pointed at the bot's test-data dir
 /// (D:/wwow-bot/test-data by default) and listens on a dedicated port that
-/// does not collide with either the Docker prod service (5001) or the
+/// does not collide with either the Docker prod service (9002) or the
 /// existing live-test fixture (5101).
 ///
 /// Why a separate fixture instead of reusing <see cref="PathfindingTestFixture"/>:
@@ -29,7 +29,7 @@ namespace Tests.Infrastructure;
 /// latency bites.
 ///
 /// Port allocation (also documented in docs/physics/MMAP_DATA_FLOW.md):
-///   5001 — Docker prod (wwow-pathfinding container)
+///   9002 — Docker prod (wwow-pathfinding container)
 ///   5101 — PathfindingTestFixture (live-bot tests)
 ///   5111 — PathfindingValidationFixture (waypoint-correctness tests)
 ///

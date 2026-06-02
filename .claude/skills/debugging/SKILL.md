@@ -23,7 +23,7 @@ responsible component.
     `Exports/WoWSharpClient/`; no client; packet-level debugging via
     `WoWSharpClient/Handlers/` and `Client/`.
 - IPC surface: all services talk Protobuf/TCP via `Exports/BotCommLayer/`
-  (PathfindingService 5001; WoWStateManager 5002 char-state, 8088 state-manager
+  (PathfindingService 9002; WoWStateManager 9001 char-state, 9000 state-manager
   API — confirm current ports against the service `appsettings`).
 
 ## Preconditions
@@ -40,8 +40,8 @@ responsible component.
    1. Entry point: `ForegroundBotRunner` or `BackgroundBotRunner`.
    2. Into `BotRunner/BotRunnerService.cs` (core behavior tree).
    3. Game state: `GameData.Core` interfaces → concrete implementations.
-   4. Movement → `PathfindingService` (5001) → `Navigation.dll`.
-   5. State change → `WoWStateManager` (5002/8088) → FSM transitions.
+   4. Movement → `PathfindingService` (9002) → `Navigation.dll`.
+   5. State change → `WoWStateManager` (9001/9000) → FSM transitions.
    6. Protocol → `WoWSharpClient/OpCodeDispatcher.cs` → specific `Handlers/`.
 3. **Debug physics** (complex C++): see `docs/physics/README.md`; key (large) files
    `PhysicsEngine.cpp`, `PhysicsCollideSlide.cpp`, `PhysicsMovement.cpp`,

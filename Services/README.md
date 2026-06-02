@@ -44,10 +44,10 @@ graph TB
 - **External Dependency Coordination**: Probes external `PathfindingService`/`SceneDataService` endpoints and continues bot orchestration without owning their process lifecycle
 
 **Communication Ports**:
-- Character State Listener: `5002`
-- State Manager Listener: `8088`
-- PathfindingService: `5001`
-- SceneDataService: `5003`
+- Character State Listener: `9001`
+- State Manager Listener: `9000`
+- PathfindingService: `9002`
+- SceneDataService: `9003`
 
 ### [BackgroundBotRunner](BackgroundBotRunner/README.md) - Autonomous Execution Engine
 **Purpose**: AI-driven background automation for individual characters
@@ -192,10 +192,10 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0
 ### Port Allocation
 | Service | Port | Purpose |
 |---------|------|---------|
-| StateManager | 8088 | State management API |
-| Character State | 5002 | Character activity monitoring |
-| PathfindingService | 5001 | Navigation queries |
-| SceneDataService | 5003 | Scene-slice/collision data |
+| StateManager | 9000 | State management API |
+| Character State | 9001 | Character activity monitoring |
+| PathfindingService | 9002 | Navigation queries |
+| SceneDataService | 9003 | Scene-slice/collision data |
 | MaNGOS SOAP | 7878 | Game server integration |
 
 ## Monitoring & Observability

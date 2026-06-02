@@ -85,7 +85,7 @@ graph TB
 cd UI/StateManagerUI
 dotnet run
 
-# Requires StateManager service running on port 8088
+# Requires StateManager service running on port 9000
 ```
 
 ### 2. Development Server Environment
@@ -129,8 +129,8 @@ builder.AddServiceDefaults(); // Adds telemetry, resilience, discovery
 ## Communication Protocols
 
 ### StateManagerUI ? Services
-- **TCP Sockets**: Direct communication with StateManager (port 8088)
-- **Character State Listener**: Real-time updates (port 5002)
+- **TCP Sockets**: Direct communication with StateManager (port 9000)
+- **Character State Listener**: Real-time updates (port 9001)
 - **Server Status Polling**: HTTP checks to MaNGOS servers
 
 ### WWoW.Systems Infrastructure
@@ -224,7 +224,7 @@ services:
 ```
 Issue: "Connection Failed" to StateManager
 Solutions:
-- Verify StateManager service running on port 8088
+- Verify StateManager service running on port 9000
 - Check Windows Firewall settings
 - Ensure services on same network segment
 - Review BasicLogger output for detailed errors
@@ -273,7 +273,7 @@ docker volume inspect wow_vanilla_mysql_data
 #### Service Health Checks
 ```bash
 # Check service health
-curl http://localhost:8088/health
+curl http://localhost:9000/health
 curl http://localhost:5000/alive
 ```
 

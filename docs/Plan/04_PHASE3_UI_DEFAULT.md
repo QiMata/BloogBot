@@ -21,7 +21,7 @@ phases populate it; this phase just establishes the host shape).
 - [ ] `WoWStateManagerUI` is the `WestworldOfWarcraft.sln` default
       startup project.
 - [ ] `WoWStateManagerUI` spawns `WoWStateManager.exe` on launch
-      (silent, port 8088 handshake per
+      (silent, port 9000 handshake per
       [`Spec/09_UI.md#startup-contract`](../Spec/09_UI.md#startup-contract)).
 - [ ] `WoWStateManagerUIFixture` (new) lives at
       `Tests/Tests.Infrastructure/`. Every LiveValidation test class
@@ -58,7 +58,7 @@ phases populate it; this phase just establishes the host shape).
 - **Owned paths:**
   - `UI/WoWStateManagerUI/App.xaml.cs`
   - `UI/WoWStateManagerUI/StateManagerHost.cs` (new)
-- **Goal:** UI checks port 8088; if not bound, spawns
+- **Goal:** UI checks port 9000; if not bound, spawns
   `WoWStateManager.exe` as a child process with redirected stdio.
   Single-instance lock prevents second UI on the same host.
 

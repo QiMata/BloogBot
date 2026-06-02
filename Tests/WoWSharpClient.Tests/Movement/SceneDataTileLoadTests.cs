@@ -19,7 +19,7 @@ namespace WoWSharpClient.Tests.Movement;
 /// Simulates N concurrent bots teleporting around the world,
 /// each requesting 3x3 tile neighborhoods from the service.
 ///
-/// Requires SceneDataService running on port 5003 (Docker).
+/// Requires SceneDataService running on port 9003 (Docker).
 ///
 /// Run:
 ///   dotnet test --filter "FullyQualifiedName~SceneDataTileLoadTests" --configuration Release -v n
@@ -69,7 +69,7 @@ public sealed class SceneDataTileLoadTests
     [Trait("Category", "RequiresInfrastructure")]
     public void SingleBot_3x3Neighborhood_MeasureLatency()
     {
-        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 5003");
+        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 9003");
 
         var (mapId, x, y, name) = Locations[0]; // Orgrimmar
         var (centerTX, centerTY) = SceneDataClient.WorldToTile(x, y);
@@ -121,7 +121,7 @@ public sealed class SceneDataTileLoadTests
     [InlineData(100)]
     public void ConcurrentBots_TeleportToLocations_MeasureThroughput(int botCount)
     {
-        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 5003");
+        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 9003");
 
         var results = new ConcurrentBag<(int BotId, string Location, long TotalMs, int Tiles, int Triangles)>();
         var errors = new ConcurrentBag<(int BotId, string Error)>();
@@ -216,7 +216,7 @@ public sealed class SceneDataTileLoadTests
     [Trait("Category", "RequiresInfrastructure")]
     public void SustainedTeleport_10Bots_5Jumps_MeasureThroughput()
     {
-        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 5003");
+        Skip.IfNot(IsServiceAvailable(), "SceneDataService not running on port 9003");
 
         const int botCount = 10;
         const int jumpsPerBot = 5;

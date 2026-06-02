@@ -169,7 +169,7 @@ The UI panel pulls these via `StateManager.GetPerformanceHistory(window)`.
 Each HTTP-capable service exposes `/metrics` (Prometheus text format).
 Socket-only services (`PathfindingService`, `SceneDataService`,
 `BackgroundBotRunner`) host a tiny in-process HTTP listener for
-`/metrics` (port `<base> + 1000`; e.g. PFS = 5001, metrics = 6001).
+`/metrics` (port `<base> + 1000`; e.g. PFS = 9002, metrics = 10002).
 
 A Prometheus scrape config ships in
 `docker/prometheus/prometheus.yml`. Grafana dashboards live in
