@@ -493,3 +493,77 @@ slide-back is a separate, deeper FG-swept-physics layer (UPDATE 3's "static-vs-s
 localized to `PhysicsEngine.cpp` with a known fix surface. It is a multi-cycle effort (instrument FG -> confirm
 -> native fix -> broad-movement regression validation), best run as a focused physics session rather than
 fast loop ticks. The handoff above is turnkey for that session.
+
+## UPDATE 8 (2026-06-02) — DIRECTION PIVOT (owner): navmesh-first. Removed the physics-wall-feedback crutch; the real deck-lip fix is the Recast bake (proper LAYERS partitioning), NOT physics/smoothPath band-aids
+
+The owner reset the approach: the FG bot drives the ORIGINAL WoW.exe client (control-bit writes -> WoW.exe's
+own physics), so the FG runner needs NO simulated-physics fix. Parity: "if FG can't run up it, BG can't
+either" — and any `PhysicsEngine.cpp` change MUST be grounded in decompiled WoW.exe, never invented. The goal:
+**use Recast properly so the mmaps are accurate and Detour always produces valid paths the bot just follows.**
+
+### Diagnosis correction (why the prior physics chase was the wrong layer)
+The live `[NAV_EXEC] physics-read blocked=1.00 normal=(0,0)` was NEVER real physics — the FG ObjectManager
+never overrode `PhysicsHitWall/PhysicsBlockedFraction/PhysicsWallNormal2D`, so the nav read the
+`IObjectManager` DEFAULTS (`false / 1.0f / (0,0)`) every tick (IObjectManager.cs:193-195). The whole run-time
+wall-feedback/avoidance subsystem was a crutch over an inaccurate navmesh.
+
+### DONE + committed `6fa84c4a` (pushed): removed the run-time crutch (R18 full removal)
+Excised the chain native swept output -> `MovementController.Last{HitWall,BlockedFraction,WallNormal}` ->
+`IObjectManager.Physics*` props -> `NavigationPath.GetNextWaypoint` wall-avoidance (deflection + wall-stuck
+repath + avoidance-waypoint); deleted `PhysicsStateHelper`, the `[NAV_EXEC] physics-read` diag, the
+`PhysicsFrameRecord` wall fields + DiagnosticsRecorder columns, and the wall-specific tests. Core Detour
+path-following (next-waypoint, advance-on-reach, recalc-on-exhaust, fallback, transport-hold, non-wall
+stalled-near-waypoint) preserved. Build green; NavigationPath/TravelTask tests 164/0; 3-lens adversarial review
+clean. KEPT (scaffolding, remove after navmesh is accurate): the plan-time corridor-walkability validation
+(`PathfindingClient.IsBlockingWallContact`, strict `Compatible=!hitWall` at PathfindingClient.cs:400; server
+`Navigation.cs:4113`) + native `PhysicsOutput` fields — same KIND of physics-wall compensation but plan-time;
+it currently guards against committing to a mesh-walkable-but-geometry-blocked corridor, i.e. it masks navmesh
+inaccuracy, so it becomes redundant once the bake is accurate.
+
+### The REAL deck-lip fix = the Recast bake (root-caused, plan ready)
+The OG tower is a vertical spiral: the same XY stacks z24/28/37/47/53. `--dump-poly-stack` at (1347.3,-4650.6)
+shows ~64 polys / >=7 Z-wraps SURVIVING — Recast's single-layer heightfield (watershed partition + contour
+simplification) BRIDGES the stacked surfaces into one merged mesh, so Detour string-pulls/smooths across
+non-traversable wraps. `tools/MmapGen/config.json` tile `"4029"` is a ~190-line GRAVEYARD of per-coordinate
+"cull" band-aids (`postDetourCullShadowedLedges/Pockets`, `preRegionCull*`, `postDetourCullAnchorPolyStacks`
+with 13 hardcoded coords, `anchorStageManifestCoordsWow` with ~35 deck-lip coords, `anchorRouteTargetsWow`)
+trying to delete the overlap after the fact — its own notes record the stack "UNCHANGED at 63 phantoms"
+(`_4029_NEGATIVE_RESULT_loop24_A3`). It also lowered `agentMaxClimbTerrain` to 0.2 (vs harvested 1.8), which
+OVER-fragments the legit ramp while doing NOTHING about the overlap (overlap is not a step-height problem;
+`_4029_README_climb` records restoring 1.8 regressed the ramp — because it was relied on as a band-aid).
+
+**Proper-Recast fix (VERIFIED config-only — no native rebuild): per-tile `partitionType:"layers"`.** Recast's
+`rcBuildLayerRegions` (TileWorker.cpp:11507-11509, fully plumbed; `partitionType` read at :10156) is the
+purpose-built tool for vertically-stacked surfaces — each spiral wrap becomes its own layer/region, same-XY
+wraps STOP merging. The prior `layers` attempt failed only because it was coupled with `maxSimplificationError`
++ `maxVertsPerPoly` churn (`_4029_NEGATIVE_RESULT_partition_layers_simplify13`); it must be retried CLEAN.
+Optional cheap adjunct: ensure `RC_CONTOUR_TESS_WALL_EDGES` on this tile (verify the vendored
+`rcBuildContours` default at :11549 — stock Recast defaults it ON; the prior plan's "omitted" claim is
+unverified).
+
+### Turnkey recipe (iteration: navmesh accuracy)
+1. Rewrite the `"4029"` block CLEAN: `cs:0.1, tileSize:213, partitionType:"layers"` + DELETE the
+   `agentMaxClimbTerrain/agentMaxClimbModelTerrainTransition` overrides (back to harvested 1.8/1.2) + RETIRE the
+   `postDetourCull*`/`preRegionCull*`/anchor-coord band-aids. (Keep a backup; expect to retire culls
+   INCREMENTALLY, re-running `probe-routes.ps1` after each, since some also target OG city/hallway dead-ends.)
+2. `tools\scripts\bake-tile.ps1 -Map 1 -Tiles "40,29" -Variant og-layers-clean -DataDir D:\wwow-bot\test-data`
+   (bake-report.json: exit 0, afterLen non-null for 0012940).
+3. PRIMARY GATE (probe oracle, `WWOW_DATA_DIR=D:\wwow-bot\test-data`): RAW `Grunt1->Frezza --detour-resolve`
+   stays valid + monotonic (<=1 DOWN); `--smooth` reaches Frezza z53.63 with 0 Blocked and NO densification
+   needed; `--dump-poly-stack` at (1347.3,-4650.6) collapses from ~64 polys/7 wraps to the local wrap.
+4. NO-REGRESSION: `tools\scripts\probe-routes.ps1 -RouteManifest tools\scripts\routes\og-zeppelin.json`
+   (FlightMasterDescentControl + OgFrezzaToBoardingPosition green; ClimbOrgrimmarTowerToFrezza no worse).
+   Unit baseline `run-pathfinding-tests.ps1 -TestSet unit` (213+7) + `DeckLipRawPathContractTests`.
+5. EXPECT 4029 poly-ID churn (layers reorders every polyRef) -> rebaseline any 4029-specific poly-ref tests
+   (`_3446_NEGATIVE_RESULT_surface_F/G` is the ID-churn precedent). Re-probe the 40,29<->40,28 tile seam
+   (full ClimbOrgrimmarTowerToFrezza) for cross-tile linking (4029 cs=0.1 vs neighbor default cs).
+6. Promote: `tools\MmapGen\promote-mmaps.ps1 -Map 1 -Tiles "40,29"`; `docker restart wwow-pathfinding
+   wwow-scene-data`. Then re-run the live `DeckLipClimbFromGruntToLiteralFrezza` (FG) + READ the screenshot (R16).
+7. AFTER the navmesh is accurate: remove the plan-time corridor-validation remnant (PathfindingClient.cs:400
+   `Compatible=!hitWall` first, then the server `hit_wall` reachability gating) — it is now masking nothing.
+
+### Honesty note
+The live DeckLip test's UPDATE 6-7 slide-back is a DOWNSTREAM consumer of the bad mesh (the idle re-grounding
+snaps onto the overlapping wraps). The layered bake removes that surface, so it is complementary — a fully-green
+FG live test MIGHT still need a `PhysicsEngine.cpp` ground-stick fix, but per the parity rule that change must
+come from decompiled WoW.exe, and the bake-accuracy is the necessary, correct, band-aid-free surface to fix FIRST.
