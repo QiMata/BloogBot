@@ -399,3 +399,46 @@ z41 yields currentSpeed=0), and fix the slope/step-up sustain in `Exports/Naviga
 fires ~14y short of Frezza and drops forward drive on the steep ramp — but the fix surface is the physics
 (hold/sustain the climb and re-acquire from z41), NOT the managed arrival radius. Validate with the
 (honest) live DeckLip test + R16 screenshots.
+
+## UPDATE 6 (2026-06-02) — slide-back LOCALIZED to NATIVE physics re-grounding on the overlapping spiral (drive-gap support loss); not managed, not the swept climb itself
+
+Iteration-B localization of the UPDATE-5 slide-back, cross-checked by `codex:rescue` reading the native
+physics. The defect is in `Exports/Navigation/PhysicsEngine.cpp` (the FG swept engine `StepV2` /
+`CollisionStepWoW`), NOT in the managed `MovementController.cs` and NOT in the static classifier.
+
+### Evidence
+- Static probe (native FindPath + 8-sample classifier, same DLL) FROM the live stuck point z41 AND from
+  the peak z47.7 to Frezza: **0 Blocked, all Walk/StepUp, reaches z53.63** — the static classifier says the
+  ramp is fully climbable.
+- Live stuck state: `[NAV_EXEC] physics-read exit hitWall=False blocked=1.00 normal=(0.00,0.00)` repeating
+  ~180ms with forward intent set (`flags=0x1`), currentSpeed=0. Per `PhysicsEngine.h:313` `wallBlockedFraction`
+  DEFAULTS to 1.0, so `blocked=1.00 / no wall / no normal` means **"zero forward progress without an accepted
+  wall contact"** — a SEMANTIC stall, not a geometric wall.
+- The swept capsule DID climb z24 -> z47.9 under continuous drive, so the swept physics CAN climb the ramp.
+
+### Root (codex diagnosis, code-verified)
+**Drive-gap support loss on the overlapping spiral.** When the leg false-completes at z47.9 and forward drive
+drops, the **grounded-IDLE branch (`PhysicsEngine.cpp:5988-5998`) does a raw `SceneQuery::GetGroundZ` at the
+current XY** and snaps `st.z` to it within a `STEP_HEIGHT(2.125)+STEP_DOWN_HEIGHT` window. The OG tower is a
+vertical spiral — the SAME XY stacks z24/28/37/47/53 (confirmed by `--dump-poly-stack`: ~64 polys / ≥7 Z-wraps
+at one XY) — so the idle re-grounding can drop the bot to a LOWER wrap. From the lower layer the forward
+`CollisionStepWoW` re-enters from a corrupted support/Z state and stalls (blocked=1.00). The `_stepUpBaseZ/
+_stepUpAge` state machine is a RED HERRING — `StepV2` outputs `stepUpBaseZ=INVALID / stepUpAge=0` every tick
+(`PhysicsEngine.cpp:~6667`) and `ApplyPhysicsResult` does not persist it.
+
+### Fix surface (native physics; NOT arrival — R13/freeze)
+Add **ground-stick on walkable slopes**: in the `StepV2` idle / no-horizontal-input path, prefer the bot's
+CURRENT/previous walkable support (a walkable-ground query near `prevGroundZ`, or AABB contact selection) over
+a raw center `GetGroundZ` that drops to a lower spiral layer; and guard `CollisionStepWoW`'s pre-sweep ground
+snap so it does not snap down from a valid walkable support before the first forward frame. Do NOT change
+`radius=15`, `STEP_HEIGHT`, or slope thresholds — match the real client (players don't slide down walkable
+slopes and can step up from rest). The live proof that the swept CAN climb when it stays on the correct
+support means: preserve the support across the drive-gap and the climb should complete.
+
+### Iteration-C next step (BEFORE editing this load-bearing engine)
+Confirm the EXACT slide mechanism with a live per-tick physics trace (mmo-movement-diagnostics): instrument
+the `StepV2` grounded-idle branch + the grounding decision + `CollisionStepWoW` to log per-tick
+(grounded/airborne, idleGroundZ chosen vs prevGroundZ, st.z, blockedFraction) during the deck-lip slide +
+stuck. Disambiguate **idle-snap-down-the-staircase** (idle branch re-grounds to a lower wrap) vs a
+**FALLINGFAR fall** (the steep deck-lip filtered as non-walkable -> airborne -> falls to z41). Then implement
+the targeted ground-stick fix, re-probe, and run the live DeckLip test + READ the success screenshot (R16).
