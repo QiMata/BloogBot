@@ -181,12 +181,22 @@ namespace MMAP
             workers.emplace_back(std::make_unique<TileWorker>(this, false, m_quick, m_debug, m_config, m_debugWoWX, m_debugWoWY, m_debugWoWSet));
         }
 
+        // Wait until every enqueued tile has been picked up by a worker. The queue
+        // empties as soon as the LAST tile is POPPED -- at that instant the workers
+        // that popped the slow (land/OG-tower/city) tiles are still mid-build.
         while (!m_tileQueue.Empty() && !m_cancel.load())
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        m_cancel.store(true);
+        // Signal "no more tiles": _shutdown makes idle workers' WaitAndPop return false
+        // so they exit their loop. Do NOT abort via m_cancel here -- m_cancel makes a
+        // worker drop the tile it just popped (WorkerThread:1033) and stop, which kills
+        // the slow in-flight builds before they write their .mmtile (the fast ocean
+        // tiles drain the queue in ~1s while the OG-tower tile is still building -- which
+        // is why a full bake was completing in ~1s without persisting the land tiles).
+        // WaitCompletion then blocks until every worker FINISHES its current build and
+        // exits gracefully, so all tiles are written.
         m_tileQueue.Cancel();
 
         for (auto& worker : workers)
@@ -339,6 +349,9 @@ namespace MMAP
             tileInfo.m_tileY = tileY;
             tileInfo.m_curTile = currentTile;
             tileInfo.m_tileCount = uint32(tiles.size());
+            // --rebuild forces every tile to regenerate even if a valid .mmtile
+            // already exists; default (false) preserves the incremental skip.
+            tileInfo.m_forceRebuild = m_rebuildAll;
             memcpy(&tileInfo.m_navMeshParams, navMesh->getParams(), sizeof(dtNavMeshParams));
             m_tileQueue.Push(tileInfo);
         }

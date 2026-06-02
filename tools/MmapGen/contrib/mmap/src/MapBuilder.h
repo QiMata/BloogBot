@@ -99,6 +99,13 @@ namespace MMAP
 
             bool IsBusy();
 
+            // When true, a full-map / all-maps bake rebuilds EVERY tile even if a
+            // valid .mmtile already exists on disk. Default (false) keeps the
+            // incremental skip (shouldSkipTile) for quick dev iteration. The
+            // "regenerate ALL tiles" entry points (bake-all-maps.ps1) pass --rebuild
+            // so a generation-LOGIC change is never silently ignored by the skip.
+            void SetRebuildAll(bool v) { m_rebuildAll = v; }
+
         private:
             // detect maps and tiles
             void discoverTiles();
@@ -137,6 +144,7 @@ namespace MMAP
             ProducerConsumerQueue<TileInfo> m_tileQueue;
             std::atomic<bool> m_cancel;
             uint8 m_threads;
+            bool m_rebuildAll = false;
     };
 }
 

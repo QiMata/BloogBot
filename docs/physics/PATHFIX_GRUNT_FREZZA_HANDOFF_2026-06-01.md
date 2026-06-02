@@ -567,3 +567,53 @@ The live DeckLip test's UPDATE 6-7 slide-back is a DOWNSTREAM consumer of the ba
 snaps onto the overlapping wraps). The layered bake removes that surface, so it is complementary — a fully-green
 FG live test MIGHT still need a `PhysicsEngine.cpp` ground-stick fix, but per the parity rule that change must
 come from decompiled WoW.exe, and the bake-accuracy is the necessary, correct, band-aid-free surface to fix FIRST.
+
+## UPDATE 9 (2026-06-02) — full WORLD rebake fixed (`--rebuild` flag); smoothPath band-aid REMOVED; accurate bake alone yields clean SMOOTH
+
+The UPDATE-8 pivot is now executed end-to-end and the **last band-aid is gone**.
+
+### The full-rebake was a silent no-op (root cause)
+`bake-all-maps.ps1` (whose entire purpose is "regenerate ALL tiles") completed in **0.9s writing
+ZERO `.mmtile`** even after the cull/anchor removal — so the band-aid-free generator changes were
+never actually applied to the world. Root cause: `MapBuilder::buildMap` (the full-map path) never set
+`TileInfo.m_forceRebuild`, so it defaulted to `false` and `TileWorker::buildTile` hit
+`if (!forceRebuild && shouldSkipTile(...)) return;` for **every** one of the 786 already-on-disk tiles.
+`shouldSkipTile` only rejects on `MMAP_MAGIC`/`dtVersion`/`mmapVersion` mismatch — a generation-**logic**
+change (cull removal) does NOT bump the version, so the incremental skip silently swallowed it. (The
+`processQueuedTiles` `m_cancel` abort I first suspected was a red herring — it's a narrow last-N-tiles
+race, not the 0-tile cause; I still made `processQueuedTiles` drain gracefully via `queue.Cancel()` +
+`WaitCompletion` instead of `m_cancel.store(true)`.)
+
+### Fix: an explicit `--rebuild` flag (opt-in; incremental stays default)
+- `generator.cpp`: new `--rebuild` arg → `MapBuilder::SetRebuildAll(true)`.
+- `MapBuilder` (`.h`/`.cpp`): `m_rebuildAll` member; `buildMap` sets `tileInfo.m_forceRebuild = m_rebuildAll`.
+- `bake-all-maps.ps1`: passes `--rebuild` (a full-regen script must override the skip).
+- Quick dev bakes (`MmapGen.exe 1` with no flag) keep the incremental skip.
+
+### Full map-1 rebake (band-aid-free) — VERIFIED
+`bake-all-maps.ps1 -Maps 1 -Threads 10`: **elapsed 335.7s (real build, not 0.9s), 786/786 tiles
+freshly written**, total bytes 866MB→671MB (−22%: culls/anchors were inflating poly counts). Deck-lip
+`0012940` = 5041KB (matches the validated single-tile layers bake → identical per-tile config).
+
+### No-regression — PASS
+- Deck-lip `Grunt1→Frezza` (probe oracle, FULL bake): **RAW segs=52 DOWN=3 maxBackΔz=0.40 Blocked=0**,
+  **SMOOTH segs=96 DOWN=6 maxBackΔz=0.47 Blocked=0**, both end exactly at Frezza (1331.11,-4649.45,**53.63**).
+- OG-zeppelin manifest (`probe-routes.ps1 -DetourResolve -SmoothPath`): **5/5 routes resolve, summary
+  clean=0 step=5 blocked=0 error=0** — the `GenericSteepMixedWalls` cull removal + restored climb broke
+  nothing and created no unsafe cliff shortcuts (no exit=2).
+
+### smoothPath emission guard (iter-A, 6ec1355f) REMOVED — the bake was the real fix
+Reverse-applied the 78-line `PathFinder.cpp::findSmoothPath` guard (R18 full removal, 0 leftover comments),
+rebuilt x64 `Navigation.dll`. Re-probed against the accurate bake: **RAW DOWN=3 / SMOOTH DOWN=6, 0 Blocked,
+reaches Frezza — byte-for-byte identical to the WITH-guard numbers.** The guard existed to suppress a
+16-DOWN/5.66y spiral limit cycle; with an accurate LAYERS-partitioned bake that cycle never forms, so the
+guard was masking bake inaccuracy. `DeckLipRawPathContractTests` thresholds (DOWN≤8, backwardZ≤3.0,
+finalZ≥50) still hold without it.
+
+### State / next
+Crutch-free surfaces now: wall-feedback removed (UPDATE 8 / 6fa84c4a), bake culls+anchors removed
+(38f543b1), smoothPath guard removed (this update), full world rebaked clean. Remaining: run the live FG
+`DeckLipClimbFromGruntToLiteralFrezza` against the accurate world + READ the screenshot (R16) — if the
+UPDATE-6 slide-back persists, its fix must still come from decompiled WoW.exe (parity rule), but the bake
+is now the correct band-aid-free foundation. Then drop `PathfindingClient.cs:400 Compatible=!hitWall` +
+server `hit_wall` gating (step 7).
