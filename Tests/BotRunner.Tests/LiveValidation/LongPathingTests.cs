@@ -942,7 +942,14 @@ public class LongPathingTests
             $"Literal Frezza deck-lip sub-test disabled (set {DeckLipLiteralFrezzaEnvVar}=1).");
 
         const string TimelineTestName = nameof(DeckLipClimbFromGruntToLiteralFrezza);
-        using var packetHookScope = DisableForegroundPacketHooksForCrossMapTransfers();
+        // EXPERIMENT (2026-06-01): DeckLip is a SAME-MAP climb (no world transfer),
+        // so do NOT disable the FG packet hooks. Disabling them for the whole test
+        // (the scope is intended only for cross-map transfers, where FG hooks are
+        // unstable) is the prime suspect for the ~z42 mid-climb client disconnect:
+        // the client drops to LoginScreen, auto-relogs, and the objective is lost.
+        // If keeping hooks enabled lets the bot climb past z42, the disconnect was a
+        // fixture artifact, not a server movement kick.
+        // using var packetHookScope = DisableForegroundPacketHooksForCrossMapTransfers();
         var target = await EnsureLongPathingTargetAsync();
 
         using var timelineScope = new EnvironmentVariableScope(LongPathingTimelineEnvVar);

@@ -160,7 +160,14 @@ public class TravelTask : BotTask, IBotTask
         if (player.MapId == _targetMapId)
         {
             var dist = player.Position.DistanceTo(_targetPosition);
-            if (dist <= _arrivalRadius)
+            var horizontalDist = player.Position.DistanceTo2D(_targetPosition);
+            var verticalDelta = Math.Abs(player.Position.Z - _targetPosition.Z);
+            // Arrival requires HORIZONTAL proximity AND being on roughly the same
+            // vertical layer. A 3D-radius-only check falsely "arrives" below a target
+            // that is directly ABOVE the bot — OG zeppelin: at z41 the bot is ~8y
+            // horizontal but ~12.5y below Frezza (z53.6), i.e. ~15y 3D <= _arrivalRadius,
+            // so the task popped travel_complete 12.5y under the deck and went Idle.
+            if (horizontalDist <= _arrivalRadius && verticalDelta <= WalkLegVerticalArrivalTolerance)
             {
                 Logger.LogInformation(
                     "[TravelTask] Arrived at destination ({X:F0},{Y:F0},{Z:F0}) distance {Dist:F1}y",

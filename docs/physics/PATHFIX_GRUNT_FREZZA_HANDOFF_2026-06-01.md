@@ -239,3 +239,51 @@ timeline with the bot's outbound movement packets on the StepUp climb vs what vm
 reason around the disconnect timestamp. Secondary latent issue worth fixing: the line-178
 `route-exhausted` fallback uses Standard policy — should use `NavigationRoutePolicy.LongTravel`
 so a legitimate near-target route exhaustion can still drive vertical/off-mesh nav.
+
+## UPDATE 3 (2026-06-01, later) — the z42 "disconnect" was 2 distinct issues; bot now climbs base→deck-lip (z47, 80%); TRUE final blocker isolated = deck-lip physics slide-back
+
+The "~z42 disconnect" decomposed into THREE more fixes (each live-isolated), peeling the onion
+to the original deck-lip problem:
+
+1. **Disabled-hooks reset symptom (FIXED, test-side).** DeckLip is SAME-MAP, but it
+   unconditionally called `DisableForegroundPacketHooksForCrossMapTransfers()` (meant only for
+   cross-map transfers). With hooks disabled the client dropped to LoginScreen mid-climb
+   (auto-relog, objective lost). Commenting that out for this same-map test removed the reset
+   (no WoW crash dump was ever produced — it was never a hard crash).
+
+2. **Top-level arrival was ALSO vertical-blind (FIXED).** `TravelTask.Update` (line ~163)
+   completed on **3D distance ≤ `_arrivalRadius`** — at z41, ~8y horizontal + ~12.5y below
+   Frezza = ~15y 3D ≤ 15 → `[TRAVEL_COMPLETE] dist=15.0`, pop→Idle. Fixed to require horizontal
+   proximity AND `verticalDelta ≤ WalkLegVerticalArrivalTolerance`.
+
+3. **The same-map travel arrival radius (15y) was far too loose (FIXED, BLAST RADIUS).**
+   `ActionDispatcher.cs` `sameMapTravelArrivalTolerance` was `15f` (overriding
+   `TravelTask.DefaultArrivalRadius=5f`), so TravelTo "arrived" ~14y short / on the ramp ~6y
+   below the deck (z47.8). Tightened to `5f` (reach the target / NPC interaction range).
+   **⚠️ BLAST RADIUS: this affects EVERY same-map `TravelTo`** — bots now must reach within 5y
+   instead of 15y. Validate against the full long-pathing / LiveValidation suite before merge;
+   some routes whose final approach only gets within ~10y may need their own attention (that is
+   correct behavior surfacing, but it is a behavior change).
+
+**Result:** the bot now climbs the OG zeppelin spiral from the **base (z24) to the deck-lip
+(z47.4, idx102/128 ≈ 80% of the route)** — every segment `afford=StepUp`, no false completion,
+no disconnect (hooks enabled). HUGE progress from the original base-stall.
+
+**TRUE FINAL BLOCKER (isolated, deep — the original deck-lip problem):** at z47-48 the bot
+`reason=stalled_near_waypoint`, oscillates, and **slides back to z41**, where the stuck-guard
+fires. Probing the final stretch FROM the live stall point
+(`PathPhysicsProbe --map 1 --start 1347.0,-4652.1,47.4 --end 1331.11,-4649.45,53.6269
+--detour-resolve --smooth`) returns **30 corners, ALL `Walk`/`StepUp`/`Clear`, ZERO `Blocked`**,
+climbing cleanly z47→53.6 onto the deck to Frezza. So the route + static physics say the
+deck-lip IS traversable — but the LIVE continuous swept-capsule motion **can't sustain the steep
+climb and slides back**. This is the **B3-class static-vs-swept divergence** (static 8-sample
+probe ≠ live continuous sweep), a PhysicsEngine slope/step-up / movement-execution issue on the
+steep deck-lip — NOT bake, NOT arrival, NOT route. This is the deep physics core (the original
+reason this test exists), now cleanly isolated with everything else stripped away.
+
+Next (deep, do NOT band-aid): `mmo-movement-diagnostics` — instrument the bot's per-tick
+movement on the z47→53.6 deck-lip (forward/StepUp intent vs actual Z delta vs slide-back),
+compare the live swept-capsule behavior to the static probe's `StepUp/Clear` verdict, and fix
+the slope/step-up handling in `Exports/Navigation/PhysicsEngine.cpp` so the bot can sustain a
+steep StepUp climb without sliding back. Validate with the (honest) DeckLip live test +
+screenshots.
