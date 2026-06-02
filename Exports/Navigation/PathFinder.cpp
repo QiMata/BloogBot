@@ -1774,10 +1774,34 @@ dtStatus PathFinder::findSmoothPath(const float* startPos, const float* endPos,
 	dtVcopy(&smoothPath[nsmoothPath * VERTEX_SIZE], iterPos);
 	++nsmoothPath;
 
+	// Deck-lip emission guard state (fix/decklip-arrival-false-green): track the running
+	// minimum remaining corridor-arc distance to target so we only EMIT corners that make
+	// real corridor progress (suppressing the spiral limit-cycle's backward revisits).
+	// remSp is thread_local so the scratch buffer lives in TLS, never on findSmoothPath's
+	// stack frame (a multi-KB stack buffer here clobbers the large polys[] frame).
+	float bestRemLen = std::numeric_limits<float>::max();
+	static thread_local float remSp[MAX_POINT_PATH_LENGTH * VERTEX_SIZE];
+	unsigned int loopIterations = 0;
+	// Retroactive cycle suppression: a non-progress corner (remLen not a new minimum) is
+	// BUFFERED, not emitted. When progress resumes, a SHORT buffered run is a benign path bend
+	// (fixupCorridor briefly re-syncing the corridor) and is FLUSHED so its chord stays walkable;
+	// a LONG buffered run is the sustained deck-lip A<->B limit cycle and is DISCARDED so the
+	// oscillation collapses. Duration cleanly separates the two (benign bends are <= ~3 iters,
+	// the deck-lip cycle is ~12); their remLen magnitudes overlap, so magnitude cannot.
+	const unsigned int SUPPRESS_RUN_MAX = 6;
+	float suppressedBuf[SUPPRESS_RUN_MAX * VERTEX_SIZE];
+	unsigned int nSuppressed = 0;
+	bool cycleDiscard = false;
+
 	// Move towards target a small advancement at a time until target reached or
 	// when ran out of memory to store the path.
 	while (npolys && nsmoothPath < maxSmoothPathSize)
 	{
+		// Hard iteration cap: emission is gated below, so nsmoothPath no longer bounds the
+		// loop on its own (a suppressed cycle does not grow it). Cap iterations directly so a
+		// non-escaping cycle truncates+replans (handled below) instead of spinning forever.
+		if (++loopIterations > maxSmoothPathSize)
+			break;
 		// Find location to steer towards.
 		float steerPos[VERTEX_SIZE];
 		unsigned char steerPosFlag;
@@ -1874,6 +1898,60 @@ dtStatus PathFinder::findSmoothPath(const float* startPos, const float* endPos,
 				m_navMeshQuery->getPolyHeight(polys[0], iterPos, &iterPos[1]);
 				iterPos[1] += 0.5f;
 			}
+		}
+
+		// Deck-lip emission guard: compute remaining corridor-arc distance to target and
+		// SUPPRESS this iteration's emission unless it reaches a new minimum (beyond
+		// SMOOTH_PATH_SLOP). The WALK above is untouched (the 2.0y step is load-bearing for
+		// corridor drain + termination); only smoothPath[] writes are gated. RAW
+		// findStraightPath over the same corridor is monotonic -- only this densification
+		// walk's spiral limit cycle (iterPos bouncing between two anchors while fixupCorridor
+		// rewinds the corridor) diverges, and its revisits never beat the watermark set at the
+		// cycle's deepest point, so they are walked-but-not-emitted. The endOfPath / off-mesh
+		// stores above stay unconditional (arrival + link entry always emit).
+		float remLen = -1.0f;
+		{
+			int rn = 0;
+			if (dtStatusSucceed(m_navMeshQuery->findStraightPath(iterPos, targetPos, polys, npolys,
+				remSp, nullptr, nullptr, &rn, (int)MAX_POINT_PATH_LENGTH)))
+			{
+				remLen = 0.0f;
+				for (int k = 1; k < rn; ++k)
+					remLen += dtVdist(&remSp[(k - 1) * VERTEX_SIZE], &remSp[k * VERTEX_SIZE]);
+			}
+		}
+		// Fail-open: a findStraightPath failure (remLen < 0) emits, preserving baseline behavior.
+		const bool madeProgress = (remLen < 0.0f) || (remLen < bestRemLen - SMOOTH_PATH_SLOP);
+		if (remLen >= 0.0f && remLen < bestRemLen)
+			bestRemLen = remLen;
+		// Buffer non-progress corners; commit-or-drop the run when progress resumes.
+		if (!madeProgress)
+		{
+			if (nSuppressed < SUPPRESS_RUN_MAX)
+			{
+				dtVcopy(&suppressedBuf[nSuppressed * VERTEX_SIZE], iterPos);
+				++nSuppressed;
+			}
+			else
+			{
+				cycleDiscard = true;  // run exceeded the benign-bend length: it is a limit cycle
+			}
+			continue;
+		}
+		// Progress resumed: FLUSH a short (benign-bend) buffered run so its chord stays walkable;
+		// DISCARD a long (limit-cycle) run so the oscillation collapses.
+		if (nSuppressed > 0)
+		{
+			if (!cycleDiscard)
+			{
+				for (unsigned int b = 0; b < nSuppressed && nsmoothPath < maxSmoothPathSize; ++b)
+				{
+					dtVcopy(&smoothPath[nsmoothPath * VERTEX_SIZE], &suppressedBuf[b * VERTEX_SIZE]);
+					++nsmoothPath;
+				}
+			}
+			nSuppressed = 0;
+			cycleDiscard = false;
 		}
 
 		// Store results.

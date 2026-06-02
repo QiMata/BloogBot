@@ -335,3 +335,67 @@ do NOT band-aid in the managed consumer):**
 monotonicity), not just per-segment affordance. Compare `--detour-resolve` (raw) vs
 `--detour-resolve --smooth`: if smooth has many DOWN segments where raw is monotonic, the
 defect is in `smoothPath` densification, not the bake or physics.
+
+## UPDATE 5 (2026-06-02) — deck-lip smoothPath OSCILLATION FIXED (native, live-confirmed); failure MOVED to a slide-back after the walk-leg completes at z47.9
+
+UPDATE 4's diagnosis was confirmed AND fixed. The native `findSmoothPath` oscillation is gone
+(probe + live), and the live failure has moved to a distinct, deeper layer.
+
+### Root cause (confirmed via native per-iteration instrumentation)
+Instrumenting the `findSmoothPath` smoothing loop (gated `WWOW_SMOOTH_DIAG`, since removed) showed
+the walk falls into a **period-2 limit cycle** at the deck-lip: `moveAlongSurface`'s fixed 2.0y step
+bounces `iterPos` between two mutually-reachable corridor anchors A (z47, poly 146630) and B (z46,
+poly 1470xx) while `fixupCorridor` REWINDS the corridor (remaining poly count `npolys` oscillates
+66<->72), and the per-iteration store emits the A<->B ping-pong (z47<->z46) the bot stalls on. It is
+NOT a step-overshoot you can cap (UPDATE 4's first instinct): capping the step to land on the steer
+corner STARVES corridor consumption (the 2.0y step is load-bearing for draining `npolys`->0) and spins
+to a 4095-corner truncation that drifts DOWN to z30. The walk genuinely oscillates; only the EMITTED
+waypoints must change.
+
+### Fix (native, on the smoothPath OUTPUT — the correct surface; bake/physics untouched)
+`Exports/Navigation/PathFinder.cpp::findSmoothPath` — an EMISSION guard with retroactive cycle
+suppression. The WALK (step size, `moveAlongSurface`, `fixupCorridor`, `getPolyHeight`) is BYTE-
+UNCHANGED, so corridor drain + loop termination are preserved (cannot spin). Per iteration we compute
+the remaining corridor-arc distance to target (`remLen`, one O(N) `findStraightPath`); a non-progress
+corner (remLen not a new minimum, beyond `SMOOTH_PATH_SLOP`) is BUFFERED, not emitted. When progress
+resumes, a SHORT buffered run (<= `SUPPRESS_RUN_MAX`=6) is a benign path bend (corridor re-sync) and is
+FLUSHED so its chord stays walkable; a LONG run is the deck-lip limit cycle and is DISCARDED so the
+oscillation collapses. Duration cleanly separates them (benign bends <=3 iters, the cycle ~12); their
+remLen magnitudes overlap, so magnitude alone cannot. A hard iteration cap (`maxSmoothPathSize`)
+truncates+replans a non-escaping cycle instead of spinning. (A naive global remLen-min guard WITHOUT
+the retroactive buffer over-pruned benign BASE bends and cut a bend into a wall = 1 Blocked chord at
+z24 — the buffer is what keeps healthy bends.)
+
+### Validation (probe + live + regression guard)
+- Probe `Grunt#1->Frezza --detour-resolve --smooth`: oscillation collapsed from 16 DOWN / 5.66y backward
+  to **4 DOWN / 1.05y** (the residual is legitimate sub-0.3y base micro-terrain + the final Frezza
+  descent), **0 Blocked**, reaches Frezza (z53.63). RAW (findStraightPath, same corridor) stays 56 segs /
+  DOWN=1. Regression routes unaffected: the guard does NOTHING on the flight-master descent / full-climb
+  (0 suppressions — every corner emits; byte-identical to baseline), and their z32 end is the pre-existing
+  Detour partial-corridor terminus, not this change.
+- Live `DeckLipClimbFromGruntToLiteralFrezza`: the bot now climbs **monotonically z24 -> z47.9** through the
+  whole spiral with NO oscillation (the `[TRAVEL_WALK_NAV]` waypoint windows are monotonic z45->48 at the
+  deck-lip, vs the old z47<->46 ping-pong). R16 screenshots confirm the Tauren on the upper wooden ramp.
+- Regression guard committed: `Tests/PathfindingService.Tests/DeckLipRawPathContractTests.cs ->
+  CalculateRawPath_DeckLipGruntBaseToLiteralFrezza_SmoothRouteDoesNotOscillate` asserts the SMOOTH route
+  has <=8 DOWN segments and <=3y backward climb (pre-fix bug = 16 / 5.66y); passes at 4 DOWN / 1.05y.
+
+### TRUE NEXT BLOCKER (new, distinct — the failure MOVED): slide-back after the walk-leg completes at z47.9
+The live test is still RED, but for a DIFFERENT reason. After the clean monotonic climb to z47.9 the walk
+leg completes (`[TRAVEL_LEG] complete reason=walk_arrived dist=14.3 dz=5.9 radius=15.0`), the bot replans
+the final 30-corner stretch to Frezza, and IN THE REPLAN GAP it **slides back z47.7 -> z41.4** down the
+steep deck-lip ramp and then **cannot re-climb** from z41 (`FG physics rejects forward movement,
+currentSpeed=0.00, flags=0x1`, creep-window 15s -> stuck-guard fail). So the smooth oscillation (UPDATE 4)
+is no longer what blocks the route; the blocker is now the steep deck-lip ramp + the leg-completion
+micro-gap — i.e. the **static-vs-swept physics divergence UPDATE 3 isolated** (the static 8-sample probe
+says StepUp/walkable, but the live continuous swept capsule cannot HOLD/sustain the steep climb when
+forward intent pauses, and re-acquiring it from z41 yields currentSpeed=0). This is the deep physics
+core, a different surface from the smooth path.
+
+Next (do NOT band-aid managed arrival — R13/freeze): instrument the per-tick FG movement on the
+z41->z53.6 deck-lip ramp (forward/StepUp intent vs actual Z delta vs slide-back, and why re-climb from
+z41 yields currentSpeed=0), and fix the slope/step-up sustain in `Exports/Navigation/PhysicsEngine.cpp`
+(or the FG movement-emission). Candidate trigger to examine: the `walk_arrived radius=15.0` leg-completion
+fires ~14y short of Frezza and drops forward drive on the steep ramp — but the fix surface is the physics
+(hold/sustain the climb and re-acquire from z41), NOT the managed arrival radius. Validate with the
+(honest) live DeckLip test + R16 screenshots.
