@@ -617,3 +617,52 @@ Crutch-free surfaces now: wall-feedback removed (UPDATE 8 / 6fa84c4a), bake cull
 UPDATE-6 slide-back persists, its fix must still come from decompiled WoW.exe (parity rule), but the bake
 is now the correct band-aid-free foundation. Then drop `PathfindingClient.cs:400 Compatible=!hitWall` +
 server `hit_wall` gating (step 7).
+
+## UPDATE 10 (2026-06-02) — live FG test on the accurate world: navmesh CONFIRMED good in-vivo, but a stall-recalc STARVATION LOOP pins the bot at base waypoint 1 (never attempts the climb)
+
+Ran the live `DeckLipClimbFromGruntToLiteralFrezza` (FG, `WWOW_DECKLIP_DIRECT_FREZZA_TEST=1`,
+`WWOW_USE_LOCAL_PATHFINDING_SERVICE=1` → reads the freshly-rebaked world + guard-free Navigation.dll).
+**Result: RED.** Diag `D:\World of Warcraft\logs\botrunner_LPATHFG1.diag.log` + timeline screenshots
+(R16) reconciled to a precise mechanism:
+
+### The navmesh fix is CONFIRMED in-vivo (not the failure)
+Every live `service-request` returns `corners=96 result=raw_detour blockedIndex=null blockedReason=none`
+and `validated-path … usable=True` — the live service produces the SAME clean 96-corner Grunt→Frezza
+route the probe oracle does (0 Blocked, reaches z53.6). The band-aid-free bake works end-to-end.
+
+### The failure is a consumer-side stall-recalc STARVATION LOOP
+This-run trajectory (timestamp-filtered to 16:27 UTC — the diag accumulates across sessions, older
+z53/z61 entries are PRIOR runs): player z stays **23.7–24.0 the entire run** (179 samples, max z=24.0).
+- `TRAVEL_WAYPOINT_REACHED` ×4, **all `idx=1/96`**; **max waypoint idx reached this run = 1**. The bot
+  NEVER advances past waypoint 1.
+- 8× `calculate-path … force=True reason=stalled_near_waypoint`. Loop: reach wp1 (z24.3) → stall detector
+  fires (no progress toward the far z53.6 goal) → force-recalc resets currentIndex → re-target wp1 →
+  reach wp1 → … The climb to wp2+ is **never attempted**.
+- waypoint-query targets only ever reach **z25.6**; player oscillates (1330–1333, −4634, z24) — a few
+  yards of horizontal shuffle at the base. Screenshot filename: `…wall-collision-creep-before-…-ramp-
+  climb-from-base…`. Screenshots + diag AGREE (the "elevation" in the thumbnails is the canvas-covered
+  base, not height).
+
+### This REGRESSED from UPDATE 5 (which climbed z24→47.9) — but NOT via the managed removals
+`AdvanceReachableWaypoints` + the `_stalledNearWaypointSamples` stall machinery are all still present and
+called on the normal path (NavigationPath.cs:793/802/805/873-901/969…) — the wall-feedback removal only
+deleted the `physicsHitWall`-gated Layer-2 avoidance branch, which FG never entered. So the advance/stall
+logic is intact; what changed is the **path geometry** (full --rebuild rebake of ALL base+neighbor tiles,
+watershed, 22% leaner) and/or the smooth densification (guard removed). The new first-waypoint geometry
+now trips the stall detector at the base before the bot can turn-and-climb.
+
+### Next (parity-correct; do NOT re-add the wall-feedback crutch)
+1. ISOLATE rebake-vs-stall-logic: the cheap decisive experiment is to re-point the live test at a
+   snapshot of the PRE-rebake mmaps (or re-bake the base tile only) and re-run — if it climbs, the full
+   rebake changed the base-ramp corridor; if it still loops, the stall detector itself is the trigger.
+2. If stall-detector: the bug is that a force-recalc on `stalled_near_waypoint` RESETS currentIndex to 0
+   so the bot re-targets wp1 forever. The recalc should PRESERVE corridor progress (advance to the
+   nearest-reachable forward waypoint) instead of restarting at the base — a core-nav fix, not a
+   wall-feedback crutch. Confirm `AdvanceReachableWaypoints`' reachability test isn't rejecting wp2
+   (the first step-up) as unreachable from z24.
+3. If FG physics genuinely can't surmount the first ramp step → parity fix from decompiled WoW.exe
+   (per the owner rule), NOT a managed arrival/threshold relaxation.
+4. Re-run live + READ the screenshot (R16). Bot must reach Frezza on the deck (2D≤6, |dz|≤4, z~53.6).
+
+The navmesh/pathfinding pillar is DONE (probe + live confirmed). The remaining blocker is purely the
+movement-consumer (stall/recalc) + FG step-up physics at the base ramp.
