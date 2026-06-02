@@ -1122,31 +1122,6 @@ namespace WoWSharpClient
             _movementController?.SetTargetWaypoint(target);
         }
 
-        /// <summary>
-        /// True if the most recent physics tick reported a wall contact during horizontal movement.
-        /// Path layer uses this to suppress false stall detection when the bot is genuinely blocked.
-        /// </summary>
-
-
-        /// <summary>
-        /// True if the most recent physics tick reported a wall contact during horizontal movement.
-        /// Path layer uses this to suppress false stall detection when the bot is genuinely blocked.
-        /// </summary>
-        public bool PhysicsHitWall => _movementController?.LastHitWall ?? false;
-
-        /// <summary>
-        /// XY components of the wall surface normal from the most recent physics wall contact.
-        /// Used by NavigationPath for geometric deflection away from obstacles.
-        /// </summary>
-        public (float X, float Y) PhysicsWallNormal2D =>
-            _movementController != null
-                ? (_movementController.LastWallNormal.X, _movementController.LastWallNormal.Y)
-                : (0f, 0f);
-
-        /// <summary>
-        /// Fraction of intended horizontal movement that was completed (0 = fully blocked, 1 = unblocked).
-        /// </summary>
-        public float PhysicsBlockedFraction => _movementController?.LastBlockedFraction ?? 1.0f;
         public string? PhysicsFrozenDebugInfo => _movementController?.LastPhysicsFrozenInfo;
 
         public SceneEnvironmentFlags PhysicsEnvironmentFlags =>

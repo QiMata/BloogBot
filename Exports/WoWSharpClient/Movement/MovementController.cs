@@ -135,10 +135,6 @@ namespace WoWSharpClient.Movement
             MovementFlags.MOVEFLAG_PENDING_STR_LEFT |
             MovementFlags.MOVEFLAG_PENDING_STR_RGHT;
 
-        // Wall contact state — updated each frame from physics output
-        public bool LastHitWall { get; private set; }
-        public Vector3 LastWallNormal { get; private set; } = new Vector3(0, 0, 1);
-        public float LastBlockedFraction { get; private set; } = 1.0f;
         // PFS-OVERHAUL-006 Phase 5.3.7 — physics-frozen diagnostic. When bot has
         // horizontal intent (FORWARD/BACK/STRAFE) but physics returns ~zero
         // displacement, accumulate a tick counter and surface a structured
@@ -1362,11 +1358,6 @@ namespace WoWSharpClient.Movement
                 + $"hw={(output.HitWall ? 1 : 0)} gnd={output.GroundZ:F2} env=0x{output.EnvironmentFlags:X} "
                 + $"st={steerStr}";
 
-            // Wall contact feedback for path layer
-            LastHitWall = output.HitWall;
-            LastWallNormal = new Vector3(output.WallNormalX, output.WallNormalY, output.WallNormalZ);
-            LastBlockedFraction = output.BlockedFraction;
-
             // Apply position directly from physics — no guards, no clamping
             _player.Position = new Position(output.NewPosX, output.NewPosY, output.NewPosZ);
             UpdateResolvedEnvironmentFlags((SceneEnvironmentFlags)output.EnvironmentFlags, _player.Position);
@@ -1559,10 +1550,6 @@ namespace WoWSharpClient.Movement
                 FalseFreefallSuppressed = false,
                 TeleportClampActive = false,
                 UndergroundSnapFired = false,
-                HitWall = LastHitWall,
-                WallNormalX = LastWallNormal.X,
-                WallNormalY = LastWallNormal.Y,
-                BlockedFraction = LastBlockedFraction,
                 PathWaypointZ = currentWaypointZ,
                 PathWaypointIndex = _steeringTarget != null ? 0 : -1,
                 ZDeltaFromPrev = posZ - prevPosZ,

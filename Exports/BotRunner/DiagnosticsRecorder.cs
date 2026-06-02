@@ -150,7 +150,7 @@ namespace BotRunner
             sb.AppendLine("Frame,GameTimeMs,DeltaSec,PosX,PosY,PosZ,RawPosZ,PhysicsGroundZ,PrevGroundZ," +
                 "HasGroundContact,VelX,VelY,VelZ,FallTimeMs,IsFalling,MoveFlags," +
                 "SlopeGuard,PathGuard,FalseFreefallSup,TeleportClamp,UndergroundSnap," +
-                "HitWall,WallNX,WallNY,BlockedFrac,PathWpZ,PathWpIdx,ZDelta," +
+                "PathWpZ,PathWpIdx,ZDelta," +
                 "GroundNx,GroundNy,GroundNz,PktOpcode,PktFlags,PktFacing");
 
             foreach (var f in frames)
@@ -176,10 +176,6 @@ namespace BotRunner
                 sb.Append(f.FalseFreefallSuppressed ? '1' : '0').Append(',');
                 sb.Append(f.TeleportClampActive ? '1' : '0').Append(',');
                 sb.Append(f.UndergroundSnapFired ? '1' : '0').Append(',');
-                sb.Append(f.HitWall ? '1' : '0').Append(',');
-                sb.Append(f.WallNormalX.ToString("F3", CultureInfo.InvariantCulture)).Append(',');
-                sb.Append(f.WallNormalY.ToString("F3", CultureInfo.InvariantCulture)).Append(',');
-                sb.Append(f.BlockedFraction.ToString("F3", CultureInfo.InvariantCulture)).Append(',');
                 sb.Append(float.IsNaN(f.PathWaypointZ) ? "NaN" : f.PathWaypointZ.ToString("F3", CultureInfo.InvariantCulture)).Append(',');
                 sb.Append(f.PathWaypointIndex).Append(',');
                 sb.Append(f.ZDeltaFromPrev.ToString("F4", CultureInfo.InvariantCulture)).Append(',');

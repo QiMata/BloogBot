@@ -5139,61 +5139,6 @@ public class NavigationPathTests
     }
 
     [Fact]
-    public void GetNextWaypoint_LongTravelWallRecoveryPromotesExistingCorridorBeforeReplanning()
-    {
-        var pathfindingCalls = 0;
-        var pathfinding = new DelegatePathfindingClient(
-            getPath: (_, _, _, _) =>
-            {
-                pathfindingCalls++;
-                return
-                [
-                    new Position(10f, 0f, 0f),
-                    new Position(12f, 1f, 0f),
-                    new Position(14f, 0f, 0f),
-                    new Position(30f, 0f, 0f),
-                    new Position(40f, 0f, 0f),
-                ];
-            },
-            isInLineOfSight: (_, _, _) => true);
-
-        var navPath = new NavigationPath(
-            pathfinding,
-            () => 10_000,
-            enableProbeHeuristics: false,
-            requireVerticalWaypointArrival: true,
-            validateLocalPhysicsSegments: true,
-            supportsNativeLocalPhysicsQueries: false,
-            tightenDenseWaypointAcceptance: true);
-
-        var destination = new Position(40f, 0f, 0f);
-        var firstWaypoint = navPath.GetNextWaypoint(
-            new Position(0f, 0f, 0f),
-            destination,
-            mapId: 1,
-            allowDirectFallback: false);
-
-        Position? recoveredWaypoint = firstWaypoint;
-        for (var i = 1; i <= 15; i++)
-        {
-            recoveredWaypoint = navPath.GetNextWaypoint(
-                new Position(i * 0.19f, 0f, 0f),
-                destination,
-                mapId: 1,
-                allowDirectFallback: false,
-                physicsHitWall: true);
-        }
-
-        Assert.NotNull(firstWaypoint);
-        Assert.NotNull(recoveredWaypoint);
-        Assert.Equal(10f, firstWaypoint!.X);
-        Assert.Equal(12f, recoveredWaypoint!.X);
-        Assert.Equal(1, pathfindingCalls);
-        Assert.Equal(1, navPath.TraceSnapshot.CurrentWaypointIndex);
-        Assert.Equal(NavigationTraceReason.WallStuck, navPath.TraceSnapshot.LastReplanReason);
-    }
-
-    [Fact]
     public void GetNextWaypoint_PrefersCheaperSupportedAlternateWhenPrimaryHasCliffSegment()
     {
         var start = new Position(0f, 0f, 10f);

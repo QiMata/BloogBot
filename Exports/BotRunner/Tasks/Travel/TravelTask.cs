@@ -993,7 +993,6 @@ public class TravelTask : BotTask, IBotTask
         _lastWalkTraceResolution = resolution;
         _lastWalkTraceEmitUtc = now;
 
-        var wallNormal = ObjectManager.PhysicsWallNormal2D;
         var decision = trace.RouteDecision;
         EmitTravelDiagnostic(
             $"[TRAVEL_WALK_NAV] leg={_currentLegIndex} nav={navigated} stuck={stuckGeneration} " +
@@ -1001,8 +1000,6 @@ public class TravelTask : BotTask, IBotTask
             $"resolution={resolution} idx={trace.CurrentWaypointIndex} afford={decision.MaxAffordance} " +
             $"agent={trace.Race}/{trace.Gender} capsule=({trace.CapsuleRadius:F3},{trace.CapsuleHeight:F3}) " +
             $"alt={decision.AlternateSelected}/{decision.AlternateEvaluated} overlay={trace.UsedNearbyObjectOverlay}:{trace.NearbyObjectCount} " +
-            $"hitWall={ObjectManager.PhysicsHitWall} blocked={ObjectManager.PhysicsBlockedFraction:F2} " +
-            $"wall=({wallNormal.X:F2},{wallNormal.Y:F2}) " +
             $"player={FormatCompactPosition(player.Position)} target={FormatCompactPosition(leg.End)} " +
             $"active={FormatCompactPosition(trace.ActiveWaypoint)} " +
             $"window={FormatCompactPathWindow(trace.PlannedWaypoints, trace.CurrentWaypointIndex, 3, 7)} " +

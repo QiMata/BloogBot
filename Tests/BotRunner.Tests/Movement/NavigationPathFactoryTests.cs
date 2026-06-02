@@ -159,39 +159,6 @@ public class NavigationPathFactoryTests
     }
 
     [Fact]
-    public void Create_LongTravelPolicy_KeepsSmoothDetourModeDuringWallRecovery()
-    {
-        var objectManager = new Mock<IObjectManager>();
-        objectManager.SetupGet(x => x.Player).Returns((IWoWLocalPlayer?)null!);
-        objectManager.SetupGet(x => x.GameObjects).Returns([]);
-        objectManager.SetupGet(x => x.MovementStuckRecoveryGeneration).Returns(0);
-
-        var smoothDetour = new[]
-        {
-            new Position(40f, 0f, 10f),
-            new Position(60f, 0f, 5f),
-        };
-        var unsmoothedShortcut = new[]
-        {
-            new Position(60f, 0f, 5f),
-        };
-
-        var pathfinding = new CapturingPathfindingClient(smooth => smooth ? smoothDetour : unsmoothedShortcut);
-        var navPath = NavigationPathFactory.Create(pathfinding, objectManager.Object, NavigationRoutePolicy.LongTravel);
-        var start = new Position(0f, 0f, 10f);
-        var destination = new Position(60f, 0f, 5f);
-
-        navPath.CalculatePath(start, destination, mapId: 1, force: true, reason: NavigationTraceReason.WallStuck);
-        var trace = navPath.TraceSnapshot;
-
-        Assert.True(trace.SmoothPath);
-        Assert.False(trace.RouteDecision.AlternateEvaluated);
-        Assert.False(trace.RouteDecision.AlternateSelected);
-        Assert.Equal(NavigationTraceReason.WallStuck, trace.LastReplanReason);
-        Assert.Equal([true], pathfinding.SmoothCalls);
-    }
-
-    [Fact]
     public void Create_LongTravelPolicy_KeepsSmoothPathModeDuringDynamicOverlayReplan()
     {
         var objectManager = new Mock<IObjectManager>();

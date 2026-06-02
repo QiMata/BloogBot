@@ -140,14 +140,6 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
 
         if (traceImmediateNavigation)
         {
-            BotContext.AddImmediateDiagnostic("[NAV_EXEC] physics-read enter");
-        }
-        var wallNormal = ObjectManager.PhysicsWallNormal2D;
-        if (traceImmediateNavigation)
-        {
-            BotContext.AddImmediateDiagnostic(
-                $"[NAV_EXEC] physics-read exit hitWall={ObjectManager.PhysicsHitWall} " +
-                $"blocked={ObjectManager.PhysicsBlockedFraction:F2} normal=({wallNormal.X:F2},{wallNormal.Y:F2})");
             BotContext.AddImmediateDiagnostic(
                 $"[NAV_EXEC] waypoint-query enter map={player.MapId} start=({player.Position.X:F1},{player.Position.Y:F1},{player.Position.Z:F1}) " +
                 $"dest=({destination.X:F1},{destination.Y:F1},{destination.Z:F1})");
@@ -160,10 +152,6 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
             player.MapId,
             allowDirectFallback: allowDirectFallback,
             minWaypointDistance: minWaypointDistance,
-            physicsHitWall: ObjectManager.PhysicsHitWall,
-            wallNormalX: wallNormal.X,
-            wallNormalY: wallNormal.Y,
-            blockedFraction: ObjectManager.PhysicsBlockedFraction,
             currentTransportGuid: player.TransportGuid,
             allowDirectRecovery: allowDirectRecovery);
         waypointStopwatch?.Stop();

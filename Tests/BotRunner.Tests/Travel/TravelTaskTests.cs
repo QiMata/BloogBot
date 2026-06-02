@@ -36,9 +36,6 @@ public class TravelTaskTests
 
         var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
         objectManager.SetupGet(o => o.Player).Returns(player.Object);
-        objectManager.SetupGet(o => o.PhysicsHitWall).Returns(false);
-        objectManager.SetupGet(o => o.PhysicsBlockedFraction).Returns(1f);
-        objectManager.SetupGet(o => o.PhysicsWallNormal2D).Returns((0f, 0f));
 
         var context = new Mock<IBotContext>(MockBehavior.Loose);
         context.SetupGet(c => c.ObjectManager).Returns(objectManager.Object);
@@ -87,8 +84,6 @@ public class TravelTaskTests
         Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] player-ready map=1 pos=(1332.8,-4633.4,24.0)", StringComparison.Ordinal));
         Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] navpath-create enter", StringComparison.Ordinal));
         Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] navpath-create exit policy=LongTravel created=True", StringComparison.Ordinal));
-        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] physics-read enter", StringComparison.Ordinal));
-        Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] physics-read exit hitWall=False blocked=1.00 normal=(0.00,0.00)", StringComparison.Ordinal));
         Assert.Contains(immediateDiagnostics, message => message.Contains("[NAV_EXEC] waypoint-query enter map=1", StringComparison.Ordinal));
         Assert.Contains(immediateDiagnostics, message => message.Contains("[TRAVEL_EXEC] walk-nav exit leg=0 nav=True", StringComparison.Ordinal));
         Assert.Contains(diagnostics, message => message.Contains("[TRAVEL_PLAN]", StringComparison.Ordinal));
@@ -127,9 +122,6 @@ public class TravelTaskTests
 
         var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
         objectManager.SetupGet(o => o.Player).Returns(player.Object);
-        objectManager.SetupGet(o => o.PhysicsHitWall).Returns(false);
-        objectManager.SetupGet(o => o.PhysicsBlockedFraction).Returns(1f);
-        objectManager.SetupGet(o => o.PhysicsWallNormal2D).Returns((0f, 0f));
 
         var context = new Mock<IBotContext>(MockBehavior.Loose);
         context.SetupGet(c => c.ObjectManager).Returns(objectManager.Object);
@@ -211,9 +203,6 @@ public class TravelTaskTests
 
         var objectManager = new Mock<IObjectManager>(MockBehavior.Loose);
         objectManager.SetupGet(o => o.Player).Returns(player.Object);
-        objectManager.SetupGet(o => o.PhysicsHitWall).Returns(false);
-        objectManager.SetupGet(o => o.PhysicsBlockedFraction).Returns(1f);
-        objectManager.SetupGet(o => o.PhysicsWallNormal2D).Returns((0f, 0f));
 
         var context = new Mock<IBotContext>(MockBehavior.Loose);
         context.SetupGet(c => c.ObjectManager).Returns(objectManager.Object);

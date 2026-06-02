@@ -125,7 +125,6 @@ public static class NavigationTraceReason
     public const string StalledNearWaypoint = "stalled_near_waypoint";
     public const string VerticalLayerMismatch = "vertical_layer_mismatch";
     public const string StrictWaypointRecalc = "strict_waypoint_recalc";
-    public const string WallStuck = "wall_stuck";
     public const string CorridorDrift = "corridor_drift";
     public const string Manual = "manual";
 }
@@ -168,18 +167,17 @@ public sealed record NavigationTraceSnapshot(
 {
     /// <summary>
     /// Compute planned-vs-executed drift metrics from the execution samples
-    /// and planned waypoints. Returns (maxDrift, avgDrift, wallDeflectCount,
+    /// and planned waypoints. Returns (maxDrift, avgDrift,
     /// directFallbackCount, distinctPlanVersions).
     /// </summary>
-    public (float MaxDrift, float AvgDrift, int WallDeflectCount, int DirectFallbackCount, int ReplanCount) ComputeDriftMetrics()
+    public (float MaxDrift, float AvgDrift, int DirectFallbackCount, int ReplanCount) ComputeDriftMetrics()
     {
         if (ExecutionSamples.Length == 0 || PlannedWaypoints.Length < 2)
-            return (0f, 0f, 0, 0, 0);
+            return (0f, 0f, 0, 0);
 
         float maxDrift = 0f;
         float totalDrift = 0f;
         int driftSamples = 0;
-        int wallDeflectCount = 0;
         int directFallbackCount = 0;
         var planVersions = new HashSet<int>();
 
@@ -187,7 +185,6 @@ public sealed record NavigationTraceSnapshot(
         {
             planVersions.Add(sample.PlanVersion);
 
-            if (sample.Resolution == "wall_deflect") wallDeflectCount++;
             if (sample.UsedDirectFallback) directFallbackCount++;
 
             // Compute perpendicular distance from actual position to nearest planned path segment
@@ -198,7 +195,7 @@ public sealed record NavigationTraceSnapshot(
         }
 
         var avgDrift = driftSamples > 0 ? totalDrift / driftSamples : 0f;
-        return (maxDrift, avgDrift, wallDeflectCount, directFallbackCount, planVersions.Count);
+        return (maxDrift, avgDrift, directFallbackCount, planVersions.Count);
     }
 
     private static float MinDistanceToPath(Position point, Position[] path)
@@ -484,16 +481,6 @@ public class NavigationPath(
     private Position _redundantStrictReplanCorner;
     private Position? _directRecoveryDestination;
     private long _directRecoveryUntilTick;
-    private int _consecutiveWallHitSamples;
-
-    // Layer 2: Wall-normal deflection avoidance
-    private Position? _avoidanceWaypoint;
-    private int _avoidanceFramesRemaining;
-    private int _consecutiveAvoidanceFailures;
-    private const int AVOIDANCE_LIFETIME_FRAMES = 10;       // 500ms at 50ms ticks
-    private const int MAX_AVOIDANCE_FAILURES = 3;
-    private const float DEFLECTION_MULTIPLIER = 3f;          // * capsuleRadius
-    private const float BLOCKED_FRACTION_THRESHOLD = 0.5f;
 
     // Layer 1: Proactive LOS lookahead
     private bool _nextSegmentBlocked;
@@ -651,7 +638,6 @@ public class NavigationPath(
     private const float DIRECT_RECOVERY_DESTINATION_EPSILON = 2f;
     private const float DIRECT_RECOVERY_MIN_PROGRESS = 1f;
     private const string TRACE_RESOLUTION_WAYPOINT = "waypoint";
-    private const string TRACE_RESOLUTION_WALL_DEFLECT = "wall_deflect";
     private const string TRACE_RESOLUTION_DIRECT_FALLBACK = "direct_fallback";
     private const string TRACE_RESOLUTION_DIRECT_RECOVERY = "direct_recovery";
     private const string TRACE_RESOLUTION_NO_ROUTE = "no_route";
@@ -730,7 +716,7 @@ public class NavigationPath(
     /// Gets the next waypoint to move toward, or the direct destination if no path is available.
     /// Automatically calculates/recalculates the path as needed.
     /// </summary>
-    public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f, bool physicsHitWall = false, float wallNormalX = 0f, float wallNormalY = 0f, float blockedFraction = 1f, ulong currentTransportGuid = 0, bool allowDirectRecovery = false)
+    public Position? GetNextWaypoint(Position currentPosition, Position destination, uint mapId, bool allowDirectFallback = true, float minWaypointDistance = 0f, ulong currentTransportGuid = 0, bool allowDirectRecovery = false)
     {
         var nowTick = _tickProvider();
         var deltaTimeSec = ComputeDeltaTimeSeconds(nowTick);
@@ -876,103 +862,6 @@ public class NavigationPath(
             }
         }
 
-        // Phase 2: Wall-normal deflection + fallback repath.
-        // Layer 2 (reactive): When significantly blocked, compute an avoidance waypoint using
-        // the wall normal — the bot deflects away from the wall geometrically instead of
-        // walking into it and counting ticks.
-        // Layer 3 (fallback): If deflection fails 3x consecutively, force a full repath.
-        const int WALL_STUCK_THRESHOLD = 15;
-        if (physicsHitWall)
-        {
-            _consecutiveWallHitSamples++;
-
-            // Layer 2: Geometric deflection using wall normal
-            if (blockedFraction < BLOCKED_FRACTION_THRESHOLD && _avoidanceWaypoint == null)
-            {
-                float normalLen2D = MathF.Sqrt(wallNormalX * wallNormalX + wallNormalY * wallNormalY);
-                if (normalLen2D > 0.01f)
-                {
-                    float deflectDist = _capsuleRadius * DEFLECTION_MULTIPLIER;
-                    float deflectX = (wallNormalX / normalLen2D) * deflectDist;
-                    float deflectY = (wallNormalY / normalLen2D) * deflectDist;
-                    var candidate = new Position(
-                        currentPosition.X + deflectX,
-                        currentPosition.Y + deflectY,
-                        currentPosition.Z);
-
-                    // Validate the deflection point is reachable (LOS check via pathfinding service)
-                    bool reachable = false;
-                    try { reachable = QueryLineOfSight(mapId, currentPosition, candidate); }
-                    catch { /* native LOS failure — skip deflection this frame */ }
-
-                    if (reachable)
-                    {
-                        _avoidanceWaypoint = candidate;
-                        _avoidanceFramesRemaining = AVOIDANCE_LIFETIME_FRAMES;
-                        _consecutiveAvoidanceFailures = 0;
-                        _consecutiveWallHitSamples = 0;
-                    }
-                    else
-                    {
-                        _consecutiveAvoidanceFailures++;
-                    }
-                }
-            }
-
-            // Layer 3: If deflection keeps failing, force a full repath
-            if (_consecutiveAvoidanceFailures >= MAX_AVOIDANCE_FAILURES
-                || _consecutiveWallHitSamples >= WALL_STUCK_THRESHOLD)
-            {
-                var promotedExistingLongTravelCorridor =
-                    IsLongTravelStyleRoute()
-                    && TryPromoteLongTravelDestinationProgressWaypoint(
-                        currentPosition,
-                        destination,
-                        mapId,
-                        requireCorridorPreservation: true,
-                        traceReason: NavigationTraceReason.WallStuck);
-                if (!promotedExistingLongTravelCorridor)
-                {
-                    CalculatePath(currentPosition, destination, mapId, force: true, reason: NavigationTraceReason.WallStuck);
-                    AdvanceReachableWaypoints(currentPosition, mapId, minWaypointDistance);
-                }
-
-                _consecutiveWallHitSamples = 0;
-                _consecutiveAvoidanceFailures = 0;
-                _avoidanceWaypoint = null;
-                _avoidanceFramesRemaining = 0;
-                _stalledNearWaypointSamples = 0;
-                _lastWaypointSampleDistance = float.NaN;
-                _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
-
-                if (_currentIndex < _waypoints.Length)
-                {
-                    waypoint = _waypoints[_currentIndex];
-                    waypointDistance = currentPosition.DistanceTo2D(waypoint);
-                }
-            }
-            else if (_stalledNearWaypointSamples > 0)
-            {
-                // Wall contact but not significantly blocked — reset stall counter (bot is sliding)
-                _stalledNearWaypointSamples = 0;
-                _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
-                _lastWaypointSampleDistance = float.NaN;
-                Metrics.IncrementCorridorAdvances();
-                // D3 (loop-25): sliding-along-wall progress also clears the VLM
-                // consecutive-fire counter (same forward-progress signal as a
-                // clean waypoint advance).
-                _consecutiveVerticalLayerReplans = 0;
-                _lastVerticalLayerReplanPosition = null;
-                _consecutiveLongTravelVerticalLayerPromotions = 0;
-                _lastLongTravelVerticalLayerPromotionPosition = null;
-            }
-        }
-        else
-        {
-            _consecutiveWallHitSamples = 0;
-            _consecutiveAvoidanceFailures = 0;
-        }
-
         // If the next waypoint remains near while the bot itself does not move,
         // skip it so callers don't repeatedly drive a blocked micro-corner.
         if (_lastWaypointSamplePosition != null
@@ -1053,24 +942,6 @@ public class NavigationPath(
 
         _lastWaypointSamplePosition = new Position(currentPosition.X, currentPosition.Y, currentPosition.Z);
         _lastWaypointSampleDistance = waypointDistance;
-
-        // Layer 2: If an avoidance waypoint is active, steer toward it instead of the path waypoint.
-        // The bot deflects away from the wall and resumes the normal path once the avoidance expires.
-        if (_avoidanceWaypoint != null && _avoidanceFramesRemaining > 0)
-        {
-            _avoidanceFramesRemaining--;
-            var avoidResult = _avoidanceWaypoint;
-            if (_avoidanceFramesRemaining <= 0)
-                _avoidanceWaypoint = null;
-            return RecordWaypointResult(currentPosition, destination, avoidResult, usedDirectFallback: false, TRACE_RESOLUTION_WALL_DEFLECT);
-        }
-
-        // Clear avoidance if bot has moved past the wall (no longer hitting)
-        if (!physicsHitWall && _avoidanceWaypoint != null)
-        {
-            _avoidanceWaypoint = null;
-            _avoidanceFramesRemaining = 0;
-        }
 
         return RecordWaypointResult(currentPosition, destination, waypoint, usedDirectFallback: false, TRACE_RESOLUTION_WAYPOINT);
     }
@@ -4439,10 +4310,6 @@ public class NavigationPath(
         _lastWaypointSampleDistance = float.NaN;
         _stalledNearWaypointSamples = 0;
         ClearDirectRecovery();
-        _consecutiveWallHitSamples = 0;
-        _avoidanceWaypoint = null;
-        _avoidanceFramesRemaining = 0;
-        _consecutiveAvoidanceFailures = 0;
         _nextSegmentBlocked = false;
         _lastProbeWaypointIndex = -1;
         _pendingDynamicBlockerReplan = false;
@@ -4484,7 +4351,6 @@ public class NavigationPath(
             // client can't safely descend.
             var preferSaferAlternateOnReplan =
                 (reason == NavigationTraceReason.MovementStuckRecovery && !IsLongTravelStyleRoute())
-                || (reason == NavigationTraceReason.WallStuck && !IsLongTravelStyleRoute())
                 || reason == NavigationTraceReason.VerticalLayerMismatch;
             var recoveryPrefersCorridorMode = _preferSmoothPath && preferSaferAlternateOnReplan;
             var preferSmooth = _preferSmoothPath && !preferSaferAlternateOnReplan;
@@ -5377,10 +5243,6 @@ public class NavigationPath(
         _lastWaypointSamplePosition = null;
         _lastWaypointSampleDistance = float.NaN;
         _stalledNearWaypointSamples = 0;
-        _consecutiveWallHitSamples = 0;
-        _avoidanceWaypoint = null;
-        _avoidanceFramesRemaining = 0;
-        _consecutiveAvoidanceFailures = 0;
         _nextSegmentBlocked = false;
         _lastProbeWaypointIndex = -1;
         _losSkipCacheIndex = -1;

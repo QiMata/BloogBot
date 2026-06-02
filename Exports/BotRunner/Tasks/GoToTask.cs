@@ -123,17 +123,6 @@ public class GoToTask : BotTask, IBotTask
         if (player.RunSpeed > 0)
             _navPath.UpdateCharacterSpeed(player.RunSpeed);
 
-        // Physics wall contact hint for stuck detection
-        bool hitWall = false;
-        float wnx = 0f, wny = 0f, bf = 1f;
-        if (ObjectManager is WoWSharpClient.WoWSharpObjectManager wsOm)
-        {
-            hitWall = wsOm.PhysicsHitWall;
-            var wn = wsOm.PhysicsWallNormal2D;
-            wnx = wn.X; wny = wn.Y;
-            bf = wsOm.PhysicsBlockedFraction;
-        }
-
         try
         {
             var now = DateTime.UtcNow;
@@ -147,9 +136,6 @@ public class GoToTask : BotTask, IBotTask
             var waypoint = _navPath.GetNextWaypoint(
                 player.Position, _target, player.MapId,
                 allowDirectFallback: allowDirectFallback,
-                physicsHitWall: hitWall,
-                wallNormalX: wnx, wallNormalY: wny,
-                blockedFraction: bf,
                 currentTransportGuid: player.TransportGuid);
             resolutionStopwatch.Stop();
 
