@@ -1,0 +1,72 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1200" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="DecisionEngine — Dynamic Objective Composition Flow" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+      <mxGeometry x="480" y="30" width="940" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="inHdr" value="INPUTS" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;fontColor=#666666;" vertex="1" parent="1">
+      <mxGeometry x="60" y="120" width="320" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="inDb" value="MaNGOS DB (read-only)&#10;quest_template&#10;creature_template&#10;gameobject_template&#10;item_template&#10;areatrigger_teleport&#10;loot tables" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f8cecc;strokeColor=#b85450;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="60" y="170" width="320" height="190" as="geometry"/>
+    </mxCell>
+    <mxCell id="inCatalog" value="Activity catalog&#10;ActivityDefinition rows&#10;(Exports/GameData.Core/Models/&#10;Activities/ActivityDefinition.cs)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="60" y="400" width="320" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="inSnap" value="Bot snapshot (this tick)&#10;level, faction&#10;quests completed&#10;lockouts&#10;position&#10;inventory" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="60" y="560" width="320" height="160" as="geometry"/>
+    </mxCell>
+    <mxCell id="procHdr" value="PROCESS — Dynamic compose pipeline" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;fontColor=#666666;" vertex="1" parent="1">
+      <mxGeometry x="520" y="120" width="560" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="step1" value="1. Filter candidates by snapshot&#10;(level / faction / quests / lockouts / position / inventory)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="520" y="170" width="560" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="step2" value="2. Build unlock graph&#10;(prerequisite edges: quest chains, attunements, item requirements)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="520" y="290" width="560" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="step3" value="3. Select Activity&#10;(catalog row)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="520" y="410" width="560" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="step4" value="4. Decompose Activity &#8594; Objectives&#10;(DAG of state changes)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="520" y="530" width="560" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="step5" value="5. Emit next ObjectiveMessage&#10;{ ObjectiveType, target, ... }" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="520" y="650" width="560" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="outHdr" value="OUTPUT" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;fontColor=#666666;" vertex="1" parent="1">
+      <mxGeometry x="1260" y="120" width="360" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="output" value="ObjectiveMessage on the wire&#10;&#8594; BotRunner (TCP 9001)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=center;verticalAlign=middle;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1260" y="650" width="360" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="note" value="Recomposed continuously from live snapshot — Objectives are NOT a static script." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=center;verticalAlign=middle;fontSize=14;fontStyle=2;" vertex="1" parent="1">
+      <mxGeometry x="1260" y="400" width="360" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_db1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#b85450;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="inDb" target="step1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_cat1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#9673a6;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="inCatalog" target="step1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_snap1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#82b366;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="inSnap" target="step1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6c8ebf;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="step1" target="step2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6c8ebf;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="step2" target="step3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_34" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6c8ebf;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="step3" target="step4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_45" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6c8ebf;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="step4" target="step5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_5out" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="step5" target="output">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

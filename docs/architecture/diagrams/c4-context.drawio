@@ -1,0 +1,45 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="WWoW &#8212; C4 System Context" style="text;html=1;fontSize=22;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="560" y="40" width="480" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="system" value="WWoW Bot Platform&#10;(Westworld of Warcraft)" style="rounded=1;html=1;fillColor=#1f6391;fontColor=#ffffff;strokeColor=#114060;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="640" y="540" width="320" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="mangos" value="MaNGOS Server&#10;(external game server)&#10;WoW 1.12.1 / 2.4.3 / 3.3.5a" style="rounded=1;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="120" y="540" width="280" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="soap" value="SOAP API&#10;(port 7878, ADMINISTRATOR creds)" style="rounded=1;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1200" y="200" width="280" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="mysql" value="MySQL&#10;(MaNGOS DB)" style="rounded=1;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1200" y="540" width="280" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="mysqlnote" value="NEVER write directly &#8212; SOAP only" style="rounded=1;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=2;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1230" y="700" width="220" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="players" value="Human Players&#10;(on live server)" style="rounded=1;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;shape=umlActor;" vertex="1" parent="1">
+      <mxGeometry x="180" y="160" width="120" height="160" as="geometry"/>
+    </mxCell>
+    <mxCell id="shodan" value="Shodan&#10;(production GM Liaison /&#10;test director)" style="rounded=1;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="640" y="200" width="320" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_mangos" value="WoW network protocol (login, world, packets)" style="endArrow=classic;startArrow=classic;html=1;fontSize=12;rounded=0;" edge="1" parent="1" source="mangos" target="system">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_soap" value="GM commands (.tele, .additem, .gobject respawn)" style="endArrow=classic;html=1;fontSize=12;rounded=0;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="system" target="soap">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_mysql" value="read-only queries (starter items, spawns)" style="endArrow=classic;html=1;fontSize=12;rounded=0;" edge="1" parent="1" source="system" target="mysql">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_players" value="chat requests for on-demand activities" style="endArrow=classic;html=1;fontSize=12;rounded=0;" edge="1" parent="1" source="players" target="shodan">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_shodan" value="the only account-level GM character; relays player requests to WoWStateManager" style="endArrow=classic;startArrow=classic;html=1;fontSize=12;rounded=0;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="shodan" target="system">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

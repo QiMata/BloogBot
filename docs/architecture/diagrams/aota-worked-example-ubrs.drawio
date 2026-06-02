@@ -1,0 +1,93 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1500" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="Worked Example — UBRS instance entry decomposed A&#8594;O&#8594;T&#8594;A" style="text;html=1;align=center;verticalAlign=middle;fontStyle=1;fontSize=22;" vertex="1" parent="1">
+      <mxGeometry x="380" y="30" width="940" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="activity" value="ACTIVITY&#10;dungeon.ubrs&#10;(catalog row / ActivityDefinition)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="560" y="110" width="360" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="objective" value="OBJECTIVE&#10;reach-flame-crest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="560" y="280" width="360" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="wirecallout" value="on the wire as&#10;ObjectiveMessage{ ObjectiveType = TravelTo,&#10;target = flame-crest-coord }" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;verticalAlign=middle;align=center;dashed=1;" vertex="1" parent="1">
+      <mxGeometry x="980" y="270" width="340" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="wirelabel" value="&#8592; crosses the wire (TCP 9001)" style="text;html=1;align=center;verticalAlign=middle;fontStyle=2;fontSize=12;fontColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="980" y="380" width="340" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="stacklabel" value="BotRunner decomposes the Objective into Tasks&#10;via behavior tree + game-DB lookups" style="text;html=1;align=center;verticalAlign=middle;fontStyle=2;fontSize=12;fontColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="120" y="600" width="340" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="stackheader" value="TASK STACK (LIFO, push down)" style="text;html=1;align=center;verticalAlign=middle;fontStyle=1;fontSize=13;fontColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="560" y="450" width="360" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="task1" value="TravelToTask(coord)&#10;(top — currently ticking)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="560" y="490" width="360" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="task2" value="BoardTransportTask(zeppelin_orgrimmar)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="560" y="570" width="360" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="task3" value="WalkToCoordTask(deck)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="560" y="645" width="360" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="task4" value="WaitForLandingTask" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="560" y="720" width="360" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="actionheader" value="ACTIONS (atomic, per tick — hang off the active Task)" style="text;html=1;align=center;verticalAlign=middle;fontStyle=1;fontSize=13;fontColor=#d79b00;" vertex="1" parent="1">
+      <mxGeometry x="980" y="440" width="620" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="action1" value="ReadUnitField(player, FIELD_POS_X/Y/Z)&#10;[read transform]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="980" y="478" width="620" height="62" as="geometry"/>
+    </mxCell>
+    <mxCell id="action2" value="WriteMovementBit(forward, true)&#10;[set forward flag]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="980" y="554" width="620" height="62" as="geometry"/>
+    </mxCell>
+    <mxCell id="action3" value="SendOpcode(MSG_MOVE_HEARTBEAT, payload)&#10;[movement]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="980" y="630" width="620" height="62" as="geometry"/>
+    </mxCell>
+    <mxCell id="action4" value="SendOpcode(CMSG_GAMEOBJECT_USE, zeppelin_guid)&#10;[board]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="980" y="706" width="620" height="62" as="geometry"/>
+    </mxCell>
+    <mxCell id="action5" value="ReadUnitField(player, FIELD_VEHICLE_SEAT)&#10;[verify]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="980" y="782" width="620" height="62" as="geometry"/>
+    </mxCell>
+    <mxCell id="actionlabel" value="atomic Actions — pure local code, do NOT cross any wire" style="text;html=1;align=center;verticalAlign=middle;fontStyle=2;fontSize=12;fontColor=#d79b00;" vertex="1" parent="1">
+      <mxGeometry x="980" y="854" width="620" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="e1" value="decomposes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=12;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="activity" target="objective">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e2" value="decomposes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=12;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="objective" target="task1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ew" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;dashed=1;strokeColor=#82b366;" edge="1" parent="1" source="objective" target="wirecallout">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="es12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;strokeColor=#6c8ebf;" edge="1" parent="1" source="task1" target="task2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="es23" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;strokeColor=#6c8ebf;" edge="1" parent="1" source="task2" target="task3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="es34" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=open;strokeColor=#6c8ebf;" edge="1" parent="1" source="task3" target="task4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ea1" value="orchestrates per tick" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.15;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="task1" target="action1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ea2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.32;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="task1" target="action2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ea3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="task1" target="action3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ea4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.68;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="task1" target="action4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="ea5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="task1" target="action5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

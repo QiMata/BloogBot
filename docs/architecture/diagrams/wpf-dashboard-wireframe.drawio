@@ -1,0 +1,129 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1300" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="WoWStateManagerUI — Operator Console Wireframe (illustrative)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="60" y="40" width="900" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="window" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;verticalAlign=top;align=left;" vertex="1" parent="1">
+      <mxGeometry x="60" y="90" width="1500" height="950" as="geometry"/>
+    </mxCell>
+    <mxCell id="titlebar" value="WoW State Manager" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8e8e8;strokeColor=#666666;verticalAlign=middle;align=left;spacingLeft=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="60" y="90" width="1500" height="36" as="geometry"/>
+    </mxCell>
+    <mxCell id="btnStartAll" value="Start All" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="80" y="136" width="90" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="btnStopAll" value="Stop All" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="180" y="136" width="90" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="btnMode" value="Mode ▾ (Test / Automated / OnDemand)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="280" y="136" width="300" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="btnRefresh" value="Refresh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="590" y="136" width="90" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="leftPanel" value="Bot Roster" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="80" y="180" width="260" height="600" as="geometry"/>
+    </mxCell>
+    <mxCell id="row1" value="TESTBOT1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="92" y="212" width="236" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="dot1" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="306" y="221" width="14" height="14" as="geometry"/>
+    </mxCell>
+    <mxCell id="row2" value="TESTBOT2" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="92" y="248" width="236" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="dot2" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="306" y="257" width="14" height="14" as="geometry"/>
+    </mxCell>
+    <mxCell id="row3" value="GATHFG1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="92" y="284" width="236" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="dot3" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="306" y="293" width="14" height="14" as="geometry"/>
+    </mxCell>
+    <mxCell id="row4" value="BG1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="92" y="320" width="236" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="dot4" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+      <mxGeometry x="306" y="329" width="14" height="14" as="geometry"/>
+    </mxCell>
+    <mxCell id="row5" value="EQUIPFG1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="92" y="356" width="236" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="dot5" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="306" y="365" width="14" height="14" as="geometry"/>
+    </mxCell>
+    <mxCell id="row6" value="ECONFG1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="92" y="392" width="236" height="32" as="geometry"/>
+    </mxCell>
+    <mxCell id="dot6" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="306" y="401" width="14" height="14" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowmore" value="... (Activity / Character buckets)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;verticalAlign=middle;align=left;spacingLeft=10;fontStyle=2;fontColor=#888888;" vertex="1" parent="1">
+      <mxGeometry x="92" y="428" width="236" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="centerPanel" value="Selected Bot — Snapshot" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="352" y="180" width="800" height="600" as="geometry"/>
+    </mxCell>
+    <mxCell id="fldPos" value="Position:  (x, y, z, map)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="368" y="216" width="760" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="fldActivity" value="Current Activity:  Fishing[Ratchet]" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="368" y="252" width="760" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="fldObjective" value="Current Objective:  TravelTo(pool)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="368" y="288" width="760" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="fldTask" value="Current Task (top of stack):  GoToTask(coord)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="368" y="324" width="760" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="fldHpMp" value="Health / Mana:  3120 / 3120     1850 / 2400" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="368" y="360" width="760" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="fldStatus" value="Status:  Connected / InWorld" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="368" y="396" width="760" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="taskStackHdr" value="Task Stack (LIFO)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="368" y="444" width="760" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="ts1" value="GoToTask(coord)        ← top" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cccccc;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="368" y="472" width="760" height="26" as="geometry"/>
+    </mxCell>
+    <mxCell id="ts2" value="FishAtPoolTask" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cccccc;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="368" y="498" width="760" height="26" as="geometry"/>
+    </mxCell>
+    <mxCell id="ts3" value="FishingActivityRootTask" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cccccc;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="368" y="524" width="760" height="26" as="geometry"/>
+    </mxCell>
+    <mxCell id="rightPanel" value="Activity / Objective control" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1164" y="180" width="376" height="600" as="geometry"/>
+    </mxCell>
+    <mxCell id="btnAssign" value="Assign Activity ▾" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="220" width="344" height="34" as="geometry"/>
+    </mxCell>
+    <mxCell id="btnClear" value="Clear Activity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="264" width="344" height="34" as="geometry"/>
+    </mxCell>
+    <mxCell id="fldActId" value="current_activity_id:  act-fishing-ratchet-7f3a" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="312" width="344" height="44" as="geometry"/>
+    </mxCell>
+    <mxCell id="fldObjId" value="current_objective_id:  obj-travelto-0091" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;verticalAlign=middle;align=left;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="1180" y="364" width="344" height="44" as="geometry"/>
+    </mxCell>
+    <mxCell id="bottomPanel" value="Log / Console" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="80" y="792" width="1460" height="190" as="geometry"/>
+    </mxCell>
+    <mxCell id="logArea" value="[12:04:01] StateManager: snapshot push (6 bots)&#10;[12:04:01] TESTBOT1: Activity=Fishing[Ratchet] Objective=TravelTo task=GoToTask&#10;[12:04:02] GATHFG1: GatherNodeTask → node found, casting Mining&#10;[12:04:03] BG1: ConnectionState=Disconnected (retry 2/5)&#10;[12:04:04] ECONFG1: AuctionScanTask complete, 142 listings&#10;[12:04:05] Shodan (GM director): .gobject respawn ok" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1e1e1e;strokeColor=#444444;verticalAlign=top;align=left;spacingLeft=10;spacingTop=8;fontFamily=Courier New;fontColor=#d4d4d4;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="92" y="824" width="1436" height="146" as="geometry"/>
+    </mxCell>
+    <mxCell id="statusBar" value="Connected to StateManager :9000  |  6 bots  |  last snapshot 0.5s ago" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e8e8e8;strokeColor=#666666;verticalAlign=middle;align=left;spacingLeft=10;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="60" y="1006" width="1500" height="34" as="geometry"/>
+    </mxCell>
+    <mxCell id="note" value="MVVM: panels bind to a StateManager summary view-model; UI-thread + state-gated; never steals focus / captures cursor." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;align=left;spacingLeft=10;spacingTop=8;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="1590" y="180" width="180" height="200" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

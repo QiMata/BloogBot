@@ -1,0 +1,113 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2100" pageHeight="1200" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="WWoW Phased Plan &#8212; Roadmap &amp; Key Dependency" style="text;html=1;fontSize=24;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="40" y="20" width="2020" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="subtitle" value="Sequential phases (Plan/00 phase map) left&#8594;right. Parallel-track Test Isolation Refactor (Plan/12, &quot;Phase 12&quot;) gates on Phase 2 slot S2.0." style="text;html=1;fontSize=13;fontStyle=2;align=center;verticalAlign=middle;fontColor=#555555;" vertex="1" parent="1">
+      <mxGeometry x="40" y="72" width="2020" height="24" as="geometry"/>
+    </mxCell>
+    <mxCell id="p0" value="Phase 0&#10;Spec Hardening&#10;&#10;(landed 2026-05-12)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="60" y="180" width="160" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="p1" value="Phase 1&#10;Action / Task Foundation&#10;&#10;BotRunner / IBotTask behavior-tree contract; MovementController; path execution&#10;&#10;(landed)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="280" y="160" width="190" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p2" value="Phase 2&#10;OnDemand Engine&#10;&#10;Runtime Activity / Objective contracts; pool bots, gear, party, teleport, hand-off" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="530" y="160" width="190" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="s20" value="&#9733; S2.0 &#8212; KEYSTONE&#10;&#10;IActivity + IObjective&#10;runtime contracts&#10;&#10;Many phases gate on this slot" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;verticalAlign=middle;strokeWidth=3;" vertex="1" parent="1">
+      <mxGeometry x="530" y="340" width="190" height="130" as="geometry"/>
+    </mxCell>
+    <mxCell id="p3" value="Phase 3&#10;UI Default + Test Host&#10;&#10;WoWStateManagerUI is default app; tests host through it" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="780" y="160" width="170" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p4" value="Phase 4&#10;Activity Registry&#10;&#10;Catalog lookups + autonomous-mode legality validator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1010" y="160" width="170" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p5" value="Phase 5&#10;Observability&#10;&#10;Meters, Grafana, derived counters, history panel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1240" y="160" width="170" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p6" value="Phase 6&#10;Automated Progression&#10;&#10;RosterPlanner + ProgressionPlanner; organic group formation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1470" y="160" width="170" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p7" value="Phase 7&#10;Pathfinding / Scene Scale&#10;&#10;Route packs, batch queries, sharding" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1700" y="160" width="170" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p8" value="Phase 8&#10;Living-server Load&#10;&#10;Iterative: 80 &#8594; measure &#8594; optimize &#8594; re-measure" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1930" y="160" width="160" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p9" value="Phase 9&#10;Catalog Completeness&#10;&#10;SM wings, Stockades, holiday events, escort family, port/summon services" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="780" y="360" width="170" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p10" value="Phase 10&#10;Decision-Engine Integration&#10;&#10;Wire DecisionEngineService into IActivity composer; ML reward / threat advice" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1010" y="360" width="170" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p11" value="Phase 11&#10;Social Fabric&#10;&#10;Trade-chat, AH chatter, guild events, mail, whisper responsiveness" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1240" y="360" width="170" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p12seq" value="Phase 12 (sequential)&#10;Behavioral Variation&#10;&#10;Per-bot personality knobs: response-time / route variance, AH strategy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1470" y="360" width="170" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="p12iso" value="Phase 12 (parallel track &#8212; Plan/12)&#10;Test Isolation Refactor&#10;&#10;Rewrites the 97 grandfathered Category-A tests.&#10;Includes slot S12.1 &#8212; Roslyn analyzer / xUnit-collection guard.&#10;&#10;Depends on Phase 2 S2.0." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;fontStyle=1;verticalAlign=middle;strokeWidth=2;" vertex="1" parent="1">
+      <mxGeometry x="700" y="600" width="320" height="180" as="geometry"/>
+    </mxCell>
+    <mxCell id="paralleltracks" value="Other parallel tracks (unchanged numbering): Plan/10 Blackrock bake-fidelity (MmapGen) &#8226; Plan/11 Skill refinement" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;fontStyle=2;align=center;verticalAlign=middle;fontColor=#555555;" vertex="1" parent="1">
+      <mxGeometry x="1100" y="640" width="420" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="note1" value="Until S2.0 lands, the test-isolation rule applies to NEW tests only. Existing 97 Category-A sites are grandfathered until Phase 12 rewrites them." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="60" y="600" width="380" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="note2" value="Legend: green = landed &#8226; orange = S2.0 keystone &#8226; blue = future phase &#8226; purple = Phase 12 Test Isolation Refactor &#8226; red edge = critical dependency. Phase titles per docs/Plan/00_OVERVIEW.md phase map." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1560" y="780" width="500" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="e01" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p0" target="p1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p1" target="p2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p2" target="p3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p3" target="p4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e45" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p4" target="p5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e56" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p5" target="p6">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e67" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p6" target="p7">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e78" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p7" target="p8">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e89" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p8" target="p9">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e910" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p9" target="p10">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e1011" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p10" target="p11">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e1112" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="p11" target="p12seq">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e2s20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#d79b00;strokeWidth=2;dashed=1;" edge="1" parent="1" source="p2" target="s20">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edep" value="Phase 12 runs ONLY after S2.0 lands" style="edgeStyle=orthogonalEdgeStyle;curved=1;rounded=1;html=1;endArrow=block;strokeColor=#b85450;strokeWidth=2;fontColor=#b85450;fontStyle=1;fontSize=13;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="s20" target="p12iso">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="625" y="560"/>
+          <mxPoint x="860" y="560"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+  </root>
+</mxGraphModel>

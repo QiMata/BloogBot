@@ -1,0 +1,146 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1400" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="Protobuf Wire Contract (ProtoDef &#8594; generated models)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=22;" vertex="1" parent="1">
+      <mxGeometry x="560" y="20" width="880" height="40" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="grp_comm" value="communication.proto" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="80" y="100" width="480" height="500" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_obj" value="ObjectiveMessage  [StateManager &#8594; BotRunner]&#10;ObjectiveType objective_type (enum, 84 values)&#10;repeated RequestParameter parameters&#10;ResponseResult actionResult&#10;LoadoutSpec loadout_spec&#10;string correlation_id&#10;&#10;ON THE WIRE (TCP, length-framed)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="100" y="135" width="440" height="130" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_snap" value="WoWActivitySnapshot  [BotRunner &#8594; StateManager]&#10;game.WoWPlayer player (position)&#10;ObjectiveMessage currentAction (current_task_name)&#10;string screenState (status) / connectionState&#10;current_activity_id / current_objective_id (Phase 2+)&#10;inventory / health deltas (isDelta, snapshotSequence)&#10;LoadoutStatus loadout_status&#10;&#10;ON THE WIRE (TCP, length-framed)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="100" y="285" width="440" height="150" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_ack" value="CommandAckEvent&#10;correlation_id; objective_type; AckStatus status&#10;failure_reason; related_id" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="455" width="210" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_async" value="AsyncRequest&#10;oneof { activity_snapshot, state_change,&#10;snapshot_query, action_forward }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="330" y="455" width="210" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_comm_more" value="ActionForwardRequest; SnapshotQueryRequest;&#10;StateChangeRequest/Response; LoadoutSpec; CharacterDefinition" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="540" width="440" height="45" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="grp_game" value="game.proto" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="80" y="660" width="480" height="280" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_wowobject" value="WoWObject { guid; mapId; zoneId; objectType; Position position }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="695" width="440" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_wowunit" value="WoWUnit { WoWGameObject gameObject; health; maxHealth; auras; unitFlags; movementFlags }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="745" width="440" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_wowplayer" value="WoWPlayer { WoWUnit unit; inventory; spellList; skillInfo; coinage; questLogEntries }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="795" width="440" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_pos" value="Position { float x; float y; float z }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="845" width="210" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_guid" value="HighGuid / guid (uint64), MovementData" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="330" y="845" width="210" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_movedata" value="MovementData; MovementRecording; PacketEvent; Item" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="895" width="440" height="35" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="grp_path" value="pathfinding.proto" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="760" y="660" width="480" height="280" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_pathreq" value="PathfindingRequest { oneof { CalculatePathRequest path } }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="780" y="695" width="440" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_pathresp" value="PathfindingResponse { CalculatePathResponse { corners; result; affordance } }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="780" y="745" width="440" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_physin" value="PhysicsInput { movement_flags; pos/vel; speeds; race; gender; nearby_objects }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="780" y="795" width="440" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_physout" value="PhysicsOutput { new_pos; new_vel; is_grounded; ground_z; hit_wall }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="780" y="845" width="440" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_los" value="DynamicObjectProto; PathSegmentAffordance (enum); Error" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="780" y="895" width="440" height="35" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="grp_db" value="database.proto" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="80" y="1000" width="480" height="280" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_dbreq" value="DatabaseRequest { TableName table_name (enum, 167 tables); repeated KeyValue key }&#10;DatabaseResponse { repeated Row rows; error_message }  /  KeyValue { key; value }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="1035" width="440" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_dbquest" value="QuestTemplate / QuestGreeting (quest)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="1105" width="210" height="35" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_dbcreature" value="CreatureTemplate / Creature (creature)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="330" y="1105" width="210" height="35" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_dbitem" value="ItemTemplate / loot templates (item)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="1150" width="210" height="35" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_dbnpc" value="NpcVendor / NpcTrainer / GossipMenu (NPC)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="330" y="1150" width="210" height="35" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_dbgo" value="GameObject / GameObjectTemplate; Faction; AreaTemplate; GameTele" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="100" y="1195" width="440" height="35" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="grp_scene" value="scenedata.proto" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="760" y="1000" width="480" height="280" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_scenetile" value="SceneTileRequest { map_id; tile_x; tile_y }&#10;SceneTileResponse { triangle_data_compressed; normal_data;&#10;triangle_metadata_compressed; bounds } (navmesh / mesh fragment)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="780" y="1035" width="440" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_scenegrid" value="SceneGridRequest / SceneGridResponse&#10;{ triangle_data; walkable; normal_data; triangle_count }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="780" y="1120" width="440" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="msg_liquid" value="LiquidGridRequest / LiquidGridResponse&#10;{ liquid_levels; liquid_types; cell_size; cells_x/y }" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="780" y="1190" width="440" height="55" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="gen_comm" value="Generated/Communication.cs" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="660" y="330" width="240" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="gen_game" value="Generated/Game.cs" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="610" y="690" width="160" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="gen_path" value="Generated/Pathfinding.cs" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="610" y="850" width="160" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="gen_db" value="Generated/Database.cs" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="610" y="1030" width="160" height="45" as="geometry"/>
+    </mxCell>
+    <mxCell id="gen_scene" value="Generated/Scenedata.cs" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="610" y="1190" width="160" height="45" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="e_comm" value="protoc --csharp_out" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#d79b00;fontSize=11;" edge="1" parent="1" source="grp_comm" target="gen_comm">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_game" value="protoc --csharp_out" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#d79b00;fontSize=11;" edge="1" parent="1" source="grp_game" target="gen_game">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_path" value="protoc --csharp_out" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#d79b00;fontSize=11;" edge="1" parent="1" source="grp_path" target="gen_path">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_db" value="protoc --csharp_out" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#d79b00;fontSize=11;" edge="1" parent="1" source="grp_db" target="gen_db">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_scene" value="protoc --csharp_out" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#d79b00;fontSize=11;" edge="1" parent="1" source="grp_scene" target="gen_scene">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="note_doedit" value="Generated C# is auto-generated — DO NOT hand-edit.&#10;Edit the .proto + regenerate." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="1300" y="330" width="360" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="note_cmd" value="protoc.exe --csharp_out=Exports/BotCommLayer/Models/Generated -I ProtoDef communication.proto game.proto pathfinding.proto database.proto scenedata.proto" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;verticalAlign=middle;fontFamily=Courier New;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="1300" y="410" width="360" height="110" as="geometry"/>
+    </mxCell>
+    <mxCell id="note_wire" value="HOT PATH — ON THE WIRE (TCP, length-framed [4-byte length][protobuf]):&#10;ObjectiveMessage (StateManager &#8594; BotRunner)&#10;WoWActivitySnapshot (BotRunner &#8594; StateManager)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=middle;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="1300" y="135" width="360" height="100" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

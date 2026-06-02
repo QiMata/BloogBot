@@ -1,0 +1,131 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1700" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="Bot Connection / Login Lifecycle (flowchart)" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+      <mxGeometry x="420" y="20" width="660" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="start" value="Start bot" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="640" y="90" width="200" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="mode" value="Execution mode?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="650" y="190" width="180" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="fg" value="Foreground: attach to running WoW.exe via injection" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="360" y="200" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="bg" value="Background: headless WoWSharpClient" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="900" y="200" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="connect" value="Connect to auth server (realmd)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="640" y="340" width="200" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="authdec" value="Auth (SRP6) succeeded?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="650" y="450" width="180" height="110" as="geometry"/>
+    </mxCell>
+    <mxCell id="backoff" value="wait + exponential backoff (retry up to N)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="340" y="455" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="abortauth" value="abort: auth failure" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+      <mxGeometry x="100" y="455" width="190" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="realmlist" value="Request realm list &#8594; select realm" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="640" y="610" width="200" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="connworld" value="Connect to world server (MaNGOS)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="640" y="720" width="200" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="worlddec" value="AUTH_OK from world?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="650" y="830" width="180" height="110" as="geometry"/>
+    </mxCell>
+    <mxCell id="abortworld" value="abort: world auth failed" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+      <mxGeometry x="980" y="845" width="210" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="charenum" value="CMSG_CHAR_ENUM &#8594; receive character list" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="630" y="990" width="220" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="chardec" value="Target character exists?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="650" y="1100" width="180" height="110" as="geometry"/>
+    </mxCell>
+    <mxCell id="createchar" value="create character" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="360" y="1115" width="200" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="playerlogin" value="CMSG_PLAYER_LOGIN &#8594; enter world" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="630" y="1270" width="220" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="discdec" value="Disconnected mid-session?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="650" y="1380" width="180" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="end" value="In world &#8212; ready for Objectives" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="630" y="1560" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_start_mode" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="start" target="mode">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_mode_fg" value="Foreground" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="mode" target="fg">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_mode_bg" value="Background" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="mode" target="bg">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_fg_connect" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="fg" target="connect">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_bg_connect" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="bg" target="connect">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_connect_authdec" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="connect" target="authdec">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_authdec_backoff" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="authdec" target="backoff">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_backoff_connect" value="retry" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="backoff" target="connect">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_backoff_abort" value="max retries" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="backoff" target="abortauth">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_authdec_realmlist" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="authdec" target="realmlist">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_realmlist_connworld" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="realmlist" target="connworld">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_connworld_worlddec" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="connworld" target="worlddec">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_worlddec_abort" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="worlddec" target="abortworld">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_worlddec_charenum" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="worlddec" target="charenum">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_charenum_chardec" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="charenum" target="chardec">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_chardec_create" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="chardec" target="createchar">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_create_login" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="createchar" target="playerlogin">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_chardec_login" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="chardec" target="playerlogin">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_login_discdec" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="playerlogin" target="discdec">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_discdec_reconnect" value="Yes (reconnect)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="discdec" target="connect">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="1280" y="1440"/>
+          <mxPoint x="1280" y="375"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e_discdec_end" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="discdec" target="end">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

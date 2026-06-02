@@ -1,0 +1,198 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1500" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="Activity Catalog + Prerequisite DAGs" style="text;html=1;fontSize=24;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="640" y="20" width="720" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="hdrA" value="A) ACTIVITY CATALOG  (ActivityDefinition rows — ~86 hand-authored, data-only)" style="text;html=1;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="60" y="80" width="900" height="26" as="geometry"/>
+    </mxCell>
+    <mxCell id="catRoot" value="Activity Catalog&#10;(ActivityDefinition rows)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="60" y="380" width="190" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="catDungeon" value="dungeon" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+      <mxGeometry x="320" y="120" width="130" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="catRaid" value="raid" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+      <mxGeometry x="320" y="180" width="130" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="catBg" value="battleground" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+      <mxGeometry x="320" y="240" width="130" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="catFishing" value="fishing&#10;(ProfessionGathering)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+      <mxGeometry x="320" y="300" width="130" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="catGather" value="gathering&#10;(ProfessionGathering)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+      <mxGeometry x="320" y="360" width="130" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="catGrind" value="grinding&#10;(mob-kill leveling)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+      <mxGeometry x="320" y="420" width="130" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="catQuest" value="quest&#10;(Zone/StarterQuesting)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+      <mxGeometry x="320" y="480" width="130" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="catEcon" value="economy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+      <mxGeometry x="320" y="540" width="130" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowDungeon1" value="dungeon.ubrs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="105" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowDungeon2" value="dungeon.deadmines" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="143" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowRaid1" value="raid.molten-core" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="180" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowBg1" value="bg.warsong-gulch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="240" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowFishing1" value="Fishing[Ratchet]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="300" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowGather1" value="gather.mining-route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="345" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowGather2" value="gather.herb-route" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="383" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowGrind1" value="grind.badlands" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="420" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowQuest1" value="zone.westfall" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="465" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowQuest2" value="zone.stranglethorn" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="503" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="rowEcon1" value="econ.ah-restock" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+      <mxGeometry x="510" y="540" width="160" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="eCatDungeon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#9673a6;" edge="1" parent="1" source="catRoot" target="catDungeon">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eCatRaid" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#9673a6;" edge="1" parent="1" source="catRoot" target="catRaid">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eCatBg" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#9673a6;" edge="1" parent="1" source="catRoot" target="catBg">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eCatFishing" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#9673a6;" edge="1" parent="1" source="catRoot" target="catFishing">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eCatGather" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#9673a6;" edge="1" parent="1" source="catRoot" target="catGather">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eCatGrind" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#9673a6;" edge="1" parent="1" source="catRoot" target="catGrind">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eCatQuest" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#9673a6;" edge="1" parent="1" source="catRoot" target="catQuest">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eCatEcon" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#9673a6;" edge="1" parent="1" source="catRoot" target="catEcon">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowDungeon1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catDungeon" target="rowDungeon1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowDungeon2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catDungeon" target="rowDungeon2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowRaid1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catRaid" target="rowRaid1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowBg1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catBg" target="rowBg1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowFishing1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catFishing" target="rowFishing1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowGather1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catGather" target="rowGather1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowGather2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catGather" target="rowGather2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowGrind1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catGrind" target="rowGrind1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowQuest1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catQuest" target="rowQuest1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowQuest2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catQuest" target="rowQuest2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eRowEcon1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;strokeColor=#6c8ebf;" edge="1" parent="1" source="catEcon" target="rowEcon1">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="hdrB" value="B) QUEST-CHAIN DAG  (quest_template PrevQuestId / NextQuestInChain)" style="text;html=1;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="60" y="660" width="760" height="26" as="geometry"/>
+    </mxCell>
+    <mxCell id="qA" value="Quest A (lvl 10)&#10;chain head" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="60" y="720" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="qB" value="Quest B&#10;chain body" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="290" y="720" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="qC" value="Quest C&#10;chain tail" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="290" y="820" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="qD" value="Quest D&#10;(exclusive group)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="60" y="880" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="qCap" value="Quest E (capstone)&#10;needs C and D" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="290" y="940" width="170" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="eqAB" value="prereq / NextQuestInChain" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#82b366;fontSize=10;" edge="1" parent="1" source="qA" target="qB">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eqBC" value="prereq / NextQuestInChain" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#82b366;fontSize=10;" edge="1" parent="1" source="qB" target="qC">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eqCcap" value="prereq" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#82b366;fontSize=10;" edge="1" parent="1" source="qC" target="qCap">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eqDcap" value="prereq" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#82b366;fontSize=10;" edge="1" parent="1" source="qD" target="qCap">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="hdrC" value="C) ITEM-REQUIREMENT DAG  (Objective ← item ← quest reward / gather node ← skill gate)" style="text;html=1;fontSize=14;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="900" y="660" width="900" height="26" as="geometry"/>
+    </mxCell>
+    <mxCell id="objTurnin" value="Objective: turn-in&#10;(needs item set)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="900" y="720" width="170" height="55" as="geometry"/>
+    </mxCell>
+    <mxCell id="itemX" value="Item X" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+      <mxGeometry x="1160" y="710" width="140" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="itemZ" value="Item Z" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+      <mxGeometry x="1160" y="820" width="140" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="questY" value="Quest Y&#10;(reward source)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="1400" y="705" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="oreNode" value="Ore node&#10;(gameobject gather)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+      <mxGeometry x="1400" y="815" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="miningSkill" value="Mining skill &#8805; N&#10;(skill gate)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+      <mxGeometry x="1640" y="815" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="eObjX" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#d79b00;fontSize=10;" edge="1" parent="1" source="objTurnin" target="itemX">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eObjZ" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#d79b00;fontSize=10;" edge="1" parent="1" source="objTurnin" target="itemZ">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eXY" value="unlocked by (reward)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#d79b00;fontSize=10;" edge="1" parent="1" source="itemX" target="questY">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eZNode" value="unlocked by (gathered at)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#d79b00;fontSize=10;" edge="1" parent="1" source="itemZ" target="oreNode">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="eNodeSkill" value="requires" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#d6b656;fontSize=10;" edge="1" parent="1" source="oreNode" target="miningSkill">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="note" value="DecisionEngine walks these DAGs against the live snapshot to pick the next reachable Objective (see decisionengine-composition-flow)." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=2;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="900" y="940" width="640" height="70" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

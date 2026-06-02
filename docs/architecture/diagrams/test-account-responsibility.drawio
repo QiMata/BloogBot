@@ -1,0 +1,42 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1300" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="Test-Account Responsibility — Shodan (director) vs Test Subjects" style="text;html=1;fontSize=22;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="400" y="30" width="1200" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="zone1" value="ZONE 1 — DIRECTOR" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;strokeColor=#d79b00;fillColor=none;verticalAlign=top;fontSize=16;fontStyle=1;align=left;spacingLeft=12;spacingTop=8;" vertex="1" parent="1">
+      <mxGeometry x="120" y="140" width="720" height="760" as="geometry"/>
+    </mxCell>
+    <mxCell id="zone2" value="ZONE 2 — SUBJECTS" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;strokeColor=#82b366;fillColor=none;verticalAlign=top;fontSize=16;fontStyle=1;align=right;spacingRight=12;spacingTop=8;" vertex="1" parent="1">
+      <mxGeometry x="1160" y="140" width="720" height="760" as="geometry"/>
+    </mxCell>
+    <mxCell id="shodan" value="Shodan&#10;&#10;Production GM Liaison / Test Director&#10;&#10;• Only character with account-level GM access in normal operation.&#10;• Relays live players' on-demand activity requests to WoWStateManager.&#10;• In tests: GM SETUP ONLY — .gobject respawn, .tele, .additem, .learn, .setskill, .reset items.&#10;• Logs &quot;[ACTION-PLAN] SHODAN ...: director only, no &lt;feature&gt; dispatch.&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;verticalAlign=top;fontSize=13;spacingLeft=12;spacingTop=10;spacingRight=12;" vertex="1" parent="1">
+      <mxGeometry x="160" y="230" width="640" height="320" as="geometry"/>
+    </mxCell>
+    <mxCell id="worldstate" value="World State&#10;(NPC spawns, gobjects, positions, gear, lockouts)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=center;verticalAlign=middle;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="200" y="640" width="280" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="forbidden" value="FORBIDDEN — Shodan as action target&#10;&#10;ResolveBotRunnerActionTargets() throws if Shodan resolves as a target; StageBotRunner*Async throws if asked to stage Shodan as subject." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=center;verticalAlign=middle;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="540" y="640" width="260" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="subjects" value="Dedicated test accounts (behavior subjects)&#10;&#10;Default roster:&#10;  • TESTBOT1&#10;  • TESTBOT2&#10;&#10;Category siblings:&#10;  • GATHFG1 / BG1 (gathering)&#10;  • EQUIPFG1 / BG1 (equip)&#10;  • TRMAF5 / B5&#10;  • ECONFG1 / BG1 (economy)&#10;  • LOOTFG1 / BG1 (loot)&#10;&#10;receive ObjectiveType.* dispatch; assertions read THEIR snapshots." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;fontSize=13;spacingLeft=12;spacingTop=10;spacingRight=12;" vertex="1" parent="1">
+      <mxGeometry x="1220" y="230" width="600" height="380" as="geometry"/>
+    </mxCell>
+    <mxCell id="snapshots" value="Subject Snapshots&#10;(WoWActivitySnapshot, Task-stack progression,&#10;current_activity_id / current_objective_id)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1320" y="690" width="400" height="130" as="geometry"/>
+    </mxCell>
+    <mxCell id="note" value="NOTE: If you write _bot.SendActionAsync(shodanAccount, ...) in a test body — STOP. Use ResolveBotRunnerActionTargets() and dispatch to the resolved FG/BG accounts." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=middle;fontSize=14;fontStyle=1;spacingLeft=14;spacingRight=14;" vertex="1" parent="1">
+      <mxGeometry x="400" y="960" width="1200" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="e1" value="sets up world (GM commands)" style="endArrow=block;html=1;fontSize=12;fontStyle=1;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="shodan" target="worldstate">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e2" value="stages targets for" style="endArrow=block;html=1;fontSize=12;fontStyle=1;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="shodan" target="subjects">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e3" value="behavior asserted on subject snapshots" style="endArrow=block;html=1;fontSize=12;fontStyle=1;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="subjects" target="snapshots">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

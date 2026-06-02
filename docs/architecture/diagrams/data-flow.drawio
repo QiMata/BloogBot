@@ -1,0 +1,60 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1300" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="WWoW Data-Flow Diagram (runtime traffic)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="560" y="30" width="680" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="ext_mangos" value="MaNGOS server&#10;(game world)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="120" y="200" width="200" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="ext_operator" value="Operator&#10;(WoWStateManagerUI)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="120" y="640" width="200" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="proc_botrunner" value="BotRunner (FG/BG)" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="560" y="200" width="220" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="proc_statemgr" value="WoWStateManager&#10;+ DecisionEngine" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="560" y="640" width="220" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="proc_pathfind" value="PathfindingService" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1" vertex="1" parent="1">
+      <mxGeometry x="1080" y="200" width="220" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="store_db" value="MaNGOS DB&#10;(read-only)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;boundedLbl=1;backgroundOutline=1;size=15" vertex="1" parent="1">
+      <mxGeometry x="1080" y="620" width="180" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="store_catalog" value="Activity catalog" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;boundedLbl=1;backgroundOutline=1;size=15" vertex="1" parent="1">
+      <mxGeometry x="1400" y="620" width="180" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="store_navmesh" value="navmesh + scene data&#10;(mmaps/vmaps)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;boundedLbl=1;backgroundOutline=1;size=15" vertex="1" parent="1">
+      <mxGeometry x="1450" y="200" width="200" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="note" value="ActivitySnapshot carries major state DELTAS, not full enemy/object payloads. All service IPC is protobuf/TCP, length-framed." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=left;verticalAlign=top;spacing=8" vertex="1" parent="1">
+      <mxGeometry x="120" y="980" width="460" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_mangos_br" value="WoW packets / memory state" style="endArrow=classic;startArrow=classic;html=1;rounded=0;fontSize=12;labelBackgroundColor=#ffffff" edge="1" parent="1" source="ext_mangos" target="proc_botrunner">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_sm_br" value="ObjectiveMessage (TCP 9001)" style="endArrow=classic;html=1;rounded=0;fontSize=12;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.7;entryDx=0;entryDy=0" edge="1" parent="1" source="proc_statemgr" target="proc_botrunner">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="470" y="670"/><mxPoint x="470" y="270"/></Array></mxGeometry>
+    </mxCell>
+    <mxCell id="e_br_sm" value="WoWActivitySnapshot (state DELTAS: position, current_task, status)" style="endArrow=classic;html=1;rounded=0;fontSize=12;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.7;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0" edge="1" parent="1" source="proc_botrunner" target="proc_statemgr">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="900" y="270"/><mxPoint x="900" y="670"/></Array></mxGeometry>
+    </mxCell>
+    <mxCell id="e_br_pf" value="PathfindingRequest / PathfindingResponse (TCP 9002)" style="endArrow=classic;startArrow=classic;html=1;rounded=0;fontSize=12;labelBackgroundColor=#ffffff" edge="1" parent="1" source="proc_botrunner" target="proc_pathfind">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_pf_navmesh" value="reads mmaps/vmaps" style="endArrow=classic;html=1;rounded=0;fontSize=12;labelBackgroundColor=#ffffff" edge="1" parent="1" source="proc_pathfind" target="store_navmesh">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_sm_db" value="read-only queries (SOAP for writes)" style="endArrow=classic;html=1;rounded=0;fontSize=12;labelBackgroundColor=#ffffff" edge="1" parent="1" source="proc_statemgr" target="store_db">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_sm_catalog" value="reads ActivityDefinition rows" style="endArrow=classic;html=1;rounded=0;fontSize=12;labelBackgroundColor=#ffffff;edgeStyle=orthogonalEdgeStyle;exitX=0.85;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0" edge="1" parent="1" source="proc_statemgr" target="store_catalog">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="747" y="840"/><mxPoint x="1490" y="840"/></Array></mxGeometry>
+    </mxCell>
+    <mxCell id="e_op_sm" value="snapshot query / control (9000)" style="endArrow=classic;startArrow=classic;html=1;rounded=0;fontSize=12;labelBackgroundColor=#ffffff" edge="1" parent="1" source="ext_operator" target="proc_statemgr">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

@@ -1,0 +1,81 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1400" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="WWoW Network Topology (ports &amp; endpoints, localhost dev)" style="text;html=1;fontSize=22;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="560" y="30" width="880" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="localbox" value="127.0.0.1 / localhost dev box" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;strokeColor=#666666;fillColor=none;verticalAlign=top;fontSize=14;fontStyle=2;" vertex="1" parent="1">
+      <mxGeometry x="120" y="140" width="1140" height="800" as="geometry"/>
+    </mxCell>
+    <mxCell id="fgbot" value="ForegroundBotRunner&#10;(inside WoW.exe, x86)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="180" y="240" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="bgbot" value="BackgroundBotRunner&#10;(.NET service)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="180" y="400" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="wsm" value="WoWStateManager (.NET service)&#10;hub&#10;:9001 BotRunner poll&#10;:9000 snapshot / test fixtures" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="600" y="450" width="280" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="pathfind" value="PathfindingService (.NET service)&#10;listens 127.0.0.1:9002" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="600" y="610" width="280" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="scenedata" value="SceneDataService&#10;(.NET service)&#10;:9003" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="600" y="740" width="280" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="testsui" value="Test fixtures / UI" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="600" y="160" width="280" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="realmd" value="MaNGOS realmd&#10;(auth/logon server)&#10;TCP 3724" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="1480" y="200" width="260" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="mangosd" value="MaNGOS mangosd&#10;(world server)&#10;TCP 8085 (or 8129)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="1480" y="360" width="260" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="soap" value="MaNGOS SOAP&#10;TCP 7878 (GM commands)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="1480" y="520" width="260" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="mysql" value="MySQL (MaNGOS DB)&#10;TCP 3306 (read-only)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="1480" y="680" width="260" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="note" value="Ports are the documented dev defaults; verify against config." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;verticalAlign=middle;align=center;" vertex="1" parent="1">
+      <mxGeometry x="600" y="1000" width="500" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_fg_wsm" value=":9001 protobuf/TCP (objectives/snapshots)" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="fgbot" target="wsm">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_bg_wsm" value=":9001 protobuf/TCP (objectives/snapshots)" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="bgbot" target="wsm">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_fg_path" value=":9002 protobuf/TCP" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="fgbot" target="pathfind">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_bg_path" value=":9002 protobuf/TCP" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="bgbot" target="pathfind">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_test_wsm" value=":9000 snapshot query" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="testsui" target="wsm">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_fg_realmd" value=":3724 SRP6 auth" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="fgbot" target="realmd">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_bg_realmd" value=":3724 SRP6 auth" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="bgbot" target="realmd">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_fg_mangosd" value=":8085 WoW world protocol (encrypted)" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="fgbot" target="mangosd">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_bg_mangosd" value=":8085 WoW world protocol (encrypted)" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="bgbot" target="mangosd">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_wsm_soap" value=":7878 GM commands (HTTP)" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="wsm" target="soap">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_test_soap" value=":7878 GM commands (HTTP)" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="testsui" target="soap">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_test_mysql" value=":3306 read-only queries" style="endArrow=classic;html=1;fontSize=11;" edge="1" parent="1" source="testsui" target="mysql">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

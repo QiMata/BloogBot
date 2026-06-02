@@ -1,0 +1,133 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1500" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="WWoW Module / Project Graph (WestworldOfWarcraft.sln — 36 projects)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=22;" vertex="1" parent="1">
+      <mxGeometry x="420" y="20" width="1060" height="40" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="g_exports" value="Exports/ (core libraries)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#6c8ebf;verticalAlign=top;fontStyle=1;dashed=0;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="500" y="90" width="900" height="190" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_gamedata" value="GameData.Core&#10;(interfaces, zero deps)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="g_exports">
+      <mxGeometry x="20" y="40" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_botcomm" value="BotCommLayer&#10;(Protobuf IPC)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="g_exports">
+      <mxGeometry x="190" y="40" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_botrunner" value="BotRunner&#10;(orchestration)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="g_exports">
+      <mxGeometry x="360" y="40" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_wowsharp" value="WoWSharpClient&#10;(WoW protocol)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="g_exports">
+      <mxGeometry x="530" y="40" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_winimports" value="WinImports&#10;(Win32 API)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="g_exports">
+      <mxGeometry x="700" y="40" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_loader" value="Loader&#10;(C++ x86, native)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="g_exports">
+      <mxGeometry x="20" y="120" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_navigation" value="Navigation&#10;(C++ x64, native)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="g_exports">
+      <mxGeometry x="190" y="120" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_fastcall" value="FastCall&#10;(C++ x86, native)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="g_exports">
+      <mxGeometry x="360" y="120" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_physics" value="Physics&#10;(C++, native)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="g_exports">
+      <mxGeometry x="530" y="120" width="150" height="50" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="g_services" value="Services/ (worker services)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#82b366;verticalAlign=top;fontStyle=1;dashed=0;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="500" y="360" width="900" height="190" as="geometry"/>
+    </mxCell>
+    <mxCell id="s_fg" value="ForegroundBotRunner&#10;(DLL injection)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="g_services">
+      <mxGeometry x="20" y="40" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="s_bg" value="BackgroundBotRunner&#10;(headless emulation)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="g_services">
+      <mxGeometry x="200" y="40" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="s_path" value="PathfindingService&#10;(port 9002)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="g_services">
+      <mxGeometry x="380" y="40" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="s_state" value="WoWStateManager&#10;(ports 9000, 9001)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="g_services">
+      <mxGeometry x="560" y="40" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="s_decision" value="DecisionEngineService&#10;(ML decisions)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="g_services">
+      <mxGeometry x="20" y="120" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="s_prompt" value="PromptHandlingService&#10;(+ .Api)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="g_services">
+      <mxGeometry x="200" y="120" width="160" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="s_scene" value="SceneDataService" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="g_services">
+      <mxGeometry x="380" y="120" width="160" height="50" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="g_ui" value="UI/ (WPF + .NET Aspire)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#9673a6;verticalAlign=top;fontStyle=1;dashed=0;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="500" y="630" width="900" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="u_ui" value="WoWStateManagerUI&#10;(WPF)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="g_ui">
+      <mxGeometry x="20" y="40" width="180" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="u_apphost" value="Systems.AppHost&#10;(.NET Aspire)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="g_ui">
+      <mxGeometry x="230" y="40" width="180" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="u_defaults" value="Systems.ServiceDefaults" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="g_ui">
+      <mxGeometry x="440" y="40" width="180" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="u_storyline" value="StorylineManager" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="g_ui">
+      <mxGeometry x="650" y="40" width="180" height="50" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="g_profiles" value="BotProfiles/" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#d79b00;verticalAlign=top;fontStyle=1;dashed=0;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="80" y="360" width="340" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="p_profiles" value="18+ class/spec&#10;combat profiles" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="g_profiles">
+      <mxGeometry x="80" y="45" width="180" height="55" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="g_tools" value="Tools/" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#d6b656;verticalAlign=top;fontStyle=1;dashed=0;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="80" y="90" width="340" height="190" as="geometry"/>
+    </mxCell>
+    <mxCell id="t_mmapgen" value="MmapGen&#10;(navmesh generator)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="g_tools">
+      <mxGeometry x="20" y="40" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="t_visualize" value="MmapVisualize" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="g_tools">
+      <mxGeometry x="190" y="40" width="130" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="t_validator" value="NavMeshValidator" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="g_tools">
+      <mxGeometry x="20" y="120" width="150" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="t_etc" value="etc." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="g_tools">
+      <mxGeometry x="190" y="120" width="130" height="50" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="g_tests" value="Tests/" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;verticalAlign=top;fontStyle=1;dashed=0;fontSize=14;" vertex="1" parent="1">
+      <mxGeometry x="1480" y="360" width="340" height="190" as="geometry"/>
+    </mxCell>
+    <mxCell id="te_tests" value="13 projects&#10;(BotRunner.Tests,&#10;WoWSharpClient.Tests,&#10;PathfindingService.Tests, ...)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="g_tests">
+      <mxGeometry x="40" y="50" width="260" height="100" as="geometry"/>
+    </mxCell>
+
+    <mxCell id="edge_ex_sv" value="depends on" style="endArrow=block;html=1;rounded=0;strokeColor=#333333;fontSize=12;" edge="1" parent="1" source="g_services" target="g_exports">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_sv_ui" value="depends on" style="endArrow=block;html=1;rounded=0;strokeColor=#333333;fontSize=12;" edge="1" parent="1" source="g_ui" target="g_services">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_prof_ex" value="references (BotRunner / GameData.Core)" style="endArrow=block;html=1;rounded=0;strokeColor=#d79b00;fontSize=12;" edge="1" parent="1" source="g_profiles" target="g_exports">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_tools_ex" value="references" style="endArrow=block;html=1;rounded=0;strokeColor=#d6b656;fontSize=12;" edge="1" parent="1" source="g_tools" target="g_exports">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_tests_ex" value="references" style="endArrow=block;html=1;rounded=0;dashed=1;strokeColor=#666666;fontSize=12;" edge="1" parent="1" source="g_tests" target="g_exports">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_tests_sv" value="references" style="endArrow=block;html=1;rounded=0;dashed=1;strokeColor=#666666;fontSize=12;" edge="1" parent="1" source="g_tests" target="g_services">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="edge_tests_ui" value="references" style="endArrow=block;html=1;rounded=0;dashed=1;strokeColor=#666666;fontSize=12;" edge="1" parent="1" source="g_tests" target="g_ui">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

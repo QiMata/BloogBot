@@ -1,0 +1,72 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1300" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="WoW 1.12.1 Login / World-Enter Handshake (sequence)" style="text;html=1;fontSize=18;fontStyle=1;align=center;" vertex="1" parent="1">
+      <mxGeometry x="350" y="16" width="800" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="h1" value="WoWSharpClient&#10;(bot client)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="60" y="60" width="200" height="46" as="geometry"/>
+    </mxCell>
+    <mxCell id="h2" value="Auth server&#10;(realmd / logon)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="560" y="60" width="200" height="46" as="geometry"/>
+    </mxCell>
+    <mxCell id="h3" value="World server&#10;(MaNGOS mangosd)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1060" y="60" width="200" height="46" as="geometry"/>
+    </mxCell>
+    <mxCell id="ll1" style="endArrow=none;dashed=1;html=1;strokeColor=#6c8ebf;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="160" y="106" as="sourcePoint"/><mxPoint x="160" y="1080" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="ll2" style="endArrow=none;dashed=1;html=1;strokeColor=#d79b00;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="660" y="106" as="sourcePoint"/><mxPoint x="660" y="1080" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="ll3" style="endArrow=none;dashed=1;html=1;strokeColor=#82b366;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="1160" y="106" as="sourcePoint"/><mxPoint x="1160" y="1080" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="g1" value="SRP6 authentication (realmd)" style="text;html=1;fontStyle=2;align=left;fontSize=11;fontColor=#d79b00;" vertex="1" parent="1">
+      <mxGeometry x="280" y="120" width="300" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="m1" value="1. CMD_AUTH_LOGON_CHALLENGE (account name)" style="html=1;endArrow=block;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="160" y="160" as="sourcePoint"/><mxPoint x="660" y="160" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="m2" value="2. LOGON_CHALLENGE (SRP6 B, salt, g, N)" style="html=1;endArrow=open;dashed=1;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="660" y="220" as="sourcePoint"/><mxPoint x="160" y="220" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="m3" value="3. CMD_AUTH_LOGON_PROOF (A, M1)" style="html=1;endArrow=block;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="160" y="280" as="sourcePoint"/><mxPoint x="660" y="280" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="m4" value="4. LOGON_PROOF (M2) — authenticated; session key derived" style="html=1;endArrow=open;dashed=1;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="660" y="340" as="sourcePoint"/><mxPoint x="160" y="340" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="m5" value="5. CMD_REALM_LIST" style="html=1;endArrow=block;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="160" y="400" as="sourcePoint"/><mxPoint x="660" y="400" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="m6" value="6. realm list" style="html=1;endArrow=open;dashed=1;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="660" y="460" as="sourcePoint"/><mxPoint x="160" y="460" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="g2" value="World session (mangosd, session key encrypts header)" style="text;html=1;fontStyle=2;align=left;fontSize=11;fontColor=#82b366;" vertex="1" parent="1">
+      <mxGeometry x="700" y="500" width="420" height="20" as="geometry"/>
+    </mxCell>
+    <mxCell id="m7" value="7. connect + CMSG_AUTH_SESSION (session key, build)" style="html=1;endArrow=block;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="160" y="550" as="sourcePoint"/><mxPoint x="1160" y="550" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="m8" value="8. SMSG_AUTH_RESPONSE (AUTH_OK)" style="html=1;endArrow=open;dashed=1;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="1160" y="610" as="sourcePoint"/><mxPoint x="160" y="610" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="m9" value="9. CMSG_CHAR_ENUM" style="html=1;endArrow=block;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="160" y="670" as="sourcePoint"/><mxPoint x="1160" y="670" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="m10" value="10. SMSG_CHAR_ENUM (character list)" style="html=1;endArrow=open;dashed=1;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="1160" y="730" as="sourcePoint"/><mxPoint x="160" y="730" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="m11" value="11. CMSG_PLAYER_LOGIN (character GUID)" style="html=1;endArrow=block;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="160" y="790" as="sourcePoint"/><mxPoint x="1160" y="790" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="m12" value="12. SMSG_LOGIN_VERIFY_WORLD + initial object updates — in world" style="html=1;endArrow=open;dashed=1;rounded=0;fontSize=11;" edge="1" parent="1">
+      <mxGeometry relative="1" as="geometry"><mxPoint x="1160" y="850" as="sourcePoint"/><mxPoint x="160" y="850" as="targetPoint"/></mxGeometry>
+    </mxCell>
+    <mxCell id="note" value="Auth uses SRP6. After M2 the derived session key encrypts the world-server packet headers. If LOGON_PROOF fails → retry with exponential backoff." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="1">
+      <mxGeometry x="160" y="920" width="1000" height="60" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

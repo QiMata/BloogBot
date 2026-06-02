@@ -5,6 +5,11 @@
 > This is a hub. It links to the authoritative detail rather than restating it.
 > For the formal architecture contract see [`Spec/01_ARCHITECTURE.md`](Spec/01_ARCHITECTURE.md);
 > for the full autonomous-work entry point see [`SPEC.md`](SPEC.md).
+>
+> **Visual diagrams:** editable draw.io renderings of this architecture (layered
+> dependency graph, component/service map, C4 context/container, the
+> Activity→Objective→Task→Action hierarchy, sequence diagrams, IPC contract, and
+> more) live in [`architecture/diagrams/`](architecture/diagrams/README.md).
 
 ## What WWoW is
 

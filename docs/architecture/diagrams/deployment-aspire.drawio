@@ -1,0 +1,87 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value=".NET Aspire Deployment / Orchestration" style="text;html=1;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="560" y="30" width="560" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="apphost" value="Systems.AppHost&#10;(.NET Aspire orchestrator)&#10;UI/Systems/Systems.AppHost&#10;orchestration root" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="640" y="110" width="400" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="defaults" value="Systems.ServiceDefaults&#10;(shared service config:&#10;telemetry, health, resilience)&#10;referenced by all services" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="690" y="690" width="300" height="110" as="geometry"/>
+    </mxCell>
+    <mxCell id="crosscut" value="Applied via ServiceDefaults:&#10;&#8226; OpenTelemetry metrics&#10;&#8226; log rotation&#10;&#8226; health checks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=left;verticalAlign=middle;spacingLeft=10;" vertex="1" parent="1">
+      <mxGeometry x="1080" y="700" width="280" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="svc_sm" value="WoWStateManager&#10;(9000 / 9001)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="120" y="380" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="svc_pf" value="PathfindingService&#10;(9002)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="400" y="380" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="svc_scene" value="SceneDataService" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="680" y="380" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="svc_bg" value="BackgroundBotRunner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="960" y="380" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="svc_prompt" value="PromptHandlingService" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="1240" y="380" width="220" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="ext_mangos" value="MaNGOS server" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="120" y="1080" width="200" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="ext_mysql" value="MySQL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="380" y="1080" width="200" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="ext_soap" value="SOAP 7878" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="640" y="1080" width="200" height="70" as="geometry"/>
+    </mxCell>
+    <mxCell id="ext_label" value="External deps&#10;(referenced, not orchestrated by AppHost)" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontStyle=2;" vertex="1" parent="1">
+      <mxGeometry x="120" y="1010" width="720" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="note" value="NOTE: ForegroundBotRunner is NOT containerized — it is injected into WoW.exe and runs alongside, outside the Aspire graph." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=13;align=left;verticalAlign=middle;spacingLeft=12;spacingRight=12;" vertex="1" parent="1">
+      <mxGeometry x="1080" y="1080" width="380" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_ah_sm" value="starts / wires" style="endArrow=classic;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="apphost" target="svc_sm">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_ah_pf" value="starts / wires" style="endArrow=classic;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="apphost" target="svc_pf">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_ah_scene" value="starts / wires" style="endArrow=classic;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="apphost" target="svc_scene">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_ah_bg" value="starts / wires" style="endArrow=classic;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="apphost" target="svc_bg">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_ah_prompt" value="starts / wires" style="endArrow=classic;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="apphost" target="svc_prompt">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_sm_def" value="uses" style="endArrow=classic;html=1;fontSize=11;rounded=0;dashed=1;" edge="1" parent="1" source="svc_sm" target="defaults">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_pf_def" value="uses" style="endArrow=classic;html=1;fontSize=11;rounded=0;dashed=1;" edge="1" parent="1" source="svc_pf" target="defaults">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_scene_def" value="uses" style="endArrow=classic;html=1;fontSize=11;rounded=0;dashed=1;" edge="1" parent="1" source="svc_scene" target="defaults">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_bg_def" value="uses" style="endArrow=classic;html=1;fontSize=11;rounded=0;dashed=1;" edge="1" parent="1" source="svc_bg" target="defaults">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_prompt_def" value="uses" style="endArrow=classic;html=1;fontSize=11;rounded=0;dashed=1;" edge="1" parent="1" source="svc_prompt" target="defaults">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_sm_mangos" value="connects" style="endArrow=open;html=1;fontSize=11;rounded=0;dashed=1;strokeColor=#b85450;" edge="1" parent="1" source="svc_sm" target="ext_mangos">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_sm_mysql" value="reads" style="endArrow=open;html=1;fontSize=11;rounded=0;dashed=1;strokeColor=#b85450;" edge="1" parent="1" source="svc_sm" target="ext_mysql">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_sm_soap" value="GM cmds" style="endArrow=open;html=1;fontSize=11;rounded=0;dashed=1;strokeColor=#b85450;" edge="1" parent="1" source="svc_sm" target="ext_soap">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

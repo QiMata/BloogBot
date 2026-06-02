@@ -1,0 +1,54 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1400" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="WWoW Layered Dependency Graph" style="text;html=1;fontSize=24;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="360" y="20" width="560" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="L1" value="1. GameData.Core&#10;Interfaces + enums + models&#10;(ZERO dependencies)" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="440" y="90" width="400" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="WIN" value="WinImports&#10;(sibling low-level&#10;Windows-API lib)" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=12;dashed=1;" vertex="1" parent="1">
+      <mxGeometry x="900" y="100" width="200" height="60" as="geometry"/>
+    </mxCell>
+    <mxCell id="L2" value="2. BotCommLayer&#10;Protobuf IPC: ProtobufSocketServer / Client&#10;length-framed TCP" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="440" y="230" width="400" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="L3" value="3. BotRunner&#10;Core orchestration; behavior-tree task stack&#10;(shared by FG + BG runners)" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="440" y="370" width="400" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="L4" value="4. WoWSharpClient&#10;WoW 1.12.1 protocol: packets, opcodes, auth" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="440" y="510" width="400" height="80" as="geometry"/>
+    </mxCell>
+    <mxCell id="L5" value="5. Services (worker services)&#10;&#10;ForegroundBotRunner&#160;&#160;&#8226;&#160;&#160;BackgroundBotRunner&#10;PathfindingService&#160;&#160;&#8226;&#160;&#160;WoWStateManager&#10;DecisionEngineService&#160;&#160;&#8226;&#160;&#160;PromptHandlingService&#10;SceneDataService" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="400" y="650" width="480" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="L6" value="6. UI (WPF + .NET Aspire)&#10;&#10;WoWStateManagerUI&#160;&#160;&#8226;&#160;&#160;Systems.AppHost&#160;&#160;&#8226;&#160;&#160;StorylineManager" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="400" y="850" width="480" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="RULES" value="Layering rules (enforced by ProjectLayeringTests.cs)&#10;&#10;&#8226;&#160;GameData.Core stays dependency-free&#10;&#8226;&#160;Exports/* must NOT reference Services/, UI/, Tests/&#10;&#8226;&#160;Services/* must NOT reference UI/, Tests/" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;html=1;whiteSpace=wrap;align=left;verticalAlign=middle;fontSize=12;spacingLeft=12;" vertex="1" parent="1">
+      <mxGeometry x="1000" y="650" width="420" height="160" as="geometry"/>
+    </mxCell>
+    <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="L1" target="L2">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="L2" target="L3">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="L3" target="L4">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e45" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="L4" target="L5">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e56" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="L5" target="L6">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="f1" value="FORBIDDEN: Core &#8594; Services" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#b85450;dashed=1;fontColor=#b85450;fontStyle=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="L1" target="L5">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="360" y="130"/><mxPoint x="360" y="720"/></Array></mxGeometry>
+    </mxCell>
+    <mxCell id="f2" value="FORBIDDEN: Services &#8594; UI" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#b85450;dashed=1;fontColor=#b85450;fontStyle=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="L5" target="L6">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="940" y="720"/><mxPoint x="940" y="900"/></Array></mxGeometry>
+    </mxCell>
+  </root>
+</mxGraphModel>

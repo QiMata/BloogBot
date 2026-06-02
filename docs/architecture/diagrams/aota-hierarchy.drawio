@@ -1,0 +1,36 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1400" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="Activity &#8594; Objective &#8594; Task &#8594; Action — the four-layer behavior hierarchy" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="120" y="40" width="900" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="activity" value="&lt;b&gt;1. ACTIVITY&lt;/b&gt;&lt;br&gt;&lt;br&gt;Major, usually-dynamic event supporting any number of characters (raid, battleground, dungeon run, multi-hour farm).&lt;br&gt;&lt;br&gt;&lt;b&gt;Example:&lt;/b&gt; dungeon.ubrs, Fishing[Ratchet]&lt;br&gt;&lt;b&gt;Granularity:&lt;/b&gt; minutes&#8211;hours&lt;br&gt;&lt;b&gt;Wire-visible:&lt;/b&gt; indirect (projected onto snapshot in Phase 2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;verticalAlign=top;spacing=12;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="120" y="120" width="760" height="200" as="geometry"/>
+    </mxCell>
+    <mxCell id="objective" value="&lt;b&gt;2. OBJECTIVE&lt;/b&gt;&lt;br&gt;&lt;br&gt;High-level state change composed of Tasks. &lt;b&gt;Travels on the wire as ObjectiveMessage&lt;/b&gt; (formerly ActionMessage).&lt;br&gt;&lt;br&gt;&lt;b&gt;Example:&lt;/b&gt; reach-flame-crest, kill-rend-blackhand&lt;br&gt;&lt;b&gt;Granularity:&lt;/b&gt; seconds&#8211;minutes&lt;br&gt;&lt;b&gt;Wire-visible:&lt;/b&gt; YES — the only layer on the wire" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=left;verticalAlign=top;spacing=12;fontSize=13;strokeWidth=3;" vertex="1" parent="1">
+      <mxGeometry x="120" y="380" width="760" height="200" as="geometry"/>
+    </mxCell>
+    <mxCell id="task" value="&lt;b&gt;3. TASK&lt;/b&gt;&lt;br&gt;&lt;br&gt;Behavior-tree node (IBotTask) on the LIFO task stack; orchestrates Actions to drive ONE minute state change with verification + failure handling; pushes child Tasks (GoToTask is the universal child).&lt;br&gt;&lt;br&gt;&lt;b&gt;Example:&lt;/b&gt; TravelToTask(coord), LootCorpseTask&lt;br&gt;&lt;b&gt;Granularity:&lt;/b&gt; tick&#8211;tens of seconds&lt;br&gt;&lt;b&gt;Wire-visible:&lt;/b&gt; indirect (top-of-stack current_task_name on snapshot)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=left;verticalAlign=top;spacing=12;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="120" y="640" width="760" height="220" as="geometry"/>
+    </mxCell>
+    <mxCell id="action" value="&lt;b&gt;4. ACTION&lt;/b&gt;&lt;br&gt;&lt;br&gt;ATOMIC code primitive: ONE thing a player can do (one memory read, one bit write, one packet opcode, one key press).&lt;br&gt;&lt;br&gt;&lt;b&gt;Examples:&lt;/b&gt; ReadUnitField(guid, off), WriteMovementBit(forward, true), SendOpcode(CMSG_CAST_SPELL, payload), PressKey(&#39;1&#39;)&lt;br&gt;&lt;b&gt;Granularity:&lt;/b&gt; single function call&lt;br&gt;&lt;b&gt;Wire-visible:&lt;/b&gt; NO — pure local code" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=left;verticalAlign=top;spacing=12;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="120" y="920" width="760" height="220" as="geometry"/>
+    </mxCell>
+    <mxCell id="e1" value="composed of / decomposes into" style="endArrow=block;html=1;rounded=0;fontSize=12;fontStyle=1;startArrow=none;strokeWidth=2;" edge="1" parent="1" source="activity" target="objective">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e2" value="composed of / decomposes into" style="endArrow=block;html=1;rounded=0;fontSize=12;fontStyle=1;startArrow=none;strokeWidth=2;" edge="1" parent="1" source="objective" target="task">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e3" value="composed of / decomposes into" style="endArrow=block;html=1;rounded=0;fontSize=12;fontStyle=1;startArrow=none;strokeWidth=2;" edge="1" parent="1" source="task" target="action">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="note1" value="&lt;b&gt;Only OBJECTIVE crosses the wire.&lt;/b&gt;&lt;br&gt;&lt;br&gt;Activity is projected onto the snapshot; Tasks/Actions are pure local code." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;spacing=12;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="960" y="380" width="320" height="200" as="geometry"/>
+    </mxCell>
+    <mxCell id="note2" value="&lt;b&gt;Task-level wrappers, NOT Actions.&lt;/b&gt;&lt;br&gt;&lt;br&gt;IObjectManager.MoveToAsync / CastSpellAsync are Task-level wrappers, NOT Actions." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=top;spacing=12;fontSize=13;" vertex="1" parent="1">
+      <mxGeometry x="960" y="920" width="320" height="220" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

@@ -1,0 +1,65 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1400" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="MaNGOS DB tables the bot reads (read-only ER)" style="text;html=1;fontSize=22;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="640" y="20" width="720" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="item_template" value="&lt;b&gt;item_template&lt;/b&gt;&#10;entry (PK)&#10;name&#10;class&#10;subclass&#10;Quality&#10;InventoryType&#10;RequiredLevel" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="880" y="640" width="240" height="160" as="geometry"/>
+    </mxCell>
+    <mxCell id="creature_template" value="&lt;b&gt;creature_template&lt;/b&gt;&#10;entry (PK)&#10;name&#10;minlevel&#10;maxlevel&#10;faction&#10;npcflag&#10;lootid (FK&#8594;creature_loot_template)" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="120" y="240" width="300" height="170" as="geometry"/>
+    </mxCell>
+    <mxCell id="creature_loot_template" value="&lt;b&gt;creature_loot_template&lt;/b&gt;&#10;entry (FK)&#10;item (FK&#8594;item_template)&#10;ChanceOrQuestChance" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="120" y="640" width="280" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="gameobject_template" value="&lt;b&gt;gameobject_template&lt;/b&gt;&#10;entry (PK)&#10;type&#10;name&#10;data fields&#10;lootid (FK&#8594;gameobject_loot_template)" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="1600" y="240" width="320" height="150" as="geometry"/>
+    </mxCell>
+    <mxCell id="gameobject_loot_template" value="&lt;b&gt;gameobject_loot_template&lt;/b&gt;&#10;entry (FK)&#10;item (FK&#8594;item_template)" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="1640" y="640" width="280" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="quest_template" value="&lt;b&gt;quest_template&lt;/b&gt;&#10;entry (PK)&#10;Title&#10;MinLevel&#10;QuestLevel&#10;RequiredRaces&#10;ReqItemId1..4 (FK&#8594;item_template)&#10;ReqCreatureOrGOId1..4 (FK&#8594;creature_template/gameobject_template)&#10;RewItemId1..4 (FK&#8594;item_template)&#10;NextQuestInChain" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="760" y="240" width="500" height="220" as="geometry"/>
+    </mxCell>
+    <mxCell id="playercreateinfo_item" value="&lt;b&gt;playercreateinfo_item&lt;/b&gt;&#10;race&#10;class&#10;itemid (FK&#8594;item_template)&#10;amount" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="480" y="640" width="260" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="areatrigger_teleport" value="&lt;b&gt;areatrigger_teleport&lt;/b&gt;&#10;id (PK)&#10;target_map&#10;target_position_x/y/z&#10;target_orientation" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=6;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="1200" y="900" width="280" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="note" value="&lt;b&gt;READ-ONLY.&lt;/b&gt; NEVER edit MaNGOS MySQL directly &#8212; all writes go through the SOAP API (port 7878). Online characters return STALE DB reads &#8212; use StateManager snapshots instead." style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacingLeft=8;spacingTop=8;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="120" y="900" width="360" height="140" as="geometry"/>
+    </mxCell>
+    <mxCell id="e1" value="1..N" style="endArrow=open;html=1;fontSize=12;" edge="1" parent="1" source="creature_template" target="creature_loot_template">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e2" value="N..1" style="endArrow=open;html=1;fontSize=12;labelBackgroundColor=#ffffff;entryX=0;entryY=0.3;entryDx=0;entryDy=0;" edge="1" parent="1" source="creature_loot_template" target="item_template">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e3" value="1..N" style="endArrow=open;html=1;fontSize=12;" edge="1" parent="1" source="gameobject_template" target="gameobject_loot_template">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e4" value="N..1" style="endArrow=open;html=1;fontSize=12;" edge="1" parent="1" source="gameobject_loot_template" target="item_template">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e5" value="N..N (req/reward)" style="endArrow=open;html=1;fontSize=12;" edge="1" parent="1" source="quest_template" target="item_template">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e6" value="N..1 (kill objectives)" style="endArrow=open;html=1;fontSize=12;" edge="1" parent="1" source="quest_template" target="creature_template">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e7" value="1..1 (NextQuestInChain, self-ref)" style="endArrow=open;html=1;fontSize=12;rounded=0;exitX=1;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="quest_template" target="quest_template">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="1340" y="220"/>
+          <mxPoint x="1340" y="480"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+    <mxCell id="e8" value="N..1" style="endArrow=open;html=1;fontSize=12;labelBackgroundColor=#ffffff;entryX=0;entryY=0.7;entryDx=0;entryDy=0;" edge="1" parent="1" source="playercreateinfo_item" target="item_template">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

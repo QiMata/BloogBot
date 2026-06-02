@@ -1,0 +1,60 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1300" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="WWoW — C4 Container Diagram" style="text;html=1;fontSize=24;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="600" y="30" width="600" height="50" as="geometry"/>
+    </mxCell>
+    <mxCell id="wowexe" value="WoW.exe (game client, x86)" style="rounded=0;fillColor=#f5f5f5;strokeColor=#666666;dashed=0;verticalAlign=top;fontStyle=1;fontSize=13;align=center;spacingTop=8;" vertex="1" parent="1">
+      <mxGeometry x="120" y="160" width="420" height="240" as="geometry"/>
+    </mxCell>
+    <mxCell id="fgbot" value="ForegroundBotRunner (managed DLL)&#10;&#10;Injected into WoW.exe.&#10;Direct memory read/write +&#10;inline packet hooks + Lua eval." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="wowexe">
+      <mxGeometry x="40" y="60" width="340" height="150" as="geometry"/>
+    </mxCell>
+    <mxCell id="loader" value="Loader&#10;(C++ x86, dllmain.cpp)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="120" y="480" width="220" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="bgbot" value="BackgroundBotRunner (.NET service)&#10;&#10;Headless WoW-protocol emulation,&#10;no game client; uses WoWSharpClient." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="120" y="680" width="420" height="150" as="geometry"/>
+    </mxCell>
+    <mxCell id="statemgr" value="WoWStateManager (.NET service host)&#10;&#10;Bot FSM + DecisionEngine.&#10;Port 9001 (BotRunner poll) +&#10;Port 9000 (snapshot query)." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="760" y="380" width="420" height="160" as="geometry"/>
+    </mxCell>
+    <mxCell id="pathfind" value="PathfindingService (.NET service)&#10;&#10;A* + physics.&#10;Port 9002." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="760" y="680" width="300" height="150" as="geometry"/>
+    </mxCell>
+    <mxCell id="scenedata" value="SceneDataService (.NET service)&#10;&#10;Scene / navmesh data." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="1120" y="680" width="300" height="150" as="geometry"/>
+    </mxCell>
+    <mxCell id="ui" value="WoWStateManagerUI (WPF desktop)&#10;&#10;Operator console." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="760" y="140" width="420" height="120" as="geometry"/>
+    </mxCell>
+    <mxCell id="mangos" value="MaNGOS server&#10;(external)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=center;verticalAlign=middle;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="1480" y="380" width="220" height="160" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_loader_wow" value="DLL injection (CLR bootstrap)" style="endArrow=block;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="loader" target="fgbot">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_fg_sm" value="protobuf/TCP 9001 (ObjectiveMessage / WoWActivitySnapshot)" style="endArrow=block;startArrow=block;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="fgbot" target="statemgr">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_bg_sm" value="protobuf/TCP 9001 (ObjectiveMessage / WoWActivitySnapshot)" style="endArrow=block;startArrow=block;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="bgbot" target="statemgr">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_fg_pf" value="protobuf/TCP 9002" style="endArrow=block;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="fgbot" target="pathfind">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_bg_pf" value="protobuf/TCP 9002" style="endArrow=block;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="bgbot" target="pathfind">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_fg_mangos" value="WoW protocol (via real client)" style="endArrow=block;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="wowexe" target="mangos">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_bg_mangos" value="WoW protocol (emulated)" style="endArrow=block;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="bgbot" target="mangos">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e_ui_sm" value="snapshot query / control" style="endArrow=block;html=1;fontSize=11;rounded=0;" edge="1" parent="1" source="ui" target="statemgr">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

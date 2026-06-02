@@ -1,0 +1,58 @@
+<mxGraphModel dx="1200" dy="800" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1200" math="0" shadow="0">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="title" value="Operator UI — Screen / View Navigation (illustrative)" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="520" y="30" width="680" height="40" as="geometry"/>
+    </mxCell>
+    <mxCell id="dashboard" value="Dashboard / Bot Roster (home)&#10;DashboardView&#10;List of bots + status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="640" y="120" width="280" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="botdetail" value="Bot Detail / Snapshot&#10;Position, activity, objective,&#10;task stack, health" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="220" y="360" width="280" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="activityctrl" value="Activity Control&#10;Assign / clear Activity,&#10;pick mode" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="40" y="600" width="260" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="logconsole" value="Log / Console (per-bot)&#10;Per-bot logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="360" y="600" width="260" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="settings" value="Global Settings / Config&#10;ConfigEditorView&#10;Service endpoints, mode&#10;defaults, feature flags" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="640" y="360" width="280" height="100" as="geometry"/>
+    </mxCell>
+    <mxCell id="logsview" value="Logs View (all-bot)&#10;Aggregated logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="1000" y="360" width="280" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="storyline" value="StorylineManager (separate app)&#10;Quest / storyline progression" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="1000" y="120" width="280" height="90" as="geometry"/>
+    </mxCell>
+    <mxCell id="note" value="Views are WPF UserControls bound via MVVM to StateManager snapshot summaries; navigation is state-gated." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;align=left;verticalAlign=top;" vertex="1" parent="1">
+      <mxGeometry x="1340" y="600" width="300" height="110" as="geometry"/>
+    </mxCell>
+    <mxCell id="e1" value="select bot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" edge="1" parent="1" source="dashboard" target="botdetail">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e2" value="open settings" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" edge="1" parent="1" source="dashboard" target="settings">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e3" value="view logs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="dashboard" target="logsview">
+      <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="960" y="405"/></Array></mxGeometry>
+    </mxCell>
+    <mxCell id="e4" value="open storyline" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" edge="1" parent="1" source="dashboard" target="storyline">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e5" value="assign activity" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" edge="1" parent="1" source="botdetail" target="activityctrl">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e6" value="view logs" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" edge="1" parent="1" source="botdetail" target="logconsole">
+      <mxGeometry relative="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="e7" value="back" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;dashed=1;" edge="1" parent="1" source="botdetail" target="dashboard">
+      <mxGeometry relative="1" as="geometry">
+        <Array as="points">
+          <mxPoint x="560" y="405"/>
+        </Array>
+      </mxGeometry>
+    </mxCell>
+  </root>
+</mxGraphModel>
