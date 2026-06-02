@@ -442,3 +442,54 @@ the `StepV2` grounded-idle branch + the grounding decision + `CollisionStepWoW` 
 stuck. Disambiguate **idle-snap-down-the-staircase** (idle branch re-grounds to a lower wrap) vs a
 **FALLINGFAR fall** (the steep deck-lip filtered as non-walkable -> airborne -> falls to z41). Then implement
 the targeted ground-stick fix, re-probe, and run the live DeckLip test + READ the success screenshot (R16).
+
+## UPDATE 7 (2026-06-02) — iteration-C diagnostic-access map; slide-back is the deep physics core (multi-cycle); decisive next-step recipe
+
+The slide-back native root (UPDATE 6) holds. Iteration C scoped HOW to get the confirming per-tick trace
+before editing the load-bearing engine, and found every trace path needs an FG-bot instrument+rebuild+live
+cycle (the bitness/host-topology must be pinned first). This is genuinely the deep physics core UPDATE 3
+isolated — a multi-cycle RE effort, distinct from the now-fixed smooth-oscillation mission.
+
+### Diagnostic-access findings (so the next session doesn't re-derive them)
+- The native physics logger exists (`Exports/Navigation/VMapLog.*`: `PHYS_INFO(PHYS_MOVE,...)`, env-gated via
+  `VMAP_PHYS_LOG_LEVEL` / `VMAP_PHYS_LOG_MASK`, sink = `std::cout`). The per-tick `[StepV2] OutputSummary`
+  (`PhysicsEngine.cpp:6788-6796`) logs `pos / flags / groundZ`, and `[Intent]` (`:5734-5744`) logs input. BUT
+  the FG bot's native `std::cout` is NOT captured in the live-test output (0 `[PHYS]` lines; only
+  `[StateManager-OUT]` / `[FG:CHAT]`). => enabling it is useless without a FILE sink (native rebuild).
+- The managed `MovementController` already captures a full per-tick `PhysicsFrameRecord`
+  (`MovementController.cs:1519-1573`: `PosZ, RawPosZ, PhysicsGroundZ, PrevGroundZ, IsFalling, MovementFlags,
+  BlockedFraction, ZDeltaFromPrev, steerZ`) — but only when `IsRecording=true` (opt-in, default off) and it is
+  never dumped; the records live in the FG-bot PROCESS, unreachable from the test process. => needs an
+  env-gated file-dump added to the FG bot (managed rebuild of the FG runner) — lighter than native (no
+  bitness), and is the RECOMMENDED trace path.
+- Bitness: `WoWSharpClient` (hosts `MovementController` + `NativeLocalPhysics`) is AnyCPU and loads
+  `Navigation.dll` at the FG-bot HOST bitness. The FG bot uses LOCAL physics (`[NAV_PATH] local-physics`).
+  Confirm the FG-runner exe bitness before any NATIVE physics rebuild; build BOTH x64 and x86 to be safe
+  (x64 first, then x86 — shared intermediates corrupt if parallel).
+
+### Confirmed root + fix surface (carry-over from UPDATE 6, codex-verified)
+Drive-gap support loss: when the leg false-completes at z47.9 and forward drive drops, the grounded-idle
+branch (`PhysicsEngine.cpp:5984-5998`) does a raw `SceneQuery::GetGroundZ` and either snaps `st.z` down a wrap
+or fails the `[st.z-STEP_DOWN_HEIGHT, st.z+STEP_HEIGHT]` acceptance and drops grounding -> the bot leaves the
+z47 ramp for a lower spiral wrap (slide to z41), then forward `CollisionStepWoW` stalls from the corrupted
+support (`blocked=1.00 / no wall / no normal` = native zero-progress default). Static classifier says the ramp
+from z41 AND z47.7 is 0-Blocked/StepUp/climbable, so the swept side is the defect. Fix = native ground-stick:
+idle branch prefers the bot's CURRENT walkable support anchored near `prevGroundZ` (don't pick a lower wrap),
+and guard `CollisionStepWoW`'s pre-sweep snap. NOT the managed arrival radius; do NOT loosen STEP_HEIGHT/slope.
+
+### Decisive next-step recipe (iteration D)
+1. Add an env-gated per-tick file dump to the FG bot: when `WWOW_PHYS_TRACE_FILE` is set, append the
+   `PhysicsFrameRecord` fields (gameTime, pos.xyz, rawZ, groundZ, prevGroundZ, flags, falling, blocked, steerZ)
+   to that file from `MovementController.CapturePhysicsFrameRecord` (before the `IsRecording` early-return).
+   Rebuild the FG runner (managed). Run the live DeckLip test with the env var; READ the trace at the z47->z41
+   slide window to CONFIRM idle-snap-down vs FALLINGFAR-fall and the exact `groundZ` the idle query returns.
+2. Implement the native ground-stick fix per the confirmed mechanism; rebuild x64 (+x86); re-probe other OG
+   routes (load-bearing); run the live DeckLip test to GREEN (bot ON the deck at Frezza, 2D<=6, z~53.6) and
+   READ the success screenshot (R16). Remove the trace instrumentation (R12). Commit + UPDATE 8.
+
+### Status framing for the owner
+The loop's EXPLICIT mission — the UPDATE-4 smoothPath oscillation — is FIXED + committed (6ec1355f). The
+slide-back is a separate, deeper FG-swept-physics layer (UPDATE 3's "static-vs-swept divergence"), now cleanly
+localized to `PhysicsEngine.cpp` with a known fix surface. It is a multi-cycle effort (instrument FG -> confirm
+-> native fix -> broad-movement regression validation), best run as a focused physics session rather than
+fast loop ticks. The handoff above is turnkey for that session.
