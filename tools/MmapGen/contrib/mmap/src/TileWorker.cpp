@@ -1387,7 +1387,12 @@ namespace MMAP
         int gameObjectMarks = 0;
         const float walkableSlopeAngleTerrain = config.walkableSlopeAngle;
         const float walkableSlopeAngleVMaps = jsonTileConfig["walkableSlopeAngleVMaps"].get<float>();
-        const float playerClimbLimit = cosf(52.0f / 180.0f * RC_PI);
+        // Harvested WoW.exe walkable-slope limit: cos(50deg)=0.642788 @ VA 0x0080DFFC
+        // ("slopes steeper than 50 deg non-walkable"). The mesh cutoff must EQUAL the
+        // client limit -- a more-permissive cutoff (the old 52deg) bakes 50-52deg slopes
+        // the client cannot walk as walkable ground, producing false connectivity the
+        // bot routes over (the OG-tower z61->z8 dive). Parity, not a band-aid.
+        const float playerClimbLimit = cosf(50.0f / 180.0f * RC_PI);
         const float maxClimbLimitTerrain = cosf(walkableSlopeAngleTerrain / 180.0f * RC_PI);
         const float maxClimbLimitVmaps = cosf(walkableSlopeAngleVMaps / 180.0f * RC_PI);
         std::vector<unsigned char> rasterAreas(tTriCount, AREA_NONE);
@@ -1907,8 +1912,8 @@ namespace MMAP
             { "walkableRadius",          0     }, // placeholder
             { "walkableErosionRadius",   -1.0f }, // world units; -1 uses walkableRadius
             { "walkableErosionRadiusCells", -1  }, // cells; overrides world-unit erosion radius when >= 0
-            { "walkableSlopeAngle",      60.0f }, // Phase 1: physics MAX_SLOPE; was 75 (over-permissive)
-            { "walkableSlopeAngleVMaps", 60.0f }, // Phase 1: unified with terrain at physics MAX_SLOPE
+            { "walkableSlopeAngle",      50.0f }, // Harvested WoW.exe client limit (cos50 @ 0x0080DFFC); was 60 (over-permissive -> steep-walkable band)
+            { "walkableSlopeAngleVMaps", 50.0f }, // Unified with terrain at the harvested 50deg client limit
             { "quick",                   -1    }, // skip 'undermesh removal'
             // PFS-OVERHAUL-006 / Phase 6: per-tile filterLedgeSpans overrides.
             // Defaults preserve legacy behavior on every tile that does not opt in.
