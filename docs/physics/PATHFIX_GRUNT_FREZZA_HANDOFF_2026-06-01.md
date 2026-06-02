@@ -287,3 +287,51 @@ compare the live swept-capsule behavior to the static probe's `StepUp/Clear` ver
 the slope/step-up handling in `Exports/Navigation/PhysicsEngine.cpp` so the bot can sustain a
 steep StepUp climb without sliding back. Validate with the (honest) DeckLip live test +
 screenshots.
+
+## UPDATE 4 (2026-06-01, later) — it is NOT physics; it is an INVALID (non-monotonic) smoothPath route at the deck-lip
+
+Verifying whether the deck-lip waypoints are actually a valid route (rather than assuming a
+physics wall) found the real cause. The route is `Walk`/`StepUp`/`Clear` **segment-by-segment**,
+but the SEQUENCE oscillates:
+
+- **The bot follows the SMOOTH path; it is non-monotonic at the deck-lip.** Probe dump of the
+  full Grunt→Frezza smooth route, segments idx86-101, oscillate
+  z47.04→46.76→46.47→46.83→47.18→46.74→46.29→46.69→47.09→46.75→46.41 — **down-up-down-up by
+  ±0.4y in a tight ~2y XY cluster** (1346-1348, -4650..-4652), not climbing.
+- **Quantified (probe, same endpoints):** SMOOTH = 127 segs, **16 DOWN segments, 5.7y of backward
+  climb**; RAW (no smoothing) = 56 segs, **1 DOWN segment, 0.6y**, and the RAW deck-lip is
+  perfectly monotonic (z45→46→47→48→50.6 consecutive StepUps). **smoothPath introduces the jitter;
+  the underlying bake/raw path is clean.**
+- **Why the bot fails:** following the oscillating smooth corners it is steered backward/down,
+  makes no net progress (`reason=stalled_near_waypoint`), and slides back down the steep ramp
+  to z41 → stuck-guard. NOT a slope/step-up physics wall (raw climbs it fine), NOT the bake.
+
+**Mechanism (native `findSmoothPath`, `Exports/Navigation/PathFinder.cpp:1750-1926`).** The OG
+zeppelin tower is a SPIRAL — the same XY stacks multiple Z layers (lower wrap ~24, mid ~35,
+upper ~47). In the smoothing loop, `moveAlongSurface` (1822) slides a fixed `SMOOTH_PATH_STEP_SIZE
+= 2.0f` step toward the steer target and `getPolyHeight(polys[0], result, &result[1])` (1825)
+resolves Z; on the tight spiral curve / overlapping layers this intermittently resolves to a
+lower wrap (or overshoots the curve and comes back), dropping Z, then recovers next step → the
+down-up oscillation. The custom densification block (1888-1920) even densifies the `-dz` (down)
+hops (`-dz > MAX_SMOOTH_PATH_SEGMENT_Z_DELTA`), amplifying it. The raw `findStraightPath` corners
+are not densified, so they never hop → monotonic.
+
+**Recommended fix (native, on the smoothPath OUTPUT — this is the correct surface; bake is fine,
+do NOT band-aid in the managed consumer):**
+1. **First instrument** (native, behind a diag flag) the smoothPath loop to log per-step
+   `iterPos`, `steerPos`, `result`, `getPolyHeight` Z, and the chosen poly at the deck-lip, to
+   CONFIRM layer-hop vs step-overshoot before changing the algorithm.
+2. Then EITHER (a) add a forward-progress / monotonic-Z guard so a smooth corner that regresses
+   toward the path start (or drops Z while the segment is net-climbing toward a higher target on
+   the spiral) is rejected/clamped to the surface of the climbing layer — narrowly scoped to the
+   micro-oscillation signature so genuine descents are unaffected; OR (b) reduce/curve-adapt the
+   step size on tight-curvature corridors. Validate with the probe (smooth route DOWN-segment
+   count must drop to ~raw's) THEN the live DeckLip test (bot must climb past z48 onto the deck to
+   Frezza, 2D≤5) + R16 screenshots.
+
+**Route-validity check (portable, add to the probe workflow):** a route can be
+`Walk/StepUp/Clear` on EVERY segment yet still be un-followable if the SEQUENCE is non-monotonic
+(oscillates backward/down). Always check route VALIDITY (count DOWN segments / net-progress
+monotonicity), not just per-segment affordance. Compare `--detour-resolve` (raw) vs
+`--detour-resolve --smooth`: if smooth has many DOWN segments where raw is monotonic, the
+defect is in `smoothPath` densification, not the bake or physics.
