@@ -942,6 +942,166 @@ static void filterLedgeSpans(const int walkableHeight, const int walkableClimbTr
     }
 }
 
+// [WWoW-DIVERGENCE] Z-banded source-support erosion. The distance-to-boundary
+// transform is byte-identical to rcErodeWalkableArea
+// (dep/recastnavigation/Recast/Source/RecastArea.cpp): same boundary marking
+// and same two-pass 3-4-3 chamfer sweep (the distance field does NOT depend on
+// the radius). ONLY the final null pass differs: each span's erosion threshold
+// is chosen by the span's world Z -- spans whose surface Z is in
+// [bandMinWowZ, bandMaxWowZ] use bandRadius, all others use fullRadius.
+//
+// Motivation (OG zeppelin tile 4029): the tile needs the FULL Tauren capsule
+// radius (1.0247) at the base (z~24) where the bot's capsule otherwise clips
+// the tower-awning walls and wedges, BUT the full radius at the z~47 spiral
+// deck-lip erodes the narrow supported ramp floor adjacent to the deck riser
+// and leaves only the unsupported cantilever lip standing over the inter-wrap
+// void -- which forces the Detour path out over the void and drops the live
+// FG bot. A single tile-wide radius cannot satisfy both regimes; banding the
+// erosion radius by world Z gives the base its full erosion while recovering
+// the supported lip floor. Per-tile JSON-gated (see the erode call site);
+// absent => stock rcErodeWalkableArea, so every other tile/map is unaffected.
+static bool erodeWalkableAreaZBanded(rcContext* context, int fullRadius, int bandRadius,
+    float bandMinWowZ, float bandMaxWowZ, rcCompactHeightfield& chf)
+{
+    const int w = chf.width;
+    const int h = chf.height;
+    const int zStride = w;
+
+    unsigned char* dist = (unsigned char*)rcAlloc(sizeof(unsigned char) * chf.spanCount, RC_ALLOC_TEMP);
+    if (!dist)
+    {
+        context->log(RC_LOG_ERROR, "erodeWalkableAreaZBanded: out of memory 'dist' (%d).", chf.spanCount);
+        return false;
+    }
+    memset(dist, 0xff, sizeof(unsigned char) * chf.spanCount);
+
+    // Mark boundary cells (identical to rcErodeWalkableArea).
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+        {
+            const rcCompactCell& c = chf.cells[x + y * zStride];
+            for (int i = (int)c.index, ni = (int)(c.index + c.count); i < ni; ++i)
+            {
+                if (chf.areas[i] == RC_NULL_AREA) { dist[i] = 0; continue; }
+                const rcCompactSpan& s = chf.spans[i];
+                int nc = 0;
+                for (int dir = 0; dir < 4; ++dir)
+                {
+                    if (rcGetCon(s, dir) == RC_NOT_CONNECTED) break;
+                    const int nx = x + rcGetDirOffsetX(dir);
+                    const int ny = y + rcGetDirOffsetY(dir);
+                    const int nidx = (int)chf.cells[nx + ny * zStride].index + rcGetCon(s, dir);
+                    if (chf.areas[nidx] == RC_NULL_AREA) break;
+                    nc++;
+                }
+                if (nc != 4) dist[i] = 0;
+            }
+        }
+
+    unsigned char nd;
+    // Pass 1 (identical 3-4-3 chamfer forward sweep).
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+        {
+            const rcCompactCell& c = chf.cells[x + y * zStride];
+            for (int i = (int)c.index, ni = (int)(c.index + c.count); i < ni; ++i)
+            {
+                const rcCompactSpan& s = chf.spans[i];
+                if (rcGetCon(s, 0) != RC_NOT_CONNECTED)
+                {
+                    const int ax = x + rcGetDirOffsetX(0), ay = y + rcGetDirOffsetY(0);
+                    const int ai = (int)chf.cells[ax + ay * w].index + rcGetCon(s, 0);
+                    const rcCompactSpan& as = chf.spans[ai];
+                    nd = (unsigned char)rcMin((int)dist[ai] + 2, 255);
+                    if (nd < dist[i]) dist[i] = nd;
+                    if (rcGetCon(as, 3) != RC_NOT_CONNECTED)
+                    {
+                        const int bx = ax + rcGetDirOffsetX(3), by = ay + rcGetDirOffsetY(3);
+                        const int bi = (int)chf.cells[bx + by * w].index + rcGetCon(as, 3);
+                        nd = (unsigned char)rcMin((int)dist[bi] + 3, 255);
+                        if (nd < dist[i]) dist[i] = nd;
+                    }
+                }
+                if (rcGetCon(s, 3) != RC_NOT_CONNECTED)
+                {
+                    const int ax = x + rcGetDirOffsetX(3), ay = y + rcGetDirOffsetY(3);
+                    const int ai = (int)chf.cells[ax + ay * w].index + rcGetCon(s, 3);
+                    const rcCompactSpan& as = chf.spans[ai];
+                    nd = (unsigned char)rcMin((int)dist[ai] + 2, 255);
+                    if (nd < dist[i]) dist[i] = nd;
+                    if (rcGetCon(as, 2) != RC_NOT_CONNECTED)
+                    {
+                        const int bx = ax + rcGetDirOffsetX(2), by = ay + rcGetDirOffsetY(2);
+                        const int bi = (int)chf.cells[bx + by * w].index + rcGetCon(as, 2);
+                        nd = (unsigned char)rcMin((int)dist[bi] + 3, 255);
+                        if (nd < dist[i]) dist[i] = nd;
+                    }
+                }
+            }
+        }
+    // Pass 2 (identical reverse sweep).
+    for (int y = h - 1; y >= 0; --y)
+        for (int x = w - 1; x >= 0; --x)
+        {
+            const rcCompactCell& c = chf.cells[x + y * zStride];
+            for (int i = (int)c.index, ni = (int)(c.index + c.count); i < ni; ++i)
+            {
+                const rcCompactSpan& s = chf.spans[i];
+                if (rcGetCon(s, 2) != RC_NOT_CONNECTED)
+                {
+                    const int ax = x + rcGetDirOffsetX(2), ay = y + rcGetDirOffsetY(2);
+                    const int ai = (int)chf.cells[ax + ay * w].index + rcGetCon(s, 2);
+                    const rcCompactSpan& as = chf.spans[ai];
+                    nd = (unsigned char)rcMin((int)dist[ai] + 2, 255);
+                    if (nd < dist[i]) dist[i] = nd;
+                    if (rcGetCon(as, 1) != RC_NOT_CONNECTED)
+                    {
+                        const int bx = ax + rcGetDirOffsetX(1), by = ay + rcGetDirOffsetY(1);
+                        const int bi = (int)chf.cells[bx + by * w].index + rcGetCon(as, 1);
+                        nd = (unsigned char)rcMin((int)dist[bi] + 3, 255);
+                        if (nd < dist[i]) dist[i] = nd;
+                    }
+                }
+                if (rcGetCon(s, 1) != RC_NOT_CONNECTED)
+                {
+                    const int ax = x + rcGetDirOffsetX(1), ay = y + rcGetDirOffsetY(1);
+                    const int ai = (int)chf.cells[ax + ay * w].index + rcGetCon(s, 1);
+                    const rcCompactSpan& as = chf.spans[ai];
+                    nd = (unsigned char)rcMin((int)dist[ai] + 2, 255);
+                    if (nd < dist[i]) dist[i] = nd;
+                    if (rcGetCon(as, 0) != RC_NOT_CONNECTED)
+                    {
+                        const int bx = ax + rcGetDirOffsetX(0), by = ay + rcGetDirOffsetY(0);
+                        const int bi = (int)chf.cells[bx + by * w].index + rcGetCon(as, 0);
+                        nd = (unsigned char)rcMin((int)dist[bi] + 3, 255);
+                        if (nd < dist[i]) dist[i] = nd;
+                    }
+                }
+            }
+        }
+
+    // Final null pass with a per-span, Z-banded erosion threshold.
+    const unsigned char fullThresh = (unsigned char)(fullRadius * 2);
+    const unsigned char bandThresh = (unsigned char)(bandRadius * 2);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+        {
+            const rcCompactCell& c = chf.cells[x + y * zStride];
+            for (int i = (int)c.index, ni = (int)(c.index + c.count); i < ni; ++i)
+            {
+                if (chf.areas[i] == RC_NULL_AREA) continue;
+                const float worldZ = chf.bmin[1] + (float)chf.spans[i].y * chf.ch;
+                const unsigned char thresh =
+                    (worldZ >= bandMinWowZ && worldZ <= bandMaxWowZ) ? bandThresh : fullThresh;
+                if (dist[i] < thresh)
+                    chf.areas[i] = RC_NULL_AREA;
+            }
+        }
+
+    rcFree(dist);
+    return true;
+}
+
 static void from_json(const json& j, rcConfig& config)
 {
     // Phase 1 iter 24: cs/ch derived from MakeBakeProfile per Mononen rules
@@ -1575,7 +1735,31 @@ namespace MMAP
                     WriteCompactHeightfieldStageCsv("markGameObjects", mapID, tileX, tileY, x, y, debugStageCrops, *tile.chf);
 
                 // build polymesh intermediates
-                if (!rcErodeWalkableArea(m_rcContext, walkableErosionRadius, *tile.chf))
+                // [WWoW-DIVERGENCE] Per-tile Z-banded erosion: when the tile
+                // declares erosionBandRadius + erosionBandMinZ/MaxZ, spans whose
+                // world Z is in the band use the (smaller) band radius while all
+                // other Z keep the full walkableErosionRadius. Absent => stock
+                // rcErodeWalkableArea (byte-identical for every non-opted tile).
+                bool erodeOk;
+                if (jsonTileConfig.contains("erosionBandRadius") &&
+                    jsonTileConfig.contains("erosionBandMinZ") &&
+                    jsonTileConfig.contains("erosionBandMaxZ"))
+                {
+                    const float bandRadiusWorld = jsonTileConfig["erosionBandRadius"].get<float>();
+                    const float bandMinZ = jsonTileConfig["erosionBandMinZ"].get<float>();
+                    const float bandMaxZ = jsonTileConfig["erosionBandMaxZ"].get<float>();
+                    int bandRadiusCells = (int)ceilf(bandRadiusWorld / config.cs);
+                    if (bandRadiusCells < 0) bandRadiusCells = 0;
+                    printf("[ERODE-BAND] map=%u tile=%u,%u fullCells=%d bandCells=%d bandZ=[%.2f,%.2f] cs=%.4f\n",
+                           mapID, tileX, tileY, walkableErosionRadius, bandRadiusCells, bandMinZ, bandMaxZ, config.cs);
+                    erodeOk = erodeWalkableAreaZBanded(m_rcContext, walkableErosionRadius, bandRadiusCells,
+                                                       bandMinZ, bandMaxZ, *tile.chf);
+                }
+                else
+                {
+                    erodeOk = rcErodeWalkableArea(m_rcContext, walkableErosionRadius, *tile.chf);
+                }
+                if (!erodeOk)
                 {
                     printf("%s Failed eroding area!                               \n", tileString);
                     continue;
