@@ -68,6 +68,10 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
     private NavigationPath? _navPath;
     private NavigationRoutePolicy _navPathPolicy = NavigationRoutePolicy.Standard;
 
+    // Per-tick movement telemetry: previous on-wire position, so [NAV_TELEM] can
+    // report actual displacement (is the bot moving, or wedged in place?).
+    private Position? _lastNavTelemetryPos;
+
     /// <summary>
     /// Exposes the cached NavigationPath for trace/diagnostic access in subclasses.
     /// Returns null if no navigation has been attempted yet.
@@ -175,6 +179,28 @@ public abstract class BotTask(IBotContext botContext) : INavigationTraceProvider
             // BotRunner owns corridor/waypoint execution. MovementController only consumes
             // the current steering target for physics/collision parity against WoW.exe.
             var facing = player.GetFacingForPosition(waypoint);
+
+            // [NAV_TELEM] objective per-tick movement trace (gated to long-travel like the
+            // other NAV_EXEC lines). Machine-readable so wedges classify from data, not
+            // screenshots: moved2D~0 + small hdgErr = blocked/colliding (cross-ref offline
+            // navmesh headroom/nearest-wall at pos); large hdgErr = facing/turn problem;
+            // movedZ<0 while grounded = slide-back. dist2D/wpDz say where the target is.
+            if (traceImmediateNavigation)
+            {
+                var cur = player.Position;
+                float dx = _lastNavTelemetryPos != null ? cur.X - _lastNavTelemetryPos.X : 0f;
+                float dy = _lastNavTelemetryPos != null ? cur.Y - _lastNavTelemetryPos.Y : 0f;
+                float dzMove = _lastNavTelemetryPos != null ? cur.Z - _lastNavTelemetryPos.Z : 0f;
+                float moved2D = MathF.Sqrt(dx * dx + dy * dy);
+                float hdgErr = MathF.Abs(facing - player.Facing);
+                if (hdgErr > MathF.PI) hdgErr = (2f * MathF.PI) - hdgErr;
+                BotContext.AddImmediateDiagnostic(
+                    $"[NAV_TELEM] pos=({cur.X:F1},{cur.Y:F1},{cur.Z:F2}) facing={player.Facing:F2} bearing={facing:F2} hdgErr={hdgErr:F2} " +
+                    $"wp=({waypoint.X:F1},{waypoint.Y:F1},{waypoint.Z:F2}) dist2D={cur.DistanceTo2D(waypoint):F2} wpDz={(waypoint.Z - cur.Z):F2} " +
+                    $"moved2D={moved2D:F3} movedZ={dzMove:F3}");
+                _lastNavTelemetryPos = new Position(cur.X, cur.Y, cur.Z);
+            }
+
             ObjectManager.MoveToward(waypoint, facing);
 
             return true;
