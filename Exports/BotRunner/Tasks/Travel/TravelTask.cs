@@ -22,7 +22,15 @@ public class TravelTask : BotTask, IBotTask
 {
     private const int MaxReplans = 3;
     private const float DefaultArrivalRadius = 5.0f;
-    private const float WalkLegArrivalRadius = 15.0f;
+    // 2D radius at which a plain walk leg "arrives" and hands the remainder to the
+    // Standard-policy close-range approach. Was 15y, but that handed off ~13y short
+    // of Frezza while the bot was still on the spiral/deck-edge -- the close-range
+    // approach then drove straight at Frezza's XY across the deck edge and fell off.
+    // Tightened to 5y (== DefaultArrivalRadius) so the navmesh-following leg drives
+    // all the way onto the deck to near Frezza before handing off, leaving only a
+    // short, on-tier close-range step. Pairs with the 2y vertical-tier guard below.
+    // (2026-06-04: OG zeppelin deck-lip arrival.)
+    private const float WalkLegArrivalRadius = 5.0f;
     // A plain (non-transport) walk leg only "arrives" when the bot is within the
     // 2D radius AND on roughly the same vertical layer as leg.End. Without this,
     // a destination directly above the bot (deck / tower / upper floor) within
@@ -30,10 +38,15 @@ public class TravelTask : BotTask, IBotTask
     // e.g. OG zeppelin tower: Frezza (z=53.6) is ~14.5y due-south of the Grunt
     // base (z=24), so the base is 2D<=15y from Frezza yet ~30y below it. The leg
     // would complete at the base and dump the bot into the Standard-policy
-    // route-exhausted fallback, which cannot drive the long climb. 6y matches the
-    // transport vertical tolerance: enough for capsule height + slope/ground-Z
-    // noise, tight enough to reject a floor/deck layer mismatch. (2026-06-01)
-    private const float WalkLegVerticalArrivalTolerance = 6.0f;
+    // route-exhausted fallback, which cannot drive the long climb. Was 6y, but that
+    // still accepted "arrival" ~5.6y BELOW the OG zeppelin deck while the bot was on
+    // the lip/spiral (Frezza z=53.6, lip z~48): the leg completed there and handed
+    // off to the Standard-policy approach, which then drove straight at Frezza's XY
+    // (west) into the deck overhang dead-end instead of letting the navmesh-following
+    // leg climb the spiral. Tightened to 2y (cf. the 1.5y same-deck-tier boarding
+    // tolerance below) so a plain walk leg only "arrives" on the destination's tier
+    // and otherwise keeps following the path all the way up. (2026-06-01; 2026-06-04)
+    private const float WalkLegVerticalArrivalTolerance = 2.0f;
     private const float WalkLegTransportArrivalRadius = 4.0f;
     private const float WalkLegTransportVerticalArrivalTolerance = 6.0f;
     // Phase 5.3.6 (PFS-OVERHAUL-006): under WWOW_OFFMESH_NATIVE_BOARDING, the

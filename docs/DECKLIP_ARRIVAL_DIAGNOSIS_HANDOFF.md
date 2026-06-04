@@ -1,8 +1,32 @@
 # Deck-Lip Arrival (Grunt→Frezza) — Diagnosis Handoff
 
+## ✅ RESOLVED 2026-06-04 — it was the CONSUMER (walk-leg arrival), not the bake
+The navmesh is sound (lip→deck connects via the NE-junction spiral — proven by
+`tools/scripts/navmesh_view.py` connectivity flood-fill + 2 FindPath methods; the
+earlier "disjoint islands" workflow claim conflated region-label with
+connectivity and was WRONG). The live failure was the `TravelTask` walk-leg
+arrival firing on **2D-proximity-to-the-goal while the bot was still below the
+deck**: at z48 the bot is within `WalkLegArrivalRadius=15`y horizontally and
+`WalkLegVerticalArrivalTolerance=6`y vertically of Frezza, so the leg "arrived"
+~14y short and 5.6y below the deck and handed off to the Standard-policy
+close-range approach, which drove straight at Frezza's XY (west) into the deck
+overhang dead-end (stall z50.5 / fall z41). This is the "gets close, takes a
+shortcut instead of walking the full path" bug.
+
+FIX (Exports/BotRunner/Tasks/Travel/TravelTask.cs): `WalkLegArrivalRadius 15→5`
+(drive the navmesh path all the way onto the deck to near Frezza before handoff)
+and `WalkLegVerticalArrivalTolerance 6→2` (don't "arrive" off the destination's
+tier — e.g. on the lip/tongue below the deck). Both are refinements of the
+existing 2026-06-01 vertical-tier guard; no bake/navmesh change, no off-mesh
+link, no physics step-up change. Live-verified 3/3: bot climbs the spiral to the
+deck (z53.54), stops ~4.3–4.7y from Frezza, fallTime=0, screenshot shows it on
+the deck. (A bisect showed vert-alone is NOT clean — it passed the flag but the
+03-final FELL; the radius tightening is load-bearing.) Earlier-iteration
+diagnosis below retained for history.
+
 Branch: `fix/decklip-arrival-false-green` (PR #65). Test:
 `LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza` (tightened gate kept,
-correctly FAILS). Tile 4029 = map1 tile 40,29 = `mmaps/0012940.mmtile`.
+now PASSES). Tile 4029 = map1 tile 40,29 = `mmaps/0012940.mmtile`.
 
 ## What is solid (committed 545a782e — keep)
 - The **fall** is fixed by the Z-banded source-support erosion. Live baseline
