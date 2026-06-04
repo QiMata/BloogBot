@@ -29,9 +29,11 @@ the deck. (A bisect showed vert-alone is NOT clean — it passed the flag but th
 03-final FELL; the radius tightening is load-bearing.) Earlier-iteration
 diagnosis below retained for history.
 
-Branch: `fix/decklip-arrival-false-green` (PR #65). Test:
-`LongPathingTests.DeckLipClimbFromGruntToLiteralFrezza` (tightened gate kept,
-now PASSES). Tile 4029 = map1 tile 40,29 = `mmaps/0012940.mmtile`.
+Branch: `fix/decklip-arrival-false-green` (PR #65). Current test:
+`LongPathingTests.DeckLipClimbFromGruntToZeppelinBoardingPlatform`
+(`WWOW_DECKLIP_DIRECT_BOARDING_TEST=1`) targets the waiting platform beyond
+Frezza, Detour poly `0x1000015201B41` (`polyIdx=6977`). Tile 4029 = map1 tile
+40,29 = `mmaps/0012940.mmtile`.
 
 ## What is solid (committed 545a782e — keep)
 - The **fall** is fixed by the Z-banded source-support erosion. Live baseline

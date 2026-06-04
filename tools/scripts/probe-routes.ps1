@@ -4,7 +4,7 @@
 # Usage:
 #   .\tools\scripts\probe-routes.ps1 -Manifest tools\scripts\routes\og-zeppelin.json
 #   .\tools\scripts\probe-routes.ps1 -Manifest ... -Variant climb-baseline-... -OutDir tmp\bake-sweeps\<variant>
-#   .\tools\scripts\probe-routes.ps1 -Manifest ... -Routes "ClimbOrgrimmarTowerToFrezza,FlightMasterDescentControl"
+#   .\tools\scripts\probe-routes.ps1 -Manifest ... -Routes "ClimbOrgrimmarTowerToBoardingPlatform,FlightMasterDescentControl"
 #   .\tools\scripts\probe-routes.ps1 -Manifest ... -DetourResolve
 #
 # Args:

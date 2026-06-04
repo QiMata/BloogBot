@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "Short-routes subset of og-zeppelin.json for fast bake-sweep iteration. Skips the 132s ClimbOrgrimmarTowerToFrezza long route. Use the full manifest for end-to-end validation.",
+  "description": "Short-routes subset of og-zeppelin.json for fast bake-sweep iteration. Skips the 132s ClimbOrgrimmarTowerToBoardingPlatform long route. Use the full manifest for end-to-end validation.",
   "agent": {
     "race": "TaurenMale",
     "radius": 1.0247,

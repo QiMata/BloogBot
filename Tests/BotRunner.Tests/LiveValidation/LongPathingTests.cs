@@ -69,8 +69,11 @@ public class LongPathingTests
     private const string OgRampWaypointInspectEnvVar = "WWOW_OG_RAMP_WAYPOINT_INSPECT";
     private const string OgDeckLipVerifyEnvVar = "WWOW_OG_DECK_LIP_VERIFY";
     private const string DeckLipClimbEnvVar = "WWOW_DECKLIP_CLIMB_TEST";
-    private const string DeckLipLiteralFrezzaEnvVar = "WWOW_DECKLIP_DIRECT_FREZZA_TEST";
+    private const string DeckLipDirectBoardingEnvVar = "WWOW_DECKLIP_DIRECT_BOARDING_TEST";
     private const string BrmDungeonTravelEnvVar = "WWOW_BRM_DUNGEON_TRAVEL_TEST";
+    private const string OrgrimmarZeppelinBoardingWaitAreaName = "OrgrimmarUndercityZeppelinBoardingPlatform";
+    private const ulong OrgrimmarZeppelinBoardingTargetPolyRef = 0x1000015201B41UL;
+    private const int OrgrimmarZeppelinBoardingTargetPolyIndex = 6977;
 
     // Lava-zone exemptions for LavaHazardGuard. Tests targeting these maps are
     // expected to take environmental damage during fights and should not auto-fail
@@ -920,28 +923,25 @@ public class LongPathingTests
     }
 
     /// <summary>
-    /// Literal-coordinate follow-up to <see cref="DeckLipClimbFromGruntToFrezza"/>.
+    /// Boarding-platform follow-up to <see cref="DeckLipClimbFromGruntToFrezza"/>.
     /// Teleports directly to the same Orgrimmar Grunt spawn at the tower base,
-    /// but dispatches <see cref="ObjectiveType.TravelTo"/> to Zeppelin Master
-    /// Frezza's actual spawn coords on map 1 instead of the staged Undercity
-    /// target that later resolves to the boarding corridor. This isolates the
-    /// user's "wrong coordinates" question on the live stack itself: if the
-    /// literal Frezza target succeeds while the corridor surrogate stalls, the
-    /// red belongs to the surrogate route-start/goal shape rather than the
-    /// base spiral ramp coordinates.
+    /// but dispatches <see cref="ObjectiveType.TravelTo"/> to the zeppelin
+    /// boarding/waiting platform beyond Frezza. This isolates the live deck-lip
+    /// climb and proves the dispatch endpoint resolves to the standable deck
+    /// polygon that anchors future wait-spot randomization.
     /// </summary>
     [SkippableFact]
     [Trait("Category", "RequiresInfrastructure")]
-    public async Task DeckLipClimbFromGruntToLiteralFrezza()
+    public async Task DeckLipClimbFromGruntToZeppelinBoardingPlatform()
     {
         global::Tests.Infrastructure.Skip.IfNot(
             string.Equals(
-                Environment.GetEnvironmentVariable(DeckLipLiteralFrezzaEnvVar),
+                Environment.GetEnvironmentVariable(DeckLipDirectBoardingEnvVar),
                 "1",
                 StringComparison.Ordinal),
-            $"Literal Frezza deck-lip sub-test disabled (set {DeckLipLiteralFrezzaEnvVar}=1).");
+            $"Direct zeppelin boarding-platform deck-lip sub-test disabled (set {DeckLipDirectBoardingEnvVar}=1).");
 
-        const string TimelineTestName = nameof(DeckLipClimbFromGruntToLiteralFrezza);
+        const string TimelineTestName = nameof(DeckLipClimbFromGruntToZeppelinBoardingPlatform);
         // EXPERIMENT (2026-06-01): DeckLip is a SAME-MAP climb (no world transfer),
         // so do NOT disable the FG packet hooks. Disabling them for the whole test
         // (the scope is intended only for cross-map transfers, where FG hooks are
@@ -979,21 +979,21 @@ public class LongPathingTests
             Parameters =
             {
                 new RequestParameter { IntParam = OrgrimmarMapId },
-                new RequestParameter { FloatParam = OrgrimmarFrezzaX },
-                new RequestParameter { FloatParam = OrgrimmarFrezzaY },
-                new RequestParameter { FloatParam = OrgrimmarFrezzaZ },
+                new RequestParameter { FloatParam = OrgrimmarZeppelinRouteTargetX },
+                new RequestParameter { FloatParam = OrgrimmarZeppelinRouteTargetY },
+                new RequestParameter { FloatParam = OrgrimmarZeppelinRouteTargetZ },
             },
         });
         Assert.Equal(ResponseResult.Success, dispatch);
 
         var stuckGuard = new SnapshotStallGuard(
-            "OG zeppelin tower ramp climb from base to literal Frezza spawn",
+            "OG zeppelin tower ramp climb from base to zeppelin boarding platform",
             TimeSpan.FromSeconds(20),
             LongTravelStallMovementYards);
 
         var pollCounter = 0;
         var seenWaypointDiagMessages = new HashSet<string>(StringComparer.Ordinal);
-        var arrivedAtLiteralFrezza = await _bot.WaitForSnapshotConditionAsync(
+        var arrivedAtBoardingPlatform = await _bot.WaitForSnapshotConditionAsync(
             target.AccountName,
             snapshot =>
             {
@@ -1024,17 +1024,14 @@ public class LongPathingTests
 
                 var pos = GetPosition(snapshot);
 
-                // Primary arrival signal: the bot is physically ON THE DECK next to
-                // Frezza. Hardened 2026-06-03: require the bot to be UP on the deck
-                // (z within 2y of Frezza's z53.63 spawn, i.e. z>=51.6) and within 5y
-                // horizontally. The prior 6y/4z tolerance accepted the bot stopped on
-                // the lower deck-lip coil (~z50.6, ~3y below the deck, ~7-8y out) --
-                // i.e. it had cleared the fall but NOT climbed onto the deck to Frezza.
-                // "Reaches Frezza" must mean on the deck within interaction range.
+                // Primary arrival signal: the bot is physically ON THE DECK at the
+                // zeppelin boarding/waiting platform beyond Frezza. The point resolves
+                // to Detour poly 0x1000015201B41 (polyIdx=6977), which is the standable
+                // ground poly anchoring future wait-spot randomization.
                 if (pos != null
                     && snapshot?.CurrentMapId == OrgrimmarMapId
-                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY) <= 5f
-                    && pos.Z >= OrgrimmarFrezzaZ - 2.0f)
+                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarZeppelinRouteTargetX, OrgrimmarZeppelinRouteTargetY) <= 5f
+                    && pos.Z >= OrgrimmarZeppelinRouteTargetZ - 2.0f)
                 {
                     return true;
                 }
@@ -1042,20 +1039,15 @@ public class LongPathingTests
                 // Secondary signal: a [TRAVEL_LEG] complete reason=walk_arrived event,
                 // but ONLY when it is (a) NEW since the post-teleport baseline (delta —
                 // not a stale ring entry) AND (b) corroborated by the bot actually being
-                // near Frezza. Without both guards a stale walk_arrived left in the
+                // near the boarding platform. Without both guards a stale walk_arrived left in the
                 // RecentChatMessages ring by EnsureCleanSlate/teleport FALSE-GREENS the
-                // test at the tower base (R16, 2026-06-01: reported arrival at z=24.8,
-                // ~29y below Frezza, with the bot still on the ground). Arrival must
-                // reflect visual reality, never a chat message alone.
-                // Secondary signal: a NEW [TRAVEL_LEG] complete reason=walk_arrived
-                // event, corroborated by the bot being ON THE DECK (z>=Frezza-2) and
-                // within 8y. Hardened 2026-06-03 to require deck height: the walk-leg
-                // arrival radius is 15y/6z, so walk_arrived fires while the bot is still
-                // ~3y below the deck on the lip -- which must NOT green the test.
+                // test at the tower base. Arrival must reflect visual reality, never a
+                // chat message alone. Require the bot to be ON THE DECK
+                // (z>=boardingZ-2) and within 8y before accepting the diagnostic.
                 if (pos != null
                     && snapshot?.CurrentMapId == OrgrimmarMapId
-                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY) <= 8f
-                    && pos.Z >= OrgrimmarFrezzaZ - 2.0f)
+                    && LiveBotFixture.Distance2D(pos.X, pos.Y, OrgrimmarZeppelinRouteTargetX, OrgrimmarZeppelinRouteTargetY) <= 8f
+                    && pos.Z >= OrgrimmarZeppelinRouteTargetZ - 2.0f)
                 {
                     foreach (var msg in GetDeltaMessages(diagnosticBaseline, snapshot?.RecentChatMessages))
                     {
@@ -1071,7 +1063,7 @@ public class LongPathingTests
             },
             TimeSpan.FromSeconds(150),
             pollIntervalMs: 500,
-            progressLabel: $"{target.RoleLabel} OG zeppelin tower ramp climb from base to literal Frezza");
+            progressLabel: $"{target.RoleLabel} OG zeppelin tower ramp climb from base to zeppelin boarding platform");
 
         await _bot.RefreshSnapshotsAsync();
         var finalSnapshot = await _bot.GetSnapshotAsync(target.AccountName);
@@ -1079,16 +1071,17 @@ public class LongPathingTests
 
         var finalPos = GetPosition(finalSnapshot);
         var finalDist = finalPos != null
-            ? LiveBotFixture.Distance2D(finalPos.X, finalPos.Y, OrgrimmarFrezzaX, OrgrimmarFrezzaY)
+            ? LiveBotFixture.Distance2D(finalPos.X, finalPos.Y, OrgrimmarZeppelinRouteTargetX, OrgrimmarZeppelinRouteTargetY)
             : float.NaN;
 
         await AssertOrScreenshotAsync(
-            arrivedAtLiteralFrezza,
+            arrivedAtBoardingPlatform,
             target.AccountName,
-            $"Expected bot to walk from the OG tower-base Grunt spawn to literal Frezza "
-            + $"({OrgrimmarFrezzaX:F2},{OrgrimmarFrezzaY:F2},{OrgrimmarFrezzaZ:F2}) within 90s. "
-            + $"Arrival is met by either [TRAVEL_LEG] complete reason=walk_arrived, OR final "
-            + $"2D-distance <= 6.0y and |dz| <= 4.0y on map {OrgrimmarMapId}. "
+            $"Expected bot to walk from the OG tower-base Grunt spawn to {OrgrimmarZeppelinBoardingWaitAreaName} "
+            + $"({OrgrimmarZeppelinRouteTargetX:F2},{OrgrimmarZeppelinRouteTargetY:F2},{OrgrimmarZeppelinRouteTargetZ:F2}) "
+            + $"within 150s. Arrival is met by either [TRAVEL_LEG] complete reason=walk_arrived corroborated "
+            + $"on the target deck, OR final 2D-distance <= 5.0y and z >= targetZ-2.0y on map {OrgrimmarMapId}. "
+            + $"Dispatch target poly=0x{OrgrimmarZeppelinBoardingTargetPolyRef:X} polyIdx={OrgrimmarZeppelinBoardingTargetPolyIndex}. "
             + $"Final position: ({finalPos?.X:F1},{finalPos?.Y:F1},{finalPos?.Z:F1}) "
             + $"map={finalSnapshot?.CurrentMapId} dist2D={finalDist:F1}y. "
             + $"Cadence diagnostic captured {seenWaypointDiagMessages.Count} [TRAVEL_WAYPOINT_REACHED] events.");
