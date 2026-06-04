@@ -92,7 +92,43 @@ correctly FAILS). Tile 4029 = map1 tile 40,29 = `mmaps/0012940.mmtile`.
   the global path. The exact failing predicate is not yet pinned — it needs
   instrumentation (next).
 
-## Next-iteration plan (iter 3)
+## ITER 3 (2026-06-04) — ROOT CAUSE CONFIRMED LIVE; it is NOT a bake issue
+Temporary `[DECKLIP_DIAG]` instrumentation (since reverted, tree clean) in
+`TravelTask.ExecuteWalkLeg` + the legs-exhausted final-approach branch produced
+an **irrefutable live trace**:
+- `walkleg-arrival ... pos=(1344.4,-4653.7,48.0) legEnd=(1331.1,-4649.5,53.6)
+  dist=13.96 vDelta=5.62 radius=15.0 arrived=True` — the previous tick (z47.1,
+  vDelta=6.50) was `arrived=False`. So **`walk_arrived` fires at z48.0**, the
+  instant the bot rises to <6y below the deck while <15y horizontally — **~14y
+  short of Frezza and 5.6y below the deck**.
+- Immediately after: 93 ticks of `final-approach-to-target ... legsExhausted
+  route=1` (the same-map branch `TryNavigateToward(_targetPosition)`, Standard
+  policy, **no NAV_EXEC** — that is why the logs went silent at z47.5), drifting
+  the bot from (1344.3,-4653.7,48.0) **west+down to (1337.4,-4649.4,41.2)** (this
+  run it fell; other runs it stalls on the tongue at z50.5 — same mechanism).
+
+**Root cause (code-confirmed, `TravelTask.cs`):** `ExecuteWalkLeg` completes the
+walk leg via `TryGetWalkLegArrival` = `distance2D <= WalkLegArrivalRadius(15) &&
+verticalDelta <= WalkLegVerticalArrivalTolerance(6)`. The OG spiral physically
+passes within 14y/5.6y of Frezza at z48, so the walk leg "arrives" there, **6y
+below the deck**. With the legs exhausted, `Execute` falls to
+`TryNavigateToward(_targetPosition)` (Standard policy) which drives the bot
+straight at Frezza's XY (west) — onto the under-deck tongue (stall) or off the
+ramp (fall). **This trigger is pure 2D distance + vertical delta — NOT
+navmesh-sampled — so NO bake change can prevent it.** Had `walk_arrived` not
+fired early, the LongTravel walk leg (which WAS correctly following the 95-corner
+corridor path) would have climbed to the deck and reached Frezza.
+
+**Conclusion: the deck-lip failure cannot be fixed in the bake.** The navmesh is
+correct (iter 2). The fix must be one of (all CONSUMER, which the mission
+forbids): (a) make the walk-leg arrival deck-tier-aware / tighten
+`WalkLegVerticalArrivalTolerance` so the leg doesn't "arrive" 5.6y below the
+target; (b) have `CrossMapRouter.PlanRoute` emit a leg to the NE-junction deck
+entry before the final Frezza leg; (c) make the legs-exhausted final approach use
+the LongTravel corridor policy instead of a direct Standard drive. This requires
+the user to relax the "do not touch the consumer" directive for this case.
+
+## Next-iteration plan (iter 3 — SUPERSEDED by the confirmation above)
 0. **Instrument first (temporary diagnostic, not a band-aid):** add log lines in
    `TryReplanFromNearVerticalLayerMismatch` (which predicate of
    `PreservesWalkableCorridor` returns false, and the promoted waypoint),
